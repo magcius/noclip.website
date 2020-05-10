@@ -814,7 +814,8 @@ class Main {
             const tex = viewerTextures[i];
             for (let j = 0; j < tex.surfaces.length; j++) {
                 const filename = `${tex.name}_${j}.png`;
-                promises.push(convertCanvasToPNG(tex.surfaces[j]).then((blob) => blobToArrayBuffer(blob)).then((data) => {
+                promises.push(convertCanvasToPNG(tex.surfaces[j]).then((blob) => blobToArrayBuffer(blob)).then((buf) => {
+                    const data = new ArrayBufferSlice(buf);
                     zipFileEntries.push({ filename, data });
                 }));
             }

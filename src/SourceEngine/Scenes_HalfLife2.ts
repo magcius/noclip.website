@@ -3,19 +3,22 @@ import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
-import { fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { DeviceProgram } from "../Program";
 import { BSPFile, Surface } from "./BSPFile";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { colorNewFromRGBA } from "../Color";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4 } from "gl-matrix";
 import { VPKMount, createVPKMount } from "./VPK";
 import { TextureMapping } from "../TextureHolder";
-import { nArray } from "../util";
+import { nArray, assertExists, assert } from "../util";
 import { VTF } from "./VTF";
+import { ZipFile } from "../ZipFile";
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { parseVMT, VMT } from "./VMT";
+import { computeMatrixWithoutTranslation, clamp } from "../MathHelpers";
 
 const pathBase = `HalfLife2`;
 
@@ -32,41 +35,27 @@ precision mediump float;
 
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-    Mat4x4 u_ModelView;
 };
 
 layout(row_major, std140) uniform ub_ObjectParams {
-    vec4 u_Color;
+    Mat4x3 u_ModelView;
 };
 
-varying vec3 v_Normal;
 varying vec4 v_TexCoord;
-varying vec2 v_LightIntensity;
 uniform sampler2D u_Texture[2];
 
 #ifdef VERT
 layout(location = ${HalfLife2Program.a_Position}) attribute vec3 a_Position;
-layout(location = ${HalfLife2Program.a_Normal}) attribute vec3 a_Normal;
 layout(location = ${HalfLife2Program.a_TexCoord}) attribute vec4 a_TexCoord;
 
 void mainVS() {
-    gl_Position = Mul(u_Projection, Mul(u_ModelView, vec4(a_Position, 1.0)));
-    vec3 t_LightDirection = normalize(vec3(.2, -1, .5));
-    float t_LightIntensityF = dot(-a_Normal, t_LightDirection);
-    float t_LightIntensityB = dot( a_Normal, t_LightDirection);
-    v_LightIntensity = vec2(t_LightIntensityF, t_LightIntensityB);
-    v_Normal = a_Normal;
+    gl_Position = Mul(u_Projection, vec4(Mul(u_ModelView, vec4(a_Position, 1.0)), 1.0));
     v_TexCoord = a_TexCoord;
 }
 #endif
 
 #ifdef FRAG
 void mainPS() {
-    float t_LightIntensity = gl_FrontFacing ? v_LightIntensity.x : v_LightIntensity.y;
-    float t_LightTint = 0.3 * t_LightIntensity;
-    gl_FragColor = u_Color + vec4(t_LightTint, t_LightTint, t_LightTint, 0.0);
-
-    // gl_FragColor.rgb = v_Normal.xyz * vec3(0.5) + vec3(0.5);
     gl_FragColor.rgb = texture(SAMPLER_2D(u_Texture[0], v_TexCoord.xy)).rgb;
 }
 #endif
@@ -77,28 +66,75 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 2 },
 ];
 
+export class SourceFileSystem {
+    public pakfiles: ZipFile[] = [];
+    public mounts: VPKMount[] = [];
+
+    public resolvePath(path: string): string {
+        path = path.toLowerCase().replace('\\', '/');
+        return path;
+    }
+
+    public async fetchFileData(path: string): Promise<ArrayBufferSlice | null> {
+        for (let i = 0; i < this.mounts.length; i++) {
+            const entry = this.mounts[i].findEntry(path);
+            if (entry !== null)
+                return this.mounts[i].fetchFileData(entry);
+        }
+
+        for (let i = 0; i < this.pakfiles.length; i++) {
+            const pakfile = this.pakfiles[i];
+            const entry = pakfile.find((entry) => entry.filename === path);
+            if (entry !== undefined)
+                return entry.data;
+        }
+
+        return null;
+    }
+}
+
 class MaterialCache {
     private textureCache = new Map<string, VTF>();
-    private promiseCache = new Map<string, Promise<VTF>>();
+    private texturePromiseCache = new Map<string, Promise<VTF>>();
+    private materialPromiseCache = new Map<string, Promise<VMT>>();
 
-    constructor(private device: GfxDevice, private mount: VPKMount) {
+    constructor(private device: GfxDevice, private filesystem: SourceFileSystem) {
+        this.textureCache.set('_rt_Camera', new VTF(device, null));
     }
 
-    private async fetchTextureInternal(path: string): Promise<VTF> {
-        const data = await this.mount.fetchFileData(path);
-        return new VTF(this.device, data);
+    private resolvePath(path: string, ext: string): string {
+        return this.filesystem.resolvePath(`materials/${path}${ext}`);
     }
 
-    public fillTextureMapping(m: TextureMapping, path: string): void {
-        if (this.textureCache.has(path)) {
-            this.textureCache.get(path)!.fillTextureMapping(m);
+    private async fetchMaterialDataInternal(name: string): Promise<VMT> {
+        const path = this.resolvePath(name, '.vmt');
+        return parseVMT(this.filesystem, path);
+    }
+
+    public fetchMaterialData(path: string): Promise<VMT> {
+        if (!this.materialPromiseCache.has(path))
+            this.materialPromiseCache.set(path, this.fetchMaterialDataInternal(path));
+        return this.materialPromiseCache.get(path)!;
+    }
+
+    private async fetchTextureInternal(name: string): Promise<VTF> {
+        const path = this.resolvePath(name, '.vtf');
+        const data = assertExists(await this.filesystem.fetchFileData(path));
+        const vtf = new VTF(this.device, data);
+        this.textureCache.set(path, vtf);
+        return vtf;
+    }
+
+    public fillTextureMapping(m: TextureMapping, name: string): void {
+        if (this.textureCache.has(name)) {
+            this.textureCache.get(name)!.fillTextureMapping(m);
             return;
         }
 
-        if (!this.promiseCache.has(path))
-            this.promiseCache.set(path, this.fetchTextureInternal(path));
+        if (!this.texturePromiseCache.has(name))
+            this.texturePromiseCache.set(name, this.fetchTextureInternal(name));
 
-        this.promiseCache.get(path)!.then((vtf) => { vtf.fillTextureMapping(m); });
+        this.texturePromiseCache.get(name)!.then((vtf) => { vtf.fillTextureMapping(m); });
     }
 
     public destroy(device: GfxDevice): void {
@@ -107,13 +143,148 @@ class MaterialCache {
     }
 }
 
+const scratchMatrix = mat4.create();
+class SkyboxRenderer {
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+    private textureMappings: TextureMapping[][] = nArray(6, () => [new TextureMapping()]);
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, private skyname: string) {
+        const vertexData = new Float32Array(6 * 4 * 5);
+        const indexData = new Uint16Array(6 * 6);
+
+        let dstVert = 0;
+        let dstIdx = 0;
+
+        function buildPlaneVert(pb: number, s: number, t: number): void {
+            const side = 50000;
+            const g = [-s*side, s*side, -t*side, t*side, -side, side];
+            vertexData[dstVert++] = g[(pb >>> 8) & 0x0F];
+            vertexData[dstVert++] = g[(pb >>> 4) & 0x0F];
+            vertexData[dstVert++] = g[(pb >>> 0) & 0x0F];
+
+            function seamClamp(v: number): number {
+                return clamp(v, 1.0/512.0, 511.0/512.0);
+            }
+
+            vertexData[dstVert++] = seamClamp(s * 0.5 + 0.5);
+            vertexData[dstVert++] = seamClamp(1.0 - (t * 0.5 + 0.5));
+        }
+
+        function buildPlaneData(pb: number): void {
+            const base = dstVert/5;
+            buildPlaneVert(pb, -1, -1);
+            buildPlaneVert(pb, -1, 1);
+            buildPlaneVert(pb, 1, 1);
+            buildPlaneVert(pb, 1, -1);
+            indexData[dstIdx++] = base+0;
+            indexData[dstIdx++] = base+1;
+            indexData[dstIdx++] = base+2;
+            indexData[dstIdx++] = base+0;
+            indexData[dstIdx++] = base+2;
+            indexData[dstIdx++] = base+3;
+        }
+
+        // right, left, back, front, top, bottom
+        buildPlaneData(0x503);
+        buildPlaneData(0x413);
+        buildPlaneData(0x153);
+        buildPlaneData(0x043);
+        buildPlaneData(0x205);
+        buildPlaneData(0x304);
+
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: HalfLife2Program.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: HalfLife2Program.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+        ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: (3+2)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
+        const indexBufferFormat = GfxFormat.U16_R;
+        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+
+        this.inputState = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBuffer, byteOffset: 0, },
+        ], { buffer: this.indexBuffer, byteOffset: 0, });
+    }
+
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        // Wait until we're ready.
+        for (let i = 0; i < 6; i++)
+            if (this.textureMappings[i][0].gfxTexture === null)
+                return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+
+        let offs = template.allocateUniformBuffer(HalfLife2Program.ub_ObjectParams, 4*3);
+        const d = template.mapUniformBufferF32(HalfLife2Program.ub_ObjectParams);
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.viewMatrix);
+        mat4.mul(scratchMatrix, scratchMatrix, zup);
+        offs += fillMatrix4x3(d, offs, scratchMatrix);
+
+        for (let i = 0; i < 6; i++) {
+            const renderInst = renderInstManager.newRenderInst();
+            renderInst.drawIndexes(6, i*6);
+            renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings[i]);
+            renderInstManager.submitRenderInst(renderInst);
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    private bindMaterialData(materialCache: MaterialCache, i: number, vmt: VMT): void {
+        materialCache.fillTextureMapping(this.textureMappings[i][0], vmt.$basetexture);
+    }
+
+    public async bindMaterial(materialCache: MaterialCache) {
+        const m = await Promise.all([
+            materialCache.fetchMaterialData(`skybox/${this.skyname}rt`),
+            materialCache.fetchMaterialData(`skybox/${this.skyname}lf`),
+            materialCache.fetchMaterialData(`skybox/${this.skyname}bk`),
+            materialCache.fetchMaterialData(`skybox/${this.skyname}ft`),
+            materialCache.fetchMaterialData(`skybox/${this.skyname}up`),
+            materialCache.fetchMaterialData(`skybox/${this.skyname}dn`),
+        ]);
+
+        for (let i = 0; i < 6; i++)
+            this.bindMaterialData(materialCache, i, m[i]);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyInputState(this.inputState);
+    }
+}
+
 class BSPSurface {
     public textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
+    public visible: boolean = true;
 
     constructor(public surface: Surface) {
     }
 
+    public bindMaterial(materialCache: MaterialCache, vmt: VMT): void {
+        // Hacks for now.
+        if (vmt['%compilesky'] || vmt['%compiletrigger']) {
+            this.visible = false;
+        }
+
+        // TODO(jstpierre): Material system.
+        if (vmt.$basetexture !== undefined)
+            materialCache.fillTextureMapping(this.textureMapping[0], assertExists(vmt.$basetexture));
+    }
+
     public prepareToRender(renderInstManager: GfxRenderInstManager) {
+        if (!this.visible)
+            return;
+
         if (this.textureMapping[0].gfxTexture === null)
             return;
 
@@ -129,7 +300,6 @@ class BSPRenderer {
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private color = colorNewFromRGBA(0.8, 0.6, 0.7);
     private surfaces: BSPSurface[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private bsp: BSPFile) {
@@ -155,24 +325,28 @@ class BSPRenderer {
             this.surfaces.push(new BSPSurface(this.bsp.surfaces[i]));
     }
 
-    public bindMaterials(textureCache: MaterialCache): void {
+    private async bindMaterial(materialCache: MaterialCache, surface: BSPSurface) {
+        const texinfo = this.bsp.texinfo[surface.surface.texinfo];
+        const materialData = await materialCache.fetchMaterialData(texinfo.texName);
+        surface.bindMaterial(materialCache, materialData);
+    }
+
+    public bindMaterials(materialCache: MaterialCache) {
         for (let i = 0; i < this.surfaces.length; i++) {
             const surface = this.surfaces[i];
-            const texinfo = this.bsp.texinfo[surface.surface.texinfo];
-            // TODO(jstpierre): Do this until materials are implemented.
-            const textureFilename = `materials/${texinfo.texName}.vtf`;
-            textureCache.fillTextureMapping(surface.textureMapping[0], textureFilename);
+            this.bindMaterial(materialCache, surface);
         }
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager): void {
-        const templateRenderInst = renderInstManager.pushTemplateRenderInst();
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const template = renderInstManager.pushTemplateRenderInst();
 
-        let offs = templateRenderInst.allocateUniformBuffer(HalfLife2Program.ub_ObjectParams, 4);
-        const d = templateRenderInst.mapUniformBufferF32(HalfLife2Program.ub_ObjectParams);
-        offs += fillColor(d, offs, this.color);
+        let offs = template.allocateUniformBuffer(HalfLife2Program.ub_ObjectParams, 4*3);
+        const d = template.mapUniformBufferF32(HalfLife2Program.ub_ObjectParams);
+        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, zup);
+        offs += fillMatrix4x3(d, offs, scratchMatrix);
 
-        templateRenderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
         for (let i = 0; i < this.surfaces.length; i++)
             this.surfaces[i].prepareToRender(renderInstManager);
@@ -187,17 +361,17 @@ class BSPRenderer {
 }
 
 const zup = mat4.fromValues(
-    1, 0, 0, 0,
-    0, 0, 1, 0,
-    0, 1, 0, 0,
-    0, 0, 0, 1,
+    -1, 0,  0, 0,
+    0,  0, -1, 0,
+    0,  1,  0, 0,
+    0,  0,  0, 1,
 );
 
-const scratchMatrix = mat4.create();
 export class SourceRenderer implements SceneGfx {
     private program: GfxProgram;
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
+    public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
 
     constructor(context: SceneContext, public materialCache: MaterialCache) {
@@ -207,6 +381,8 @@ export class SourceRenderer implements SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
@@ -215,13 +391,14 @@ export class SourceRenderer implements SceneGfx {
         let offs = template.allocateUniformBuffer(HalfLife2Program.ub_SceneParams, 32);
         const mapped = template.mapUniformBufferF32(offs);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
-        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, zup);
-        offs += fillMatrix4x4(mapped, offs, scratchMatrix);
+
+        if (this.skyboxRenderer !== null)
+            this.skyboxRenderer.prepareToRender(renderInstManager, viewerInput);
 
         for (let i = 0; i < this.bspRenderers.length; i++)
-            this.bspRenderers[i].prepareToRender(this.renderHelper.renderInstManager);
+            this.bspRenderers[i].prepareToRender(renderInstManager, viewerInput);
 
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
@@ -252,16 +429,31 @@ class HalfLife2SceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const textureMount = await createVPKMount(context.dataFetcher, `${pathBase}/hl2_textures`);
-        const textureCache = new MaterialCache(device, textureMount);
+        const filesystem = new SourceFileSystem();
 
-        const renderer = new SourceRenderer(context, textureCache);
+        filesystem.mounts.push(await createVPKMount(context.dataFetcher, `${pathBase}/hl2_textures`));
+        filesystem.mounts.push(await createVPKMount(context.dataFetcher, `${pathBase}/hl2_misc`));
+
+        const materialCache = new MaterialCache(device, filesystem);
+
+        const renderer = new SourceRenderer(context, materialCache);
         const cache = renderer.renderHelper.getCache();
 
         const bsp = await context.dataFetcher.fetchData(`${pathBase}/maps/${this.id}.bsp`);
-        const bspFile = new BSPFile(device, bsp);
+        const bspFile = new BSPFile(bsp);
+        if (bspFile.pakfile !== null)
+            filesystem.pakfiles.push(bspFile.pakfile);
+
+        // Build skybox from worldname.
+        const worldspawn = bspFile.entities[0];
+        assert(worldspawn.classname === 'worldspawn');
+        if (worldspawn.skyname) {
+            renderer.skyboxRenderer = new SkyboxRenderer(device, cache, worldspawn.skyname);
+            renderer.skyboxRenderer.bindMaterial(materialCache);
+        }
+
         const bspRenderer = new BSPRenderer(device, cache, bspFile);
-        bspRenderer.bindMaterials(textureCache);
+        bspRenderer.bindMaterials(materialCache);
         renderer.bspRenderers.push(bspRenderer);
 
         return renderer;
@@ -276,11 +468,27 @@ const sceneDescs = [
     new HalfLife2SceneDesc('background03'),
     new HalfLife2SceneDesc('background04'),
     new HalfLife2SceneDesc('background05'),
+
     new HalfLife2SceneDesc('d1_trainstation_01'),
     new HalfLife2SceneDesc('d1_trainstation_02'),
     new HalfLife2SceneDesc('d1_trainstation_03'),
     new HalfLife2SceneDesc('d1_trainstation_04'),
     new HalfLife2SceneDesc('d1_trainstation_05'),
+    new HalfLife2SceneDesc('d1_trainstation_06'),
+
+    new HalfLife2SceneDesc('d1_canals_01'),
+    new HalfLife2SceneDesc('d1_canals_01a'),
+    new HalfLife2SceneDesc('d1_canals_02'),
+    new HalfLife2SceneDesc('d1_canals_03'),
+    new HalfLife2SceneDesc('d1_canals_05'),
+    new HalfLife2SceneDesc('d1_canals_06'),
+    new HalfLife2SceneDesc('d1_canals_07'),
+    new HalfLife2SceneDesc('d1_canals_08'),
+    new HalfLife2SceneDesc('d1_canals_09'),
+    new HalfLife2SceneDesc('d1_canals_10'),
+    new HalfLife2SceneDesc('d1_canals_11'),
+    new HalfLife2SceneDesc('d1_canals_12'),
+    new HalfLife2SceneDesc('d1_canals_13'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };

@@ -2,6 +2,7 @@
 import { assertExists, leftPad } from "./util";
 import { Viewer, resizeCanvas } from "./viewer";
 import { ZipFileEntry } from "./ZipFile";
+import ArrayBufferSlice from "./ArrayBufferSlice";
 
 type Callback = (viewer: Viewer, t: number, f: number) => boolean;
 
@@ -39,7 +40,7 @@ export async function captureScene(viewer: Viewer, options: CaptureOptions): Pro
         await Promise.resolve();
         const canvas = viewer.takeScreenshotToCanvas(options.opaque);
         const blob = await convertCanvasToPNG(canvas);
-        const data = await blobToArrayBuffer(blob);
+        const data = new ArrayBufferSlice(await blobToArrayBuffer(blob));
         const filename = `${options.filenamePrefix}_${leftPad('' + i, 4)}.png`;
         fileEntries.push({ filename, data });
     }

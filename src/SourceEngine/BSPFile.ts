@@ -1,11 +1,15 @@
 
+// Source Engine BSP.
+
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { readString, assertExists, assert, nArray } from "../util";
 import { vec4, vec3, vec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
+import { parseZipFile, ZipFile } from "../ZipFile";
+import { parseEntitiesLump, Entity } from "./VMT";
 
 const enum LumpType {
+    ENTITIES             = 0,
     TEXDATA              = 2,
     VERTEXES             = 3,
     TEXINFO              = 6,
@@ -14,9 +18,12 @@ const enum LumpType {
     SURFEDGES            = 13,
     VERTNORMALS          = 30,
     VERTNORMALINDICES    = 31,
-    FACES_HDR            = 58,
+    PRIMITIVES           = 37,
+    PRIMINDICES          = 39,
+    PAKFILE              = 40,
     TEXDATA_STRING_DATA  = 43,
     TEXDATA_STRING_TABLE = 44,
+    FACES_HDR            = 58,
 }
 
 export interface Surface {
@@ -31,6 +38,9 @@ interface TexinfoMapping {
 }
 
 const enum TexinfoFlags {
+    SKY2D   = 0x0002,
+    SKY     = 0x0004,
+    NODRAW  = 0x0080,
     NOLIGHT = 0x0400,
 }
 
@@ -51,13 +61,15 @@ function calcTexCoord(dst: vec2, v: vec3, m: TexinfoMapping): void {
 }
 
 export class BSPFile {
+    public entities: Entity[] = [];
     public texinfo: Texinfo[] = [];
     public surfaces: Surface[] = [];
+    public pakfile: ZipFile | null = null;
 
     public indexData: Uint16Array;
     public vertexData: Float32Array;
 
-    constructor(device: GfxDevice, buffer: ArrayBufferSlice) {
+    constructor(buffer: ArrayBufferSlice) {
         assertExists(readString(buffer, 0x00, 0x04) === 'VBSP');
         const view = buffer.createDataView();
         const version = view.getUint32(0x04, true);
@@ -81,6 +93,9 @@ export class BSPFile {
                 assert(version === expectedVersion);
             return buffer;
         }
+
+        // Parse out entities.
+        this.entities = parseEntitiesLump(getLumpData(LumpType.ENTITIES));
 
         function readVec4(view: DataView, offs: number): vec4 {
             const x = view.getFloat32(offs + 0x00, true);
@@ -121,6 +136,11 @@ export class BSPFile {
             this.texinfo.push({ textureMapping, lightmapMapping, flags, texName, width, height });
         }
 
+        // Parse materials.
+        const pakfileData = getLumpData(LumpType.PAKFILE);
+        if (pakfileData !== null)
+            this.pakfile = parseZipFile(pakfileData);
+
         // Build our mesh.
 
         // Parse out edges / surfedges.
@@ -141,6 +161,8 @@ export class BSPFile {
             faces = getLumpData(LumpType.FACES, 1).createDataView();
 
         const faceCount = faces.byteLength / 0x38;
+        const primindices = getLumpData(LumpType.PRIMINDICES).createTypedArray(Uint16Array);
+        const primitives = getLumpData(LumpType.PRIMITIVES).createDataView();
 
         // Count up the number of vertices we need.
         let vertCount = 0;
@@ -148,11 +170,14 @@ export class BSPFile {
         for (let i = 0; i < faceCount; i++) {
             const idx = i * 0x38;
             const numedges = faces.getUint16(idx + 0x08, true);
-            // TODO(jstpierre): Skip DispInfo / NODRAW surfaces?
             vertCount += numedges;
-            const m_NumPrims = faces.getUint16(idx + 0x30);
+
+            const m_NumPrims = faces.getUint16(idx + 0x30, true);
+            const firstPrimID = faces.getUint16(idx + 0x32, true);
             if (m_NumPrims !== 0) {
-                // TODO(jstpierre): Prims
+                const primOffs = firstPrimID * 0x0A;
+                const primIndexCount = primitives.getUint16(primOffs + 0x04, true);
+                indexCount += primIndexCount;
             } else {
                 indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
             }
@@ -170,6 +195,7 @@ export class BSPFile {
         const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);
         const vertnormals = getLumpData(LumpType.VERTNORMALS).createTypedArray(Float32Array);
         const vertnormalindices = getLumpData(LumpType.VERTNORMALINDICES).createTypedArray(Uint16Array);
+
         let dstOffs = 0;
         let dstOffsIndex = 0;
         let dstIndexBase = 0;
@@ -187,15 +213,15 @@ export class BSPFile {
             const styles = nArray(4, (i) => faces.getUint8(idx + 0x10 + i));
             const lightofs = faces.getUint32(idx + 0x14, true);
             const area = faces.getFloat32(idx + 0x18, true);
-            const m_LightmapTextureMinsInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x1C + i * 4));
-            const m_LightmapTextureSizeInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x24 + i * 4));
-            const origFace = faces.getUint32(idx + 0x2C);
-            const m_NumPrims = faces.getUint16(idx + 0x30);
-            const firstPrimID = faces.getUint16(idx + 0x32);
-            const smoothingGroups = faces.getUint32(idx + 0x34);
+            const m_LightmapTextureMinsInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x1C + i * 4, true));
+            const m_LightmapTextureSizeInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x24 + i * 4, true));
+            const origFace = faces.getUint32(idx + 0x2C, true);
+            const m_NumPrims = faces.getUint16(idx + 0x30, true);
+            const firstPrimID = faces.getUint16(idx + 0x32, true);
+            const smoothingGroups = faces.getUint32(idx + 0x34, true);
 
-            if (m_NumPrims !== 0) {
-                // TODO(jstpierre): Prims
+            const tex = this.texinfo[texinfo];
+            if (!!(tex.flags & TexinfoFlags.NODRAW)) {
                 continue;
             }
 
@@ -215,9 +241,9 @@ export class BSPFile {
                 vertexData[dstOffs++] = vertnormals[normIndex * 3 + 2];
 
                 // Texture UV
-                const tex = this.texinfo[texinfo];
                 calcTexCoord(scratchVec2, scratchVec3, tex.textureMapping);
-                scratchVec2[0] /= tex.width;
+                // TODO(jstpierre): Why is this flipped?
+                scratchVec2[0] /= -tex.width;
                 scratchVec2[1] /= tex.height;
                 vertexData[dstOffs++] = scratchVec2[0];
                 vertexData[dstOffs++] = scratchVec2[1];
@@ -238,7 +264,29 @@ export class BSPFile {
             }
 
             const count = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
-            convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
+            if (m_NumPrims !== 0) {
+                const primOffs = firstPrimID * 0x0A;
+                const primType = primitives.getUint8(primOffs + 0x00);
+                const primFirstIndex = primitives.getUint16(primOffs + 0x02, true);
+                const primIndexCount = primitives.getUint16(primOffs + 0x04, true);
+                const primFirstVert = primitives.getUint16(primOffs + 0x06, true);
+                const primVertCount = primitives.getUint16(primOffs + 0x08, true);
+                if (primVertCount !== 0) {
+                    // Dynamic mesh. Skip for now.
+                    continue;
+                }
+
+                // We should be in static mode, so we should have 1 prim maximum.
+                assert(m_NumPrims === 1);
+                assert(primIndexCount === count);
+                assert(primType === 0x00 /* PRIM_TRILIST */);
+
+                for (let k = 0; k < count; k++)
+                    indexData[dstOffsIndex + k] = dstIndexBase + primindices[primFirstIndex + k];
+            } else {
+                convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
+            }
+
             this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: count });
             dstOffsIndex += count;
             dstIndexBase += numedges;
