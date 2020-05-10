@@ -59,6 +59,7 @@ import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
+import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -150,6 +151,7 @@ const sceneGroups = [
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
     Scenes_SunshineWater.sceneGroup,
+    Scenes_HalfLife2.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {

@@ -31,42 +31,32 @@ class BasicRRESSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-class H3DScene implements Viewer.SceneGfx {
+class H3DScene extends EmptyScene {
     public textureHolder = new CtrTextureHolder();
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        return null as unknown as GfxRenderPass;
-    }
-
-    public destroy(device: GfxDevice): void {
-    }
 }
 
 class H3DSceneDesc implements Viewer.SceneDesc {
     constructor(public dataPath: string, public id: string = dataPath, public name: string = dataPath) {}
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(this.dataPath).then((data) => {
-            const h3d = H3D.parse(data);
-            const renderer = new H3DScene();
-            renderer.textureHolder.addTextures(device, h3d.textures);
-            return renderer;
-        });
+        const data = await dataFetcher.fetchData(this.dataPath);
+        const h3d = H3D.parse(data);
+        const renderer = new H3DScene();
+        renderer.textureHolder.addTextures(device, h3d.textures);
+        return renderer;
     }
 }
 
 class NARCSceneDesc implements Viewer.SceneDesc {
     constructor(public dataPath: string, public id: string = dataPath, public name: string = dataPath) {}
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(this.dataPath).then((data) => {
-            const narc = NARC.parse(data);
-            console.log(narc);
-            const renderer = new H3DScene();
-            return renderer;
-        });
+        const data = await dataFetcher.fetchData(this.dataPath);
+        const narc = NARC.parse(data);
+        console.log(narc);
+        return new EmptyScene();
     }
 }
 
