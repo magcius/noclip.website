@@ -14,7 +14,11 @@ export interface VMT {
 
     // material
     $basetexture: string;
-    [k: string]: string;
+    $alphatest: number;
+    $alphatestreference: number;
+    $additive: number;
+    ['%compilesky']: string;
+    ['%compiletrigger']: string;
 }
 
 export class ValveKeyValueParser {

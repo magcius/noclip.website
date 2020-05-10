@@ -5,6 +5,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxTexture, GfxDevice, makeTextureDescriptor2D, GfxFormat } from "../gfx/platform/GfxPlatform";
 import { readString, assert } from "../util";
 import { TextureMapping } from "../TextureHolder";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 const enum ImageFormat {
     RGBA8888     = 0x00,
@@ -82,17 +83,22 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
     }
 }
 
+export const enum VTFFlags {
+    ONEBITALPHA   = 0x00001000,
+    EIGHTBITALPHA = 0x00002000,
+}
+
 export class VTF {
     public gfxTexture: GfxTexture | null = null;
 
     public format: ImageFormat;
-    public flags: number;
+    public flags: VTFFlags;
     public width: number;
     public height: number;
     public depth: number;
     public numLevels: number;
 
-    constructor(device: GfxDevice, buffer: ArrayBufferSlice | null) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null) {
         if (buffer === null)
             return;
 
@@ -177,6 +183,10 @@ export class VTF {
 
     public fillTextureMapping(m: TextureMapping): void {
         m.gfxTexture = this.gfxTexture;
+    }
+
+    public isTranslucent(): boolean {
+        return !!(this.flags & (VTFFlags.ONEBITALPHA | VTFFlags.EIGHTBITALPHA));
     }
 
     public destroy(device: GfxDevice): void {

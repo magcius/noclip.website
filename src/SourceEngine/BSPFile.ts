@@ -30,6 +30,7 @@ export interface Surface {
     texinfo: number;
     startIndex: number;
     indexCount: number;
+    center: vec3;
 }
 
 interface TexinfoMapping {
@@ -225,6 +226,8 @@ export class BSPFile {
                 continue;
             }
 
+            const center = vec3.create();
+
             for (let j = 0; j < numedges; j++) {
                 const idx = firstedge + j;
 
@@ -233,6 +236,7 @@ export class BSPFile {
                 vertexData[dstOffs++] = scratchVec3[0] = vertexes[vertIndex * 3 + 0];
                 vertexData[dstOffs++] = scratchVec3[1] = vertexes[vertIndex * 3 + 1];
                 vertexData[dstOffs++] = scratchVec3[2] = vertexes[vertIndex * 3 + 2];
+                vec3.scaleAndAdd(center, center, scratchVec3, 1/numedges);
 
                 // Normal
                 const normIndex = vertnormalindices[idx];
@@ -242,8 +246,7 @@ export class BSPFile {
 
                 // Texture UV
                 calcTexCoord(scratchVec2, scratchVec3, tex.textureMapping);
-                // TODO(jstpierre): Why is this flipped?
-                scratchVec2[0] /= -tex.width;
+                scratchVec2[0] /= tex.width;
                 scratchVec2[1] /= tex.height;
                 vertexData[dstOffs++] = scratchVec2[0];
                 vertexData[dstOffs++] = scratchVec2[1];
@@ -287,7 +290,7 @@ export class BSPFile {
                 convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
             }
 
-            this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: count });
+            this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: count, center });
             dstOffsIndex += count;
             dstIndexBase += numedges;
         }

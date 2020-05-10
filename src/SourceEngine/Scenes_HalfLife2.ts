@@ -3,23 +3,22 @@ import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
-import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { DeviceProgram } from "../Program";
 import { BSPFile, Surface } from "./BSPFile";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { VPKMount, createVPKMount } from "./VPK";
-import { TextureMapping } from "../TextureHolder";
-import { nArray, assertExists, assert } from "../util";
-import { VTF } from "./VTF";
 import { ZipFile } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { parseVMT, VMT } from "./VMT";
-import { MaterialInstance, MaterialCache } from "./Materials";
-import { clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
+import { BaseMaterial, MaterialCache } from "./Materials";
+import { clamp, computeMatrixWithoutTranslation, transformVec3Mat4w0 } from "../MathHelpers";
+import { assert } from "../util";
+import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 const pathBase = `HalfLife2`;
 
@@ -100,7 +99,7 @@ class SkyboxRenderer {
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private materialInstances: MaterialInstance[] = [];
+    private materialInstances: BaseMaterial[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private skyname: string) {
         const vertexData = new Float32Array(6 * 4 * 5);
@@ -180,6 +179,7 @@ class SkyboxRenderer {
         for (let i = 0; i < 6; i++) {
             const renderInst = renderInstManager.newRenderInst();
             this.materialInstances[i].setOnRenderInst(renderInst, scratchMatrix);
+            renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
             renderInst.drawIndexes(6, i*6);
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -206,13 +206,12 @@ class SkyboxRenderer {
 }
 
 class BSPSurface {
-    public materialInstance: MaterialInstance | null = null;
-    public visible: boolean = true;
+    public materialInstance: BaseMaterial | null = null;
 
     constructor(public surface: Surface) {
     }
 
-    public bindMaterial(materialInstance: MaterialInstance): void {
+    public bindMaterial(materialInstance: BaseMaterial): void {
         this.materialInstance = materialInstance;
     }
 
@@ -223,6 +222,8 @@ class BSPSurface {
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderInst, viewerInput.camera.viewMatrix);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
+        const depth = this.materialInstance.computeViewSpaceDepth(this.surface.center, viewerInput.camera.viewMatrix);
+        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         renderInstManager.submitRenderInst(renderInst);
     }
 }
@@ -359,7 +360,7 @@ class HalfLife2SceneDesc implements SceneDesc {
         const renderer = new SourceRenderer(context);
         const cache = renderer.renderHelper.getCache();
 
-        const materialCache = new MaterialCache(device, cache, filesystem);
+        renderer.materialCache = new MaterialCache(device, cache, filesystem);
 
         const bsp = await context.dataFetcher.fetchData(`${pathBase}/maps/${this.id}.bsp`);
         const bspFile = new BSPFile(bsp);
@@ -371,11 +372,11 @@ class HalfLife2SceneDesc implements SceneDesc {
         assert(worldspawn.classname === 'worldspawn');
         if (worldspawn.skyname) {
             renderer.skyboxRenderer = new SkyboxRenderer(device, cache, worldspawn.skyname);
-            renderer.skyboxRenderer.bindMaterial(materialCache);
+            renderer.skyboxRenderer.bindMaterial(renderer.materialCache);
         }
 
         const bspRenderer = new BSPRenderer(device, cache, bspFile);
-        bspRenderer.bindMaterials(materialCache);
+        bspRenderer.bindMaterials(renderer.materialCache);
         renderer.bspRenderers.push(bspRenderer);
 
         return renderer;

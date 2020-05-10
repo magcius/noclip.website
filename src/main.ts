@@ -852,7 +852,7 @@ declare var gtag: (command: string, eventName: string, eventParameters: { [key: 
 // Declare a "main" object for easy access.
 declare global {
     interface Window {
-        main: any;
+        main: Main;
     }
 }
 
