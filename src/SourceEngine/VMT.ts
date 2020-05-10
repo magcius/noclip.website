@@ -162,6 +162,7 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
     }
 }
 
+// This is in the same file because it also parses keyfiles, even though it's not material-related.
 export interface Entity {
     classname: string;
     [k: string]: string;
