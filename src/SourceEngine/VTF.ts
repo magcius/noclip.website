@@ -2,7 +2,7 @@
 // Valve Texture File
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxTexture, GfxDevice, makeTextureDescriptor2D, GfxFormat } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { readString, assert } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -83,13 +83,19 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
     }
 }
 
-export const enum VTFFlags {
+const enum VTFFlags {
+    POINTSAMPLE   = 0x00000001,
+    TRILINEAR     = 0x00000002,
+    CLAMPS        = 0x00000004,
+    CLAMPT        = 0x00000008,
+    NOMIP         = 0x00000100,
     ONEBITALPHA   = 0x00001000,
     EIGHTBITALPHA = 0x00002000,
 }
 
 export class VTF {
     public gfxTexture: GfxTexture | null = null;
+    public gfxSampler: GfxSampler;
 
     public format: ImageFormat;
     public flags: VTFFlags;
@@ -172,6 +178,18 @@ export class VTF {
 
         hostAccessPass.uploadTextureData(this.gfxTexture, 0, levelDatas);
         device.submitPass(hostAccessPass);
+
+        const wrapS = !!(this.flags & VTFFlags.CLAMPS) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;
+        const wrapT = !!(this.flags & VTFFlags.CLAMPT) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;
+
+        const texFilter = !!(this.flags & VTFFlags.POINTSAMPLE) ? GfxTexFilterMode.POINT : GfxTexFilterMode.BILINEAR;
+        const minFilter = texFilter;
+        const magFilter = texFilter;
+        const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NO_MIP : !!(this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.LINEAR : GfxMipFilterMode.NEAREST;
+        this.gfxSampler = cache.createSampler(device, {
+            wrapS, wrapT, minFilter, magFilter, mipFilter,
+            minLOD: 0, maxLOD: 100,
+        });
     }
 
     private calcMipSize(i: number, depth: number = this.depth): number {
@@ -183,6 +201,9 @@ export class VTF {
 
     public fillTextureMapping(m: TextureMapping): void {
         m.gfxTexture = this.gfxTexture;
+        m.gfxSampler = this.gfxSampler;
+        m.width = this.width;
+        m.height = this.height;
     }
 
     public isTranslucent(): boolean {
