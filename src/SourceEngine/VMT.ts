@@ -19,10 +19,13 @@ export interface VMT {
     $detail: string;
     $detailblendmode: string;
     $detailblendfactor: string;
+    $detailtint: string;
     $detailscale: string;
     $envmap: string;
     $envmapmask: string;
     $envmaptint: string;
+    $bumpmap: string;
+    $nodiffusebumplighting: string;
     $alphatest: string;
     $alphatestreference: string;
     $additive: string;

@@ -196,14 +196,16 @@ export class BSPFile {
             }
         }
 
-        // 3 pos, 3 normal, 4 uv
-        const vertexSize = (3 + 3 + 4);
+        // 3 pos, 3 normal, 4 tangent, 4 uv
+        const vertexSize = (3 + 3 + 4 + 4);
         const vertexData = new Float32Array(vertCount * vertexSize);
         assert(vertCount < 0xFFFF);
         const indexData = new Uint16Array(indexCount);
 
         const scratchVec2 = vec2.create();
-        const scratchVec3 = vec3.create();
+        const scratchPosition = vec3.create();
+        const scratchNormal = vec3.create();
+        const scratchTangentS = vec3.create();
 
         const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);
         const vertnormals = getLumpData(LumpType.VERTNORMALS).createTypedArray(Float32Array);
@@ -267,19 +269,32 @@ export class BSPFile {
 
                 // Position
                 const vertIndex = vertindices[idx];
-                vertexData[dstOffs++] = scratchVec3[0] = vertexes[vertIndex * 3 + 0];
-                vertexData[dstOffs++] = scratchVec3[1] = vertexes[vertIndex * 3 + 1];
-                vertexData[dstOffs++] = scratchVec3[2] = vertexes[vertIndex * 3 + 2];
-                vec3.scaleAndAdd(center, center, scratchVec3, 1/numedges);
+                vertexData[dstOffs++] = scratchPosition[0] = vertexes[vertIndex * 3 + 0];
+                vertexData[dstOffs++] = scratchPosition[1] = vertexes[vertIndex * 3 + 1];
+                vertexData[dstOffs++] = scratchPosition[2] = vertexes[vertIndex * 3 + 2];
+                vec3.scaleAndAdd(center, center, scratchPosition, 1/numedges);
 
                 // Normal
                 const normIndex = vertnormalindices[vertnormBase + j];
-                vertexData[dstOffs++] = vertnormals[normIndex * 3 + 0];
-                vertexData[dstOffs++] = vertnormals[normIndex * 3 + 1];
-                vertexData[dstOffs++] = vertnormals[normIndex * 3 + 2];
+                vertexData[dstOffs++] = scratchNormal[0] = vertnormals[normIndex * 3 + 0];
+                vertexData[dstOffs++] = scratchNormal[1] = vertnormals[normIndex * 3 + 1];
+                vertexData[dstOffs++] = scratchNormal[2] = vertnormals[normIndex * 3 + 2];
+
+                // Compute Tangent S vector
+                vec3.set(scratchTangentS, tex.textureMapping.t[0], tex.textureMapping.t[1], tex.textureMapping.t[2]);
+                vec3.normalize(scratchTangentS, scratchTangentS);
+                // Tangent S = Normal x Texture T Mapping (bitangent)
+                vec3.cross(scratchTangentS, scratchNormal, scratchTangentS);
+                // Tangent T = Tangent S x Normal. Done in shader.
+                vertexData[dstOffs++] = scratchTangentS[0];
+                vertexData[dstOffs++] = scratchTangentS[1];
+                vertexData[dstOffs++] = scratchTangentS[2];
+                // Tangent T Sign.
+                const tangentTSign = 1.0;
+                vertexData[dstOffs++] = tangentTSign;
 
                 // Texture UV
-                calcTexCoord(scratchVec2, scratchVec3, tex.textureMapping);
+                calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);
                 scratchVec2[0] /= tex.width;
                 scratchVec2[1] /= tex.height;
                 vertexData[dstOffs++] = scratchVec2[0];
@@ -289,7 +304,7 @@ export class BSPFile {
                 if (tex.flags & TexinfoFlags.NOLIGHT) {
                     vec2.set(scratchVec2, 0.5, 0.5);
                 } else {
-                    calcTexCoord(scratchVec2, scratchVec3, tex.lightmapMapping);
+                    calcTexCoord(scratchVec2, scratchPosition, tex.lightmapMapping);
                     scratchVec2[0] += 0.5 - m_LightmapTextureMinsInLuxels[0];
                     scratchVec2[1] += 0.5 - m_LightmapTextureMinsInLuxels[1];
 

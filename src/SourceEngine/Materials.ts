@@ -18,7 +18,8 @@ import { Color, White } from "../Color";
 export class BaseMaterialProgram extends DeviceProgram {
     public static a_Position = 0;
     public static a_Normal = 1;
-    public static a_TexCoord = 2;
+    public static a_TangentS = 2;
+    public static a_TexCoord = 3;
 
     public static ub_SceneParams = 0;
     public static ub_ObjectParams = 1;
@@ -50,13 +51,28 @@ layout(row_major, std140) uniform ub_ObjectParams {
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
+#define u_LightmapOffset     (u_Misc[0].z)
 
-// Base, Detail, Lightmap, Envmap Mask
+// Base, Detail
 varying vec4 v_TexCoord0;
+// Lightmap (0), Envmap Mask
 varying vec4 v_TexCoord1;
+// Bumpmap
+varying vec4 v_TexCoord2;
 varying vec3 v_PositionWorld;
-varying vec3 v_NormalWorld;
-uniform sampler2D u_Texture[4];
+
+#define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
+
+#ifdef HAS_FULL_TANGENTSPACE
+// 3x3 matrix for our tangent space basis.
+varying vec3 v_TangentSpaceBasis0;
+varying vec3 v_TangentSpaceBasis1;
+#endif
+// Just need the vertex normal component.
+varying vec3 v_TangentSpaceBasis2;
+
+// Base, Detail, Bumpmap, Lightmap, Envmap Mask
+uniform sampler2D u_Texture[5];
 
 // Cube Envmap
 uniform samplerCube u_TextureCube[1];
@@ -64,6 +80,7 @@ uniform samplerCube u_TextureCube[1];
 #ifdef VERT
 layout(location = ${BaseMaterialProgram.a_Position}) attribute vec3 a_Position;
 layout(location = ${BaseMaterialProgram.a_Normal}) attribute vec3 a_Normal;
+layout(location = ${BaseMaterialProgram.a_TangentS}) attribute vec4 a_TangentS;
 layout(location = ${BaseMaterialProgram.a_TexCoord}) attribute vec4 a_TexCoord;
 
 vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
@@ -75,8 +92,17 @@ void mainVS() {
 
     // TODO(jstpierre): MV/P split.
     v_PositionWorld = a_Position;
-    v_NormalWorld = a_Normal;
+    vec3 t_NormalWorld = a_Normal;
+    vec3 t_TangentSWorld = a_TangentS.xyz;
+    vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld) * a_TangentS.w;
 
+#ifdef HAS_FULL_TANGENTSPACE
+    v_TangentSpaceBasis0 = t_TangentSWorld;
+    v_TangentSpaceBasis1 = t_TangentTWorld;
+#endif
+    v_TangentSpaceBasis2 = t_NormalWorld;
+
+    // TODO(jstpierre): BaseScale
     v_TexCoord0.xy = a_TexCoord.xy;
 #ifdef USE_DETAIL
     v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_DetailScaleBias);
@@ -86,6 +112,10 @@ void mainVS() {
 #endif
 #ifdef USE_ENVMAP_MASK
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
+#endif
+#ifdef USE_BUMPMAP
+    // TODO(jstpierre): BumpmapScale
+    v_TexCoord2.xy = a_TexCoord.xy;
 #endif
 }
 #endif
@@ -124,8 +154,20 @@ void mainPS() {
 
     vec4 t_FinalColor;
 
+    vec3 t_NormalWorld;
+#ifdef USE_BUMPMAP
+    vec3 t_BumpmapSample = texture(SAMPLER_2D(u_Texture[2], v_TexCoord2.xy)).rgb;
+    vec3 t_BumpmapNormal = t_BumpmapSample * 2.0 - 1.0;
+
+    t_NormalWorld.x = dot(v_TangentSpaceBasis0, t_BumpmapNormal);
+    t_NormalWorld.y = dot(v_TangentSpaceBasis1, t_BumpmapNormal);
+    t_NormalWorld.z = dot(v_TangentSpaceBasis2, t_BumpmapNormal);
+#else
+    t_NormalWorld = v_TangentSpaceBasis2;
+#endif
+
 #ifdef USE_LIGHTMAP
-    vec3 t_DiffuseLighting = texture(SAMPLER_2D(u_Texture[2], v_TexCoord1.xy)).rgb;
+    vec3 t_DiffuseLighting = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy)).rgb;
 #else
     vec3 t_DiffuseLighting = vec3(1.0);
 #endif
@@ -135,17 +177,17 @@ void mainPS() {
     vec3 t_SpecularFactor = vec3(u_EnvmapTint);
 
 #ifdef USE_ENVMAP_MASK
-    t_SpecularFactor *= texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.zw)).rgb;
+    t_SpecularFactor *= texture(SAMPLER_2D(u_Texture[4], v_TexCoord1.zw)).rgb;
 #endif
 
     vec3 t_SpecularLighting = vec3(0.0);
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld;
-    vec3 t_Reflection = CalcReflection(v_NormalWorld, t_PositionToEye);
+    vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
     t_SpecularLighting += texture(u_TextureCube[0], t_Reflection).rgb;
     t_SpecularLighting *= t_SpecularFactor;
 
     vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
-    float t_Fresnel = pow(1.0 - dot(v_NormalWorld, t_WorldDirectionToEye), 5.0);
+    float t_Fresnel = pow(1.0 - dot(t_NormalWorld, t_WorldDirectionToEye), 5.0);
     t_SpecularLighting *= t_Fresnel;
 
     t_FinalColor.rgb += t_SpecularLighting.rgb;
@@ -186,9 +228,10 @@ export class BaseMaterial {
     private detailTexture: VTF | null = null;
     private envmapMaskTexture: VTF | null = null;
     private envmapTexture: VTF | null = null;
+    private bumpmapTexture: VTF | null = null;
     private lightmapAllocation: LightmapAllocation | null = null;
 
-    public textureMapping: TextureMapping[] = nArray(5, () => new TextureMapping());
+    public textureMapping: TextureMapping[] = nArray(6, () => new TextureMapping());
 
     // Material parameters.
     public wantsLightmap = false;
@@ -199,8 +242,9 @@ export class BaseMaterial {
 
     private alphaTestReference: number = 0.0;
     private detailScaleBias = vec4.create();
-    private envmapMaskScaleBias = vec4.create();
+    private detailTint: Color = White;
     private detailBlendFactor = 1.0;
+    private envmapMaskScaleBias = vec4.create();
     private envmapTint: Color = White;
 
     constructor(public vmt: VMT) {
@@ -222,6 +266,8 @@ export class BaseMaterial {
             this.baseTexture = await materialCache.fetchVTF(vmt.$basetexture);
         if (vmt.$detail !== undefined)
             this.detailTexture = await materialCache.fetchVTF(vmt.$detail);
+        if (vmt.$bumpmap !== undefined)
+            this.bumpmapTexture = await materialCache.fetchVTF(vmt.$bumpmap);
         if (vmt.$envmapmask !== undefined)
             this.envmapMaskTexture = await materialCache.fetchVTF(vmt.$envmapmask);
         if (vmt.$envmap !== undefined)
@@ -246,15 +292,27 @@ export class BaseMaterial {
             this.detailTexture.fillTextureMapping(this.textureMapping[1]);
             if (vmt.$detailblendfactor)
                 this.detailBlendFactor = Number(vmt.$detailblendfactor);
+            if (vmt.$detailtint)
+                this.detailTint = vmtParseColor(vmt.$detailtint);
 
             if (vmt.$detailscale)
                 scaleBiasSet(this.detailScaleBias, Number(vmt.$detailscale));
         }
 
+        if (this.bumpmapTexture !== null) {
+            this.wantsBumpmap = true;
+            this.program.defines.set('USE_BUMPMAP', '1');
+            this.bumpmapTexture.fillTextureMapping(this.textureMapping[2]);
+            const wantsDiffuseBumpmap = !vmt.$nodiffusebumplighting;
+            this.program.defines.set('USE_DIFFUSE_BUMPMAP', wantsDiffuseBumpmap ? '1' : '0');
+        }
+
+        // Lightmap = 3
+
         if (this.envmapMaskTexture !== null) {
             this.wantsEnvmapMask = true;
             this.program.defines.set('USE_ENVMAP_MASK', '1');
-            this.envmapMaskTexture.fillTextureMapping(this.textureMapping[3]);
+            this.envmapMaskTexture.fillTextureMapping(this.textureMapping[4]);
             scaleBiasSet(this.envmapMaskScaleBias, 1.0);
         }
 
@@ -263,7 +321,7 @@ export class BaseMaterial {
             this.program.defines.set('USE_ENVMAP', '1');
             if (vmt.$envmaptint)
                 this.envmapTint = vmtParseColor(vmt.$envmaptint);
-            this.envmapTexture.fillTextureMapping(this.textureMapping[4]);
+            this.envmapTexture.fillTextureMapping(this.textureMapping[5]);
         }
 
         if (shaderType === 'lightmappedgeneric') {
@@ -332,7 +390,7 @@ export class BaseMaterial {
 
     public setLightmapAllocation(lightmapAllocation: LightmapAllocation): void {
         this.lightmapAllocation = lightmapAllocation;
-        const lightmapTextureMapping = this.textureMapping[2];
+        const lightmapTextureMapping = this.textureMapping[3];
         lightmapTextureMapping.gfxTexture = this.lightmapAllocation.gfxTexture;
         lightmapTextureMapping.gfxSampler = this.lightmapAllocation.gfxSampler;
     }

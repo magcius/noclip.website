@@ -16,6 +16,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BaseMaterialProgram, BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState } from "./Materials";
 import { clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { assert } from "../util";
+import { interactiveVizSliderSelect } from "../DebugJunk";
 
 const pathBase = `HalfLife2`;
 
@@ -165,6 +166,7 @@ class SkyboxRenderer {
 class BSPSurface {
     public materialInstance: BaseMaterial | null = null;
     public surfaceLighting: SurfaceLightingInstance;
+    public visible = true;
 
     constructor(public surface: Surface) {
     }
@@ -177,7 +179,7 @@ class BSPSurface {
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        if (this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
+        if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
             return;
 
         if (this.surfaceLighting !== null && this.surfaceLighting.lightmapDirty) {
@@ -209,10 +211,11 @@ class BSPRenderer {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: BaseMaterialProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
             { location: BaseMaterialProgram.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGB, },
-            { location: BaseMaterialProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 6*0x04, format: GfxFormat.F32_RGBA, },
+            { location: BaseMaterialProgram.a_TangentS, bufferIndex: 0, bufferByteOffset: 6*0x04, format: GfxFormat.F32_RGBA, },
+            { location: BaseMaterialProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 10*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: (3+3+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: (3+3+4+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
@@ -256,6 +259,12 @@ class BSPRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
     }
+
+    public surfaceSelect(): void {
+        interactiveVizSliderSelect(this.surfaces, (item) => {
+            console.log(item);
+        });
+    }
 }
 
 class SourceRenderContext {
@@ -276,7 +285,7 @@ class SourceRenderContext {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 5 },
+    { numUniformBuffers: 2, numSamplers: 6 },
 ];
 
 export class SourceRenderer implements SceneGfx {
