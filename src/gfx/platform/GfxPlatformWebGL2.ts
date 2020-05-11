@@ -1545,8 +1545,7 @@ void main() {
 
                 this._setActiveTexture(gl.TEXTURE0);
                 this._currentTextures[0] = null;
-                if (!isCube)
-                    gl.bindTexture(gl_target, gl_texture);
+                gl.bindTexture(gl_target, gl_texture);
                 let w = width, h = height, d = depth;
                 const maxMipLevel = Math.min(firstMipLevelToUpload + numMipLevelsToUpload, numLevels);
 
@@ -1563,9 +1562,15 @@ void main() {
                                 gl.compressedTexSubImage3D(gl_target, i, 0, 0, z, w, h, 1, gl_format, levelData, z * imageSize, imageSize);
                             }
                         } else if (isCube) {
-                            const imageSize = levelData.byteLength / depth
+                            const imageSize = levelData.byteLength / depth;
                             for (let z = 0; z < depth; z++) {
-                                
+                                const face_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X + (z % 6);
+                                if (isCompressed) {
+                                    gl.compressedTexSubImage2D(face_target, i, 0, 0, w, h, gl_format, levelData, z * imageSize, imageSize);
+                                } else {
+                                    const gl_type = this.translateTextureType(pixelFormat);
+                                    gl.texSubImage2D(face_target, i, 0, 0, w, h, gl_format, gl_type, levelData, z * imageSize);
+                                }
                             }
                         } else if (is3D) {
                             if (isCompressed) {

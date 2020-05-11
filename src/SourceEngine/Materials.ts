@@ -1,18 +1,19 @@
 
 import { DeviceProgram } from "../Program";
-import { VMT, parseVMT } from "./VMT";
+import { VMT, parseVMT, vmtParseColor } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderer";
 import { nArray, assert, assertExists, fallback } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillVec4, fillVec4v, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceFileSystem } from "./Scenes_HalfLife2";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Surface, SurfaceLighting } from "./BSPFile";
+import { Color, White } from "../Color";
 
 export class BaseMaterialProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -31,11 +32,15 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 layout(row_major, std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelView;
+    vec4 u_CameraPosWorld;
 #ifdef USE_DETAIL
     vec4 u_DetailScaleBias;
 #endif
 #ifdef USE_LIGHTMAP
     vec4 u_LightmapScaleBias;
+#endif
+#ifdef USE_ENVMAP_MASK
+    vec4 u_EnvmapMaskScaleBias;
 #endif
 #ifdef USE_ENVMAP
     vec4 u_EnvmapTint;
@@ -46,13 +51,19 @@ layout(row_major, std140) uniform ub_ObjectParams {
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
 
-// Base, Detail, Lightmap, Cube Envmap, Envmap Mask
+// Base, Detail, Lightmap, Envmap Mask
 varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
-uniform sampler2D u_Texture[5];
+varying vec3 v_PositionWorld;
+varying vec3 v_NormalWorld;
+uniform sampler2D u_Texture[4];
+
+// Cube Envmap
+uniform samplerCube u_TextureCube[1];
 
 #ifdef VERT
 layout(location = ${BaseMaterialProgram.a_Position}) attribute vec3 a_Position;
+layout(location = ${BaseMaterialProgram.a_Normal}) attribute vec3 a_Normal;
 layout(location = ${BaseMaterialProgram.a_TexCoord}) attribute vec4 a_TexCoord;
 
 vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
@@ -61,14 +72,20 @@ vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
 
 void mainVS() {
     gl_Position = Mul(u_Projection, vec4(Mul(u_ModelView, vec4(a_Position, 1.0)), 1.0));
-    v_TexCoord0.xy = a_TexCoord.xy;
 
+    // TODO(jstpierre): MV/P split.
+    v_PositionWorld = a_Position;
+    v_NormalWorld = a_Normal;
+
+    v_TexCoord0.xy = a_TexCoord.xy;
 #ifdef USE_DETAIL
     v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_DetailScaleBias);
 #endif
-
 #ifdef USE_LIGHTMAP
     v_TexCoord1.xy = CalcScaleBias(a_TexCoord.zw, u_LightmapScaleBias);
+#endif
+#ifdef USE_ENVMAP_MASK
+    v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
 #endif
 }
 #endif
@@ -76,13 +93,17 @@ void mainVS() {
 #ifdef FRAG
 
 #define COMBINE_MODE_MUL_DETAIL2        (0)
-vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, int t_CombineMode, float t_BlendFactor) {
+vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
     if (t_CombineMode == COMBINE_MODE_MUL_DETAIL2) {
         return t_BaseTexture * mix(vec4(1.0), t_DetailTexture * 2.0, t_BlendFactor);
     } else {
         // Unknown.
         return t_BaseTexture + vec4(1.0, 0.0, 1.0, 0.0);
     }
+}
+
+vec3 CalcReflection(in vec3 t_NormalWorld, in vec3 t_PositionToEye) {
+    return (2.0 * (dot(t_NormalWorld, t_PositionToEye)) * t_NormalWorld) - (dot(t_NormalWorld, t_NormalWorld) * t_PositionToEye);
 }
 
 void mainPS() {
@@ -110,6 +131,26 @@ void mainPS() {
 #endif
     t_FinalColor.rgb += t_DiffuseLighting * t_Albedo.rgb;
 
+#ifdef USE_ENVMAP
+    vec3 t_SpecularFactor = vec3(u_EnvmapTint);
+
+#ifdef USE_ENVMAP_MASK
+    t_SpecularFactor *= texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.zw)).rgb;
+#endif
+
+    vec3 t_SpecularLighting = vec3(0.0);
+    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld;
+    vec3 t_Reflection = CalcReflection(v_NormalWorld, t_PositionToEye);
+    t_SpecularLighting += texture(u_TextureCube[0], t_Reflection).rgb;
+    t_SpecularLighting *= t_SpecularFactor;
+
+    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
+    float t_Fresnel = pow(1.0 - dot(v_NormalWorld, t_WorldDirectionToEye), 5.0);
+    t_SpecularLighting *= t_Fresnel;
+
+    t_FinalColor.rgb += t_SpecularLighting.rgb;
+#endif
+
     t_FinalColor.a = t_Albedo.a;
 
     // Gamma correction.
@@ -128,6 +169,10 @@ const zup = mat4.fromValues(
     0, 0,  0, 1,
 );
 
+function scaleBiasSet(dst: vec4, scale: number, x: number = 0.0, y: number = 0.0): void {
+    vec4.set(dst, scale, scale, x, y);
+}
+
 const scratchMatrix = mat4.create();
 export class BaseMaterial {
     public visible = true;
@@ -139,6 +184,8 @@ export class BaseMaterial {
     // Texture parameters.
     private baseTexture: VTF | null = null;
     private detailTexture: VTF | null = null;
+    private envmapMaskTexture: VTF | null = null;
+    private envmapTexture: VTF | null = null;
     private lightmapAllocation: LightmapAllocation | null = null;
 
     public textureMapping: TextureMapping[] = nArray(5, () => new TextureMapping());
@@ -147,10 +194,14 @@ export class BaseMaterial {
     public wantsLightmap = false;
     public wantsBumpmap = false;
     public wantsDetail = false;
+    public wantsEnvmap = false;
+    public wantsEnvmapMask = false;
 
-    private alphaTestReference: number;
-    private detailScaleBiasVec = vec4.create();
+    private alphaTestReference: number = 0.0;
+    private detailScaleBias = vec4.create();
+    private envmapMaskScaleBias = vec4.create();
     private detailBlendFactor = 1.0;
+    private envmapTint: Color = White;
 
     constructor(public vmt: VMT) {
     }
@@ -168,9 +219,13 @@ export class BaseMaterial {
 
         // Base textures.
         if (vmt.$basetexture !== undefined)
-            this.baseTexture = await materialCache.fetchVTF(assertExists(vmt.$basetexture));
+            this.baseTexture = await materialCache.fetchVTF(vmt.$basetexture);
         if (vmt.$detail !== undefined)
-            this.detailTexture = await materialCache.fetchVTF(assertExists(vmt.$detail));
+            this.detailTexture = await materialCache.fetchVTF(vmt.$detail);
+        if (vmt.$envmapmask !== undefined)
+            this.envmapMaskTexture = await materialCache.fetchVTF(vmt.$envmapmask);
+        if (vmt.$envmap !== undefined)
+            this.envmapTexture = await materialCache.fetchVTF(vmt.$envmap);
     }
 
     protected initSync() {
@@ -186,17 +241,29 @@ export class BaseMaterial {
 
         if (this.detailTexture !== null) {
             this.wantsDetail = true;
-
             this.program.defines.set('USE_DETAIL', '1');
             this.program.defines.set('DETAIL_COMBINE_MODE', fallback(vmt.$detailblendmode, '0'));
             this.detailTexture.fillTextureMapping(this.textureMapping[1]);
             if (vmt.$detailblendfactor)
                 this.detailBlendFactor = Number(vmt.$detailblendfactor);
 
-            if (vmt.$detailscale) {
-                const scale = Number(vmt.$detailscale);
-                vec4.set(this.detailScaleBiasVec, scale, scale, 0.0, 0.0);
-            }
+            if (vmt.$detailscale)
+                scaleBiasSet(this.detailScaleBias, Number(vmt.$detailscale));
+        }
+
+        if (this.envmapMaskTexture !== null) {
+            this.wantsEnvmapMask = true;
+            this.program.defines.set('USE_ENVMAP_MASK', '1');
+            this.envmapMaskTexture.fillTextureMapping(this.textureMapping[3]);
+            scaleBiasSet(this.envmapMaskScaleBias, 1.0);
+        }
+
+        if (this.envmapTexture !== null) {
+            this.wantsEnvmap = true;
+            this.program.defines.set('USE_ENVMAP', '1');
+            if (vmt.$envmaptint)
+                this.envmapTint = vmtParseColor(vmt.$envmaptint);
+            this.envmapTexture.fillTextureMapping(this.textureMapping[4]);
         }
 
         if (shaderType === 'lightmappedgeneric') {
@@ -271,14 +338,21 @@ export class BaseMaterial {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, viewMatrix: mat4): void {
-        let offs = renderInst.allocateUniformBuffer(BaseMaterialProgram.ub_ObjectParams, 4*3+4+4+4);
+        let offs = renderInst.allocateUniformBuffer(BaseMaterialProgram.ub_ObjectParams, 4*3+4+4+4+4+4+4+4);
         const d = renderInst.mapUniformBufferF32(BaseMaterialProgram.ub_ObjectParams);
         mat4.mul(scratchMatrix, viewMatrix, zup);
         offs += fillMatrix4x3(d, offs, scratchMatrix);
+        // Compute camera world translation.
+        mat4.invert(scratchMatrix, scratchMatrix);
+        offs += fillVec4(d, offs, scratchMatrix[12], scratchMatrix[13], scratchMatrix[14]);
         if (this.wantsDetail)
-            offs += fillVec4v(d, offs, this.detailScaleBiasVec);
+            offs += fillVec4v(d, offs, this.detailScaleBias);
         if (this.wantsLightmap)
-            offs += fillVec4v(d, offs, this.lightmapAllocation!.scaleBiasVec);
+            offs += fillVec4v(d, offs, this.lightmapAllocation!.scaleBias);
+        if (this.wantsEnvmapMask)
+            offs += fillVec4v(d, offs, this.envmapMaskScaleBias);
+        if (this.wantsEnvmap)
+            offs += fillColor(d, offs, this.envmapTint);
         offs += fillVec4(d, offs, this.alphaTestReference, this.detailBlendFactor);
 
         assert(this.isMaterialLoaded());
@@ -375,7 +449,7 @@ export class MaterialCache {
 export class LightmapAllocation {
     public width: number;
     public height: number;
-    public scaleBiasVec = vec4.create();
+    public scaleBias = vec4.create();
     public gfxTexture: GfxTexture | null = null;
     public gfxSampler: GfxSampler | null = null;
 }
@@ -412,7 +486,7 @@ export class LightmapManager {
         const scaleY = 1.0 / textureHeight;
         const offsX = 0.0;
         const offsY = 0.0;
-        vec4.set(allocation.scaleBiasVec, scaleX, scaleY, offsX, offsY);
+        vec4.set(allocation.scaleBias, scaleX, scaleY, offsX, offsY);
     }
 
     public destroy(device: GfxDevice): void {

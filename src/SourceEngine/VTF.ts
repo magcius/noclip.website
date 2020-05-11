@@ -2,7 +2,7 @@
 // Valve Texture File
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxTexture, GfxDevice, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
 import { readString, assert } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -93,6 +93,7 @@ const enum VTFFlags {
     NOMIP         = 0x00000100,
     ONEBITALPHA   = 0x00001000,
     EIGHTBITALPHA = 0x00002000,
+    ENVMAP        = 0x00004000,
 }
 
 export class VTF {
@@ -104,9 +105,10 @@ export class VTF {
     public width: number;
     public height: number;
     public depth: number;
+    public numFrames: number;
     public numLevels: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private buffer: ArrayBufferSlice | null) {
         if (buffer === null)
             return;
 
@@ -125,7 +127,7 @@ export class VTF {
             this.width = view.getUint16(0x10, true);
             this.height = view.getUint16(0x12, true);
             this.flags = view.getUint32(0x14, true);
-            const numFrames = view.getUint16(0x18, true);
+            this.numFrames = view.getUint16(0x18, true);
             const startFrame = view.getUint16(0x1A, true);
             const reflectivityR = view.getFloat32(0x20, true);
             const reflectivityG = view.getFloat32(0x24, true);
@@ -138,7 +140,9 @@ export class VTF {
             const lowresImageHeight = view.getUint8(0x3E);
 
             if (versionMinor >= 0x02) {
-                this.depth = view.getUint16(0x41, true);
+                this.depth = Math.max(view.getUint16(0x41, true), 1);
+            } else {
+                this.depth = 1;
             }
 
             if (versionMinor >= 0x03) {
@@ -163,9 +167,20 @@ export class VTF {
             throw "whoops";
         }
 
+        const isCube = !!(this.flags & VTFFlags.ENVMAP);
         const srgb = !!(this.flags & VTFFlags.SRGB);
-        const gfxFormat = imageFormatToGfxFormat(device, this.format, srgb);
-        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, this.width, this.height, this.numLevels));
+        const pixelFormat = imageFormatToGfxFormat(device, this.format, srgb);
+        const dimension = isCube ? GfxTextureDimension.Cube : GfxTextureDimension.n2D;
+        const faceCount = (isCube ? 6 : 1);
+        const faceDataCount = (isCube ? 7 : 1);
+        const descriptor: GfxTextureDescriptor = {
+            dimension, pixelFormat,
+            width: this.width,
+            height: this.height,
+            numLevels: this.numLevels,
+            depth: this.depth * faceCount,
+        };
+        this.gfxTexture = device.createTexture(descriptor);
 
         const hostAccessPass = device.createHostAccessPass();
         const levelDatas: Uint8Array[] = [];
@@ -174,9 +189,10 @@ export class VTF {
         for (let i = this.numLevels - 1; i >= 0; i--) {
             const mipWidth = Math.max(this.width >>> i, 1);
             const mipHeight = Math.max(this.height >>> i, 1);
-            const size = this.calcMipSize(i);
+            const faceSize = this.calcMipSize(i);
+            const size = faceSize * faceCount;
             const levelData = imageFormatConvertData(device, this.format, buffer.subarray(dataIdx, size), mipWidth, mipHeight);
-            dataIdx += size;
+            dataIdx += faceSize * faceDataCount;
             levelDatas.unshift(levelData);
         }
 

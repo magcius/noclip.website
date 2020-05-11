@@ -20,6 +20,9 @@ export interface VMT {
     $detailblendmode: string;
     $detailblendfactor: string;
     $detailscale: string;
+    $envmap: string;
+    $envmapmask: string;
+    $envmaptint: string;
     $alphatest: string;
     $alphatestreference: string;
     $additive: string;
@@ -176,7 +179,7 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
 export function vmtParseVector(S: string): number[] {
     assert((S.startsWith('[') && S.endsWith(']')) || (S.startsWith('{') && S.endsWith('}')));
     const scale = S.startsWith('{') ? 1/255.0 : 1;
-    return S.slice(1, -1).split(/\s+/).map((item) => Number(item) * scale);
+    return S.slice(1, -1).trim().split(/\s+/).map((item) => Number(item) * scale);
 }
 
 export function vmtParseColor(S: string): Color {

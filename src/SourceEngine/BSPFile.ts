@@ -213,6 +213,7 @@ export class BSPFile {
         let dstOffs = 0;
         let dstOffsIndex = 0;
         let dstIndexBase = 0;
+        let vertnormalIdx = 0;
         for (let i = 0; i < faceCount; i++) {
             const idx = i * 0x38;
             const planenum = faces.getUint16(idx + 0x00, true);
@@ -233,6 +234,9 @@ export class BSPFile {
             const m_NumPrims = faces.getUint16(idx + 0x30, true);
             const firstPrimID = faces.getUint16(idx + 0x32, true);
             const smoothingGroups = faces.getUint32(idx + 0x34, true);
+
+            const vertnormBase = vertnormalIdx;
+            vertnormalIdx += numedges;
 
             const tex = this.texinfo[texinfo];
             if (!!(tex.flags & TexinfoFlags.NODRAW)) {
@@ -269,7 +273,7 @@ export class BSPFile {
                 vec3.scaleAndAdd(center, center, scratchVec3, 1/numedges);
 
                 // Normal
-                const normIndex = vertnormalindices[idx];
+                const normIndex = vertnormalindices[vertnormBase + j];
                 vertexData[dstOffs++] = vertnormals[normIndex * 3 + 0];
                 vertexData[dstOffs++] = vertnormals[normIndex * 3 + 1];
                 vertexData[dstOffs++] = vertnormals[normIndex * 3 + 2];
