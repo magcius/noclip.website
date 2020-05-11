@@ -22,6 +22,7 @@ export interface VMT {
     $detailtint: string;
     $detailscale: string;
     $envmap: string;
+    $normalmapalphaenvmapmask: string;
     $envmapmask: string;
     $envmaptint: string;
     $bumpmap: string;

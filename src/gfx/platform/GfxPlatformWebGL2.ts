@@ -784,6 +784,8 @@ void main() {
             return WebGL2RenderingContext.R16UI;
         case GfxFormat.U32_R:
             return WebGL2RenderingContext.R32UI;
+        case GfxFormat.U16_RGBA_5551:
+            return WebGL2RenderingContext.RGB5_A1;
         case GfxFormat.U8_R_NORM:
             return WebGL2RenderingContext.R8;
         case GfxFormat.U8_RG_NORM:
@@ -862,6 +864,11 @@ void main() {
     }
     
     private translateTextureType(fmt: GfxFormat): GLenum {
+        switch (fmt) {
+        case GfxFormat.U16_RGBA_5551:
+            return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
+        }
+
         const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
         switch (typeFlags) {
         case FormatTypeFlags.U8:

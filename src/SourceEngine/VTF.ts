@@ -2,7 +2,7 @@
 // Valve Texture File
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxTexture, GfxDevice, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
+import { GfxTexture, GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
 import { readString, assert } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -10,9 +10,12 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 const enum ImageFormat {
     RGBA8888     = 0x00,
     BGR888       = 0x03,
+    ARGB8888     = 0x0B,
+    BGRA8888     = 0x0C,
     DXT1         = 0x0D,
     DXT3         = 0x0E,
     DXT5         = 0x0F,
+    BGRA5551     = 0x16,
 }
 
 function imageFormatIsBlockCompressed(fmt: ImageFormat): boolean {
@@ -27,8 +30,14 @@ function imageFormatIsBlockCompressed(fmt: ImageFormat): boolean {
 function imageFormatGetBPP(fmt: ImageFormat): number {
     if (fmt === ImageFormat.RGBA8888)
         return 4;
+    if (fmt === ImageFormat.ARGB8888)
+        return 4;
+    if (fmt === ImageFormat.BGRA8888)
+        return 4;
     if (fmt === ImageFormat.BGR888)
         return 3;
+    if (fmt === ImageFormat.BGRA5551)
+        return 2;
     throw "whoops";
 }
 
@@ -60,6 +69,10 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (fmt === ImageFormat.BGR888)
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    else if (fmt === ImageFormat.BGRA8888)
+        return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    else if (fmt === ImageFormat.BGRA5551)
+        return GfxFormat.U16_RGBA_5551; // TODO(jstpierre): sRGB?
     else
         throw "whoops";
 }
@@ -77,6 +90,20 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
             dst[i++] = src.getUint8(p + 0);
             dst[i++] = 255;
             p += 3;
+        }
+        return dst;
+    } else if (fmt === ImageFormat.BGRA8888) {
+        // BGRA888 => RGBA8888
+        const src = data.createDataView();
+        const n = width * height * 4;
+        const dst = new Uint8Array(n);
+        let p = 0;
+        for (let i = 0; i < n;) {
+            dst[i++] = src.getUint8(p + 2);
+            dst[i++] = src.getUint8(p + 1);
+            dst[i++] = src.getUint8(p + 0);
+            dst[i++] = src.getUint8(p + 3);
+            p += 4;
         }
         return dst;
     } else {

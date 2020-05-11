@@ -10,6 +10,7 @@ import { parseEntitiesLump, Entity } from "./VMT";
 
 const enum LumpType {
     ENTITIES             = 0,
+    PLANES               = 1,
     TEXDATA              = 2,
     VERTEXES             = 3,
     TEXINFO              = 6,
@@ -34,6 +35,7 @@ export interface SurfaceLighting {
     styles: number[];
     lightmapSize: number;
     samples: Uint8Array | null;
+    hasBumpmapSamples: boolean;
 }
 
 export interface Surface {
@@ -202,15 +204,17 @@ export class BSPFile {
         assert(vertCount < 0xFFFF);
         const indexData = new Uint16Array(indexCount);
 
-        const scratchVec2 = vec2.create();
-        const scratchPosition = vec3.create();
-        const scratchNormal = vec3.create();
-        const scratchTangentS = vec3.create();
-
+        const planes = getLumpData(LumpType.PLANES).createDataView();
         const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);
         const vertnormals = getLumpData(LumpType.VERTNORMALS).createTypedArray(Float32Array);
         const vertnormalindices = getLumpData(LumpType.VERTNORMALINDICES).createTypedArray(Uint16Array);
         const lighting = getLumpData(LumpType.LIGHTING, 1);
+
+        const scratchVec2 = vec2.create();
+        const scratchPosition = vec3.create();
+        const scratchNormal = vec3.create();
+        const scratchTangentT = vec3.create();
+        const scratchTangentS = vec3.create();
 
         let dstOffs = 0;
         let dstOffsIndex = 0;
@@ -255,12 +259,27 @@ export class BSPFile {
                     break;
             }
 
-            const numlightmaps = !!(tex.flags & TexinfoFlags.BUMPLIGHT) ? 4 : 1;
+            const hasBumpmapSamples = !!(tex.flags & TexinfoFlags.BUMPLIGHT);
+            const numlightmaps = hasBumpmapSamples ? 4 : 1;
             const lightmapSize = numstyles * numlightmaps * (width * height * 4);
             let samples: Uint8Array | null = null;
             if (lightofs !== -1)
                 samples = lighting.subarray(lightofs, lightmapSize).createTypedArray(Uint8Array);
-            const surfaceLighting: SurfaceLighting = { mins, width, height, styles, lightmapSize, samples };
+            const surfaceLighting: SurfaceLighting = { mins, width, height, styles, lightmapSize, samples, hasBumpmapSamples };
+
+            // Tangent space setup.
+            const planeX = planes.getFloat32(planenum * 0x14 + 0x00, true);
+            const planeY = planes.getFloat32(planenum * 0x14 + 0x04, true);
+            const planeZ = planes.getFloat32(planenum * 0x14 + 0x08, true);
+            vec3.set(scratchPosition, planeX, planeY, planeZ);
+
+            vec3.set(scratchTangentS, tex.textureMapping.s[0], tex.textureMapping.s[1], tex.textureMapping.s[2]);
+            vec3.normalize(scratchTangentS, scratchTangentS);
+            vec3.set(scratchTangentT, tex.textureMapping.t[0], tex.textureMapping.t[1], tex.textureMapping.t[2]);
+            vec3.normalize(scratchTangentT, scratchTangentT);
+            vec3.cross(scratchNormal, scratchTangentS, scratchTangentT);
+            // Detect if we need to flip tangents.
+            const tangentSSign = vec3.dot(scratchPosition, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
             const center = vec3.create();
 
@@ -281,17 +300,13 @@ export class BSPFile {
                 vertexData[dstOffs++] = scratchNormal[2] = vertnormals[normIndex * 3 + 2];
 
                 // Compute Tangent S vector
-                vec3.set(scratchTangentS, tex.textureMapping.t[0], tex.textureMapping.t[1], tex.textureMapping.t[2]);
-                vec3.normalize(scratchTangentS, scratchTangentS);
-                // Tangent S = Normal x Texture T Mapping (bitangent)
-                vec3.cross(scratchTangentS, scratchNormal, scratchTangentS);
-                // Tangent T = Tangent S x Normal. Done in shader.
+                // Tangent S = Normal x Texture T Mapping
+                vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
                 vertexData[dstOffs++] = scratchTangentS[0];
                 vertexData[dstOffs++] = scratchTangentS[1];
                 vertexData[dstOffs++] = scratchTangentS[2];
-                // Tangent T Sign.
-                const tangentTSign = 1.0;
-                vertexData[dstOffs++] = tangentTSign;
+                vertexData[dstOffs++] = tangentSSign;
+                // Tangent T = Tangent S x Normal. Done in shader.
 
                 // Texture UV
                 calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);

@@ -93,11 +93,12 @@ void mainVS() {
     // TODO(jstpierre): MV/P split.
     v_PositionWorld = a_Position;
     vec3 t_NormalWorld = a_Normal;
-    vec3 t_TangentSWorld = a_TangentS.xyz;
-    vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld) * a_TangentS.w;
 
 #ifdef HAS_FULL_TANGENTSPACE
-    v_TangentSpaceBasis0 = t_TangentSWorld;
+    vec3 t_TangentSWorld = a_TangentS.xyz;
+    vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
+
+    v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;
     v_TangentSpaceBasis1 = t_TangentTWorld;
 #endif
     v_TangentSpaceBasis2 = t_NormalWorld;
@@ -136,6 +137,11 @@ vec3 CalcReflection(in vec3 t_NormalWorld, in vec3 t_PositionToEye) {
     return (2.0 * (dot(t_NormalWorld, t_PositionToEye)) * t_NormalWorld) - (dot(t_NormalWorld, t_NormalWorld) * t_PositionToEye);
 }
 
+// https://steamcdn-a.akamaihd.net/apps/valve/2004/GDC2004_Half-Life2_Shading.pdf#page=10
+const vec3 g_RNBasis0 = vec3( 1.2247448713915890,  0.0000000000000000, 0.5773502691896258); //  sqrt3/2, 0,        sqrt1/3
+const vec3 g_RNBasis1 = vec3(-0.4082482904638631,  0.7071067811865475, 0.5773502691896258); // -sqrt1/6, sqrt1/2,  sqrt1/3
+const vec3 g_RNBasis2 = vec3(-0.4082482904638631, -0.7071067811865475, 0.5773502691896258); // -sqrt1/6, -sqrt1/2, sqrt1/3
+
 void mainPS() {
     vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy)).rgba;
 
@@ -156,20 +162,36 @@ void mainPS() {
 
     vec3 t_NormalWorld;
 #ifdef USE_BUMPMAP
-    vec3 t_BumpmapSample = texture(SAMPLER_2D(u_Texture[2], v_TexCoord2.xy)).rgb;
-    vec3 t_BumpmapNormal = t_BumpmapSample * 2.0 - 1.0;
+    vec4 t_BumpmapSample = texture(SAMPLER_2D(u_Texture[2], v_TexCoord2.xy));
+    vec3 t_BumpmapNormal = t_BumpmapSample.rgb * 2.0 - 1.0;
 
-    t_NormalWorld.x = dot(v_TangentSpaceBasis0, t_BumpmapNormal);
-    t_NormalWorld.y = dot(v_TangentSpaceBasis1, t_BumpmapNormal);
-    t_NormalWorld.z = dot(v_TangentSpaceBasis2, t_BumpmapNormal);
+    t_NormalWorld.x = dot(vec3(v_TangentSpaceBasis0.x, v_TangentSpaceBasis1.x, v_TangentSpaceBasis2.x), t_BumpmapNormal);
+    t_NormalWorld.y = dot(vec3(v_TangentSpaceBasis0.y, v_TangentSpaceBasis1.y, v_TangentSpaceBasis2.y), t_BumpmapNormal);
+    t_NormalWorld.z = dot(vec3(v_TangentSpaceBasis0.z, v_TangentSpaceBasis1.z, v_TangentSpaceBasis2.z), t_BumpmapNormal);
 #else
     t_NormalWorld = v_TangentSpaceBasis2;
 #endif
 
+vec3 t_DiffuseLighting;
 #ifdef USE_LIGHTMAP
-    vec3 t_DiffuseLighting = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy)).rgb;
+#ifdef USE_DIFFUSE_BUMPMAP
+    vec3 t_LightmapColor1 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, u_LightmapOffset * 1.0))).rgb;
+    vec3 t_LightmapColor2 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, u_LightmapOffset * 2.0))).rgb;
+    vec3 t_LightmapColor3 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, u_LightmapOffset * 3.0))).rgb;
+    vec3 t_Influence;
+    t_Influence.x = clamp(dot(t_NormalWorld, g_RNBasis0), 0.0, 1.0);
+    t_Influence.y = clamp(dot(t_NormalWorld, g_RNBasis1), 0.0, 1.0);
+    t_Influence.z = clamp(dot(t_NormalWorld, g_RNBasis2), 0.0, 1.0);
+
+    t_DiffuseLighting = vec3(0.0);
+    t_DiffuseLighting += t_LightmapColor1 * t_Influence.x;
+    t_DiffuseLighting += t_LightmapColor2 * t_Influence.y;
+    t_DiffuseLighting += t_LightmapColor3 * t_Influence.z;
 #else
-    vec3 t_DiffuseLighting = vec3(1.0);
+    t_DiffuseLighting = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy)).rgb;
+#endif
+#else
+    t_DiffuseLighting = vec3(1.0);
 #endif
     t_FinalColor.rgb += t_DiffuseLighting * t_Albedo.rgb;
 
@@ -178,6 +200,10 @@ void mainPS() {
 
 #ifdef USE_ENVMAP_MASK
     t_SpecularFactor *= texture(SAMPLER_2D(u_Texture[4], v_TexCoord1.zw)).rgb;
+#endif
+
+#ifdef USE_NORMALMAP_ALPHA_ENVMAP_MASK
+    t_SpecularFactor *= t_BumpmapSample.a;
 #endif
 
     vec3 t_SpecularLighting = vec3(0.0);
@@ -236,6 +262,7 @@ export class BaseMaterial {
     // Material parameters.
     public wantsLightmap = false;
     public wantsBumpmap = false;
+    public wantsBumpmappedLightmap = false;
     public wantsDetail = false;
     public wantsEnvmap = false;
     public wantsEnvmapMask = false;
@@ -305,6 +332,7 @@ export class BaseMaterial {
             this.bumpmapTexture.fillTextureMapping(this.textureMapping[2]);
             const wantsDiffuseBumpmap = !vmt.$nodiffusebumplighting;
             this.program.defines.set('USE_DIFFUSE_BUMPMAP', wantsDiffuseBumpmap ? '1' : '0');
+            this.wantsBumpmappedLightmap = wantsDiffuseBumpmap;
         }
 
         // Lightmap = 3
@@ -328,6 +356,10 @@ export class BaseMaterial {
             // Use lightmap. We don't support bump-mapped lighting yet.
             this.program.defines.set('USE_LIGHTMAP', '1');
             this.wantsLightmap = true;
+        }
+
+        if (vmt.$normalmapalphaenvmapmask) {
+            this.program.defines.set('USE_NORMALMAP_ALPHA_ENVMAP_MASK', '1');
         }
 
         if (vmt.$alphatest) {
@@ -411,7 +443,8 @@ export class BaseMaterial {
             offs += fillVec4v(d, offs, this.envmapMaskScaleBias);
         if (this.wantsEnvmap)
             offs += fillColor(d, offs, this.envmapTint);
-        offs += fillVec4(d, offs, this.alphaTestReference, this.detailBlendFactor);
+        const lightmapOffset = this.lightmapAllocation !== null ? this.lightmapAllocation.bumpPageOffset : 0.0;
+        offs += fillVec4(d, offs, this.alphaTestReference, this.detailBlendFactor, lightmapOffset);
 
         assert(this.isMaterialLoaded());
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -505,9 +538,10 @@ export class MaterialCache {
 // Lightmap / Lighting data
 
 export class LightmapAllocation {
-    public width: number;
-    public height: number;
+    public width: number = 0;
+    public height: number = 0;
     public scaleBias = vec4.create();
+    public bumpPageOffset: number = 0;
     public gfxTexture: GfxTexture | null = null;
     public gfxSampler: GfxSampler | null = null;
 }
@@ -545,6 +579,8 @@ export class LightmapManager {
         const offsX = 0.0;
         const offsY = 0.0;
         vec4.set(allocation.scaleBias, scaleX, scaleY, offsX, offsY);
+
+        allocation.bumpPageOffset = scaleY * (allocation.height / 4);
     }
 
     public destroy(device: GfxDevice): void {
@@ -617,7 +653,7 @@ export class SurfaceLightingInstance {
     private runtimeLightmapData: Uint8ClampedArray[];
     private scratchpad: Float32Array;
 
-    constructor(lightmapManager: LightmapManager, surface: Surface, public wantsLightmap: boolean, public wantsBumpmap: boolean) {
+    constructor(lightmapManager: LightmapManager, surface: Surface, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
         this.scratchpad = lightmapManager.scratchpad;
 
         this.lighting = assertExists(surface.lighting);
@@ -625,8 +661,9 @@ export class SurfaceLightingInstance {
 
         // Allocate texture.
         if (this.wantsLightmap) {
+            const numLightmaps = this.wantsBumpmap ? 4 : 1;
             this.allocation.width = this.lighting.width;
-            this.allocation.height = this.lighting.height;
+            this.allocation.height = this.lighting.height * numLightmaps;
             lightmapManager.allocate(this.allocation);
         }
     }
@@ -637,21 +674,34 @@ export class SurfaceLightingInstance {
 
         const hasLightmap = this.lighting.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
-            const size = this.lighting.width * this.lighting.height * 4;
+            const dstSize = this.allocation.width * this.allocation.height * 4;
+            const srcNumLightmaps = (this.wantsBumpmap && this.lighting.hasBumpmapSamples) ? 4 : 1
+            const srcSize = srcNumLightmaps * this.lighting.width * this.lighting.height * 4;
 
             const scratchpad = this.scratchpad;
+            scratchpad.fill(0);
+            assert(scratchpad.byteLength >= dstSize);
             for (let i = 0; i < this.lighting.styles.length; i++) {
                 const styleIdx = this.lighting.styles[i];
                 if (styleIdx === 0xFF)
                     break;
 
                 const intensity = worldLightingState.styleIntensities[styleIdx];
-                lightmapAccumLight(scratchpad, 0, this.lighting.samples!, size, intensity);
+                lightmapAccumLight(scratchpad, 0, this.lighting.samples!, srcSize, intensity);
             }
 
-            lightmapPackRuntime(this.runtimeLightmapData[0], 0, scratchpad, 0, size);
+            if (this.wantsBumpmap && !this.lighting.hasBumpmapSamples) {
+                // Game wants bumpmap samples but has none. Copy from primary lightsource.
+                const src = new Float32Array(scratchpad.buffer, 0, srcSize * 4);
+                for (let i = 1; i < 4; i++) {
+                    const dst = new Float32Array(scratchpad.buffer, i * srcSize * 4, srcSize * 4);
+                    dst.set(src);
+                }
+            }
+
+            lightmapPackRuntime(this.runtimeLightmapData[0], 0, scratchpad, 0, dstSize);
         } else if (this.wantsLightmap && !hasLightmap) {
-            // Fill with white.
+            // Fill with white. Handles both bump & non-bump cases.
             this.runtimeLightmapData[0].fill(255);
         }
 

@@ -174,7 +174,7 @@ class BSPSurface {
     public bindMaterial(materialInstance: BaseMaterial, lightmapManager: LightmapManager): void {
         this.materialInstance = materialInstance;
 
-        this.surfaceLighting = new SurfaceLightingInstance(lightmapManager, this.surface, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmap);
+        this.surfaceLighting = new SurfaceLightingInstance(lightmapManager, this.surface, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap);
         this.materialInstance.setLightmapAllocation(this.surfaceLighting.allocation);
     }
 
@@ -258,6 +258,7 @@ class BSPRenderer {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
+        device.destroyInputState(this.inputState);
     }
 
     public surfaceSelect(): void {
@@ -338,6 +339,8 @@ export class SourceRenderer implements SceneGfx {
         this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
         this.renderContext.destroy(device);
+        if (this.skyboxRenderer !== null)
+            this.skyboxRenderer.destroy(device);
         for (let i = 0; i < this.bspRenderers.length; i++)
             this.bspRenderers[i].destroy(device);
     }
