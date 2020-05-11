@@ -14,6 +14,7 @@ const enum LumpType {
     VERTEXES             = 3,
     TEXINFO              = 6,
     FACES                = 7,
+    LIGHTING             = 8,
     EDGES                = 12,
     SURFEDGES            = 13,
     VERTNORMALS          = 30,
@@ -26,11 +27,21 @@ const enum LumpType {
     FACES_HDR            = 58,
 }
 
+export interface SurfaceLighting {
+    width: number;
+    height: number;
+    mins: number[];
+    styles: number[];
+    lightmapSize: number;
+    samples: Uint8Array | null;
+}
+
 export interface Surface {
     texinfo: number;
     startIndex: number;
     indexCount: number;
     center: vec3;
+    lighting: SurfaceLighting;
 }
 
 interface TexinfoMapping {
@@ -39,10 +50,11 @@ interface TexinfoMapping {
 }
 
 const enum TexinfoFlags {
-    SKY2D   = 0x0002,
-    SKY     = 0x0004,
-    NODRAW  = 0x0080,
-    NOLIGHT = 0x0400,
+    SKY2D     = 0x0002,
+    SKY       = 0x0004,
+    NODRAW    = 0x0080,
+    NOLIGHT   = 0x0400,
+    BUMPLIGHT = 0x0800,
 }
 
 export interface Texinfo {
@@ -196,6 +208,7 @@ export class BSPFile {
         const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);
         const vertnormals = getLumpData(LumpType.VERTNORMALS).createTypedArray(Float32Array);
         const vertnormalindices = getLumpData(LumpType.VERTNORMALINDICES).createTypedArray(Uint16Array);
+        const lighting = getLumpData(LumpType.LIGHTING, 1);
 
         let dstOffs = 0;
         let dstOffsIndex = 0;
@@ -208,13 +221,13 @@ export class BSPFile {
             const firstedge = faces.getUint32(idx + 0x04, true);
             const numedges = faces.getUint16(idx + 0x08, true);
             const texinfo = faces.getUint16(idx + 0x0A, true);
-            const dispinfo = faces.getUint16(idx + 0x0C, true);
+            const dispinfo = faces.getInt16(idx + 0x0C, true);
             const surfaceFogVolumeID = faces.getUint16(idx + 0x0E, true);
             // lighting info
             const styles = nArray(4, (i) => faces.getUint8(idx + 0x10 + i));
-            const lightofs = faces.getUint32(idx + 0x14, true);
+            const lightofs = faces.getInt32(idx + 0x14, true);
             const area = faces.getFloat32(idx + 0x18, true);
-            const m_LightmapTextureMinsInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x1C + i * 4, true));
+            const m_LightmapTextureMinsInLuxels = nArray(2, (i) => faces.getInt32(idx + 0x1C + i * 4, true));
             const m_LightmapTextureSizeInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x24 + i * 4, true));
             const origFace = faces.getUint32(idx + 0x2C, true);
             const m_NumPrims = faces.getUint16(idx + 0x30, true);
@@ -225,6 +238,23 @@ export class BSPFile {
             if (!!(tex.flags & TexinfoFlags.NODRAW)) {
                 continue;
             }
+
+            // surface lighting info
+            const mins = m_LightmapTextureMinsInLuxels;
+            const width = m_LightmapTextureSizeInLuxels[0] + 1, height = m_LightmapTextureSizeInLuxels[1] + 1;
+
+            let numstyles = 0;
+            for (numstyles; numstyles < styles.length;) {
+                if (styles[numstyles++] === 0xFF)
+                    break;
+            }
+
+            const numlightmaps = !!(tex.flags & TexinfoFlags.BUMPLIGHT) ? 4 : 1;
+            const lightmapSize = numstyles * numlightmaps * (width * height * 4);
+            let samples: Uint8Array | null = null;
+            if (lightofs !== -1)
+                samples = lighting.subarray(lightofs, lightmapSize).createTypedArray(Uint8Array);
+            const surfaceLighting: SurfaceLighting = { mins, width, height, styles, lightmapSize, samples };
 
             const center = vec3.create();
 
@@ -290,7 +320,7 @@ export class BSPFile {
                 convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
             }
 
-            this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: count, center });
+            this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: count, center, lighting: surfaceLighting });
             dstOffsIndex += count;
             dstIndexBase += numedges;
         }

@@ -132,7 +132,6 @@ export class VTF {
             this.format = view.getUint32(0x34, true);
             this.numLevels = view.getUint8(0x38);
             const lowresImageFormat = view.getUint32(0x39, true);
-            assert(lowresImageFormat === ImageFormat.DXT1);
             const lowresImageWidth = view.getUint8(0x3D);
             const lowresImageHeight = view.getUint8(0x3E);
 
@@ -153,9 +152,11 @@ export class VTF {
                 dataIdx = 0x40;
             }
 
-            const lowresDataSize = imageFormatCalcLevelSize(lowresImageFormat, lowresImageWidth, lowresImageHeight, 1);
-            const lowresData = buffer.subarray(dataIdx, lowresDataSize);
-            dataIdx += lowresDataSize;
+            if (lowresImageFormat !== 0xFFFFFFFF) {
+                const lowresDataSize = imageFormatCalcLevelSize(lowresImageFormat, lowresImageWidth, lowresImageHeight, 1);
+                const lowresData = buffer.subarray(dataIdx, lowresDataSize);
+                dataIdx += lowresDataSize;
+            }
         } else {
             throw "whoops";
         }
