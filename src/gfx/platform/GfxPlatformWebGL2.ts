@@ -898,7 +898,7 @@ void main() {
     }
 
     private clampNumLevels(descriptor: GfxTextureDescriptor): number {
-        if (descriptor.dimension === GfxTextureDimension.n2D_ARRAY && descriptor.depth > 1) {
+        if (descriptor.dimension === GfxTextureDimension.n2DArray && descriptor.depth > 1) {
             const typeFlags: FormatTypeFlags = getFormatTypeFlags(descriptor.pixelFormat);
             if (typeFlags === FormatTypeFlags.BC1) {
                 // Chrome/ANGLE seems to have issues with compressed miplevels of size 1/2, so clamp before they arrive...
@@ -1006,10 +1006,15 @@ void main() {
             gl.bindTexture(gl_target, gl_texture);
             gl.texStorage2D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height);
             assert(descriptor.depth === 1);
-        } else if (descriptor.dimension === GfxTextureDimension.n2D_ARRAY) {
+        } else if (descriptor.dimension === GfxTextureDimension.n2DArray) {
             gl_target = WebGL2RenderingContext.TEXTURE_2D_ARRAY;
             gl.bindTexture(gl_target, gl_texture);
             gl.texStorage3D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
+        } else if (descriptor.dimension === GfxTextureDimension.Cube) {
+            gl_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP;
+            gl.bindTexture(gl_target, gl_texture);
+            gl.texStorage2D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height);
+            assert(descriptor.depth === 6);
         } else {
             throw "whoops";
         }
@@ -1534,14 +1539,17 @@ void main() {
 
                 const gl = this.gl;
                 const { gl_texture, gl_target, pixelFormat, width, height, depth, numLevels } = texture as GfxTextureP_GL;
+                const isCompressed = this.isTextureFormatCompressed(pixelFormat);
+                const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
+                const isCube = gl_target === WebGL2RenderingContext.TEXTURE_CUBE_MAP;
+
                 this._setActiveTexture(gl.TEXTURE0);
                 this._currentTextures[0] = null;
-                gl.bindTexture(gl_target, gl_texture);
+                if (!isCube)
+                    gl.bindTexture(gl_target, gl_texture);
                 let w = width, h = height, d = depth;
                 const maxMipLevel = Math.min(firstMipLevelToUpload + numMipLevelsToUpload, numLevels);
 
-                const isCompressed = this.isTextureFormatCompressed(pixelFormat);
-                const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
                 const gl_format = this.translateTextureFormat(pixelFormat);
 
                 for (let i = 0; i < maxMipLevel; i++) {
@@ -1553,6 +1561,11 @@ void main() {
                             const imageSize = levelData.byteLength / depth;
                             for (let z = 0; z < depth; z++) {
                                 gl.compressedTexSubImage3D(gl_target, i, 0, 0, z, w, h, 1, gl_format, levelData, z * imageSize, imageSize);
+                            }
+                        } else if (isCube) {
+                            const imageSize = levelData.byteLength / depth
+                            for (let z = 0; z < depth; z++) {
+                                
                             }
                         } else if (is3D) {
                             if (isCompressed) {

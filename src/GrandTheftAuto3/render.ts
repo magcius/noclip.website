@@ -145,7 +145,7 @@ export class TextureArray extends TextureMapping {
         }
 
         const gfxTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D_ARRAY, pixelFormat,
+            dimension: GfxTextureDimension.n2DArray, pixelFormat,
             width, height, depth: textures.length, numLevels: mipmaps.length
         });
         const hostAccessPass = device.createHostAccessPass();

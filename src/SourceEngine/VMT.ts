@@ -4,9 +4,11 @@
 import { assert, assertExists } from "../util";
 import { SourceFileSystem } from "./Scenes_HalfLife2";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { Color, colorNewFromRGBA } from "../Color";
 
 export interface VMT {
     _Root: string;
+    _Filename: string;
 
     // patch
     include: string;
@@ -14,9 +16,13 @@ export interface VMT {
 
     // material
     $basetexture: string;
-    $alphatest: number;
-    $alphatestreference: number;
-    $additive: number;
+    $detail: string;
+    $detailblendmode: string;
+    $detailblendfactor: string;
+    $detailscale: string;
+    $alphatest: string;
+    $alphatestreference: string;
+    $additive: string;
     ['%compilesky']: string;
     ['%compiletrigger']: string;
 }
@@ -128,7 +134,7 @@ export class ValveKeyValueParser {
             return this.obj();
         else if (tok === '"')
             return this.quote(tok);
-        else if (/[a-zA-Z$]/.test(tok))
+        else if (/[a-zA-Z$%]/.test(tok))
             return this.unquote(tok);
         else if (/[-0-9.]/.test(tok))
             return this.num(tok);
@@ -152,6 +158,7 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
         const [k, v] = new ValveKeyValueParser(str).pair();
         const vmt = v as VMT;
         vmt._Root = k;
+        vmt._Filename = path;
 
         return vmt;
     }
@@ -159,11 +166,23 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
     const vmt = await parsePath(path);
     if (vmt._Root === 'patch') {
         const base = await parseVMT(filesystem, vmt['include'], depth++);
-        Object.assign(vmt.replace, base);
+        Object.assign(base, vmt.replace);
         return base;
     } else {
         return vmt;
     }
+}
+
+export function vmtParseVector(S: string): number[] {
+    assert((S.startsWith('[') && S.endsWith(']')) || (S.startsWith('{') && S.endsWith('}')));
+    const scale = S.startsWith('{') ? 1/255.0 : 1;
+    return S.slice(1, -1).split(/\s+/).map((item) => Number(item) * scale);
+}
+
+export function vmtParseColor(S: string): Color {
+    const v = vmtParseVector(S);
+    assert(v.length === 3);
+    return colorNewFromRGBA(v[0], v[1], v[2]);
 }
 
 // This is in the same file because it also parses keyfiles, even though it's not material-related.

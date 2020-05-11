@@ -3,8 +3,8 @@ import { DeviceProgram } from "../Program";
 import { VMT, parseVMT } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderer";
-import { nArray, assert, assertExists } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { nArray, assert, assertExists, fallback } from "../util";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
@@ -31,16 +31,25 @@ layout(row_major, std140) uniform ub_SceneParams {
 
 layout(row_major, std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelView;
+#ifdef USE_DETAIL
+    vec4 u_DetailScaleBias;
+#endif
 #ifdef USE_LIGHTMAP
     vec4 u_LightmapScaleBias;
+#endif
+#ifdef USE_ENVMAP
+    vec4 u_EnvmapTint;
 #endif
     vec4 u_Misc[1];
 };
 
 #define u_AlphaTestReference (u_Misc[0].x)
+#define u_DetailBlendFactor  (u_Misc[0].y)
 
-varying vec4 v_TexCoord;
-uniform sampler2D u_Texture[2];
+// Base, Detail, Lightmap, Cube Envmap, Envmap Mask
+varying vec4 v_TexCoord0;
+varying vec4 v_TexCoord1;
+uniform sampler2D u_Texture[5];
 
 #ifdef VERT
 layout(location = ${BaseMaterialProgram.a_Position}) attribute vec3 a_Position;
@@ -52,31 +61,61 @@ vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
 
 void mainVS() {
     gl_Position = Mul(u_Projection, vec4(Mul(u_ModelView, vec4(a_Position, 1.0)), 1.0));
-    v_TexCoord.xy = a_TexCoord.xy;
+    v_TexCoord0.xy = a_TexCoord.xy;
+
+#ifdef USE_DETAIL
+    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_DetailScaleBias);
+#endif
+
 #ifdef USE_LIGHTMAP
-    v_TexCoord.zw = CalcScaleBias(a_TexCoord.zw, u_LightmapScaleBias);
+    v_TexCoord1.xy = CalcScaleBias(a_TexCoord.zw, u_LightmapScaleBias);
 #endif
 }
 #endif
 
 #ifdef FRAG
-void mainPS() {
-    vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture[0], v_TexCoord.xy)).rgba;
 
-    vec4 t_Albedo = t_BaseTexture;
-    // TODO(jstpierre): Combine.
+#define COMBINE_MODE_MUL_DETAIL2        (0)
+vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, int t_CombineMode, float t_BlendFactor) {
+    if (t_CombineMode == COMBINE_MODE_MUL_DETAIL2) {
+        return t_BaseTexture * mix(vec4(1.0), t_DetailTexture * 2.0, t_BlendFactor);
+    } else {
+        // Unknown.
+        return t_BaseTexture + vec4(1.0, 0.0, 1.0, 0.0);
+    }
+}
+
+void mainPS() {
+    vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy)).rgba;
+
+    vec4 t_Albedo;
+#ifdef USE_DETAIL
+    vec4 t_DetailTexture = texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw)).rgba;
+    t_Albedo = TextureCombine(t_BaseTexture, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
+#else
+    t_Albedo = t_BaseTexture;
+#endif
 
 #ifdef USE_ALPHATEST
     if (t_Albedo.a < u_AlphaTestReference)
         discard;
 #endif
 
-#ifdef USE_LIGHTMAP
-    vec3 t_DiffuseLighting = texture(SAMPLER_2D(u_Texture[1], v_TexCoord.zw)).rgb;
-    t_Albedo.rgb *= t_DiffuseLighting;
-#endif
+    vec4 t_FinalColor;
 
-    gl_FragColor.rgba = t_Albedo.rgba;
+#ifdef USE_LIGHTMAP
+    vec3 t_DiffuseLighting = texture(SAMPLER_2D(u_Texture[2], v_TexCoord1.xy)).rgb;
+#else
+    vec3 t_DiffuseLighting = vec3(1.0);
+#endif
+    t_FinalColor.rgb += t_DiffuseLighting * t_Albedo.rgb;
+
+    t_FinalColor.a = t_Albedo.a;
+
+    // Gamma correction.
+    t_FinalColor.rgb = pow(t_FinalColor.rgb, vec3(1.0 / 2.2));
+
+    gl_FragColor = t_FinalColor;
 }
 #endif
 `;
@@ -99,16 +138,19 @@ export class BaseMaterial {
 
     // Texture parameters.
     private baseTexture: VTF | null = null;
+    private detailTexture: VTF | null = null;
     private lightmapAllocation: LightmapAllocation | null = null;
 
-    public textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
+    public textureMapping: TextureMapping[] = nArray(5, () => new TextureMapping());
 
     // Material parameters.
-    // TODO(jstpierre): This doesn't seem to be in the files? Not sure.
-    private alphatestreference: number = 0.4;
-
     public wantsLightmap = false;
     public wantsBumpmap = false;
+    public wantsDetail = false;
+
+    private alphaTestReference: number;
+    private detailScaleBiasVec = vec4.create();
+    private detailBlendFactor = 1.0;
 
     constructor(public vmt: VMT) {
     }
@@ -127,6 +169,8 @@ export class BaseMaterial {
         // Base textures.
         if (vmt.$basetexture !== undefined)
             this.baseTexture = await materialCache.fetchVTF(assertExists(vmt.$basetexture));
+        if (vmt.$detail !== undefined)
+            this.detailTexture = await materialCache.fetchVTF(assertExists(vmt.$detail));
     }
 
     protected initSync() {
@@ -140,6 +184,21 @@ export class BaseMaterial {
         if (this.baseTexture !== null)
             this.baseTexture.fillTextureMapping(this.textureMapping[0]);
 
+        if (this.detailTexture !== null) {
+            this.wantsDetail = true;
+
+            this.program.defines.set('USE_DETAIL', '1');
+            this.program.defines.set('DETAIL_COMBINE_MODE', fallback(vmt.$detailblendmode, '0'));
+            this.detailTexture.fillTextureMapping(this.textureMapping[1]);
+            if (vmt.$detailblendfactor)
+                this.detailBlendFactor = Number(vmt.$detailblendfactor);
+
+            if (vmt.$detailscale) {
+                const scale = Number(vmt.$detailscale);
+                vec4.set(this.detailScaleBiasVec, scale, scale, 0.0, 0.0);
+            }
+        }
+
         if (shaderType === 'lightmappedgeneric') {
             // Use lightmap. We don't support bump-mapped lighting yet.
             this.program.defines.set('USE_LIGHTMAP', '1');
@@ -148,8 +207,12 @@ export class BaseMaterial {
 
         if (vmt.$alphatest) {
             this.program.defines.set('USE_ALPHATEST', '1');
-            if (vmt.$alphatestreference)
-                this.alphatestreference = Number(vmt.$alphatestreference);
+            if (vmt.$alphatestreference) {
+                this.alphaTestReference = Number(vmt.$alphatestreference);
+            } else {
+                // TODO(jstpierre): This default was just guessed.
+                this.alphaTestReference = 0.4;
+            }
         } else {
             // Set translucency. There's a matvar for it, but the real behavior appears to come
             // from the texture's flags.
@@ -202,19 +265,21 @@ export class BaseMaterial {
 
     public setLightmapAllocation(lightmapAllocation: LightmapAllocation): void {
         this.lightmapAllocation = lightmapAllocation;
-        const lightmapTextureMapping = this.textureMapping[1];
+        const lightmapTextureMapping = this.textureMapping[2];
         lightmapTextureMapping.gfxTexture = this.lightmapAllocation.gfxTexture;
         lightmapTextureMapping.gfxSampler = this.lightmapAllocation.gfxSampler;
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, viewMatrix: mat4): void {
-        let offs = renderInst.allocateUniformBuffer(BaseMaterialProgram.ub_ObjectParams, 4*3+4+4);
+        let offs = renderInst.allocateUniformBuffer(BaseMaterialProgram.ub_ObjectParams, 4*3+4+4+4);
         const d = renderInst.mapUniformBufferF32(BaseMaterialProgram.ub_ObjectParams);
         mat4.mul(scratchMatrix, viewMatrix, zup);
         offs += fillMatrix4x3(d, offs, scratchMatrix);
+        if (this.wantsDetail)
+            offs += fillVec4v(d, offs, this.detailScaleBiasVec);
         if (this.wantsLightmap)
             offs += fillVec4v(d, offs, this.lightmapAllocation!.scaleBiasVec);
-        offs += fillVec4(d, offs, this.alphatestreference);
+        offs += fillVec4(d, offs, this.alphaTestReference, this.detailBlendFactor);
 
         assert(this.isMaterialLoaded());
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);

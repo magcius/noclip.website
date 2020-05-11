@@ -19,10 +19,6 @@ import { assert } from "../util";
 
 const pathBase = `HalfLife2`;
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 2 },
-];
-
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
     public mounts: VPKMount[] = [];
@@ -279,8 +275,11 @@ class SourceRenderContext {
     }
 }
 
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 2, numSamplers: 5 },
+];
+
 export class SourceRenderer implements SceneGfx {
-    private program: GfxProgram;
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
     public skyboxRenderer: SkyboxRenderer | null = null;
@@ -297,9 +296,8 @@ export class SourceRenderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const template = this.renderHelper.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
-        template.setGfxProgram(this.program);
         template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
+        template.setBindingLayouts(bindingLayouts);
 
         let offs = template.allocateUniformBuffer(BaseMaterialProgram.ub_SceneParams, 32);
         const mapped = template.mapUniformBufferF32(offs);

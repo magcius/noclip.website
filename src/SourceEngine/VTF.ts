@@ -48,17 +48,18 @@ function imageFormatCalcLevelSize(fmt: ImageFormat, width: number, height: numbe
     }
 }
 
-function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat): GfxFormat {
+function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boolean): GfxFormat {
+    // TODO(jstpierre): Software decode BC1 if necessary.
     if (fmt === ImageFormat.DXT1)
-        return GfxFormat.BC1;
+        return srgb ? GfxFormat.BC1_SRGB : GfxFormat.BC1;
     else if (fmt === ImageFormat.DXT3)
-        return GfxFormat.BC2;
+        return srgb ? GfxFormat.BC2_SRGB : GfxFormat.BC1;
     else if (fmt === ImageFormat.DXT5)
-        return GfxFormat.BC3;
+        return srgb ? GfxFormat.BC3_SRGB : GfxFormat.BC3;
     else if (fmt === ImageFormat.RGBA8888)
-        return GfxFormat.U8_RGBA_NORM;
+        return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (fmt === ImageFormat.BGR888)
-        return GfxFormat.U8_RGBA_NORM;
+        return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else
         throw "whoops";
 }
@@ -88,6 +89,7 @@ const enum VTFFlags {
     TRILINEAR     = 0x00000002,
     CLAMPS        = 0x00000004,
     CLAMPT        = 0x00000008,
+    SRGB          = 0x00000040,
     NOMIP         = 0x00000100,
     ONEBITALPHA   = 0x00001000,
     EIGHTBITALPHA = 0x00002000,
@@ -161,7 +163,8 @@ export class VTF {
             throw "whoops";
         }
 
-        const gfxFormat = imageFormatToGfxFormat(device, this.format);
+        const srgb = !!(this.flags & VTFFlags.SRGB);
+        const gfxFormat = imageFormatToGfxFormat(device, this.format, srgb);
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(gfxFormat, this.width, this.height, this.numLevels));
 
         const hostAccessPass = device.createHostAccessPass();
