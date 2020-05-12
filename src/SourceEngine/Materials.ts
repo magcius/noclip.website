@@ -519,7 +519,7 @@ export class MaterialCache {
 
     private async fetchVTFInternal(name: string): Promise<VTF> {
         const path = this.resolvePath(name, '.vtf');
-        const data = assertExists(await this.filesystem.fetchFileData(path));
+        const data = await this.filesystem.fetchFileData(path);
         const vtf = new VTF(this.device, this.cache, data);
         this.textureCache.set(name, vtf);
         return vtf;
@@ -602,12 +602,13 @@ function lightmapUnpackTexelStorage(v: number, exp: number): number {
     return v * m;
 }
 
-function lightmapAccumLight(dst: Float32Array, dstOffs: number, src: Uint8Array, size: number, m: number): void {
+function lightmapAccumLight(dst: Float32Array, dstOffs: number, src: Uint8Array, srcOffs: number, size: number, m: number): void {
     for (let i = 0; i < size; i += 4) {
-        const sr = src[i + 0], sg = src[i + 1], sb = src[i + 2], exp = src[i + 3];
+        const sr = src[srcOffs + i + 0], sg = src[srcOffs + i + 1], sb = src[srcOffs + i + 2], exp = src[srcOffs + i + 3];
         dst[dstOffs++] = m * lightmapUnpackTexelStorage(sr, exp);
         dst[dstOffs++] = m * lightmapUnpackTexelStorage(sg, exp);
         dst[dstOffs++] = m * lightmapUnpackTexelStorage(sb, exp);
+        // TODO(jstpierre): Drop this.
         dst[dstOffs++] = 1.0;
     }
 }
@@ -686,13 +687,13 @@ export class SurfaceLightingInstance {
             const scratchpad = this.scratchpad;
             scratchpad.fill(0);
             assert(scratchpad.byteLength >= dstSize);
+
+            let srcOffs = 0;
             for (let i = 0; i < this.lighting.styles.length; i++) {
                 const styleIdx = this.lighting.styles[i];
-                if (styleIdx === 0xFF)
-                    break;
-
                 const intensity = worldLightingState.styleIntensities[styleIdx];
-                lightmapAccumLight(scratchpad, 0, this.lighting.samples!, srcSize, intensity);
+                lightmapAccumLight(scratchpad, 0, this.lighting.samples!, srcOffs, srcSize, intensity);
+                srcOffs += srcSize;
             }
 
             if (this.wantsBumpmap && !this.lighting.hasBumpmapSamples) {

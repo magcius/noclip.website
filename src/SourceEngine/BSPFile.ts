@@ -85,6 +85,8 @@ export interface BSPNode {
     child1: number;
     bbox: AABB;
     area: number;
+    surfaceStart: number;
+    surfaceCount: number;
 }
 
 export interface Model {
@@ -250,7 +252,14 @@ export class BSPFile {
             const dispinfo = faces.getInt16(idx + 0x0C, true);
             const surfaceFogVolumeID = faces.getUint16(idx + 0x0E, true);
             // lighting info
-            const styles = nArray(4, (i) => faces.getUint8(idx + 0x10 + i));
+            const styles: number[] = [];
+            for (let j = 0; j < 4; j++) {
+                const style = faces.getUint8(idx + 0x10 + j);
+                if (style === 0xFF)
+                    break;
+                styles.push(style);
+            }
+
             const lightofs = faces.getInt32(idx + 0x14, true);
             const area = faces.getFloat32(idx + 0x18, true);
             const m_LightmapTextureMinsInLuxels = nArray(2, (i) => faces.getInt32(idx + 0x1C + i * 4, true));
@@ -272,15 +281,9 @@ export class BSPFile {
             const mins = m_LightmapTextureMinsInLuxels;
             const width = m_LightmapTextureSizeInLuxels[0] + 1, height = m_LightmapTextureSizeInLuxels[1] + 1;
 
-            let numstyles = 0;
-            for (numstyles; numstyles < styles.length;) {
-                if (styles[numstyles++] === 0xFF)
-                    break;
-            }
-
             const hasBumpmapSamples = !!(tex.flags & TexinfoFlags.BUMPLIGHT);
             const numlightmaps = hasBumpmapSamples ? 4 : 1;
-            const lightmapSize = numstyles * numlightmaps * (width * height * 4);
+            const lightmapSize = styles.length * numlightmaps * (width * height * 4);
             let samples: Uint8Array | null = null;
             if (lightofs !== -1)
                 samples = lighting.subarray(lightofs, lightmapSize).createTypedArray(Uint8Array);
@@ -408,17 +411,34 @@ export class BSPFile {
             const firstface = nodes.getUint16(idx + 0x18, true);
             const numfaces = nodes.getUint16(idx + 0x1A, true);
             const area = nodes.getInt16(idx + 0x1C, true);
-            nodelist.push({ plane, child0, child1, bbox, area });
+            nodelist.push({ plane, child0, child1, bbox, area, surfaceStart: firstface, surfaceCount: numfaces });
         }
 
-        /*
         const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
         const leafs = leafsLump.createDataView();
 
         const leaflist: BSPNode[] = [];
-        if (leafsVersion === 0) {
+        for (let idx = 0x00; idx < leafs.byteLength; idx += 0x20) {
+            const contents = leafs.getUint32(idx + 0x00, true);
+            const cluster = leafs.getUint16(idx + 0x04, true);
+            const areaAndFlags = leafs.getUint16(idx + 0x06, true);
+            const bboxMinX = leafs.getInt16(idx + 0x08, true);
+            const bboxMinY = leafs.getInt16(idx + 0x0C, true);
+            const bboxMinZ = leafs.getInt16(idx + 0x0E, true);
+            const bboxMaxX = leafs.getInt16(idx + 0x10, true);
+            const bboxMaxY = leafs.getInt16(idx + 0x12, true);
+            const bboxMaxZ = leafs.getInt16(idx + 0x14, true);
+            const firstleafface = leafs.getUint16(idx + 0x16, true);
+            const numleaffaces = leafs.getUint16(idx + 0x18, true);
+            const firstleafbrush = leafs.getUint16(idx + 0x1A, true);
+            const numleafbrushes = leafs.getUint16(idx + 0x1C, true);
+            const leafwaterdata = leafs.getUint16(idx + 0x1E, true);
+
+            // AmbientLighting info in version 0 is here.
+            if (leafsVersion === 0) {
+                idx += 0x18;
+            }
         }
-        */
 
         const models = getLumpData(LumpType.MODELS).createDataView();
         for (let idx = 0x00; idx < models.byteLength; idx += 0x30) {

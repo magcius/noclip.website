@@ -65,7 +65,7 @@ import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_F
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump, assertExists, assert, fallbackUndefined, magicstr, leftPad } from './util';
+import { assertExists, assert, fallbackUndefined } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { atob, btoa } from './Ascii85';
@@ -79,10 +79,11 @@ import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
-import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
+import { downloadBlob, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
 import { WebXRContext } from './WebXR';
+import { debugJunk } from './DebugJunk';
 
 const sceneGroups = [
     "Wii",
@@ -229,6 +230,9 @@ class Main {
 
     public sceneTimeScale = 1.0;
     public isEmbedMode = false;
+
+    // Link to debugJunk so we can reference it from the DevTools.
+    private debugJunk = debugJunk;
 
     constructor() {
         this.init();
@@ -861,21 +865,8 @@ window.main = new Main();
 // Debug utilities.
 declare global {
     interface Window {
-        hexdump: any;
-        magicstr: any;
-        downloadBuffer: any;
         debug: any;
         debugObj: any;
         gl: any;
     }
 }
-window.hexdump = hexdump;
-window.magicstr = magicstr;
-window.downloadBuffer = (name: any, buffer: any) => {
-    if (buffer instanceof ArrayBufferSlice)
-        downloadBufferSlice(name, buffer);
-    else if (name.name && name.buffer)
-        window.downloadBuffer(name.name, name.buffer);
-    else if (buffer instanceof ArrayBuffer)
-        downloadBuffer(name, buffer);
-};

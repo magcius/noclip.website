@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxTexture, GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
-import { readString, assert } from "../util";
+import { readString, assert, nArray } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
@@ -126,8 +126,8 @@ const enum VTFFlags {
 }
 
 export class VTF {
-    public gfxTexture: GfxTexture | null = null;
-    public gfxSampler: GfxSampler;
+    public gfxTextures: GfxTexture[] = [];
+    public gfxSampler: GfxSampler | null = null;
 
     public format: ImageFormat;
     public flags: VTFFlags;
@@ -209,10 +209,12 @@ export class VTF {
             numLevels: this.numLevels,
             depth: this.depth * faceCount,
         };
-        this.gfxTexture = device.createTexture(descriptor);
+
+        for (let i = 0; i < this.numFrames; i++)
+            this.gfxTextures.push(device.createTexture(descriptor));
 
         const hostAccessPass = device.createHostAccessPass();
-        const levelDatas: ArrayBufferView[] = [];
+        const levelDatas: ArrayBufferView[][] = nArray(this.gfxTextures.length, () => []);
 
         // Mipmaps are stored from smallest to largest.
         for (let i = this.numLevels - 1; i >= 0; i--) {
@@ -220,13 +222,17 @@ export class VTF {
             const mipHeight = Math.max(this.height >>> i, 1);
             const faceSize = this.calcMipSize(i);
             const size = faceSize * faceCount;
-            const levelData = imageFormatConvertData(device, this.format, buffer.subarray(dataIdx, size), mipWidth, mipHeight);
-            dataIdx += faceSize * faceDataCount;
-            levelDatas.unshift(levelData);
+            for (let j = 0; j < this.gfxTextures.length; j++) {
+                const levelData = imageFormatConvertData(device, this.format, buffer.subarray(dataIdx, size), mipWidth, mipHeight);
+                dataIdx += faceSize * faceDataCount;
+                levelDatas[j].unshift(levelData);
+            }
         }
 
-        hostAccessPass.uploadTextureData(this.gfxTexture, 0, levelDatas);
-        device.submitPass(hostAccessPass);
+        for (let i = 0; i < this.gfxTextures.length; i++) {
+            hostAccessPass.uploadTextureData(this.gfxTextures[i], 0, levelDatas[i]);
+            device.submitPass(hostAccessPass);
+        }
 
         const wrapS = !!(this.flags & VTFFlags.CLAMPS) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;
         const wrapT = !!(this.flags & VTFFlags.CLAMPT) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;
@@ -248,8 +254,10 @@ export class VTF {
         return imageFormatCalcLevelSize(this.format, mipWidth, mipHeight, mipDepth);
     }
 
-    public fillTextureMapping(m: TextureMapping): void {
-        m.gfxTexture = this.gfxTexture;
+    public fillTextureMapping(m: TextureMapping, frame: number = 0): void {
+        m.gfxTexture = this.gfxTextures[frame];
+        if (this.gfxTextures.length === 0)
+            m.gfxTexture = null;
         m.gfxSampler = this.gfxSampler;
         m.width = this.width;
         m.height = this.height;
@@ -260,7 +268,7 @@ export class VTF {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.gfxTexture !== null)
-            device.destroyTexture(this.gfxTexture);
+        for (let i = 0; i < this.gfxTextures.length; i++)
+            device.destroyTexture(this.gfxTextures[i]);
     }
 }

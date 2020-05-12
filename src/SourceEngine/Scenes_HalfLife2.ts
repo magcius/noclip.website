@@ -16,7 +16,6 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BaseMaterialProgram, BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState } from "./Materials";
 import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants } from "../MathHelpers";
 import { assert } from "../util";
-import { interactiveVizSliderSelect } from "../DebugJunk";
 import { Entity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 
@@ -236,10 +235,6 @@ class BSPModelRenderer {
         for (let i = 0; i < this.surfaces.length; i++)
             this.surfaces[i].prepareToRender(renderContext, renderInstManager, viewMatrixForDepthSort, this.modelMatrix);
     }
-
-    public surfaceSelect(): void {
-        interactiveVizSliderSelect(this.surfaces);
-    }
 }
 
 class EntityInstance {
@@ -371,10 +366,6 @@ class BSPRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputState(this.inputState);
-    }
-
-    public modelSelect(): void {
-        interactiveVizSliderSelect(this.models);
     }
 }
 

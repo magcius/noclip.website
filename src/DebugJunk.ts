@@ -442,3 +442,8 @@ export function interactiveVizSliderSelect(items: VisTestItem[], callback: ((ite
             callback(origIndex);
     });
 }
+
+// This goes on window.main and is meant as a global "helper utils" thing.
+export const debugJunk: any = {
+    interactiveVizSliderSelect,
+};
