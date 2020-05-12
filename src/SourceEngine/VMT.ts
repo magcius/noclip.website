@@ -4,7 +4,7 @@
 import { assert, assertExists } from "../util";
 import { SourceFileSystem } from "./Scenes_HalfLife2";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { Color, colorNewFromRGBA } from "../Color";
+import { Color, colorFromRGBA } from "../Color";
 
 export interface VMT {
     _Root: string;
@@ -13,32 +13,18 @@ export interface VMT {
     // patch
     include: string;
     replace: any;
+    insert: any;
 
-    // material
-    $basetexture: string;
-    $basealphaenvmapmask: string;
-    $detail: string;
-    $detailblendmode: string;
-    $detailblendfactor: string;
-    $detailtint: string;
-    $detailscale: string;
-    $envmap: string;
-    $normalmapalphaenvmapmask: string;
-    $envmapmask: string;
-    $envmaptint: string;
-    $bumpmap: string;
-    $nodiffusebumplighting: string;
-    $alphatest: string;
-    $alphatestreference: string;
-    $additive: string;
-    $opaquetexture: string;
-    $selfillum: string;
-    $translucent: string;
-    ['%compilesky']: string;
-    ['%compiletrigger']: string;
+    // proxies
+    proxies: any;
+
+    // generic
+    [k: string]: string;
 }
 
-export class ValveKeyValueParser {
+export type VKFPair = [string, any];
+
+class ValveKeyValueParser {
     private pos = 0;
     constructor(private S: string) {
     }
@@ -83,9 +69,9 @@ export class ValveKeyValueParser {
         this.pos--;
     }
 
-    private obj(): any {
+    private obj(): VKFPair[] {
         // already consumed "{"
-        const val: { [k: string]: any } = {};
+        const val: VKFPair[] = [];
         while (this.hastok()) {
             const tok = this.chew();
             if (tok == "}") {
@@ -94,8 +80,7 @@ export class ValveKeyValueParser {
                 this.spit();
             }
 
-            const [k, v] = this.pair();
-            val[k] = v;
+            val.push(this.pair());
             this.skipcomment();
         }
         return val;
@@ -129,8 +114,8 @@ export class ValveKeyValueParser {
         return val;
     }
 
-    private num(start: string): number {
-        return Number(this.run(/[0-9.]/, start));
+    private num(start: string): string {
+        return this.run(/[0-9.]/, start);
     }
 
     private unquote(start: string): string {
@@ -153,10 +138,33 @@ export class ValveKeyValueParser {
         throw "whoops";
     }
 
-    public pair(): [string, any] {
+    public pair(): VKFPair {
         const k = (this.unit() as string).toLowerCase();
         const v = this.unit();
         return [k, v];
+    }
+}
+
+function pairs2obj(pairs: VKFPair[], recurse: boolean = false): any {
+    const o: any = {};
+    for (let i = 0; i < pairs.length; i++) {
+        const [k, v] = pairs[i];
+        o[k] = (recurse && typeof v === 'object') ? pairs2obj(v) : v;
+    }
+    return o;
+}
+
+function patch(dst: any, srcpair: VKFPair[], replace: boolean): void {
+    if (srcpair === undefined)
+        return;
+
+    for (const [key, value] of srcpair) {
+        if (key in dst || !replace) {
+            if (typeof value === 'object')
+                patch(dst[key], value, replace);
+            else
+                dst[key] = value;
+        }
     }
 }
 
@@ -167,9 +175,15 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
         const str = new TextDecoder('utf8').decode(buffer.createTypedArray(Uint8Array));
 
         const [k, v] = new ValveKeyValueParser(str).pair();
-        const vmt = v as VMT;
+        const vmt = pairs2obj(v) as VMT;
         vmt._Root = k;
         vmt._Filename = path;
+
+        if (vmt.proxies !== undefined) {
+            const proxies = vmt.proxies as VKFPair[];
+            for (let i = 0; i < proxies.length; i++)
+                proxies[i][1] = pairs2obj(proxies[i][1], true);
+        }
 
         return vmt;
     }
@@ -177,7 +191,8 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
     const vmt = await parsePath(path);
     if (vmt._Root === 'patch') {
         const base = await parseVMT(filesystem, vmt['include'], depth++);
-        Object.assign(base, vmt.replace);
+        patch(base, vmt.replace, true);
+        patch(base, vmt.insert, false);
         return base;
     } else {
         return vmt;
@@ -190,10 +205,10 @@ export function vmtParseVector(S: string): number[] {
     return S.slice(1, -1).trim().split(/\s+/).map((item) => Number(item) * scale);
 }
 
-export function vmtParseColor(S: string): Color {
+export function vmtParseColor(dst: Color, S: string): void {
     const v = vmtParseVector(S);
     assert(v.length === 3);
-    return colorNewFromRGBA(v[0], v[1], v[2]);
+    colorFromRGBA(dst, v[0], v[1], v[2]);
 }
 
 export function vmtParseNumbers(S: string): number[] {
@@ -211,7 +226,7 @@ export function parseEntitiesLump(buffer: ArrayBufferSlice): Entity[] {
     const p = new ValveKeyValueParser(str);
     const entities: Entity[] = [];
     while (p.hastok()) {
-        entities.push(p.unit() as Entity);
+        entities.push(pairs2obj(p.unit()) as Entity);
         p.skipwhite();
     }
     return entities;

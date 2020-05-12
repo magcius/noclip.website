@@ -1,18 +1,19 @@
 
 import { DeviceProgram } from "../Program";
-import { VMT, parseVMT, vmtParseColor } from "./VMT";
+import { VMT, parseVMT, vmtParseColor, VKFPair } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderer";
-import { nArray, assert, assertExists, fallbackUndefined } from "../util";
+import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec3, vec4 } from "gl-matrix";
+import { mat4, vec4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
-import { SourceFileSystem } from "./Scenes_HalfLife2";
+import { SourceRenderContext, SourceFileSystem } from "./Scenes_HalfLife2";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { Surface, SurfaceLighting } from "./BSPFile";
-import { Color, White } from "../Color";
+import { Color, White, colorNewCopy } from "../Color";
+import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
 
 export class BaseMaterialProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -45,6 +46,9 @@ layout(row_major, std140) uniform ub_ObjectParams {
 #ifdef USE_ENVMAP
     vec4 u_EnvmapTint;
 #endif
+#ifdef USE_BASE2TEXTURE
+    vec4 u_Base2TextureScaleBias;
+#endif
     vec4 u_Misc[1];
 };
 
@@ -70,8 +74,8 @@ varying vec3 v_TangentSpaceBasis1;
 // Just need the vertex normal component.
 varying vec3 v_TangentSpaceBasis2;
 
-// Base, Detail, Bumpmap, Lightmap, Envmap Mask
-uniform sampler2D u_Texture[5];
+// Base, Detail, Bumpmap, Lightmap, Envmap Mask, Base 2
+uniform sampler2D u_Texture[6];
 
 // Cube Envmap
 uniform samplerCube u_TextureCube[1];
@@ -117,6 +121,9 @@ void mainVS() {
     // TODO(jstpierre): BumpmapScale
     v_TexCoord2.xy = a_TexCoord.xy;
 #endif
+#ifdef USE_BASE2TEXTURE
+    v_TexCoord2.zw = CalcScaleBias(a_TexCoord.xy, u_Base2TextureScaleBias);
+#endif
 }
 #endif
 
@@ -150,6 +157,11 @@ void mainPS() {
     t_Albedo = TextureCombine(t_BaseTexture, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #else
     t_Albedo = t_BaseTexture;
+#endif
+
+#ifdef USE_BASE2TEXTURE
+    vec4 t_Base2Texture = texture(SAMPLER_2D(u_Texture[5], v_TexCoord2.zw)).rgba;
+    t_Albedo *= t_Base2Texture;
 #endif
 
 #ifdef USE_ALPHATEST
@@ -238,82 +250,298 @@ function scaleBiasSet(dst: vec4, scale: number, x: number = 0.0, y: number = 0.0
     vec4.set(dst, scale, scale, x, y);
 }
 
-const scratchMatrix = mat4.create();
-const scratchVec3 = vec3.create();
-export class BaseMaterial {
-    public visible = true;
-    public program: BaseMaterialProgram;
-    public gfxProgram: GfxProgram;
-    public megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
-    public sortKeyBase: number = 0;
+type ParameterMap = { [k: string]: Parameter };
 
-    // Texture parameters.
+export interface BaseMaterial {
+    isMaterialLoaded(): boolean;
+    setLightmapAllocation(allocation: LightmapAllocation): void;
+    movement(renderContext: SourceRenderContext): void;
+    setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: mat4): void;
+    visible: boolean;
+    wantsLightmap: boolean;
+    wantsBumpmappedLightmap: boolean;
+    param: ParameterMap;
+    entityParams: EntityParameters;
+}
+
+interface Parameter {
+    parse(S: string): void;
+    index(i: number): Parameter;
+    set(param: Parameter): void;
+}
+
+class ParameterTexture {
+    public ref: string | null = null;
+    public parse(S: string): void { this.ref = S; }
+    public index(i: number): Parameter { throw "whoops"; }
+    public set(param: Parameter): void {
+        // Cannot dynamically change at runtime.
+        throw "whoops";
+    }
+}
+
+class ParameterNumber {
+    constructor(public value: number, private dynamic: boolean = true) { }
+    public parse(S: string): void { this.value = Number(S); }
+    public index(i: number): Parameter { throw "whoops"; }
+    public set(param: Parameter): void {
+        assert(param instanceof ParameterNumber);
+        assert(this.dynamic);
+        this.value = param.value;
+    }
+}
+
+class ParameterBoolean extends ParameterNumber {
+    constructor(value: boolean, dynamic: boolean = true) { super(value ? 1 : 0, dynamic); }
+    public getBool(): boolean { return !!this.value; }
+}
+
+class ParameterMatrix {
+    public matrix = mat4.create();
+
+    constructor() { }
+
+    public parse(S: string): void {
+        // "center {} {} scale {} {} rotate {} translate {} {}"
+        const [cx, cy, sx, sy, r, tx, ty] = assertExists(/center (.+) (.+) scale (.+) (.+) rotate (.+) translate (.+) (.+)/.exec(S));
+        // TODO(jstpierre): Matrix
+    }
+
+    public index(i: number): Parameter { throw "whoops"; }
+    public set(param: Parameter): void { throw "whoops"; }
+}
+
+class ParameterColor {
+    private internal: ParameterNumber[] = nArray(3, () => new ParameterNumber(0.0));
+    private color: Color = colorNewCopy(White);
+
+    constructor(r: number, g: number = r, b: number = r) {
+        this.internal[0].value = r;
+        this.internal[1].value = g;
+        this.internal[2].value = b;
+    }
+
+    public parse(S: string): void {
+        vmtParseColor(this.color, S);
+        this.internal[0].value = this.color.r;
+        this.internal[1].value = this.color.g;
+        this.internal[2].value = this.color.b;
+    }
+
+    public index(i: number): Parameter {
+        return this.internal[i];
+    }
+
+    public set(param: Parameter): void {
+        if (param instanceof ParameterColor) {
+            this.internal[0].value = param.internal[0].value;
+            this.internal[1].value = param.internal[1].value;
+            this.internal[2].value = param.internal[2].value;
+        } else {
+            throw "whoops";
+        }
+    }
+
+    public getColor(): Color {
+        this.color.r = this.internal[0].value;
+        this.color.g = this.internal[1].value;
+        this.color.b = this.internal[2].value;
+        return this.color;
+    }
+}
+
+function createParameterAuto(S: string): Parameter | null {
+    const n = Number(S);
+    if (n !== undefined)
+        return new ParameterNumber(n);
+
+    // Try Vector
+    if (S.startsWith('[') || S.startsWith('{')) {
+        const color = new ParameterColor(0);
+        color.parse(S);
+    }
+
+    // Unknown.
+    return null;
+}
+
+function setupParametersFromVMT(param: ParameterMap, vmt: VMT): void {
+    for (const key in vmt) {
+        if (!key.startsWith('$'))
+            continue;
+        const value = vmt[key];
+        if (key in param) {
+            // Easy case -- existing parameter.
+            param[key].parse(value);
+        } else {
+            // Hard case -- auto-detect type from string.
+            const p = createParameterAuto(value);
+            if (p !== null) {
+                param[key] = p;
+            } else {
+                console.warn("Could not parse parameter", key, value);
+            }
+        }
+    }
+}
+
+class EntityParameters {
+    public position = vec3.create();
+}
+
+// LightmappedGeneric, UnlitGeneric, VertexLightingGeneric
+const scratchVec4 = vec4.create();
+class GenericMaterial implements BaseMaterial {
+    public visible = true;
+    public wantsLightmap = false;
+    public wantsBumpmappedLightmap = false;
+    public param: ParameterMap = {};
+    public entityParams = new EntityParameters();
+
+    private proxySystem: MaterialProxySystem | null = null;
+    private loaded: boolean = false;
+    private wantsDetail = false;
+    private wantsBase2Texture = false;
+    private wantsEnvmapMask = false;
+    private wantsEnvmap = false;
+
+    private program: BaseMaterialProgram;
+    private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private sortKeyBase: number = 0;
+
+    // Texture parameters. TODO(jstpierre): Move to Parameter?
     private baseTexture: VTF | null = null;
     private detailTexture: VTF | null = null;
-    private envmapMaskTexture: VTF | null = null;
-    private envmapTexture: VTF | null = null;
     private bumpmapTexture: VTF | null = null;
+    private envmapMaskTexture: VTF | null = null;
+    private base2Texture: VTF | null = null;
+    private envmapTexture: VTF | null = null;
     private lightmapAllocation: LightmapAllocation | null = null;
 
-    public textureMapping: TextureMapping[] = nArray(6, () => new TextureMapping());
-
-    // Material parameters.
-    public wantsLightmap = false;
-    public wantsBumpmap = false;
-    public wantsBumpmappedLightmap = false;
-    public wantsDetail = false;
-    public wantsEnvmap = false;
-    public wantsEnvmapMask = false;
-
-    private alphaTestReference: number = 0.0;
-    private detailScaleBias = vec4.create();
-    private detailTint: Color = White;
-    private detailBlendFactor = 1.0;
-    private envmapMaskScaleBias = vec4.create();
-    private envmapTint: Color = White;
+    private textureMapping: TextureMapping[] = nArray(7, () => new TextureMapping());
 
     constructor(public vmt: VMT) {
     }
 
     public async init(device: GfxDevice, cache: GfxRenderCache, materialCache: MaterialCache) {
+        this.initParameters();
         await this.fetchResources(materialCache);
-        this.initSync();
+        this.initStatic();
 
         this.gfxProgram = cache.createProgram(device, this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
-    protected async fetchResources(materialCache: MaterialCache) {
-        const vmt = this.vmt;
+    private async fetchTextureParam(materialCache: MaterialCache, name: string): Promise<VTF | null> {
+        const ref = (this.param[name] as ParameterTexture).ref;
+        if (ref !== null)
+            return await materialCache.fetchVTF(ref);
+        else
+            return null;
+    }
 
-        // Base textures.
-        if (vmt.$basetexture !== undefined)
-            this.baseTexture = await materialCache.fetchVTF(vmt.$basetexture);
-        if (vmt.$detail !== undefined)
-            this.detailTexture = await materialCache.fetchVTF(vmt.$detail);
-        if (vmt.$bumpmap !== undefined)
-            this.bumpmapTexture = await materialCache.fetchVTF(vmt.$bumpmap);
-        if (vmt.$envmapmask !== undefined)
-            this.envmapMaskTexture = await materialCache.fetchVTF(vmt.$envmapmask);
-        if (vmt.$envmap !== undefined)
-            this.envmapTexture = await materialCache.fetchVTF(vmt.$envmap);
+    protected async fetchResources(materialCache: MaterialCache) {
+        // TODO(jstpierre): Fetch in parallel?
+        this.baseTexture       = await this.fetchTextureParam(materialCache, '$basetexture');
+        this.detailTexture     = await this.fetchTextureParam(materialCache, '$detail');
+        this.bumpmapTexture    = await this.fetchTextureParam(materialCache, '$bumpmap');
+        this.envmapMaskTexture = await this.fetchTextureParam(materialCache, '$envmapmask');
+        this.base2Texture      = await this.fetchTextureParam(materialCache, '$texture2');
+        this.envmapTexture     = await this.fetchTextureParam(materialCache, '$envmap');
+        this.loaded = true;
+    }
+
+    private paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
+        const m = (this.param[name] as ParameterMatrix).matrix;
+        // Make sure there's no rotation. We should definitely handle this eventually, though.
+        assert(m[1] === 0.0 && m[2] === 0.0);
+        const scaleS = m[0];
+        const scaleT = m[5];
+        const transS = m[12];
+        const transT = m[13];
+        return fillVec4(d, offs, scaleS, scaleT, transS, transT);
+    }
+
+    private paramGetBoolean(name: string): boolean {
+        return (this.param[name] as ParameterBoolean).getBool();
+    }
+
+    private paramGetNumber(name: string): number {
+        return (this.param[name] as ParameterNumber).value;
+    }
+
+    private paramGetInt(name: string): number {
+        return this.paramGetNumber(name) | 0;
     }
 
     private textureIsTranslucent(texture: VTF): boolean {
         if (texture === this.baseTexture) {
             // Special consideration.
-            if (this.vmt.$opaquetexture)
+            if (this.paramGetBoolean('$opaquetexture'))
                 return false;
-            if (this.vmt.$selfillum || this.vmt.$basealphaenvmapmask)
+            if (this.paramGetBoolean('$selfillum') || this.paramGetBoolean('$basealphaenvmapmask'))
                 return false;
-            if (!(this.vmt.$translucent || this.vmt.$alphatest))
+            if (!(this.paramGetBoolean('$translucent') || this.paramGetBoolean('$alphatest')))
                 return false;
         }
 
         return texture.isTranslucent();
     }
 
-    protected initSync() {
+    protected initParameters(): void {
+        const p = this.param;
+
+        // Base parameters
+        p['$basetexture']                  = new ParameterTexture();
+        p['$basetexturetransform']         = new ParameterMatrix();
+        p['$frame']                        = new ParameterNumber(0);
+        p['$color']                        = new ParameterColor(1, 1, 1);
+        p['$alpha']                        = new ParameterNumber(1);
+
+        // Material vars
+        p['$selfillum']                    = new ParameterBoolean(false, false);
+        p['$additive']                     = new ParameterBoolean(false, false);
+        p['$alphatest']                    = new ParameterBoolean(false, false);
+        p['$translucent']                  = new ParameterBoolean(false, false);
+        p['$basealphaenvmapmask']          = new ParameterBoolean(false, false);
+        p['$normalmapalphaenvmapmask']     = new ParameterBoolean(false, false);
+
+        // Generic
+        p['$opaquetexture']                = new ParameterBoolean(false, false);
+        p['$envmap']                       = new ParameterTexture();
+        p['$envmapframe']                  = new ParameterNumber(0);
+        p['$envmapmask']                   = new ParameterTexture();
+        p['$envmapmaskframe']              = new ParameterNumber(0);
+        p['$envmapmasktransform']          = new ParameterMatrix();
+        p['$envmaptint']                   = new ParameterColor(1, 1, 1);
+        p['$detail']                       = new ParameterTexture();
+        p['$detailframe']                  = new ParameterNumber(0);
+        p['$detailblendmode']              = new ParameterNumber(0, false);
+        p['$detailblendfactor']            = new ParameterNumber(1);
+        p['$detailtint']                   = new ParameterColor(1, 1, 1);
+        p['$detailscale']                  = new ParameterNumber(4);
+        p['$bumpmap']                      = new ParameterTexture();
+        p['$bumpframe']                    = new ParameterNumber(0);
+        p['$bumptransform']                = new ParameterMatrix();
+        // TODO(jstpierre): This default isn't right
+        p['$alphatestreference']           = new ParameterNumber(0.4);
+        p['$nodiffusebumplighting']        = new ParameterBoolean(false, false);
+
+        // Unlit Two Texture
+        // TODO(jstpierre): Break out into a separate class?
+        p['$texture2']                     = new ParameterTexture();
+        p['$texture2transform']            = new ParameterMatrix();
+        p['$frame2']                       = new ParameterNumber(0.0);
+
+        setupParametersFromVMT(p, this.vmt);
+        if (this.vmt.proxies !== undefined)
+            this.proxySystem = new MaterialProxySystem(this, this.vmt.proxies);
+    }
+
+    protected initStatic() {
+        // Init static portions of the material.
+
         const vmt = this.vmt;
 
         const shaderType = vmt._Root.toLowerCase();
@@ -327,22 +555,12 @@ export class BaseMaterial {
         if (this.detailTexture !== null) {
             this.wantsDetail = true;
             this.program.defines.set('USE_DETAIL', '1');
-            this.program.defines.set('DETAIL_COMBINE_MODE', fallbackUndefined(vmt.$detailblendmode, '0'));
-            this.detailTexture.fillTextureMapping(this.textureMapping[1]);
-            if (vmt.$detailblendfactor)
-                this.detailBlendFactor = Number(vmt.$detailblendfactor);
-            if (vmt.$detailtint)
-                this.detailTint = vmtParseColor(vmt.$detailtint);
-
-            if (vmt.$detailscale)
-                scaleBiasSet(this.detailScaleBias, Number(vmt.$detailscale));
+            this.program.defines.set('DETAIL_COMBINE_MODE', '' + this.paramGetNumber('$detailblendmode'));
         }
 
         if (this.bumpmapTexture !== null) {
-            this.wantsBumpmap = true;
             this.program.defines.set('USE_BUMPMAP', '1');
-            this.bumpmapTexture.fillTextureMapping(this.textureMapping[2]);
-            const wantsDiffuseBumpmap = !vmt.$nodiffusebumplighting;
+            const wantsDiffuseBumpmap = !this.paramGetBoolean('$nodiffusebumplighting');
             this.program.defines.set('USE_DIFFUSE_BUMPMAP', wantsDiffuseBumpmap ? '1' : '0');
             this.wantsBumpmappedLightmap = wantsDiffuseBumpmap;
         }
@@ -352,16 +570,16 @@ export class BaseMaterial {
         if (this.envmapMaskTexture !== null) {
             this.wantsEnvmapMask = true;
             this.program.defines.set('USE_ENVMAP_MASK', '1');
-            this.envmapMaskTexture.fillTextureMapping(this.textureMapping[4]);
-            scaleBiasSet(this.envmapMaskScaleBias, 1.0);
+        }
+
+        if (this.base2Texture !== null) {
+            this.wantsBase2Texture = true;
+            this.program.defines.set('USE_BASE2TEXTURE', '1');
         }
 
         if (this.envmapTexture !== null) {
             this.wantsEnvmap = true;
             this.program.defines.set('USE_ENVMAP', '1');
-            if (vmt.$envmaptint)
-                this.envmapTint = vmtParseColor(vmt.$envmaptint);
-            this.envmapTexture.fillTextureMapping(this.textureMapping[5]);
         }
 
         if (shaderType === 'lightmappedgeneric') {
@@ -370,29 +588,21 @@ export class BaseMaterial {
             this.wantsLightmap = true;
         }
 
-        if (vmt.$basealphaenvmapmask) {
+        if (this.paramGetBoolean('$basealphaenvmapmask'))
             this.program.defines.set('USE_BASE_ALPHA_ENVMAP_MASK', '1');
-        }
 
-        if (vmt.$normalmapalphaenvmapmask) {
+        if (this.paramGetBoolean('$normalmapalphaenvmapmask'))
             this.program.defines.set('USE_NORMALMAP_ALPHA_ENVMAP_MASK', '1');
-        }
 
-        if (vmt.$alphatest) {
+        if (this.paramGetBoolean('$alphatest')) {
             this.program.defines.set('USE_ALPHATEST', '1');
-            if (vmt.$alphatestreference) {
-                this.alphaTestReference = Number(vmt.$alphatestreference);
-            } else {
-                // TODO(jstpierre): This default was just guessed.
-                this.alphaTestReference = 0.4;
-            }
         } else {
             let isTranslucent = false;
 
             if (this.baseTexture !== null && this.textureIsTranslucent(this.baseTexture))
                 isTranslucent = true;
 
-            if (isTranslucent && vmt.$additive) {
+            if (isTranslucent && this.paramGetBoolean('$additive')) {
                 // BLENDADD
                 setAttachmentStateSimple(this.megaStateFlags, {
                     blendMode: GfxBlendMode.ADD,
@@ -406,7 +616,7 @@ export class BaseMaterial {
                     blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
                     blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
                 });
-            } else if (vmt.$additive) {
+            } else if (this.paramGetBoolean('$additive')) {
                 // ADD
                 setAttachmentStateSimple(this.megaStateFlags, {
                     blendMode: GfxBlendMode.ADD,
@@ -416,7 +626,7 @@ export class BaseMaterial {
             }
 
             let sortLayer: GfxRendererLayer;
-            if (isTranslucent || vmt.$additive) {
+            if (isTranslucent || this.paramGetBoolean('$additive')) {
                 this.megaStateFlags.depthWrite = false;
                 sortLayer = GfxRendererLayer.TRANSLUCENT;
             } else {
@@ -428,10 +638,7 @@ export class BaseMaterial {
     }
 
     public isMaterialLoaded(): boolean {
-        if (this.textureMapping[0].gfxTexture === null)
-            return false;
-
-        return true;
+        return this.loaded;
     }
 
     public setLightmapAllocation(lightmapAllocation: LightmapAllocation): void {
@@ -441,20 +648,57 @@ export class BaseMaterial {
         lightmapTextureMapping.gfxSampler = this.lightmapAllocation.gfxSampler;
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, modelMatrix: mat4): void {
+    private updateTextureMappings(): void {
+        if (this.baseTexture !== null)
+            this.baseTexture.fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
+        if (this.detailTexture !== null)
+            this.detailTexture.fillTextureMapping(this.textureMapping[1], this.paramGetInt('$detailframe'));
+        if (this.bumpmapTexture !== null)
+            this.bumpmapTexture.fillTextureMapping(this.textureMapping[2], this.paramGetInt('$bumpframe'));
+        // Lightmap is supplied by entity.
+        if (this.envmapMaskTexture !== null)
+            this.envmapMaskTexture.fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapmaskframe'));
+        if (this.base2Texture !== null)
+            this.base2Texture.fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
+        if (this.envmapTexture !== null)
+            this.envmapTexture.fillTextureMapping(this.textureMapping[6], this.paramGetInt('$envmapframe'));
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        // Update the proxy system.
+        if (this.proxySystem !== null)
+            this.proxySystem.update(renderContext, this.entityParams);
+    }
+
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: mat4): void {
+        // Update texture mappings from frames.
+        this.updateTextureMappings();
+
         let offs = renderInst.allocateUniformBuffer(BaseMaterialProgram.ub_ObjectParams, 4*3+4+4+4+4+4+4+4);
         const d = renderInst.mapUniformBufferF32(BaseMaterialProgram.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
-        if (this.wantsDetail)
-            offs += fillVec4v(d, offs, this.detailScaleBias);
+
+        if (this.wantsDetail) {
+            scaleBiasSet(scratchVec4, this.paramGetNumber('$detailscale'));
+            offs += fillVec4v(d, offs, scratchVec4);
+        }
+
         if (this.wantsLightmap)
             offs += fillVec4v(d, offs, this.lightmapAllocation!.scaleBias);
+
         if (this.wantsEnvmapMask)
-            offs += fillVec4v(d, offs, this.envmapMaskScaleBias);
+            offs += this.paramFillScaleBias(d, offs, '$envmapmasktransform');
+
         if (this.wantsEnvmap)
-            offs += fillColor(d, offs, this.envmapTint);
+            offs += fillColor(d, offs, (this.param['$envmaptint'] as ParameterColor).getColor());
+
+        if (this.wantsBase2Texture)
+            offs += this.paramFillScaleBias(d, offs, '$texture2transform');
+
+        const alphaTestReference = this.paramGetNumber('$alphatestreference');
+        const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
         const lightmapOffset = this.lightmapAllocation !== null ? this.lightmapAllocation.bumpPageOffset : 0.0;
-        offs += fillVec4(d, offs, this.alphaTestReference, this.detailBlendFactor, lightmapOffset);
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, lightmapOffset);
 
         assert(this.isMaterialLoaded());
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -467,9 +711,9 @@ export class BaseMaterial {
     }
 }
 
-class HiddenMaterial extends BaseMaterial {
-    protected initSync() {
-        super.initSync();
+class HiddenMaterial extends GenericMaterial {
+    protected initStatic() {
+        super.initStatic();
         this.visible = false;
     }
 }
@@ -480,7 +724,7 @@ export class MaterialCache {
     private materialPromiseCache = new Map<string, Promise<VMT>>();
 
     constructor(private device: GfxDevice, private cache: GfxRenderCache, private filesystem: SourceFileSystem) {
-        this.textureCache.set('_rt_Camera', new VTF(device, cache, null));
+        this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera'));
     }
 
     private resolvePath(path: string, ext: string): string {
@@ -498,7 +742,7 @@ export class MaterialCache {
         return this.materialPromiseCache.get(path)!;
     }
 
-    private createMaterialInstanceInternal(vmt: VMT): BaseMaterial {
+    private createMaterialInstanceInternal(vmt: VMT): GenericMaterial {
         // Hacks for now. I believe these are normally hidden by not actually being in the BSP tree.
         if (vmt['%compilesky'] || vmt['%compiletrigger']) {
             return new HiddenMaterial(vmt);
@@ -507,10 +751,10 @@ export class MaterialCache {
         // const shaderType = vmt._Root.toLowerCase();
 
         // Dispatch based on shader type.
-        return new BaseMaterial(vmt);
+        return new GenericMaterial(vmt);
     }
 
-    public async createMaterialInstance(path: string): Promise<BaseMaterial> {
+    public async createMaterialInstance(path: string): Promise<GenericMaterial> {
         const vmt = await this.fetchMaterialData(path);
         const materialInstance = this.createMaterialInstanceInternal(vmt);
         await materialInstance.init(this.device, this.cache, this);
@@ -520,7 +764,7 @@ export class MaterialCache {
     private async fetchVTFInternal(name: string): Promise<VTF> {
         const path = this.resolvePath(name, '.vtf');
         const data = await this.filesystem.fetchFileData(path);
-        const vtf = new VTF(this.device, this.cache, data);
+        const vtf = new VTF(this.device, this.cache, data, path);
         this.textureCache.set(name, vtf);
         return vtf;
     }
@@ -540,8 +784,7 @@ export class MaterialCache {
     }
 }
 
-// Lightmap / Lighting data
-
+//#region Lightmap / Lighting data
 export class LightmapAllocation {
     public width: number = 0;
     public height: number = 0;
@@ -723,3 +966,273 @@ export class SurfaceLightingInstance {
         device.submitPass(hostAccessPass);
     }
 }
+//#endregion
+
+//#region Material Proxy System
+class ParameterReference {
+    public name: string | null = null;
+    public index: number = -1;
+    public value: Parameter | null = null;
+
+    constructor(str: string, defaultValue: number | null = null) {
+        if (str === undefined) {
+            this.value = new ParameterNumber(assertExists(defaultValue));
+        } else if (str.startsWith('$')) {
+            // '$envmaptint', '$envmaptint[1]'
+            const [, name, index] = assertExists(/([a-z0-9$]+)(?:\[(\d+)\])?/.exec(str));
+            this.name = name;
+            if (index !== undefined)
+                this.index = Number(index);
+        } else {
+            this.value = createParameterAuto(str);
+        }
+    }
+}
+
+function paramLookup<T extends Parameter>(map: ParameterMap, ref: ParameterReference): T {
+    if (ref.name !== null) {
+        const pm = map[ref.name];
+        if (ref.index !== -1)
+            return pm.index(ref.index) as T;
+        else
+            return pm as T;
+    } else {
+        return assertExists(ref.value as T);
+    }
+}
+
+function paramGetNum(map: ParameterMap, ref: ParameterReference): number {
+    return paramLookup<ParameterNumber>(map, ref).value;
+}
+
+function paramSetNum(map: ParameterMap, ref: ParameterReference, v: number): void {
+    paramLookup<ParameterNumber>(map, ref).value = v;
+}
+
+class MaterialProxySystem {
+    private proxies: MaterialProxy[] = [];
+
+    constructor(private material: BaseMaterial, proxies: VKFPair[]) {
+        for (let i = 0; i < proxies.length; i++) {
+            const [name, params] = proxies[i];
+            const proxy = buildMaterialProxy(name, params);
+            if (proxy !== null) {
+                this.proxies.push(proxy);
+            } else {
+                console.log(`unknown proxy type`, name);
+            }
+        }
+    }
+
+    public update(renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+        for (let i = 0; i < this.proxies.length; i++)
+            this.proxies[i].update(this.material.param, renderContext, entityParams);
+    }
+}
+
+type VKFParamMap = { [k: string]: string };
+
+function buildMaterialProxy(name: string, params: VKFParamMap): MaterialProxy | null {
+    if (name === 'equals')
+        return new MaterialProxy_Equals(params);
+    else if (name === 'add')
+        return new MaterialProxy_Add(params);
+    else if (name === 'subtract')
+        return new MaterialProxy_Subtract(params);
+    else if (name === 'multiply')
+        return new MaterialProxy_Multiply(params);
+    else if (name === 'clamp')
+        return new MaterialProxy_Clamp(params);
+    else if (name === 'sine')
+        return new MaterialProxy_Sine(params);
+    else if (name === 'texturescroll')
+        return new MaterialProxy_TextureScroll(params);
+    else if (name === 'playerproximity')
+        return new MaterialProxy_PlayerProximity(params);
+    else if (name === 'gaussiannoise')
+        return new MaterialProxy_GaussianNoise(params);
+    else
+        return null;
+}
+
+interface MaterialProxy {
+    update(paramsMap: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void;
+}
+
+class MaterialProxy_Equals {
+    private srcvar1: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.srcvar1 = new ParameterReference(params.srcvar1);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext): void {
+        const srcvar1 = paramLookup(map, this.srcvar1);
+        const resultvar = paramLookup(map, this.resultvar);
+        resultvar.set(srcvar1);
+    }
+}
+
+class MaterialProxy_Add {
+    private srcvar1: ParameterReference;
+    private srcvar2: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.srcvar1 = new ParameterReference(params.srcvar1);
+        this.srcvar2 = new ParameterReference(params.srcvar2);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext): void {
+        paramSetNum(map, this.resultvar, paramGetNum(map, this.srcvar1) + paramGetNum(map, this.srcvar2));
+    }
+}
+
+class MaterialProxy_Subtract {
+    private srcvar1: ParameterReference;
+    private srcvar2: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.srcvar1 = new ParameterReference(params.srcvar1);
+        this.srcvar2 = new ParameterReference(params.srcvar2);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext): void {
+        paramSetNum(map, this.resultvar, paramGetNum(map, this.srcvar1) - paramGetNum(map, this.srcvar2));
+    }
+}
+
+class MaterialProxy_Multiply {
+    private srcvar1: ParameterReference;
+    private srcvar2: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.srcvar1 = new ParameterReference(params.srcvar1);
+        this.srcvar2 = new ParameterReference(params.srcvar2);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext): void {
+        paramSetNum(map, this.resultvar, paramGetNum(map, this.srcvar1) * paramGetNum(map, this.srcvar2));
+    }
+}
+
+class MaterialProxy_Clamp {
+    private srcvar1: ParameterReference;
+    private min: ParameterReference;
+    private max: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.srcvar1 = new ParameterReference(params.srcvar1);
+        this.min = new ParameterReference(params.min, 0.0);
+        this.max = new ParameterReference(params.max, 1.0);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext): void {
+        paramSetNum(map, this.resultvar, clamp(paramGetNum(map, this.srcvar1), paramGetNum(map, this.min), paramGetNum(map, this.max)));
+    }
+}
+
+class MaterialProxy_Sine {
+    private sineperiod: ParameterReference;
+    private sinemin: ParameterReference;
+    private sinemax: ParameterReference;
+    private timeoffset: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.sineperiod = new ParameterReference(params.sineperiod, 1.0);
+        this.sinemin = new ParameterReference(params.sinemin, 0.0);
+        this.sinemax = new ParameterReference(params.sinemax, 1.0);
+        this.timeoffset = new ParameterReference(params.sinemax, 0.0);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext): void {
+        const freq = 1.0 / paramGetNum(map, this.sineperiod);
+        const t = (renderContext.globalTime - paramGetNum(map, this.timeoffset));
+        const min = paramGetNum(map, this.sinemin);
+        const max = paramGetNum(map, this.sinemax);
+        const v = lerp(min, max, invlerp(-1.0, 1.0, Math.sin(MathConstants.TAU * freq * t)));
+        paramSetNum(map, this.resultvar, v);
+    }
+}
+
+class MaterialProxy_GaussianNoise {
+    private resultvar: ParameterReference;
+    private minval: ParameterReference;
+    private maxval: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.resultvar = new ParameterReference(params.resultvar);
+        this.minval = new ParameterReference(params.minval);
+        this.maxval = new ParameterReference(params.maxval);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+        // TODO(jstpierre): Proper Gaussian noise.
+        const r = lerp(paramGetNum(map, this.minval), paramGetNum(map, this.maxval), Math.random());
+        paramSetNum(map, this.resultvar, r);
+    }
+}
+
+class MaterialProxy_TextureScroll {
+    private texturescrollvar: ParameterReference;
+    private texturescrollangle: ParameterReference;
+    private texturescrollrate: ParameterReference;
+    private texturescale: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.texturescrollvar = new ParameterReference(params.texturescrollvar);
+        this.texturescrollrate = new ParameterReference(params.texturescrollrate, 1.0);
+        this.texturescrollangle = new ParameterReference(params.texturescrollangle, 0.0);
+        this.texturescale = new ParameterReference(params.texturescale, 1.0);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext): void {
+        // TODO(jstpierre): Proximity.
+        const p = paramLookup(map, this.texturescrollvar);
+
+        const scale = paramGetNum(map, this.texturescale);
+        const angle = paramGetNum(map, this.texturescrollangle) * MathConstants.DEG_TO_RAD;
+        const rate = paramGetNum(map, this.texturescrollrate) * renderContext.globalTime;
+        const offsS = (Math.cos(angle) * rate) % 1.0;
+        const offsT = (Math.sin(angle) * rate) % 1.0;
+
+        if (p instanceof ParameterMatrix) {
+            mat4.identity(p.matrix);
+            p.matrix[0] = scale;
+            p.matrix[5] = scale;
+            p.matrix[12] = offsS;
+            p.matrix[13] = offsT;
+        } else {
+            // not sure
+            debugger;
+        }
+    }
+}
+
+class MaterialProxy_PlayerProximity {
+    private resultvar: ParameterReference;
+    private scale: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.resultvar = new ParameterReference(params.resultvar);
+        this.scale = new ParameterReference(params.scale);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+        const scale = paramGetNum(map, this.scale);
+        const dist = vec3.distance(renderContext.cameraPos, entityParams.position);
+        paramSetNum(map, this.resultvar, dist * scale);
+    }
+}
+//#endregion

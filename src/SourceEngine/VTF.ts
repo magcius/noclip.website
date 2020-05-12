@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxTexture, GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxTextureDescriptor, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
-import { readString, assert, nArray } from "../util";
+import { readString, assert, nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
@@ -137,7 +137,7 @@ export class VTF {
     public numFrames: number;
     public numLevels: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private buffer: ArrayBufferSlice | null) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private buffer: ArrayBufferSlice | null, private name: string) {
         if (buffer === null)
             return;
 
@@ -210,8 +210,11 @@ export class VTF {
             depth: this.depth * faceCount,
         };
 
-        for (let i = 0; i < this.numFrames; i++)
-            this.gfxTextures.push(device.createTexture(descriptor));
+        for (let i = 0; i < this.numFrames; i++) {
+            const texture = device.createTexture(descriptor);
+            device.setResourceName(texture, `${this.name} frame ${i}`);
+            this.gfxTextures.push(texture);
+        }
 
         const hostAccessPass = device.createHostAccessPass();
         const levelDatas: ArrayBufferView[][] = nArray(this.gfxTextures.length, () => []);
@@ -255,9 +258,13 @@ export class VTF {
     }
 
     public fillTextureMapping(m: TextureMapping, frame: number = 0): void {
-        m.gfxTexture = this.gfxTextures[frame];
-        if (this.gfxTextures.length === 0)
+        if (this.gfxTextures.length === 0) {
             m.gfxTexture = null;
+        } else {
+            if (frame < 0 || frame >= this.gfxTextures.length)
+                frame = 0;
+            m.gfxTexture = assertExists(this.gfxTextures[frame]);
+        }
         m.gfxSampler = this.gfxSampler;
         m.width = this.width;
         m.height = this.height;
