@@ -73,7 +73,7 @@ class DataFetcherRequest {
             return true;
         }
 
-        if (request.status === 200)
+        if (request.status === 200 || request.status === 206)
             return false;
 
         if (this.retriesLeft > 0) {
@@ -93,6 +93,10 @@ class DataFetcherRequest {
         this.request = new XMLHttpRequest();
         this.request.open("GET", this.url, true);
         this.request.responseType = "arraybuffer";
+        if (this.options.rangeStart && this.options.rangeSize) {
+            const rangeStart = this.options.rangeStart, rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
+            this.request.setRequestHeader('Range', `bytes=${rangeStart}-${rangeEnd}`);
+        }
         this.request.send();
         this.request.onload = (e) => {
             const hadError = this.resolveError();
@@ -141,6 +145,16 @@ class DataFetcherRequest {
 interface DataFetcherOptions {
     allow404?: boolean;
     abortedCallback?: AbortedCallback;
+    /**
+     * rangeStart: 0-based byte index for the range Header. Use to request part of a file.
+     * Must be specified in tandem with rangeSize.
+     */
+    rangeStart?: number;
+    /**
+     * rangeSize: Length for the range header.
+     * Must be specified together with rangeStart.
+     */
+    rangeSize?: number;
 }
 
 export class DataFetcher {

@@ -2,8 +2,8 @@
 // Valve Packfile. Only handles newest VPK version.
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, nArray, leftPad, fallbackUndefined } from "../util";
-import { DataFetcher, NamedArrayBufferSlice } from "../DataFetcher";
+import { assert, readString, leftPad, fallbackUndefined } from "../util";
+import { DataFetcher, AbortedCallback } from "../DataFetcher";
 
 interface VPKFileEntryChunk {
     packFileIdx: number;
@@ -96,59 +96,50 @@ export function parseVPKDirectory(buffer: ArrayBufferSlice): VPKDirectory {
 }
 
 export class VPKMount {
-    public data: (ArrayBufferSlice | null)[];
-    public promise: (Promise<NamedArrayBufferSlice> | null)[];
+    private fileDataPromise = new Map<string, Promise<ArrayBufferSlice>>();
 
     constructor(private dataFetcher: DataFetcher, private basePath: string, private dir: VPKDirectory) {
-        this.data = nArray(this.dir.maxPackFile + 1, () => null);
-        this.promise = nArray(this.dir.maxPackFile + 1, () => null);
     }
 
-    private async fetchArchive(packFileIdx: number): Promise<ArrayBufferSlice> {
-        if (this.promise[packFileIdx] === null) {
-            this.promise[packFileIdx] = this.dataFetcher.fetchData(`${this.basePath}_${leftPad('' + packFileIdx, 3, '0')}.vpk`);
-            this.data[packFileIdx] = await this.promise[packFileIdx];
-        }
-
-        return this.data[packFileIdx]!;
+    private fetchChunk(chunk: VPKFileEntryChunk, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
+        const packFileIdx = chunk.packFileIdx, rangeStart = chunk.chunkOffset, rangeSize = chunk.chunkSize;
+        return this.dataFetcher.fetchData(`${this.basePath}_${leftPad('' + packFileIdx, 3, '0')}.vpk`, { rangeStart, rangeSize, abortedCallback });
     }
 
     public findEntry(path: string): VPKFileEntry | null {
         return fallbackUndefined(this.dir.entries.find((entry) => entry.path === path), null);
     }
 
-    public async fetchFileData(entry: VPKFileEntry): Promise<ArrayBufferSlice | null> {
+    private async fetchFileDataInternal(entry: VPKFileEntry, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
         const promises = [];
         let size = 0;
+
         for (let i = 0; i < entry.chunks.length; i++) {
             const chunk = entry.chunks[i];
+            promises.push(this.fetchChunk(chunk, abortedCallback));
             size += chunk.chunkSize;
-
-            const packFileIdx = chunk.packFileIdx;
-            if (this.data[packFileIdx] === null) {
-                if (this.promise[packFileIdx] === null)
-                    this.fetchArchive(packFileIdx);
-                promises.push(this.promise[packFileIdx]!);
-            }
         }
 
-        await Promise.all(promises);
-
-        if (entry.chunks.length === 1) {
-            const chunk = entry.chunks[0];
-            const data = this.data[chunk.packFileIdx]!.subarray(chunk.chunkOffset, chunk.chunkSize);
-            return data;
-        }
+        const chunks = await Promise.all(promises);
+        if (chunks.length === 1)
+            return chunks[0];
 
         const buf = new Uint8Array(size);
         let offs = 0;
-        for (let i = 0; i < entry.chunks.length; i++) {
-            const chunk = entry.chunks[i];
-            const data = this.data[chunk.packFileIdx]!.subarray(chunk.chunkOffset, chunk.chunkSize);
-            buf.set(data.createTypedArray(Uint8Array), offs);
-            offs += chunk.chunkSize;
+        for (let i = 0; i < chunks.length; i++) {
+            buf.set(chunks[i].createTypedArray(Uint8Array), offs);
+            offs += chunks[i].byteLength;
         }
         return new ArrayBufferSlice(buf.buffer);
+    }
+
+    public fetchFileData(entry: VPKFileEntry): Promise<ArrayBufferSlice> {
+        if (!this.fileDataPromise.has(entry.path)) {
+            this.fileDataPromise.set(entry.path, this.fetchFileDataInternal(entry, () => {
+                this.fileDataPromise.delete(entry.path);
+            }));
+        }
+        return this.fileDataPromise.get(entry.path)!;
     }
 }
 
