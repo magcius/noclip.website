@@ -7,17 +7,21 @@ import { vec4, vec3, vec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
 import { parseEntitiesLump, Entity } from "./VMT";
+import { Plane, AABB } from "../Geometry";
 
 const enum LumpType {
     ENTITIES             = 0,
     PLANES               = 1,
     TEXDATA              = 2,
     VERTEXES             = 3,
+    NODES                = 5,
     TEXINFO              = 6,
     FACES                = 7,
     LIGHTING             = 8,
+    LEAFS                = 10,
     EDGES                = 12,
     SURFEDGES            = 13,
+    MODELS               = 14,
     VERTNORMALS          = 30,
     VERTNORMALINDICES    = 31,
     PRIMITIVES           = 37,
@@ -75,10 +79,25 @@ function calcTexCoord(dst: vec2, v: vec3, m: TexinfoMapping): void {
     dst[1] = v[0]*m.t[0] + v[1]*m.t[1] + v[2]*m.t[2] + m.t[3];
 }
 
+export interface BSPNode {
+    plane: Plane;
+    child0: number;
+    child1: number;
+    bbox: AABB;
+    area: number;
+}
+
+export interface Model {
+    bbox: AABB;
+    surfaceStart: number;
+    surfaceCount: number;
+}
+
 export class BSPFile {
     public entities: Entity[] = [];
     public texinfo: Texinfo[] = [];
     public surfaces: Surface[] = [];
+    public models: Model[] = [];
     public pakfile: ZipFile | null = null;
 
     public indexData: Uint16Array;
@@ -361,5 +380,65 @@ export class BSPFile {
 
         this.vertexData = vertexData;
         this.indexData = indexData;
+
+        // Parse out BSP tree.
+        const nodes = getLumpData(LumpType.NODES).createDataView();
+
+        const nodelist: BSPNode[] = [];
+        for (let idx = 0x00; idx < nodes.byteLength; idx += 0x20) {
+            const planenum = nodes.getUint32(idx + 0x00, true);
+
+            // Read plane.
+            const planeX = planes.getFloat32(planenum * 0x14 + 0x00, true);
+            const planeY = planes.getFloat32(planenum * 0x14 + 0x04, true);
+            const planeZ = planes.getFloat32(planenum * 0x14 + 0x08, true);
+            const planeDist = planes.getFloat32(planenum * 0x14 + 0x0C, true);
+
+            const plane = new Plane(planeX, planeY, planeZ, planeDist);
+
+            const child0 = nodes.getInt32(idx + 0x04, true);
+            const child1 = nodes.getInt32(idx + 0x08, true);
+            const bboxMinX = nodes.getInt16(idx + 0x0C, true);
+            const bboxMinY = nodes.getInt16(idx + 0x0E, true);
+            const bboxMinZ = nodes.getInt16(idx + 0x10, true);
+            const bboxMaxX = nodes.getInt16(idx + 0x12, true);
+            const bboxMaxY = nodes.getInt16(idx + 0x14, true);
+            const bboxMaxZ = nodes.getInt16(idx + 0x16, true);
+            const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+            const firstface = nodes.getUint16(idx + 0x18, true);
+            const numfaces = nodes.getUint16(idx + 0x1A, true);
+            const area = nodes.getInt16(idx + 0x1C, true);
+            nodelist.push({ plane, child0, child1, bbox, area });
+        }
+
+        /*
+        const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
+        const leafs = leafsLump.createDataView();
+
+        const leaflist: BSPNode[] = [];
+        if (leafsVersion === 0) {
+        }
+        */
+
+        const models = getLumpData(LumpType.MODELS).createDataView();
+        for (let idx = 0x00; idx < models.byteLength; idx += 0x30) {
+            const minX = models.getFloat32(idx + 0x00, true);
+            const minY = models.getFloat32(idx + 0x04, true);
+            const minZ = models.getFloat32(idx + 0x08, true);
+            const maxX = models.getFloat32(idx + 0x0C, true);
+            const maxY = models.getFloat32(idx + 0x10, true);
+            const maxZ = models.getFloat32(idx + 0x14, true);
+            const bbox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
+
+            const originX = models.getFloat32(idx + 0x18, true);
+            const originY = models.getFloat32(idx + 0x1C, true);
+            const originZ = models.getFloat32(idx + 0x20, true);
+
+            const headnode = models.getUint32(idx + 0x24, true);
+            const firstface = models.getUint32(idx + 0x28, true);
+            const numfaces = models.getUint32(idx + 0x2C, true);
+
+            this.models.push({ bbox, surfaceStart: firstface, surfaceCount: numfaces });
+        }
     }
 }

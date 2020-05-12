@@ -16,6 +16,7 @@ export interface VMT {
 
     // material
     $basetexture: string;
+    $basealphaenvmapmask: string;
     $detail: string;
     $detailblendmode: string;
     $detailblendfactor: string;
@@ -30,6 +31,9 @@ export interface VMT {
     $alphatest: string;
     $alphatestreference: string;
     $additive: string;
+    $opaquetexture: string;
+    $selfillum: string;
+    $translucent: string;
     ['%compilesky']: string;
     ['%compiletrigger']: string;
 }
@@ -190,6 +194,10 @@ export function vmtParseColor(S: string): Color {
     const v = vmtParseVector(S);
     assert(v.length === 3);
     return colorNewFromRGBA(v[0], v[1], v[2]);
+}
+
+export function vmtParseNumbers(S: string): number[] {
+    return S.trim().split(/\s+/).map((item) => Number(item));
 }
 
 // This is in the same file because it also parses keyfiles, even though it's not material-related.

@@ -5,12 +5,16 @@ import { transformVec3Mat4w1 } from "./MathHelpers";
 
 export class Plane {
     private static scratchVec3: vec3[] = nArray(2, () => vec3.create());
-    // Plane normal
-    public x: number;
-    public y: number;
-    public z: number;
-    // Distance
-    public d: number;
+
+    constructor(
+        // Plane normal
+        public x: number = 0,
+        public y: number = 0,
+        public z: number = 0,
+        // Distance
+        public d: number = 0,
+    ) {
+    }
 
     public distance(x: number, y: number, z: number): number {
         const dot = x*this.x + y*this.y + z*this.z;

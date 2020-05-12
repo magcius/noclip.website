@@ -3,20 +3,22 @@ import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from "../gfx/helpers/RenderTargetHelpers";
-import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { BSPFile, Surface } from "./BSPFile";
+import { BSPFile, Surface, Model } from "./BSPFile";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { VPKMount, createVPKMount } from "./VPK";
 import { ZipFile } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BaseMaterialProgram, BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState } from "./Materials";
-import { clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
+import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants } from "../MathHelpers";
 import { assert } from "../util";
 import { interactiveVizSliderSelect } from "../DebugJunk";
+import { Entity, vmtParseNumbers } from "./VMT";
+import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 
 const pathBase = `HalfLife2`;
 
@@ -47,6 +49,19 @@ export class SourceFileSystem {
     }
 }
 
+const zup = mat4.fromValues(
+    1, 0,  0, 0,
+    0, 0, -1, 0,
+    0, 1,  0, 0,
+    0, 0,  0, 1,
+);
+
+function fillCameraPosWorld(d: Float32Array, offs: number, viewMatrix: mat4): number {
+    mat4.mul(scratchMatrix, viewMatrix, zup);
+    mat4.invert(scratchMatrix, scratchMatrix);
+    return fillVec4(d, offs, scratchMatrix[12], scratchMatrix[13], scratchMatrix[14]);
+}
+
 const scratchMatrix = mat4.create();
 class SkyboxRenderer {
     private vertexBuffer: GfxBuffer;
@@ -54,6 +69,7 @@ class SkyboxRenderer {
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
     private materialInstances: BaseMaterial[] = [];
+    private modelMatrix = mat4.create();
 
     constructor(renderContext: SourceRenderContext, private skyname: string) {
         const device = renderContext.device, cache = renderContext.cache;
@@ -145,9 +161,18 @@ class SkyboxRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
+        let offs = template.allocateUniformBuffer(BaseMaterialProgram.ub_SceneParams, 32);
+        const d = template.mapUniformBufferF32(BaseMaterialProgram.ub_SceneParams);
+        mat4.mul(scratchMatrix, viewerInput.camera.projectionMatrix, scratchMatrix);
+        mat4.mul(scratchMatrix, scratchMatrix, zup);
+        offs += fillMatrix4x4(d, offs, scratchMatrix);
+        offs += fillCameraPosWorld(d, offs, viewerInput.camera.viewMatrix);
+
+        computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.viewMatrix);
+
         for (let i = 0; i < 6; i++) {
             const renderInst = renderInstManager.newRenderInst();
-            this.materialInstances[i].setOnRenderInst(renderInst, scratchMatrix);
+            this.materialInstances[i].setOnRenderInst(renderInst, this.modelMatrix);
             renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
             renderInst.drawIndexes(6, i*6);
             renderInstManager.submitRenderInst(renderInst);
@@ -163,7 +188,7 @@ class SkyboxRenderer {
     }
 }
 
-class BSPSurface {
+class BSPSurfaceRenderer {
     public materialInstance: BaseMaterial | null = null;
     public surfaceLighting: SurfaceLightingInstance;
     public visible = true;
@@ -178,7 +203,7 @@ class BSPSurface {
         this.materialInstance.setLightmapAllocation(this.surfaceLighting.allocation);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewMatrixForDepthSort: mat4, modelMatrix: mat4) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
             return;
 
@@ -188,11 +213,74 @@ class BSPSurface {
         }
 
         const renderInst = renderInstManager.newRenderInst();
-        this.materialInstance.setOnRenderInst(renderInst, viewerInput.camera.viewMatrix);
+        this.materialInstance.setOnRenderInst(renderInst, modelMatrix);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
-        const depth = this.materialInstance.computeViewSpaceDepth(this.surface.center, viewerInput.camera.viewMatrix);
+        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrixForDepthSort, this.surface.center);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         renderInstManager.submitRenderInst(renderInst);
+    }
+}
+
+class BSPModelRenderer {
+    public visible: boolean = true;
+    public modelMatrix = mat4.create();
+    public entity: EntityInstance | null = null;
+
+    constructor(public model: Model, public surfaces: BSPSurfaceRenderer[]) {
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewMatrixForDepthSort: mat4): void {
+        if (!this.visible)
+            return;
+
+        for (let i = 0; i < this.surfaces.length; i++)
+            this.surfaces[i].prepareToRender(renderContext, renderInstManager, viewMatrixForDepthSort, this.modelMatrix);
+    }
+
+    public surfaceSelect(): void {
+        interactiveVizSliderSelect(this.surfaces);
+    }
+}
+
+class EntityInstance {
+    private model: BSPModelRenderer | null = null;
+    private origin = vec3.create();
+    private angles = vec3.create();
+    public visible = true;
+
+    constructor(bspRenderer: BSPRenderer, private entity: Entity) {
+        if (entity.model) {
+            if (entity.model.startsWith('*')) {
+                const index = parseInt(entity.model.slice(1), 10);
+                this.model = bspRenderer.models[index];
+                this.model.entity = this;
+            } else {
+                // External model reference.
+            }
+        }
+
+        if (entity.origin) {
+            const origin = vmtParseNumbers(entity.origin);
+            vec3.set(this.origin, origin[0], origin[1], origin[2]);
+        }
+
+        if (entity.angles) {
+            const angles = vmtParseNumbers(entity.angles);
+            vec3.set(this.angles, angles[0], angles[1], angles[2]);
+        }
+    }
+
+    public movement(): void {
+        if (this.model !== null) {
+            const rotX = MathConstants.DEG_TO_RAD * this.angles[0];
+            const rotY = MathConstants.DEG_TO_RAD * this.angles[1];
+            const rotZ = MathConstants.DEG_TO_RAD * this.angles[2];
+            const transX = this.origin[0];
+            const transY = this.origin[1];
+            const transZ = this.origin[2];
+            computeModelMatrixSRT(this.model.modelMatrix, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
+            this.model.visible = this.visible;
+        }
     }
 }
 
@@ -201,7 +289,8 @@ class BSPRenderer {
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private surfaces: BSPSurface[] = [];
+    private entities: EntityInstance[] = [];
+    public models: BSPModelRenderer[] = [];
 
     constructor(renderContext: SourceRenderContext, private bsp: BSPFile) {
         const device = renderContext.device, cache = renderContext.cache;
@@ -224,24 +313,40 @@ class BSPRenderer {
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0, });
 
-        for (let i = 0; i < this.bsp.surfaces.length; i++)
-            this.surfaces.push(new BSPSurface(this.bsp.surfaces[i]));
+        for (let i = 0; i < this.bsp.models.length; i++) {
+            const model = this.bsp.models[i];
 
-        this.bindMaterials(renderContext);
+            const surfaces: BSPSurfaceRenderer[] = [];
+            for (let j = 0; j < model.surfaceCount; j++) {
+                const surface = new BSPSurfaceRenderer(this.bsp.surfaces[model.surfaceStart + j]);
+                this.bindMaterial(renderContext, surface);
+                surfaces.push(surface);
+            }
+
+            const modelRenderer = new BSPModelRenderer(model, surfaces);
+            // Submodels are invisible by default.
+            modelRenderer.visible = (i === 0);
+            this.models.push(modelRenderer);
+        }
+
+        this.spawnEntities();
     }
 
-    private async bindMaterial(renderContext: SourceRenderContext, surface: BSPSurface) {
-        const materialCache = renderContext.materialCache, lightmapManager = renderContext.lightmapManager;
+    private async bindMaterial(renderContext: SourceRenderContext, surface: BSPSurfaceRenderer) {
+        const materialCache = renderContext.materialCache;
         const texinfo = this.bsp.texinfo[surface.surface.texinfo];
         const materialInstance = await materialCache.createMaterialInstance(texinfo.texName);
-        surface.bindMaterial(materialInstance, lightmapManager);
+        surface.bindMaterial(materialInstance, renderContext.lightmapManager);
     }
 
-    private bindMaterials(renderContext: SourceRenderContext) {
-        for (let i = 0; i < this.surfaces.length; i++) {
-            const surface = this.surfaces[i];
-            this.bindMaterial(renderContext, surface);
-        }
+    private spawnEntities(): void {
+        for (let i = 0; i < this.bsp.entities.length; i++)
+            this.entities.push(new EntityInstance(this, this.bsp.entities[i]));
+    }
+
+    public movement(): void {
+        for (let i = 0; i < this.entities.length; i++)
+            this.entities[i].movement();
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -249,8 +354,15 @@ class BSPRenderer {
 
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-        for (let i = 0; i < this.surfaces.length; i++)
-            this.surfaces[i].prepareToRender(renderContext, renderInstManager, viewerInput);
+        let offs = template.allocateUniformBuffer(BaseMaterialProgram.ub_SceneParams, 32);
+        const d = template.mapUniformBufferF32(BaseMaterialProgram.ub_SceneParams);
+        mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, zup);
+        offs += fillMatrix4x4(d, offs, scratchMatrix);
+        offs += fillCameraPosWorld(d, offs, viewerInput.camera.viewMatrix);
+
+        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, zup);
+        for (let i = 0; i < this.models.length; i++)
+            this.models[i].prepareToRender(renderContext, renderInstManager, scratchMatrix);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -261,10 +373,8 @@ class BSPRenderer {
         device.destroyInputState(this.inputState);
     }
 
-    public surfaceSelect(): void {
-        interactiveVizSliderSelect(this.surfaces, (item) => {
-            console.log(item);
-        });
+    public modelSelect(): void {
+        interactiveVizSliderSelect(this.models);
     }
 }
 
@@ -302,16 +412,19 @@ export class SourceRenderer implements SceneGfx {
         this.renderContext = new SourceRenderContext(device, this.renderHelper.getCache());
     }
 
+    private movement(): void {
+        for (let i = 0; i < this.bspRenderers.length; i++)
+            this.bspRenderers[i].movement();
+    }
+
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+        this.movement();
+
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
         template.setBindingLayouts(bindingLayouts);
-
-        let offs = template.allocateUniformBuffer(BaseMaterialProgram.ub_SceneParams, 32);
-        const mapped = template.mapUniformBufferF32(offs);
-        offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
 
         if (this.skyboxRenderer !== null)
             this.skyboxRenderer.prepareToRender(renderInstManager, viewerInput);

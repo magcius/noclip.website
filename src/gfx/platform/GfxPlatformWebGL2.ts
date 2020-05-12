@@ -801,6 +801,8 @@ void main() {
             return WebGL2RenderingContext.SRGB8_ALPHA8;
         case GfxFormat.S8_RGBA_NORM:
             return WebGL2RenderingContext.RGBA8_SNORM;
+        case GfxFormat.U16_RGBA_5551:
+            return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
         case GfxFormat.BC1:
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case GfxFormat.BC1_SRGB:
@@ -864,11 +866,6 @@ void main() {
     }
     
     private translateTextureType(fmt: GfxFormat): GLenum {
-        switch (fmt) {
-        case GfxFormat.U16_RGBA_5551:
-            return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
-        }
-
         const typeFlags: FormatTypeFlags = getFormatTypeFlags(fmt);
         switch (typeFlags) {
         case FormatTypeFlags.U8:
@@ -877,7 +874,12 @@ void main() {
             return WebGL2RenderingContext.UNSIGNED_SHORT;
         case FormatTypeFlags.U32:
             return WebGL2RenderingContext.UNSIGNED_INT;
+        case FormatTypeFlags.S8:
+            return WebGL2RenderingContext.BYTE;
         case FormatTypeFlags.F32:
+            return WebGL2RenderingContext.FLOAT;
+        case FormatTypeFlags.U16_PACKED_5551:
+            return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
         case FormatTypeFlags.D32:
             return WebGL2RenderingContext.FLOAT;
         case FormatTypeFlags.D24:
@@ -885,8 +887,6 @@ void main() {
             return WebGL2RenderingContext.UNSIGNED_INT_24_8;
         case FormatTypeFlags.D32S8:
             return WebGL2RenderingContext.FLOAT_32_UNSIGNED_INT_24_8_REV;
-        case FormatTypeFlags.S8:
-            return WebGL2RenderingContext.BYTE;
         default:
             throw "whoops";
         }

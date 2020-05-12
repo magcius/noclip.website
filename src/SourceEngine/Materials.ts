@@ -3,7 +3,7 @@ import { DeviceProgram } from "../Program";
 import { VMT, parseVMT, vmtParseColor } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderer";
-import { nArray, assert, assertExists, fallback } from "../util";
+import { nArray, assert, assertExists, fallbackUndefined } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3, vec4 } from "gl-matrix";
@@ -11,7 +11,6 @@ import { fillMatrix4x3, fillVec4, fillVec4v, fillColor } from "../gfx/helpers/Un
 import { VTF } from "./VTF";
 import { SourceFileSystem } from "./Scenes_HalfLife2";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Surface, SurfaceLighting } from "./BSPFile";
 import { Color, White } from "../Color";
 
@@ -28,12 +27,12 @@ export class BaseMaterialProgram extends DeviceProgram {
 precision mediump float;
 
 layout(row_major, std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+    Mat4x4 u_ProjectionView;
+    vec4 u_CameraPosWorld;
 };
 
 layout(row_major, std140) uniform ub_ObjectParams {
-    Mat4x3 u_ModelView;
-    vec4 u_CameraPosWorld;
+    Mat4x3 u_ModelMatrix;
 #ifdef USE_DETAIL
     vec4 u_DetailScaleBias;
 #endif
@@ -88,10 +87,10 @@ vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
 }
 
 void mainVS() {
-    gl_Position = Mul(u_Projection, vec4(Mul(u_ModelView, vec4(a_Position, 1.0)), 1.0));
+    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    // TODO(jstpierre): MV/P split.
-    v_PositionWorld = a_Position;
+    v_PositionWorld = t_PositionWorld;
     vec3 t_NormalWorld = a_Normal;
 
 #ifdef HAS_FULL_TANGENTSPACE
@@ -143,7 +142,7 @@ const vec3 g_RNBasis1 = vec3(-0.4082482904638631,  0.7071067811865475, 0.5773502
 const vec3 g_RNBasis2 = vec3(-0.4082482904638631, -0.7071067811865475, 0.5773502691896258); // -sqrt1/6, -sqrt1/2, sqrt1/3
 
 void mainPS() {
-    vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy)).rgba;
+    vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy));
 
     vec4 t_Albedo;
 #ifdef USE_DETAIL
@@ -205,6 +204,9 @@ vec3 t_DiffuseLighting;
 #ifdef USE_NORMALMAP_ALPHA_ENVMAP_MASK
     t_SpecularFactor *= t_BumpmapSample.a;
 #endif
+#ifdef USE_BASE_ALPHA_ENVMAP_MASK
+    t_SpecularFactor *= 1.0 - t_BaseTexture.a;
+#endif
 
     vec3 t_SpecularLighting = vec3(0.0);
     vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld;
@@ -219,7 +221,9 @@ vec3 t_DiffuseLighting;
     t_FinalColor.rgb += t_SpecularLighting.rgb;
 #endif
 
-    t_FinalColor.a = t_Albedo.a;
+#ifndef USE_BASE_ALPHA_ENVMAP_MASK
+    t_FinalColor.a = t_BaseTexture.a;
+#endif
 
     // Gamma correction.
     t_FinalColor.rgb = pow(t_FinalColor.rgb, vec3(1.0 / 2.2));
@@ -230,18 +234,12 @@ vec3 t_DiffuseLighting;
 `;
 }
 
-const zup = mat4.fromValues(
-    1, 0,  0, 0,
-    0, 0, -1, 0,
-    0, 1,  0, 0,
-    0, 0,  0, 1,
-);
-
 function scaleBiasSet(dst: vec4, scale: number, x: number = 0.0, y: number = 0.0): void {
     vec4.set(dst, scale, scale, x, y);
 }
 
 const scratchMatrix = mat4.create();
+const scratchVec3 = vec3.create();
 export class BaseMaterial {
     public visible = true;
     public program: BaseMaterialProgram;
@@ -301,6 +299,20 @@ export class BaseMaterial {
             this.envmapTexture = await materialCache.fetchVTF(vmt.$envmap);
     }
 
+    private textureIsTranslucent(texture: VTF): boolean {
+        if (texture === this.baseTexture) {
+            // Special consideration.
+            if (this.vmt.$opaquetexture)
+                return false;
+            if (this.vmt.$selfillum || this.vmt.$basealphaenvmapmask)
+                return false;
+            if (!(this.vmt.$translucent || this.vmt.$alphatest))
+                return false;
+        }
+
+        return texture.isTranslucent();
+    }
+
     protected initSync() {
         const vmt = this.vmt;
 
@@ -315,7 +327,7 @@ export class BaseMaterial {
         if (this.detailTexture !== null) {
             this.wantsDetail = true;
             this.program.defines.set('USE_DETAIL', '1');
-            this.program.defines.set('DETAIL_COMBINE_MODE', fallback(vmt.$detailblendmode, '0'));
+            this.program.defines.set('DETAIL_COMBINE_MODE', fallbackUndefined(vmt.$detailblendmode, '0'));
             this.detailTexture.fillTextureMapping(this.textureMapping[1]);
             if (vmt.$detailblendfactor)
                 this.detailBlendFactor = Number(vmt.$detailblendfactor);
@@ -358,6 +370,10 @@ export class BaseMaterial {
             this.wantsLightmap = true;
         }
 
+        if (vmt.$basealphaenvmapmask) {
+            this.program.defines.set('USE_BASE_ALPHA_ENVMAP_MASK', '1');
+        }
+
         if (vmt.$normalmapalphaenvmapmask) {
             this.program.defines.set('USE_NORMALMAP_ALPHA_ENVMAP_MASK', '1');
         }
@@ -371,11 +387,9 @@ export class BaseMaterial {
                 this.alphaTestReference = 0.4;
             }
         } else {
-            // Set translucency. There's a matvar for it, but the real behavior appears to come
-            // from the texture's flags.
             let isTranslucent = false;
 
-            if (this.baseTexture !== null && this.baseTexture.isTranslucent())
+            if (this.baseTexture !== null && this.textureIsTranslucent(this.baseTexture))
                 isTranslucent = true;
 
             if (isTranslucent && vmt.$additive) {
@@ -427,14 +441,10 @@ export class BaseMaterial {
         lightmapTextureMapping.gfxSampler = this.lightmapAllocation.gfxSampler;
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, viewMatrix: mat4): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, modelMatrix: mat4): void {
         let offs = renderInst.allocateUniformBuffer(BaseMaterialProgram.ub_ObjectParams, 4*3+4+4+4+4+4+4+4);
         const d = renderInst.mapUniformBufferF32(BaseMaterialProgram.ub_ObjectParams);
-        mat4.mul(scratchMatrix, viewMatrix, zup);
-        offs += fillMatrix4x3(d, offs, scratchMatrix);
-        // Compute camera world translation.
-        mat4.invert(scratchMatrix, scratchMatrix);
-        offs += fillVec4(d, offs, scratchMatrix[12], scratchMatrix[13], scratchMatrix[14]);
+        offs += fillMatrix4x3(d, offs, modelMatrix);
         if (this.wantsDetail)
             offs += fillVec4v(d, offs, this.detailScaleBias);
         if (this.wantsLightmap)
@@ -451,11 +461,6 @@ export class BaseMaterial {
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.sortKey = this.sortKeyBase;
-    }
-
-    public computeViewSpaceDepth(center: vec3, viewMatrix: mat4): number {
-        mat4.mul(scratchMatrix, viewMatrix, zup);
-        return computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(scratchMatrix, center);
     }
 
     public destroy(device: GfxDevice): void {

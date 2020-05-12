@@ -77,7 +77,7 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
         throw "whoops";
 }
 
-function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: ArrayBufferSlice, width: number, height: number): Uint8Array {
+function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: ArrayBufferSlice, width: number, height: number): ArrayBufferView {
     if (fmt === ImageFormat.BGR888) {
         // BGR888 => RGBA8888
         const src = data.createDataView();
@@ -106,6 +106,8 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
             p += 4;
         }
         return dst;
+    } else if (fmt === ImageFormat.BGRA5551) {
+        return data.createTypedArray(Uint16Array);
     } else {
         return data.createTypedArray(Uint8Array);
     }
@@ -210,7 +212,7 @@ export class VTF {
         this.gfxTexture = device.createTexture(descriptor);
 
         const hostAccessPass = device.createHostAccessPass();
-        const levelDatas: Uint8Array[] = [];
+        const levelDatas: ArrayBufferView[] = [];
 
         // Mipmaps are stored from smallest to largest.
         for (let i = this.numLevels - 1; i >= 0; i--) {

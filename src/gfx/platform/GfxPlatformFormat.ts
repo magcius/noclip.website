@@ -16,8 +16,8 @@ export const enum FormatTypeFlags {
     BC2,
     BC3,
 
-    // Packed texture formats.
-    PACKED_5551 = 0x61,
+    // Special-case packed texture formats.
+    U16_PACKED_5551 = 0x61,
 
     // Depth/stencil texture formats.
     D24 = 0x81,
@@ -89,7 +89,7 @@ export enum GfxFormat {
     S32_R         = makeFormat(FormatTypeFlags.S32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
 
     // Packed texture formats.
-    U16_RGBA_5551      = makeFormat(FormatTypeFlags.PACKED_5551, FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
+    U16_RGBA_5551 = makeFormat(FormatTypeFlags.U16_PACKED_5551, FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
     
     // Compressed
     BC1           = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
