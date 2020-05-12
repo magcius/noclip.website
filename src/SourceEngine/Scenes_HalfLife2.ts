@@ -46,6 +46,9 @@ export class SourceFileSystem {
 
         return null;
     }
+
+    public destroy(device: GfxDevice): void {
+    }
 }
 
 const zup = mat4.fromValues(
@@ -386,12 +389,11 @@ export class SourceRenderContext {
     public lightmapManager: LightmapManager;
     public materialCache: MaterialCache;
     public worldLightingState = new WorldLightingState();
-    public filesystem = new SourceFileSystem();
     public globalTime: number = 0;
     public cameraPos = vec3.create();
     public materialProxySystem = new MaterialProxySystem();
 
-    constructor(public device: GfxDevice, public cache: GfxRenderCache) {
+    constructor(public device: GfxDevice, public cache: GfxRenderCache, public filesystem: SourceFileSystem) {
         this.lightmapManager = new LightmapManager(device, cache);
         this.materialCache = new MaterialCache(device, cache, this.filesystem);
     }
@@ -413,10 +415,10 @@ export class SourceRenderer implements SceneGfx {
     public bspRenderers: BSPRenderer[] = [];
     public renderContext: SourceRenderContext;
 
-    constructor(context: SceneContext) {
+    constructor(context: SceneContext, filesystem: SourceFileSystem) {
         const device = context.device;
         this.renderHelper = new GfxRenderHelper(device);
-        this.renderContext = new SourceRenderContext(device, this.renderHelper.getCache());
+        this.renderContext = new SourceRenderContext(device, this.renderHelper.getCache(), filesystem);
     }
 
     private movement(): void {
@@ -478,15 +480,22 @@ class HalfLife2SceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const renderer = new SourceRenderer(context);
-        const renderContext = renderer.renderContext;
+        const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
+            const filesystem = new SourceFileSystem();
+            filesystem.mounts.push(await createVPKMount(context.dataFetcher, `${pathBase}/hl2_textures`));
+            filesystem.mounts.push(await createVPKMount(context.dataFetcher, `${pathBase}/hl2_misc`));
+            return filesystem;
+        });
 
-        const filesystem = renderContext.filesystem;
-        filesystem.mounts.push(await createVPKMount(context.dataFetcher, `${pathBase}/hl2_textures`));
-        filesystem.mounts.push(await createVPKMount(context.dataFetcher, `${pathBase}/hl2_misc`));
+        // Clear out old filesystem pakfile.
+        filesystem.pakfiles.length = 0;
+
+        const renderer = new SourceRenderer(context, filesystem);
+        const renderContext = renderer.renderContext;
 
         const bsp = await context.dataFetcher.fetchData(`${pathBase}/maps/${this.id}.bsp`);
         const bspFile = new BSPFile(bsp);
+
         if (bspFile.pakfile !== null)
             filesystem.pakfiles.push(bspFile.pakfile);
 
