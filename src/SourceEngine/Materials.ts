@@ -1,18 +1,17 @@
 
 import { DeviceProgram } from "../Program";
-import { VMT, parseVMT, vmtParseColor, VKFPair } from "./VMT";
+import { VMT, parseVMT, VKFPair, vmtParseVector } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderer";
 import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3 } from "gl-matrix";
-import { fillMatrix4x3, fillVec4, fillVec4v, fillColor } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem } from "./Scenes_HalfLife2";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { Surface, SurfaceLighting } from "./BSPFile";
-import { Color, White, colorNewCopy } from "../Color";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
 
 export class BaseMaterialProgram extends DeviceProgram {
@@ -36,6 +35,9 @@ layout(row_major, std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
 #ifdef USE_DETAIL
     vec4 u_DetailScaleBias;
+#endif
+#ifdef USE_BUMPMAP
+    Mat4x2 u_BumpmapTransform;
 #endif
 #ifdef USE_LIGHTMAP
     vec4 u_LightmapScaleBias;
@@ -118,8 +120,7 @@ void mainVS() {
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
 #endif
 #ifdef USE_BUMPMAP
-    // TODO(jstpierre): BumpmapScale
-    v_TexCoord2.xy = a_TexCoord.xy;
+    v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
 #ifdef USE_BASE2TEXTURE
     v_TexCoord2.zw = CalcScaleBias(a_TexCoord.xy, u_Base2TextureScaleBias);
@@ -272,11 +273,22 @@ interface Parameter {
 
 class ParameterTexture {
     public ref: string | null = null;
+    public texture: VTF | null = null;
     public parse(S: string): void { this.ref = S; }
     public index(i: number): Parameter { throw "whoops"; }
     public set(param: Parameter): void {
         // Cannot dynamically change at runtime.
         throw "whoops";
+    }
+
+    public async fetch(materialCache: MaterialCache): Promise<void> {
+        if (this.ref !== null)
+            this.texture = await materialCache.fetchVTF(this.ref);
+    }
+
+    public fillTextureMapping(m: TextureMapping, frame: number): void {
+        if (this.texture !== null)
+            this.texture.fillTextureMapping(m, frame);
     }
 }
 
@@ -296,44 +308,57 @@ class ParameterBoolean extends ParameterNumber {
     public getBool(): boolean { return !!this.value; }
 }
 
+const scratchMatrix = mat4.create();
 class ParameterMatrix {
     public matrix = mat4.create();
 
     constructor() { }
 
+    public setMatrix(cx: number, cy: number, sx: number, sy: number, r: number, tx: number, ty: number): void {
+        mat4.identity(this.matrix);
+        this.matrix[12] = -cx;
+        this.matrix[13] = -cy;
+        this.matrix[0] = sx;
+        this.matrix[5] = sy;
+        mat4.fromZRotation(scratchMatrix, MathConstants.DEG_TO_RAD * r);
+        mat4.mul(this.matrix, scratchMatrix, this.matrix);
+        mat4.identity(scratchMatrix);
+        scratchMatrix[12] = cx + tx;
+        scratchMatrix[13] = cy + ty;
+        mat4.mul(this.matrix, scratchMatrix, this.matrix);
+    }
+
     public parse(S: string): void {
         // "center {} {} scale {} {} rotate {} translate {} {}"
-        const [cx, cy, sx, sy, r, tx, ty] = assertExists(/center (.+) (.+) scale (.+) (.+) rotate (.+) translate (.+) (.+)/.exec(S));
-        // TODO(jstpierre): Matrix
+        const [, cx, cy, sx, sy, r, tx, ty] = assertExists(/center (.+) (.+) scale (.+) (.+) rotate (.+) translate (.+) (.+)/.exec(S)).map((v) => Number(v));
+        this.setMatrix(cx, cy, sx, sy, r, tx, ty);
     }
 
     public index(i: number): Parameter { throw "whoops"; }
     public set(param: Parameter): void { throw "whoops"; }
 }
 
-class ParameterColor {
-    private internal: ParameterNumber[] = nArray(3, () => new ParameterNumber(0.0));
-    private color: Color = colorNewCopy(White);
+class ParameterVector {
+    protected internal: ParameterNumber[];
 
-    constructor(r: number, g: number = r, b: number = r) {
-        this.internal[0].value = r;
-        this.internal[1].value = g;
-        this.internal[2].value = b;
+    constructor(length: number) {
+        this.internal = nArray(length, () => new ParameterNumber(0));
     }
 
     public parse(S: string): void {
-        vmtParseColor(this.color, S);
-        this.internal[0].value = this.color.r;
-        this.internal[1].value = this.color.g;
-        this.internal[2].value = this.color.b;
+        const numbers = vmtParseVector(S);
+        this.internal.length = numbers.length;
+        for (let i = 0; i < numbers.length; i++)
+            this.internal[i] = new ParameterNumber(numbers[i]);
     }
 
-    public index(i: number): Parameter {
+    public index(i: number): ParameterNumber {
         return this.internal[i];
     }
 
     public set(param: Parameter): void {
-        if (param instanceof ParameterColor) {
+        if (param instanceof ParameterVector) {
+            this.internal
             this.internal[0].value = param.internal[0].value;
             this.internal[1].value = param.internal[1].value;
             this.internal[2].value = param.internal[2].value;
@@ -342,27 +367,43 @@ class ParameterColor {
         }
     }
 
-    public getColor(): Color {
-        this.color.r = this.internal[0].value;
-        this.color.g = this.internal[1].value;
-        this.color.b = this.internal[2].value;
-        return this.color;
+    public fillColor(d: Float32Array, offs: number): number {
+        assert(this.internal.length === 3);
+        return fillVec4(d, offs, this.internal[0].value, this.internal[1].value, this.internal[2].value);
+    }
+}
+
+class ParameterColor extends ParameterVector {
+    constructor(r: number, g: number = r, b: number = r) {
+        super(3);
+        this.internal[0].value = r;
+        this.internal[0].value = g;
+        this.internal[0].value = b;
     }
 }
 
 function createParameterAuto(S: string): Parameter | null {
     const n = Number(S);
-    if (n !== undefined)
+    if (!Number.isNaN(n))
         return new ParameterNumber(n);
 
     // Try Vector
     if (S.startsWith('[') || S.startsWith('{')) {
-        const color = new ParameterColor(0);
-        color.parse(S);
+        const v = new ParameterVector(0);
+        v.parse(S);
+        return v;
     }
 
-    // Unknown.
-    return null;
+    if (S.startsWith('center')) {
+        const v = new ParameterMatrix();
+        v.parse(S);
+        return v;
+    }
+
+    // It's an arbitrary string. Currently, our only method for that is ParameterTexture.
+    const v = new ParameterTexture();
+    v.parse(S);
+    return v;
 }
 
 function setupParametersFromVMT(param: ParameterMap, vmt: VMT): void {
@@ -387,6 +428,7 @@ function setupParametersFromVMT(param: ParameterMap, vmt: VMT): void {
 
 class EntityParameters {
     public position = vec3.create();
+    public animationStartTime = 0;
 }
 
 // LightmappedGeneric, UnlitGeneric, VertexLightingGeneric
@@ -398,9 +440,10 @@ class GenericMaterial implements BaseMaterial {
     public param: ParameterMap = {};
     public entityParams = new EntityParameters();
 
-    private proxySystem: MaterialProxySystem | null = null;
+    private proxyDriver: MaterialProxyDriver | null = null;
     private loaded: boolean = false;
     private wantsDetail = false;
+    private wantsBumpmap = false;
     private wantsBase2Texture = false;
     private wantsEnvmapMask = false;
     private wantsEnvmap = false;
@@ -410,13 +453,6 @@ class GenericMaterial implements BaseMaterial {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
 
-    // Texture parameters. TODO(jstpierre): Move to Parameter?
-    private baseTexture: VTF | null = null;
-    private detailTexture: VTF | null = null;
-    private bumpmapTexture: VTF | null = null;
-    private envmapMaskTexture: VTF | null = null;
-    private base2Texture: VTF | null = null;
-    private envmapTexture: VTF | null = null;
     private lightmapAllocation: LightmapAllocation | null = null;
 
     private textureMapping: TextureMapping[] = nArray(7, () => new TextureMapping());
@@ -424,43 +460,34 @@ class GenericMaterial implements BaseMaterial {
     constructor(public vmt: VMT) {
     }
 
-    public async init(device: GfxDevice, cache: GfxRenderCache, materialCache: MaterialCache) {
-        this.initParameters();
-        await this.fetchResources(materialCache);
+    public async init(renderContext: SourceRenderContext) {
+        this.initParameters(renderContext);
+        await this.fetchResources(renderContext.materialCache);
         this.initStatic();
 
+        const device = renderContext.device, cache = renderContext.cache;
         this.gfxProgram = cache.createProgram(device, this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
     }
 
-    private async fetchTextureParam(materialCache: MaterialCache, name: string): Promise<VTF | null> {
-        const ref = (this.param[name] as ParameterTexture).ref;
-        if (ref !== null)
-            return await materialCache.fetchVTF(ref);
-        else
-            return null;
+    private paramGetTexture(name: string): ParameterTexture {
+        return (this.param[name] as ParameterTexture);
+    }
+
+    private paramGetVTF(name: string): VTF | null {
+        return this.paramGetTexture(name).texture;
     }
 
     protected async fetchResources(materialCache: MaterialCache) {
-        // TODO(jstpierre): Fetch in parallel?
-        this.baseTexture       = await this.fetchTextureParam(materialCache, '$basetexture');
-        this.detailTexture     = await this.fetchTextureParam(materialCache, '$detail');
-        this.bumpmapTexture    = await this.fetchTextureParam(materialCache, '$bumpmap');
-        this.envmapMaskTexture = await this.fetchTextureParam(materialCache, '$envmapmask');
-        this.base2Texture      = await this.fetchTextureParam(materialCache, '$texture2');
-        this.envmapTexture     = await this.fetchTextureParam(materialCache, '$envmap');
+        await Promise.all([
+            this.paramGetTexture('$basetexture').fetch(materialCache),
+            this.paramGetTexture('$detail').fetch(materialCache),
+            this.paramGetTexture('$bumpmap').fetch(materialCache),
+            this.paramGetTexture('$envmapmask').fetch(materialCache),
+            this.paramGetTexture('$texture2').fetch(materialCache),
+            this.paramGetTexture('$envmap').fetch(materialCache),
+        ]);
         this.loaded = true;
-    }
-
-    private paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
-        const m = (this.param[name] as ParameterMatrix).matrix;
-        // Make sure there's no rotation. We should definitely handle this eventually, though.
-        assert(m[1] === 0.0 && m[2] === 0.0);
-        const scaleS = m[0];
-        const scaleT = m[5];
-        const transS = m[12];
-        const transT = m[13];
-        return fillVec4(d, offs, scaleS, scaleT, transS, transT);
     }
 
     private paramGetBoolean(name: string): boolean {
@@ -475,8 +502,11 @@ class GenericMaterial implements BaseMaterial {
         return this.paramGetNumber(name) | 0;
     }
 
-    private textureIsTranslucent(texture: VTF): boolean {
-        if (texture === this.baseTexture) {
+    private textureIsTranslucent(texture: VTF | null): boolean {
+        if (texture === null)
+            return false;
+
+        if (texture === this.paramGetVTF('$basetexture')) {
             // Special consideration.
             if (this.paramGetBoolean('$opaquetexture'))
                 return false;
@@ -489,7 +519,7 @@ class GenericMaterial implements BaseMaterial {
         return texture.isTranslucent();
     }
 
-    protected initParameters(): void {
+    protected initParameters(renderContext: SourceRenderContext): void {
         const p = this.param;
 
         // Base parameters
@@ -535,8 +565,9 @@ class GenericMaterial implements BaseMaterial {
         p['$frame2']                       = new ParameterNumber(0.0);
 
         setupParametersFromVMT(p, this.vmt);
+
         if (this.vmt.proxies !== undefined)
-            this.proxySystem = new MaterialProxySystem(this, this.vmt.proxies);
+            this.proxyDriver = renderContext.materialProxySystem.createProxyDriver(this, this.vmt.proxies);
     }
 
     protected initStatic() {
@@ -549,16 +580,14 @@ class GenericMaterial implements BaseMaterial {
         this.program = new BaseMaterialProgram();
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
-        if (this.baseTexture !== null)
-            this.baseTexture.fillTextureMapping(this.textureMapping[0]);
-
-        if (this.detailTexture !== null) {
+        if (this.paramGetVTF('$detail') !== null) {
             this.wantsDetail = true;
             this.program.defines.set('USE_DETAIL', '1');
             this.program.defines.set('DETAIL_COMBINE_MODE', '' + this.paramGetNumber('$detailblendmode'));
         }
 
-        if (this.bumpmapTexture !== null) {
+        if (this.paramGetVTF('$bumpmap') !== null) {
+            this.wantsBumpmap = true;
             this.program.defines.set('USE_BUMPMAP', '1');
             const wantsDiffuseBumpmap = !this.paramGetBoolean('$nodiffusebumplighting');
             this.program.defines.set('USE_DIFFUSE_BUMPMAP', wantsDiffuseBumpmap ? '1' : '0');
@@ -567,17 +596,17 @@ class GenericMaterial implements BaseMaterial {
 
         // Lightmap = 3
 
-        if (this.envmapMaskTexture !== null) {
+        if (this.paramGetVTF('$envmapmask') !== null) {
             this.wantsEnvmapMask = true;
             this.program.defines.set('USE_ENVMAP_MASK', '1');
         }
 
-        if (this.base2Texture !== null) {
+        if (this.paramGetVTF('$texture2') !== null) {
             this.wantsBase2Texture = true;
             this.program.defines.set('USE_BASE2TEXTURE', '1');
         }
 
-        if (this.envmapTexture !== null) {
+        if (this.paramGetVTF('$envmap') !== null) {
             this.wantsEnvmap = true;
             this.program.defines.set('USE_ENVMAP', '1');
         }
@@ -599,7 +628,7 @@ class GenericMaterial implements BaseMaterial {
         } else {
             let isTranslucent = false;
 
-            if (this.baseTexture !== null && this.textureIsTranslucent(this.baseTexture))
+            if (this.textureIsTranslucent(this.paramGetVTF('$basetexture')))
                 isTranslucent = true;
 
             if (isTranslucent && this.paramGetBoolean('$additive')) {
@@ -649,32 +678,46 @@ class GenericMaterial implements BaseMaterial {
     }
 
     private updateTextureMappings(): void {
-        if (this.baseTexture !== null)
-            this.baseTexture.fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
-        if (this.detailTexture !== null)
-            this.detailTexture.fillTextureMapping(this.textureMapping[1], this.paramGetInt('$detailframe'));
-        if (this.bumpmapTexture !== null)
-            this.bumpmapTexture.fillTextureMapping(this.textureMapping[2], this.paramGetInt('$bumpframe'));
+        this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
+        this.paramGetTexture('$detail').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$detailframe'));
+        this.paramGetTexture('$bumpmap').fillTextureMapping(this.textureMapping[2], this.paramGetInt('$bumpframe'));
         // Lightmap is supplied by entity.
-        if (this.envmapMaskTexture !== null)
-            this.envmapMaskTexture.fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapmaskframe'));
-        if (this.base2Texture !== null)
-            this.base2Texture.fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
-        if (this.envmapTexture !== null)
-            this.envmapTexture.fillTextureMapping(this.textureMapping[6], this.paramGetInt('$envmapframe'));
+        this.paramGetTexture('$envmapmask').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapmaskframe'));
+        this.paramGetTexture('$texture2').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
+        this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[6], this.paramGetInt('$envmapframe'));
     }
 
     public movement(renderContext: SourceRenderContext): void {
-        // Update the proxy system.
-        if (this.proxySystem !== null)
-            this.proxySystem.update(renderContext, this.entityParams);
+        // Update the proxy driver.
+        if (this.proxyDriver !== null)
+            this.proxyDriver.update(renderContext, this.entityParams);
+    }
+
+    private paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
+        const m = (this.param[name] as ParameterMatrix).matrix;
+        // Make sure there's no rotation. We should definitely handle this eventually, though.
+        assert(m[1] === 0.0 && m[2] === 0.0);
+        const scaleS = m[0];
+        const scaleT = m[5];
+        const transS = m[12];
+        const transT = m[13];
+        return fillVec4(d, offs, scaleS, scaleT, transS, transT);
+    }
+
+    private paramFillTextureMatrix(d: Float32Array, offs: number, name: string): number {
+        const m = (this.param[name] as ParameterMatrix).matrix;
+        return fillMatrix4x2(d, offs, m);
+    }
+
+    private paramFillColor(d: Float32Array, offs: number, name: string): number {
+        return (this.param[name] as ParameterVector).fillColor(d, offs);
     }
 
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: mat4): void {
         // Update texture mappings from frames.
         this.updateTextureMappings();
 
-        let offs = renderInst.allocateUniformBuffer(BaseMaterialProgram.ub_ObjectParams, 4*3+4+4+4+4+4+4+4);
+        let offs = renderInst.allocateUniformBuffer(BaseMaterialProgram.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(BaseMaterialProgram.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
 
@@ -683,6 +726,9 @@ class GenericMaterial implements BaseMaterial {
             offs += fillVec4v(d, offs, scratchVec4);
         }
 
+        if (this.wantsBumpmap)
+            offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
+
         if (this.wantsLightmap)
             offs += fillVec4v(d, offs, this.lightmapAllocation!.scaleBias);
 
@@ -690,7 +736,7 @@ class GenericMaterial implements BaseMaterial {
             offs += this.paramFillScaleBias(d, offs, '$envmapmasktransform');
 
         if (this.wantsEnvmap)
-            offs += fillColor(d, offs, (this.param['$envmaptint'] as ParameterColor).getColor());
+            offs += this.paramFillColor(d, offs, '$envmaptint');
 
         if (this.wantsBase2Texture)
             offs += this.paramFillScaleBias(d, offs, '$texture2transform');
@@ -754,10 +800,10 @@ export class MaterialCache {
         return new GenericMaterial(vmt);
     }
 
-    public async createMaterialInstance(path: string): Promise<GenericMaterial> {
+    public async createMaterialInstance(renderContext: SourceRenderContext, path: string): Promise<GenericMaterial> {
         const vmt = await this.fetchMaterialData(path);
         const materialInstance = this.createMaterialInstanceInternal(vmt);
-        await materialInstance.init(this.device, this.cache, this);
+        await materialInstance.init(renderContext);
         return materialInstance;
     }
 
@@ -974,12 +1020,13 @@ class ParameterReference {
     public index: number = -1;
     public value: Parameter | null = null;
 
-    constructor(str: string, defaultValue: number | null = null) {
+    constructor(str: string, defaultValue: number | null = null, required: boolean = true) {
         if (str === undefined) {
-            this.value = new ParameterNumber(assertExists(defaultValue));
+            if (required || defaultValue !== null)
+                this.value = new ParameterNumber(assertExists(defaultValue));
         } else if (str.startsWith('$')) {
             // '$envmaptint', '$envmaptint[1]'
-            const [, name, index] = assertExists(/([a-z0-9$]+)(?:\[(\d+)\])?/.exec(str));
+            const [, name, index] = assertExists(/([a-z0-9$_]+)(?:\[(\d+)\])?/.exec(str));
             this.name = name;
             if (index !== undefined)
                 this.index = Number(index);
@@ -989,7 +1036,7 @@ class ParameterReference {
     }
 }
 
-function paramLookup<T extends Parameter>(map: ParameterMap, ref: ParameterReference): T {
+function paramLookupOptional<T extends Parameter>(map: ParameterMap, ref: ParameterReference): T | null {
     if (ref.name !== null) {
         const pm = map[ref.name];
         if (ref.index !== -1)
@@ -997,8 +1044,12 @@ function paramLookup<T extends Parameter>(map: ParameterMap, ref: ParameterRefer
         else
             return pm as T;
     } else {
-        return assertExists(ref.value as T);
+        return ref.value as T;
     }
+}
+
+function paramLookup<T extends Parameter>(map: ParameterMap, ref: ParameterReference): T {
+    return assertExists(paramLookupOptional<T>(map, ref));
 }
 
 function paramGetNum(map: ParameterMap, ref: ParameterReference): number {
@@ -1009,19 +1060,58 @@ function paramSetNum(map: ParameterMap, ref: ParameterReference, v: number): voi
     paramLookup<ParameterNumber>(map, ref).value = v;
 }
 
-class MaterialProxySystem {
-    private proxies: MaterialProxy[] = [];
+interface MaterialProxyFactory {
+    type: string;
+    new (params: VKFParamMap): MaterialProxy;
+}
 
-    constructor(private material: BaseMaterial, proxies: VKFPair[]) {
-        for (let i = 0; i < proxies.length; i++) {
-            const [name, params] = proxies[i];
-            const proxy = buildMaterialProxy(name, params);
-            if (proxy !== null) {
-                this.proxies.push(proxy);
+export class MaterialProxySystem {
+    public proxyFactories = new Map<string, MaterialProxyFactory>();
+
+    constructor() {
+        this.registerDefaultProxyFactories();
+    }
+
+    private registerDefaultProxyFactories(): void {
+        this.registerProxyFactory(MaterialProxy_Equals);
+        this.registerProxyFactory(MaterialProxy_Add);
+        this.registerProxyFactory(MaterialProxy_Subtract);
+        this.registerProxyFactory(MaterialProxy_Multiply);
+        this.registerProxyFactory(MaterialProxy_Clamp);
+        this.registerProxyFactory(MaterialProxy_Abs);
+        this.registerProxyFactory(MaterialProxy_LessOrEqual);
+        this.registerProxyFactory(MaterialProxy_LinearRamp);
+        this.registerProxyFactory(MaterialProxy_Sine);
+        this.registerProxyFactory(MaterialProxy_TextureScroll);
+        this.registerProxyFactory(MaterialProxy_PlayerProximity);
+        this.registerProxyFactory(MaterialProxy_GaussianNoise);
+        this.registerProxyFactory(MaterialProxy_AnimatedTexture);
+        this.registerProxyFactory(MaterialProxy_WaterLOD);
+        this.registerProxyFactory(MaterialProxy_TextureTransform);
+    }
+
+    public registerProxyFactory(factory: MaterialProxyFactory): void {
+        this.proxyFactories.set(factory.type, factory);
+    }
+
+    public createProxyDriver(material: BaseMaterial, proxyDefs: VKFPair[]): MaterialProxyDriver {
+        const proxies: MaterialProxy[] = [];
+        for (let i = 0; i < proxyDefs.length; i++) {
+            const [name, params] = proxyDefs[i];
+            const proxyFactory = this.proxyFactories.get(name);
+            if (proxyFactory !== undefined) {
+                const proxy = new proxyFactory(params);
+                proxies.push(proxy);
             } else {
                 console.log(`unknown proxy type`, name);
             }
         }
+        return new MaterialProxyDriver(material, proxies);
+    }
+}
+
+class MaterialProxyDriver {
+    constructor(private material: BaseMaterial, private proxies: MaterialProxy[]) {
     }
 
     public update(renderContext: SourceRenderContext, entityParams: EntityParameters): void {
@@ -1032,34 +1122,13 @@ class MaterialProxySystem {
 
 type VKFParamMap = { [k: string]: string };
 
-function buildMaterialProxy(name: string, params: VKFParamMap): MaterialProxy | null {
-    if (name === 'equals')
-        return new MaterialProxy_Equals(params);
-    else if (name === 'add')
-        return new MaterialProxy_Add(params);
-    else if (name === 'subtract')
-        return new MaterialProxy_Subtract(params);
-    else if (name === 'multiply')
-        return new MaterialProxy_Multiply(params);
-    else if (name === 'clamp')
-        return new MaterialProxy_Clamp(params);
-    else if (name === 'sine')
-        return new MaterialProxy_Sine(params);
-    else if (name === 'texturescroll')
-        return new MaterialProxy_TextureScroll(params);
-    else if (name === 'playerproximity')
-        return new MaterialProxy_PlayerProximity(params);
-    else if (name === 'gaussiannoise')
-        return new MaterialProxy_GaussianNoise(params);
-    else
-        return null;
-}
-
 interface MaterialProxy {
     update(paramsMap: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void;
 }
 
 class MaterialProxy_Equals {
+    public static type = 'equals';
+
     private srcvar1: ParameterReference;
     private resultvar: ParameterReference;
 
@@ -1076,6 +1145,8 @@ class MaterialProxy_Equals {
 }
 
 class MaterialProxy_Add {
+    public static type = 'add';
+
     private srcvar1: ParameterReference;
     private srcvar2: ParameterReference;
     private resultvar: ParameterReference;
@@ -1092,6 +1163,8 @@ class MaterialProxy_Add {
 }
 
 class MaterialProxy_Subtract {
+    public static type = 'subtract';
+
     private srcvar1: ParameterReference;
     private srcvar2: ParameterReference;
     private resultvar: ParameterReference;
@@ -1108,6 +1181,8 @@ class MaterialProxy_Subtract {
 }
 
 class MaterialProxy_Multiply {
+    public static type = 'multiply';
+
     private srcvar1: ParameterReference;
     private srcvar2: ParameterReference;
     private resultvar: ParameterReference;
@@ -1124,6 +1199,8 @@ class MaterialProxy_Multiply {
 }
 
 class MaterialProxy_Clamp {
+    public static type = 'clamp';
+
     private srcvar1: ParameterReference;
     private min: ParameterReference;
     private max: ParameterReference;
@@ -1141,7 +1218,71 @@ class MaterialProxy_Clamp {
     }
 }
 
+class MaterialProxy_Abs {
+    public static type = 'abs';
+
+    private srcvar1: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.srcvar1 = new ParameterReference(params.srcvar1);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+        paramSetNum(map, this.resultvar, Math.abs(paramGetNum(map, this.srcvar1)));
+    }
+}
+
+class MaterialProxy_LessOrEqual {
+    public static type = 'lessorequal';
+
+    private srcvar1: ParameterReference;
+    private srcvar2: ParameterReference;
+    private lessequalvar: ParameterReference;
+    private greatervar: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.srcvar1 = new ParameterReference(params.srcvar1);
+        this.srcvar2 = new ParameterReference(params.srcvar2);
+        this.lessequalvar = new ParameterReference(params.lessequalvar);
+        this.greatervar = new ParameterReference(params.greatervar);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+        const src1 = paramGetNum(map, this.srcvar1);
+        const src2 = paramGetNum(map, this.srcvar2);
+        const p = (src1 <= src2) ? this.lessequalvar : this.greatervar;
+        paramLookup(map, this.resultvar).set(paramLookup(map, p));
+    }
+}
+
+class MaterialProxy_LinearRamp {
+    public static type = 'linearramp';
+
+    private rate: ParameterReference;
+    private initialvalue: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.rate = new ParameterReference(params.rate);
+        this.initialvalue = new ParameterReference(params.initialvalue, 0.0);
+        this.resultvar = new ParameterReference(params.resultvar, 1.0);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+        const rate = paramGetNum(map, this.rate);
+        const initialvalue = paramGetNum(map, this.initialvalue);
+        const v = initialvalue + (rate * renderContext.globalTime);
+        paramSetNum(map, this.resultvar, v);
+    }
+}
+
 class MaterialProxy_Sine {
+    public static type = 'sine';
+
     private sineperiod: ParameterReference;
     private sinemin: ParameterReference;
     private sinemax: ParameterReference;
@@ -1167,14 +1308,16 @@ class MaterialProxy_Sine {
 }
 
 class MaterialProxy_GaussianNoise {
+    public static type = 'gaussiannoise';
+
     private resultvar: ParameterReference;
     private minval: ParameterReference;
     private maxval: ParameterReference;
 
     constructor(params: VKFParamMap) {
         this.resultvar = new ParameterReference(params.resultvar);
-        this.minval = new ParameterReference(params.minval);
-        this.maxval = new ParameterReference(params.maxval);
+        this.minval = new ParameterReference(params.minval, -Number.MAX_VALUE);
+        this.maxval = new ParameterReference(params.maxval, Number.MAX_VALUE);
     }
 
     public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
@@ -1185,6 +1328,8 @@ class MaterialProxy_GaussianNoise {
 }
 
 class MaterialProxy_TextureScroll {
+    public static type = 'texturescroll';
+
     private texturescrollvar: ParameterReference;
     private texturescrollangle: ParameterReference;
     private texturescrollrate: ParameterReference;
@@ -1221,6 +1366,8 @@ class MaterialProxy_TextureScroll {
 }
 
 class MaterialProxy_PlayerProximity {
+    public static type = 'playerproximity';
+
     private resultvar: ParameterReference;
     private scale: ParameterReference;
 
@@ -1233,6 +1380,101 @@ class MaterialProxy_PlayerProximity {
         const scale = paramGetNum(map, this.scale);
         const dist = vec3.distance(renderContext.cameraPos, entityParams.position);
         paramSetNum(map, this.resultvar, dist * scale);
+    }
+}
+
+class MaterialProxy_AnimatedTexture {
+    public static type = 'animatedtexture';
+
+    private animatedtexturevar: ParameterReference;
+    private animatedtextureframenumvar: ParameterReference;
+    private animatedtextureframerate: ParameterReference;
+    private animationnowrap: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.animatedtexturevar = new ParameterReference(params.animatedtexturevar);
+        this.animatedtextureframenumvar = new ParameterReference(params.animatedtextureframenumvar);
+        this.animatedtextureframerate = new ParameterReference(params.animatedtextureframerate, 15.0);
+        this.animationnowrap = new ParameterReference(params.animationnowrap, 0);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+        const ptex = paramLookup<ParameterTexture>(map, this.animatedtexturevar);
+        if (ptex.texture === null)
+            return;
+
+        const rate = paramGetNum(map, this.animatedtextureframerate);
+        const wrap = !paramGetNum(map, this.animationnowrap);
+
+        let frame = (renderContext.globalTime - entityParams.animationStartTime) * rate;
+        if (wrap) {
+            frame = frame % ptex.texture.numFrames;
+        } else {
+            frame = Math.min(frame, ptex.texture.numFrames);
+        }
+
+        paramSetNum(map, this.animatedtextureframenumvar, frame);
+    }
+}
+
+class MaterialProxy_WaterLOD {
+    public static type = 'waterlod';
+
+    constructor(params: VKFParamMap) {
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+        // TODO(jstpierre).
+    }
+}
+
+class MaterialProxy_TextureTransform {
+    public static type = 'texturetransform';
+
+    private centervar: ParameterReference;
+    private scalevar: ParameterReference;
+    private rotatevar: ParameterReference;
+    private translatevar: ParameterReference;
+    private resultvar: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.centervar = new ParameterReference(params.centervar, null, false);
+        this.scalevar = new ParameterReference(params.scalevar, null, false);
+        this.rotatevar = new ParameterReference(params.rotatevar, null, false);
+        this.translatevar = new ParameterReference(params.translatevar, null, false);
+        this.resultvar = new ParameterReference(params.resultvar);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+        const center = paramLookupOptional<ParameterVector>(map, this.centervar);
+        const scale = paramLookupOptional<ParameterVector>(map, this.scalevar);
+        const rotate = paramLookupOptional<ParameterNumber>(map, this.centervar);
+        const translate = paramLookupOptional<ParameterVector>(map, this.scalevar);
+
+        let cx = 0.5, cy = 0.5;
+        if (center !== null) {
+            cx = center.index(0).value;
+            cy = center.index(1).value;
+        }
+
+        let sx = 1.0, sy = 1.0;
+        if (scale !== null) {
+            sx = scale.index(0).value;
+            sy = scale.index(1).value;
+        }
+
+        let r = 0.0;
+        if (rotate !== null)
+            r = rotate.value;
+
+        let tx = 0.0, ty = 0.0;
+        if (translate !== null) {
+            tx = translate.index(0).value;
+            ty = translate.index(1).value;
+        }
+
+        const result = paramLookup<ParameterMatrix>(map, this.resultvar);
+        result.setMatrix(cx, cy, sx, sy, r, tx, ty);
     }
 }
 //#endregion

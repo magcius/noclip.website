@@ -13,7 +13,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { VPKMount, createVPKMount } from "./VPK";
 import { ZipFile } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { BaseMaterialProgram, BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState } from "./Materials";
+import { BaseMaterialProgram, BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState, MaterialProxySystem } from "./Materials";
 import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
 import { assert } from "../util";
 import { Entity, vmtParseNumbers } from "./VMT";
@@ -127,17 +127,18 @@ class SkyboxRenderer {
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0, });
 
-        this.bindMaterial(renderContext.materialCache);
+        this.bindMaterial(renderContext);
     }
 
-    private async bindMaterial(materialCache: MaterialCache) {
+    private async bindMaterial(renderContext: SourceRenderContext) {
+        const materialCache = renderContext.materialCache;
         this.materialInstances = await Promise.all([
-            materialCache.createMaterialInstance(`skybox/${this.skyname}rt`),
-            materialCache.createMaterialInstance(`skybox/${this.skyname}lf`),
-            materialCache.createMaterialInstance(`skybox/${this.skyname}bk`),
-            materialCache.createMaterialInstance(`skybox/${this.skyname}ft`),
-            materialCache.createMaterialInstance(`skybox/${this.skyname}up`),
-            materialCache.createMaterialInstance(`skybox/${this.skyname}dn`),
+            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}rt`),
+            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}lf`),
+            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}bk`),
+            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}ft`),
+            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}up`),
+            materialCache.createMaterialInstance(renderContext, `skybox/${this.skyname}dn`),
         ]);
     }
 
@@ -340,7 +341,7 @@ class BSPRenderer {
     private async bindMaterial(renderContext: SourceRenderContext, surface: BSPSurfaceRenderer) {
         const materialCache = renderContext.materialCache;
         const texinfo = this.bsp.texinfo[surface.surface.texinfo];
-        const materialInstance = await materialCache.createMaterialInstance(texinfo.texName);
+        const materialInstance = await materialCache.createMaterialInstance(renderContext, texinfo.texName);
         surface.bindMaterial(materialInstance, renderContext.lightmapManager);
     }
 
@@ -388,6 +389,7 @@ export class SourceRenderContext {
     public filesystem = new SourceFileSystem();
     public globalTime: number = 0;
     public cameraPos = vec3.create();
+    public materialProxySystem = new MaterialProxySystem();
 
     constructor(public device: GfxDevice, public cache: GfxRenderCache) {
         this.lightmapManager = new LightmapManager(device, cache);
