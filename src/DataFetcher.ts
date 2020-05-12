@@ -95,7 +95,7 @@ class DataFetcherRequest {
         this.request.responseType = "arraybuffer";
 
         let rangeStart = -1, rangeEnd = -1;
-        if (this.options.rangeStart && this.options.rangeSize) {
+        if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
             rangeStart = this.options.rangeStart;
             rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
             this.request.setRequestHeader('Range', `bytes=${rangeStart}-${rangeEnd}`);
@@ -110,16 +110,17 @@ class DataFetcherRequest {
                 let slice = new ArrayBufferSlice(buffer);
 
                 // Check for Range.
-                if (this.options.rangeStart && this.options.rangeSize) {
+                if (rangeStart >= 0 && rangeEnd >= 0) {
                     const contentRange = request.getResponseHeader('Content-Range');
                     if (contentRange === null) {
                         // Do the slicing ourselves. TODO(jstpierre): Accept partial content.
-                        slice = slice.subarray(this.options.rangeStart, this.options.rangeSize);
+                        slice = slice.slice(rangeStart, rangeEnd - 1);
                     } else {
                         // Parse out the Content-Range header and make sure it's what we expect.
                         const [, start, end] = assertExists(/bytes (\d+)-(\d+).*/.exec(contentRange));
                         assert(Number(start) === rangeStart);
-                        assert(Number(end) === rangeEnd);
+                        // it can be possible for the file to be smaller than the range
+                        assert(Number(end) <= rangeEnd);
                     }
                 }
 
