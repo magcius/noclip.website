@@ -93,18 +93,40 @@ class DataFetcherRequest {
         this.request = new XMLHttpRequest();
         this.request.open("GET", this.url, true);
         this.request.responseType = "arraybuffer";
+
+        let rangeStart = -1, rangeEnd = -1;
         if (this.options.rangeStart && this.options.rangeSize) {
-            const rangeStart = this.options.rangeStart, rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
+            rangeStart = this.options.rangeStart;
+            rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
             this.request.setRequestHeader('Range', `bytes=${rangeStart}-${rangeEnd}`);
         }
         this.request.send();
         this.request.onload = (e) => {
             const hadError = this.resolveError();
             if (!hadError) {
-                const buffer: ArrayBuffer = this.request!.response;
-                const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
-                slice.name = this.url;
-                this.resolve(slice);
+                const request = this.request!;
+                const buffer: ArrayBuffer = request.response;
+
+                let slice = new ArrayBufferSlice(buffer);
+
+                // Check for Range.
+                if (this.options.rangeStart && this.options.rangeSize) {
+                    const contentRange = request.getResponseHeader('Content-Range');
+                    if (contentRange === null) {
+                        // Do the slicing ourselves. TODO(jstpierre): Accept partial content.
+                        slice = slice.subarray(this.options.rangeStart, this.options.rangeSize);
+                    } else {
+                        // Parse out the Content-Range header and make sure it's what we expect.
+                        const [, start, end] = assertExists(/bytes (\d+)-(\d+).*/.exec(contentRange));
+                        assert(Number(start) === rangeStart);
+                        assert(Number(end) === rangeEnd);
+                    }
+                }
+
+                const namedSlice = slice as NamedArrayBufferSlice;
+                namedSlice.name = this.url;
+
+                this.resolve(namedSlice);
                 this.done();
             }
         };
