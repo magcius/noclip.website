@@ -15,7 +15,8 @@ const enum ImageFormat {
     DXT1         = 0x0D,
     DXT3         = 0x0E,
     DXT5         = 0x0F,
-    BGRA5551     = 0x16,
+    BGRA5551     = 0x15,
+    UV88         = 0x16,
 }
 
 function imageFormatIsBlockCompressed(fmt: ImageFormat): boolean {
@@ -37,6 +38,8 @@ function imageFormatGetBPP(fmt: ImageFormat): number {
     if (fmt === ImageFormat.BGR888)
         return 3;
     if (fmt === ImageFormat.BGRA5551)
+        return 2;
+    if (fmt === ImageFormat.UV88)
         return 2;
     throw "whoops";
 }
@@ -73,6 +76,8 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (fmt === ImageFormat.BGRA5551)
         return GfxFormat.U16_RGBA_5551; // TODO(jstpierre): sRGB?
+    else if (fmt === ImageFormat.UV88)
+        return GfxFormat.S8_RG_NORM;
     else
         throw "whoops";
 }
@@ -106,6 +111,8 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
             p += 4;
         }
         return dst;
+    } else if (fmt === ImageFormat.UV88) {
+        return data.createTypedArray(Int8Array);
     } else if (fmt === ImageFormat.BGRA5551) {
         return data.createTypedArray(Uint16Array);
     } else {

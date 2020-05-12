@@ -377,8 +377,8 @@ class ParameterColor extends ParameterVector {
     constructor(r: number, g: number = r, b: number = r) {
         super(3);
         this.internal[0].value = r;
-        this.internal[0].value = g;
-        this.internal[0].value = b;
+        this.internal[1].value = g;
+        this.internal[2].value = b;
     }
 }
 

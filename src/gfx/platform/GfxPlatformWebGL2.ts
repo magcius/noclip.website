@@ -801,6 +801,8 @@ void main() {
             return WebGL2RenderingContext.SRGB8_ALPHA8;
         case GfxFormat.S8_RGBA_NORM:
             return WebGL2RenderingContext.RGBA8_SNORM;
+        case GfxFormat.S8_RG_NORM:
+            return WebGL2RenderingContext.RG8_SNORM;
         case GfxFormat.U16_RGBA_5551:
             return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
         case GfxFormat.BC1:
@@ -1592,6 +1594,8 @@ void main() {
                             } else {
                                 const gl_type = this.translateTextureType(pixelFormat);
                                 gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
+                                if (gl.getError() !== gl.NO_ERROR)
+                                    debugger;
                             }
                         }
                     }

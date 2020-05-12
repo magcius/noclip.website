@@ -4,9 +4,11 @@ import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS, Red, Green, Blue } from "./Color";
 import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, vec3, mat4 } from "gl-matrix";
-import { nArray, assert, assertExists } from "./util";
+import { nArray, assert, assertExists, hexdump, magicstr } from "./util";
 import { UI, Slider } from "./ui";
-import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, transformVec3Mat4w1 } from "./MathHelpers";
+import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ } from "./MathHelpers";
+import ArrayBufferSlice from "./ArrayBufferSlice";
+import { downloadBufferSlice, downloadBuffer } from "./DownloadUtils";
 
 export function stepF(f: (t: number) => number, maxt: number, step: number, callback: (t: number, v: number) => void) {
     for (let t = 0; t < maxt; t += step) {
@@ -443,7 +445,19 @@ export function interactiveVizSliderSelect(items: VisTestItem[], callback: ((ite
     });
 }
 
+function downloadBuffer2(name: any, buffer: any) {
+    if (buffer instanceof ArrayBufferSlice)
+        downloadBufferSlice(name, buffer);
+    else if (name.name && name.buffer)
+        downloadBuffer2(name.name, name.buffer);
+    else if (buffer instanceof ArrayBuffer)
+        downloadBuffer(name, buffer);
+}
+
 // This goes on window.main and is meant as a global "helper utils" thing.
 export const debugJunk: any = {
     interactiveVizSliderSelect,
+    hexdump,
+    magicstr,
+    downloadBuffer: downloadBuffer2,
 };
