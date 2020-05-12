@@ -5,7 +5,6 @@ import { TPLTextureHolder, WorldRenderer } from './render';
 import * as TPL from './tpl';
 import * as World from './world';
 import { SceneContext } from '../SceneBase';
-import { DataFetcherFlags } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController } from '../Camera';
 import { linkREL } from './REL';
@@ -31,7 +30,7 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             // and not allowing files without extensions to be served... sigh...
             dataFetcher.fetchData(`${pathBase}/m/${this.id}/d.blob`),
             dataFetcher.fetchData(`${pathBase}/m/${this.id}/t.blob`),
-            dataFetcher.fetchData(`${pathBase}/b/${this.id}.tpl`, DataFetcherFlags.ALLOW_404),
+            dataFetcher.fetchData(`${pathBase}/b/${this.id}.tpl`, { allow404: true }),
         ]);
 
         let rel: ArrayBufferSlice | null = null;
@@ -39,7 +38,7 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             rel = await dataFetcher.fetchData(`${pathBase}/rel/${this.relName}`);
             linkREL(rel, this.relBaseAddress!);
 
-            const mapFile = await dataFetcher.fetchData(`${pathBase}/G8ME01.map`, DataFetcherFlags.ALLOW_404);
+            const mapFile = await dataFetcher.fetchData(`${pathBase}/G8ME01.map`, { allow404: true });
 
             const scriptExec = new evt_disasm_ctx(rel, this.relBaseAddress!, this.relEntry!, mapFile);
             scriptExec.disasm();

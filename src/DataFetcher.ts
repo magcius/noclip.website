@@ -20,11 +20,6 @@ export function getDataURLForPath(url: string, isDevelopment: boolean = IS_DEVEL
     return `${getDataStorageBaseURL(isDevelopment)}/${url}`;
 }
 
-export const enum DataFetcherFlags {
-    NONE = 0x00,
-    ALLOW_404 = 0x01,
-}
-
 export type AbortedCallback = () => void;
 
 class DataFetcherRequest {
@@ -38,7 +33,7 @@ class DataFetcherRequest {
     private reject: (e: Error | null) => void;
     private retriesLeft = 2;
 
-    constructor(public url: string, private flags: DataFetcherFlags, private abortedCallback: AbortedCallback | null) {
+    constructor(public url: string, private options: DataFetcherOptions) {
         this.promise = new Promise((resolve, reject) => {
             this.resolve = resolve;
             this.reject = reject;
@@ -69,7 +64,7 @@ class DataFetcherRequest {
     private resolveError(): boolean {
         const request = this.request!;
 
-        const allow404 = !!(this.flags & DataFetcherFlags.ALLOW_404);
+        const allow404 = !!this.options.allow404;
         if (allow404 && this.isConsidered404Error()) {
             const emptySlice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
             emptySlice.name = this.url;
@@ -137,10 +132,15 @@ class DataFetcherRequest {
     public abort(): void {
         if (this.request !== null)
             this.request.abort();
-        if (this.abortedCallback !== null)
-            this.abortedCallback();
+        if (this.options.abortedCallback !== undefined)
+            this.options.abortedCallback();
         this.destroy();
     }
+}
+
+interface DataFetcherOptions {
+    allow404?: boolean;
+    abortedCallback?: AbortedCallback;
 }
 
 export class DataFetcher {
@@ -158,7 +158,7 @@ export class DataFetcher {
             // Check for the existence of a /data directory.
             const url = getDataURLForPath('', true);
             try {
-                await this.fetchURL(url);
+                await this.fetchURL(url, {});
                 this.useDevelopmentStorage = true;
             } catch(e) {
                 this.useDevelopmentStorage = false;
@@ -205,11 +205,11 @@ export class DataFetcher {
         }
     }
 
-    public fetchURL(url: string, flags: DataFetcherFlags = 0, abortedCallback: AbortedCallback | null = null): Promise<NamedArrayBufferSlice> {
+    public fetchURL(url: string, options: DataFetcherOptions): Promise<NamedArrayBufferSlice> {
         if (this.aborted)
             throw new Error("Tried to fetch new data while aborted; should not happen");
 
-        const request = new DataFetcherRequest(url, flags, abortedCallback);
+        const request = new DataFetcherRequest(url, options);
         this.requests.push(request);
         request.ondone = () => {
             this.doneRequestCount++;
@@ -224,8 +224,8 @@ export class DataFetcher {
         return request.promise!;
     }
 
-    public fetchData(path: string, flags: DataFetcherFlags = 0, abortedCallback: AbortedCallback | null = null): Promise<NamedArrayBufferSlice> {
+    public fetchData(path: string, options: DataFetcherOptions = { }): Promise<NamedArrayBufferSlice> {
         const url = getDataURLForPath(path, assertExists(this.useDevelopmentStorage));
-        return this.fetchURL(url, flags, abortedCallback);
+        return this.fetchURL(url, options);
     }
 }

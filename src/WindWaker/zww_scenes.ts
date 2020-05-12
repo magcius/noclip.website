@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assertExists, assert, nArray, hexzero } from '../util';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 
 import * as Viewer from '../viewer';
 import * as BYML from '../byml';
@@ -680,9 +680,9 @@ export class ModelCache {
         let fetchPath = path;
         if (cacheBust > 0)
             fetchPath = `${path}?cache_bust=${cacheBust}`;
-        const p = this.dataFetcher.fetchData(fetchPath, DataFetcherFlags.NONE, () => {
+        const p = this.dataFetcher.fetchData(fetchPath, { abortedCallback: () => {
             this.filePromiseCache.delete(path);
-        });
+        } });
         this.filePromiseCache.set(path, p);
         return p;
     }
@@ -706,9 +706,9 @@ export class ModelCache {
     }
 
     private async requestArchiveDataInternal(archivePath: string): Promise<RARC.JKRArchive> {
-        let buffer: ArrayBufferSlice = await this.dataFetcher.fetchData(archivePath, DataFetcherFlags.NONE, () => {
+        let buffer: ArrayBufferSlice = await this.dataFetcher.fetchData(archivePath, { abortedCallback: () => {
             this.archivePromiseCache.delete(archivePath);
-        });
+        } });
 
         if (readString(buffer, 0x00, 0x04) === 'Yaz0')
             buffer = Yaz0.decompressSync(this.yaz0Decompressor, buffer);

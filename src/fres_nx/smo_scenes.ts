@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as BYML from '../byml';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import * as SARC from './sarc';
 import * as BFRES from './bfres';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -41,7 +41,7 @@ class ResourceSystem {
     }
 
     private async fetchDataInternal(device: GfxDevice, dataFetcher: DataFetcher, arcPath: string): Promise<SARC.SARC | null> {
-        const buffer = await dataFetcher.fetchData(`${pathBase}/${arcPath}.szs`, DataFetcherFlags.ALLOW_404);
+        const buffer = await dataFetcher.fetchData(`${pathBase}/${arcPath}.szs`, { allow404: true });
 
         if (buffer.byteLength === 0)
             return null;

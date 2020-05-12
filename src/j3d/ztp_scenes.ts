@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
@@ -350,7 +350,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     }
 
     private async fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.JKRArchive | null> {
-        const buffer = await dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404);
+        const buffer = await dataFetcher.fetchData(path, { allow404: true });
         if (buffer.byteLength === 0)
             return null;
         const decompressed = await Yaz0.decompress(buffer);
