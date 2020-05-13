@@ -7,12 +7,13 @@ import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxBindingLayoutDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3 } from "gl-matrix";
-import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
 import { SourceRenderContext, SourceFileSystem } from "./Scenes_HalfLife2";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { Surface, SurfaceLighting } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
+import { colorNewCopy, White, Color, colorCopy } from "../Color";
 
 export class BaseMaterialProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -51,6 +52,7 @@ layout(row_major, std140) uniform ub_ObjectParams {
 #ifdef USE_BASE2TEXTURE
     vec4 u_Base2TextureScaleBias;
 #endif
+    vec4 u_ModulationColor;
     vec4 u_Misc[1];
 };
 
@@ -165,6 +167,13 @@ void mainPS() {
     t_Albedo *= t_Base2Texture;
 #endif
 
+#ifdef USE_MODULATIONCOLOR_COLOR
+    t_Albedo.rgb *= u_ModulationColor.rgb;
+#endif
+#ifdef USE_MODULATIONCOLOR_ALPHA
+    t_Albedo.a *= u_ModulationColor.a;
+#endif
+
 #ifdef USE_ALPHATEST
     if (t_Albedo.a < u_AlphaTestReference)
         discard;
@@ -262,7 +271,7 @@ export interface BaseMaterial {
     wantsLightmap: boolean;
     wantsBumpmappedLightmap: boolean;
     param: ParameterMap;
-    entityParams: EntityParameters;
+    entityParams: EntityMaterialParameters | null;
 }
 
 interface Parameter {
@@ -371,6 +380,13 @@ class ParameterVector {
         assert(this.internal.length === 3);
         return fillVec4(d, offs, this.internal[0].value, this.internal[1].value, this.internal[2].value);
     }
+
+    public mulColor(c: Color): void {
+        assert(this.internal.length === 3);
+        c.r *= this.internal[0].value;
+        c.g *= this.internal[1].value;
+        c.b *= this.internal[2].value;
+    }
 }
 
 class ParameterColor extends ParameterVector {
@@ -426,19 +442,22 @@ function setupParametersFromVMT(param: ParameterMap, vmt: VMT): void {
     }
 }
 
-class EntityParameters {
+export class EntityMaterialParameters {
     public position = vec3.create();
     public animationStartTime = 0;
+    public textureFrameIndex = 0;
+    public blendColor = colorNewCopy(White);
 }
 
 // LightmappedGeneric, UnlitGeneric, VertexLightingGeneric
 const scratchVec4 = vec4.create();
+const scratchColor = colorNewCopy(White);
 class GenericMaterial implements BaseMaterial {
     public visible = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
     public param: ParameterMap = {};
-    public entityParams = new EntityParameters();
+    public entityParams: EntityMaterialParameters | null = null;
 
     private proxyDriver: MaterialProxyDriver | null = null;
     private loaded: boolean = false;
@@ -611,6 +630,10 @@ class GenericMaterial implements BaseMaterial {
             this.program.defines.set('USE_ENVMAP', '1');
         }
 
+        // Use modulation by default.
+        this.program.defines.set('USE_MODULATIONCOLOR_COLOR', '1');
+        this.program.defines.set('USE_MODULATIONCOLOR_ALPHA', '0');
+
         if (shaderType === 'lightmappedgeneric') {
             // Use lightmap. We don't support bump-mapped lighting yet.
             this.program.defines.set('USE_LIGHTMAP', '1');
@@ -688,8 +711,7 @@ class GenericMaterial implements BaseMaterial {
     }
 
     public movement(renderContext: SourceRenderContext): void {
-        // Update the proxy driver.
-        if (this.proxyDriver !== null)
+        if (this.proxyDriver !== null && this.entityParams !== null)
             this.proxyDriver.update(renderContext, this.entityParams);
     }
 
@@ -711,6 +733,10 @@ class GenericMaterial implements BaseMaterial {
 
     private paramFillColor(d: Float32Array, offs: number, name: string): number {
         return (this.param[name] as ParameterVector).fillColor(d, offs);
+    }
+
+    private paramGetVector(name: string): ParameterVector {
+        return (this.param[name] as ParameterVector);
     }
 
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: mat4): void {
@@ -740,6 +766,12 @@ class GenericMaterial implements BaseMaterial {
 
         if (this.wantsBase2Texture)
             offs += this.paramFillScaleBias(d, offs, '$texture2transform');
+
+        // Compute modulation color.
+        colorCopy(scratchColor, this.entityParams !== null ? this.entityParams.blendColor : White);
+        this.paramGetVector('$color').mulColor(scratchColor);
+        scratchColor.a *= this.paramGetNumber('$alpha');
+        offs += fillColor(d, offs, scratchColor);
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
@@ -1088,6 +1120,7 @@ export class MaterialProxySystem {
         this.registerProxyFactory(MaterialProxy_AnimatedTexture);
         this.registerProxyFactory(MaterialProxy_WaterLOD);
         this.registerProxyFactory(MaterialProxy_TextureTransform);
+        this.registerProxyFactory(MaterialProxy_ToggleTexture);
     }
 
     public registerProxyFactory(factory: MaterialProxyFactory): void {
@@ -1114,7 +1147,7 @@ class MaterialProxyDriver {
     constructor(private material: BaseMaterial, private proxies: MaterialProxy[]) {
     }
 
-    public update(renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+    public update(renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
         for (let i = 0; i < this.proxies.length; i++)
             this.proxies[i].update(this.material.param, renderContext, entityParams);
     }
@@ -1123,7 +1156,7 @@ class MaterialProxyDriver {
 type VKFParamMap = { [k: string]: string };
 
 interface MaterialProxy {
-    update(paramsMap: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void;
+    update(paramsMap: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void;
 }
 
 class MaterialProxy_Equals {
@@ -1229,7 +1262,7 @@ class MaterialProxy_Abs {
         this.resultvar = new ParameterReference(params.resultvar);
     }
 
-    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
         paramSetNum(map, this.resultvar, Math.abs(paramGetNum(map, this.srcvar1)));
     }
 }
@@ -1251,7 +1284,7 @@ class MaterialProxy_LessOrEqual {
         this.resultvar = new ParameterReference(params.resultvar);
     }
 
-    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
         const src1 = paramGetNum(map, this.srcvar1);
         const src2 = paramGetNum(map, this.srcvar2);
         const p = (src1 <= src2) ? this.lessequalvar : this.greatervar;
@@ -1272,7 +1305,7 @@ class MaterialProxy_LinearRamp {
         this.resultvar = new ParameterReference(params.resultvar, 1.0);
     }
 
-    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
         const rate = paramGetNum(map, this.rate);
         const initialvalue = paramGetNum(map, this.initialvalue);
         const v = initialvalue + (rate * renderContext.globalTime);
@@ -1320,7 +1353,7 @@ class MaterialProxy_GaussianNoise {
         this.maxval = new ParameterReference(params.maxval, Number.MAX_VALUE);
     }
 
-    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
         // TODO(jstpierre): Proper Gaussian noise.
         const r = lerp(paramGetNum(map, this.minval), paramGetNum(map, this.maxval), Math.random());
         paramSetNum(map, this.resultvar, r);
@@ -1376,7 +1409,7 @@ class MaterialProxy_PlayerProximity {
         this.scale = new ParameterReference(params.scale);
     }
 
-    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
         const scale = paramGetNum(map, this.scale);
         const dist = vec3.distance(renderContext.cameraPos, entityParams.position);
         paramSetNum(map, this.resultvar, dist * scale);
@@ -1398,7 +1431,7 @@ class MaterialProxy_AnimatedTexture {
         this.animationnowrap = new ParameterReference(params.animationnowrap, 0);
     }
 
-    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
         const ptex = paramLookup<ParameterTexture>(map, this.animatedtexturevar);
         if (ptex.texture === null)
             return;
@@ -1423,7 +1456,7 @@ class MaterialProxy_WaterLOD {
     constructor(params: VKFParamMap) {
     }
 
-    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
         // TODO(jstpierre).
     }
 }
@@ -1445,11 +1478,11 @@ class MaterialProxy_TextureTransform {
         this.resultvar = new ParameterReference(params.resultvar);
     }
 
-    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityParameters): void {
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
         const center = paramLookupOptional<ParameterVector>(map, this.centervar);
         const scale = paramLookupOptional<ParameterVector>(map, this.scalevar);
-        const rotate = paramLookupOptional<ParameterNumber>(map, this.centervar);
-        const translate = paramLookupOptional<ParameterVector>(map, this.scalevar);
+        const rotate = paramLookupOptional<ParameterNumber>(map, this.rotatevar);
+        const translate = paramLookupOptional<ParameterVector>(map, this.translatevar);
 
         let cx = 0.5, cy = 0.5;
         if (center !== null) {
@@ -1475,6 +1508,37 @@ class MaterialProxy_TextureTransform {
 
         const result = paramLookup<ParameterMatrix>(map, this.resultvar);
         result.setMatrix(cx, cy, sx, sy, r, tx, ty);
+    }
+}
+
+class MaterialProxy_ToggleTexture {
+    public static type = 'toggletexture';
+
+    private toggletexturevar: ParameterReference;
+    private toggletextureframenumvar: ParameterReference;
+    private toggleshouldwrap: ParameterReference;
+
+    constructor(params: VKFParamMap) {
+        this.toggletexturevar = new ParameterReference(params.toggletexturevar);
+        this.toggletextureframenumvar = new ParameterReference(params.toggletextureframenumvar);
+        this.toggleshouldwrap = new ParameterReference(params.toggleshouldwrap, 1.0);
+    }
+
+    public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
+        const ptex = paramLookup<ParameterTexture>(map, this.toggletexturevar);
+        if (ptex.texture === null)
+            return;
+
+        const wrap = !!paramGetNum(map, this.toggleshouldwrap);
+
+        let frame = entityParams.textureFrameIndex;
+        if (wrap) {
+            frame = frame % ptex.texture.numFrames;
+        } else {
+            frame = Math.min(frame, ptex.texture.numFrames);
+        }
+
+        paramSetNum(map, this.toggletextureframenumvar, frame);
     }
 }
 //#endregion

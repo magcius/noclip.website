@@ -6,7 +6,7 @@ import { readString, assertExists, assert, nArray, hexdump } from "../util";
 import { vec4, vec3, vec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
-import { parseEntitiesLump, Entity } from "./VMT";
+import { parseEntitiesLump, BSPEntity } from "./VMT";
 import { Plane, AABB } from "../Geometry";
 
 const enum LumpType {
@@ -92,6 +92,7 @@ export interface BSPNode {
 
 export interface BSPLeaf {
     bbox: AABB;
+    area: number;
     leaffaceStart: number;
     leaffaceCount: number;
 }
@@ -104,7 +105,7 @@ export interface Model {
 }
 
 export class BSPFile {
-    public entities: Entity[] = [];
+    public entities: BSPEntity[] = [];
     public texinfo: Texinfo[] = [];
     public surfaces: Surface[] = [];
     public models: Model[] = [];
@@ -408,7 +409,7 @@ export class BSPFile {
             const planeZ = planes.getFloat32(planenum * 0x14 + 0x08, true);
             const planeDist = planes.getFloat32(planenum * 0x14 + 0x0C, true);
 
-            const plane = new Plane(planeX, planeY, planeZ, planeDist);
+            const plane = new Plane(planeX, planeY, planeZ, -planeDist);
 
             const child0 = nodes.getInt32(idx + 0x04, true);
             const child1 = nodes.getInt32(idx + 0x08, true);
@@ -433,6 +434,8 @@ export class BSPFile {
             const contents = leafs.getUint32(idx + 0x00, true);
             const cluster = leafs.getUint16(idx + 0x04, true);
             const areaAndFlags = leafs.getUint16(idx + 0x06, true);
+            const area = areaAndFlags & 0x01FF;
+            const flags = (areaAndFlags >>> 9) & 0x007F;
             const bboxMinX = leafs.getInt16(idx + 0x08, true);
             const bboxMinY = leafs.getInt16(idx + 0x0A, true);
             const bboxMinZ = leafs.getInt16(idx + 0x0C, true);
@@ -451,7 +454,7 @@ export class BSPFile {
                 idx += 0x18;
             }
 
-            this.leaflist.push({ bbox, leaffaceStart: firstleafface, leaffaceCount: numleaffaces });
+            this.leaflist.push({ bbox, area, leaffaceStart: firstleafface, leaffaceCount: numleaffaces });
         }
 
         const models = getLumpData(LumpType.MODELS).createDataView();
@@ -474,5 +477,15 @@ export class BSPFile {
 
             this.models.push({ bbox, headnode, surfaceStart: firstface, surfaceCount: numfaces });
         }
+    }
+
+    public findLeafForPoint(p: vec3, nodeid: number = 0): number {
+        if (nodeid < 0)
+            return -nodeid - 1;
+
+        const node = this.nodelist[nodeid];
+        const dot = node.plane.distance(p[0], p[1], p[2]);
+
+        return this.findLeafForPoint(p, dot >= 0.0 ? node.child0 : node.child1);
     }
 }

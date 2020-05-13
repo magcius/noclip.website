@@ -216,17 +216,17 @@ export function vmtParseNumbers(S: string): number[] {
 }
 
 // This is in the same file because it also parses keyfiles, even though it's not material-related.
-export interface Entity {
+export interface BSPEntity {
     classname: string;
     [k: string]: string;
 }
 
-export function parseEntitiesLump(buffer: ArrayBufferSlice): Entity[] {
+export function parseEntitiesLump(buffer: ArrayBufferSlice): BSPEntity[] {
     const str = new TextDecoder('utf8').decode(buffer.createTypedArray(Uint8Array));
     const p = new ValveKeyValueParser(str);
-    const entities: Entity[] = [];
+    const entities: BSPEntity[] = [];
     while (p.hastok()) {
-        entities.push(pairs2obj(p.unit()) as Entity);
+        entities.push(pairs2obj(p.unit()) as BSPEntity);
         p.skipwhite();
     }
     return entities;

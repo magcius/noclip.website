@@ -219,7 +219,7 @@ export function drawWorldSpaceVector(ctx: CanvasRenderingContext2D, camera: Came
     ctx.stroke();
 }
 
-export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, camera: Camera, aabb: AABB, m: mat4 | null, color: Color = Magenta): void {
+export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, camera: Camera, aabb: AABB, m: mat4 | null = null, color: Color = Magenta): void {
     vec4.set(p[0], aabb.minX, aabb.minY, aabb.minZ, 1.0);
     vec4.set(p[1], aabb.maxX, aabb.minY, aabb.minZ, 1.0);
     vec4.set(p[2], aabb.minX, aabb.maxY, aabb.minZ, 1.0);
