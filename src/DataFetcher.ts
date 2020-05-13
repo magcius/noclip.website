@@ -109,21 +109,6 @@ class DataFetcherRequest {
 
                 let slice = new ArrayBufferSlice(buffer);
 
-                // Check for Range.
-                if (rangeStart >= 0 && rangeEnd >= 0) {
-                    const contentRange = request.getResponseHeader('Content-Range');
-                    if (contentRange === null) {
-                        // Do the slicing ourselves. TODO(jstpierre): Accept partial content.
-                        slice = slice.slice(rangeStart, rangeEnd - 1);
-                    } else {
-                        // Parse out the Content-Range header and make sure it's what we expect.
-                        const [, start, end] = assertExists(/bytes (\d+)-(\d+).*/.exec(contentRange));
-                        assert(Number(start) === rangeStart);
-                        // it can be possible for the file to be smaller than the range
-                        assert(Number(end) <= rangeEnd);
-                    }
-                }
-
                 const namedSlice = slice as NamedArrayBufferSlice;
                 namedSlice.name = this.url;
 
@@ -191,7 +176,7 @@ export class DataFetcher {
     }
 
     public async init() {
-        if (IS_DEVELOPMENT) {
+        if (false && IS_DEVELOPMENT) {
             // Check for the existence of a /data directory.
             const url = getDataURLForPath('', true);
             try {
