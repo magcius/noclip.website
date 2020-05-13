@@ -176,7 +176,7 @@ export class DataFetcher {
     }
 
     public async init() {
-        if (false && IS_DEVELOPMENT) {
+        if (IS_DEVELOPMENT) {
             // Check for the existence of a /data directory.
             const url = getDataURLForPath('', true);
             try {
