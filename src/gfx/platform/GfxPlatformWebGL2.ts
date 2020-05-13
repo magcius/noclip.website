@@ -1594,8 +1594,6 @@ void main() {
                             } else {
                                 const gl_type = this.translateTextureType(pixelFormat);
                                 gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
-                                if (gl.getError() !== gl.NO_ERROR)
-                                    debugger;
                             }
                         }
                     }

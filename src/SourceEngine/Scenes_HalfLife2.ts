@@ -18,6 +18,7 @@ import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathCons
 import { assert } from "../util";
 import { Entity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { AABB } from "../Geometry";
 
 const pathBase = `HalfLife2`;
 
@@ -226,12 +227,27 @@ class BSPSurfaceRenderer {
     }
 }
 
+const scratchAABB = new AABB();
+const scratchMatrixCull = mat4.create();
 class BSPModelRenderer {
     public visible: boolean = true;
     public modelMatrix = mat4.create();
     public entity: EntityInstance | null = null;
+    public surfaces: BSPSurfaceRenderer[] = [];
 
-    constructor(public model: Model, public surfaces: BSPSurfaceRenderer[]) {
+    constructor(renderContext: SourceRenderContext, public model: Model, public bsp: BSPFile) {
+        for (let j = 0; j < model.surfaceCount; j++) {
+            const surface = new BSPSurfaceRenderer(this.bsp.surfaces[this.model.surfaceStart + j]);
+            this.bindMaterial(renderContext, surface);
+            this.surfaces.push(surface);
+        }
+    }
+
+    private async bindMaterial(renderContext: SourceRenderContext, surface: BSPSurfaceRenderer) {
+        const materialCache = renderContext.materialCache;
+        const texinfo = this.bsp.texinfo[surface.surface.texinfo];
+        const materialInstance = await materialCache.createMaterialInstance(renderContext, texinfo.texName);
+        surface.bindMaterial(materialInstance, renderContext.lightmapManager);
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -242,12 +258,48 @@ class BSPModelRenderer {
             this.surfaces[i].movement(renderContext, this.modelMatrix);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewMatrixForDepthSort: mat4): void {
+    private prepareToRenderBSP(nodeid: number, renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4, modelMatrixCull: mat4): void {
+        if (nodeid >= 0) {
+            // node
+            const node = this.bsp.nodelist[nodeid];
+
+            mat4.mul(scratchMatrixCull, zup, this.modelMatrix);
+            scratchAABB.transform(node.bbox, scratchMatrixCull);
+            if (!viewerInput.camera.frustum.contains(scratchAABB))
+                return;
+
+            for (let i = node.surfaceStart - this.model.surfaceStart; i < node.surfaceCount; i++)
+                this.surfaces[i].prepareToRender(renderContext, renderInstManager, viewMatrixZUp, this.modelMatrix);
+
+            this.prepareToRenderBSP(node.child0, renderContext, renderInstManager, viewerInput, viewMatrixZUp, modelMatrixCull);
+            this.prepareToRenderBSP(node.child1, renderContext, renderInstManager, viewerInput, viewMatrixZUp, modelMatrixCull);
+        } else {
+            // leaf
+            const leaf = this.bsp.leaflist[-nodeid - 1];
+
+            mat4.mul(scratchMatrixCull, zup, this.modelMatrix);
+            scratchAABB.transform(leaf.bbox, scratchMatrixCull);
+            if (!viewerInput.camera.frustum.contains(scratchAABB))
+                return;
+
+            for (let i = 0; i < leaf.leaffaceCount; i++) {
+                const surfaceIdx = this.bsp.leaffacelist[leaf.leaffaceStart + i] - this.model.surfaceStart;
+                assert(surfaceIdx >= 0);
+                this.surfaces[surfaceIdx].prepareToRender(renderContext, renderInstManager, viewMatrixZUp, this.modelMatrix);
+            }
+        }
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4): void {
         if (!this.visible)
             return;
 
-        for (let i = 0; i < this.surfaces.length; i++)
-            this.surfaces[i].prepareToRender(renderContext, renderInstManager, viewMatrixForDepthSort, this.modelMatrix);
+        mat4.mul(scratchMatrixCull, zup, this.modelMatrix);
+        scratchAABB.transform(this.model.bbox, scratchMatrixCull);
+        if (!viewerInput.camera.frustum.contains(scratchAABB))
+            return;
+
+        this.prepareToRenderBSP(this.model.headnode, renderContext, renderInstManager, viewerInput, viewMatrixZUp, scratchMatrixCull);
     }
 }
 
@@ -324,28 +376,13 @@ class BSPRenderer {
 
         for (let i = 0; i < this.bsp.models.length; i++) {
             const model = this.bsp.models[i];
-
-            const surfaces: BSPSurfaceRenderer[] = [];
-            for (let j = 0; j < model.surfaceCount; j++) {
-                const surface = new BSPSurfaceRenderer(this.bsp.surfaces[model.surfaceStart + j]);
-                this.bindMaterial(renderContext, surface);
-                surfaces.push(surface);
-            }
-
-            const modelRenderer = new BSPModelRenderer(model, surfaces);
+            const modelRenderer = new BSPModelRenderer(renderContext, model, bsp);
             // Submodels are invisible by default.
             modelRenderer.visible = (i === 0);
             this.models.push(modelRenderer);
         }
 
         this.spawnEntities();
-    }
-
-    private async bindMaterial(renderContext: SourceRenderContext, surface: BSPSurfaceRenderer) {
-        const materialCache = renderContext.materialCache;
-        const texinfo = this.bsp.texinfo[surface.surface.texinfo];
-        const materialInstance = await materialCache.createMaterialInstance(renderContext, texinfo.texName);
-        surface.bindMaterial(materialInstance, renderContext.lightmapManager);
     }
 
     private spawnEntities(): void {
@@ -372,8 +409,9 @@ class BSPRenderer {
         offs += fillVec3v(d, offs, renderContext.cameraPos);
 
         mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, zup);
+
         for (let i = 0; i < this.models.length; i++)
-            this.models[i].prepareToRender(renderContext, renderInstManager, scratchMatrix);
+            this.models[i].prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix);
 
         renderInstManager.popTemplateRenderInst();
     }

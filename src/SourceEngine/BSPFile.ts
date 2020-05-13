@@ -2,7 +2,7 @@
 // Source Engine BSP.
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assertExists, assert, nArray } from "../util";
+import { readString, assertExists, assert, nArray, hexdump } from "../util";
 import { vec4, vec3, vec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
@@ -22,6 +22,7 @@ const enum LumpType {
     EDGES                = 12,
     SURFEDGES            = 13,
     MODELS               = 14,
+    LEAFFACES            = 16,
     VERTNORMALS          = 30,
     VERTNORMALINDICES    = 31,
     PRIMITIVES           = 37,
@@ -89,8 +90,15 @@ export interface BSPNode {
     surfaceCount: number;
 }
 
+export interface BSPLeaf {
+    bbox: AABB;
+    leaffaceStart: number;
+    leaffaceCount: number;
+}
+
 export interface Model {
     bbox: AABB;
+    headnode: number;
     surfaceStart: number;
     surfaceCount: number;
 }
@@ -104,6 +112,10 @@ export class BSPFile {
 
     public indexData: Uint16Array;
     public vertexData: Float32Array;
+
+    public nodelist: BSPNode[] = [];
+    public leaflist: BSPLeaf[] = [];
+    public leaffacelist: Uint16Array;
 
     constructor(buffer: ArrayBufferSlice) {
         assertExists(readString(buffer, 0x00, 0x04) === 'VBSP');
@@ -387,7 +399,6 @@ export class BSPFile {
         // Parse out BSP tree.
         const nodes = getLumpData(LumpType.NODES).createDataView();
 
-        const nodelist: BSPNode[] = [];
         for (let idx = 0x00; idx < nodes.byteLength; idx += 0x20) {
             const planenum = nodes.getUint32(idx + 0x00, true);
 
@@ -411,33 +422,36 @@ export class BSPFile {
             const firstface = nodes.getUint16(idx + 0x18, true);
             const numfaces = nodes.getUint16(idx + 0x1A, true);
             const area = nodes.getInt16(idx + 0x1C, true);
-            nodelist.push({ plane, child0, child1, bbox, area, surfaceStart: firstface, surfaceCount: numfaces });
+            this.nodelist.push({ plane, child0, child1, bbox, area, surfaceStart: firstface, surfaceCount: numfaces });
         }
 
         const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
         const leafs = leafsLump.createDataView();
 
-        const leaflist: BSPNode[] = [];
+        this.leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
         for (let idx = 0x00; idx < leafs.byteLength; idx += 0x20) {
             const contents = leafs.getUint32(idx + 0x00, true);
             const cluster = leafs.getUint16(idx + 0x04, true);
             const areaAndFlags = leafs.getUint16(idx + 0x06, true);
             const bboxMinX = leafs.getInt16(idx + 0x08, true);
-            const bboxMinY = leafs.getInt16(idx + 0x0C, true);
-            const bboxMinZ = leafs.getInt16(idx + 0x0E, true);
-            const bboxMaxX = leafs.getInt16(idx + 0x10, true);
-            const bboxMaxY = leafs.getInt16(idx + 0x12, true);
-            const bboxMaxZ = leafs.getInt16(idx + 0x14, true);
-            const firstleafface = leafs.getUint16(idx + 0x16, true);
-            const numleaffaces = leafs.getUint16(idx + 0x18, true);
-            const firstleafbrush = leafs.getUint16(idx + 0x1A, true);
-            const numleafbrushes = leafs.getUint16(idx + 0x1C, true);
-            const leafwaterdata = leafs.getUint16(idx + 0x1E, true);
+            const bboxMinY = leafs.getInt16(idx + 0x0A, true);
+            const bboxMinZ = leafs.getInt16(idx + 0x0C, true);
+            const bboxMaxX = leafs.getInt16(idx + 0x0E, true);
+            const bboxMaxY = leafs.getInt16(idx + 0x10, true);
+            const bboxMaxZ = leafs.getInt16(idx + 0x12, true);
+            const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+            const firstleafface = leafs.getUint16(idx + 0x14, true);
+            const numleaffaces = leafs.getUint16(idx + 0x16, true);
+            const firstleafbrush = leafs.getUint16(idx + 0x18, true);
+            const numleafbrushes = leafs.getUint16(idx + 0x1A, true);
+            const leafwaterdata = leafs.getInt16(idx + 0x1C, true);
 
             // AmbientLighting info in version 0 is here.
             if (leafsVersion === 0) {
                 idx += 0x18;
             }
+
+            this.leaflist.push({ bbox, leaffaceStart: firstleafface, leaffaceCount: numleaffaces });
         }
 
         const models = getLumpData(LumpType.MODELS).createDataView();
@@ -458,7 +472,7 @@ export class BSPFile {
             const firstface = models.getUint32(idx + 0x28, true);
             const numfaces = models.getUint32(idx + 0x2C, true);
 
-            this.models.push({ bbox, surfaceStart: firstface, surfaceCount: numfaces });
+            this.models.push({ bbox, headnode, surfaceStart: firstface, surfaceCount: numfaces });
         }
     }
 }
