@@ -639,21 +639,21 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     // Kreeb
     else if (actorName === 'Um1') fetchArchive(`Um`).then((rarc) => {
-        const m = buildModel(rarc, `bdl/um.bdl`);
-        buildChildModel(rarc, `bdlm/um01_head.bdl`).setParentJoint(m, `head`);
-        m.bindANK1(parseBCK(rarc, `bcks/um_wait01.bck`));
+        const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um02.bmt`);
+        buildChildModel(rarc, `bdlm/um02_head.bdl`).setParentJoint(m, `head`);
+        m.bindANK1(parseBCK(rarc, `bcks/um_happy02.bck`));
     });
     // Anton
     else if (actorName === 'Um2') fetchArchive(`Um`).then((rarc) => {
-        const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um02.bmt`);
-        buildChildModel(rarc, `bdlm/um02_head.bdl`).setParentJoint(m, `head`);
-        m.bindANK1(parseBCK(rarc, `bcks/um_wait01.bck`));
+        const m = buildModel(rarc, `bdl/um.bdl`);
+        buildChildModel(rarc, `bdlm/um01_head.bdl`).setParentJoint(m, `head`);
+        m.bindANK1(parseBCK(rarc, `bcks/um_walk.bck`));
     });
     // Kamo
     else if (actorName === 'Um3') fetchArchive(`Um`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um03.bmt`);
         buildChildModel(rarc, `bdlm/um03_head.bdl`).setParentJoint(m, `head`);
-        m.bindANK1(parseBCK(rarc, `bcks/um_wait01.bck`));
+        m.bindANK1(parseBCK(rarc, `bcks/um_wait02.bck`));
     });
     // Sam
     else if (actorName === 'Uo1') fetchArchive(`Uo`).then((rarc) => {
@@ -716,7 +716,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         m.bindANK1(parseBCK(rarc, `bcks/ho_wait01.bck`));
     });
     // Tott
-    else if (actorName === 'Tt') fetchArchive(`Tt`).then((rarc) => buildModel(rarc, `bdlm/tt.bdl`).bindANK1(parseBCK(rarc, `bck/wait01.bck`)));
+    else if (actorName === 'Tt') fetchArchive(`Tt`).then((rarc) => buildModel(rarc, `bdlm/tt.bdl`).bindANK1(parseBCK(rarc, `bck/step01.bck`)));
     // Maggie's Father (Rich)
     else if (actorName === 'Gp1') fetchArchive(`Gp`).then((rarc) => buildModel(rarc, `bdlm/gp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
     // Maggie's Father (Poor)
@@ -1105,7 +1105,21 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'DmKmm') fetchArchive(`Demo_Kmm`).then((rarc) => buildModel(rarc, `bmd/ka.bmd`).bindANK1(parseBCK(rarc, `bcks/ka_wait1.bck`)));
     // else if (actorName === 'Kamome') fetchArchive(`Kamome`).then((rarc) => buildModel(rarc, `bdl/ka.bdl`).bindANK1(parseBCK(rarc, `bck/ka_wait2.bck`)));
     else if (actorName === 'kani') fetchArchive(`Kn`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`));
-    else if (actorName === 'Pig') fetchArchive(`Kb`).then((rarc) => buildModel(rarc, `bdlm/pg.bdl`));
+    else if (actorName === 'Pig') fetchArchive(`Kb`).then((rarc) => {
+        const color = actor.parameters & 0x3;
+        let bmtPaths = ['bmt/pg_pink.bmt', 'bmt/pg_buti.bmt', 'bmt/pg_kuro.bmt'];
+        const bdlmPaths = ['bdlm/pg.bdl', 'bdlm/pg_big.bdl'];
+
+        let model: BMDObjectRenderer;
+
+        if (actor.parameters == 0xFFFFFFFF) {
+            model = buildModelBMT(rarc, bdlmPaths[1], 'bmt/pg_pink.bmt');
+        } else {
+            model = buildModelBMT(rarc, bdlmPaths[0], bmtPaths[color]);
+        }
+
+        model.bindANK1(parseBCK(rarc, `bck/wait1.bck`));
+    });
     else if (actorName === 'kani') fetchArchive(`Kn`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`).bindANK1(parseBCK(rarc, `bck/wait01.bck`)));
     else if (actorName === 'NpcSo') fetchArchive(`So`).then((rarc) => buildModel(rarc, `bdlm/so.bdl`).bindANK1(parseBCK(rarc, `bcks/so_wait01.bck`)));
     // Enemies
@@ -1461,6 +1475,12 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const m = buildModel(rarc, `bmd/lamp_00.bmd`);
         const scale = 0.5;
         mat4.scale(m.modelMatrix, m.modelMatrix, [scale, scale, scale]);
+    });
+    // House door
+    else if (actorName === 'KNOB00') fetchArchive(`Knob`).then((rarc) => {
+        const m = buildModel(rarc, `bdl/door_a.bdl`);
+        m.bindANK1(parseBCK(rarc, `bck/dooropenbdoor.bck`), animFrame(0));
+        m.lightTevColorType = LightType.BG0;
     });
     else if (actorName === 'MKoppu') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/koppu.bdl`));
     else if (actorName === 'MOsara') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/osara.bdl`));
