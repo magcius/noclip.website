@@ -115,6 +115,68 @@ interface BSPDispInfo {
     vertexCount: number;
 }
 
+class DisplacementMeshVertex {
+    public position = vec3.create();
+    public normal = vec3.create();
+    public alpha = 1.0;
+    public uv = vec3.create();
+}
+
+class DisplacementBuilder {
+    public vertex: DisplacementMeshVertex[];
+
+    constructor(public disp: BSPDispInfo, public corners: vec3[], public disp_verts: Float32Array) {
+        this.vertex = nArray(disp.vertexCount, () => new DisplacementMeshVertex());
+
+        const x0 = vec3.create(), x1 = vec3.create();
+
+        // Positions
+        for (let y = 0; y < disp.sideLength; y++) {
+            const ty = y / (disp.sideLength - 1);
+            vec3.lerp(x0, corners[0], corners[1], ty);
+            vec3.lerp(x1, corners[3], corners[2], ty);
+
+            for (let x = 0; x < disp.sideLength; x++) {
+                const tx = x / (disp.sideLength - 1);
+
+                // Displacement normal vertex.
+                const dvidx = disp.dispVertStart + (y * disp.sideLength) + x;
+                const dvx = disp_verts[dvidx * 5 + 0];
+                const dvy = disp_verts[dvidx * 5 + 1];
+                const dvz = disp_verts[dvidx * 5 + 2];
+                const dvdist = disp_verts[dvidx * 5 + 3];
+                const dvalpha = disp_verts[dvidx * 5 + 4];
+
+                const vertex = this.vertex[y * disp.sideLength + x];
+                vec3.lerp(vertex.position, x0, x1, tx);
+
+                vertex.position[0] += (dvx * dvdist);
+                vertex.position[1] += (dvy * dvdist);
+                vertex.position[2] += (dvz * dvdist);
+                vertex.uv[0] = tx;
+                vertex.uv[1] = ty;
+                vertex.alpha = dvalpha / 0xFF;
+            }
+        }
+
+        // Normals
+
+        // TODO(jstpierre): Actual normals
+        // For now, just compute base surface normal.
+        vec3.sub(x0, corners[1], corners[0]);
+        vec3.sub(x1, corners[3], corners[0]);
+        vec3.cross(x0, x1, x0);
+        vec3.normalize(x0, x0);
+
+        for (let y = 0; y < disp.sideLength; y++) {
+            for (let x = 0; x < disp.sideLength; x++) {
+                const vertex = this.vertex[y * disp.sideLength + x];
+                vec3.copy(vertex.normal, x0);
+            }
+        }
+    }
+}
+
 export class BSPFile {
     public entities: BSPEntity[] = [];
     public texinfo: Texinfo[] = [];
@@ -387,50 +449,25 @@ export class BSPFile {
                 }
                 assert(startIndex >= 0);
 
-                // Compute our base normal.
-                vec3.sub(scratchPosition, corners[1], corners[0]);
-                vec3.normalize(scratchPosition, scratchPosition);
-                vec3.sub(scratchNormal, corners[3], corners[0]);
-                vec3.normalize(scratchNormal, scratchNormal);
-                const baseNormal = vec3.create();
-                vec3.cross(baseNormal, scratchNormal, scratchPosition);
-
                 // Rotate vectors so start pos corner is first
                 if (startIndex !== 0)
                     corners = corners.slice(startIndex).concat(corners.slice(0, startIndex));
 
-                // Build our vertex grid.
-                const x0 = vec3.create(), x1 = vec3.create();
-
+                const builder = new DisplacementBuilder(disp, corners, disp_verts);
                 for (let y = 0; y < disp.sideLength; y++) {
-                    const ty = y / (disp.sideLength - 1);
-                    vec3.lerp(x0, corners[0], corners[1], ty);
-                    vec3.lerp(x1, corners[3], corners[2], ty);
-
                     for (let x = 0; x < disp.sideLength; x++) {
-                        const tx = x / (disp.sideLength - 1);
-
-                        // Displacement normal vertex.
-                        const dvidx = disp.dispVertStart + (y * disp.sideLength) + x;
-                        const dvx = disp_verts[dvidx * 5 + 0];
-                        const dvy = disp_verts[dvidx * 5 + 1];
-                        const dvz = disp_verts[dvidx * 5 + 2];
-                        const dvdist = disp_verts[dvidx * 5 + 3];
-                        const dvalpha = disp_verts[dvidx * 5 + 4];
-
-                        vec3.lerp(scratchPosition, x0, x1, tx);
+                        const vertex = builder.vertex[y * disp.sideLength + x];
 
                         // Position
-                        vertexData[dstOffs++] = scratchPosition[0] + (dvx * dvdist);
-                        vertexData[dstOffs++] = scratchPosition[1] + (dvy * dvdist);
-                        vertexData[dstOffs++] = scratchPosition[2] + (dvz * dvdist);
+                        vertexData[dstOffs++] = vertex.position[0];
+                        vertexData[dstOffs++] = vertex.position[1];
+                        vertexData[dstOffs++] = vertex.position[2];
 
                         // Normal
-                        // TODO(jstpierre)
-                        vertexData[dstOffs++] = scratchNormal[0] = baseNormal[0];
-                        vertexData[dstOffs++] = scratchNormal[1] = baseNormal[1];
-                        vertexData[dstOffs++] = scratchNormal[2] = baseNormal[2];
-                        vertexData[dstOffs++] = dvalpha / 255.0;
+                        vertexData[dstOffs++] = scratchNormal[0] = vertex.normal[0];
+                        vertexData[dstOffs++] = scratchNormal[1] = vertex.normal[1];
+                        vertexData[dstOffs++] = scratchNormal[2] = vertex.normal[2];
+                        vertexData[dstOffs++] = vertex.alpha;
 
                         // Tangent
                         vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
@@ -440,31 +477,20 @@ export class BSPFile {
                         vertexData[dstOffs++] = tangentSSign;
 
                         // Texture UV
-                        calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);
+                        calcTexCoord(scratchVec2, vertex.position, tex.textureMapping);
                         scratchVec2[0] /= tex.width;
                         scratchVec2[1] /= tex.height;
                         vertexData[dstOffs++] = scratchVec2[0];
                         vertexData[dstOffs++] = scratchVec2[1];
 
                         // Lightmap UV
-                        /*
-                        if (tex.flags & TexinfoFlags.NOLIGHT) {
-                            vec2.set(scratchVec2, 0.5, 0.5);
-                        } else {
-                            calcTexCoord(scratchVec2, scratchPosition, tex.lightmapMapping);
-                            scratchVec2[0] += m_LightmapTextureMinsInLuxels[0];
-                            scratchVec2[1] += m_LightmapTextureMinsInLuxels[1];
-                        }
-                        */
                         // Source seems to just have lightmaps in surface space, and ignore the mapping. (!!!)
-                        scratchVec2[0] = (tx * m_LightmapTextureSizeInLuxels[0]) + 0.5;
-                        scratchVec2[1] = (ty * m_LightmapTextureSizeInLuxels[1]) + 0.5;
-
-                        vertexData[dstOffs++] = scratchVec2[0];
-                        vertexData[dstOffs++] = scratchVec2[1];
+                        vertexData[dstOffs++] = (vertex.uv[0] * m_LightmapTextureSizeInLuxels[0]) + 0.5;
+                        vertexData[dstOffs++] = (vertex.uv[1] * m_LightmapTextureSizeInLuxels[1]) + 0.5;
                     }
                 }
 
+                // Build grid index buffer.
                 let m = 0;
                 for (let y = 0; y < disp.sideLength - 1; y++) {
                     for (let x = 0; x < disp.sideLength - 1; x++) {
