@@ -75,7 +75,7 @@ export function setSortKeyProgramKey(sortKey: number, programKey: number): numbe
     if (isTransparent)
         return sortKey;
     else
-        return ((sortKey & 0xFF0000FF) | ((programKey & 0xFFFF) << 16)) >>> 0;
+        return ((sortKey & 0xFF0000FF) | ((programKey & 0xFFFF) << 8)) >>> 0;
 }
 
 export function setSortKeyBias(sortKey: number, bias: number): number {
