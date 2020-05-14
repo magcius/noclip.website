@@ -131,13 +131,13 @@ class DisplacementBuilder {
     constructor(public disp: BSPDispInfo, public corners: vec3[], public disp_verts: Float32Array) {
         this.vertex = nArray(disp.vertexCount, () => new DisplacementMeshVertex());
 
-        const x0 = vec3.create(), x1 = vec3.create();
+        const v0 = vec3.create(), v1 = vec3.create();
 
         // Positions
         for (let y = 0; y < disp.sideLength; y++) {
             const ty = y / (disp.sideLength - 1);
-            vec3.lerp(x0, corners[0], corners[1], ty);
-            vec3.lerp(x1, corners[3], corners[2], ty);
+            vec3.lerp(v0, corners[0], corners[1], ty);
+            vec3.lerp(v1, corners[3], corners[2], ty);
 
             for (let x = 0; x < disp.sideLength; x++) {
                 const tx = x / (disp.sideLength - 1);
@@ -151,7 +151,7 @@ class DisplacementBuilder {
                 const dvalpha = disp_verts[dvidx * 5 + 4];
 
                 const vertex = this.vertex[y * disp.sideLength + x];
-                vec3.lerp(vertex.position, x0, x1, tx);
+                vec3.lerp(vertex.position, v0, v1, tx);
 
                 vertex.position[0] += (dvx * dvdist);
                 vertex.position[1] += (dvy * dvdist);
@@ -163,18 +163,84 @@ class DisplacementBuilder {
         }
 
         // Normals
+        const w = disp.sideLength;
+        for (let y = 0; y < w; y++) {
+            for (let x = 0; x < w; x++) {
+                const vertex = this.vertex[y * w + x];
+                const x0 = x - 1, x1 = x, x2 = x + 1;
+                const y0 = y - 1, y1 = y, y2 = y + 1;
 
-        // TODO(jstpierre): Actual normals
-        // For now, just compute base surface normal.
-        vec3.sub(x0, corners[1], corners[0]);
-        vec3.sub(x1, corners[3], corners[0]);
-        vec3.cross(x0, x1, x0);
-        vec3.normalize(x0, x0);
+                let count = 0;
 
-        for (let y = 0; y < disp.sideLength; y++) {
-            for (let x = 0; x < disp.sideLength; x++) {
-                const vertex = this.vertex[y * disp.sideLength + x];
-                vec3.copy(vertex.normal, x0);
+                // Top left
+                if (x0 >= 0 && y0 >= 0) {
+                    vec3.sub(v0, this.vertex[y1*w+x0].position, this.vertex[y0*w+x0].position);
+                    vec3.sub(v1, this.vertex[y0*w+x1].position, this.vertex[y0*w+x0].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    vec3.sub(v0, this.vertex[y1*w+x0].position, this.vertex[y0*w+x1].position);
+                    vec3.sub(v1, this.vertex[y1*w+x1].position, this.vertex[y0*w+x1].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    count += 2;
+                }
+
+                // Top right
+                if (x2 < w && y0 >= 0) {
+                    vec3.sub(v0, this.vertex[y1*w+x1].position, this.vertex[y0*w+x1].position);
+                    vec3.sub(v1, this.vertex[y0*w+x2].position, this.vertex[y0*w+x1].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    vec3.sub(v0, this.vertex[y1*w+x1].position, this.vertex[y0*w+x2].position);
+                    vec3.sub(v1, this.vertex[y1*w+x2].position, this.vertex[y0*w+x2].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    count += 2;
+                }
+
+                // Bottom left
+                if (x0 >= 0 && y2 < w) {
+                    vec3.sub(v0, this.vertex[y2*w+x0].position, this.vertex[y1*w+x0].position);
+                    vec3.sub(v1, this.vertex[y1*w+x1].position, this.vertex[y1*w+x0].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    vec3.sub(v0, this.vertex[y2*w+x0].position, this.vertex[y1*w+x1].position);
+                    vec3.sub(v1, this.vertex[y2*w+x1].position, this.vertex[y1*w+x1].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    count += 2;
+                }
+
+                // Bottom right
+                if (x2 < w && y2 < w) {
+                    vec3.sub(v0, this.vertex[y2*w+x1].position, this.vertex[y1*w+x1].position);
+                    vec3.sub(v1, this.vertex[y1*w+x2].position, this.vertex[y1*w+x1].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    vec3.sub(v0, this.vertex[y2*w+x1].position, this.vertex[y1*w+x2].position);
+                    vec3.sub(v1, this.vertex[y2*w+x2].position, this.vertex[y1*w+x2].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    count += 2;
+                }
+
+                vec3.scale(vertex.normal, vertex.normal, 1 / count);
             }
         }
     }
@@ -313,7 +379,6 @@ export class BSPFile {
 
         // Parse out surfaces.
         let faces = getLumpData(LumpType.FACES_HDR, 1).createDataView();
-        console.log(faces.byteLength);
         if (faces.byteLength === 0)
             faces = getLumpData(LumpType.FACES, 1).createDataView();
 
