@@ -34,7 +34,7 @@ const enum LumpType {
     PAKFILE              = 40,
     TEXDATA_STRING_DATA  = 43,
     TEXDATA_STRING_TABLE = 44,
-    LIGHTING_HDR         = 56,
+    LIGHTING_HDR         = 53,
     FACES_HDR            = 58,
 }
 
@@ -313,6 +313,7 @@ export class BSPFile {
 
         // Parse out surfaces.
         let faces = getLumpData(LumpType.FACES_HDR, 1).createDataView();
+        console.log(faces.byteLength);
         if (faces.byteLength === 0)
             faces = getLumpData(LumpType.FACES, 1).createDataView();
 
