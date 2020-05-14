@@ -23,8 +23,10 @@ const enum LumpType {
     SURFEDGES            = 13,
     MODELS               = 14,
     LEAFFACES            = 16,
+    DISPINFO             = 26,
     VERTNORMALS          = 30,
     VERTNORMALINDICES    = 31,
+    DISP_VERTS           = 33,
     PRIMITIVES           = 37,
     PRIMINDICES          = 39,
     PAKFILE              = 40,
@@ -49,6 +51,7 @@ export interface Surface {
     indexCount: number;
     center: vec3;
     lighting: SurfaceLighting;
+    dispinfo: number;
 }
 
 interface TexinfoMapping {
@@ -102,6 +105,14 @@ export interface Model {
     headnode: number;
     surfaceStart: number;
     surfaceCount: number;
+}
+
+interface BSPDispInfo {
+    startPos: vec3;
+    power: number;
+    dispVertStart: number;
+    sideLength: number;
+    vertexCount: number;
 }
 
 export class BSPFile {
@@ -209,6 +220,34 @@ export class BSPFile {
         if (faces.byteLength === 0)
             faces = getLumpData(LumpType.FACES, 1).createDataView();
 
+        const dispinfo = getLumpData(LumpType.DISPINFO).createDataView();
+        const dispinfolist: BSPDispInfo[] = [];
+        for (let idx = 0x00; idx < dispinfo.byteLength; idx += 0xB0) {
+            const startPosX = dispinfo.getFloat32(idx + 0x00, true);
+            const startPosY = dispinfo.getFloat32(idx + 0x04, true);
+            const startPosZ = dispinfo.getFloat32(idx + 0x08, true);
+            const startPos = vec3.fromValues(startPosX, startPosY, startPosZ);
+
+            const m_iDispVertStart = dispinfo.getUint32(idx + 0x0C, true);
+            const m_iDispTriStart = dispinfo.getUint32(idx + 0x10, true);
+            const power = dispinfo.getUint32(idx + 0x14, true);
+            const minTess = dispinfo.getUint32(idx + 0x18, true);
+            const smoothingAngle = dispinfo.getFloat32(idx + 0x1C, true);
+            const contents = dispinfo.getUint32(idx + 0x20, true);
+            const mapFace = dispinfo.getUint16(idx + 0x24, true);
+            const m_iLightmapAlphaStart = dispinfo.getUint32(idx + 0x26, true);
+            const m_iLightmapSamplePositionStart = dispinfo.getUint32(idx + 0x2A, true);
+
+            // neighbor rules
+            // allowed verts
+
+            // compute for easy access
+            const sideLength = (1 << power) + 1;
+            const vertexCount = sideLength * sideLength;
+
+            dispinfolist.push({ startPos, dispVertStart: m_iDispVertStart, power, sideLength, vertexCount });
+        }
+
         const faceCount = faces.byteLength / 0x38;
         const primindices = getLumpData(LumpType.PRIMINDICES).createTypedArray(Uint16Array);
         const primitives = getLumpData(LumpType.PRIMITIVES).createDataView();
@@ -219,21 +258,30 @@ export class BSPFile {
         for (let i = 0; i < faceCount; i++) {
             const idx = i * 0x38;
             const numedges = faces.getUint16(idx + 0x08, true);
-            vertCount += numedges;
+            const dispinfo = faces.getInt16(idx + 0x0C, true);
 
-            const m_NumPrims = faces.getUint16(idx + 0x30, true);
-            const firstPrimID = faces.getUint16(idx + 0x32, true);
-            if (m_NumPrims !== 0) {
-                const primOffs = firstPrimID * 0x0A;
-                const primIndexCount = primitives.getUint16(primOffs + 0x04, true);
-                indexCount += primIndexCount;
+            if (dispinfo >= 0) {
+                const disp = dispinfolist[dispinfo];
+                vertCount += disp.vertexCount;
+
+                indexCount += ((disp.sideLength - 1) ** 2) * 6;
             } else {
-                indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
+                vertCount += numedges;
+
+                const m_NumPrims = faces.getUint16(idx + 0x30, true);
+                const firstPrimID = faces.getUint16(idx + 0x32, true);
+                if (m_NumPrims !== 0) {
+                    const primOffs = firstPrimID * 0x0A;
+                    const primIndexCount = primitives.getUint16(primOffs + 0x04, true);
+                    indexCount += primIndexCount;
+                } else {
+                    indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
+                }
             }
         }
 
-        // 3 pos, 3 normal, 4 tangent, 4 uv
-        const vertexSize = (3 + 3 + 4 + 4);
+        // 3 pos, 4 normal, 4 tangent, 4 uv
+        const vertexSize = (3+4+4+4);
         const vertexData = new Float32Array(vertCount * vertexSize);
         assert(vertCount < 0xFFFF);
         const indexData = new Uint16Array(indexCount);
@@ -242,6 +290,7 @@ export class BSPFile {
         const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);
         const vertnormals = getLumpData(LumpType.VERTNORMALS).createTypedArray(Float32Array);
         const vertnormalindices = getLumpData(LumpType.VERTNORMALINDICES).createTypedArray(Uint16Array);
+        const disp_verts = getLumpData(LumpType.DISP_VERTS).createTypedArray(Float32Array);
         const lighting = getLumpData(LumpType.LIGHTING, 1);
 
         const scratchVec2 = vec2.create();
@@ -250,6 +299,7 @@ export class BSPFile {
         const scratchTangentT = vec3.create();
         const scratchTangentS = vec3.create();
 
+        // now build buffers
         let dstOffs = 0;
         let dstOffsIndex = 0;
         let dstIndexBase = 0;
@@ -318,80 +368,194 @@ export class BSPFile {
 
             const center = vec3.create();
 
-            for (let j = 0; j < numedges; j++) {
-                const idx = firstedge + j;
+            // vertex data
+            if (dispinfo >= 0) {
+                // Build displacement data.
+                const disp = dispinfolist[dispinfo];
 
-                // Position
-                const vertIndex = vertindices[idx];
-                vertexData[dstOffs++] = scratchPosition[0] = vertexes[vertIndex * 3 + 0];
-                vertexData[dstOffs++] = scratchPosition[1] = vertexes[vertIndex * 3 + 1];
-                vertexData[dstOffs++] = scratchPosition[2] = vertexes[vertIndex * 3 + 2];
-                vec3.scaleAndAdd(center, center, scratchPosition, 1/numedges);
+                assert(numedges === 4);
 
-                // Normal
-                const normIndex = vertnormalindices[vertnormBase + j];
-                vertexData[dstOffs++] = scratchNormal[0] = vertnormals[normIndex * 3 + 0];
-                vertexData[dstOffs++] = scratchNormal[1] = vertnormals[normIndex * 3 + 1];
-                vertexData[dstOffs++] = scratchNormal[2] = vertnormals[normIndex * 3 + 2];
+                // Load the four corner vertices.
+                let corners: vec3[] = [];
+                let startIndex = -1;
+                for (let j = 0; j < 4; j++) {
+                    const vertIndex = vertindices[firstedge + j];
+                    const corner = vec3.fromValues(vertexes[vertIndex * 3 + 0], vertexes[vertIndex * 3 + 1], vertexes[vertIndex * 3 + 2]);
+                    corners.push(corner);
+                    if (vec3.dist(corner, disp.startPos) < 1.0)
+                        startIndex = j;
+                }
+                assert(startIndex >= 0);
 
-                // Compute Tangent S vector
-                // Tangent S = Normal x Texture T Mapping
-                vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
-                vertexData[dstOffs++] = scratchTangentS[0];
-                vertexData[dstOffs++] = scratchTangentS[1];
-                vertexData[dstOffs++] = scratchTangentS[2];
-                vertexData[dstOffs++] = tangentSSign;
-                // Tangent T = Tangent S x Normal. Done in shader.
+                // Compute our base normal.
+                vec3.sub(scratchPosition, corners[1], corners[0]);
+                vec3.normalize(scratchPosition, scratchPosition);
+                vec3.sub(scratchNormal, corners[3], corners[0]);
+                vec3.normalize(scratchNormal, scratchNormal);
+                const baseNormal = vec3.create();
+                vec3.cross(baseNormal, scratchNormal, scratchPosition);
 
-                // Texture UV
-                calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);
-                scratchVec2[0] /= tex.width;
-                scratchVec2[1] /= tex.height;
-                vertexData[dstOffs++] = scratchVec2[0];
-                vertexData[dstOffs++] = scratchVec2[1];
+                // Rotate vectors so start pos corner is first
+                if (startIndex !== 0)
+                    corners = corners.slice(startIndex).concat(corners.slice(0, startIndex));
 
-                // Lightmap UV
-                if (tex.flags & TexinfoFlags.NOLIGHT) {
-                    vec2.set(scratchVec2, 0.5, 0.5);
-                } else {
-                    calcTexCoord(scratchVec2, scratchPosition, tex.lightmapMapping);
-                    scratchVec2[0] += 0.5 - m_LightmapTextureMinsInLuxels[0];
-                    scratchVec2[1] += 0.5 - m_LightmapTextureMinsInLuxels[1];
+                // Build our vertex grid.
+                const x0 = vec3.create(), x1 = vec3.create();
 
-                    // TODO(jstpierre): Context scale?
+                for (let y = 0; y < disp.sideLength; y++) {
+                    const ty = y / (disp.sideLength - 1);
+                    vec3.lerp(x0, corners[0], corners[1], ty);
+                    vec3.lerp(x1, corners[3], corners[2], ty);
+
+                    for (let x = 0; x < disp.sideLength; x++) {
+                        const tx = x / (disp.sideLength - 1);
+
+                        // Displacement normal vertex.
+                        const dvidx = disp.dispVertStart + (y * disp.sideLength) + x;
+                        const dvx = disp_verts[dvidx * 5 + 0];
+                        const dvy = disp_verts[dvidx * 5 + 1];
+                        const dvz = disp_verts[dvidx * 5 + 2];
+                        const dvdist = disp_verts[dvidx * 5 + 3];
+                        const dvalpha = disp_verts[dvidx * 5 + 4];
+
+                        vec3.lerp(scratchPosition, x0, x1, tx);
+
+                        // Position
+                        vertexData[dstOffs++] = scratchPosition[0] + (dvx * dvdist);
+                        vertexData[dstOffs++] = scratchPosition[1] + (dvy * dvdist);
+                        vertexData[dstOffs++] = scratchPosition[2] + (dvz * dvdist);
+
+                        // Normal
+                        // TODO(jstpierre)
+                        vertexData[dstOffs++] = scratchNormal[0] = baseNormal[0];
+                        vertexData[dstOffs++] = scratchNormal[1] = baseNormal[1];
+                        vertexData[dstOffs++] = scratchNormal[2] = baseNormal[2];
+                        vertexData[dstOffs++] = dvalpha / 255.0;
+
+                        // Tangent
+                        vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
+                        vertexData[dstOffs++] = scratchTangentS[0];
+                        vertexData[dstOffs++] = scratchTangentS[1];
+                        vertexData[dstOffs++] = scratchTangentS[2];
+                        vertexData[dstOffs++] = tangentSSign;
+
+                        // Texture UV
+                        calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);
+                        scratchVec2[0] /= tex.width;
+                        scratchVec2[1] /= tex.height;
+                        vertexData[dstOffs++] = scratchVec2[0];
+                        vertexData[dstOffs++] = scratchVec2[1];
+
+                        // Lightmap UV
+                        /*
+                        if (tex.flags & TexinfoFlags.NOLIGHT) {
+                            vec2.set(scratchVec2, 0.5, 0.5);
+                        } else {
+                            calcTexCoord(scratchVec2, scratchPosition, tex.lightmapMapping);
+                            scratchVec2[0] += m_LightmapTextureMinsInLuxels[0];
+                            scratchVec2[1] += m_LightmapTextureMinsInLuxels[1];
+                        }
+                        */
+                        // Source seems to just have lightmaps in surface space, and ignore the mapping. (!!!)
+                        scratchVec2[0] = (tx * m_LightmapTextureSizeInLuxels[0]) + 0.5;
+                        scratchVec2[1] = (ty * m_LightmapTextureSizeInLuxels[1]) + 0.5;
+
+                        vertexData[dstOffs++] = scratchVec2[0];
+                        vertexData[dstOffs++] = scratchVec2[1];
+                    }
                 }
 
-                vertexData[dstOffs++] = scratchVec2[0];
-                vertexData[dstOffs++] = scratchVec2[1];
-            }
-
-            const count = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
-            if (m_NumPrims !== 0) {
-                const primOffs = firstPrimID * 0x0A;
-                const primType = primitives.getUint8(primOffs + 0x00);
-                const primFirstIndex = primitives.getUint16(primOffs + 0x02, true);
-                const primIndexCount = primitives.getUint16(primOffs + 0x04, true);
-                const primFirstVert = primitives.getUint16(primOffs + 0x06, true);
-                const primVertCount = primitives.getUint16(primOffs + 0x08, true);
-                if (primVertCount !== 0) {
-                    // Dynamic mesh. Skip for now.
-                    continue;
+                let m = 0;
+                for (let y = 0; y < disp.sideLength - 1; y++) {
+                    for (let x = 0; x < disp.sideLength - 1; x++) {
+                        const base = dstIndexBase + y * disp.sideLength + x;
+                        indexData[dstOffsIndex + m++] = base;
+                        indexData[dstOffsIndex + m++] = base + disp.sideLength;
+                        indexData[dstOffsIndex + m++] = base + disp.sideLength + 1;
+                        indexData[dstOffsIndex + m++] = base;
+                        indexData[dstOffsIndex + m++] = base + disp.sideLength + 1;
+                        indexData[dstOffsIndex + m++] = base + 1;
+                    }
                 }
 
-                // We should be in static mode, so we should have 1 prim maximum.
-                assert(m_NumPrims === 1);
-                assert(primIndexCount === count);
-                assert(primType === 0x00 /* PRIM_TRILIST */);
-
-                for (let k = 0; k < count; k++)
-                    indexData[dstOffsIndex + k] = dstIndexBase + primindices[primFirstIndex + k];
+                assert(m === ((disp.sideLength - 1) ** 2) * 6);
+                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: m, center, lighting: surfaceLighting, dispinfo });
+                dstOffsIndex += m;
+                dstIndexBase += disp.vertexCount;
             } else {
-                convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
-            }
+                for (let j = 0; j < numedges; j++) {
+                    // Position
+                    const vertIndex = vertindices[firstedge + j];
+                    vertexData[dstOffs++] = scratchPosition[0] = vertexes[vertIndex * 3 + 0];
+                    vertexData[dstOffs++] = scratchPosition[1] = vertexes[vertIndex * 3 + 1];
+                    vertexData[dstOffs++] = scratchPosition[2] = vertexes[vertIndex * 3 + 2];
+                    vec3.scaleAndAdd(center, center, scratchPosition, 1/numedges);
 
-            this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: count, center, lighting: surfaceLighting });
-            dstOffsIndex += count;
-            dstIndexBase += numedges;
+                    // Normal
+                    const normIndex = vertnormalindices[vertnormBase + j];
+                    vertexData[dstOffs++] = scratchNormal[0] = vertnormals[normIndex * 3 + 0];
+                    vertexData[dstOffs++] = scratchNormal[1] = vertnormals[normIndex * 3 + 1];
+                    vertexData[dstOffs++] = scratchNormal[2] = vertnormals[normIndex * 3 + 2];
+                    vertexData[dstOffs++] = 1.0; // Vertex Alpha (Unused)
+
+                    // Compute Tangent S vector
+                    // Tangent S = Normal x Texture T Mapping
+                    vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
+                    vertexData[dstOffs++] = scratchTangentS[0];
+                    vertexData[dstOffs++] = scratchTangentS[1];
+                    vertexData[dstOffs++] = scratchTangentS[2];
+                    vertexData[dstOffs++] = tangentSSign;
+                    // Tangent T = Tangent S x Normal. Done in shader.
+
+                    // Texture UV
+                    calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);
+                    scratchVec2[0] /= tex.width;
+                    scratchVec2[1] /= tex.height;
+                    vertexData[dstOffs++] = scratchVec2[0];
+                    vertexData[dstOffs++] = scratchVec2[1];
+
+                    // Lightmap UV
+                    if (tex.flags & TexinfoFlags.NOLIGHT) {
+                        vec2.set(scratchVec2, 0.5, 0.5);
+                    } else {
+                        calcTexCoord(scratchVec2, scratchPosition, tex.lightmapMapping);
+                        scratchVec2[0] += 0.5 - m_LightmapTextureMinsInLuxels[0];
+                        scratchVec2[1] += 0.5 - m_LightmapTextureMinsInLuxels[1];
+                    }
+
+                    vertexData[dstOffs++] = scratchVec2[0];
+                    vertexData[dstOffs++] = scratchVec2[1];
+                }
+
+                // index buffer
+                const indexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
+                if (m_NumPrims !== 0) {
+                    const primOffs = firstPrimID * 0x0A;
+                    const primType = primitives.getUint8(primOffs + 0x00);
+                    const primFirstIndex = primitives.getUint16(primOffs + 0x02, true);
+                    const primIndexCount = primitives.getUint16(primOffs + 0x04, true);
+                    const primFirstVert = primitives.getUint16(primOffs + 0x06, true);
+                    const primVertCount = primitives.getUint16(primOffs + 0x08, true);
+                    if (primVertCount !== 0) {
+                        // Dynamic mesh. Skip for now.
+                        continue;
+                    }
+
+                    // We should be in static mode, so we should have 1 prim maximum.
+                    assert(m_NumPrims === 1);
+                    assert(primIndexCount === indexCount);
+                    assert(primType === 0x00 /* PRIM_TRILIST */);
+
+                    for (let k = 0; k < indexCount; k++)
+                        indexData[dstOffsIndex + k] = dstIndexBase + primindices[primFirstIndex + k];
+                } else {
+                    convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
+                }
+
+                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: indexCount, center, lighting: surfaceLighting, dispinfo });
+                dstOffsIndex += indexCount;
+                dstIndexBase += numedges;
+            }
         }
 
         this.vertexData = vertexData;

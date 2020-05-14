@@ -235,12 +235,16 @@ class BSPModelRenderer {
     public modelMatrix = mat4.create();
     public entity: BaseEntity | null = null;
     public surfaces: BSPSurfaceRenderer[] = [];
+    public displacementSurfaces: BSPSurfaceRenderer[] = [];
 
     constructor(renderContext: SourceRenderContext, public model: Model, public bsp: BSPFile) {
         for (let j = 0; j < model.surfaceCount; j++) {
             const surface = new BSPSurfaceRenderer(this.bsp.surfaces[this.model.surfaceStart + j]);
             this.bindMaterial(renderContext, surface);
             this.surfaces.push(surface);
+
+            if (surface.surface.dispinfo >= 0)
+                this.displacementSurfaces.push(surface);
         }
     }
 
@@ -324,6 +328,11 @@ class BSPModelRenderer {
             if (!viewerInput.camera.frustum.contains(scratchAABB))
                 return;
         }
+
+        // Render all displacement surfaces.
+        // TODO(jstpierre): Move this to the BSP leaves
+        for (let i = 0; i < this.displacementSurfaces.length; i++)
+            this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, viewMatrixZUp, this.modelMatrix);
 
         this.prepareToRenderBSP(this.model.headnode, renderContext, renderInstManager, viewerInput, viewMatrixZUp, scratchMatrixCull, area);
     }
@@ -443,12 +452,12 @@ class BSPRenderer {
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: BaseMaterialProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
-            { location: BaseMaterialProgram.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGB, },
-            { location: BaseMaterialProgram.a_TangentS, bufferIndex: 0, bufferByteOffset: 6*0x04, format: GfxFormat.F32_RGBA, },
-            { location: BaseMaterialProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 10*0x04, format: GfxFormat.F32_RGBA, },
+            { location: BaseMaterialProgram.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
+            { location: BaseMaterialProgram.a_TangentS, bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
+            { location: BaseMaterialProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: (3+3+4+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: (3+4+4+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });

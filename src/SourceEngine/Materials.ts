@@ -49,8 +49,8 @@ layout(row_major, std140) uniform ub_ObjectParams {
 #ifdef USE_ENVMAP
     vec4 u_EnvmapTint;
 #endif
-#ifdef USE_BASE2TEXTURE
-    vec4 u_Base2TextureScaleBias;
+#ifdef USE_TEXTURE2
+    vec4 u_Texture2ScaleBias;
 #endif
     vec4 u_ModulationColor;
     vec4 u_Misc[1];
@@ -66,7 +66,7 @@ varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
 // Bumpmap
 varying vec4 v_TexCoord2;
-varying vec3 v_PositionWorld;
+varying vec4 v_PositionWorld;
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -78,7 +78,7 @@ varying vec3 v_TangentSpaceBasis1;
 // Just need the vertex normal component.
 varying vec3 v_TangentSpaceBasis2;
 
-// Base, Detail, Bumpmap, Lightmap, Envmap Mask, Base 2
+// Base, Detail, Bumpmap, Lightmap, Envmap Mask, Texture2
 uniform sampler2D u_Texture[6];
 
 // Cube Envmap
@@ -86,7 +86,7 @@ uniform samplerCube u_TextureCube[1];
 
 #ifdef VERT
 layout(location = ${BaseMaterialProgram.a_Position}) attribute vec3 a_Position;
-layout(location = ${BaseMaterialProgram.a_Normal}) attribute vec3 a_Normal;
+layout(location = ${BaseMaterialProgram.a_Normal}) attribute vec4 a_Normal;
 layout(location = ${BaseMaterialProgram.a_TangentS}) attribute vec4 a_TangentS;
 layout(location = ${BaseMaterialProgram.a_TexCoord}) attribute vec4 a_TexCoord;
 
@@ -98,8 +98,13 @@ void mainVS() {
     vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
-    v_PositionWorld = t_PositionWorld;
-    vec3 t_NormalWorld = a_Normal;
+    v_PositionWorld.xyz = t_PositionWorld;
+    vec3 t_NormalWorld = a_Normal.xyz;
+
+#ifdef USE_BASETEXTURE2
+    // We sneak through "vertex alpha" through v_PositionWorld.w
+    v_PositionWorld.w = a_Normal.w;
+#endif
 
 #ifdef HAS_FULL_TANGENTSPACE
     vec3 t_TangentSWorld = a_TangentS.xyz;
@@ -124,8 +129,8 @@ void mainVS() {
 #ifdef USE_BUMPMAP
     v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
-#ifdef USE_BASE2TEXTURE
-    v_TexCoord2.zw = CalcScaleBias(a_TexCoord.xy, u_Base2TextureScaleBias);
+#ifdef USE_TEXTURE2
+    v_TexCoord2.zw = CalcScaleBias(a_TexCoord.xy, u_Texture2ScaleBias);
 #endif
 }
 #endif
@@ -154,17 +159,23 @@ const vec3 g_RNBasis2 = vec3(-0.4082482904638631, -0.7071067811865475, 0.5773502
 void mainPS() {
     vec4 t_BaseTexture = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy));
 
-    vec4 t_Albedo;
+    vec4 t_Albedo, t_BlendedAlpha;
 #ifdef USE_DETAIL
-    vec4 t_DetailTexture = texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw)).rgba;
+    vec4 t_DetailTexture = texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw));
     t_Albedo = TextureCombine(t_BaseTexture, t_DetailTexture, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
 #else
     t_Albedo = t_BaseTexture;
 #endif
 
-#ifdef USE_BASE2TEXTURE
-    vec4 t_Base2Texture = texture(SAMPLER_2D(u_Texture[5], v_TexCoord2.zw)).rgba;
-    t_Albedo *= t_Base2Texture;
+#ifdef USE_BASETEXTURE2
+    // Blend in basetexture2 using vertex alpha.
+    vec4 t_BaseTexture2 = texture(SAMPLER_2D(u_Texture[5]), v_TexCoord0.xy);
+    t_Albedo = mix(t_Albedo, t_BaseTexture2, v_PositionWorld.w);
+#endif
+
+#ifdef USE_TEXTURE2
+    vec4 t_Texture2 = texture(SAMPLER_2D(u_Texture[5], v_TexCoord2.zw));
+    t_Albedo *= t_Texture2;
 #endif
 
 #ifdef USE_MODULATIONCOLOR_COLOR
@@ -231,7 +242,7 @@ vec3 t_DiffuseLighting;
 #endif
 
     vec3 t_SpecularLighting = vec3(0.0);
-    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld;
+    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
     vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
     t_SpecularLighting += texture(u_TextureCube[0], t_Reflection).rgb;
     t_SpecularLighting *= t_SpecularFactor;
@@ -463,8 +474,9 @@ class GenericMaterial implements BaseMaterial {
     private loaded: boolean = false;
     private wantsDetail = false;
     private wantsBumpmap = false;
-    private wantsBase2Texture = false;
     private wantsEnvmapMask = false;
+    private wantsTexture2 = false;
+    private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
 
     private program: BaseMaterialProgram;
@@ -495,18 +507,6 @@ class GenericMaterial implements BaseMaterial {
 
     private paramGetVTF(name: string): VTF | null {
         return this.paramGetTexture(name).texture;
-    }
-
-    protected async fetchResources(materialCache: MaterialCache) {
-        await Promise.all([
-            this.paramGetTexture('$basetexture').fetch(materialCache),
-            this.paramGetTexture('$detail').fetch(materialCache),
-            this.paramGetTexture('$bumpmap').fetch(materialCache),
-            this.paramGetTexture('$envmapmask').fetch(materialCache),
-            this.paramGetTexture('$texture2').fetch(materialCache),
-            this.paramGetTexture('$envmap').fetch(materialCache),
-        ]);
-        this.loaded = true;
     }
 
     private paramGetBoolean(name: string): boolean {
@@ -583,10 +583,26 @@ class GenericMaterial implements BaseMaterial {
         p['$texture2transform']            = new ParameterMatrix();
         p['$frame2']                       = new ParameterNumber(0.0);
 
+        // World Vertex Transition
+        p['$basetexture2']                 = new ParameterTexture();
+
         setupParametersFromVMT(p, this.vmt);
 
         if (this.vmt.proxies !== undefined)
             this.proxyDriver = renderContext.materialProxySystem.createProxyDriver(this, this.vmt.proxies);
+    }
+
+    protected async fetchResources(materialCache: MaterialCache) {
+        await Promise.all([
+            this.paramGetTexture('$basetexture').fetch(materialCache),
+            this.paramGetTexture('$detail').fetch(materialCache),
+            this.paramGetTexture('$bumpmap').fetch(materialCache),
+            this.paramGetTexture('$envmapmask').fetch(materialCache),
+            this.paramGetTexture('$texture2').fetch(materialCache),
+            this.paramGetTexture('$basetexture2').fetch(materialCache),
+            this.paramGetTexture('$envmap').fetch(materialCache),
+        ]);
+        this.loaded = true;
     }
 
     protected initStatic() {
@@ -621,8 +637,8 @@ class GenericMaterial implements BaseMaterial {
         }
 
         if (this.paramGetVTF('$texture2') !== null) {
-            this.wantsBase2Texture = true;
-            this.program.defines.set('USE_BASE2TEXTURE', '1');
+            this.wantsTexture2 = true;
+            this.program.defines.set('USE_TEXTURE2', '1');
         }
 
         if (this.paramGetVTF('$envmap') !== null) {
@@ -634,10 +650,14 @@ class GenericMaterial implements BaseMaterial {
         this.program.defines.set('USE_MODULATIONCOLOR_COLOR', '1');
         this.program.defines.set('USE_MODULATIONCOLOR_ALPHA', '0');
 
-        if (shaderType === 'lightmappedgeneric') {
-            // Use lightmap. We don't support bump-mapped lighting yet.
-            this.program.defines.set('USE_LIGHTMAP', '1');
+        if (shaderType === 'lightmappedgeneric' || shaderType === 'worldvertextransition') {
             this.wantsLightmap = true;
+            this.program.defines.set('USE_LIGHTMAP', '1');
+        }
+
+        if (shaderType === 'worldvertextransition') {
+            this.wantsBaseTexture2 = true;
+            this.program.defines.set('USE_BASETEXTURE2', '1');
         }
 
         if (this.paramGetBoolean('$basealphaenvmapmask'))
@@ -706,7 +726,10 @@ class GenericMaterial implements BaseMaterial {
         this.paramGetTexture('$bumpmap').fillTextureMapping(this.textureMapping[2], this.paramGetInt('$bumpframe'));
         // Lightmap is supplied by entity.
         this.paramGetTexture('$envmapmask').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapmaskframe'));
-        this.paramGetTexture('$texture2').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
+        if (this.wantsTexture2)
+            this.paramGetTexture('$texture2').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
+        if (this.wantsBaseTexture2)
+            this.paramGetTexture('$basetexture2').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
         this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[6], this.paramGetInt('$envmapframe'));
     }
 
@@ -764,7 +787,7 @@ class GenericMaterial implements BaseMaterial {
         if (this.wantsEnvmap)
             offs += this.paramFillColor(d, offs, '$envmaptint');
 
-        if (this.wantsBase2Texture)
+        if (this.wantsTexture2)
             offs += this.paramFillScaleBias(d, offs, '$texture2transform');
 
         // Compute modulation color.
