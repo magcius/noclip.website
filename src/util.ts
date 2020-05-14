@@ -48,10 +48,10 @@ export function alignNonPowerOfTwo(n: number, multiple: number): number {
     return (((n + multiple - 1) / multiple) | 0) * multiple;
 }
 
-export function nArray<T>(n: number, c: () => T): T[] {
+export function nArray<T>(n: number, c: (i: number) => T): T[] {
     const d = new Array(n);
     for (let i = 0; i < n; i++)
-        d[i] = c();
+        d[i] = c(i);
     return d;
 }
 

@@ -16,7 +16,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController } from '../Camera';
 import { hexzero, assertExists } from '../util';
-import { DataFetcher, AbortedCallback, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT } from '../MathHelpers';
 import { vec3, mat4, vec4 } from 'gl-matrix';
 import { parseAnimationFile } from '../BanjoKazooie/scenes';
@@ -197,7 +197,7 @@ class ModelCache {
     }
 
     private async requestArchiveInternal(path: string, abortedCallback: AbortedCallback): Promise<ActorArchive | null> {
-        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${path}`, DataFetcherFlags.ALLOW_404, abortedCallback);
+        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${path}`, { allow404: true, abortedCallback });
 
         if (buffer.byteLength === 0) {
             // console.warn(`Could not fetch archive ${path}`);

@@ -16,6 +16,9 @@ export const enum FormatTypeFlags {
     BC2,
     BC3,
 
+    // Special-case packed texture formats.
+    U16_PACKED_5551 = 0x61,
+
     // Depth/stencil texture formats.
     D24 = 0x81,
     D32,
@@ -61,10 +64,10 @@ export enum GfxFormat {
     U8_RG_NORM    = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RG,   FormatFlags.NORMALIZED),
     U8_RGB        = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGB,  FormatFlags.NONE),
     U8_RGB_NORM   = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGB,  FormatFlags.NORMALIZED),
-    U8_RGB_SRGB   = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGB,  FormatFlags.SRGB),
+    U8_RGB_SRGB   = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGB,  FormatFlags.SRGB | FormatFlags.NORMALIZED),
     U8_RGBA       = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     U8_RGBA_NORM  = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
-    U8_RGBA_SRGB  = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
+    U8_RGBA_SRGB  = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.SRGB | FormatFlags.NORMALIZED),
     U16_R         = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_R,    FormatFlags.NONE),
     U16_R_NORM    = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
     U16_RG_NORM   = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_RG,   FormatFlags.NORMALIZED),
@@ -74,7 +77,7 @@ export enum GfxFormat {
     U32_RG        = makeFormat(FormatTypeFlags.U32, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
     S8_R          = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NONE),
     S8_R_NORM     = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
-    S8_RG_NORM    = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
+    S8_RG_NORM    = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_RG,   FormatFlags.NORMALIZED),
     S8_RGB_NORM   = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_RGB,  FormatFlags.NORMALIZED),
     S8_RGBA_NORM  = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
     S16_R         = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_R,    FormatFlags.NONE),
@@ -85,6 +88,9 @@ export enum GfxFormat {
     S16_RGBA_NORM = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
     S32_R         = makeFormat(FormatTypeFlags.S32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
 
+    // Packed texture formats.
+    U16_RGBA_5551 = makeFormat(FormatTypeFlags.U16_PACKED_5551, FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
+    
     // Compressed
     BC1           = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     BC1_SRGB      = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),

@@ -10,7 +10,6 @@ import * as Viewer from '../viewer';
 import { RoomRenderer, CtrTextureHolder, CmbInstance } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero } from '../util';
-import { DataFetcherFlags } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { OoT3DRenderer, ModelCache } from './oot3d_scenes';
 import { TransparentBlack } from '../Color';
@@ -876,7 +875,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
 
         const [zarBuffer, zsiBuffer] = await Promise.all([
-            dataFetcher.fetchData(path_zar, DataFetcherFlags.ALLOW_404),
+            dataFetcher.fetchData(path_zar, { allow404: true }),
             dataFetcher.fetchData(path_info_zsi),
         ]);
 

@@ -406,7 +406,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         world.spawnObjectsFromRomlist(romlist);
         
-        window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => {
+        (window.main as any).lookupObject = (objType: number, skipObjindex: boolean = false) => {
             const obj = world.objectMan.getObjectType(objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };

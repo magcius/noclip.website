@@ -784,6 +784,8 @@ void main() {
             return WebGL2RenderingContext.R16UI;
         case GfxFormat.U32_R:
             return WebGL2RenderingContext.R32UI;
+        case GfxFormat.U16_RGBA_5551:
+            return WebGL2RenderingContext.RGB5_A1;
         case GfxFormat.U8_R_NORM:
             return WebGL2RenderingContext.R8;
         case GfxFormat.U8_RG_NORM:
@@ -799,6 +801,10 @@ void main() {
             return WebGL2RenderingContext.SRGB8_ALPHA8;
         case GfxFormat.S8_RGBA_NORM:
             return WebGL2RenderingContext.RGBA8_SNORM;
+        case GfxFormat.S8_RG_NORM:
+            return WebGL2RenderingContext.RG8_SNORM;
+        case GfxFormat.U16_RGBA_5551:
+            return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
         case GfxFormat.BC1:
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case GfxFormat.BC1_SRGB:
@@ -870,7 +876,12 @@ void main() {
             return WebGL2RenderingContext.UNSIGNED_SHORT;
         case FormatTypeFlags.U32:
             return WebGL2RenderingContext.UNSIGNED_INT;
+        case FormatTypeFlags.S8:
+            return WebGL2RenderingContext.BYTE;
         case FormatTypeFlags.F32:
+            return WebGL2RenderingContext.FLOAT;
+        case FormatTypeFlags.U16_PACKED_5551:
+            return WebGL2RenderingContext.UNSIGNED_SHORT_5_5_5_1;
         case FormatTypeFlags.D32:
             return WebGL2RenderingContext.FLOAT;
         case FormatTypeFlags.D24:
@@ -878,8 +889,6 @@ void main() {
             return WebGL2RenderingContext.UNSIGNED_INT_24_8;
         case FormatTypeFlags.D32S8:
             return WebGL2RenderingContext.FLOAT_32_UNSIGNED_INT_24_8_REV;
-        case FormatTypeFlags.S8:
-            return WebGL2RenderingContext.BYTE;
         default:
             throw "whoops";
         }
@@ -898,7 +907,7 @@ void main() {
     }
 
     private clampNumLevels(descriptor: GfxTextureDescriptor): number {
-        if (descriptor.dimension === GfxTextureDimension.n2D_ARRAY && descriptor.depth > 1) {
+        if (descriptor.dimension === GfxTextureDimension.n2DArray && descriptor.depth > 1) {
             const typeFlags: FormatTypeFlags = getFormatTypeFlags(descriptor.pixelFormat);
             if (typeFlags === FormatTypeFlags.BC1) {
                 // Chrome/ANGLE seems to have issues with compressed miplevels of size 1/2, so clamp before they arrive...
@@ -1006,10 +1015,15 @@ void main() {
             gl.bindTexture(gl_target, gl_texture);
             gl.texStorage2D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height);
             assert(descriptor.depth === 1);
-        } else if (descriptor.dimension === GfxTextureDimension.n2D_ARRAY) {
+        } else if (descriptor.dimension === GfxTextureDimension.n2DArray) {
             gl_target = WebGL2RenderingContext.TEXTURE_2D_ARRAY;
             gl.bindTexture(gl_target, gl_texture);
             gl.texStorage3D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height, descriptor.depth);
+        } else if (descriptor.dimension === GfxTextureDimension.Cube) {
+            gl_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP;
+            gl.bindTexture(gl_target, gl_texture);
+            gl.texStorage2D(gl_target, numLevels, internalformat, descriptor.width, descriptor.height);
+            assert(descriptor.depth === 6);
         } else {
             throw "whoops";
         }
@@ -1534,14 +1548,16 @@ void main() {
 
                 const gl = this.gl;
                 const { gl_texture, gl_target, pixelFormat, width, height, depth, numLevels } = texture as GfxTextureP_GL;
+                const isCompressed = this.isTextureFormatCompressed(pixelFormat);
+                const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
+                const isCube = gl_target === WebGL2RenderingContext.TEXTURE_CUBE_MAP;
+
                 this._setActiveTexture(gl.TEXTURE0);
                 this._currentTextures[0] = null;
                 gl.bindTexture(gl_target, gl_texture);
                 let w = width, h = height, d = depth;
                 const maxMipLevel = Math.min(firstMipLevelToUpload + numMipLevelsToUpload, numLevels);
 
-                const isCompressed = this.isTextureFormatCompressed(pixelFormat);
-                const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
                 const gl_format = this.translateTextureFormat(pixelFormat);
 
                 for (let i = 0; i < maxMipLevel; i++) {
@@ -1553,6 +1569,17 @@ void main() {
                             const imageSize = levelData.byteLength / depth;
                             for (let z = 0; z < depth; z++) {
                                 gl.compressedTexSubImage3D(gl_target, i, 0, 0, z, w, h, 1, gl_format, levelData, z * imageSize, imageSize);
+                            }
+                        } else if (isCube) {
+                            const imageSize = levelData.byteLength / depth;
+                            for (let z = 0; z < depth; z++) {
+                                const face_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X + (z % 6);
+                                if (isCompressed) {
+                                    gl.compressedTexSubImage2D(face_target, i, 0, 0, w, h, gl_format, levelData, z * imageSize, imageSize);
+                                } else {
+                                    const gl_type = this.translateTextureType(pixelFormat);
+                                    gl.texSubImage2D(face_target, i, 0, 0, w, h, gl_format, gl_type, levelData, z * imageSize);
+                                }
                             }
                         } else if (is3D) {
                             if (isCompressed) {

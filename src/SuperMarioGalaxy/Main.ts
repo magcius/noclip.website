@@ -2,7 +2,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists, align, nArray, fallback, nullify, spliceBisectRight } from '../util';
-import { DataFetcher, DataFetcherFlags, AbortedCallback } from '../DataFetcher';
+import { DataFetcher, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, computeNormalMatrix, clamp, computeProjectionMatrixFromCuboid } from '../MathHelpers';
 import { Camera, texProjCameraSceneTex } from '../Camera';
 import { SceneContext } from '../SceneBase';
@@ -815,7 +815,7 @@ export class ModelCache {
     }
 
     private async requestArchiveDataInternal(archivePath: string, abortedCallback: AbortedCallback): Promise<RARC.JKRArchive | null> {
-        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`, DataFetcherFlags.ALLOW_404, abortedCallback);
+        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${archivePath}`, { allow404: true, abortedCallback });
 
         if (buffer.byteLength === 0) {
             console.warn(`Could not fetch archive ${archivePath}`);
@@ -861,7 +861,7 @@ export class ModelCache {
     }
 
     private async requestExtraDataInternal(path: string, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
-        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${path}`, DataFetcherFlags.NONE, abortedCallback);
+        const buffer = await this.dataFetcher.fetchData(`${this.pathBase}/${path}`, { abortedCallback });
         this.extraDataCache.set(path, buffer);
         return buffer;
     }

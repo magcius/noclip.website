@@ -3,7 +3,7 @@
 
 import * as Viewer from '../viewer';
 
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
@@ -88,7 +88,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBMD(path: string, dataFetcher: DataFetcher): Promise<BMD0 | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, { allow404: true }).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0)
                 return null;
             return parseNSBMD(buffer);
@@ -96,7 +96,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBTX(path: string, dataFetcher: DataFetcher): Promise<BTX0 | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, { allow404: true }).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0)
                 return null;
             return parseNSBTX(buffer);
@@ -104,7 +104,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBTA(path: string, dataFetcher: DataFetcher): Promise<BTA0 | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, { allow404: true }).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0)
                 return null;
             return parseNSBTA(buffer);
@@ -112,7 +112,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBTP(path: string, dataFetcher: DataFetcher): Promise<BTP0 | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, { allow404: true}).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0)
                 return null;
             return parseNSBTP(buffer);

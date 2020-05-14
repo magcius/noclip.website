@@ -217,7 +217,7 @@ export class Scene implements Viewer.SceneGfx {
         template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
 
         let offs = template.allocateUniformBuffer(IVProgram.ub_SceneParams, 32);
-        const mapped = template.mapUniformBufferF32(offs);
+        const mapped = template.mapUniformBufferF32(IVProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 

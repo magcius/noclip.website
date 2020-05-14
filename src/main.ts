@@ -59,12 +59,13 @@ import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
+import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump, assertExists, assert, fallbackUndefined, magicstr, leftPad } from './util';
+import { assertExists, assert, fallbackUndefined } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { atob, btoa } from './Ascii85';
@@ -78,10 +79,11 @@ import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
-import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
+import { downloadBlob, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
 import { WebXRContext } from './WebXR';
+import { debugJunk } from './DebugJunk';
 
 const sceneGroups = [
     "Wii",
@@ -134,6 +136,7 @@ const sceneGroups = [
     Scenes_Fez.sceneGroup,
     Scenes_GTA.sceneGroup.vc,
     Scenes_GTA.sceneGroup.sa,
+    Scenes_HalfLife2.sceneGroup,
     Scenes_LuigisMansion3D.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
@@ -227,6 +230,9 @@ class Main {
 
     public sceneTimeScale = 1.0;
     public isEmbedMode = false;
+
+    // Link to debugJunk so we can reference it from the DevTools.
+    private debugJunk = debugJunk;
 
     constructor() {
         this.init();
@@ -812,7 +818,8 @@ class Main {
             const tex = viewerTextures[i];
             for (let j = 0; j < tex.surfaces.length; j++) {
                 const filename = `${tex.name}_${j}.png`;
-                promises.push(convertCanvasToPNG(tex.surfaces[j]).then((blob) => blobToArrayBuffer(blob)).then((data) => {
+                promises.push(convertCanvasToPNG(tex.surfaces[j]).then((blob) => blobToArrayBuffer(blob)).then((buf) => {
+                    const data = new ArrayBufferSlice(buf);
                     zipFileEntries.push({ filename, data });
                 }));
             }
@@ -849,7 +856,7 @@ declare var gtag: (command: string, eventName: string, eventParameters: { [key: 
 // Declare a "main" object for easy access.
 declare global {
     interface Window {
-        main: any;
+        main: Main;
     }
 }
 
@@ -858,21 +865,8 @@ window.main = new Main();
 // Debug utilities.
 declare global {
     interface Window {
-        hexdump: any;
-        magicstr: any;
-        downloadBuffer: any;
         debug: any;
         debugObj: any;
         gl: any;
     }
 }
-window.hexdump = hexdump;
-window.magicstr = magicstr;
-window.downloadBuffer = (name: any, buffer: any) => {
-    if (buffer instanceof ArrayBufferSlice)
-        downloadBufferSlice(name, buffer);
-    else if (name.name && name.buffer)
-        window.downloadBuffer(name.name, name.buffer);
-    else if (buffer instanceof ArrayBuffer)
-        downloadBuffer(name, buffer);
-};
