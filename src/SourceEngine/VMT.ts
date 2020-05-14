@@ -2,7 +2,7 @@
 // Valve Material Type
 
 import { assert, assertExists } from "../util";
-import { SourceFileSystem } from "./Scenes_HalfLife2";
+import { SourceFileSystem } from "./Main";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Color, colorFromRGBA } from "../Color";
 

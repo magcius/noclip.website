@@ -4,7 +4,7 @@ import { assert, readString } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGB32Exp, BaseMaterial, BaseMaterialProgram } from "./Materials";
-import { SourceRenderContext, noclipSpaceFromSourceEngineSpace } from "./Scenes_HalfLife2";
+import { SourceRenderContext, noclipSpaceFromSourceEngineSpace } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { transformVec3Mat4w0, computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";

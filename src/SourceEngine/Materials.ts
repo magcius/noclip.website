@@ -9,7 +9,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF } from "./VTF";
-import { SourceRenderContext, SourceFileSystem } from "./Scenes_HalfLife2";
+import { SourceRenderContext, SourceFileSystem } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { Surface, SurfaceLighting } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
@@ -192,11 +192,19 @@ void mainPS() {
 
     vec4 t_FinalColor;
 
-    vec3 t_NormalWorld;
+vec3 t_NormalWorld;
 #ifdef USE_BUMPMAP
     vec4 t_BumpmapSample = texture(SAMPLER_2D(u_Texture[2], v_TexCoord2.xy));
-    vec3 t_BumpmapNormal = t_BumpmapSample.rgb * 2.0 - 1.0;
 
+#ifdef USE_SSBUMP
+    // In SSBUMP, the bumpmap is pre-convolved with the basis. Compute the normal by re-applying our basis.
+    vec3 t_BumpmapNormal = normalize(g_RNBasis0*t_BumpmapSample.x + g_RNBasis1*t_BumpmapSample.y + g_RNBasis2*t_BumpmapSample.z);
+#else
+    // In non-SSBUMP, this is a traditional normal map with signed offsets.
+    vec3 t_BumpmapNormal = t_BumpmapSample.rgb * 2.0 - 1.0;
+#endif
+
+    // Transform from tangent space into world-space.
     t_NormalWorld.x = dot(vec3(v_TangentSpaceBasis0.x, v_TangentSpaceBasis1.x, v_TangentSpaceBasis2.x), t_BumpmapNormal);
     t_NormalWorld.y = dot(vec3(v_TangentSpaceBasis0.y, v_TangentSpaceBasis1.y, v_TangentSpaceBasis2.y), t_BumpmapNormal);
     t_NormalWorld.z = dot(vec3(v_TangentSpaceBasis0.z, v_TangentSpaceBasis1.z, v_TangentSpaceBasis2.z), t_BumpmapNormal);
@@ -205,20 +213,38 @@ void mainPS() {
 #endif
 
 vec3 t_DiffuseLighting;
+
 #ifdef USE_LIGHTMAP
+
 #ifdef USE_DIFFUSE_BUMPMAP
     vec3 t_LightmapColor1 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, u_LightmapOffset * 1.0))).rgb;
     vec3 t_LightmapColor2 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, u_LightmapOffset * 2.0))).rgb;
     vec3 t_LightmapColor3 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, u_LightmapOffset * 3.0))).rgb;
+
     vec3 t_Influence;
-    t_Influence.x = clamp(dot(t_NormalWorld, g_RNBasis0), 0.0, 1.0);
-    t_Influence.y = clamp(dot(t_NormalWorld, g_RNBasis1), 0.0, 1.0);
-    t_Influence.z = clamp(dot(t_NormalWorld, g_RNBasis2), 0.0, 1.0);
+    float t_DiffuseLightingScale;
+#ifdef USE_SSBUMP
+    // SSBUMP precomputes the elements of t_Influence (calculated below) offline.
+    t_Influence = t_BumpmapSample.rgb;
+    t_DiffuseLightingScale = 1.0;
+#else
+    t_Influence.x = clamp(dot(t_BumpmapNormal, g_RNBasis0), 0.0, 1.0);
+    t_Influence.y = clamp(dot(t_BumpmapNormal, g_RNBasis1), 0.0, 1.0);
+    t_Influence.z = clamp(dot(t_BumpmapNormal, g_RNBasis2), 0.0, 1.0);
+
+    // According to https://steamcdn-a.akamaihd.net/apps/valve/2007/SIGGRAPH2007_EfficientSelfShadowedRadiosityNormalMapping.pdf
+    // even without SSBUMP, the engine squares and re-normalizes the results. Not sure why, and why it doesn't match the original
+    // Radiosity Normal Mapping text.
+    t_Influence *= t_Influence;
+    t_DiffuseLightingScale = 1.0 / dot(t_Influence, vec3(1.0));
+#endif
 
     t_DiffuseLighting = vec3(0.0);
     t_DiffuseLighting += t_LightmapColor1 * t_Influence.x;
     t_DiffuseLighting += t_LightmapColor2 * t_Influence.y;
     t_DiffuseLighting += t_LightmapColor3 * t_Influence.z;
+    t_DiffuseLighting *= t_DiffuseLightingScale;
+
 #else
     t_DiffuseLighting = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy)).rgb;
 #endif
@@ -576,6 +602,7 @@ class GenericMaterial implements BaseMaterial {
         // TODO(jstpierre): This default isn't right
         p['$alphatestreference']           = new ParameterNumber(0.4);
         p['$nodiffusebumplighting']        = new ParameterBoolean(false, false);
+        p['$ssbump']                       = new ParameterBoolean(false, false);
 
         // Unlit Two Texture
         // TODO(jstpierre): Break out into a separate class?
@@ -665,6 +692,9 @@ class GenericMaterial implements BaseMaterial {
 
         if (this.paramGetBoolean('$normalmapalphaenvmapmask'))
             this.program.defines.set('USE_NORMALMAP_ALPHA_ENVMAP_MASK', '1');
+
+        if (this.paramGetBoolean('$ssbump'))
+            this.program.defines.set('USE_SSBUMP', '1');
 
         if (this.paramGetBoolean('$alphatest')) {
             this.program.defines.set('USE_ALPHATEST', '1');
