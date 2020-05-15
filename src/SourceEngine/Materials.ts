@@ -470,6 +470,7 @@ ${this.Common}
 
 layout(row_major, std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
+    vec4 u_BaseTextureScaleBias;
 #ifdef USE_DETAIL
     vec4 u_DetailScaleBias;
 #endif
@@ -544,8 +545,7 @@ void mainVS() {
 #endif
     v_TangentSpaceBasis2 = t_NormalWorld;
 
-    // TODO(jstpierre): BaseScale
-    v_TexCoord0.xy = a_TexCoord.xy;
+    v_TexCoord0.xy = CalcScaleBias(a_TexCoord.xy, u_BaseTextureScaleBias);
 #ifdef USE_DETAIL
     v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_DetailScaleBias);
 #endif
@@ -858,6 +858,8 @@ class Material_Generic extends BaseMaterial {
         let offs = renderInst.allocateUniformBuffer(GenericMaterialProgram.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(GenericMaterialProgram.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
+
+        offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
 
         if (this.wantsDetail) {
             scaleBiasSet(scratchVec4, this.paramGetNumber('$detailscale'));
