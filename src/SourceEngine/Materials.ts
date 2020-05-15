@@ -741,7 +741,7 @@ class GenericMaterial implements BaseMaterial {
     private paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
         const m = (this.param[name] as ParameterMatrix).matrix;
         // Make sure there's no rotation. We should definitely handle this eventually, though.
-        assert(m[1] === 0.0 && m[2] === 0.0);
+        // assert(m[1] === 0.0 && m[2] === 0.0);
         const scaleS = m[0];
         const scaleT = m[5];
         const transS = m[12];
@@ -939,19 +939,19 @@ export class LightmapManager {
 }
 
 // Convert from RGBM-esque storage to linear light
-function lightmapUnpackTexelStorage(v: number, exp: number): number {
+export function unpackColorRGB32Exp(v: number, exp: number): number {
     // exp comes in unsigned, sign extend
     exp = (exp << 24) >> 24;
-    const m = Math.pow(2.0, exp) / 255.0;
+    const m = Math.pow(2.0, exp) / 0xFF;
     return v * m;
 }
 
 function lightmapAccumLight(dst: Float32Array, dstOffs: number, src: Uint8Array, srcOffs: number, size: number, m: number): void {
     for (let i = 0; i < size; i += 4) {
         const sr = src[srcOffs + i + 0], sg = src[srcOffs + i + 1], sb = src[srcOffs + i + 2], exp = src[srcOffs + i + 3];
-        dst[dstOffs++] = m * lightmapUnpackTexelStorage(sr, exp);
-        dst[dstOffs++] = m * lightmapUnpackTexelStorage(sg, exp);
-        dst[dstOffs++] = m * lightmapUnpackTexelStorage(sb, exp);
+        dst[dstOffs++] = m * unpackColorRGB32Exp(sr, exp);
+        dst[dstOffs++] = m * unpackColorRGB32Exp(sg, exp);
+        dst[dstOffs++] = m * unpackColorRGB32Exp(sb, exp);
         // TODO(jstpierre): Drop this.
         dst[dstOffs++] = 1.0;
     }
@@ -1363,23 +1363,44 @@ class MaterialProxy_Sine {
     }
 }
 
+function gaussianRandom(mean: number, halfwidth: number): number {
+    // https://en.wikipedia.org/wiki/Marsaglia_polar_method
+
+    // pick two points inside a circle
+    let x = 0, y = 0, s = 100;
+    while (s > 1) {
+        x = Math.random() * 2 - 1;
+        y = Math.random() * 2 - 1;
+        s = Math.hypot(x, y);
+    }
+
+    const f = Math.sqrt(-2 * Math.log(s));
+
+    // return one of the two sampled values
+    return mean * halfwidth * x * f;
+}
+
 class MaterialProxy_GaussianNoise {
     public static type = 'gaussiannoise';
 
     private resultvar: ParameterReference;
     private minval: ParameterReference;
     private maxval: ParameterReference;
+    private mean: ParameterReference;
+    private halfwidth: ParameterReference;
 
     constructor(params: VKFParamMap) {
         this.resultvar = new ParameterReference(params.resultvar);
         this.minval = new ParameterReference(params.minval, -Number.MAX_VALUE);
         this.maxval = new ParameterReference(params.maxval, Number.MAX_VALUE);
+        this.mean = new ParameterReference(params.mean, 0.0);
+        this.halfwidth = new ParameterReference(params.halfwidth, 0.0);
     }
 
     public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
-        // TODO(jstpierre): Proper Gaussian noise.
-        const r = lerp(paramGetNum(map, this.minval), paramGetNum(map, this.maxval), Math.random());
-        paramSetNum(map, this.resultvar, r);
+        const r = gaussianRandom(paramGetNum(map, this.mean), paramGetNum(map, this.halfwidth));
+        const v = clamp(r, paramGetNum(map, this.minval), paramGetNum(map, this.maxval));
+        paramSetNum(map, this.resultvar, v);
     }
 }
 
@@ -1502,19 +1523,23 @@ class MaterialProxy_TextureTransform {
     }
 
     public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): void {
-        const center = paramLookupOptional<ParameterVector>(map, this.centervar);
-        const scale = paramLookupOptional<ParameterVector>(map, this.scalevar);
+        const center = paramLookupOptional(map, this.centervar);
+        const scale = paramLookupOptional(map, this.scalevar);
         const rotate = paramLookupOptional<ParameterNumber>(map, this.rotatevar);
-        const translate = paramLookupOptional<ParameterVector>(map, this.translatevar);
+        const translate = paramLookupOptional(map, this.translatevar);
 
         let cx = 0.5, cy = 0.5;
-        if (center !== null) {
+        if (center instanceof ParameterNumber) {
+            cx = cy = center.value;
+        } else if (center instanceof ParameterVector) {
             cx = center.index(0).value;
             cy = center.index(1).value;
         }
 
         let sx = 1.0, sy = 1.0;
-        if (scale !== null) {
+        if (scale instanceof ParameterNumber) {
+            sx = sy = scale.value;
+        } else if (scale instanceof ParameterVector) {
             sx = scale.index(0).value;
             sy = scale.index(1).value;
         }
@@ -1524,7 +1549,9 @@ class MaterialProxy_TextureTransform {
             r = rotate.value;
 
         let tx = 0.0, ty = 0.0;
-        if (translate !== null) {
+        if (translate instanceof ParameterNumber) {
+            tx = ty = translate.value;
+        } else if (translate instanceof ParameterVector) {
             tx = translate.index(0).value;
             ty = translate.index(1).value;
         }

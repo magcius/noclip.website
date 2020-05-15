@@ -2,12 +2,13 @@
 // Source Engine BSP.
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, assertExists, assert, nArray, hexdump } from "../util";
+import { readString, assertExists, assert, nArray } from "../util";
 import { vec4, vec3, vec2 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
 import { parseEntitiesLump, BSPEntity } from "./VMT";
 import { Plane, AABB } from "../Geometry";
+import { deserializeGameLump_dprp, DetailObjects } from "./StaticDetailObject";
 
 const enum LumpType {
     ENTITIES             = 0,
@@ -27,11 +28,13 @@ const enum LumpType {
     VERTNORMALS          = 30,
     VERTNORMALINDICES    = 31,
     DISP_VERTS           = 33,
+    GAME_LUMP            = 35,
     PRIMITIVES           = 37,
     PRIMINDICES          = 39,
     PAKFILE              = 40,
     TEXDATA_STRING_DATA  = 43,
     TEXDATA_STRING_TABLE = 44,
+    LIGHTING_HDR         = 53,
     FACES_HDR            = 58,
 }
 
@@ -115,25 +118,163 @@ interface BSPDispInfo {
     vertexCount: number;
 }
 
+class DisplacementMeshVertex {
+    public position = vec3.create();
+    public normal = vec3.create();
+    public alpha = 1.0;
+    public uv = vec3.create();
+}
+
+class DisplacementBuilder {
+    public vertex: DisplacementMeshVertex[];
+
+    constructor(public disp: BSPDispInfo, public corners: vec3[], public disp_verts: Float32Array) {
+        this.vertex = nArray(disp.vertexCount, () => new DisplacementMeshVertex());
+
+        const v0 = vec3.create(), v1 = vec3.create();
+
+        // Positions
+        for (let y = 0; y < disp.sideLength; y++) {
+            const ty = y / (disp.sideLength - 1);
+            vec3.lerp(v0, corners[0], corners[1], ty);
+            vec3.lerp(v1, corners[3], corners[2], ty);
+
+            for (let x = 0; x < disp.sideLength; x++) {
+                const tx = x / (disp.sideLength - 1);
+
+                // Displacement normal vertex.
+                const dvidx = disp.dispVertStart + (y * disp.sideLength) + x;
+                const dvx = disp_verts[dvidx * 5 + 0];
+                const dvy = disp_verts[dvidx * 5 + 1];
+                const dvz = disp_verts[dvidx * 5 + 2];
+                const dvdist = disp_verts[dvidx * 5 + 3];
+                const dvalpha = disp_verts[dvidx * 5 + 4];
+
+                const vertex = this.vertex[y * disp.sideLength + x];
+                vec3.lerp(vertex.position, v0, v1, tx);
+
+                vertex.position[0] += (dvx * dvdist);
+                vertex.position[1] += (dvy * dvdist);
+                vertex.position[2] += (dvz * dvdist);
+                vertex.uv[0] = tx;
+                vertex.uv[1] = ty;
+                vertex.alpha = dvalpha / 0xFF;
+            }
+        }
+
+        // Normals
+        const w = disp.sideLength;
+        for (let y = 0; y < w; y++) {
+            for (let x = 0; x < w; x++) {
+                const vertex = this.vertex[y * w + x];
+                const x0 = x - 1, x1 = x, x2 = x + 1;
+                const y0 = y - 1, y1 = y, y2 = y + 1;
+
+                let count = 0;
+
+                // Top left
+                if (x0 >= 0 && y0 >= 0) {
+                    vec3.sub(v0, this.vertex[y1*w+x0].position, this.vertex[y0*w+x0].position);
+                    vec3.sub(v1, this.vertex[y0*w+x1].position, this.vertex[y0*w+x0].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    vec3.sub(v0, this.vertex[y1*w+x0].position, this.vertex[y0*w+x1].position);
+                    vec3.sub(v1, this.vertex[y1*w+x1].position, this.vertex[y0*w+x1].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    count += 2;
+                }
+
+                // Top right
+                if (x2 < w && y0 >= 0) {
+                    vec3.sub(v0, this.vertex[y1*w+x1].position, this.vertex[y0*w+x1].position);
+                    vec3.sub(v1, this.vertex[y0*w+x2].position, this.vertex[y0*w+x1].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    vec3.sub(v0, this.vertex[y1*w+x1].position, this.vertex[y0*w+x2].position);
+                    vec3.sub(v1, this.vertex[y1*w+x2].position, this.vertex[y0*w+x2].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    count += 2;
+                }
+
+                // Bottom left
+                if (x0 >= 0 && y2 < w) {
+                    vec3.sub(v0, this.vertex[y2*w+x0].position, this.vertex[y1*w+x0].position);
+                    vec3.sub(v1, this.vertex[y1*w+x1].position, this.vertex[y1*w+x0].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    vec3.sub(v0, this.vertex[y2*w+x0].position, this.vertex[y1*w+x1].position);
+                    vec3.sub(v1, this.vertex[y2*w+x1].position, this.vertex[y1*w+x1].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    count += 2;
+                }
+
+                // Bottom right
+                if (x2 < w && y2 < w) {
+                    vec3.sub(v0, this.vertex[y2*w+x1].position, this.vertex[y1*w+x1].position);
+                    vec3.sub(v1, this.vertex[y1*w+x2].position, this.vertex[y1*w+x1].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    vec3.sub(v0, this.vertex[y2*w+x1].position, this.vertex[y1*w+x2].position);
+                    vec3.sub(v1, this.vertex[y2*w+x2].position, this.vertex[y1*w+x2].position);
+                    vec3.cross(v0, v1, v0);
+                    vec3.normalize(v0, v0);
+                    vec3.add(vertex.normal, vertex.normal, v0);
+
+                    count += 2;
+                }
+
+                vec3.scale(vertex.normal, vertex.normal, 1 / count);
+            }
+        }
+    }
+}
+
+function magicint(S: string): number {
+    const n0 = S.charCodeAt(0);
+    const n1 = S.charCodeAt(1);
+    const n2 = S.charCodeAt(2);
+    const n3 = S.charCodeAt(3);
+    return (n0 << 24) | (n1 << 16) | (n2 << 8) | n3;
+}
+
 export class BSPFile {
+    public version: number;
+
     public entities: BSPEntity[] = [];
     public texinfo: Texinfo[] = [];
     public surfaces: Surface[] = [];
     public models: Model[] = [];
     public pakfile: ZipFile | null = null;
+    public nodelist: BSPNode[] = [];
+    public leaflist: BSPLeaf[] = [];
+    public leaffacelist: Uint16Array;
+    public detailObjects: DetailObjects | null = null;
 
     public indexData: Uint16Array;
     public vertexData: Float32Array;
 
-    public nodelist: BSPNode[] = [];
-    public leaflist: BSPLeaf[] = [];
-    public leaffacelist: Uint16Array;
-
     constructor(buffer: ArrayBufferSlice) {
         assertExists(readString(buffer, 0x00, 0x04) === 'VBSP');
         const view = buffer.createDataView();
-        const version = view.getUint32(0x04, true);
-        assert(version === 0x13);
+        this.version = view.getUint32(0x04, true);
+        assert(this.version === 0x13 || this.version === 0x14);
 
         function getLumpDataEx(lumpType: LumpType): [ArrayBufferSlice, number] {
             const lumpsStart = 0x08;
@@ -152,6 +293,27 @@ export class BSPFile {
             if (buffer.byteLength !== 0)
                 assert(version === expectedVersion);
             return buffer;
+        }
+
+        const game_lump = getLumpData(LumpType.GAME_LUMP).createDataView();
+        function getGameLumpData(magic: string): [ArrayBufferSlice, number] | null {
+            const lumpCount = game_lump.getUint32(0x00, true);
+            const needle = magicint(magic);
+            let idx = 0x04;
+            for (let i = 0; i < lumpCount; i++) {
+                const lumpmagic = game_lump.getUint32(idx + 0x00, true);
+                if (lumpmagic === needle) {
+                    const flags = game_lump.getUint16(idx + 0x04, true);
+                    const version = game_lump.getUint16(idx + 0x06, true);
+                    const fileofs = game_lump.getUint32(idx + 0x08, true);
+                    const filelen = game_lump.getUint32(idx + 0x0C, true);
+                    assert(flags === 0);
+                    const lump = buffer.subarray(fileofs, filelen);
+                    return [lump, version];
+                }
+                idx += 0x10;
+            }
+            return null;
         }
 
         // Parse out entities.
@@ -291,7 +453,10 @@ export class BSPFile {
         const vertnormals = getLumpData(LumpType.VERTNORMALS).createTypedArray(Float32Array);
         const vertnormalindices = getLumpData(LumpType.VERTNORMALINDICES).createTypedArray(Uint16Array);
         const disp_verts = getLumpData(LumpType.DISP_VERTS).createTypedArray(Float32Array);
-        const lighting = getLumpData(LumpType.LIGHTING, 1);
+
+        let lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
+        if (lighting.byteLength === 0)
+            lighting = getLumpData(LumpType.LIGHTING, 1);
 
         const scratchVec2 = vec2.create();
         const scratchPosition = vec3.create();
@@ -387,50 +552,25 @@ export class BSPFile {
                 }
                 assert(startIndex >= 0);
 
-                // Compute our base normal.
-                vec3.sub(scratchPosition, corners[1], corners[0]);
-                vec3.normalize(scratchPosition, scratchPosition);
-                vec3.sub(scratchNormal, corners[3], corners[0]);
-                vec3.normalize(scratchNormal, scratchNormal);
-                const baseNormal = vec3.create();
-                vec3.cross(baseNormal, scratchNormal, scratchPosition);
-
                 // Rotate vectors so start pos corner is first
                 if (startIndex !== 0)
                     corners = corners.slice(startIndex).concat(corners.slice(0, startIndex));
 
-                // Build our vertex grid.
-                const x0 = vec3.create(), x1 = vec3.create();
-
+                const builder = new DisplacementBuilder(disp, corners, disp_verts);
                 for (let y = 0; y < disp.sideLength; y++) {
-                    const ty = y / (disp.sideLength - 1);
-                    vec3.lerp(x0, corners[0], corners[1], ty);
-                    vec3.lerp(x1, corners[3], corners[2], ty);
-
                     for (let x = 0; x < disp.sideLength; x++) {
-                        const tx = x / (disp.sideLength - 1);
-
-                        // Displacement normal vertex.
-                        const dvidx = disp.dispVertStart + (y * disp.sideLength) + x;
-                        const dvx = disp_verts[dvidx * 5 + 0];
-                        const dvy = disp_verts[dvidx * 5 + 1];
-                        const dvz = disp_verts[dvidx * 5 + 2];
-                        const dvdist = disp_verts[dvidx * 5 + 3];
-                        const dvalpha = disp_verts[dvidx * 5 + 4];
-
-                        vec3.lerp(scratchPosition, x0, x1, tx);
+                        const vertex = builder.vertex[y * disp.sideLength + x];
 
                         // Position
-                        vertexData[dstOffs++] = scratchPosition[0] + (dvx * dvdist);
-                        vertexData[dstOffs++] = scratchPosition[1] + (dvy * dvdist);
-                        vertexData[dstOffs++] = scratchPosition[2] + (dvz * dvdist);
+                        vertexData[dstOffs++] = vertex.position[0];
+                        vertexData[dstOffs++] = vertex.position[1];
+                        vertexData[dstOffs++] = vertex.position[2];
 
                         // Normal
-                        // TODO(jstpierre)
-                        vertexData[dstOffs++] = scratchNormal[0] = baseNormal[0];
-                        vertexData[dstOffs++] = scratchNormal[1] = baseNormal[1];
-                        vertexData[dstOffs++] = scratchNormal[2] = baseNormal[2];
-                        vertexData[dstOffs++] = dvalpha / 255.0;
+                        vertexData[dstOffs++] = scratchNormal[0] = vertex.normal[0];
+                        vertexData[dstOffs++] = scratchNormal[1] = vertex.normal[1];
+                        vertexData[dstOffs++] = scratchNormal[2] = vertex.normal[2];
+                        vertexData[dstOffs++] = vertex.alpha;
 
                         // Tangent
                         vec3.cross(scratchTangentS, scratchNormal, scratchTangentT);
@@ -440,31 +580,20 @@ export class BSPFile {
                         vertexData[dstOffs++] = tangentSSign;
 
                         // Texture UV
-                        calcTexCoord(scratchVec2, scratchPosition, tex.textureMapping);
+                        calcTexCoord(scratchVec2, vertex.position, tex.textureMapping);
                         scratchVec2[0] /= tex.width;
                         scratchVec2[1] /= tex.height;
                         vertexData[dstOffs++] = scratchVec2[0];
                         vertexData[dstOffs++] = scratchVec2[1];
 
                         // Lightmap UV
-                        /*
-                        if (tex.flags & TexinfoFlags.NOLIGHT) {
-                            vec2.set(scratchVec2, 0.5, 0.5);
-                        } else {
-                            calcTexCoord(scratchVec2, scratchPosition, tex.lightmapMapping);
-                            scratchVec2[0] += m_LightmapTextureMinsInLuxels[0];
-                            scratchVec2[1] += m_LightmapTextureMinsInLuxels[1];
-                        }
-                        */
                         // Source seems to just have lightmaps in surface space, and ignore the mapping. (!!!)
-                        scratchVec2[0] = (tx * m_LightmapTextureSizeInLuxels[0]) + 0.5;
-                        scratchVec2[1] = (ty * m_LightmapTextureSizeInLuxels[1]) + 0.5;
-
-                        vertexData[dstOffs++] = scratchVec2[0];
-                        vertexData[dstOffs++] = scratchVec2[1];
+                        vertexData[dstOffs++] = (vertex.uv[0] * m_LightmapTextureSizeInLuxels[0]) + 0.5;
+                        vertexData[dstOffs++] = (vertex.uv[1] * m_LightmapTextureSizeInLuxels[1]) + 0.5;
                     }
                 }
 
+                // Build grid index buffer.
                 let m = 0;
                 for (let y = 0; y < disp.sideLength - 1; y++) {
                     for (let x = 0; x < disp.sideLength - 1; x++) {
@@ -641,6 +770,10 @@ export class BSPFile {
 
             this.models.push({ bbox, headnode, surfaceStart: firstface, surfaceCount: numfaces });
         }
+
+        const dprp = getGameLumpData('dprp');
+        if (dprp !== null)
+            this.detailObjects = deserializeGameLump_dprp(dprp[0], dprp[1]);
     }
 
     public findLeafForPoint(p: vec3, nodeid: number = 0): number {

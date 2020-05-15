@@ -82,11 +82,11 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
         throw "whoops";
 }
 
-function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: ArrayBufferSlice, width: number, height: number): ArrayBufferView {
+function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: ArrayBufferSlice, width: number, height: number, depth: number): ArrayBufferView {
     if (fmt === ImageFormat.BGR888) {
         // BGR888 => RGBA8888
         const src = data.createDataView();
-        const n = width * height * 4;
+        const n = width * height * depth * 4;
         const dst = new Uint8Array(n);
         let p = 0;
         for (let i = 0; i < n;) {
@@ -100,7 +100,7 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
     } else if (fmt === ImageFormat.BGRA8888) {
         // BGRA888 => RGBA8888
         const src = data.createDataView();
-        const n = width * height * 4;
+        const n = width * height * depth * 4;
         const dst = new Uint8Array(n);
         let p = 0;
         for (let i = 0; i < n;) {
@@ -233,7 +233,7 @@ export class VTF {
             const faceSize = this.calcMipSize(i);
             const size = faceSize * faceCount;
             for (let j = 0; j < this.gfxTextures.length; j++) {
-                const levelData = imageFormatConvertData(device, this.format, buffer.subarray(dataIdx, size), mipWidth, mipHeight);
+                const levelData = imageFormatConvertData(device, this.format, buffer.subarray(dataIdx, size), mipWidth, mipHeight, this.depth * faceCount);
                 dataIdx += faceSize * faceDataCount;
                 levelDatas[j].unshift(levelData);
             }

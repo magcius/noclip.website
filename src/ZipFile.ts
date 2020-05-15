@@ -90,7 +90,7 @@ export function makeZipFile(entries: ZipFile): ArrayBuffer {
     const crc32s: number[] = [];
 
     let localHeaderOffset = 0;
-    for (let i = 0; i < entries.length; i++) {
+    for (let i = 0; i < entries.length; i++) {7
         const fileEntry = entries[i];
         const crc32 = CRC32.buf(fileEntry.data.createTypedArray(Uint8Array));
         crc32s.push(crc32);
@@ -122,8 +122,14 @@ export function makeZipFile(entries: ZipFile): ArrayBuffer {
 export function parseZipFile(buffer: ArrayBufferSlice): ZipFile {
     const view = buffer.createDataView();
 
-    const centralDirectoryEndOffs = buffer.byteLength - 0x16;
-    assertExists(readString(buffer, centralDirectoryEndOffs + 0x00, 0x04) === 'PK\x05\x06');
+    // Search for central directory.
+    let centralDirectoryEndOffs = buffer.byteLength - 0x16;
+    for (; centralDirectoryEndOffs > buffer.byteLength - 0x40; centralDirectoryEndOffs--) {
+        const magic = 0x504B0506; // PK\x05\x06
+        if (view.getUint32(centralDirectoryEndOffs, false) === magic)
+            break;
+    }
+    assert(readString(buffer, centralDirectoryEndOffs + 0x00, 0x04) === 'PK\x05\x06');
 
     const numEntries = view.getUint16(centralDirectoryEndOffs + 0x08, true);
     const cdOffs = view.getUint32(centralDirectoryEndOffs + 0x10, true);

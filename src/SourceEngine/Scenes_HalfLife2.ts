@@ -2,7 +2,7 @@
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { BSPFile, Surface, Model } from "./BSPFile";
@@ -14,13 +14,12 @@ import { VPKMount, createVPKMount } from "./VPK";
 import { ZipFile } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BaseMaterialProgram, BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState, MaterialProxySystem, EntityMaterialParameters } from "./Materials";
-import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants, getMatrixTranslation, transformVec3Mat4w0, computeModelMatrixS } from "../MathHelpers";
+import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
 import { assert } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { AABB } from "../Geometry";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceText } from "../DebugJunk";
-import { Blue, Yellow } from "../Color";
+import { DetailSpriteLeafRenderer } from "./StaticDetailObject";
 
 const pathBase = `HalfLife2`;
 
@@ -54,11 +53,13 @@ export class SourceFileSystem {
     }
 }
 
-const zup = mat4.fromValues(
-    1, 0,  0, 0,
-    0, 0, -1, 0,
-    0, 1,  0, 0,
-    0, 0,  0, 1,
+// In Source, the convention is +X for forward and -X for backward, +Y for left and -Y for right, and +Z for up and -Z for down.
+// Converts from Source conventions to noclip ones.
+export const noclipSpaceFromSourceEngineSpace = mat4.fromValues(
+    0,  0, -1, 0,
+    -1, 0,  0, 0,
+    0,  1,  0, 0,
+    0,  0,  0, 1,
 );
 
 const scratchMatrix = mat4.create();
@@ -164,7 +165,7 @@ class SkyboxRenderer {
         let offs = template.allocateUniformBuffer(BaseMaterialProgram.ub_SceneParams, 32);
         const d = template.mapUniformBufferF32(BaseMaterialProgram.ub_SceneParams);
         mat4.mul(scratchMatrix, viewerInput.camera.projectionMatrix, scratchMatrix);
-        mat4.mul(scratchMatrix, scratchMatrix, zup);
+        mat4.mul(scratchMatrix, scratchMatrix, noclipSpaceFromSourceEngineSpace);
         offs += fillMatrix4x4(d, offs, scratchMatrix);
         offs += fillVec3v(d, offs, renderContext.cameraPos);
 
@@ -210,7 +211,7 @@ class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewMatrixForDepthSort: mat4, modelMatrix: mat4) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewMatrixZUp: mat4, modelMatrix: mat4) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
             return;
 
@@ -222,7 +223,7 @@ class BSPSurfaceRenderer {
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
-        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrixForDepthSort, this.surface.center);
+        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrixZUp, this.surface.center);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -281,7 +282,7 @@ class BSPModelRenderer {
                 return;
 
             if (area === null) {
-                mat4.mul(scratchMatrixCull, zup, this.modelMatrix);
+                mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
                 scratchAABB.transform(node.bbox, scratchMatrixCull);
                 if (!viewerInput.camera.frustum.contains(scratchAABB))
                     return;
@@ -304,7 +305,7 @@ class BSPModelRenderer {
                 return;
 
             if (area === null) {
-                mat4.mul(scratchMatrixCull, zup, this.modelMatrix);
+                mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
                 scratchAABB.transform(leaf.bbox, scratchMatrixCull);
                 if (!viewerInput.camera.frustum.contains(scratchAABB))
                     return;
@@ -323,7 +324,7 @@ class BSPModelRenderer {
             return;
 
         if (area === null) {
-            mat4.mul(scratchMatrixCull, zup, this.modelMatrix);
+            mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
             scratchAABB.transform(this.model.bbox, scratchMatrixCull);
             if (!viewerInput.camera.frustum.contains(scratchAABB))
                 return;
@@ -399,12 +400,6 @@ class sky_camera extends BaseEntity {
             this.scale * -this.origin[1],
             this.scale * -this.origin[2]);
     }
-
-    public movement(): void {
-        super.movement();
-
-        // Pull out any surfaces
-    }
 }
 
 interface EntityFactory {
@@ -444,6 +439,7 @@ class BSPRenderer {
     private inputState: GfxInputState;
     private entities: BaseEntity[] = [];
     public models: BSPModelRenderer[] = [];
+    public detailSpriteLeafRenderers: DetailSpriteLeafRenderer[] = [];
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
         const device = renderContext.device, cache = renderContext.cache;
@@ -475,6 +471,10 @@ class BSPRenderer {
         }
 
         this.spawnEntities(renderContext);
+
+        if (this.bsp.detailObjects !== null)
+            for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
+                this.detailSpriteLeafRenderers.push(new DetailSpriteLeafRenderer(renderContext, this.bsp.detailObjects, leaf));
     }
 
     private spawnEntities(renderContext: SourceRenderContext): void {
@@ -496,14 +496,13 @@ class BSPRenderer {
 
         let offs = template.allocateUniformBuffer(BaseMaterialProgram.ub_SceneParams, 32);
         const d = template.mapUniformBufferF32(BaseMaterialProgram.ub_SceneParams);
-        mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, zup);
+        mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSourceEngineSpace);
         if (modelMatrix !== null)
             mat4.mul(scratchMatrix, scratchMatrix, modelMatrix);
         offs += fillMatrix4x4(d, offs, scratchMatrix);
         offs += fillVec3v(d, offs, renderContext.cameraPos);
 
-        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, zup);
-
+        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         for (let i = 0; i < this.models.length; i++)
             this.models[i].prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix, area);
 
@@ -518,6 +517,13 @@ class BSPRenderer {
             this.prepareToRenderInternal(renderContext, renderInstManager, viewerInput, skybox.modelMatrix, skybox.area);
             renderInstManager.popTemplateRenderInst();
         }
+
+        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
+        for (let i = 0; i < this.detailSpriteLeafRenderers.length; i++) {
+            // TODO(jstpierre): Compute leaf visibility (ain't that the joke.......)
+            this.detailSpriteLeafRenderers[i].prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix);
+        }
+
         this.prepareToRenderInternal(renderContext, renderInstManager, viewerInput, null, null);
     }
 
@@ -525,6 +531,10 @@ class BSPRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputState(this.inputState);
+
+        for (let i = 0; i < this.detailSpriteLeafRenderers.length; i++) {
+            this.detailSpriteLeafRenderers[i].destroy(device);
+        }
     }
 }
 
@@ -574,7 +584,7 @@ export class SourceRenderer implements SceneGfx {
         // globalTime is in seconds.
         this.renderContext.globalTime = viewerInput.time / 1000.0;
 
-        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, zup);
+        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         mat4.invert(scratchMatrix, scratchMatrix);
         getMatrixTranslation(this.renderContext.cameraPos, scratchMatrix);
 
