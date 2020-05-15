@@ -176,7 +176,7 @@ class ParameterVector {
         }
     }
 
-    public fillColor(d: Float32Array, offs: number, a: number = 0): number {
+    public fillColor(d: Float32Array, offs: number, a: number): number {
         assert(this.internal.length === 3);
         return fillVec4(d, offs, this.internal[0].value, this.internal[1].value, this.internal[2].value, a);
     }
@@ -253,6 +253,10 @@ export class EntityMaterialParameters {
     public blendColor = colorNewCopy(White);
 }
 
+const enum AlphaBlendMode {
+    None, Blend, Add, BlendAdd,
+}
+
 export abstract class BaseMaterial {
     public visible = true;
     public wantsLightmap = false;
@@ -267,7 +271,7 @@ export abstract class BaseMaterial {
     }
 
     public async init(renderContext: SourceRenderContext) {
-        this.initParameters(renderContext);
+        this.initParameters();
 
         setupParametersFromVMT(this.param, this.vmt);
         if (this.vmt.proxies !== undefined)
@@ -301,7 +305,96 @@ export abstract class BaseMaterial {
         return (this.param[name] as ParameterVector);
     }
 
-    protected initParameters(renderContext: SourceRenderContext): void {
+    protected paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
+        const m = (this.param[name] as ParameterMatrix).matrix;
+        // Make sure there's no rotation. We should definitely handle this eventually, though.
+        // assert(m[1] === 0.0 && m[2] === 0.0);
+        const scaleS = m[0];
+        const scaleT = m[5];
+        const transS = m[12];
+        const transT = m[13];
+        return fillVec4(d, offs, scaleS, scaleT, transS, transT);
+    }
+
+    protected paramFillTextureMatrix(d: Float32Array, offs: number, name: string): number {
+        const m = (this.param[name] as ParameterMatrix).matrix;
+        return fillMatrix4x2(d, offs, m);
+    }
+
+    protected paramFillColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
+        const alpha = alphaname !== null ? this.paramGetNumber(alphaname) : 1.0;
+        return (this.param[name] as ParameterVector).fillColor(d, offs, alpha);
+    }
+
+    protected textureIsTranslucent(name: string): boolean {
+        const texture = this.paramGetVTF(name);
+
+        if (texture === null)
+            return false;
+
+        if (texture === this.paramGetVTF('$basetexture')) {
+            // Special consideration.
+            if (this.paramGetBoolean('$opaquetexture'))
+                return false;
+            if (this.paramGetBoolean('$selfillum') || this.paramGetBoolean('$basealphaenvmapmask'))
+                return false;
+            if (!(this.paramGetBoolean('$translucent') || this.paramGetBoolean('$alphatest')))
+                return false;
+        }
+
+        return texture.isTranslucent();
+    }
+
+    protected setAlphaBlendMode(megaStateFlags: Partial<GfxMegaStateDescriptor>, alphaBlendMode: AlphaBlendMode): boolean {
+        if (alphaBlendMode === AlphaBlendMode.BlendAdd) {
+            setAttachmentStateSimple(megaStateFlags, {
+                blendMode: GfxBlendMode.ADD,
+                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                blendDstFactor: GfxBlendFactor.ONE,
+            });
+            megaStateFlags.depthWrite = false;
+            return true;
+        } else if (alphaBlendMode === AlphaBlendMode.Blend) {
+            setAttachmentStateSimple(megaStateFlags, {
+                blendMode: GfxBlendMode.ADD,
+                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+            });
+            megaStateFlags.depthWrite = false;
+            return true;
+        } else if (alphaBlendMode === AlphaBlendMode.Add) {
+            setAttachmentStateSimple(megaStateFlags, {
+                blendMode: GfxBlendMode.ADD,
+                blendSrcFactor: GfxBlendFactor.ONE,
+                blendDstFactor: GfxBlendFactor.ONE,
+            });
+            megaStateFlags.depthWrite = false;
+            return true;
+        } else if (alphaBlendMode === AlphaBlendMode.None) {
+            setAttachmentStateSimple(megaStateFlags, {
+                blendMode: GfxBlendMode.ADD,
+                blendSrcFactor: GfxBlendFactor.ONE,
+                blendDstFactor: GfxBlendFactor.ZERO,
+            });
+            megaStateFlags.depthWrite = true;
+            return false;
+        } else {
+            throw "whoops";
+        }
+    }
+
+    protected getAlphaBlendModeFromTexture(isTranslucent: boolean): AlphaBlendMode {
+        if (isTranslucent && this.paramGetBoolean('$additive'))
+            return AlphaBlendMode.BlendAdd;
+        else if (this.paramGetBoolean('$additive'))
+            return AlphaBlendMode.Add;
+        else if (isTranslucent)
+            return AlphaBlendMode.Blend;
+        else
+            return AlphaBlendMode.None;
+    }
+
+    protected initParameters(): void {
         const p = this.param;
 
         // Material vars
@@ -311,6 +404,7 @@ export abstract class BaseMaterial {
         p['$translucent']                  = new ParameterBoolean(false, false);
         p['$basealphaenvmapmask']          = new ParameterBoolean(false, false);
         p['$normalmapalphaenvmapmask']     = new ParameterBoolean(false, false);
+        p['$opaquetexture']                = new ParameterBoolean(false, false);
 
         // Base parameters
         p['$basetexture']                  = new ParameterTexture();
@@ -379,9 +473,6 @@ layout(row_major, std140) uniform ub_ObjectParams {
     vec4 u_EnvmapTint;
     vec4 u_EnvmapContrastSaturationFresnel;
 #endif
-#ifdef USE_TEXTURE2
-    vec4 u_Texture2ScaleBias;
-#endif
     vec4 u_ModulationColor;
     vec4 u_Misc[1];
 };
@@ -408,7 +499,7 @@ varying vec3 v_TangentSpaceBasis1;
 // Just need the vertex normal component.
 varying vec3 v_TangentSpaceBasis2;
 
-// Base, Detail, Bumpmap, Lightmap, Envmap Mask, Texture2
+// Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2
 uniform sampler2D u_Texture[6];
 // Envmap
 uniform samplerCube u_TextureCube[1];
@@ -454,9 +545,6 @@ void mainVS() {
 #ifdef USE_BUMPMAP
     v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
-#ifdef USE_TEXTURE2
-    v_TexCoord2.zw = CalcScaleBias(a_TexCoord.xy, u_Texture2ScaleBias);
-#endif
 }
 #endif
 
@@ -492,11 +580,6 @@ void mainPS() {
     // Blend in basetexture2 using vertex alpha.
     vec4 t_BaseTexture2 = texture(SAMPLER_2D(u_Texture[5]), v_TexCoord0.xy);
     t_Albedo = mix(t_Albedo, t_BaseTexture2, v_PositionWorld.w);
-#endif
-
-#ifdef USE_TEXTURE2
-    vec4 t_Texture2 = texture(SAMPLER_2D(u_Texture[5], v_TexCoord2.zw));
-    t_Albedo *= t_Texture2;
 #endif
 
 #ifdef USE_MODULATIONCOLOR_COLOR
@@ -613,11 +696,10 @@ void mainPS() {
 `;
 }
 
-class GenericMaterial extends BaseMaterial {
+class Material_Generic extends BaseMaterial {
     private wantsDetail = false;
     private wantsBumpmap = false;
     private wantsEnvmapMask = false;
-    private wantsTexture2 = false;
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
     private lightmapAllocation: LightmapAllocation | null = null;
@@ -628,13 +710,12 @@ class GenericMaterial extends BaseMaterial {
     private sortKeyBase: number = 0;
     private textureMapping: TextureMapping[] = nArray(7, () => new TextureMapping());
 
-    protected initParameters(renderContext: SourceRenderContext): void {
-        super.initParameters(renderContext);
+    protected initParameters(): void {
+        super.initParameters();
 
         const p = this.param;
 
         // Generic
-        p['$opaquetexture']                = new ParameterBoolean(false, false);
         p['$envmap']                       = new ParameterTexture();
         p['$envmapframe']                  = new ParameterNumber(0);
         p['$envmapmask']                   = new ParameterTexture();
@@ -658,31 +739,9 @@ class GenericMaterial extends BaseMaterial {
         p['$nodiffusebumplighting']        = new ParameterBoolean(false, false);
         p['$ssbump']                       = new ParameterBoolean(false, false);
 
-        // Unlit Two Texture
-        // TODO(jstpierre): Break out into a separate class?
-        p['$texture2']                     = new ParameterTexture();
-        p['$texture2transform']            = new ParameterMatrix();
-        p['$frame2']                       = new ParameterNumber(0.0);
-
         // World Vertex Transition
         p['$basetexture2']                 = new ParameterTexture();
-    }
-
-    private textureIsTranslucent(texture: VTF | null): boolean {
-        if (texture === null)
-            return false;
-
-        if (texture === this.paramGetVTF('$basetexture')) {
-            // Special consideration.
-            if (this.paramGetBoolean('$opaquetexture'))
-                return false;
-            if (this.paramGetBoolean('$selfillum') || this.paramGetBoolean('$basealphaenvmapmask'))
-                return false;
-            if (!(this.paramGetBoolean('$translucent') || this.paramGetBoolean('$alphatest')))
-                return false;
-        }
-
-        return texture.isTranslucent();
+        p['$frame2']                       = new ParameterNumber(0.0);
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
@@ -710,11 +769,6 @@ class GenericMaterial extends BaseMaterial {
         if (this.paramGetVTF('$envmapmask') !== null) {
             this.wantsEnvmapMask = true;
             this.program.setDefineBool('USE_ENVMAP_MASK', true);
-        }
-
-        if (this.paramGetVTF('$texture2') !== null) {
-            this.wantsTexture2 = true;
-            this.program.setDefineBool('USE_TEXTURE2', true);
         }
 
         if (this.paramGetVTF('$envmap') !== null) {
@@ -750,40 +804,11 @@ class GenericMaterial extends BaseMaterial {
         } else {
             let isTranslucent = false;
 
-            if (this.textureIsTranslucent(this.paramGetVTF('$basetexture')))
+            if (this.textureIsTranslucent('$basetexture'))
                 isTranslucent = true;
 
-            if (isTranslucent && this.paramGetBoolean('$additive')) {
-                // BLENDADD
-                setAttachmentStateSimple(this.megaStateFlags, {
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                    blendDstFactor: GfxBlendFactor.ONE,
-                });
-            } else if (isTranslucent) {
-                // BLEND
-                setAttachmentStateSimple(this.megaStateFlags, {
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                    blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-                });
-            } else if (this.paramGetBoolean('$additive')) {
-                // ADD
-                setAttachmentStateSimple(this.megaStateFlags, {
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.ONE,
-                    blendDstFactor: GfxBlendFactor.ONE,
-                });
-            }
-
-            let sortLayer: GfxRendererLayer;
-            if (isTranslucent || this.paramGetBoolean('$additive')) {
-                this.megaStateFlags.depthWrite = false;
-                sortLayer = GfxRendererLayer.TRANSLUCENT;
-            } else {
-                sortLayer = GfxRendererLayer.OPAQUE;
-            }
-
+            const translucentLayer = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
+            const sortLayer = translucentLayer ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
             this.sortKeyBase = makeSortKey(sortLayer);
         }
 
@@ -808,31 +833,9 @@ class GenericMaterial extends BaseMaterial {
         this.paramGetTexture('$bumpmap').fillTextureMapping(this.textureMapping[2], this.paramGetInt('$bumpframe'));
         // Lightmap is supplied by entity.
         this.paramGetTexture('$envmapmask').fillTextureMapping(this.textureMapping[4], this.paramGetInt('$envmapmaskframe'));
-        if (this.wantsTexture2)
-            this.paramGetTexture('$texture2').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
         if (this.wantsBaseTexture2)
             this.paramGetTexture('$basetexture2').fillTextureMapping(this.textureMapping[5], this.paramGetInt('$frame2'));
         this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[6], this.paramGetInt('$envmapframe'));
-    }
-
-    private paramFillScaleBias(d: Float32Array, offs: number, name: string): number {
-        const m = (this.param[name] as ParameterMatrix).matrix;
-        // Make sure there's no rotation. We should definitely handle this eventually, though.
-        // assert(m[1] === 0.0 && m[2] === 0.0);
-        const scaleS = m[0];
-        const scaleT = m[5];
-        const transS = m[12];
-        const transT = m[13];
-        return fillVec4(d, offs, scaleS, scaleT, transS, transT);
-    }
-
-    private paramFillTextureMatrix(d: Float32Array, offs: number, name: string): number {
-        const m = (this.param[name] as ParameterMatrix).matrix;
-        return fillMatrix4x2(d, offs, m);
-    }
-
-    private paramFillColor(d: Float32Array, offs: number, name: string): number {
-        return (this.param[name] as ParameterVector).fillColor(d, offs);
     }
 
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: mat4): void {
@@ -865,9 +868,6 @@ class GenericMaterial extends BaseMaterial {
             offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
         }
 
-        if (this.wantsTexture2)
-            offs += this.paramFillScaleBias(d, offs, '$texture2transform');
-
         // Compute modulation color.
         colorCopy(scratchColor, this.entityParams !== null ? this.entityParams.blendColor : White);
         this.paramGetVector('$color').mulColor(scratchColor);
@@ -889,8 +889,107 @@ class GenericMaterial extends BaseMaterial {
     }
 }
 
+// UnlitTwoTexture
+class UnlitTwoTextureProgram extends MaterialProgramBase {
+    public static ub_ObjectParams = 1;
+
+    public both = `
+precision mediump float;
+
+${this.Common}
+
+layout(row_major, std140) uniform ub_ObjectParams {
+    Mat4x3 u_ModelMatrix;
+    vec4 u_Texture2ScaleBias;
+    vec4 u_ModulationColor;
+};
+
+// Texture1, Texture2
+varying vec4 v_TexCoord0;
+
+// Texture1, Texture2
+uniform sampler2D u_Texture[2];
+
+#ifdef VERT
+layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
+layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
+
+void mainVS() {
+    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+
+    // TODO(jstpierre): BaseTransform
+    v_TexCoord0.xy = a_TexCoord.xy;
+    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_Texture2ScaleBias);
+}
+#endif
+
+#ifdef FRAG
+void mainPS() {
+    vec4 t_Texture1 = texture(SAMPLER_2D(u_Texture[0], v_TexCoord0.xy));
+    vec4 t_Texture2 = texture(SAMPLER_2D(u_Texture[1], v_TexCoord0.zw));
+    vec4 t_FinalColor = t_Texture1 * t_Texture2 * u_ModulationColor;
+    OutputLinearColor(t_FinalColor);
+}
+#endif
+`;
+}
+
+class Material_UnlitTwoTexture extends BaseMaterial {
+    private program: GenericMaterialProgram;
+    private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private sortKeyBase: number = 0;
+    private textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
+
+    protected initParameters(): void {
+        super.initParameters();
+
+        const p = this.param;
+
+        p['$texture2']                     = new ParameterTexture();
+        p['$texture2transform']            = new ParameterMatrix();
+        p['$frame2']                       = new ParameterNumber(0.0);
+    }
+
+    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        this.program = new UnlitTwoTextureProgram();
+
+        this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
+
+        const isTranslucent = this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
+        const translucentLayer = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
+        const sortLayer = translucentLayer ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKeyBase = makeSortKey(sortLayer);
+
+        this.gfxProgram = cache.createProgram(device, this.program);
+        this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+    }
+
+    private updateTextureMappings(): void {
+        this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
+        this.paramGetTexture('$texture2').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$frame2'));
+    }
+
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: mat4): void {
+        assert(this.isMaterialLoaded());
+        this.updateTextureMappings();
+
+        let offs = renderInst.allocateUniformBuffer(GenericMaterialProgram.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(GenericMaterialProgram.ub_ObjectParams);
+        offs += fillMatrix4x3(d, offs, modelMatrix);
+        offs += this.paramFillScaleBias(d, offs, '$texture2transform');
+        offs += this.paramFillColor(d, offs, '$color', '$alpha');
+
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.sortKey = this.sortKeyBase;
+    }
+}
+
 // Hide Tool materials by default. I don't think we need to do this now that we use the BSP, but just in case...
-class HiddenMaterial extends GenericMaterial {
+class HiddenMaterial extends Material_Generic {
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         super.initStatic(device, cache);
         this.visible = false;
@@ -1004,7 +1103,7 @@ void mainPS() {
 `;
 }
 
-class WaterMaterial extends BaseMaterial {
+class Material_Water extends BaseMaterial {
     private program: GenericMaterialProgram;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
@@ -1013,8 +1112,8 @@ class WaterMaterial extends BaseMaterial {
 
     private wantsTexScroll = false;
 
-    protected initParameters(renderContext: SourceRenderContext): void {
-        super.initParameters(renderContext);
+    protected initParameters(): void {
+        super.initParameters();
 
         const p = this.param;
 
@@ -1035,7 +1134,6 @@ class WaterMaterial extends BaseMaterial {
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         // Use Cheap water for now.
         this.program = new WaterCheapMaterialProgram();
-
         this.program.setDefineBool('USE_FRESNEL', !this.paramGetBoolean('$nofresnel'));
 
         if (this.paramGetVector('$scroll1').get(0) !== 0) {
@@ -1044,13 +1142,9 @@ class WaterMaterial extends BaseMaterial {
         }
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
-        setAttachmentStateSimple(this.megaStateFlags, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-        });
-        this.megaStateFlags.depthWrite = false;
-        this.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+        const translucentLayer = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
+        const sortLayer = translucentLayer ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKeyBase = makeSortKey(sortLayer);
 
         this.gfxProgram = cache.createProgram(device, this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -1077,7 +1171,7 @@ class WaterMaterial extends BaseMaterial {
             offs += fillVec4(d, offs, scroll1x, scroll1y, scroll2x, scroll2y);
         }
 
-        offs += this.paramGetVector('$reflecttint').fillColor(d, offs, this.paramGetNumber('$reflectamount'));
+        offs += this.paramFillColor(d, offs, '$reflecttint', '$reflectamount');
 
         const cheapwaterstartdistance = this.paramGetNumber('$cheapwaterstartdistance');
         const cheapwaterenddistance = this.paramGetNumber('$cheapwaterenddistance');
@@ -1130,11 +1224,12 @@ export class MaterialCache {
 
         // Dispatch based on shader type.
         const shaderType = vmt._Root.toLowerCase();
-        if (shaderType === 'water') {
-            return new WaterMaterial(vmt);
-        } else {
-            return new GenericMaterial(vmt);
-        }
+        if (shaderType === 'water')
+            return new Material_Water(vmt);
+        else if (shaderType === 'unlittwotexture')
+            return new Material_UnlitTwoTexture(vmt);
+        else
+            return new Material_Generic(vmt);
     }
 
     public async createMaterialInstance(renderContext: SourceRenderContext, path: string): Promise<BaseMaterial> {
