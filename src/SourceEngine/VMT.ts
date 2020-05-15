@@ -2,7 +2,7 @@
 // Valve Material Type
 
 import { assert, assertExists } from "../util";
-import { SourceFileSystem } from "./Scenes_HalfLife2";
+import { SourceFileSystem } from "./Main";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { Color, colorFromRGBA } from "../Color";
 
@@ -193,6 +193,7 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
         const base = await parseVMT(filesystem, vmt['include'], depth++);
         patch(base, vmt.replace, true);
         patch(base, vmt.insert, false);
+        base._Filename = vmt._Filename;
         return base;
     } else {
         return vmt;
