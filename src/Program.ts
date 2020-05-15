@@ -42,6 +42,10 @@ export class DeviceProgram {
     public frag: string = '';
     public defines = new Map<string, string>();
 
+    public setDefineBool(name: string, v: boolean): void {
+        this.defines.set(name, v ? '1' : '0');
+    }
+
     public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {
         if (this.preprocessedVert === '') {
             this.preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', this.both + this.vert, this.defines);

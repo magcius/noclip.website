@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../Color";
-import { unpackColorRGB32Exp, BaseMaterial, BaseMaterialProgram } from "./Materials";
+import { unpackColorRGB32Exp, BaseMaterial, MaterialProgramBase } from "./Materials";
 import { SourceRenderContext, noclipSpaceFromSourceEngineSpace } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { transformVec3Mat4w0, computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
@@ -166,8 +166,8 @@ export class DetailSpriteLeafRenderer {
         const device = renderContext.device, cache = renderContext.cache;
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: BaseMaterialProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
-            { location: BaseMaterialProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+2)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
@@ -342,7 +342,7 @@ export interface StaticObjects {
 }
 
 export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: number): StaticObjects | null {
-    assert(version === 5 || version === 6);
+    assert(version === 4 || version === 5 || version === 6);
     const sprp = buffer.createDataView();
     let idx = 0x00;
 
@@ -380,8 +380,13 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         const lightingOriginX = sprp.getFloat32(idx + 0x2C, true);
         const lightingOriginY = sprp.getFloat32(idx + 0x30, true);
         const lightingOriginZ = sprp.getFloat32(idx + 0x34, true);
-        const forcedFadeScale = sprp.getFloat32(idx + 0x38, true);
-        idx += 0x3C;
+        idx += 0x38;
+
+        let forcedFadeScale = 1.0;
+        if (version >= 5) {
+            forcedFadeScale = sprp.getFloat32(idx + 0x00, true);
+            idx += 0x04;
+        }
 
         let minDXLevel = -1, maxDXLevel = -1;
         if (version >= 6) {

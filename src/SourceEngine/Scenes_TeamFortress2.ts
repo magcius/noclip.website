@@ -31,10 +31,12 @@ class TeamFortress2SceneDesc implements SceneDesc {
         const renderContext = renderer.renderContext;
 
         const bsp = await context.dataFetcher.fetchData(`${pathBase}/tf/maps/${this.id}.bsp`);
-        const bspFile = new BSPFile(bsp);
+        const bspFile = new BSPFile(bsp, this.id);
 
         if (bspFile.pakfile !== null)
             filesystem.pakfiles.push(bspFile.pakfile);
+
+        await renderContext.materialCache.bindLocalCubemap(bspFile.cubemaps[0]);
 
         // Build skybox from worldname.
         const worldspawn = bspFile.entities[0];

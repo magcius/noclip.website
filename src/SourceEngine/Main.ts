@@ -13,7 +13,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { VPKMount } from "./VPK";
 import { ZipFile } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { BaseMaterialProgram, BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState, MaterialProxySystem, EntityMaterialParameters } from "./Materials";
+import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase } from "./Materials";
 import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
 import { assert, assertExists } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
@@ -120,8 +120,8 @@ export class SkyboxRenderer {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: BaseMaterialProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
-            { location: BaseMaterialProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+2)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
@@ -161,8 +161,8 @@ export class SkyboxRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-        let offs = template.allocateUniformBuffer(BaseMaterialProgram.ub_SceneParams, 32);
-        const d = template.mapUniformBufferF32(BaseMaterialProgram.ub_SceneParams);
+        let offs = template.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
+        const d = template.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
         mat4.mul(scratchMatrix, viewerInput.camera.projectionMatrix, scratchMatrix);
         mat4.mul(scratchMatrix, scratchMatrix, noclipSpaceFromSourceEngineSpace);
         offs += fillMatrix4x4(d, offs, scratchMatrix);
@@ -362,7 +362,7 @@ class BaseEntity {
     public visible = true;
     public materialParams = new EntityMaterialParameters();
 
-    constructor(bspRenderer: BSPRenderer, private entity: BSPEntity) {
+    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, private entity: BSPEntity) {
         if (entity.model) {
             if (entity.model.startsWith('*')) {
                 const index = parseInt(entity.model.slice(1), 10);
@@ -406,8 +406,8 @@ class sky_camera extends BaseEntity {
     public scale: number = 1;
     public modelMatrix = mat4.create();
 
-    constructor(bspRenderer: BSPRenderer, entity: BSPEntity) {
-        super(bspRenderer, entity);
+    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(renderContext, bspRenderer, entity);
         const leafnum = bspRenderer.bsp.findLeafForPoint(this.origin);
         this.area = bspRenderer.bsp.leaflist[leafnum].area;
         this.scale = Number(entity.scale);
@@ -418,8 +418,20 @@ class sky_camera extends BaseEntity {
     }
 }
 
+class water_lod_control extends BaseEntity {
+    public static classname = 'water_lod_control';
+
+    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(renderContext, bspRenderer, entity);
+        if (entity.cheapwaterstartdistance !== undefined)
+            renderContext.cheapWaterStartDistance = Number(entity.cheapwaterstartdistance);
+        if (entity.cheapwaterenddistance !== undefined)
+            renderContext.cheapWaterEndDistance = Number(entity.cheapwaterenddistance);
+    }
+}
+
 interface EntityFactory {
-    new(bspRenderer: BSPRenderer, entity: BSPEntity): BaseEntity;
+    new(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): BaseEntity;
     classname: string;
 }
 
@@ -432,17 +444,16 @@ class EntitySystem {
 
     private registerDefaultFactories(): void {
         this.registerFactory(sky_camera);
+        this.registerFactory(water_lod_control);
     }
 
     public registerFactory(factory: EntityFactory): void {
         this.classname.set(factory.classname, factory);
     }
 
-    public createEntity(renderer: BSPRenderer, entity: BSPEntity): BaseEntity {
-        if (this.classname.has(entity.classname))
-            return new (this.classname.get(entity.classname)!)(renderer, entity);
-        else
-            return new BaseEntity(renderer, entity);
+    public createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, entity: BSPEntity): BaseEntity {
+        const factory = this.classname.has(entity.classname) ? this.classname.get(entity.classname)! : BaseEntity;
+        return new factory(renderContext, renderer, entity);
     }
 }
 
@@ -464,10 +475,10 @@ export class BSPRenderer {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.bsp.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: BaseMaterialProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
-            { location: BaseMaterialProgram.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
-            { location: BaseMaterialProgram.a_TangentS, bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
-            { location: BaseMaterialProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialProgramBase.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialProgramBase.a_TangentS, bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+4+4+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
@@ -498,7 +509,7 @@ export class BSPRenderer {
 
     private spawnEntities(renderContext: SourceRenderContext): void {
         for (let i = 0; i < this.bsp.entities.length; i++)
-            this.entities.push(renderContext.entitySystem.createEntity(this, this.bsp.entities[i]));
+            this.entities.push(renderContext.entitySystem.createEntity(renderContext, this, this.bsp.entities[i]));
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -513,8 +524,8 @@ export class BSPRenderer {
 
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-        let offs = template.allocateUniformBuffer(BaseMaterialProgram.ub_SceneParams, 32);
-        const d = template.mapUniformBufferF32(BaseMaterialProgram.ub_SceneParams);
+        let offs = template.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
+        const d = template.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
         mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSourceEngineSpace);
         if (modelMatrix !== null)
             mat4.mul(scratchMatrix, scratchMatrix, modelMatrix);
@@ -590,6 +601,8 @@ export class SourceRenderContext {
     public cameraPos = vec3.create();
     public materialProxySystem = new MaterialProxySystem();
     public entitySystem = new EntitySystem();
+    public cheapWaterStartDistance = 0.0;
+    public cheapWaterEndDistance = 0.1;
 
     constructor(public device: GfxDevice, public cache: GfxRenderCache, public filesystem: SourceFileSystem) {
         this.lightmapManager = new LightmapManager(device, cache);

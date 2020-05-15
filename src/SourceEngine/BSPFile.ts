@@ -34,6 +34,7 @@ const enum LumpType {
     PRIMITIVES           = 37,
     PRIMINDICES          = 39,
     PAKFILE              = 40,
+    CUBEMAPS             = 42,
     TEXDATA_STRING_DATA  = 43,
     TEXDATA_STRING_TABLE = 44,
     OVERLAYS             = 45,
@@ -318,6 +319,7 @@ export class BSPFile {
     public pakfile: ZipFile | null = null;
     public nodelist: BSPNode[] = [];
     public leaflist: BSPLeaf[] = [];
+    public cubemaps: string[] = [];
     public leaffacelist: Uint16Array;
     public detailObjects: DetailObjects | null = null;
     public staticObjects: StaticObjects | null = null;
@@ -326,7 +328,7 @@ export class BSPFile {
     public indexData: Uint16Array;
     public vertexData: Float32Array;
 
-    constructor(buffer: ArrayBufferSlice) {
+    constructor(buffer: ArrayBufferSlice, mapname: string) {
         assertExists(readString(buffer, 0x00, 0x04) === 'VBSP');
         const view = buffer.createDataView();
         this.version = view.getUint32(0x04, true);
@@ -828,6 +830,15 @@ export class BSPFile {
             const numfaces = models.getUint32(idx + 0x2C, true);
 
             this.models.push({ bbox, headnode, surfaceStart: firstface, surfaceCount: numfaces });
+        }
+
+        const cubemaps = getLumpData(LumpType.CUBEMAPS).createDataView();
+        for (let idx = 0x00; idx < cubemaps.byteLength; idx += 0x10) {
+            const posX = cubemaps.getInt32(idx + 0x00, true);
+            const posY = cubemaps.getInt32(idx + 0x04, true);
+            const posZ = cubemaps.getInt32(idx + 0x08, true);
+            const cubemapSample = `maps/${mapname}/c${posX}_${posY}_${posZ}`;
+            this.cubemaps.push(cubemapSample);
         }
 
         const dprp = getGameLumpData('dprp');

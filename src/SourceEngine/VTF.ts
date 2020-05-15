@@ -250,7 +250,8 @@ export class VTF {
         const texFilter = !!(this.flags & VTFFlags.POINTSAMPLE) ? GfxTexFilterMode.POINT : GfxTexFilterMode.BILINEAR;
         const minFilter = texFilter;
         const magFilter = texFilter;
-        const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NO_MIP : !!(this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.LINEAR : GfxMipFilterMode.NEAREST;
+        const forceTrilinear = true;
+        const mipFilter = !!(this.flags & VTFFlags.NOMIP) ? GfxMipFilterMode.NO_MIP : !!(forceTrilinear || this.flags & VTFFlags.TRILINEAR) ? GfxMipFilterMode.LINEAR : GfxMipFilterMode.NEAREST;
         this.gfxSampler = cache.createSampler(device, {
             wrapS, wrapT, minFilter, magFilter, mipFilter,
             minLOD: 0, maxLOD: 100,
@@ -284,5 +285,6 @@ export class VTF {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.gfxTextures.length; i++)
             device.destroyTexture(this.gfxTextures[i]);
+        this.gfxTextures.length = 0;
     }
 }
