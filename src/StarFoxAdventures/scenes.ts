@@ -1,7 +1,9 @@
 import * as Viewer from '../viewer';
 
-import { SFAMapSceneDesc, AncientMapSceneDesc } from './maps';
+import { SFAMapSceneDesc, SwapcircleSceneDesc, AncientMapSceneDesc } from './maps';
 import { SFAWorldSceneDesc } from './world';
+import { ModelVersion } from './models';
+import { SFAModelExhibitSceneDesc } from './modelexhibit';
 
 export interface GameInfo {
     pathBase: string;
@@ -320,6 +322,7 @@ const sceneDescs = [
     new SFAWorldSceneDesc('dragrock', 'dragrock', 2, 'Dragon Rock'),
 
     // 'Miscellaneous',
+    // new SwapcircleSceneDesc(22, 'betaswapcircle', 'Swap Circle', SFADEMO_GAME_INFO),
     // new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit', 'swaphol', ModelVersion.Final),
     // new SFAModelExhibitSceneDesc('betamodelexhibit', 'Beta Model Exhibit', 'swapcircle', ModelVersion.Beta, SFADEMO_GAME_INFO),
 

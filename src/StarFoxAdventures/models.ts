@@ -313,7 +313,8 @@ interface CoarseBlend {
 }
 
 export enum ModelVersion {
-    Beta, // Demo swapcircle
+    Beta,
+    BetaMap, // Demo swapcircle
     Demo, // Most demo files
     Final,
 }
@@ -506,7 +507,7 @@ export class Model {
         if (this.modelVersion === ModelVersion.Beta) {
             fields = {
                 isBeta: true,
-                isMapBlock: false, // TODO: support map blocks
+                isMapBlock: false,
                 alwaysUseTex1: true,
                 shaderFields: BETA_MODEL_SHADER_FIELDS,
                 hasNormals: true,
@@ -541,7 +542,37 @@ export class Model {
                 bitsByteCounts: [0x94],
                 oldVat: true,
                 hasYTranslate: false,
-            }
+            };
+        } else if (this.modelVersion === ModelVersion.BetaMap) {
+            fields = {
+                isBeta: true,
+                isMapBlock: true,
+                alwaysUseTex1: true,
+                shaderFields: BETA_MODEL_SHADER_FIELDS,
+                hasNormals: false,
+                hasBones: false,
+                texOffset: 0x58,
+                posOffset: 0x5c,
+                clrOffset: 0x60,
+                texcoordOffset: 0x64,
+                shaderOffset: 0x68,
+                listOffsets: 0x6c,
+                listSizes: 0x70,
+                posCount: 0x9e,
+                clrCount: 0xa2,
+                texcoordCount: 0xa4,
+                texCount: 0x98,
+                shaderCount: 0x99, // ???
+                texMtxCount: 0xaf,
+                dlOffsets: 0x6c,
+                dlSizes: 0x70,
+                dlInfoCount: 0x99, // ???
+                numListBits: 6,
+                bitsOffsets: [0x7c],
+                bitsByteCounts: [0x94], // ???
+                oldVat: true,
+                hasYTranslate: false,
+            };
         } else if (this.modelVersion === ModelVersion.Demo) {
             const isMapModel = false; // TODO: detect
             if (isMapModel) {
@@ -618,7 +649,7 @@ export class Model {
                     hasYTranslate: false,
                 };
             }
-        } else { // this.modelVersion === ModelVersion.Final
+        } else if (this.modelVersion === ModelVersion.Final) {
             // FIXME: This field is NOT a model type and doesn't reliably indicate
             // the type of model.
             const modelType = blockDv.getUint16(4);
@@ -697,6 +728,8 @@ export class Model {
             default:
                 throw Error(`Model type ${modelType} not implemented`);
             }
+        } else {
+            throw Error(`Unhandled model version ${modelVersion}`);
         }
 
         if (fields.posFineSkinningConfig !== undefined) {
@@ -732,6 +765,7 @@ export class Model {
             const texIdFromFile = blockDv.getUint32(texOffset + i * 4);
             texIds.push(texIdFromFile);
         }
+        // console.log(`texids: ${texIds}`);
 
         const posOffset = blockDv.getUint32(fields.posOffset);
         const posCount = blockDv.getUint16(fields.posCount);
@@ -757,7 +791,7 @@ export class Model {
 
         const texcoordOffset = blockDv.getUint32(fields.texcoordOffset);
         const texcoordCount = blockDv.getUint16(fields.texcoordCount);
-        // console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordCount.toString(16)}`);
+        // console.log(`Loading ${texcoordCount} texcoords from 0x${texcoordOffset.toString(16)}`);
         const texcoordBuffer = blockData.subarray(texcoordOffset);
 
         let jointCount = 0;
@@ -897,13 +931,14 @@ export class Model {
         const dlInfos: DisplayListInfo[] = [];
         const dlInfoCount = blockDv.getUint8(fields.dlInfoCount);
         // console.log(`Loading ${dlInfoCount} display lists...`);
-        if (this.modelVersion === ModelVersion.Beta) {
+        if (fields.isBeta) {
             for (let i = 0; i < dlInfoCount; i++) {
                 const dlOffsetsOffs = blockDv.getUint32(fields.dlOffsets);
                 const dlSizesOffs = blockDv.getUint32(fields.dlSizes);
 
                 const dlOffset = blockDv.getUint32(dlOffsetsOffs + i * 4);
                 const dlSize = blockDv.getUint16(dlSizesOffs + i * 2);
+                // console.log(`DL ${i}: offset 0x${dlOffset.toString(16)}, size 0x${dlSize.toString(16)}`);
                 dlInfos.push({
                     offset: dlOffset,
                     size: dlSize,

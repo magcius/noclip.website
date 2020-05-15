@@ -21,11 +21,14 @@ class ModelExhibitRenderer extends SFARenderer {
 
     private modanim: DataView | null | undefined = undefined;
     private amap: DataView | null | undefined = undefined;
+    private generatedAmap: DataView | null = null;
     private anim: Anim | null | undefined = undefined;
     private modelAnimNum = 0;
     private animSelect: UI.TextEntry;
 
     private displayBones: boolean = false;
+    private useGlobalAnimNum: boolean = false;
+    private autogenAmap: boolean = false;
 
     constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelFetcher: ModelFetcher, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
         super(device, animController);
@@ -54,17 +57,31 @@ class ModelExhibitRenderer extends SFARenderer {
             if (newNum !== NaN) {
                 this.modelAnimNum = newNum;
                 this.anim = undefined;
+                this.generatedAmap = null;
             }
         }
         // this.animSelect.setLabel("Animation #");
         // this.animSelect.setRange(0, 200 /*this.animLoader.getNumAnims()*/);
         panel.contents.append(this.animSelect.elem);
 
-        const bonesSelect = new UI.Checkbox("Display Bones", false);
+        const bonesSelect = new UI.Checkbox("Display bones", false);
         bonesSelect.onchanged = () => {
             this.displayBones = bonesSelect.checked;
         };
         panel.contents.append(bonesSelect.elem);
+
+        const useGlobalAnimSelect = new UI.Checkbox("Use global animation number", false);
+        useGlobalAnimSelect.onchanged = () => {
+            this.useGlobalAnimNum = useGlobalAnimSelect.checked;
+        };
+        panel.contents.append(useGlobalAnimSelect.elem);
+
+        const autogenAmapSelect = new UI.Checkbox("Autogenerate AMAP", false);
+        autogenAmapSelect.onchanged = () => {
+            this.autogenAmap = autogenAmapSelect.checked;
+            this.generatedAmap = null;
+        };
+        panel.contents.append(autogenAmapSelect.elem);
 
         return [panel];
     }
@@ -90,9 +107,56 @@ class ModelExhibitRenderer extends SFARenderer {
     }
 
     private getAmapForModelAnim(modelAnimNum: number): DataView {
-        const stride = (((this.modelInst!.model.joints.length + 8) / 8)|0) * 8;
-        // console.log(`getting amap for model ${this.modelNum} anim ${modelAnimNum} at file offset 0x${(this.amap!.byteOffset + modelAnimNum * stride).toString(16)}`)
-        return dataSubarray(this.amap!, modelAnimNum * stride, stride);
+        const printAmap = (amap: DataView) => {
+            let s = '';
+            for (let i = 0; i < amap.byteLength; i++) {
+                s += `${amap.getInt8(i)},`;
+            }
+            console.log(`Amap: ${s}`);
+        };
+
+        if (this.autogenAmap) {
+            if (this.generatedAmap === null) {
+                let generatedAmap = [0];
+
+                // Perform a breadth-first search on the model joint hierarchy.
+                // The output matches most AMAP tables, except Fox.
+                let curCluster = [0];
+                while (curCluster.length > 0) {
+                    const prevCluster = curCluster; // This is safe because curCluster is set to a new array.
+                    curCluster = [];
+
+                    for (let i = 0; i < prevCluster.length; i++) {
+                        for (let j = 0; j < this.modelInst!.model.joints.length; j++) {
+                            const joint = this.modelInst!.model.joints[j];
+                            if (joint.parent === prevCluster[i]) {
+                                curCluster.push(j);
+                            }
+                        }
+                    }
+
+                    for (let i = 0; i < curCluster.length; i++) {
+                        generatedAmap.push(curCluster[i]);
+                    }
+                }
+                
+                this.generatedAmap = new DataView(new Int8Array(generatedAmap).buffer);
+                printAmap(this.generatedAmap);
+            }
+
+            return this.generatedAmap;
+        } else {
+            const stride = (((this.modelInst!.model.joints.length + 8) / 8)|0) * 8;
+            // console.log(`getting amap for model ${this.modelNum} anim ${modelAnimNum} at file offset 0x${(this.amap!.byteOffset + modelAnimNum * stride).toString(16)}`)
+            const amap = dataSubarray(this.amap!, modelAnimNum * stride, stride);
+
+            if (this.generatedAmap === null) {
+                this.generatedAmap = new DataView(new Int8Array(1).buffer);
+                printAmap(amap);
+            }
+
+            return amap;
+        }
     }
     
     protected update(viewerInput: Viewer.ViewerRenderInput) {
@@ -120,7 +184,12 @@ class ModelExhibitRenderer extends SFARenderer {
         if (animate && this.modelInst !== null && this.modelInst !== undefined) {
             if (this.anim === undefined) {
                 try {
-                    const globalAnimNum = this.getGlobalAnimNum(this.modelAnimNum);
+                    let globalAnimNum;
+                    if (this.useGlobalAnimNum) {
+                        globalAnimNum = this.modelAnimNum;
+                    } else {
+                        globalAnimNum = this.getGlobalAnimNum(this.modelAnimNum);
+                    }
                     this.anim = this.animColl.getAnim(globalAnimNum);
                     console.log(`Loaded anim ${this.modelAnimNum} (global #${globalAnimNum})`);
                     console.log(`Anim ${this.modelAnimNum} has ${this.anim.keyframes[0].poses.length} poses`);
