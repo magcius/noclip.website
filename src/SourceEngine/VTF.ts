@@ -120,7 +120,7 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
     }
 }
 
-const enum VTFFlags {
+export const enum VTFFlags {
     POINTSAMPLE   = 0x00000001,
     TRILINEAR     = 0x00000002,
     CLAMPS        = 0x00000004,
@@ -144,7 +144,7 @@ export class VTF {
     public numFrames: number;
     public numLevels: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private buffer: ArrayBufferSlice | null, private name: string) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, additionalFlags: VTFFlags) {
         if (buffer === null)
             return;
 
@@ -162,7 +162,7 @@ export class VTF {
 
             this.width = view.getUint16(0x10, true);
             this.height = view.getUint16(0x12, true);
-            this.flags = view.getUint32(0x14, true);
+            this.flags = view.getUint32(0x14, true) | additionalFlags;
             this.numFrames = view.getUint16(0x18, true);
             const startFrame = view.getUint16(0x1A, true);
             const reflectivityR = view.getFloat32(0x20, true);

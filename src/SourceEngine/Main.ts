@@ -171,6 +171,8 @@ export class SkyboxRenderer {
         computeMatrixWithoutTranslation(scratchMatrix, viewerInput.camera.viewMatrix);
 
         for (let i = 0; i < 6; i++) {
+            if (!this.materialInstances[i].visible)
+                continue;
             const renderInst = renderInstManager.newRenderInst();
             this.materialInstances[i].setOnRenderInst(renderContext, renderInst, this.modelMatrix);
             renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
