@@ -384,8 +384,12 @@ export class AnimCollection {
         const self = new AnimCollection();
 
         const pathBase = gameInfo.pathBase;
-        self.animFile = await AnimFile.create(dataFetcher, `${pathBase}/${subdir}/ANIM`);
-        self.preanimFile = await AnimFile.create(dataFetcher, `${pathBase}/PREANIM`);
+        const [animFile, preanimFile] = await Promise.all([
+            AnimFile.create(dataFetcher, `${pathBase}/${subdir}/ANIM`),
+            AnimFile.create(dataFetcher, `${pathBase}/PREANIM`)
+        ]);
+        self.animFile = animFile;
+        self.preanimFile = preanimFile;
 
         return self;
     }

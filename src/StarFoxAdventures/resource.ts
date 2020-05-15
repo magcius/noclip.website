@@ -98,15 +98,18 @@ export class ResourceCollection {
         await self.texFetcher.loadSubdir(subdir, dataFetcher);
         self.modelFetcher = await ModelFetcher.create(device, gameInfo, dataFetcher, self.texFetcher, self.materialFactory, self.animController, ModelVersion.Final)
         await self.modelFetcher.loadSubdir(subdir, dataFetcher);
-        self.animColl = await AnimCollection.create(self.gameInfo, dataFetcher, subdir);
-        self.amapColl = await AmapCollection.create(self.gameInfo, dataFetcher);
-        self.modanimColl = await ModanimCollection.create(self.gameInfo, dataFetcher);
 
         const pathBase = self.gameInfo.pathBase;
-        const [tablesTab, tablesBin] = await Promise.all([
+        const [animColl, amapColl, modanimColl. tablesTab, tablesBin] = await Promise.all([
+            AnimCollection.create(self.gameInfo, dataFetcher, subdir),
+            AmapCollection.create(self.gameInfo, dataFetcher),
+            ModanimCollection.create(self.gameInfo, dataFetcher),
             dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
             dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
         ]);
+        self.animColl = animColl;
+        self.amapColl = amapColl;
+        self.modanimColl = modanimColl;
         self.tablesTab = tablesTab.createDataView();
         self.tablesBin = tablesBin.createDataView();
 
