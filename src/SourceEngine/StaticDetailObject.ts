@@ -8,8 +8,9 @@ import { SourceRenderContext, noclipSpaceFromSourceEngineSpace } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { transformVec3Mat4w0, computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { ViewerRenderInput } from "../viewer";
+import { ViewerRenderInput, Viewer } from "../viewer";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
+import { Endianness } from "../endian";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -325,3 +326,75 @@ export class DetailSpriteLeafRenderer {
     }
 }
 //#endregion
+
+interface StaticObject {
+    pos: vec3;
+    rot: vec3;
+    propName: string;
+    firstLeaf: number;
+    leafCount: number;
+    fadeMinDist: number;
+    fadeMaxDist: number;
+}
+
+export interface StaticObjects {
+    staticObjects: StaticObject[];
+}
+
+export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: number): StaticObjects | null {
+    assert(version === 5 || version === 6);
+    const sprp = buffer.createDataView();
+    let idx = 0x00;
+
+    const staticModelDict: string[] = [];
+    const staticModelDictCount = sprp.getUint32(idx, true);
+    idx += 0x04;
+    for (let i = 0; i < staticModelDictCount; i++) {
+        staticModelDict.push(readString(buffer, idx + 0x00, 0x80, true));
+        idx += 0x80;
+    }
+
+    const leafListCount = sprp.getUint32(idx, true);
+    idx += 0x04;
+    const leafList = buffer.createTypedArray(Uint16Array, idx, leafListCount, Endianness.LITTLE_ENDIAN);
+    idx += leafList.byteLength;
+
+    const staticObjects: StaticObject[] = [];
+    const staticObjectCount = sprp.getUint32(idx, true);
+    idx += 0x04;
+    for (let i = 0; i < staticObjectCount; i++) {
+        const posX = sprp.getFloat32(idx + 0x00, true);
+        const posY = sprp.getFloat32(idx + 0x04, true);
+        const posZ = sprp.getFloat32(idx + 0x08, true);
+        const rotX = sprp.getFloat32(idx + 0x0C, true);
+        const rotY = sprp.getFloat32(idx + 0x10, true);
+        const rotZ = sprp.getFloat32(idx + 0x14, true);
+        const propType = sprp.getUint16(idx + 0x18, true);
+        const firstLeaf = sprp.getUint16(idx + 0x1A, true);
+        const leafCount = sprp.getUint16(idx + 0x1C, true);
+        const solid = sprp.getUint8(idx + 0x1E);
+        const flags = sprp.getUint8(idx + 0x1F);
+        const skin = sprp.getInt32(idx + 0x20, true);
+        const fadeMinDist = sprp.getFloat32(idx + 0x24, true);
+        const fadeMaxDist = sprp.getFloat32(idx + 0x28, true);
+        const lightingOriginX = sprp.getFloat32(idx + 0x2C, true);
+        const lightingOriginY = sprp.getFloat32(idx + 0x30, true);
+        const lightingOriginZ = sprp.getFloat32(idx + 0x34, true);
+        const forcedFadeScale = sprp.getFloat32(idx + 0x38, true);
+        idx += 0x3C;
+
+        let minDXLevel = -1, maxDXLevel = -1;
+        if (version >= 6) {
+            minDXLevel = sprp.getUint16(idx + 0x00, true);
+            maxDXLevel = sprp.getUint16(idx + 0x02, true);
+            idx += 0x04;
+        }
+
+        const pos = vec3.fromValues(posX, posY, posZ);
+        const rot = vec3.fromValues(rotX, rotY, rotZ);
+        const propName = staticModelDict[propType];
+        staticObjects.push({ pos, rot, propName, firstLeaf, leafCount, fadeMinDist, fadeMaxDist })
+    }
+
+    return { staticObjects };
+}

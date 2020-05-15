@@ -15,11 +15,12 @@ import { ZipFile } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BaseMaterialProgram, BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState, MaterialProxySystem, EntityMaterialParameters } from "./Materials";
 import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
-import { assert } from "../util";
+import { assert, assertExists } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { AABB } from "../Geometry";
 import { DetailSpriteLeafRenderer } from "./StaticDetailObject";
+import BitMap from "../BitMap";
 
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
@@ -188,9 +189,11 @@ export class SkyboxRenderer {
 }
 
 class BSPSurfaceRenderer {
+    public visible = true;
     public materialInstance: BaseMaterial | null = null;
     public surfaceLighting: SurfaceLightingInstance;
-    public visible = true;
+    // displacement
+    public clusterset: number[] | null = null;
 
     constructor(public surface: Surface) {
     }
@@ -209,9 +212,31 @@ class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewMatrixZUp: mat4, modelMatrix: mat4) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4, modelMatrix: mat4, pvs: BitMap | null = null) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
             return;
+
+        if (pvs !== null) {
+            // displacement check
+            const clusterset = assertExists(this.clusterset);
+            let visible = false;
+            for (let i = 0; i < clusterset.length; i++) {
+                if (pvs.getBit(clusterset[i])) {
+                    visible = true;
+                    break;
+                }
+            }
+
+            if (!visible)
+                return;
+        }
+
+        if (this.surface.bbox !== null) {
+            mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, modelMatrix);
+            scratchAABB.transform(this.surface.bbox, scratchMatrixCull);
+            if (!viewerInput.camera.frustum.contains(scratchAABB))
+                return;
+        }
 
         if (this.surfaceLighting !== null && this.surfaceLighting.lightmapDirty) {
             this.surfaceLighting.buildLightmap(renderContext.worldLightingState);
@@ -242,8 +267,12 @@ class BSPModelRenderer {
             this.bindMaterial(renderContext, surface);
             this.surfaces.push(surface);
 
-            if (surface.surface.dispinfo >= 0)
+            if (surface.surface.isDisplacement) {
+                const aabb = surface.surface.bbox!;
                 this.displacementSurfaces.push(surface);
+                surface.clusterset = [];
+                this.bsp.markClusterSet(surface.clusterset, aabb);
+            }
         }
     }
 
@@ -271,69 +300,58 @@ class BSPModelRenderer {
             this.surfaces[i].movement(renderContext);
     }
 
-    private prepareToRenderBSP(nodeid: number, renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4, modelMatrixCull: mat4, area: number | null): void {
+    private prepareToRenderBSP(nodeid: number, renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4, modelMatrixCull: mat4, pvs: BitMap): void {
         if (nodeid >= 0) {
             // node
             const node = this.bsp.nodelist[nodeid];
 
-            if (node.area > 0 && area !== null && node.area !== area)
+            mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
+            scratchAABB.transform(node.bbox, scratchMatrixCull);
+            if (!viewerInput.camera.frustum.contains(scratchAABB))
                 return;
 
-            if (area === null) {
-                mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
-                scratchAABB.transform(node.bbox, scratchMatrixCull);
-                if (!viewerInput.camera.frustum.contains(scratchAABB))
-                    return;
-            }
-
-            this.prepareToRenderBSP(node.child0, renderContext, renderInstManager, viewerInput, viewMatrixZUp, modelMatrixCull, area);
-            this.prepareToRenderBSP(node.child1, renderContext, renderInstManager, viewerInput, viewMatrixZUp, modelMatrixCull, area);
-
-            if (area !== null && node.area !== area)
-                return;
+            this.prepareToRenderBSP(node.child0, renderContext, renderInstManager, viewerInput, viewMatrixZUp, modelMatrixCull, pvs);
+            this.prepareToRenderBSP(node.child1, renderContext, renderInstManager, viewerInput, viewMatrixZUp, modelMatrixCull, pvs);
 
             for (let i = node.surfaceStart - this.model.surfaceStart; i < node.surfaceCount; i++)
-                this.surfaces[i].prepareToRender(renderContext, renderInstManager, viewMatrixZUp, this.modelMatrix);
+                this.surfaces[i].prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix);
         } else {
             // leaf
             const leafnum = -nodeid - 1;
             const leaf = this.bsp.leaflist[leafnum];
 
-            if (area !== null && leaf.area !== area)
+            if (!pvs.getBit(leaf.cluster))
                 return;
 
-            if (area === null) {
-                mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
-                scratchAABB.transform(leaf.bbox, scratchMatrixCull);
-                if (!viewerInput.camera.frustum.contains(scratchAABB))
-                    return;
-            }
+            mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
+            scratchAABB.transform(leaf.bbox, scratchMatrixCull);
+            if (!viewerInput.camera.frustum.contains(scratchAABB))
+                return;
 
             for (let i = 0; i < leaf.leaffaceCount; i++) {
                 const surfaceIdx = this.bsp.leaffacelist[leaf.leaffaceStart + i] - this.model.surfaceStart;
                 assert(surfaceIdx >= 0);
-                this.surfaces[surfaceIdx].prepareToRender(renderContext, renderInstManager, viewMatrixZUp, this.modelMatrix);
+                this.surfaces[surfaceIdx].prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix);
             }
         }
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4, area: number | null): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4, pvs: BitMap): void {
         if (!this.visible)
             return;
 
-        if (area === null) {
-            mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
-            scratchAABB.transform(this.model.bbox, scratchMatrixCull);
-            if (!viewerInput.camera.frustum.contains(scratchAABB))
-                return;
-        }
+        mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
+        scratchAABB.transform(this.model.bbox, scratchMatrixCull);
+        if (!viewerInput.camera.frustum.contains(scratchAABB))
+            return;
 
         // Render all displacement surfaces.
         // TODO(jstpierre): Move this to the BSP leaves
-        for (let i = 0; i < this.displacementSurfaces.length; i++)
-            this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, viewMatrixZUp, this.modelMatrix);
+        for (let i = 0; i < this.displacementSurfaces.length; i++) {
+            this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix, pvs);
+        }
 
-        this.prepareToRenderBSP(this.model.headnode, renderContext, renderInstManager, viewerInput, viewMatrixZUp, scratchMatrixCull, area);
+        this.prepareToRenderBSP(this.model.headnode, renderContext, renderInstManager, viewerInput, viewMatrixZUp, scratchMatrixCull, pvs);
     }
 }
 
@@ -438,6 +456,7 @@ export class BSPRenderer {
     private entities: BaseEntity[] = [];
     public models: BSPModelRenderer[] = [];
     public detailSpriteLeafRenderers: DetailSpriteLeafRenderer[] = [];
+    public pvs: BitMap;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
         const device = renderContext.device, cache = renderContext.cache;
@@ -459,6 +478,8 @@ export class BSPRenderer {
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0, });
+
+        this.pvs = new BitMap(this.bsp.visibility.numclusters);
 
         for (let i = 0; i < this.bsp.models.length; i++) {
             const model = this.bsp.models[i];
@@ -487,7 +508,7 @@ export class BSPRenderer {
             this.models[i].movement(renderContext);
     }
 
-    private prepareToRenderInternal(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelMatrix: mat4 | null, area: number | null): void {
+    private prepareToRenderInternal(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelMatrix: mat4 | null, pvs: BitMap): void {
         const template = renderInstManager.pushTemplateRenderInst();
 
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
@@ -502,27 +523,52 @@ export class BSPRenderer {
 
         mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         for (let i = 0; i < this.models.length; i++)
-            this.models[i].prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix, area);
+            this.models[i].prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix, pvs);
 
         renderInstManager.popTemplateRenderInst();
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const skybox = this.entities.find((entity) => entity instanceof sky_camera) as sky_camera | undefined;
+        // Compute PVS from player position.
+        const leafid = this.bsp.findLeafForPoint(renderContext.cameraPos);
+
+        let insideWorld = false;
+        if (leafid >= 0) {
+            const leaf = this.bsp.leaflist[leafid];
+
+            if (leaf.cluster !== 0xFFFF) {
+                // Has valid visibility.
+                this.pvs.fill(false);
+                this.pvs.or(this.bsp.visibility.pvs[leaf.cluster]);
+                insideWorld = true;
+            }
+        }
+
+        if (!insideWorld) {
+            // Outside world. Mark all as visible.
+            this.pvs.fill(true);
+        }
+
+        // TODO(jstpierre): Skybox
+        /*const skybox = this.entities.find((entity) => entity instanceof sky_camera) as sky_camera | undefined;
         if (skybox !== undefined) {
             const template = renderInstManager.pushTemplateRenderInst();
             template.filterKey = FilterKey.Skybox;
             this.prepareToRenderInternal(renderContext, renderInstManager, viewerInput, skybox.modelMatrix, skybox.area);
             renderInstManager.popTemplateRenderInst();
-        }
+        }*/
 
         mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         for (let i = 0; i < this.detailSpriteLeafRenderers.length; i++) {
-            // TODO(jstpierre): Compute leaf visibility (ain't that the joke.......)
-            this.detailSpriteLeafRenderers[i].prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix);
+            const spr = this.detailSpriteLeafRenderers[i];
+            // TODO(jstpierre): This seems to have clusterless leaves ??????
+            const cluster = this.bsp.leaflist[spr.leaf].cluster;
+            if (cluster !== 0xFFFF && !this.pvs.getBit(cluster))
+                continue;
+            spr.prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix);
         }
 
-        this.prepareToRenderInternal(renderContext, renderInstManager, viewerInput, null, null);
+        this.prepareToRenderInternal(renderContext, renderInstManager, viewerInput, null, this.pvs);
     }
 
     public destroy(device: GfxDevice): void {

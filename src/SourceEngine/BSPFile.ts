@@ -8,13 +8,15 @@ import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrian
 import { parseZipFile, ZipFile } from "../ZipFile";
 import { parseEntitiesLump, BSPEntity } from "./VMT";
 import { Plane, AABB } from "../Geometry";
-import { deserializeGameLump_dprp, DetailObjects } from "./StaticDetailObject";
+import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject";
+import BitMap from "../BitMap";
 
 const enum LumpType {
     ENTITIES             = 0,
     PLANES               = 1,
     TEXDATA              = 2,
     VERTEXES             = 3,
+    VISIBILITY           = 4,
     NODES                = 5,
     TEXINFO              = 6,
     FACES                = 7,
@@ -34,6 +36,7 @@ const enum LumpType {
     PAKFILE              = 40,
     TEXDATA_STRING_DATA  = 43,
     TEXDATA_STRING_TABLE = 44,
+    OVERLAYS             = 45,
     LIGHTING_HDR         = 53,
     FACES_HDR            = 58,
 }
@@ -54,7 +57,10 @@ export interface Surface {
     indexCount: number;
     center: vec3;
     lighting: SurfaceLighting;
-    dispinfo: number;
+
+    // displacement info
+    isDisplacement: boolean;
+    bbox: AABB | null;
 }
 
 interface TexinfoMapping {
@@ -99,6 +105,7 @@ export interface BSPNode {
 export interface BSPLeaf {
     bbox: AABB;
     area: number;
+    cluster: number;
     leaffaceStart: number;
     leaffaceCount: number;
 }
@@ -127,6 +134,7 @@ class DisplacementMeshVertex {
 
 class DisplacementBuilder {
     public vertex: DisplacementMeshVertex[];
+    public aabb = new AABB();
 
     constructor(public disp: BSPDispInfo, public corners: vec3[], public disp_verts: Float32Array) {
         this.vertex = nArray(disp.vertexCount, () => new DisplacementMeshVertex());
@@ -159,6 +167,7 @@ class DisplacementBuilder {
                 vertex.uv[0] = tx;
                 vertex.uv[1] = ty;
                 vertex.alpha = dvalpha / 0xFF;
+                this.aabb.unionPoint(vertex.position);
             }
         }
 
@@ -254,6 +263,51 @@ function magicint(S: string): number {
     return (n0 << 24) | (n1 << 16) | (n2 << 8) | n3;
 }
 
+class BSPVisibility {
+    public pvs: BitMap[];
+    public numclusters: number;
+
+    constructor(buffer: ArrayBufferSlice) {
+        const view = buffer.createDataView();
+
+        this.numclusters = view.getUint32(0x00, true);
+        this.pvs = nArray(this.numclusters, () => new BitMap(this.numclusters));
+
+        for (let i = 0; i < this.numclusters; i++) {
+            const pvsofs = view.getUint32(0x04 + i * 0x08 + 0x00, true);
+            const pasofs = view.getUint32(0x04 + i * 0x08 + 0x04, true);
+            this.decodeClusterTable(this.pvs[i], view, pvsofs);
+        }
+    }
+
+    private decodeClusterTable(dst: BitMap, view: DataView, offs: number): void {
+        if (offs === 0x00) {
+            // No visibility info; mark everything visible.
+            dst.fill(true);
+            return;
+        }
+
+        // Initialize with all 0s.
+        dst.fill(false);
+
+        let clusteridx = 0;
+        while (clusteridx < this.numclusters) {
+            const b = view.getUint8(offs++);
+
+            if (b) {
+                // Transfer to bitmap. Need to reverse bits (unfortunately).
+                for (let i = 0; i < 8; i++)
+                    dst.setBit(clusteridx++, !!(b & (1 << i)));
+            } else {
+                // RLE.
+                const c = view.getUint8(offs++);
+                clusteridx += c * 8;
+            }
+        }
+    }
+}
+
+const scratchVec3 = vec3.create();
 export class BSPFile {
     public version: number;
 
@@ -266,6 +320,8 @@ export class BSPFile {
     public leaflist: BSPLeaf[] = [];
     public leaffacelist: Uint16Array;
     public detailObjects: DetailObjects | null = null;
+    public staticObjects: StaticObjects | null = null;
+    public visibility: BSPVisibility;
 
     public indexData: Uint16Array;
     public vertexData: Float32Array;
@@ -315,6 +371,9 @@ export class BSPFile {
             }
             return null;
         }
+
+        // Parse out visibility.
+        this.visibility = new BSPVisibility(getLumpData(LumpType.VISIBILITY));
 
         // Parse out entities.
         this.entities = parseEntitiesLump(getLumpData(LumpType.ENTITIES));
@@ -608,7 +667,7 @@ export class BSPFile {
                 }
 
                 assert(m === ((disp.sideLength - 1) ** 2) * 6);
-                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: m, center, lighting: surfaceLighting, dispinfo });
+                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: m, center, lighting: surfaceLighting, isDisplacement: true, bbox: builder.aabb });
                 dstOffsIndex += m;
                 dstIndexBase += disp.vertexCount;
             } else {
@@ -681,7 +740,7 @@ export class BSPFile {
                     convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
                 }
 
-                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: indexCount, center, lighting: surfaceLighting, dispinfo });
+                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: indexCount, center, lighting: surfaceLighting, isDisplacement: false, bbox: null });
                 dstOffsIndex += indexCount;
                 dstIndexBase += numedges;
             }
@@ -747,7 +806,7 @@ export class BSPFile {
                 idx += 0x18;
             }
 
-            this.leaflist.push({ bbox, area, leaffaceStart: firstleafface, leaffaceCount: numleaffaces });
+            this.leaflist.push({ bbox, cluster, area, leaffaceStart: firstleafface, leaffaceCount: numleaffaces });
         }
 
         const models = getLumpData(LumpType.MODELS).createDataView();
@@ -774,15 +833,40 @@ export class BSPFile {
         const dprp = getGameLumpData('dprp');
         if (dprp !== null)
             this.detailObjects = deserializeGameLump_dprp(dprp[0], dprp[1]);
+
+        const sprp = getGameLumpData('sprp');
+        if (sprp !== null)
+            this.staticObjects = deserializeGameLump_sprp(sprp[0], sprp[1]);
     }
 
     public findLeafForPoint(p: vec3, nodeid: number = 0): number {
-        if (nodeid < 0)
+        if (nodeid < 0) {
             return -nodeid - 1;
+        } else {
+            const node = this.nodelist[nodeid];
+            const dot = node.plane.distance(p[0], p[1], p[2]);
+            return this.findLeafForPoint(p, dot >= 0.0 ? node.child0 : node.child1);
+        }
+    }
 
-        const node = this.nodelist[nodeid];
-        const dot = node.plane.distance(p[0], p[1], p[2]);
+    public markClusterSet(dst: number[], aabb: AABB, nodeid: number = 0): void {
+        if (nodeid < 0) {
+            const leaf = this.leaflist[-nodeid - 1];
+            if (leaf.cluster !== 0xFFFF && !dst.includes(leaf.cluster))
+                dst.push(leaf.cluster);
+        } else {
+            const node = this.nodelist[nodeid];
+            let signs = 0;
+            for (let i = 0; i < 8; i++) {
+                aabb.cornerPoint(scratchVec3, i);
+                const dot = node.plane.distance(scratchVec3[0], scratchVec3[1], scratchVec3[2]);
+                signs |= (dot >= 0 ? 1 : 2);
+            }
 
-        return this.findLeafForPoint(p, dot >= 0.0 ? node.child0 : node.child1);
+            if (!!(signs & 1))
+                this.markClusterSet(dst, aabb, node.child0);
+            if (!!(signs & 2))
+                this.markClusterSet(dst, aabb, node.child1);
+        }
     }
 }

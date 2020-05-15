@@ -153,16 +153,35 @@ export class AABB {
             pZ < this.minZ - rad || pZ > this.maxZ + rad);
     }
 
+    public extents(v: vec3): void {
+        v[0] = (this.maxX - this.minX) / 2;
+        v[1] = (this.maxY - this.minY) / 2;
+        v[2] = (this.maxZ - this.minZ) / 2;
+    }
+
     public centerPoint(v: vec3): void {
         v[0] = (this.minX + this.maxX) / 2;
         v[1] = (this.minY + this.maxY) / 2;
         v[2] = (this.minZ + this.maxZ) / 2;
     }
 
-    public extents(v: vec3): void {
-        v[0] = (this.maxX - this.minX) / 2;
-        v[1] = (this.maxY - this.minY) / 2;
-        v[2] = (this.maxZ - this.minZ) / 2;
+    public cornerPoint(dst: vec3, i: number): void {
+        if (i === 0)
+            vec3.set(dst, this.minX, this.minY, this.minZ);
+        else if (i === 1)
+            vec3.set(dst, this.maxX, this.minY, this.minZ);
+        else if (i === 2)
+            vec3.set(dst, this.minX, this.maxY, this.minZ);
+        else if (i === 3)
+            vec3.set(dst, this.maxX, this.maxY, this.minZ);
+        else if (i === 4)
+            vec3.set(dst, this.minX, this.minY, this.maxZ);
+        else if (i === 5)
+            vec3.set(dst, this.maxX, this.minY, this.maxZ);
+        else if (i === 6)
+            vec3.set(dst, this.minX, this.maxY, this.maxZ);
+        else if (i === 7)
+            vec3.set(dst, this.maxX, this.maxY, this.maxZ);
     }
 
     public boundingSphereRadius(): number {
