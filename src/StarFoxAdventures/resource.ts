@@ -100,7 +100,7 @@ export class ResourceCollection {
         await self.modelFetcher.loadSubdir(subdir, dataFetcher);
 
         const pathBase = self.gameInfo.pathBase;
-        const [animColl, amapColl, modanimColl. tablesTab, tablesBin] = await Promise.all([
+        const [animColl, amapColl, modanimColl, tablesTab, tablesBin] = await Promise.all([
             AnimCollection.create(self.gameInfo, dataFetcher, subdir),
             AmapCollection.create(self.gameInfo, dataFetcher),
             ModanimCollection.create(self.gameInfo, dataFetcher),

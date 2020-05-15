@@ -707,6 +707,10 @@ export class ObjectType {
 
         const flags = data.getUint32(0x44);
         this.isDevObject = !!(flags & 1);
+        if (this.objClass === 293) {
+            // XXX: Object type "curve" is not marked as a dev object, but it should be treated as one.
+            this.isDevObject = true;
+        }
 
         this.ambienceNum = data.getUint8(0x8e);
     }

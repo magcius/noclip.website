@@ -321,10 +321,10 @@ const sceneDescs = [
     new SFAWorldSceneDesc('wallcity', 'wallcity', 13, 'Walled City'),
     new SFAWorldSceneDesc('dragrock', 'dragrock', 2, 'Dragon Rock'),
 
-    'Miscellaneous',
-    new SwapcircleSceneDesc(22, 'betaswapcircle', 'Swap Circle', SFADEMO_GAME_INFO),
-    new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit', 'swaphol', ModelVersion.Final),
-    new SFAModelExhibitSceneDesc('betamodelexhibit', 'Beta Model Exhibit', 'swapcircle', ModelVersion.Beta, SFADEMO_GAME_INFO),
+    // 'Miscellaneous',
+    // new SwapcircleSceneDesc(22, 'betaswapcircle', 'Swap Circle', SFADEMO_GAME_INFO),
+    // new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit', 'swaphol', ModelVersion.Final),
+    // new SFAModelExhibitSceneDesc('betamodelexhibit', 'Beta Model Exhibit', 'swapcircle', ModelVersion.Beta, SFADEMO_GAME_INFO),
 
     // 'Demo Maps',
     // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),
