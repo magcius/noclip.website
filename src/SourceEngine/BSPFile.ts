@@ -43,6 +43,10 @@ const enum LumpType {
 }
 
 export interface SurfaceLighting {
+    // Size of a single lightmap.
+    mapWidth: number;
+    mapHeight: number;
+    // Size of the full lightmap texture (x4 for RN bumpmap)
     width: number;
     height: number;
     styles: number[];
@@ -632,7 +636,7 @@ export class BSPFile {
                 samples = lighting.subarray(lightofs, lightmapSize).createTypedArray(Uint8Array);
 
             const surfaceLighting: SurfaceLighting = {
-                width, height, styles, lightmapSize, samples, hasBumpmapSamples,
+                mapWidth, mapHeight, width, height, styles, lightmapSize, samples, hasBumpmapSamples,
                 pageIndex: -1, pagePosX: -1, pagePosY: -1, lightmapDirty: true,
             };
 

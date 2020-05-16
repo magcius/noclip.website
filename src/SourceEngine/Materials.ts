@@ -1414,9 +1414,9 @@ export function unpackColorRGB32Exp(v: number, exp: number): number {
 function lightmapAccumLight(dst: Float32Array, dstOffs: number, src: Uint8Array, srcOffs: number, size: number, m: number): void {
     for (let i = 0; i < size; i += 4) {
         const sr = src[srcOffs + i + 0], sg = src[srcOffs + i + 1], sb = src[srcOffs + i + 2], exp = src[srcOffs + i + 3];
-        dst[dstOffs++] = m * unpackColorRGB32Exp(sr, exp);
-        dst[dstOffs++] = m * unpackColorRGB32Exp(sg, exp);
-        dst[dstOffs++] = m * unpackColorRGB32Exp(sb, exp);
+        dst[dstOffs++] += m * unpackColorRGB32Exp(sr, exp);
+        dst[dstOffs++] += m * unpackColorRGB32Exp(sg, exp);
+        dst[dstOffs++] += m * unpackColorRGB32Exp(sb, exp);
     }
 }
 
@@ -1589,7 +1589,7 @@ export class SurfaceLightingInstance {
 
         const hasLightmap = this.lighting.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
-            const texelCount = this.lighting.width * this.lighting.height;
+            const texelCount = this.lighting.mapWidth * this.lighting.mapHeight;
             const srcNumLightmaps = (this.wantsBumpmap && this.lighting.hasBumpmapSamples) ? 4 : 1;
             const srcSize = srcNumLightmaps * texelCount * 4;
 
@@ -1604,6 +1604,7 @@ export class SurfaceLightingInstance {
                 lightmapAccumLight(scratchpad, 0, this.lighting.samples!, srcOffs, srcSize, intensity);
                 srcOffs += srcSize;
             }
+            assert(srcOffs === this.lighting.samples!.byteLength);
 
             if (this.wantsBumpmap && !this.lighting.hasBumpmapSamples) {
                 // Game wants bumpmap samples but has none. Copy from primary lightsource.
