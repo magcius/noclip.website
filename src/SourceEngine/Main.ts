@@ -240,10 +240,8 @@ class BSPSurfaceRenderer {
                 return;
         }
 
-        if (this.surfaceLighting !== null && this.surfaceLighting.lightmapDirty) {
+        if (this.surfaceLighting !== null && this.surfaceLighting.lightmapDirty)
             this.surfaceLighting.buildLightmap(renderContext.worldLightingState);
-            this.surfaceLighting.uploadLightmap(renderContext.device);
-        }
 
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix);
@@ -664,6 +662,10 @@ export class SourceRenderer implements SceneGfx {
             this.bspRenderers[i].prepareToRender(this.renderContext, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
+
+        // Update our lightmaps right before rendering.
+        this.renderContext.lightmapManager.prepareToRender(device);
+
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 

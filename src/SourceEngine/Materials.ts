@@ -1282,19 +1282,147 @@ export class MaterialCache {
 //#endregion
 
 //#region Lightmap / Lighting data
+class LightmapPacker {
+    public skyline: Uint16Array;
+
+    constructor(public width: number, public height: number) {
+        // Initialize our skyline. Note that our skyline goes horizontal, not vertical.
+        assert(this.width <= 0xFFFF);
+        this.skyline = new Uint16Array(this.height);
+    }
+
+    public allocate(allocation: LightmapAllocation): boolean {
+        const w = allocation.width, h = allocation.height;
+
+        // March downwards until we find a span of skyline that will fit.
+        let bestY = -1, minX = this.width;
+        for (let y = 0; y < this.height - h;) {
+            const searchY = this.searchSkyline(y, h);
+            if (this.skyline[searchY] < minX) {
+                minX = this.skyline[searchY];
+                bestY = y;
+            }
+            y = searchY + 1;
+        }
+
+        if (bestY < 0) {
+            // Could not pack.
+            return false;
+        }
+
+        // Found a position!
+        allocation.posX = minX;
+        allocation.posY = bestY;
+
+        // Update our skyline.
+        for (let y = bestY; y < bestY + h; y++)
+            this.skyline[y] = minX + w;
+
+        return true;
+    }
+
+    private searchSkyline(startY: number, h: number): number {
+        let winnerY = -1, maxX = -1;
+        for (let y = startY; y < startY + h; y++) {
+            if (this.skyline[y] >= maxX) {
+                winnerY = y;
+                maxX = this.skyline[y];
+            }
+        }
+        return winnerY;
+    }
+}
+
 export class LightmapAllocation {
     public width: number = 0;
     public height: number = 0;
+    public posX: number = 0;
+    public posY: number = 0;
     public scaleBias = vec4.create();
     public bumpPageOffset: number = 0;
     public gfxTexture: GfxTexture | null = null;
     public gfxSampler: GfxSampler | null = null;
+    public pixelData: Uint8ClampedArray;
+    public lightmapDirty: boolean = false;
+}
+
+class LightmapPage {
+    public packer: LightmapPacker;
+    public gfxTexture: GfxTexture;
+    public allocations: LightmapAllocation[] = [];
+    public data: Uint8Array;
+
+    constructor(device: GfxDevice, width: number, height: number) {
+        this.packer = new LightmapPacker(width, height);
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, width, height, 1));
+        this.data = new Uint8Array(width * height * 4);
+    }
+
+    public allocate(alloc: LightmapAllocation): boolean {
+        if (!this.packer.allocate(alloc))
+            return false;
+
+        // Set up more detailed properties on the allocation, and record it.
+        alloc.gfxTexture = this.gfxTexture;
+        const scaleX = 1.0 / this.packer.width;
+        const scaleY = 1.0 / this.packer.height;
+        const offsX = scaleX * alloc.posX;
+        const offsY = scaleY * alloc.posY;
+        vec4.set(alloc.scaleBias, scaleX, scaleY, offsX, offsY);
+        alloc.bumpPageOffset = scaleY * (alloc.height / 4);
+        this.allocations.push(alloc);
+        return true;
+    }
+
+    public prepareToRender(device: GfxDevice): void {
+        const w = this.packer.width, h = this.packer.height;
+
+        const data = this.data;
+
+        // Go through and stamp each allocation into the page at the right location.
+
+        // TODO(jstpierre): Maybe it makes more sense for packRuntimeLightmapData to do this positioning.
+        let anyDirty = false;
+        for (let i = 0; i < this.allocations.length; i++) {
+            const alloc = this.allocations[i];
+            if (!alloc.lightmapDirty)
+                continue;
+
+            let srcOffs = 0;
+            for (let y = alloc.posY; y < alloc.posY + alloc.height; y++) {
+                for (let x = alloc.posX; x < alloc.posX + alloc.width; x++) {
+                    let dstOffs = (y*w+x)*4;
+                    // Copy one pixel.
+                    data[dstOffs++] = alloc.pixelData[srcOffs++];
+                    data[dstOffs++] = alloc.pixelData[srcOffs++];
+                    data[dstOffs++] = alloc.pixelData[srcOffs++];
+                    data[dstOffs++] = alloc.pixelData[srcOffs++];
+                }
+            }
+
+            // Not dirty anymore.
+            anyDirty = true;
+            alloc.lightmapDirty = false;
+        }
+
+        if (anyDirty) {
+            const hostAccessPass = device.createHostAccessPass();
+            hostAccessPass.uploadTextureData(this.gfxTexture, 0, [data]);
+            device.submitPass(hostAccessPass);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
+    }
 }
 
 export class LightmapManager {
-    private lightmapTextures: GfxTexture[] = [];
+    private lightmapPages: LightmapPage[] = [];
     public gfxSampler: GfxSampler;
     public scratchpad = new Float32Array(4 * 128 * 128 * 3);
+    public pageWidth = 2048;
+    public pageHeight = 2048;
 
     constructor(private device: GfxDevice, cache: GfxRenderCache) {
         this.gfxSampler = cache.createSampler(device, {
@@ -1307,30 +1435,28 @@ export class LightmapManager {
         })
     }
 
+    public prepareToRender(device: GfxDevice): void {
+        for (let i = 0; i < this.lightmapPages.length; i++)
+            this.lightmapPages[i].prepareToRender(device);
+    }
+
     public allocate(allocation: LightmapAllocation): void {
-        assert(allocation.gfxTexture === null);
-
-        const gfxFormat = GfxFormat.U8_RGBA_SRGB;
-        const gfxTexture = this.device.createTexture(makeTextureDescriptor2D(gfxFormat, allocation.width, allocation.height, 1));
-        allocation.gfxTexture = gfxTexture;
         allocation.gfxSampler = this.gfxSampler;
-        this.lightmapTextures.push(gfxTexture);
 
-        const textureWidth = allocation.width;
-        const textureHeight = allocation.height;
+        for (let i = 0; i < this.lightmapPages.length; i++) {
+            if (this.lightmapPages[i].allocate(allocation))
+                return;
+        }
 
-        const scaleX = 1.0 / textureWidth;
-        const scaleY = 1.0 / textureHeight;
-        const offsX = 0.0;
-        const offsY = 0.0;
-        vec4.set(allocation.scaleBias, scaleX, scaleY, offsX, offsY);
-
-        allocation.bumpPageOffset = scaleY * (allocation.height / 4);
+        // Make a new page.
+        const page = new LightmapPage(this.device, this.pageWidth, this.pageHeight);
+        assert(page.allocate(allocation));
+        this.lightmapPages.push(page);
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.lightmapTextures.length; i++)
-            device.destroyTexture(this.lightmapTextures[i]);
+        for (let i = 0; i < this.lightmapPages.length; i++)
+            this.lightmapPages[i].destroy(device);
     }
 }
 
@@ -1473,9 +1599,9 @@ export class WorldLightingState {
     }
 }
 
-function createRuntimeLightmap(width: number, height: number, wantsLightmap: boolean, wantsBumpmap: boolean): Uint8ClampedArray[] {
+function createRuntimeLightmap(width: number, height: number, wantsLightmap: boolean, wantsBumpmap: boolean): Uint8ClampedArray | null {
     if (!wantsLightmap && !wantsBumpmap) {
-        return [];
+        return null;
     }
 
     let numLightmaps = 1;
@@ -1484,15 +1610,15 @@ function createRuntimeLightmap(width: number, height: number, wantsLightmap: boo
     }
 
     const lightmapSize = (width * height * 4);
-    return [new Uint8ClampedArray(numLightmaps * lightmapSize)];
+    return new Uint8ClampedArray(numLightmaps * lightmapSize);
 }
 
 export class SurfaceLightingInstance {
     public allocation = new LightmapAllocation();
-    public lightmapDirty: boolean = true;
+    public lightmapDirty: boolean = false;
 
     private lighting: SurfaceLighting;
-    private runtimeLightmapData: Uint8ClampedArray[];
+    private runtimeLightmapData: Uint8ClampedArray | null;
     private scratchpad: Float32Array;
 
     constructor(lightmapManager: LightmapManager, surface: Surface, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
@@ -1506,7 +1632,9 @@ export class SurfaceLightingInstance {
             const numLightmaps = this.wantsBumpmap ? 4 : 1;
             this.allocation.width = this.lighting.width;
             this.allocation.height = this.lighting.height * numLightmaps;
+            this.allocation.pixelData = assertExists(this.runtimeLightmapData);
             lightmapManager.allocate(this.allocation);
+            this.lightmapDirty = true;
         }
     }
 
@@ -1543,25 +1671,19 @@ export class SurfaceLightingInstance {
             }
 
             if (this.wantsBumpmap) {
-                lightmapPackRuntimeBumpmap(this.runtimeLightmapData[0], 0, scratchpad, 0, texelCount);
+                lightmapPackRuntimeBumpmap(this.runtimeLightmapData!, 0, scratchpad, 0, texelCount);
             } else {
-                lightmapPackRuntime(this.runtimeLightmapData[0], 0, scratchpad, 0, dstSize);
+                lightmapPackRuntime(this.runtimeLightmapData!, 0, scratchpad, 0, dstSize);
             }
         } else if (this.wantsLightmap && !hasLightmap) {
             // Fill with white. Handles both bump & non-bump cases.
-            this.runtimeLightmapData[0].fill(255);
+            this.runtimeLightmapData!.fill(255);
         }
 
         this.lightmapDirty = false;
-    }
 
-    public uploadLightmap(device: GfxDevice): void {
-        if (!this.wantsLightmap)
-            return;
-
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(this.allocation.gfxTexture!, 0, this.runtimeLightmapData);
-        device.submitPass(hostAccessPass);
+        // Mark our allocation as dirty.
+        this.allocation.lightmapDirty = true;
     }
 }
 //#endregion
