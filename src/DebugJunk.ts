@@ -368,34 +368,10 @@ export function interactiveBisect(items: any[], testItem: (itemIndex: number, v:
     return step;
 }
 
-interface VisTestItem {
-    visible: boolean;
-}
-
-function flashItem(item: VisTestItem, step: number = 0) {
-    item.visible = step % 2 === 1;
+function flashItem(item: any, fieldName: string, step: number = 0) {
+    item[fieldName] = step % 2 === 1;
     if (step < 7)
-        setTimeout(() => { flashItem(item, step + 1) }, 200);
-}
-
-export function interactiveVisTestBisect(items: VisTestItem[]): void {
-    const visibleItems = items.filter((v) => v.visible);
-
-    const step = interactiveBisect(visibleItems, (i, v) => { visibleItems[i].visible = v; }, (i) => {
-        visibleItems.forEach((v) => v.visible = true);
-        const item = visibleItems[i];
-        console.log(`Found item @ ${items.indexOf(item)}:`, item);
-        flashItem(item);
-        delete (window as any).visible;
-        delete (window as any).invisible;
-    });
-
-    (window as any).visible = () => {
-        step(true);
-    };
-    (window as any).invisible = () => {
-        step(false);
-    };
+        setTimeout(() => { flashItem(item, fieldName, step + 1) }, 200);
 }
 
 export function interactiveSliderSelect(items: any[], testItem: (itemIndex: number, v: boolean) => void, done: (itemIndex: number) => void): void {
@@ -431,14 +407,14 @@ export function interactiveSliderSelect(items: any[], testItem: (itemIndex: numb
     };
 }
 
-export function interactiveVizSliderSelect(items: VisTestItem[], callback: ((item: number) => void) | null = null): void {
-    const visibleItems = items.filter((v) => v.visible);
+export function interactiveVizSliderSelect(items: any[], fieldName: string = 'visible', callback: ((item: number) => void) | null = null): void {
+    const visibleItems = items.filter((v) => v[fieldName]);
 
-    interactiveSliderSelect(visibleItems, (i, v) => { visibleItems[i].visible = v; }, (index) => {
-        visibleItems.forEach((v) => v.visible = true);
+    interactiveSliderSelect(visibleItems, (i, v) => { visibleItems[i][fieldName] = v; }, (index) => {
+        visibleItems.forEach((v) => v[fieldName] = true);
         const item = visibleItems[index];
         const origIndex = items.indexOf(item);
-        flashItem(item);
+        flashItem(item, fieldName);
         console.log(`Found item @ ${items.indexOf(item)}:`, item);
         if (callback !== null)
             callback(origIndex);
