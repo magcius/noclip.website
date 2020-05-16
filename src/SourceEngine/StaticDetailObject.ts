@@ -8,9 +8,10 @@ import { SourceRenderContext, noclipSpaceFromSourceEngineSpace } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { transformVec3Mat4w0, computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { ViewerRenderInput, Viewer } from "../viewer";
+import { ViewerRenderInput } from "../viewer";
 import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
 import { Endianness } from "../endian";
+import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -131,6 +132,7 @@ class DetailSpriteEntry {
     public pos: vec3;
     public texcoord: vec4;
     public cameraDepth: number = 0;
+    public color: Color;
 }
 
 // Compute a rotation matrix given a forward direction, in Source Engine space.
@@ -168,9 +170,10 @@ export class DetailSpriteLeafRenderer {
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
             { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RG, },
+            { location: MaterialProgramBase.a_Color,    bufferIndex: 0, bufferByteOffset: 5*0x04, format: GfxFormat.F32_RGBA, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: (3+2)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: (3+2+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
         this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
@@ -202,6 +205,7 @@ export class DetailSpriteLeafRenderer {
                 transformVec3Mat4w0(entry.origin, noclipSpaceFromSourceEngineSpace, entry.origin);
                 entry.pos = detailModel.pos;
                 entry.texcoord = desc.texcoord;
+                entry.color = detailModel.lighting;
 
                 this.spriteEntries.push(entry);
             }
@@ -209,7 +213,7 @@ export class DetailSpriteLeafRenderer {
             // TODO(jstpierre): Cross & Tri shapes.
         }
 
-        this.vertexData = new Float32Array(vertexCount * 5);
+        this.vertexData = new Float32Array(vertexCount * 9);
         this.indexData = new Uint16Array(indexCount);
 
         this.vertexBuffer = device.createBuffer((this.vertexData.byteLength + 3) >>> 2, GfxBufferUsage.VERTEX, GfxBufferFrequencyHint.DYNAMIC);
@@ -262,6 +266,7 @@ export class DetailSpriteLeafRenderer {
             vertexData[vertexOffs++] = scratchVec3[2];
             vertexData[vertexOffs++] = entry.texcoord[0];
             vertexData[vertexOffs++] = entry.texcoord[1];
+            vertexOffs += fillColor(vertexData, vertexOffs, entry.color);
 
             // top right
             vec3.set(scratchVec3, 0, entry.halfWidth, -entry.height);
@@ -271,6 +276,7 @@ export class DetailSpriteLeafRenderer {
             vertexData[vertexOffs++] = scratchVec3[2];
             vertexData[vertexOffs++] = entry.texcoord[2];
             vertexData[vertexOffs++] = entry.texcoord[1];
+            vertexOffs += fillColor(vertexData, vertexOffs, entry.color);
 
             // bottom right
             vec3.set(scratchVec3, 0, entry.halfWidth, 0);
@@ -280,6 +286,7 @@ export class DetailSpriteLeafRenderer {
             vertexData[vertexOffs++] = scratchVec3[2];
             vertexData[vertexOffs++] = entry.texcoord[2];
             vertexData[vertexOffs++] = entry.texcoord[3];
+            vertexOffs += fillColor(vertexData, vertexOffs, entry.color);
 
             // bottom left
             vec3.set(scratchVec3, 0, -entry.halfWidth, 0);
@@ -289,6 +296,7 @@ export class DetailSpriteLeafRenderer {
             vertexData[vertexOffs++] = scratchVec3[2];
             vertexData[vertexOffs++] = entry.texcoord[0];
             vertexData[vertexOffs++] = entry.texcoord[3];
+            vertexOffs += fillColor(vertexData, vertexOffs, entry.color);
 
             indexData[indexOffs++] = vertexBase + 0;
             indexData[indexOffs++] = vertexBase + 1;

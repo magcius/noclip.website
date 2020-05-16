@@ -43,7 +43,10 @@ export class DeviceProgram {
     public defines = new Map<string, string>();
 
     public setDefineBool(name: string, v: boolean): void {
-        this.defines.set(name, v ? '1' : '0');
+        if (v)
+            this.defines.set(name, '1');
+        else
+            this.defines.delete(name);
     }
 
     public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {

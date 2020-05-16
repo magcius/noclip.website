@@ -24,6 +24,7 @@ export class MaterialProgramBase extends DeviceProgram {
     public static a_Normal = 1;
     public static a_TangentS = 2;
     public static a_TexCoord = 3;
+    public static a_Color = 4;
 
     public static ub_SceneParams = 0;
 
@@ -418,6 +419,8 @@ export abstract class BaseMaterial {
         p['$basealphaenvmapmask']          = new ParameterBoolean(false, false);
         p['$normalmapalphaenvmapmask']     = new ParameterBoolean(false, false);
         p['$opaquetexture']                = new ParameterBoolean(false, false);
+        p['$vertexcolor']                  = new ParameterBoolean(false, false);
+        p['$vertexalpha']                  = new ParameterBoolean(false, false);
 
         // Base parameters
         p['$basetexture']                  = new ParameterTexture(VTFFlags.SRGB);
@@ -498,7 +501,10 @@ varying vec4 v_TexCoord0;
 varying vec4 v_TexCoord1;
 // Bumpmap
 varying vec4 v_TexCoord2;
+
+// w contains BaseTexture2 blend factor.
 varying vec4 v_PositionWorld;
+varying vec4 v_Color;
 
 #define HAS_FULL_TANGENTSPACE (USE_BUMPMAP)
 
@@ -520,6 +526,9 @@ layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
 layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
 layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
 layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
+#ifdef USE_VERTEX_COLOR
+layout(location = ${MaterialProgramBase.a_Color}) attribute vec4 a_Color;
+#endif
 
 void mainVS() {
     vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
@@ -528,8 +537,22 @@ void mainVS() {
     v_PositionWorld.xyz = t_PositionWorld;
     vec3 t_NormalWorld = a_Normal.xyz;
 
+#ifdef USE_VERTEX_COLOR
+    v_Color = a_Color;
+#else
+    v_Color = vec4(1.0);
+#endif
+
+#ifdef USE_MODULATIONCOLOR_COLOR
+    v_Color.rgb *= u_ModulationColor.rgb;
+#endif
+
+#ifdef USE_MODULATIONCOLOR_ALPHA
+    v_Color.a *= u_ModulationColor.a;
+#endif
+
 #ifdef USE_BASETEXTURE2
-    // We sneak through "vertex alpha" through v_PositionWorld.w
+    // This is the BaseTexture2 blend factor, smuggled through using unobvious means.
     v_PositionWorld.w = a_Normal.w;
 #endif
 
@@ -587,14 +610,12 @@ void mainPS() {
 #endif
 
 #ifdef USE_BASETEXTURE2
-    // Blend in basetexture2 using vertex alpha.
+    // Blend in BaseTexture2 using blend factor.
     vec4 t_BaseTexture2 = texture(SAMPLER_2D(u_Texture[5]), v_TexCoord0.xy);
     t_Albedo = mix(t_Albedo, t_BaseTexture2, v_PositionWorld.w);
 #endif
 
-#ifdef USE_MODULATIONCOLOR_ALPHA
-    t_Albedo.a *= u_ModulationColor.a;
-#endif
+    t_Albedo *= v_Color;
 
 #ifdef USE_ALPHATEST
     if (t_Albedo.a < u_AlphaTestReference)
@@ -787,7 +808,8 @@ class Material_Generic extends BaseMaterial {
         }
 
         // Use modulation by default.
-        this.program.setDefineBool('USE_MODULATIONCOLOR_COLOR', true);
+        // TODO(jstpierre): Figure out where modulation is actually used.
+        this.program.setDefineBool('USE_MODULATIONCOLOR_COLOR', false);
         this.program.setDefineBool('USE_MODULATIONCOLOR_ALPHA', false);
 
         if (shaderType === 'lightmappedgeneric' || shaderType === 'worldvertextransition') {
@@ -799,6 +821,9 @@ class Material_Generic extends BaseMaterial {
             this.wantsBaseTexture2 = true;
             this.program.setDefineBool('USE_BASETEXTURE2', true);
         }
+
+        if (this.paramGetBoolean('$vertexcolor') || this.paramGetBoolean('$vertexalpha'))
+            this.program.setDefineBool('USE_VERTEX_COLOR', true);
 
         if (this.paramGetBoolean('$basealphaenvmapmask'))
             this.program.setDefineBool('USE_BASE_ALPHA_ENVMAP_MASK', true);
