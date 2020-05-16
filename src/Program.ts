@@ -75,10 +75,16 @@ export class DeviceProgram {
                 this.preprocessedVert = '';
             };
 
-            editor.onvaluechanged = function() {
+            editor.onvaluechanged = function(immediate: boolean) {
                 if (timeout > 0)
                     clearTimeout(timeout);
-                timeout = window.setTimeout(tryCompile, 500);
+
+                if (immediate) {
+                    tryCompile();
+                } else {
+                    // debounce
+                    timeout = window.setTimeout(tryCompile, 500);
+                }
             };
             const onresize = win.onresize = () => {
                 editor.setSize(document.body.offsetWidth, window.innerHeight);
