@@ -239,10 +239,10 @@ export class VTF {
             }
         }
 
-        for (let i = 0; i < this.gfxTextures.length; i++) {
+        for (let i = 0; i < this.gfxTextures.length; i++)
             hostAccessPass.uploadTextureData(this.gfxTextures[i], 0, levelDatas[i]);
-            device.submitPass(hostAccessPass);
-        }
+
+        device.submitPass(hostAccessPass);
 
         const wrapS = !!(this.flags & VTFFlags.CLAMPS) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;
         const wrapT = !!(this.flags & VTFFlags.CLAMPT) ? GfxWrapMode.CLAMP : GfxWrapMode.REPEAT;

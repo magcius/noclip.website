@@ -683,6 +683,7 @@ export class BSPFile {
 
             const area = faces.getFloat32(idx + 0x18, true);
             const m_LightmapTextureMinsInLuxels = nArray(2, (i) => faces.getInt32(idx + 0x1C + i * 4, true));
+            const m_LightmapTextureSizeInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x24 + i * 4, true));
             const origFace = faces.getUint32(idx + 0x2C, true);
             const m_NumPrims = faces.getUint16(idx + 0x30, true);
             const firstPrimID = faces.getUint16(idx + 0x32, true);
@@ -766,8 +767,16 @@ export class BSPFile {
 
                         // Lightmap UV
                         // Source seems to just have lightmaps in surface space, and ignore the mapping. (!!!)
-                        vertexData[dstOffs++] = (vertex.uv[0] * m_LightmapTextureMinsInLuxels[0]) + 0.5;
-                        vertexData[dstOffs++] = (vertex.uv[1] * m_LightmapTextureMinsInLuxels[1]) + 0.5;
+                        scratchVec2[0] = (vertex.uv[0] * m_LightmapTextureSizeInLuxels[0]) + 0.5;
+                        scratchVec2[1] = (vertex.uv[1] * m_LightmapTextureSizeInLuxels[1]) + 0.5;
+
+                        // Place into page.
+                        const page = this.lightmapPackerManager.pages[surfaceLighting.pageIndex];
+                        scratchVec2[0] = (scratchVec2[0] + surfaceLighting.pagePosX) / page.width;
+                        scratchVec2[1] = (scratchVec2[1] + surfaceLighting.pagePosY) / page.height;
+
+                        vertexData[dstOffs++] = scratchVec2[0];
+                        vertexData[dstOffs++] = scratchVec2[1];
                     }
                 }
 
