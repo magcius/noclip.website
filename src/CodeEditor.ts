@@ -124,7 +124,7 @@ class NumberDragger {
 
         this._toplevel = this._document.createElement('div');
         this._toplevel.style.position = 'absolute';
-        this._toplevel.style.transform = 'translate(0, -50%)';
+        this._toplevel.style.transform = 'translate(0, 0)';
         this._toplevel.style.fontFamily = MONOSPACE;
         this._toplevel.style.backgroundColor = '#232323';
         this._toplevel.style.color = '#c93';
@@ -225,8 +225,23 @@ class NumberDragger {
         this._anchorMouseX = e.clientX;
         this._anchorValue = value;
 
-        // reset
-        this._selectSegment(this._segments[2]);
+        // Select default segment based on powers of 10.
+        let segmentExp = 0;
+        for (let exp = -2; exp <= 2; exp++) {
+            const incr = Math.pow(10, exp + 1);
+            if (value > -incr && value < incr) {
+                segmentExp = exp;
+                break;
+            }
+        }
+
+        // segmentExp between -2 and 2. Our indexes range from 2 to -2.
+        const segmentIdx = 4 - (segmentExp + 2);
+        this._selectSegment(this._segments[segmentIdx]);
+
+        // Adjust the transform so the center of the segment box is in the middle.
+        const pcts = ['-10.5%', '-30%', '-50%', '-70%', '-89.5%'];
+        this._toplevel.style.transform = `translate(0, ${pcts[segmentIdx]}`;
 
         this._document.documentElement.addEventListener('mouseup', this._onMouseUp);
         // Delay the show a tiny bit...
@@ -345,15 +360,15 @@ export default class CodeEditor {
         // Setup is particularly wacky... maybe clean it up at some point?
         this._document.body.appendChild(this._toplevel);
 
+        this._canvas = this._document.createElement('canvas');
+        this._toplevel.appendChild(this._canvas);
+
         this._textarea = this._document.createElement('textarea');
         this._textarea.style.fontFamily = MONOSPACE;
         this._textarea.oninput = this._onInput.bind(this);
         this._textarea.onkeydown = this._onKeyDown.bind(this);
         this._toplevel.appendChild(this._textarea);
 
-        this._canvas = this._document.createElement('canvas');
-
-        this._toplevel.appendChild(this._canvas);
         this._onMouseDown = this._onMouseDown.bind(this);
         this._onMouseMove = this._onMouseMove.bind(this);
         this._onMouseUp = this._onMouseUp.bind(this);
@@ -485,11 +500,6 @@ export default class CodeEditor {
         const types = (/\b(void|bool|float|[ui]?vec[234]|mat[234]|mat[234]x[234]|[u]?int|sampler[23]D)\b/g);
         while ((match = types.exec(chars)) !== null)
             syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#6d9cbe' });
-        const numbers = (/\W-?\d+(\.\d+)?\b/g); // Don't bother supporting scientific notation on numbers...
-        while ((match = numbers.exec(chars)) !== null) {
-            syntaxRuns.push({ start: match.index+1, end: match.index + match[0].length, color: '#a5c261' });
-            draggableNumbers.push({ start: match.index+1, end: match.index + match[0].length });
-        }
         const strings = (/("[^"]*")|('[^']*')/g);
         while ((match = strings.exec(chars)) !== null)
             syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#6d9cbe' });
@@ -497,6 +507,16 @@ export default class CodeEditor {
         while ((match = comments.exec(chars)) !== null)
             syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#bc9458', style: 'italic' });
 
+        const numbers = (/\W-?\d+(\.\d+)?\b/g); // Don't bother supporting scientific notation on numbers...
+        while ((match = numbers.exec(chars)) !== null) {
+            const start = match.index + 1, end = start + match[0].length - 1;
+            // Look for an existing syntax run that encompasses this number. If so, skip it.
+            if (syntaxRuns.some((run) => start >= run.start && end <= run.end))
+                continue;
+            draggableNumbers.push({ start, end });
+            syntaxRuns.push({ start, end, color: '#a5c261' });
+        }
+    
         syntaxRuns.sort((a, b) => a.start - b.start);
 
         this._syntaxRuns = syntaxRuns;
@@ -703,7 +723,9 @@ export default class CodeEditor {
     }
 
     private _onNumberDraggerValue(newValue: number) {
-        this._textarea.blur();
+        // This seems to break scrolling after refocusing from number dragging. Not sure exactly why, and I can't
+        // remember why I added it in the first place.
+        // this._textarea.blur();
         const { start, end } = this._draggingNumber!;
         const newValueString = formatDecimal(newValue);
         this.setValue(this._spliceValue(start, end, newValueString));
