@@ -45,11 +45,17 @@ const enum LumpType {
 export interface SurfaceLighting {
     width: number;
     height: number;
-    mins: number[];
     styles: number[];
     lightmapSize: number;
     samples: Uint8Array | null;
     hasBumpmapSamples: boolean;
+    // Dynamic allocation
+    pageWidth: number;
+    pageHeight: number;
+    pageIndex: number;
+    pagePosX: number;
+    pagePosY: number;
+    lightmapDirty: boolean;
 }
 
 export interface Surface {
@@ -308,6 +314,82 @@ class BSPVisibility {
     }
 }
 
+export class LightmapPackerPage {
+    public skyline: Uint16Array;
+
+    constructor(public width: number, public height: number) {
+        // Initialize our skyline. Note that our skyline goes horizontal, not vertical.
+        assert(this.width <= 0xFFFF);
+        this.skyline = new Uint16Array(this.height);
+    }
+
+    public allocate(allocation: SurfaceLighting): boolean {
+        const w = allocation.width, h = allocation.height;
+
+        // March downwards until we find a span of skyline that will fit.
+        let bestY = -1, minX = this.width;
+        for (let y = 0; y < this.height - h;) {
+            const searchY = this.searchSkyline(y, h);
+            if (this.skyline[searchY] < minX) {
+                minX = this.skyline[searchY];
+                bestY = y;
+            }
+            y = searchY + 1;
+        }
+
+        if (bestY < 0) {
+            // Could not pack.
+            return false;
+        }
+
+        // Found a position!
+        allocation.pagePosX = minX;
+        allocation.pagePosY = bestY;
+        allocation.pageWidth = this.width;
+        allocation.pageHeight = this.height;
+        // pageIndex filled in by caller.
+
+        // Update our skyline.
+        for (let y = bestY; y < bestY + h; y++)
+            this.skyline[y] = minX + w;
+
+        return true;
+    }
+
+    private searchSkyline(startY: number, h: number): number {
+        let winnerY = -1, maxX = -1;
+        for (let y = startY; y < startY + h; y++) {
+            if (this.skyline[y] >= maxX) {
+                winnerY = y;
+                maxX = this.skyline[y];
+            }
+        }
+        return winnerY;
+    }
+}
+
+export class LightmapPackerManager {
+    public pages: LightmapPackerPage[] = [];
+
+    constructor(public pageWidth: number = 2048, public pageHeight: number = 2048) {
+    }
+
+    public allocate(allocation: SurfaceLighting): void {
+        for (let i = 0; i < this.pages.length; i++) {
+            if (this.pages[i].allocate(allocation)) {
+                allocation.pageIndex = i;
+                return;
+            }
+        }
+
+        // Make a new page.
+        const page = new LightmapPackerPage(this.pageWidth, this.pageHeight);
+        this.pages.push(page);
+        assert(page.allocate(allocation));
+        allocation.pageIndex = this.pages.length - 1;
+    }
+}
+
 const scratchVec3 = vec3.create();
 export class BSPFile {
     public version: number;
@@ -324,6 +406,7 @@ export class BSPFile {
     public detailObjects: DetailObjects | null = null;
     public staticObjects: StaticObjects | null = null;
     public visibility: BSPVisibility;
+    public lightmapPackerManager = new LightmapPackerManager();
 
     public indexData: Uint16Array;
     public vertexData: Float32Array;
@@ -567,16 +650,23 @@ export class BSPFile {
             }
 
             // surface lighting info
-            const mins = m_LightmapTextureMinsInLuxels;
-            const width = m_LightmapTextureSizeInLuxels[0] + 1, height = m_LightmapTextureSizeInLuxels[1] + 1;
-
+            const mapWidth = m_LightmapTextureSizeInLuxels[0] + 1, mapHeight = m_LightmapTextureSizeInLuxels[1] + 1;
             const hasBumpmapSamples = !!(tex.flags & TexinfoFlags.BUMPLIGHT);
             const numlightmaps = hasBumpmapSamples ? 4 : 1;
-            const lightmapSize = styles.length * numlightmaps * (width * height * 4);
+            const width = mapWidth, height = mapHeight * numlightmaps;
+            const lightmapSize = styles.length * (width * height * 4);
+
             let samples: Uint8Array | null = null;
             if (lightofs !== -1)
                 samples = lighting.subarray(lightofs, lightmapSize).createTypedArray(Uint8Array);
-            const surfaceLighting: SurfaceLighting = { mins, width, height, styles, lightmapSize, samples, hasBumpmapSamples };
+
+            const surfaceLighting: SurfaceLighting = {
+                width, height, styles, lightmapSize, samples, hasBumpmapSamples,
+                pageWidth: -1, pageHeight: -1, pageIndex: -1, pagePosX: -1, pagePosY: -1, lightmapDirty: true,
+            };
+
+            // Allocate ourselves a page.
+            this.lightmapPackerManager.allocate(surfaceLighting);
 
             // Tangent space setup.
             const planeX = planes.getFloat32(planenum * 0x14 + 0x00, true);
@@ -711,6 +801,10 @@ export class BSPFile {
                         calcTexCoord(scratchVec2, scratchPosition, tex.lightmapMapping);
                         scratchVec2[0] += 0.5 - m_LightmapTextureMinsInLuxels[0];
                         scratchVec2[1] += 0.5 - m_LightmapTextureMinsInLuxels[1];
+
+                        // Place into page.
+                        scratchVec2[0] = (scratchVec2[0] + surfaceLighting.pagePosX) / surfaceLighting.pageWidth;
+                        scratchVec2[1] = (scratchVec2[1] + surfaceLighting.pagePosY) / surfaceLighting.pageHeight;
                     }
 
                     vertexData[dstOffs++] = scratchVec2[0];

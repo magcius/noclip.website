@@ -204,7 +204,7 @@ class BSPSurfaceRenderer {
         this.materialInstance = materialInstance;
 
         this.surfaceLighting = new SurfaceLightingInstance(lightmapManager, this.surface, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap);
-        this.materialInstance.setLightmapAllocation(this.surfaceLighting.allocation);
+        this.materialInstance.setLightmapAllocation(this.surfaceLighting);
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -240,7 +240,7 @@ class BSPSurfaceRenderer {
                 return;
         }
 
-        if (this.surfaceLighting !== null && this.surfaceLighting.lightmapDirty)
+        if (this.surfaceLighting !== null)
             this.surfaceLighting.buildLightmap(renderContext.worldLightingState);
 
         const renderInst = renderInstManager.newRenderInst();
@@ -470,6 +470,8 @@ export class BSPRenderer {
     public pvs: BitMap;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
+        renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
+
         const device = renderContext.device, cache = renderContext.cache;
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.bsp.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.bsp.indexData.buffer);

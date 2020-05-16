@@ -11,7 +11,7 @@ import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "..
 import { VTF, VTFFlags } from "./VTF";
 import { SourceRenderContext, SourceFileSystem } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { Surface, SurfaceLighting } from "./BSPFile";
+import { Surface, SurfaceLighting, LightmapPackerManager, LightmapPackerPage } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite } from "../Color";
 
@@ -446,7 +446,7 @@ export abstract class BaseMaterial {
         return this.loaded;
     }
 
-    public setLightmapAllocation(lightmapAllocation: LightmapAllocation): void {
+    public setLightmapAllocation(lightmapAllocation: SurfaceLightingInstance): void {
         // Nothing by default.
     }
 
@@ -476,9 +476,6 @@ layout(row_major, std140) uniform ub_ObjectParams {
 #endif
 #ifdef USE_BUMPMAP
     Mat4x2 u_BumpmapTransform;
-#endif
-#ifdef USE_LIGHTMAP
-    vec4 u_LightmapScaleBias;
 #endif
 #ifdef USE_ENVMAP_MASK
     vec4 u_EnvmapMaskScaleBias;
@@ -550,7 +547,7 @@ void mainVS() {
     v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_DetailScaleBias);
 #endif
 #ifdef USE_LIGHTMAP
-    v_TexCoord1.xy = CalcScaleBias(a_TexCoord.zw, u_LightmapScaleBias);
+    v_TexCoord1.xy = a_TexCoord.zw;
 #endif
 #ifdef USE_ENVMAP_MASK
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
@@ -715,7 +712,7 @@ class Material_Generic extends BaseMaterial {
     private wantsEnvmapMask = false;
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
-    private lightmapAllocation: LightmapAllocation | null = null;
+    private lightmapAllocation: SurfaceLightingInstance | null = null;
 
     private program: GenericMaterialProgram;
     private gfxProgram: GfxProgram;
@@ -833,7 +830,7 @@ class Material_Generic extends BaseMaterial {
         return this.loaded;
     }
 
-    public setLightmapAllocation(lightmapAllocation: LightmapAllocation): void {
+    public setLightmapAllocation(lightmapAllocation: SurfaceLightingInstance): void {
         this.lightmapAllocation = lightmapAllocation;
         const lightmapTextureMapping = this.textureMapping[3];
         lightmapTextureMapping.gfxTexture = this.lightmapAllocation.gfxTexture;
@@ -868,9 +865,6 @@ class Material_Generic extends BaseMaterial {
 
         if (this.wantsBumpmap)
             offs += this.paramFillTextureMatrix(d, offs, '$bumptransform');
-
-        if (this.wantsLightmap)
-            offs += fillVec4v(d, offs, this.lightmapAllocation!.scaleBias);
 
         if (this.wantsEnvmapMask)
             offs += this.paramFillScaleBias(d, offs, '$envmapmasktransform');
@@ -1282,127 +1276,54 @@ export class MaterialCache {
 //#endregion
 
 //#region Lightmap / Lighting data
-class LightmapPacker {
-    public skyline: Uint16Array;
-
-    constructor(public width: number, public height: number) {
-        // Initialize our skyline. Note that our skyline goes horizontal, not vertical.
-        assert(this.width <= 0xFFFF);
-        this.skyline = new Uint16Array(this.height);
-    }
-
-    public allocate(allocation: LightmapAllocation): boolean {
-        const w = allocation.width, h = allocation.height;
-
-        // March downwards until we find a span of skyline that will fit.
-        let bestY = -1, minX = this.width;
-        for (let y = 0; y < this.height - h;) {
-            const searchY = this.searchSkyline(y, h);
-            if (this.skyline[searchY] < minX) {
-                minX = this.skyline[searchY];
-                bestY = y;
-            }
-            y = searchY + 1;
-        }
-
-        if (bestY < 0) {
-            // Could not pack.
-            return false;
-        }
-
-        // Found a position!
-        allocation.posX = minX;
-        allocation.posY = bestY;
-
-        // Update our skyline.
-        for (let y = bestY; y < bestY + h; y++)
-            this.skyline[y] = minX + w;
-
-        return true;
-    }
-
-    private searchSkyline(startY: number, h: number): number {
-        let winnerY = -1, maxX = -1;
-        for (let y = startY; y < startY + h; y++) {
-            if (this.skyline[y] >= maxX) {
-                winnerY = y;
-                maxX = this.skyline[y];
-            }
-        }
-        return winnerY;
-    }
-}
-
-export class LightmapAllocation {
-    public width: number = 0;
-    public height: number = 0;
-    public posX: number = 0;
-    public posY: number = 0;
-    public scaleBias = vec4.create();
-    public bumpPageOffset: number = 0;
-    public gfxTexture: GfxTexture | null = null;
-    public gfxSampler: GfxSampler | null = null;
-    public pixelData: Uint8ClampedArray;
-    public lightmapDirty: boolean = false;
-}
-
 class LightmapPage {
-    public packer: LightmapPacker;
     public gfxTexture: GfxTexture;
-    public allocations: LightmapAllocation[] = [];
     public data: Uint8Array;
+    public instances: SurfaceLightingInstance[] = [];
 
-    constructor(device: GfxDevice, width: number, height: number) {
-        this.packer = new LightmapPacker(width, height);
+    constructor(device: GfxDevice, private packer: LightmapPackerPage) {
+        const width = this.packer.width, height = this.packer.height;
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, width, height, 1));
         this.data = new Uint8Array(width * height * 4);
     }
 
-    public allocate(alloc: LightmapAllocation): boolean {
-        if (!this.packer.allocate(alloc))
-            return false;
-
-        // Set up more detailed properties on the allocation, and record it.
-        alloc.gfxTexture = this.gfxTexture;
-        const scaleX = 1.0 / this.packer.width;
-        const scaleY = 1.0 / this.packer.height;
-        const offsX = scaleX * alloc.posX;
-        const offsY = scaleY * alloc.posY;
-        vec4.set(alloc.scaleBias, scaleX, scaleY, offsX, offsY);
-        alloc.bumpPageOffset = scaleY * (alloc.height / 4);
-        this.allocations.push(alloc);
-        return true;
+    public registerInstance(instance: SurfaceLightingInstance): void {
+        this.instances.push(instance);
+        instance.page = this;
+        instance.gfxTexture = this.gfxTexture;
+        instance.bumpPageOffset = (instance.lighting.height / 4) / this.packer.height;
     }
 
     public prepareToRender(device: GfxDevice): void {
-        const w = this.packer.width, h = this.packer.height;
-
         const data = this.data;
 
-        // Go through and stamp each allocation into the page at the right location.
+        // Go through and stamp each surface into the page at the right location.
 
         // TODO(jstpierre): Maybe it makes more sense for packRuntimeLightmapData to do this positioning.
         let anyDirty = false;
-        for (let i = 0; i < this.allocations.length; i++) {
-            const alloc = this.allocations[i];
-            if (!alloc.lightmapDirty)
+        for (let i = 0; i < this.instances.length; i++) {
+            const instance = this.instances[i];
+            if (!instance.lightmapUploadDirty)
                 continue;
 
+            const alloc = instance.lighting;
+            const pixelData = instance.pixelData!;
+
             let srcOffs = 0;
-            for (let y = alloc.posY; y < alloc.posY + alloc.height; y++) {
-                for (let x = alloc.posX; x < alloc.posX + alloc.width; x++) {
-                    let dstOffs = (y*w+x)*4;
+            for (let y = alloc.pagePosY; y < alloc.pagePosY + alloc.height; y++) {
+                for (let x = alloc.pagePosX; x < alloc.pagePosX + alloc.width; x++) {
+                    let dstOffs = (y * this.packer.width + x) * 4;
                     // Copy one pixel.
-                    data[dstOffs++] = alloc.pixelData[srcOffs++];
-                    data[dstOffs++] = alloc.pixelData[srcOffs++];
-                    data[dstOffs++] = alloc.pixelData[srcOffs++];
-                    data[dstOffs++] = alloc.pixelData[srcOffs++];
+                    data[dstOffs++] = pixelData[srcOffs++];
+                    data[dstOffs++] = pixelData[srcOffs++];
+                    data[dstOffs++] = pixelData[srcOffs++];
+                    data[dstOffs++] = pixelData[srcOffs++];
                 }
             }
 
             // Not dirty anymore.
             anyDirty = true;
-            alloc.lightmapDirty = false;
+            instance.lightmapUploadDirty = false;
         }
 
         if (anyDirty) {
@@ -1432,7 +1353,12 @@ export class LightmapManager {
             minLOD: 0, maxLOD: 100,
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
-        })
+        });
+    }
+
+    public appendPackerManager(manager: LightmapPackerManager): void {
+        for (let i = 0; i < manager.pages.length; i++)
+            this.lightmapPages.push(new LightmapPage(this.device, manager.pages[i]));
     }
 
     public prepareToRender(device: GfxDevice): void {
@@ -1440,18 +1366,10 @@ export class LightmapManager {
             this.lightmapPages[i].prepareToRender(device);
     }
 
-    public allocate(allocation: LightmapAllocation): void {
-        allocation.gfxSampler = this.gfxSampler;
-
-        for (let i = 0; i < this.lightmapPages.length; i++) {
-            if (this.lightmapPages[i].allocate(allocation))
-                return;
-        }
-
-        // Make a new page.
-        const page = new LightmapPage(this.device, this.pageWidth, this.pageHeight);
-        assert(page.allocate(allocation));
-        this.lightmapPages.push(page);
+    public registerInstance(instance: SurfaceLightingInstance): void {
+        // TODO(jstpierre): PageIndex isn't unique / won't work with multiple BSP files.
+        this.lightmapPages[instance.lighting.pageIndex].registerInstance(instance);
+        instance.gfxSampler = this.gfxSampler;
     }
 
     public destroy(device: GfxDevice): void {
@@ -1489,9 +1407,9 @@ function linearToLightmap(v: number): number {
     return Math.pow(v, 1.0 / gamma) * 0.5;
 }
 
-function lightmapPackRuntime(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, size: number): void {
-    for (let i = 0; i < size; i += 3) {
-        const sr = linearToLightmap(src[srcOffs + i + 0]), sg = linearToLightmap(src[srcOffs + i + 1]), sb = linearToLightmap(src[srcOffs + i + 2]);
+function lightmapPackRuntime(dst: Uint8ClampedArray, dstOffs: number, src: Float32Array, srcOffs: number, texelCount: number): void {
+    for (let i = 0; i < texelCount; i++) {
+        const sr = linearToLightmap(src[srcOffs++]), sg = linearToLightmap(src[srcOffs++]), sb = linearToLightmap(src[srcOffs++]);
         dst[dstOffs++] = (sr * 255.0) | 0;
         dst[dstOffs++] = (sg * 255.0) | 0;
         dst[dstOffs++] = (sb * 255.0) | 0;
@@ -1614,44 +1532,45 @@ function createRuntimeLightmap(width: number, height: number, wantsLightmap: boo
 }
 
 export class SurfaceLightingInstance {
-    public allocation = new LightmapAllocation();
-    public lightmapDirty: boolean = false;
+    public lightmapBuildDirty: boolean = false;
+    public lightmapUploadDirty: boolean = false;
+    public lighting: SurfaceLighting;
+    public pixelData: Uint8ClampedArray | null;
 
-    private lighting: SurfaceLighting;
-    private runtimeLightmapData: Uint8ClampedArray | null;
+    public gfxTexture: GfxTexture | null = null;
+    public gfxSampler: GfxSampler | null = null;
+    public page: LightmapPage | null = null;
+    public bumpPageOffset: number = 0;
+
     private scratchpad: Float32Array;
 
     constructor(lightmapManager: LightmapManager, surface: Surface, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
         this.scratchpad = lightmapManager.scratchpad;
 
         this.lighting = assertExists(surface.lighting);
-        this.runtimeLightmapData = createRuntimeLightmap(this.lighting.width, this.lighting.height, this.wantsLightmap, this.wantsBumpmap);
+        this.pixelData = createRuntimeLightmap(this.lighting.width, this.lighting.height, this.wantsLightmap, this.wantsBumpmap);
 
-        // Allocate texture.
+        this.lightmapBuildDirty = true;
+
         if (this.wantsLightmap) {
-            const numLightmaps = this.wantsBumpmap ? 4 : 1;
-            this.allocation.width = this.lighting.width;
-            this.allocation.height = this.lighting.height * numLightmaps;
-            this.allocation.pixelData = assertExists(this.runtimeLightmapData);
-            lightmapManager.allocate(this.allocation);
-            this.lightmapDirty = true;
+            // Associate ourselves with the right page.
+            lightmapManager.registerInstance(this);
         }
     }
 
     public buildLightmap(worldLightingState: WorldLightingState): void {
-        if (!this.lightmapDirty)
+        if (!this.lightmapBuildDirty)
             return;
 
         const hasLightmap = this.lighting.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
             const texelCount = this.lighting.width * this.lighting.height;
-            const dstSize = this.allocation.width * this.allocation.height * 4;
             const srcNumLightmaps = (this.wantsBumpmap && this.lighting.hasBumpmapSamples) ? 4 : 1;
             const srcSize = srcNumLightmaps * texelCount * 4;
 
             const scratchpad = this.scratchpad;
             scratchpad.fill(0);
-            assert(scratchpad.byteLength >= dstSize);
+            assert(scratchpad.byteLength >= srcSize);
 
             let srcOffs = 0;
             for (let i = 0; i < this.lighting.styles.length; i++) {
@@ -1671,19 +1590,17 @@ export class SurfaceLightingInstance {
             }
 
             if (this.wantsBumpmap) {
-                lightmapPackRuntimeBumpmap(this.runtimeLightmapData!, 0, scratchpad, 0, texelCount);
+                lightmapPackRuntimeBumpmap(this.pixelData!, 0, scratchpad, 0, texelCount);
             } else {
-                lightmapPackRuntime(this.runtimeLightmapData!, 0, scratchpad, 0, dstSize);
+                lightmapPackRuntime(this.pixelData!, 0, scratchpad, 0, texelCount);
             }
         } else if (this.wantsLightmap && !hasLightmap) {
             // Fill with white. Handles both bump & non-bump cases.
-            this.runtimeLightmapData!.fill(255);
+            this.pixelData!.fill(255);
         }
 
-        this.lightmapDirty = false;
-
-        // Mark our allocation as dirty.
-        this.allocation.lightmapDirty = true;
+        this.lightmapBuildDirty = false;
+        this.lightmapUploadDirty = true;
     }
 }
 //#endregion
