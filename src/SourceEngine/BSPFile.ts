@@ -50,8 +50,6 @@ export interface SurfaceLighting {
     samples: Uint8Array | null;
     hasBumpmapSamples: boolean;
     // Dynamic allocation
-    pageWidth: number;
-    pageHeight: number;
     pageIndex: number;
     pagePosX: number;
     pagePosY: number;
@@ -317,18 +315,21 @@ class BSPVisibility {
 export class LightmapPackerPage {
     public skyline: Uint16Array;
 
-    constructor(public width: number, public height: number) {
+    public width: number = 0;
+    public height: number = 0;
+
+    constructor(public maxWidth: number, public maxHeight: number) {
         // Initialize our skyline. Note that our skyline goes horizontal, not vertical.
-        assert(this.width <= 0xFFFF);
-        this.skyline = new Uint16Array(this.height);
+        assert(this.maxWidth <= 0xFFFF);
+        this.skyline = new Uint16Array(this.maxHeight);
     }
 
     public allocate(allocation: SurfaceLighting): boolean {
         const w = allocation.width, h = allocation.height;
 
         // March downwards until we find a span of skyline that will fit.
-        let bestY = -1, minX = this.width;
-        for (let y = 0; y < this.height - h;) {
+        let bestY = -1, minX = this.maxWidth;
+        for (let y = 0; y < this.maxHeight - h;) {
             const searchY = this.searchSkyline(y, h);
             if (this.skyline[searchY] < minX) {
                 minX = this.skyline[searchY];
@@ -345,13 +346,15 @@ export class LightmapPackerPage {
         // Found a position!
         allocation.pagePosX = minX;
         allocation.pagePosY = bestY;
-        allocation.pageWidth = this.width;
-        allocation.pageHeight = this.height;
         // pageIndex filled in by caller.
 
         // Update our skyline.
         for (let y = bestY; y < bestY + h; y++)
             this.skyline[y] = minX + w;
+
+        // Update our bounds.
+        this.width = Math.max(this.width, minX + w);
+        this.height = Math.max(this.height, bestY + h);
 
         return true;
     }
@@ -558,14 +561,34 @@ export class BSPFile {
         const primindices = getLumpData(LumpType.PRIMINDICES).createTypedArray(Uint16Array);
         const primitives = getLumpData(LumpType.PRIMITIVES).createDataView();
 
-        // Count up the number of vertices we need.
+        interface BasicSurface {
+            index: number;
+            texinfo: number;
+            lighting: SurfaceLighting;
+        }
+
+        const surfaces: BasicSurface[] = [];
+
+        let lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
+        if (lighting.byteLength === 0)
+            lighting = getLumpData(LumpType.LIGHTING, 1);
+
+        // Do some initial surface parsing, pack lightmaps, and count up the number of vertices we need.
         let vertCount = 0;
         let indexCount = 0;
         for (let i = 0; i < faceCount; i++) {
             const idx = i * 0x38;
+
+            const texinfo = faces.getUint16(idx + 0x0A, true);
+            const tex = this.texinfo[texinfo];
+            if (!!(tex.flags & TexinfoFlags.NODRAW)) {
+                continue;
+            }
+
             const numedges = faces.getUint16(idx + 0x08, true);
             const dispinfo = faces.getInt16(idx + 0x0C, true);
 
+            // Count vertices.
             if (dispinfo >= 0) {
                 const disp = dispinfolist[dispinfo];
                 vertCount += disp.vertexCount;
@@ -584,45 +607,10 @@ export class BSPFile {
                     indexCount += getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRIFAN, numedges);
                 }
             }
-        }
 
-        // 3 pos, 4 normal, 4 tangent, 4 uv
-        const vertexSize = (3+4+4+4);
-        const vertexData = new Float32Array(vertCount * vertexSize);
-        assert(vertCount < 0xFFFF);
-        const indexData = new Uint16Array(indexCount);
+            const lightofs = faces.getInt32(idx + 0x14, true);
+            const m_LightmapTextureSizeInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x24 + i * 4, true));
 
-        const planes = getLumpData(LumpType.PLANES).createDataView();
-        const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);
-        const vertnormals = getLumpData(LumpType.VERTNORMALS).createTypedArray(Float32Array);
-        const vertnormalindices = getLumpData(LumpType.VERTNORMALINDICES).createTypedArray(Uint16Array);
-        const disp_verts = getLumpData(LumpType.DISP_VERTS).createTypedArray(Float32Array);
-
-        let lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
-        if (lighting.byteLength === 0)
-            lighting = getLumpData(LumpType.LIGHTING, 1);
-
-        const scratchVec2 = vec2.create();
-        const scratchPosition = vec3.create();
-        const scratchNormal = vec3.create();
-        const scratchTangentT = vec3.create();
-        const scratchTangentS = vec3.create();
-
-        // now build buffers
-        let dstOffs = 0;
-        let dstOffsIndex = 0;
-        let dstIndexBase = 0;
-        let vertnormalIdx = 0;
-        for (let i = 0; i < faceCount; i++) {
-            const idx = i * 0x38;
-            const planenum = faces.getUint16(idx + 0x00, true);
-            const side = faces.getUint8(idx + 0x02);
-            const onNode = faces.getUint8(idx + 0x03);
-            const firstedge = faces.getUint32(idx + 0x04, true);
-            const numedges = faces.getUint16(idx + 0x08, true);
-            const texinfo = faces.getUint16(idx + 0x0A, true);
-            const dispinfo = faces.getInt16(idx + 0x0C, true);
-            const surfaceFogVolumeID = faces.getUint16(idx + 0x0E, true);
             // lighting info
             const styles: number[] = [];
             for (let j = 0; j < 4; j++) {
@@ -630,23 +618,6 @@ export class BSPFile {
                 if (style === 0xFF)
                     break;
                 styles.push(style);
-            }
-
-            const lightofs = faces.getInt32(idx + 0x14, true);
-            const area = faces.getFloat32(idx + 0x18, true);
-            const m_LightmapTextureMinsInLuxels = nArray(2, (i) => faces.getInt32(idx + 0x1C + i * 4, true));
-            const m_LightmapTextureSizeInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x24 + i * 4, true));
-            const origFace = faces.getUint32(idx + 0x2C, true);
-            const m_NumPrims = faces.getUint16(idx + 0x30, true);
-            const firstPrimID = faces.getUint16(idx + 0x32, true);
-            const smoothingGroups = faces.getUint32(idx + 0x34, true);
-
-            const vertnormBase = vertnormalIdx;
-            vertnormalIdx += numedges;
-
-            const tex = this.texinfo[texinfo];
-            if (!!(tex.flags & TexinfoFlags.NODRAW)) {
-                continue;
             }
 
             // surface lighting info
@@ -662,11 +633,63 @@ export class BSPFile {
 
             const surfaceLighting: SurfaceLighting = {
                 width, height, styles, lightmapSize, samples, hasBumpmapSamples,
-                pageWidth: -1, pageHeight: -1, pageIndex: -1, pagePosX: -1, pagePosY: -1, lightmapDirty: true,
+                pageIndex: -1, pagePosX: -1, pagePosY: -1, lightmapDirty: true,
             };
 
             // Allocate ourselves a page.
             this.lightmapPackerManager.allocate(surfaceLighting);
+
+            surfaces.push({ index: i, texinfo, lighting: surfaceLighting });
+        }
+
+        // Sort surfaces by texinfo.
+        // TODO(jstpierre): This requires changing surfaceStart
+        // surfaces.sort((a, b) => a.texinfo - b.texinfo);
+
+        // 3 pos, 4 normal, 4 tangent, 4 uv
+        const vertexSize = (3+4+4+4);
+        const vertexData = new Float32Array(vertCount * vertexSize);
+        assert(vertCount < 0xFFFF);
+        const indexData = new Uint16Array(indexCount);
+
+        const planes = getLumpData(LumpType.PLANES).createDataView();
+        const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);
+        const vertnormals = getLumpData(LumpType.VERTNORMALS).createTypedArray(Float32Array);
+        const vertnormalindices = getLumpData(LumpType.VERTNORMALINDICES).createTypedArray(Uint16Array);
+        const disp_verts = getLumpData(LumpType.DISP_VERTS).createTypedArray(Float32Array);
+
+        const scratchVec2 = vec2.create();
+        const scratchPosition = vec3.create();
+        const scratchNormal = vec3.create();
+        const scratchTangentT = vec3.create();
+        const scratchTangentS = vec3.create();
+
+        // now build buffers
+        let dstOffs = 0;
+        let dstOffsIndex = 0;
+        let dstIndexBase = 0;
+        let vertnormalIdx = 0;
+        for (let i = 0; i < surfaces.length; i++) {
+            const surface = surfaces[i];
+
+            const idx = surface.index * 0x38;
+            const planenum = faces.getUint16(idx + 0x00, true);
+            const side = faces.getUint8(idx + 0x02);
+            const onNode = faces.getUint8(idx + 0x03);
+            const firstedge = faces.getUint32(idx + 0x04, true);
+            const numedges = faces.getUint16(idx + 0x08, true);
+            const dispinfo = faces.getInt16(idx + 0x0C, true);
+            const surfaceFogVolumeID = faces.getUint16(idx + 0x0E, true);
+
+            const area = faces.getFloat32(idx + 0x18, true);
+            const m_LightmapTextureMinsInLuxels = nArray(2, (i) => faces.getInt32(idx + 0x1C + i * 4, true));
+            const origFace = faces.getUint32(idx + 0x2C, true);
+            const m_NumPrims = faces.getUint16(idx + 0x30, true);
+            const firstPrimID = faces.getUint16(idx + 0x32, true);
+            const smoothingGroups = faces.getUint32(idx + 0x34, true);
+
+            const vertnormBase = vertnormalIdx;
+            vertnormalIdx += numedges;
 
             // Tangent space setup.
             const planeX = planes.getFloat32(planenum * 0x14 + 0x00, true);
@@ -674,6 +697,7 @@ export class BSPFile {
             const planeZ = planes.getFloat32(planenum * 0x14 + 0x08, true);
             vec3.set(scratchPosition, planeX, planeY, planeZ);
 
+            const tex = this.texinfo[surface.texinfo];
             vec3.set(scratchTangentS, tex.textureMapping.s[0], tex.textureMapping.s[1], tex.textureMapping.s[2]);
             vec3.normalize(scratchTangentS, scratchTangentS);
             vec3.set(scratchTangentT, tex.textureMapping.t[0], tex.textureMapping.t[1], tex.textureMapping.t[2]);
@@ -681,6 +705,9 @@ export class BSPFile {
             vec3.cross(scratchNormal, scratchTangentS, scratchTangentT);
             // Detect if we need to flip tangents.
             const tangentSSign = vec3.dot(scratchPosition, scratchNormal) > 0.0 ? -1.0 : 1.0;
+
+            const texinfo = surface.texinfo;
+            const surfaceLighting = surface.lighting;
 
             const center = vec3.create();
 
@@ -739,8 +766,8 @@ export class BSPFile {
 
                         // Lightmap UV
                         // Source seems to just have lightmaps in surface space, and ignore the mapping. (!!!)
-                        vertexData[dstOffs++] = (vertex.uv[0] * m_LightmapTextureSizeInLuxels[0]) + 0.5;
-                        vertexData[dstOffs++] = (vertex.uv[1] * m_LightmapTextureSizeInLuxels[1]) + 0.5;
+                        vertexData[dstOffs++] = (vertex.uv[0] * m_LightmapTextureMinsInLuxels[0]) + 0.5;
+                        vertexData[dstOffs++] = (vertex.uv[1] * m_LightmapTextureMinsInLuxels[1]) + 0.5;
                     }
                 }
 
@@ -803,8 +830,9 @@ export class BSPFile {
                         scratchVec2[1] += 0.5 - m_LightmapTextureMinsInLuxels[1];
 
                         // Place into page.
-                        scratchVec2[0] = (scratchVec2[0] + surfaceLighting.pagePosX) / surfaceLighting.pageWidth;
-                        scratchVec2[1] = (scratchVec2[1] + surfaceLighting.pagePosY) / surfaceLighting.pageHeight;
+                        const page = this.lightmapPackerManager.pages[surfaceLighting.pageIndex];
+                        scratchVec2[0] = (scratchVec2[0] + surfaceLighting.pagePosX) / page.width;
+                        scratchVec2[1] = (scratchVec2[1] + surfaceLighting.pagePosY) / page.height;
                     }
 
                     vertexData[dstOffs++] = scratchVec2[0];
