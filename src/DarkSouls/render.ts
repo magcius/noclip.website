@@ -816,7 +816,7 @@ export class MSBRenderer {
 
     private lodModels: string[] = [];
     public chooseLODModel(): void {
-        interactiveVizSliderSelect(this.flverInstances, (index) => {
+        interactiveVizSliderSelect(this.flverInstances, 'visible', (index) => {
             const instance = this.flverInstances[index];
             this.lodModels.push(instance.name);
             setTimeout(() => { instance.visible = false; }, 2000);
