@@ -1557,7 +1557,8 @@ function createRuntimeLightmap(width: number, height: number, wantsLightmap: boo
 }
 
 export class SurfaceLightingInstance {
-    public lightmapBuildDirty: boolean = false;
+    // The styles that we built our lightmaps for.
+    public lightmapStyleIntensities: number[];
     public lightmapUploadDirty: boolean = false;
     public lighting: SurfaceLighting;
     public pixelData: Uint8ClampedArray | null;
@@ -1575,7 +1576,7 @@ export class SurfaceLightingInstance {
         this.lighting = assertExists(surface.lighting);
         this.pixelData = createRuntimeLightmap(this.lighting.width, this.lighting.height, this.wantsLightmap, this.wantsBumpmap);
 
-        this.lightmapBuildDirty = true;
+        this.lightmapStyleIntensities = nArray(this.lighting.styles.length, () => -1);
 
         if (this.wantsLightmap) {
             // Associate ourselves with the right page.
@@ -1584,7 +1585,17 @@ export class SurfaceLightingInstance {
     }
 
     public buildLightmap(worldLightingState: WorldLightingState): void {
-        if (!this.lightmapBuildDirty)
+        // Check if our lightmap needs rebuilding.
+        let dirty = false;
+        for (let i = 0; i < this.lighting.styles.length; i++) {
+            const styleIdx = this.lighting.styles[i];
+            if (worldLightingState.styleIntensities[styleIdx] !== this.lightmapStyleIntensities[i]) {
+                this.lightmapStyleIntensities[i] = worldLightingState.styleIntensities[styleIdx];
+                dirty = true;
+            }
+        }
+
+        if (!dirty)
             return;
 
         const hasLightmap = this.lighting.samples !== null;
@@ -1625,7 +1636,6 @@ export class SurfaceLightingInstance {
             this.pixelData!.fill(255);
         }
 
-        this.lightmapBuildDirty = false;
         this.lightmapUploadDirty = true;
     }
 }
