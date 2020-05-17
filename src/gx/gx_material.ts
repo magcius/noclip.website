@@ -487,23 +487,23 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     // Output is a vec3, src is a vec4.
-    private generateMulPntMatrixStatic(pnt: GX.TexGenMatrix, src: string): string {
+    private generateMulPntMatrixStatic(pnt: GX.TexGenMatrix, src: string, funcName: string = `Mul`): string {
         if (pnt === GX.TexGenMatrix.IDENTITY) {
             return `${src}.xyz`;
         } else if (pnt >= GX.TexGenMatrix.TEXMTX0) {
             const texMtxIdx = (pnt - GX.TexGenMatrix.TEXMTX0) / 3;
-            return `Mul(u_TexMtx[${texMtxIdx}], ${src})`;
+            return `${funcName}(u_TexMtx[${texMtxIdx}], ${src})`;
         } else if (pnt >= GX.TexGenMatrix.PNMTX0) {
             const pnMtxIdx = (pnt - GX.TexGenMatrix.PNMTX0) / 3;
-            return `Mul(u_PosMtx[${pnMtxIdx}], ${src})`;
+            return `${funcName}(u_PosMtx[${pnMtxIdx}], ${src})`;
         } else {
             throw "whoops";
         }
     }
 
     // Output is a vec3, src is a vec4.
-    private generateMulPntMatrixDynamic(attrStr: string, src: string): string {
-        return `Mul(GetPosTexMatrix(${attrStr}), ${src})`;
+    private generateMulPntMatrixDynamic(attrStr: string, src: string, funcName: string = `Mul`): string {
+        return `${funcName}(GetPosTexMatrix(${attrStr}), ${src})`;
     }
 
     private generateTexMtxIdxAttr(index: GX.TexCoordID): string {
@@ -1197,11 +1197,10 @@ ${this.generateFogFunc(`t_Fog`)}
         // Default to using pnmtxidx.
         const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
         const src = `vec4(a_Normal.xyz, 0.0)`;
-        // TODO(jstpierre): Move to a normal matrix calculated on the CPU
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`a_Position.w`, src);
+            return this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`);
         else
-            return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
+            return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `MulNormalMatrix`);
     }
 
     private generateShaders(): void {
@@ -1230,6 +1229,15 @@ Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
         return u_TexMtx[(t_MtxIdx - 10u)];
     else
         return u_PosMtx[t_MtxIdx];
+}
+
+vec3 MulNormalMatrix(_Mat4x3 t_Matrix, vec4 t_Value) {
+    // Pull out the squared scaling.
+    vec3 t_Col0 = Mat4x3GetCol0(t_Matrix);
+    vec3 t_Col1 = Mat4x3GetCol1(t_Matrix);
+    vec3 t_Col2 = Mat4x3GetCol2(t_Matrix);
+    vec4 t_SqScale = vec4(dot(t_Col0, t_Col0), dot(t_Col1, t_Col1), dot(t_Col2, t_Col2), 1.0);
+    return normalize(Mul(t_Matrix, t_Value / t_SqScale));
 }
 
 float ApplyAttenuation(vec3 t_Coeff, float t_Value) {

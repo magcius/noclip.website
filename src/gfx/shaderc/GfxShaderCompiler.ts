@@ -95,6 +95,9 @@ struct Mat4x2 { vec4 _m[2]; };
 vec4 Mul(Mat4x4 m, vec4 v) { return vec4(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v), dot(m._m[3], v)); }
 vec3 Mul(Mat4x3 m, vec4 v) { return vec3(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v)); }
 vec2 Mul(Mat4x2 m, vec4 v) { return vec2(dot(m._m[0], v), dot(m._m[1], v)); }
+vec3 Mat4x3GetCol0(Mat4x3 m) { return vec3(m._m[0].x, m._m[1].x, m._m[2].x); }
+vec3 Mat4x3GetCol1(Mat4x3 m) { return vec3(m._m[0].y, m._m[1].y, m._m[2].y); }
+vec3 Mat4x3GetCol2(Mat4x3 m) { return vec3(m._m[0].z, m._m[1].z, m._m[2].z); }
 vec4 Mul(vec3 v, Mat4x3 m) { return vec4(
 dot(vec3(m._m[0].x, m._m[1].x, m._m[2].x), v),
 dot(vec3(m._m[0].y, m._m[1].y, m._m[2].y), v),
@@ -115,8 +118,11 @@ Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n;
 #define Mat4x2 mat4x2
 #define _Mat4x4 mat4x4
 #define _Mat4x3 mat4x3
-#define Mul(A, B) (A * B)
+#define Mul(A, B) (A * (B))
 #define Fma(D, M, S) (D += (M) * (S))
+#define Mat4x3GetCol0(A) (A)[0]
+#define Mat4x3GetCol1(A) (A)[1]
+#define Mat4x3GetCol2(A) (A)[2]
 `;
     }
 
