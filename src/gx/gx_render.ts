@@ -16,7 +16,6 @@ import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 import { GfxBufferCoalescerCombo, makeStaticDataBuffer, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
-import { Camera } from '../Camera';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -136,17 +135,17 @@ export function fillPacketParamsData(d: Float32Array, bOffs: number, packetParam
     assert(d.length >= offs);
 }
 
-export function fillSceneParams(sceneParams: SceneParams, projectionMatrix: mat4, viewportWidth: number, viewportHeight: number, useLODBias: boolean= true): void {
+export function fillSceneParams(sceneParams: SceneParams, projectionMatrix: mat4, viewportWidth: number, viewportHeight: number, customLODBias: number | null = null): void {
     mat4.copy(sceneParams.u_Projection, projectionMatrix);
 
-    if (useLODBias) {
+    if (customLODBias !== null) {
+        sceneParams.u_SceneTextureLODBias = customLODBias;
+    } else {
         // Mip levels in GX are assumed to be relative to the GameCube's embedded framebuffer (EFB) size,
         // which is hardcoded to be 640x528. We need to bias our mipmap LOD selection by this amount to
         // make sure textures are sampled correctly...
         const textureLODBias = Math.log2(Math.min(viewportWidth / GX_Material.EFB_WIDTH, viewportHeight / GX_Material.EFB_HEIGHT));
         sceneParams.u_SceneTextureLODBias = textureLODBias;
-    } else {
-        sceneParams.u_SceneTextureLODBias = 0;
     }
 }
 
@@ -514,8 +513,8 @@ export const gxBindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 const sceneParams = new SceneParams();
-export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, useLODBias: boolean = true, sceneParamsScratch = sceneParams): void {
-    fillSceneParams(sceneParamsScratch, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight, useLODBias);
+export function fillSceneParamsDataOnTemplate(renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, customLODBias: number | null = null, sceneParamsScratch = sceneParams): void {
+    fillSceneParams(sceneParamsScratch, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight, customLODBias);
     let offs = renderInst.getUniformBufferOffset(ub_SceneParams);
     const d = renderInst.mapUniformBufferF32(ub_SceneParams);
     fillSceneParamsData(d, offs, sceneParams);

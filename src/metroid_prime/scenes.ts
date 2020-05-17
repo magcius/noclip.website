@@ -51,7 +51,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         viewerInput.camera.setClipPlanes(0.2);
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput, this.worldAmbientColor);
         this.prepareToRenderSkybox(device, viewerInput);

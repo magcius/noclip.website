@@ -278,7 +278,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         // Prepare our two scene params buffers.
         const sceneParamsOffs3D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
-        fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight, true);
+        fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(sceneParamsOffs3D, ub_SceneParamsBufferSize), sceneParamsOffs3D, sceneParams);
         this.sceneObjHolder.renderParams.sceneParamsOffs3D = sceneParamsOffs3D;
 

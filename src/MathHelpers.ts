@@ -80,7 +80,7 @@ export function computeModelMatrixSRT_MayaSSC(dst: mat4, scaleX: number, scaleY:
  * This is equivalent to {@link computeModelMatrixSRT} with the rotation parameters set to
  * 0 and the translation set to 0.
  */
-export function computeModelMatrixS(dst: mat4, scaleX: number, scaleY: number, scaleZ: number): void {
+export function computeModelMatrixS(dst: mat4, scaleX: number, scaleY: number = scaleX, scaleZ: number = scaleX): void {
     dst[0] =  scaleX;
     dst[1] =  0.0;
     dst[2] =  0.0;

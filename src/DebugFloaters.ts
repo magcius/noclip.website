@@ -2,11 +2,18 @@
 // Debug Floater UI
 
 import { objIsColor } from "./Color";
-import { Slider, Widget, RENDER_HACKS_ICON, createDOMFromString, HIGHLIGHT_COLOR, setElementHighlighted } from "./ui";
+import { Slider, Widget, RENDER_HACKS_ICON, createDOMFromString, HIGHLIGHT_COLOR, setElementHighlighted, Checkbox } from "./ui";
 import { GlobalGrabManager } from "./GrabManager";
 import { assert } from "./util";
 import { invlerp, lerp } from "./MathHelpers";
 import { IS_DEVELOPMENT } from "./BuildVersion";
+
+function getParentMetadata(target: any, key: string) {
+    return {
+        range: Reflect.getMetadata('df:range', target, key),
+        usepercent: Reflect.getMetadata('df:usepercent', target, key),
+    };
+}
 
 export class FloatingPanel implements Widget {
     public elem: HTMLElement;
@@ -122,43 +129,30 @@ export class FloatingPanel implements Widget {
             setElementHighlighted(this.header, true, HIGHLIGHT_COLOR);
         }
     }
-}
 
-export class DebugFloaterHolder {
-    private floatingPanels: FloatingPanel[] = [];
-    public elem: HTMLElement;
-    public midiControls = new GlobalMIDIControls();
+    public bindCheckbox(labelName: string, obj: any, paramName: string): void {
+        let value = obj[paramName];
+        assert(typeof value === "boolean");
 
-    constructor() {
-        this.elem = document.createElement('div');
+        const cb = new Checkbox(labelName, value);
+        cb.onchanged = () => {
+            obj[paramName] = cb.checked;
+            update();
+        };
 
-        if (IS_DEVELOPMENT)
-            this.midiControls.init();
+        function update(): void {
+            cb.setChecked(obj[paramName]);
+        }
+
+        setInterval(() => {
+            if (obj[paramName] !== value)
+                update();
+        }, 100);
+
+        this.contents.appendChild(cb.elem);
     }
 
-    public makeFloatingPanel(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
-        const panel = new FloatingPanel();
-        panel.setWidth(600);
-        panel.setTitle(icon, title);
-        this.elem.appendChild(panel.elem);
-        this.floatingPanels.push(panel);
-        return panel;
-    }
-
-    public destroyScene(): void {
-        for (let i = 0; i < this.floatingPanels.length; i++)
-            this.floatingPanels[i].destroy();
-        this.floatingPanels = [];
-    }
-
-    private debugFloater: FloatingPanel | null = null;
-    private getDebugFloater(): FloatingPanel {
-        if (this.debugFloater === null)
-            this.debugFloater = this.makeFloatingPanel('Debug');
-        return this.debugFloater;
-    }
-
-    public bindSlider(obj: { [k: string]: number }, panel: FloatingPanel, paramName: string, labelName: string, parentMetadata: any | null): void {
+    public bindSingleSlider(labelName: string, obj: any, paramName: string, parentMetadata: any | null = null, midiControls: GlobalMIDIControls | null = null): void {
         let value = obj[paramName];
         assert(typeof value === "number");
 
@@ -173,12 +167,17 @@ export class DebugFloaterHolder {
             step = range.step;
         }
 
+        let usePercent = Reflect.getMetadata('df:usepercent', obj, paramName);
+        if (usePercent === undefined && parentMetadata !== null)
+            usePercent = parentMetadata.usepercent;
+        usePercent = !!usePercent;
+
         const fracDig = Math.max(0, -Math.log10(step));
         const slider = new Slider();
 
         let midiBindButton: HTMLElement | null = null;
 
-        if (this.midiControls.isInitialized()) {
+        if (midiControls !== null && midiControls.isInitialized()) {
             const sliderDiv = slider.elem.querySelector('div')!;
             sliderDiv.style.gridTemplateColumns = '48px 1fr 1fr';
 
@@ -219,11 +218,11 @@ export class DebugFloaterHolder {
                 if (bindState === 'unbound') {
                     bindState = 'binding';
                     syncColor();
-                    this.midiControls.setNextBindListener(midiListener);
+                    midiControls.setNextBindListener(midiListener);
                 } else if (bindState === 'binding') {
                     bindState = 'unbound';
                     syncColor();
-                    this.midiControls.setNextBindListener(null);
+                    midiControls.setNextBindListener(null);
                 } else if (bindState === 'bound') {
                     bindState = 'unbound';
                     syncColor();
@@ -244,7 +243,15 @@ export class DebugFloaterHolder {
 
         function update() {
             value = obj[paramName];
-            slider.setLabel(`${labelName} = ${value.toFixed(fracDig)}`);
+
+            let valueStr: string;
+            if (usePercent) {
+                valueStr = `${(invlerp(min, max, value) * 100).toFixed(0)}%`;
+            } else {
+                valueStr = value.toFixed(fracDig);
+            }
+
+            slider.setLabel(`${labelName} = ${valueStr}`);
             const localMin = Math.min(value, min);
             const localMax = Math.max(value, max);
 
@@ -263,7 +270,54 @@ export class DebugFloaterHolder {
                 update();
         }, 100);
 
-        panel.contents.appendChild(slider.elem);
+        this.contents.appendChild(slider.elem);
+    }
+
+    public bindSliderChain(labelName: string, target: any, ...args: string[]): void {
+        // Ugly helper that recurses through the chain, accumulating metadata along the way.
+
+        let parentMetadata: any | null = null;
+        for (let i = 0; i < args.length - 1; i++) {
+            parentMetadata = getParentMetadata(target, args[i]);
+            target = target[args[i]];
+        }
+
+        this.bindSingleSlider(labelName, target, args[args.length - 1], parentMetadata);
+    }
+}
+
+export class DebugFloaterHolder {
+    private floatingPanels: FloatingPanel[] = [];
+    public elem: HTMLElement;
+    public midiControls = new GlobalMIDIControls();
+
+    constructor() {
+        this.elem = document.createElement('div');
+
+        if (IS_DEVELOPMENT)
+            this.midiControls.init();
+    }
+
+    public makeFloatingPanel(title: string = 'Floating Panel', icon: string = RENDER_HACKS_ICON): FloatingPanel {
+        const panel = new FloatingPanel();
+        panel.setWidth(600);
+        panel.setTitle(icon, title);
+        this.elem.appendChild(panel.elem);
+        this.floatingPanels.push(panel);
+        return panel;
+    }
+
+    public destroyScene(): void {
+        for (let i = 0; i < this.floatingPanels.length; i++)
+            this.floatingPanels[i].destroy();
+        this.floatingPanels = [];
+    }
+
+    private debugFloater: FloatingPanel | null = null;
+    private getDebugFloater(): FloatingPanel {
+        if (this.debugFloater === null)
+            this.debugFloater = this.makeFloatingPanel('Debug');
+        return this.debugFloater;
     }
 
     private bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
@@ -279,11 +333,9 @@ export class DebugFloaterHolder {
             const v = obj[keyName];
 
             if (typeof v === "number")
-                this.bindSlider(obj, panel, keyName, `${parentName}.${keyName}`, parentMetadata);
+                panel.bindSingleSlider(`${parentName}.${keyName}`, obj, keyName, parentMetadata);
 
-            this.bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, {
-                range: Reflect.getMetadata('df:range', obj, keyName),
-            });
+            this.bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
         }
     }
 
@@ -423,4 +475,8 @@ export function dfRange(min: number = 0, max: number = 1, step: number = (max - 
 
 export function dfSigFigs(v: number = 2) {
     return Reflect.metadata('df:sigfigs', v);
+}
+
+export function dfUsePercent(v: boolean = true) {
+    return Reflect.metadata('df:usepercent', v);
 }

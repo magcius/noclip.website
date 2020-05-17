@@ -236,23 +236,19 @@ export class SunshineWaterSceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const dataFetcher = context.dataFetcher;
     
-        return dataFetcher.fetchData("j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
-            return Yaz0.decompress(buffer);
-        }).then((buffer: ArrayBufferSlice) => {
-            const rarc = RARC.parse(buffer);
-    
-            const renderer = new SeaRenderer(device, rarc);
-            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-            const skyScene = assertExists(SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true));
-            renderer.modelInstances.push(skyScene);
-    
-            const bmd = BMD.parse(rarc.findFileData('map/map/sea.bmd')!);
-            const btk = BTK.parse(rarc.findFileData('map/map/sea.btk')!);
-    
-            const seaScene = new SunshineWaterModel(device, cache, bmd, btk, this.id);
-            renderer.sunshineWaterModel = seaScene;
-            return renderer;
-        });
+        const rarc = RARC.parse(await Yaz0.decompress(await dataFetcher.fetchData("j3d/sms/dolpic0.szs")));
+
+        const renderer = new SeaRenderer(device, rarc);
+        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+        const skyScene = assertExists(SunshineSceneDesc.createSunshineSceneForBasename(device, cache, SMSPass.SKYBOX, rarc, 'map/map/sky', true));
+        renderer.modelInstances.push(skyScene);
+
+        const bmd = BMD.parse(rarc.findFileData('map/map/sea.bmd')!);
+        const btk = BTK.parse(rarc.findFileData('map/map/sea.btk')!);
+
+        const seaScene = new SunshineWaterModel(device, cache, bmd, btk, this.id);
+        renderer.sunshineWaterModel = seaScene;
+        return renderer;
     }
 }
 
