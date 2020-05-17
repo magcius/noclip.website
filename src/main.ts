@@ -642,6 +642,7 @@ class Main {
 
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
+        this._saveStateAndUpdateURL();
 
         if (scene.createCameraController !== undefined)
             this.viewer.setCameraController(scene.createCameraController());
