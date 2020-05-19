@@ -1,6 +1,6 @@
 import * as Viewer from '../viewer';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { CameraController } from '../Camera';
@@ -61,7 +61,7 @@ export class SFARenderer extends SFARendererHelper {
             oldProjection = mat4.clone(viewerInput.camera.projectionMatrix);
             mat4.identity(viewerInput.camera.projectionMatrix);
         }
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
         if (clipSpace) {
             mat4.copy(viewerInput.camera.projectionMatrix, oldProjection!);
         }

@@ -143,7 +143,7 @@ export class MapInstance {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number, showDevGeometry: boolean) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
 
         const modelViewState: ModelViewState = {
             showDevGeometry,
@@ -162,7 +162,7 @@ export class MapInstance {
 
     public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
 
         const modelViewState: ModelViewState = {
             showDevGeometry: true,
@@ -181,7 +181,7 @@ export class MapInstance {
 
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
         
         const modelViewState: ModelViewState = {
             showDevGeometry: true,
