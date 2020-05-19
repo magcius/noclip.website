@@ -26,7 +26,7 @@ import { AABB } from '../Geometry';
 import * as GX from '../gx/gx_enum';
 import { colorNewCopy, White } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { dfUsePercent } from '../DebugFloaters';
+import { dfUsePercent, dfRange } from '../DebugFloaters';
 
 class PlaneShape {
     private vtxBuffer: GfxBuffer;
@@ -162,6 +162,8 @@ class FakeWaterModelInstance {
     // alpha test high, alpha test low, _, second texture fade
     @dfUsePercent()
     public k3 = colorNewCopy(White);
+    // second texture fade, _, _, _
+    public k2 = colorNewCopy(White);
     // _, _, _, vertex color fade
     @dfUsePercent()
     public c1 = colorNewCopy(White);
@@ -199,7 +201,7 @@ class FakeWaterModelInstance {
             mb.setTevColorIn(0, GX.CC.CPREV, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
             // Blend between PREV (single texture) and A0 (both)
             mb.setTevAlphaIn(0, GX.CA.APREV, GX.CA.A0, GX.CA.KONST, GX.CA.ZERO);
-            mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_K3_A);
+            mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_K2_R);
 
             // Append in vertex color fade.
             mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.RASA, GX.CC.A2, GX.CC.ZERO);
@@ -222,6 +224,7 @@ class FakeWaterModelInstance {
         this.c2.a = 0.0;
 
         this.materialInstance.setColorOverride(ColorKind.K3, this.k3);
+        this.materialInstance.setColorOverride(ColorKind.K2, this.k2);
         this.materialInstance.setColorOverride(ColorKind.C1, this.c1);
         this.materialInstance.setColorOverride(ColorKind.C2, this.c2);
 
@@ -381,9 +384,9 @@ export class SlimySpringWaterDesc implements SceneDesc {
             const panel = window.main.ui.debugFloaterHolder.makeFloatingPanel('Controls');
             panel.bindSliderChain("Alpha Threshold Low", waterModel, 'k3', 'g');
             panel.bindSliderChain("Alpha Threshold High", waterModel, 'k3', 'r');
-            panel.bindSliderChain("Fade In Vertex Colors", waterModel, 'c1', 'a');
-            panel.bindSliderChain("Fade In Second Texture", waterModel, 'k3', 'a');
             panel.bindSliderChain("Show Only Vertex Colors", waterModel, 'c2', 'a');
+            panel.bindSliderChain("Fade In Vertex Colors", waterModel, 'c1', 'a');
+            panel.bindSliderChain("Fade In Second Texture", waterModel, 'k2', 'r');
             panel.bindCheckbox("Show Flower Box?", renderer, 'showFlowerBox');
             panel.bindCheckbox("Rotate Camera?", renderer, 'shouldOrbit');
             panel.bindCheckbox("Use Miptrick?", renderer, 'useMipmaps');
