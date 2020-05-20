@@ -1231,7 +1231,7 @@ Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
         return u_PosMtx[t_MtxIdx];
 }
 
-vec3 MulNormalMatrix(_Mat4x3 t_Matrix, vec4 t_Value) {
+vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec4 t_Value) {
     // Pull out the squared scaling.
     vec3 t_Col0 = Mat4x3GetCol0(t_Matrix);
     vec3 t_Col1 = Mat4x3GetCol1(t_Matrix);
