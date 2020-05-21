@@ -127,14 +127,14 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     }
 }
 
-function checkTEX0Compatible(mdl0: MDL0Model, tex0: TEX0): boolean {
+export function checkTEX0Compatible(mdl0: MDL0Model, tex0: TEX0): boolean {
     for (let i = 0; i < mdl0.materials.length; i++)
         if (mdl0.materials[i].textureName !== null && tex0.textures.find((tex) => tex.name === mdl0.materials[i].textureName) === undefined)
             return false;
     return true;
 }
 
-function tryMDL0(device: GfxDevice, mdl0: MDL0Model, tex0: TEX0): MDL0Renderer | null {
+export function tryMDL0(device: GfxDevice, mdl0: MDL0Model, tex0: TEX0): MDL0Renderer | null {
     if (checkTEX0Compatible(mdl0, tex0))
         return new MDL0Renderer(device, mdl0, tex0);
     else
@@ -164,36 +164,56 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
         const tileset_indices: number[] = [];
 
         const mapHeaders = (await dataFetcher.fetchData(`${pathBase}/maps.bin`)).createDataView();
+        
+        const mapHeaderIndex = parseInt(this.id);
+        const mapFallbackTileset = mapHeaders.getUint8(mapHeaderIndex*24);
+        const matrixIndex = mapHeaders.getUint8(mapHeaderIndex*24 + 0x02);
+        console.log(`Reading Map Header at 0x${(mapHeaderIndex*24).toString(16)} : 0x${mapHeaders.getUint8(mapHeaderIndex*24).toString(16)}`)
+        console.log(matrixIndex);
+
         for (let i = 0; i < 700; i++) {
             tileset_indices[i] = mapHeaders.getUint8((24 * i));
         }
 
-        const mapMatrixData = assertExists(modelCache.getFileData(`map_matrix/0.bin`)).createDataView();
-        let currentMatrixOffset = 0x08;
-        for (let y = 0; y < 30; y++) {
-            map_matrix_headers[y] = [];
-            for (let x = 0; x < 30; x++) {
-                map_matrix_headers[y][x] = mapMatrixData.getUint16(currentMatrixOffset, true);
-                currentMatrixOffset += 2;
-            }   
-        }
-
-        //SpaceCats: Leaving these two as seperate since for loading the underground and some indoor maps this secondary section might be disabled
-
-        for (let y = 0; y < 30; y++) {
-            map_matrix_height[y] = [];
-            for (let x = 0; x < 30; x++) {
-                map_matrix_height[y][x] = mapMatrixData.getUint8(currentMatrixOffset);
-                currentMatrixOffset += 1;
-            }   
-        }
-
-        for (let y = 0; y < 30; y++) {
+        const mapMatrixData = assertExists(modelCache.getFileData(`map_matrix/${matrixIndex}.bin`)).createDataView();
+        const width = mapMatrixData.getUint8(0x00);
+        const height = mapMatrixData.getUint8(0x01);
+        const hasHeightLayer = mapMatrixData.getUint8(0x02) == 1;
+        const hasHeaderLayer = mapMatrixData.getUint8(0x03) == 1;
+        
+        //Read header or file layer and set default height, if the header layer is included this is header, if its not its file
+        let currentMatrixOffset = 0x05 + mapMatrixData.getUint8(0x04);
+        for (let y = 0; y < height; y++) {
             map_matrix_files[y] = [];
-            for (let x = 0; x < 30; x++) {
-                map_matrix_files[y][x] = mapMatrixData.getUint16(currentMatrixOffset, true);
+            map_matrix_height[y] = [];
+            map_matrix_headers[y] = [];
+            for (let x = 0; x < width; x++) {
+                const idx = mapMatrixData.getUint16(currentMatrixOffset, true);
+                
+                map_matrix_height[y][x] = 0;
+                map_matrix_files[y][x] = idx;
+                map_matrix_headers[y][x] = idx;
                 currentMatrixOffset += 2;
             }   
+        }
+        
+        if(hasHeightLayer){
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    map_matrix_height[y][x] = mapMatrixData.getUint8(currentMatrixOffset);
+                    currentMatrixOffset += 1;
+                }   
+            }
+        }
+
+        //If the header data is included, the file indices will be after the height layer
+        if(hasHeaderLayer){
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    map_matrix_files[y][x] = mapMatrixData.getUint16(currentMatrixOffset, true);
+                    currentMatrixOffset += 2;
+                }   
+            }
         }
 
         //SpaceCats: This is a hack, but it works.
@@ -203,8 +223,8 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
             set_index++;
         }
 
-        for (let y = 0; y < 30; y++) {
-            for (let x = 0; x < 30; x++) {
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
                 if (map_matrix_files[y][x] === 0xFFFF)
                     continue;
 
@@ -223,7 +243,7 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
                 if (mapRenderer === null)
                     mapRenderer = tryMDL0(device, embeddedModelBMD.models[0], assertExists(tilesets.get(tilesetIndex)!.tex0));
                 if (mapRenderer === null)
-                    mapRenderer = tryMDL0(device, embeddedModelBMD.models[0], assertExists(tilesets.get(6)!.tex0));
+                    mapRenderer = tryMDL0(device, embeddedModelBMD.models[0], assertExists(tilesets.get(mapFallbackTileset)!.tex0));
                 if (mapRenderer === null)
                     continue;
 
@@ -263,7 +283,8 @@ class PokemonPlatinumSceneDesc implements Viewer.SceneDesc {
 const id = 'pkmnpl';
 const name = 'Pokemon Platinum';
 const sceneDescs = [
-    new PokemonPlatinumSceneDesc("0", "Sinnoh Region")
+    new PokemonPlatinumSceneDesc("0", "Sinnoh Region"),
+    new PokemonPlatinumSceneDesc("2", "Underground"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
