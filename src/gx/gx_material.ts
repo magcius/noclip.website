@@ -1198,9 +1198,9 @@ ${this.generateFogFunc(`t_Fog`)}
         const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
         const src = `vec4(a_Normal.xyz, 0.0)`;
         if (usePnMtxIdx)
-            return this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`);
+            return this.generateMulPntMatrixDynamic(`a_Position.w`, src, `Mul`);
         else
-            return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `MulNormalMatrix`);
+            return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `Mul`);
     }
 
     private generateShaders(): void {
