@@ -1615,7 +1615,6 @@ export class SurfaceLightingInstance {
                 lightmapAccumLight(scratchpad, 0, this.lighting.samples!, srcOffs, srcSize, intensity);
                 srcOffs += srcSize;
             }
-            assert(srcOffs === this.lighting.samples!.byteLength);
 
             if (this.wantsBumpmap && !this.lighting.hasBumpmapSamples) {
                 // Game wants bumpmap samples but has none. Copy from primary lightsource.
