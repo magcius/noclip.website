@@ -305,9 +305,10 @@ class WorldRenderer extends SFARenderer {
 
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
         // Render opaques
+
         this.beginPass(viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0, this.showDevGeometry);
+            this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.previousFrameTexture, 0, this.showDevGeometry);
         }
         
         const mtx = mat4.create();
