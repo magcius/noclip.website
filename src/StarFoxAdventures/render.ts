@@ -34,6 +34,7 @@ export class SFARenderer extends SFARendererHelper {
     protected renderPass: GfxRenderPass;
     protected viewport: any;
     protected sceneTexture = new ColorTexture();
+    protected previousFrameTexture = new ColorTexture();
     protected renderInstManager: GfxRenderInstManager;
 
     constructor(device: GfxDevice, protected animController: SFAAnimationController) {
@@ -93,7 +94,8 @@ export class SFARenderer extends SFARendererHelper {
         this.renderSky(device, this.renderInstManager, viewerInput);
         this.renderWorld(device, this.renderInstManager, viewerInput);
 
-        this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor);
+        this.previousFrameTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.previousFrameTexture.gfxTexture);
         return this.renderPass;
     }
 }

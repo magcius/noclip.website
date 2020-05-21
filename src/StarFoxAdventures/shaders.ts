@@ -446,9 +446,14 @@ class StandardMaterial extends MaterialBase {
         if (!this.isMapBlock) {
             // Not a map block. Just do basic texturing.
             this.mb.setUsePnMtxIdx(true);
-            const texMap = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
-            const texCoord = this.genScrollableTexCoord(texMap, this.shader.layers[0].scrollingTexMtx);
-            this.addTevStageForTextureWithWhiteKonst(0, texMap, texCoord, true);
+            if (this.shader.layers.length > 0 && this.shader.layers[0].texId !== null) {
+                const texMap = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
+                const texCoord = this.genScrollableTexCoord(texMap, this.shader.layers[0].scrollingTexMtx);
+                this.addTevStageForTextureWithWhiteKonst(0, texMap, texCoord, true);
+            }
+            if (this.shader.attrFlags & ShaderAttrFlags.CLR) {
+                this.addTevStageForMultVtxColor();
+            }
         } else {
             this.texMtx[2] = (dst: mat4, viewState: ViewState) => {
                 // Flipped

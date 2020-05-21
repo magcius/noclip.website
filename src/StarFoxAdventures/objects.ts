@@ -518,6 +518,11 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             }
         },
     },
+    [521]: { // WM_LevelCon
+        setup: (obj: ObjectInstance, data: DataView) => {
+            obj.world.envfxMan.loadEnvfx(0x3c);
+        },
+    },
     [523]: commonClass(),
     [524]: { // WM_spiritpl
         setup: (obj: ObjectInstance, data: DataView) => {
