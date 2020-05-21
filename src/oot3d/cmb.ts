@@ -551,9 +551,8 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
 
     const colorByteOffset = readSlice(baseOffs);
     const texCoord0ByteOffset = readSlice(baseOffs);
-    // TODO(jstpierre): Figure out how tex coords work, 'cuz this ain't it chief.
-    const texCoord1ByteOffset = -1; readSlice(baseOffs);
-    const texCoord2ByteOffset = -1; readSlice(baseOffs);
+    const texCoord1ByteOffset = readSlice(baseOffs);
+    const texCoord2ByteOffset = readSlice(baseOffs);
 
     const boneIndicesByteOffset = readSlice(baseOffs);
     const boneWeightsByteOffset = readSlice(baseOffs);

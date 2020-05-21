@@ -202,7 +202,7 @@ uniform sampler2D u_Samplers[8];
         try {
             const samplerIndex = this.lookupSamplerIndex(shadingModelSamplerBindingName);
             const uv = 'v_TexCoord0';
-            return `texture(u_Samplers[${samplerIndex}], ${uv})`;
+            return `texture(SAMPLER_2D(u_Samplers[${samplerIndex}]), ${uv})`;
         } catch(e) {
             // TODO(jstpierre): Figure out wtf is going on.
             console.warn(`${this.name}: No sampler by name ${shadingModelSamplerBindingName}`);
@@ -711,12 +711,13 @@ class FSHPMeshInstance {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         // TODO(jstpierre): Do we have to care about submeshes?
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.drawIndexes(this.meshData.mesh.count);
         renderInst.setInputLayoutAndState(this.meshData.inputLayout, this.meshData.inputState);
 
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.meshData.mesh.bbox);
         renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 

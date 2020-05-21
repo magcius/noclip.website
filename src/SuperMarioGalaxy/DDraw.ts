@@ -131,10 +131,7 @@ export class TDDraw extends TDDrawVtxSpec {
 
     private getOffs(v: number, attr: GX.Attr): number {
         const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
-        for (let i = 0; i < this.loadedVertexLayout!.vertexAttributeLayouts.length; i++)
-            if (this.loadedVertexLayout!.vertexAttributeLayouts[i].vtxAttrib === attr)
-                return v*stride + this.loadedVertexLayout!.vertexAttributeLayouts[i].bufferOffset;
-        throw "whoops";
+        return v*stride + this.loadedVertexLayout!.vertexAttributeOffsets[attr];
     }
 
     private writeUint8(offs: number, v: number): void {
@@ -189,6 +186,17 @@ export class TDDraw extends TDDrawVtxSpec {
 
     public position3vec3(v: vec3): void {
         this.position3f32(v[0], v[1], v[2]);
+    }
+
+    public normal3f32(x: number, y: number, z: number): void {
+        const offs = this.getOffs(this.currentVertex, GX.Attr.NRM);
+        this.writeFloat32(offs + 0x00, x);
+        this.writeFloat32(offs + 0x04, y);
+        this.writeFloat32(offs + 0x08, z);
+    }
+
+    public normal3vec3(v: vec3): void {
+        this.normal3f32(v[0], v[1], v[2]);
     }
 
     public texCoord2f32(attr: GX.Attr, s: number, t: number): void {
@@ -261,7 +269,7 @@ export class TDDraw extends TDDrawVtxSpec {
 
     public makeRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
         this.flushDeviceObjects(device, renderInstManager.gfxRenderCache);
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.currentIndex - this.startIndex, this.startIndex);
         this.startIndex = this.currentIndex;
@@ -340,10 +348,7 @@ export class TSDraw extends TDDrawVtxSpec {
 
     private getOffs(v: number, attr: GX.Attr): number {
         const stride = this.loadedVertexLayout!.vertexBufferStrides[0];
-        for (let i = 0; i < this.loadedVertexLayout!.vertexAttributeLayouts.length; i++)
-            if (this.loadedVertexLayout!.vertexAttributeLayouts[i].vtxAttrib === attr)
-                return v*stride + this.loadedVertexLayout!.vertexAttributeLayouts[i].bufferOffset;
-        throw "whoops";
+        return v*stride + this.loadedVertexLayout!.vertexAttributeOffsets[attr];
     }
 
     private writeUint8(offs: number, v: number): void {

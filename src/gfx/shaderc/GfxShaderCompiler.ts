@@ -1,6 +1,6 @@
 
-import { assert } from "../../util";
 import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxDevice } from "../platform/GfxPlatform";
+import { assert } from "../platform/GfxPlatformUtil";
 
 // Shader preprocessor / compiler infrastructure for GLSL.
 
@@ -23,13 +23,15 @@ export function preprocessShader_GLSL(vendorInfo: GfxVendorInfo, type: 'vert' | 
 
     const precision = lines.find((line) => line.startsWith('precision')) || 'precision mediump float;';
     let rest = lines.filter((line) => !line.startsWith('precision')).join('\n');
+    let extraDefines = '';
 
     let outLayout = '';
     if (vendorInfo.explicitBindingLocations) {
         let set = 0, binding = 0, location = 0;
 
-        rest = rest.replace(/layout\((.*)\)\s+uniform/g, (substr, layout) => {
-            return `layout(${layout}, set = ${set}, binding = ${binding++}) uniform`;
+        rest = rest.replace(/^(layout\((.*)\))?\s*uniform(.+{)$/gm, (substr, cap, layout, rest) => {
+            const layout2 = layout ? `${layout}, ` : ``;
+            return `layout(${layout2}set = ${set}, binding = ${binding++}) uniform ${rest}`;
         });
 
         assert(vendorInfo.separateSamplerTextures);
@@ -41,19 +43,45 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
 ` : '';
         });
 
-        rest = rest.replace(/^varying/gm, (substr, layout) => {
-            return `layout(location = ${location++}) varying`;
+        rest = rest.replace(type === 'frag' ? /^\b(varying|in)\b/gm : /^\b(varying|out)\b/gm, (substr, tok) => {
+            return `layout(location = ${location++}) ${tok}`;
         });
 
         outLayout = 'layout(location = 0) ';
+
+        extraDefines = `#define gl_VertexID gl_VertexIndex\n`;
     }
 
     if (vendorInfo.separateSamplerTextures) {
-        rest = rest.replace(/SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `texture2D T_P_${samplerName}, sampler S_P_${samplerName}`;
+        });
+
+        rest = rest.replace(/\bPU_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `SAMPLER_2D(P_${samplerName})`;
+        });
+
+        rest = rest.replace(/\bPP_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `T_${samplerName}, S_${samplerName}`;
+        });
+
+        rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
             return `sampler2D(T_${samplerName}, S_${samplerName})`;
         });
     } else {
-        rest = rest.replace(/SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+        rest = rest.replace(/\bPD_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `sampler2D P_${samplerName}`;
+        });
+
+        rest = rest.replace(/\bPU_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return `SAMPLER_2D(P_${samplerName})`;
+        });
+
+        rest = rest.replace(/\bPP_SAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
+            return samplerName;
+        });
+
+        rest = rest.replace(/\bSAMPLER_2D\((.*?)\)/g, (substr, samplerName) => {
             return samplerName;
         });
     }
@@ -67,6 +95,9 @@ struct Mat4x2 { vec4 _m[2]; };
 vec4 Mul(Mat4x4 m, vec4 v) { return vec4(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v), dot(m._m[3], v)); }
 vec3 Mul(Mat4x3 m, vec4 v) { return vec3(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v)); }
 vec2 Mul(Mat4x2 m, vec4 v) { return vec2(dot(m._m[0], v), dot(m._m[1], v)); }
+vec3 Mat4x3GetCol0(Mat4x3 m) { return vec3(m._m[0].x, m._m[1].x, m._m[2].x); }
+vec3 Mat4x3GetCol1(Mat4x3 m) { return vec3(m._m[0].y, m._m[1].y, m._m[2].y); }
+vec3 Mat4x3GetCol2(Mat4x3 m) { return vec3(m._m[0].z, m._m[1].z, m._m[2].z); }
 vec4 Mul(vec3 v, Mat4x3 m) { return vec4(
 dot(vec3(m._m[0].x, m._m[1].x, m._m[2].x), v),
 dot(vec3(m._m[0].y, m._m[1].y, m._m[2].y), v),
@@ -87,28 +118,40 @@ Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n;
 #define Mat4x2 mat4x2
 #define _Mat4x4 mat4x4
 #define _Mat4x3 mat4x3
-#define Mul(A, B) (A * B)
+#define Mul(A, B) (A * (B))
 #define Fma(D, M, S) (D += (M) * (S))
+#define Mat4x3GetCol0(A) (A)[0]
+#define Mat4x3GetCol1(A) (A)[1]
+#define Mat4x3GetCol2(A) (A)[2]
 `;
     }
 
     const hasFragColor = rest.includes('gl_FragColor');
 
-    return `
+    let concat = `
 ${vendorInfo.glslVersion}
 ${precision}
 #define ${type.toUpperCase()}
 #define attribute in
 #define varying ${type === 'vert' ? 'out' : 'in'}
 #define main${type === 'vert' ? 'VS' : 'PS'} main
+${extraDefines}
 ${hasFragColor ? `
 #define gl_FragColor o_color
-${type === 'frag' ? `${outLayout}out vec4 o_color;` : ''}
+${type === 'frag' ? `out vec4 o_color;` : ''}
 ` : ``}
 ${matrixDefines}
 ${definesString}
 ${rest}
 `.trim();
+
+    if (vendorInfo.explicitBindingLocations && type === 'frag') {
+        concat = concat.replace(/^\b(out)\b/gm, (substr, tok) => {
+            return `layout(location = 0) ${tok}`;
+        });
+    }
+
+    return concat;
 }
 
 interface GfxProgramDescriptorSimpleWithOrig extends GfxProgramDescriptorSimple {

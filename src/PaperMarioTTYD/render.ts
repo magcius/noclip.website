@@ -1,5 +1,5 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
@@ -60,7 +60,7 @@ void main() {
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor = vec4(color.rgb, 1.0);
 }
 `;
@@ -80,7 +80,7 @@ class BackgroundBillboardRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setInputLayoutAndState(null, null);
@@ -97,6 +97,8 @@ class BackgroundBillboardRenderer {
         const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -159,11 +161,14 @@ class MaterialInstance {
     }
 
     private fillMaterialParams(materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
+        for (let i = 0; i < 8; i++)
+            materialParams.m_TextureMapping[i].reset();
+
         for (let i = 0; i < this.material.samplers.length; i++) {
             const sampler = this.material.samplers[i];
 
             const texMapping = materialParams.m_TextureMapping[i];
-            textureHolder.fillTextureMapping(texMapping, sampler.textureName);
+            assert(textureHolder.fillTextureMapping(texMapping, sampler.textureName));
             texMapping.gfxSampler = this.gfxSamplers[i];
 
             if (this.materialAnimators[i]) {
@@ -312,9 +317,9 @@ class NodeInstance {
             const depthBias = 1.0 + (indexBias * -2.0 * far * near) / ((far + near) * (1.0 + indexBias));
 
             if (depthBias !== 1.0) {
-                let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
+                let offs = template.allocateUniformBuffer(ub_SceneParams, ub_SceneParamsBufferSize);
                 const d = template.mapUniformBufferF32(ub_SceneParams);
-                fillSceneParams(sceneParams, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+                fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
                 projectionMatrixD3DFromOpenGL(sceneParams.u_Projection);
                 sceneParams.u_Projection[10] *= depthBias;

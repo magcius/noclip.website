@@ -1,6 +1,7 @@
 
 import { nArray, assert } from "../util";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { loadVertexFromView } from "../Common/N64/RSP";
 
 export class Vertex {
     public x: number = 0;
@@ -27,17 +28,7 @@ class StagingVertex extends Vertex {
 
     public setFromView(view: DataView, offs: number): void {
         this.outputIndex = -1;
-
-        this.x = view.getInt16(offs + 0x00);
-        this.y = view.getInt16(offs + 0x02);
-        this.z = view.getInt16(offs + 0x04);
-        // flag (unused)
-        this.tx = (view.getInt16(offs + 0x08) / 0x20);
-        this.ty = (view.getInt16(offs + 0x0A) / 0x20);
-        this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
-        this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
-        this.c2 = view.getUint8(offs + 0x0E) / 0xFF;
-        this.a = view.getUint8(offs + 0x0F) / 0xFF;
+        loadVertexFromView(this, view, offs);
     }
 }
 
@@ -87,8 +78,8 @@ export class RSPState {
 
     private SP_GeometryMode: number = 0;
 
-    public ramBuffer: ArrayBufferSlice;
-    public ramAddrBase: number;
+    constructor(public ramBuffer: ArrayBufferSlice, public ramAddrBase: number) {
+    }
 
     public finish(): RSPOutput {
         return this.output;

@@ -12,8 +12,8 @@ import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render';
 import { SceneGroup } from '../viewer';
-import { assert, assertExists, hexzero, readString } from '../util';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { assert, assertExists, hexzero } from '../util';
+import { DataFetcher } from '../DataFetcher';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
@@ -37,9 +37,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(12/60);
-        return c;
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -130,13 +129,6 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
     }
 }
 
-export function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
-    if (readString(buffer, 0x00, 0x04) === 'LzS\x01')
-        return LzS.decompress(buffer.createDataView());
-    else
-        return buffer;
-}
-
 export class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
@@ -152,22 +144,22 @@ export class ModelCache {
         return Promise.all(v);
     }
 
-    private fetchFile(path: string, flags: DataFetcherFlags): Promise<ArrayBufferSlice> {
+    private fetchFile(path: string, allow404: boolean): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
-        const p = this.dataFetcher.fetchData(path, flags, () => {
+        const p = this.dataFetcher.fetchData(path, { allow404, abortedCallback: () => {
             this.filePromiseCache.delete(path);
             this.archivePromiseCache.delete(path);
-        });
+        } });
         this.filePromiseCache.set(path, p);
         return p;
     }
 
-    public fetchFileData(path: string, flags: DataFetcherFlags = DataFetcherFlags.NONE): Promise<ArrayBufferSlice> {
+    public fetchFileData(path: string, allow404: boolean = false): Promise<ArrayBufferSlice> {
         const p = this.filePromiseCache.get(path);
         if (p !== undefined) {
             return p.then(() => this.getFileData(path));
         } else {
-            return this.fetchFile(path, flags).then((data) => {
+            return this.fetchFile(path, allow404).then((data) => {
                 this.fileDataCache.set(path, data);
                 return data;
             });
@@ -188,7 +180,7 @@ export class ModelCache {
             p = this.fetchFileData(archivePath).then((data) => {
                 return data;
             }).then((data) => {
-                const arc = ZAR.parse(maybeDecompress(data));
+                const arc = ZAR.parse(LzS.maybeDecompress(data));
                 this.archiveCache.set(archivePath, arc);
                 return arc;
             });
@@ -2349,7 +2341,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const textureHolder = dataHolder.textureHolder;
 
         const [zarBuffer, zsiBuffer] = await Promise.all([
-            modelCache.fetchFileData(path_zar, DataFetcherFlags.ALLOW_404),
+            modelCache.fetchFileData(path_zar, true),
             modelCache.fetchFileData(path_info_zsi),
         ]);
 

@@ -5,10 +5,6 @@ import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 type EqualFunc<K> = (a: K, b: K) => boolean;
 type CopyFunc<T> = (a: T) => T;
 
-function gfxColorEqual(c0: GfxColor, c1: GfxColor): boolean {
-    return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
-}
-
 function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
     const b = Array(a.length);
     for (let i = 0; i < a.length; i++)
@@ -161,4 +157,49 @@ export function gfxSamplerDescriptorEquals(a: GfxSamplerDescriptor, b: GfxSample
         a.minLOD === b.minLOD &&
         a.maxLOD === b.maxLOD
     );
+}
+
+// Copied from toplevel util.ts
+
+export function assert(b: boolean, message: string = ""): asserts b {
+    if (!b) {
+        console.error(new Error().stack);
+        throw new Error(`Assert fail: ${message}`);
+    }
+}
+
+export function assertExists<T>(v: T | null | undefined): T {
+    if (v !== undefined && v !== null)
+        return v;
+    else
+        throw new Error("Missing object");
+}
+
+export function gfxColorEqual(c0: GfxColor, c1: GfxColor): boolean {
+    return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
+}
+
+export function gfxColorCopy(c0: GfxColor, c1: GfxColor): boolean {
+    return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
+}
+
+export function range(start: number, count: number): number[] {
+    const L: number[] = [];
+    for (let i = start; i < start + count; i++)
+        L.push(i);
+    return L;
+}
+
+// Eat your heart out, npm.
+export function leftPad(S: string, spaces: number, ch: string = '0'): string {
+    while (S.length < spaces)
+        S = `${ch}${S}`;
+    return S;
+}
+
+export function nArray<T>(n: number, c: () => T): T[] {
+    const d = new Array(n);
+    for (let i = 0; i < n; i++)
+        d[i] = c();
+    return d;
 }

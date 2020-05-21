@@ -1,6 +1,6 @@
 
 import { vec3, mat4, vec2 } from "gl-matrix";
-import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
+import { SceneObjHolder, getObjectName, SceneObj, SpecialTextureType } from "./Main";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
@@ -9,18 +9,20 @@ import AnimationController from "../AnimationController";
 import { colorFromRGBA8 } from "../Color";
 import { assert } from "../util";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { getVertexAttribLocation } from "../gx/gx_material";
+import { getVertexInputLocation } from "../gx/gx_material";
 import * as GX from "../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../gx/gx_render";
-import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, u_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
+import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, ub_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../gx/gx_render";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../gfx/render/GfxRenderer";
-import { DrawType } from "./NameObj";
+import { DrawType, NameObj } from "./NameObj";
 import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST, isValidDraw } from "./ActorUtil";
+import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST, isValidDraw, vecKillElement } from "./ActorUtil";
 import { calcActorAxis } from "./MiscActor";
+import { VertexAttributeInput } from "../gx/gx_displaylist";
+import { isCameraInWater, WaterAreaHolder, WaterInfo } from "./MiscMap";
 
 function calcHeightStatic(wave1Time: number, wave2Time: number, x: number, z: number): number {
     const wave1 = 40 * Math.sin(wave1Time + 0.003 * z);
@@ -38,6 +40,25 @@ class OceanBowlPoint {
         // The original code is written really bizarrely but it seems to boil down to this.
         vec3.copy(this.drawPosition, this.gridPosition);
         this.drawPosition[1] += height;
+    }
+}
+
+class OceanBowlBloomDrawer extends NameObj {
+    constructor(sceneObjHolder: SceneObjHolder, private bowl: OceanBowl) {
+        super(sceneObjHolder, 'OceanBowlBloomDrawer');
+        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OCEAN_BOWL_BLOOM_DRAWER);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!isValidDraw(this.bowl))
+            return;
+
+        if (!isCameraInWater(sceneObjHolder))
+            return;
+
+        this.bowl.drawBloom(sceneObjHolder, renderInstManager, viewerInput);
     }
 }
 
@@ -60,6 +81,7 @@ export class OceanBowl extends LiveActor {
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
     private materialHelper: GXMaterialHelperGfx;
+    private materialHelperBloom: GXMaterialHelperGfx;
     private gridAxisPointCount: number;
     private gridSpacing: number;
     private tex0Trans = vec2.create();
@@ -69,6 +91,7 @@ export class OceanBowl extends LiveActor {
     private axisX = vec3.create();
     private axisY = vec3.create();
     private axisZ = vec3.create();
+    private bloomDrawer: OceanBowlBloomDrawer;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -88,6 +111,13 @@ export class OceanBowl extends LiveActor {
 
         sceneObjHolder.create(SceneObj.WaterAreaHolder);
         sceneObjHolder.waterAreaHolder!.entryOceanBowl(this);
+
+        this.bloomDrawer = new OceanBowlBloomDrawer(sceneObjHolder, this);
+    }
+
+    public calcWaterInfo(dst: WaterInfo, pos: vec3, gravity: vec3): void {
+        vec3.sub(scratchVec3, pos, this.translation);
+        dst.depth = -vecKillElement(scratchVec3, scratchVec3, this.axisY);
     }
 
     public isInWater(v: vec3): boolean {
@@ -188,12 +218,9 @@ export class OceanBowl extends LiveActor {
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: getVertexAttribLocation(GX.Attr.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.CLR0), format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.TEX0), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.TEX1), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.TEX2), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
-            { location: getVertexAttribLocation(GX.Attr.TEX3), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
+            { location: getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferIndex: 0, bufferByteOffset: 0, },
+            { location: getVertexInputLocation(VertexAttributeInput.CLR0), format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferByteOffset: 0, },
+            { location: getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.S16_RG_NORM, bufferIndex: 2, bufferByteOffset: 0, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: 4*3, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
@@ -214,14 +241,16 @@ export class OceanBowl extends LiveActor {
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         // Material.
-        const mb = new GXMaterialBuilder('OceanBowl');
+        let mb: GXMaterialBuilder;
+
+        mb = new GXMaterialBuilder('OceanBowl');
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX1, GX.TexGenMatrix.TEXMTX1);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX2, GX.TexGenMatrix.TEXMTX2);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX1);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD2, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX2);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD3, GX.TexGenType.MTX3x4, GX.TexGenSrc.POS,  GX.TexGenMatrix.TEXMTX3);
-        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD4, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX3, GX.TexGenMatrix.TEXMTX4, true);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD4, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX4, true);
 
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
         mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
@@ -253,6 +282,30 @@ export class OceanBowl extends LiveActor {
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+
+        // Material.
+        mb = new GXMaterialBuilder('OceanBowlBloomDrawer');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX1);
+
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.C0, GX.CC.C1);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(1, GX.CC.ZERO, GX.CC.TEXC, GX.CC.C0, GX.CC.CPREV);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.APREV);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_2, true, GX.Register.PREV);
+
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelperBloom = new GXMaterialHelperGfx(mb.finish());
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
@@ -296,7 +349,7 @@ export class OceanBowl extends LiveActor {
 
         // Fill in our material params.
         this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
-        sceneObjHolder.captureSceneDirector.fillTextureMappingOpaqueSceneTexture(materialParams.m_TextureMapping[1]);
+        sceneObjHolder.specialTextureBinder.registerTextureMapping(materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
         this.waterIndirect.fillTextureMapping(materialParams.m_TextureMapping[2]);
         this.mask.fillTextureMapping(materialParams.m_TextureMapping[3]);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x28282814);
@@ -334,7 +387,7 @@ export class OceanBowl extends LiveActor {
         materialParams.u_TexMtx[4][13] = (-normPosX * scale4) + 0.5;
 
         // Now create our draw instance.
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indexCount);
 
@@ -346,9 +399,46 @@ export class OceanBowl extends LiveActor {
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
         fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public drawBloom(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = sceneObjHolder.modelCache.device;
+        const cache = sceneObjHolder.modelCache.cache;
+
+        // Fill in our material params.
+        this.water.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x5F5F5FFF);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x323232FF);
+
+        const scale0 = 0.05 * this.gridAxisPointCount;
+
+        const camera = viewerInput.camera;
+
+        setTextureMatrixST(materialParams.u_TexMtx[0], scale0, this.tex0Trans);
+        setTextureMatrixST(materialParams.u_TexMtx[1], scale0, this.tex1Trans);
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.drawIndexes(this.indexCount);
+
+        this.materialHelperBloom.setOnRenderInst(device, cache, renderInst);
+        renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelperBloom.programKey);
+
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelperBloom.materialParamsBufferSize);
+        this.materialHelperBloom.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+        mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -364,5 +454,6 @@ export class OceanBowl extends LiveActor {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('WaterWave');
+        WaterAreaHolder.requestArchives(sceneObjHolder);
     }
 }

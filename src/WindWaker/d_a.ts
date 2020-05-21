@@ -13,7 +13,7 @@ import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX } from "./
 import { dStage_Multi_c } from "./d_stage";
 import { nArray, assertExists } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { colorCopy, colorNewCopy, TransparentBlack } from "../Color";
+import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8 } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc } from "./d_kankyo_wether";
 import { ColorKind } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
@@ -44,7 +44,13 @@ export function mDoMtx_ZrotM(dst: mat4, n: number): void {
 export function mDoMtx_ZYXrotM(dst: mat4, v: vec3): void {
     mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
     mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
-    mat4.rotateZ(dst, dst, v[0] * kUshortTo2PI);
+    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
+}
+
+export function mDoMtx_XYZrotM(dst: mat4, v: vec3): void {
+    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
+    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
+    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
 }
 
 export const calc_mtx = mat4.create();
@@ -84,7 +90,7 @@ class d_a_grass extends fopAc_ac_c {
         { group: 6, count: 5 },
     ];
     
-    static kSpawnOffsets = [
+    static kSpawnOffsets: vec3[][] = [
         [
             [0, 0, 0],
             [3, 0, -50],
@@ -1165,6 +1171,57 @@ class d_a_obj_zouK1 extends fopAc_ac_c {
     }
 }
 
+class d_a_swhit0 extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_swhit0;
+
+    private model: J3DModelInstance;
+    private bckAnm = new mDoExt_bckAnm();
+    private btkAnm = new mDoExt_btkAnm();
+    private static color1Normal = colorNewFromRGBA8(0xF0F5FF6E);
+    private static color2Normal = colorNewFromRGBA8(0x6E786432);
+    private static color1Hit = colorNewFromRGBA8(0xE6C8006E);
+    private static color2Hit = colorNewFromRGBA8(0x78643264);
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const resCtrl = globals.resCtrl;
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Always`, 0x35));
+        initModelForZelda(this.model);
+
+        const bckAnm = resCtrl.getObjectRes(ResType.Bck, `Always`, 0x0D);
+        this.bckAnm.init(this.model.modelData, bckAnm, true, LoopMode.REPEAT, 1.0, 0);
+
+        const btkAnm = resCtrl.getObjectRes(ResType.Btk, `Always`, 0x58);
+        this.btkAnm.init(this.model.modelData, btkAnm, true, LoopMode.REPEAT, 1.0, 0);
+
+        this.rot[2] = 0.0;
+        this.setDrawMtx();
+
+        return cPhs__Status.Next;
+    }
+
+    private setDrawMtx(): void {
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false, this.model.modelMatrix);
+        mDoMtx_XYZrotM(this.model.modelMatrix, this.rot);
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.bckAnm.play(deltaTimeInFrames);
+        this.btkAnm.play(deltaTimeInFrames);
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+
+        this.model.setColorOverride(ColorKind.C1, d_a_swhit0.color1Normal);
+        this.model.setColorOverride(ColorKind.C2, d_a_swhit0.color2Normal);
+        this.bckAnm.entry(this.model);
+        this.btkAnm.entry(this.model);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -1185,4 +1242,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_obj_Ygush00);
     R(d_a_obj_lpalm);
     R(d_a_obj_zouK1);
+    R(d_a_swhit0);
 }

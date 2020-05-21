@@ -104,7 +104,7 @@ class ColorAObj {
     }
 }
 
-export function getPathPoint(dst: vec3, path: Path, t: number): void {
+export function getPathPoint(dst: vec3, path: Path, t: number, useRaw = false): void {
     let segment = 0;
     while (segment + 1 < path.length && t > path.times[segment + 1])
         segment++;
@@ -131,6 +131,9 @@ export function getPathPoint(dst: vec3, path: Path, t: number): void {
                     (path.points[offs + 6 + i] - path.points[offs + i]) * path.segmentRate, (path.points[offs + 9 + i] - path.points[offs + 3 + i]) * path.segmentRate, frac);
         } break;
     }
+    // paths in the level need to be rescaled by 100
+    if (!useRaw)
+        vec3.scale(dst, dst, 100);
 }
 
 export function getPathTangent(dst: vec3, path: Path, t: number): void {
@@ -169,6 +172,7 @@ export class Animator {
     public stateFlags = 0;
     public loopCount = 0;
     public forceLoop = false;
+    public lastFunction = -1;
 
     private trackIndex = 0;
     private nextUpdate = 0;
@@ -215,9 +219,7 @@ export class Animator {
                     this.trackIndex = this.track.loopStart;
                 else {
                     if (!this.forceLoop)
-                        return false;
-                    // should end, but loop anyway
-                    // causes some glitches, but e.g. lava is clearly supposed to loop
+                        return this.loopCount === 1;
                     this.trackIndex = 0;
                 }
             }
@@ -324,6 +326,8 @@ export class Animator {
                         }
                     }
                 } break;
+                case EntryKind.Func:
+                    this.lastFunction = entry.flags; break;
             }
             if (entry.block)
                 this.nextUpdate += entry.increment;

@@ -1,6 +1,6 @@
 
 import { mat4, mat2d, vec3 } from "gl-matrix";
-import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxTextureDimension, GfxMegaStateDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxTextureDimension, GfxMegaStateDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
 import * as NITRO_GX from '../SuperMario64DS/nitro_gx';
 import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../SuperMario64DS/nitro_tex";
@@ -8,9 +8,9 @@ import { NITRO_Program, VertexData } from '../SuperMario64DS/render';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { computeViewMatrix, computeViewMatrixSkybox, computeModelMatrixYBillboard } from "../Camera";
+import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import AnimationController from "../AnimationController";
-import { nArray, assertExists, fallback } from "../util";
+import { nArray, assertExists } from "../util";
 import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, SRT0, PAT0, bindPAT0, bindSRT0, MDL0Node, MDL0Shape } from "./NNS_G3D";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { AABB } from "../Geometry";
@@ -279,8 +279,9 @@ class ShapeInstance {
 
         for (let i = 0; i < this.vertexData.nitroVertexData.drawCalls.length; i++) {
             const drawCall = this.vertexData.nitroVertexData.drawCalls[i];
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.drawIndexes(drawCall.numIndices, drawCall.startIndex);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

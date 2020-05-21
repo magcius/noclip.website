@@ -1,15 +1,20 @@
 
 import { vec3, mat4 } from "gl-matrix";
 import { nArray } from "./util";
+import { transformVec3Mat4w1 } from "./MathHelpers";
 
 export class Plane {
     private static scratchVec3: vec3[] = nArray(2, () => vec3.create());
-    // Plane normal
-    public x: number;
-    public y: number;
-    public z: number;
-    // Distance
-    public d: number;
+
+    constructor(
+        // Plane normal
+        public x: number = 0,
+        public y: number = 0,
+        public z: number = 0,
+        // Distance
+        public d: number = 0,
+    ) {
+    }
 
     public distance(x: number, y: number, z: number): number {
         const dot = x*this.x + y*this.y + z*this.z;
@@ -148,16 +153,35 @@ export class AABB {
             pZ < this.minZ - rad || pZ > this.maxZ + rad);
     }
 
+    public extents(v: vec3): void {
+        v[0] = (this.maxX - this.minX) / 2;
+        v[1] = (this.maxY - this.minY) / 2;
+        v[2] = (this.maxZ - this.minZ) / 2;
+    }
+
     public centerPoint(v: vec3): void {
         v[0] = (this.minX + this.maxX) / 2;
         v[1] = (this.minY + this.maxY) / 2;
         v[2] = (this.minZ + this.maxZ) / 2;
     }
 
-    public extents(v: vec3): void {
-        v[0] = (this.maxX - this.minX) / 2;
-        v[1] = (this.maxY - this.minY) / 2;
-        v[2] = (this.maxZ - this.minZ) / 2;
+    public cornerPoint(dst: vec3, i: number): void {
+        if (i === 0)
+            vec3.set(dst, this.minX, this.minY, this.minZ);
+        else if (i === 1)
+            vec3.set(dst, this.maxX, this.minY, this.minZ);
+        else if (i === 2)
+            vec3.set(dst, this.minX, this.maxY, this.minZ);
+        else if (i === 3)
+            vec3.set(dst, this.maxX, this.maxY, this.minZ);
+        else if (i === 4)
+            vec3.set(dst, this.minX, this.minY, this.maxZ);
+        else if (i === 5)
+            vec3.set(dst, this.maxX, this.minY, this.maxZ);
+        else if (i === 6)
+            vec3.set(dst, this.minX, this.maxY, this.maxZ);
+        else if (i === 7)
+            vec3.set(dst, this.maxX, this.maxY, this.maxZ);
     }
 
     public boundingSphereRadius(): number {
@@ -233,7 +257,7 @@ export enum IntersectionState {
 }
 
 export class Frustum {
-    private static scratchPlaneVec3 = nArray(9, () => vec3.create());
+    private static scratchPlaneVec3 = nArray(8, () => vec3.create());
 
     // View-space configuration.
     public left: number;
@@ -278,19 +302,18 @@ export class Frustum {
         vec3.set(scratch[5], fn * this.right, fn * this.top, this.far);
         vec3.set(scratch[6], fn * this.right, fn * this.bottom, this.far);
         vec3.set(scratch[7], fn * this.left, fn * this.bottom, this.far);
-        vec3.set(scratch[8], 0, 0, 0);
 
-        for (let i = 0; i < 9; i++)
-            vec3.transformMat4(scratch[i], scratch[i], worldMatrix);
+        for (let i = 0; i < 8; i++)
+            transformVec3Mat4w1(scratch[i], worldMatrix, scratch[i]);
 
         this.aabb.setFromPoints(scratch);
 
-        this.planes[0].set(scratch[8], scratch[0], scratch[3]); // left plane
-        this.planes[1].set(scratch[8], scratch[2], scratch[1]); // right plane
+        this.planes[0].set(scratch[0], scratch[4], scratch[7]); // left plane
+        this.planes[1].set(scratch[2], scratch[6], scratch[5]); // right plane
         this.planes[2].set(scratch[0], scratch[2], scratch[1]); // near plane
         this.planes[3].set(scratch[4], scratch[6], scratch[7]); // far plane
-        this.planes[4].set(scratch[8], scratch[1], scratch[0]); // top plane
-        this.planes[5].set(scratch[8], scratch[3], scratch[2]); // bottom plane
+        this.planes[4].set(scratch[2], scratch[6], scratch[5]); // top plane
+        this.planes[5].set(scratch[3], scratch[7], scratch[6]); // bottom plane
 
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;
@@ -306,7 +329,7 @@ export class Frustum {
             ctx.beginPath();
             for (let i = 0; i < 4; i++) {
                 const p = scratch[i];
-                vec3.transformMat4(p, p, worldMatrix);
+                transformVec3Mat4w1(p, worldMatrix, p);
                 const x = this.visualizer.dsx(p[0]);
                 const y = this.visualizer.dsy(p[2]);
                 ctx.lineTo(x, y);
@@ -412,19 +435,23 @@ export class Frustum {
  * to the the AABB's center point.
  */
 export function squaredDistanceFromPointToAABB(v: vec3, aabb: AABB): number {
-    function square(V: number): number {
-        return V * V;
-    }
-
     const pX = v[0], pY = v[1], pZ = v[2];
     let sqDist = 0;
 
-    if (pX < aabb.minX) sqDist += square(aabb.minX - pX);
-    else if (pX > aabb.maxX) sqDist += square(pX - aabb.maxX);
-    if (pY < aabb.minY) sqDist += square(aabb.minY - pY);
-    else if (pY > aabb.maxY) sqDist += square(pY - aabb.maxY);
-    if (pZ < aabb.minZ) sqDist += square(aabb.minZ - pZ);
-    else if (pZ > aabb.maxZ) sqDist += square(pZ - aabb.maxZ);
+    if (pX < aabb.minX)
+        sqDist += (aabb.minX - pX) ** 2.0;
+    else if (pX > aabb.maxX)
+        sqDist += (pX - aabb.maxX) ** 2.0;
+
+    if (pY < aabb.minY)
+        sqDist += (aabb.minY - pY) ** 2.0;
+    else if (pY > aabb.maxY)
+        sqDist += (pY - aabb.maxY) ** 2.0;
+
+    if (pZ < aabb.minZ)
+        sqDist += (aabb.minZ - pZ) ** 2.0;
+    else if (pZ > aabb.maxZ)
+        sqDist += (pZ - aabb.maxZ) ** 2.0;
 
     return sqDist;
 }

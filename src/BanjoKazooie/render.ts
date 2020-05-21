@@ -1,9 +1,9 @@
 import * as Viewer from '../viewer';
 import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
-import {ACMUX, CCMUX, CombineParams, fillCombineParams} from '../Common/N64/RDP';
-import { getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType, OtherModeH_Layout } from "./f3dex";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { ACMUX, CCMUX, CombineParams } from '../Common/N64/RDP';
+import { getImageFormatString, Vertex, DrawCall, translateBlendMode, RSP_Geometry, RSPSharedOutput } from "./f3dex";
+import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
@@ -18,6 +18,7 @@ import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY } from '../MathHelpers'
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
+import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -50,6 +51,8 @@ uniform ub_CombineParameters {
     vec4 u_EnvColor;
 #ifdef EXTRA_COMBINE
     vec4 u_MiscComb;
+#else
+    #define u_MiscComb (vec4(0))
 #endif
 };
 
@@ -72,6 +75,14 @@ vec3 Monochrome(vec3 t_Color) {
     return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
 }
 
+// Convert from 0...1 UNORM range to SNORM range
+vec3 ConvertToSignedInt(vec3 t_Input) {
+    ivec3 t_Num = ivec3(t_Input * 255.0);
+    // Sign extend
+    t_Num = t_Num << 24 >> 24;
+    return vec3(t_Num) / 127.0;
+}
+
 void main() {
     int t_BoneIndex = int(a_Position.w);
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), vec4(a_Position.xyz, 1.0)));
@@ -92,11 +103,11 @@ void main() {
 
 #ifdef LIGHTING
     // convert (unsigned) colors to normal vector components
-    vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
+    vec4 t_Normal = vec4(ConvertToSignedInt(a_Color.rgb), 0.0);
     t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
 
     // TODO: find and pass in lighting data
-    v_Color = vec4(vec3(.6 + .4*t_Normal.y), 1.0);
+    v_Color = vec4(vec3(.6 + .4*t_Normal.y), a_Color.a);
 
 #ifdef TEXTURE_GEN
     // generate texture coordinates based on the vertex normal in screen space
@@ -116,9 +127,9 @@ void main() {
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4, private blendAlpha = .5, private tiles: RDP.TileState[] = []) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: CombineParams, private blendAlpha = .5, private tiles: RDP.TileState[] = []) {
         super();
-        if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
+        if (RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag(combParams);
     }
@@ -145,7 +156,7 @@ void main() {
 
     private generateAlphaTest(): string {
         const alphaCompare = (this.DP_OtherModeL >>> 0) & 0x03;
-        const cvgXAlpha = (this.DP_OtherModeL >>> OtherModeL_Layout.CVG_X_ALPHA) & 0x01;
+        const cvgXAlpha = (this.DP_OtherModeL >>> RDP.OtherModeL_Layout.CVG_X_ALPHA) & 0x01;
         let alphaThreshold = 0;
         if (alphaCompare === 0x01) {
             alphaThreshold = this.blendAlpha;
@@ -171,8 +182,8 @@ void main() {
         }
     }
 
-    private generateFrag(combParams: vec4): string {
-        const textFilt = getTextFiltFromOtherModeH(this.DP_OtherModeH);
+    private generateFrag(combParams: CombineParams): string {
+        const textFilt = RDP.getTextFiltFromOtherModeH(this.DP_OtherModeH);
         let texFiltStr: string;
         if (textFilt === TextFilt.G_TF_POINT)
             texFiltStr = 'Point';
@@ -205,58 +216,44 @@ void main() {
             'v_Color.a', 'u_EnvColor.a', 'u_MiscComb.r', '0.0'
         ];
 
-        function unpackParams(params: number): {x: number, y: number, z: number, w: number} {
-            return {
-                x: (params >>> 12) & 0xf,
-                y: (params >>> 8) & 0xf,
-                z: (params >>> 4) & 0xf,
-                w: (params >>> 0) & 0xf
-            }
-        }
-
-        const px = unpackParams(combParams[0]);
-        const py = unpackParams(combParams[1]);
-        const pz = unpackParams(combParams[2]);
-        const pw = unpackParams(combParams[3]);
-
         return `
-vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
-    return texture(t_Texture, t_TexCoord);
+vec4 Texture2D_N64_Point(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
+    return texture(PU_SAMPLER_2D(t_Texture), t_TexCoord);
 }
 
-vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord) {
+vec4 Texture2D_N64_Average(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
     // Unimplemented.
-    return texture(t_Texture, t_TexCoord);
+    return texture(PU_SAMPLER_2D(t_Texture), t_TexCoord);
 }
 
 // Implements N64-style "triangle bilienar filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
-vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
-    vec2 t_Size = vec2(textureSize(t_Texture, 0));
+vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
+    vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));
     vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
     t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
-    vec4 t_S0 = texture(t_Texture, t_TexCoord - t_Offs / t_Size);
-    vec4 t_S1 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
-    vec4 t_S2 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
+    vec4 t_S0 = texture(PU_SAMPLER_2D(t_Texture), t_TexCoord - t_Offs / t_Size);
+    vec4 t_S1 = texture(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
+    vec4 t_S2 = texture(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
     return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
 }
 
 #define Texture2D_N64 Texture2D_N64_${texFiltStr}
 
 vec3 CombineColorCycle0(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return (${colorInputs[px.x]} - ${colorInputs[px.y]}) * ${multInputs[px.z]} + ${colorInputs[px.w]};
+    return (${colorInputs[combParams.c0.a]} - ${colorInputs[combParams.c0.b]}) * ${multInputs[combParams.c0.c]} + ${colorInputs[combParams.c0.d]};
 }
 
 float CombineAlphaCycle0(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaMultInputs[py.z]} + ${alphaInputs[py.w]};
+    return (${alphaInputs[combParams.a0.a]} - ${alphaInputs[combParams.a0.b]}) * ${alphaMultInputs[combParams.a0.c]} + ${alphaInputs[combParams.a0.d]};
 }
 
 vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return (${colorInputs[pz.x]} - ${colorInputs[pz.y]}) * ${multInputs[pz.z]} + ${colorInputs[pz.w]};
+    return (${colorInputs[combParams.c1.a]} - ${colorInputs[combParams.c1.b]}) * ${multInputs[combParams.c1.c]} + ${colorInputs[combParams.c1.d]};
 }
 
 float CombineAlphaCycle1(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaMultInputs[pw.z]} + ${alphaInputs[pw.w]};
+    return (${alphaInputs[combParams.a1.a]} - ${alphaInputs[combParams.a1.b]}) * ${alphaMultInputs[combParams.a1.c]} + ${alphaInputs[combParams.a1.d]};
 }
 
 void main() {
@@ -264,10 +261,13 @@ void main() {
     vec4 t_Tex0 = t_One, t_Tex1 = t_One;
 
 #ifdef USE_TEXTURE
-    t_Tex0 = Texture2D_N64(u_Texture[0], v_TexCoord.xy);
-    t_Tex1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
+    t_Tex0 = Texture2D_N64(PP_SAMPLER_2D(u_Texture[0]), v_TexCoord.xy);
+    t_Tex1 = Texture2D_N64(PP_SAMPLER_2D(u_Texture[1]), v_TexCoord.zw);
 #endif
 
+#ifdef ONLY_VERTEX_COLOR
+    t_Color.rgba = v_Color.rgba;
+#else
     t_Color = vec4(
         CombineColorCycle0(t_Zero, t_Tex0, t_Tex1),
         CombineAlphaCycle0(t_Zero.a, t_Tex0.a, t_Tex1.a)
@@ -279,13 +279,10 @@ void main() {
         CombineAlphaCycle1(t_Color.a, t_Tex0.a, t_Tex1.a)
     );
 #endif
-
-#ifdef ONLY_VERTEX_COLOR
-    t_Color.rgba = v_Color.rgba;
 #endif
 
 #ifdef USE_ALPHA_VISUALIZER
-    t_Color.rgb = vec3(v_Color.a);
+    t_Color.rgb = vec3(t_Color.a);
     t_Color.a = 1.0;
 #endif
 
@@ -311,19 +308,6 @@ export function textureToCanvas(texture: RDP.Texture): Viewer.Texture {
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
     return { name: texture.name, surfaces, extraInfo };
-}
-
-const enum TexCM {
-    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02, MIRROR_CLAMP = 0x03,
-}
-
-function translateCM(cm: TexCM): GfxWrapMode {
-    switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
-    case TexCM.MIRROR_CLAMP:  return GfxWrapMode.MIRROR;
-    }
 }
 
 function makeVertexBufferData(v: Vertex[]): Float32Array {
@@ -479,8 +463,8 @@ export class RenderData {
         const textures = sharedOutput.textureCache.textures;
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
-            this.textures.push(this.translateTexture(device, tex));
-            this.samplers.push(this.translateSampler(device, cache, tex));
+            this.textures.push(RDP.translateToGfxTexture(device, tex));
+            this.samplers.push(RDP.translateSampler(device, cache, tex));
         }
 
         this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
@@ -509,29 +493,6 @@ export class RenderData {
         this.inputState = device.createInputState(this.inputLayout, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
-    }
-
-    private translateTexture(device: GfxDevice, texture: RDP.Texture): GfxTexture {
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
-        device.setResourceName(gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
-        device.submitPass(hostAccessPass);
-        return gfxTexture;
-    }
-
-    private translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: RDP.Texture): GfxSampler {
-        return cache.createSampler(device, {
-            // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
-            // it should repeat within the coordinate range, and clamp outside
-            // then ignore clamping here, and handle it in the shader
-            wrapS: translateCM(RDP.getMaskedCMS(texture.tile)),
-            wrapT: translateCM(RDP.getMaskedCMT(texture.tile)),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0, maxLOD: 0,
-        });
     }
 
     public destroy(device: GfxDevice): void {
@@ -594,8 +555,7 @@ class DrawCallInstance {
 
     private createProgram(): void {
         const combParams = vec4.create();
-        fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
         program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -654,10 +614,7 @@ class DrawCallInstance {
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
             const entry = this.textureEntry[textureEntryIndex];
-            const ss = this.drawCall.SP_TextureState.s / (entry.width);
-            const st = this.drawCall.SP_TextureState.t / (entry.height);
-            m[0] = ss;
-            m[5] = st;
+            calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
         } else {
             mat4.identity(m);
         }
@@ -670,7 +627,7 @@ class DrawCallInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         if (this.textureAnimator !== null) {
             for (let i = 0; i < this.drawCall.textureIndices.length && i < this.textureMappings.length; i++) {
@@ -708,6 +665,7 @@ class DrawCallInstance {
         // TODO: set these properly, this mostly just reproduces vertex*texture
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
         offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -843,7 +801,7 @@ function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): 
     const lastFrame = anim.endFrame - anim.startFrame;
     switch (mode) {
     case AnimationMode.Loop:
-        while (frame > lastFrame)
+        while (frame > lastFrame && lastFrame > 0)
             frame -= lastFrame;
         break;
     case AnimationMode.Once:
@@ -882,21 +840,29 @@ export class AdjustableAnimationController {
         this.phaseFrames = newPhase;
     }
 
-    public adjust(newFPS: number, newPhase = 0) {
+    // adjust the framerate, while either preserving the current phase value or setting a new one
+    public adjust(newFPS: number, newPhase?: number) {
         // assume time is current, so just adjust the values now
+        if (newPhase !== undefined)
+            this.phaseFrames = newPhase - this.time * newFPS;
+        else // preserve old phase
+            this.phaseFrames += (this.fps - newFPS) * this.time;
         this.fps = newFPS;
-        this.phaseFrames = newPhase - this.time * this.fps;
     }
 
     public getTimeInFrames(): number {
+        if (!this.initialized)
+            return this.phaseFrames;
         return this.time*this.fps + this.phaseFrames;
     }
 
     public getTimeInSeconds(): number {
         if (this.fps === 0)
             return 0; // not sure what this should mean
-        else
+        else if (this.initialized)
             return this.time + this.phaseFrames/this.fps;
+        else
+            return this.phaseFrames/this.fps;
     }
 
     public resetPhase(): void {
@@ -908,9 +874,11 @@ export class AdjustableAnimationController {
 export class GeometryData {
     public renderData: RenderData;
     public dynamic: boolean;
-    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
+
+    // forget any game specific data in the geometry, for now
+    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry<GeoNode>, private id = 0) {
         this.renderData = new RenderData(device, cache, geo.sharedOutput);
-        this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null;
+        this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null || (geo.softwareLighting !== undefined && geo.softwareLighting.length > 0) || !!geo.morphs;
     }
 }
 const geoNodeScratch = vec3.create();
@@ -1148,8 +1116,10 @@ export class GeometryRenderer {
         this.animationSetup = geo.animationSetup;
         this.vertexEffects = geo.vertexEffects;
 
-        if (geo.textureAnimationSetup !== null)
-            this.textureAnimator = new TextureAnimator(geo.textureAnimationSetup, geometryData.renderData.textures);
+        if (geo.textureAnimationSetup.length > 0) {
+            assert(geo.textureAnimationSetup.length === 1);
+            this.textureAnimator = new TextureAnimator(geo.textureAnimationSetup[0], geometryData.renderData.textures);
+        }
 
         if (geo.vertexBoneTable !== null) {
             const boneToModelMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
@@ -1202,10 +1172,8 @@ export class GeometryRenderer {
         const geoNodeRenderer = new GeoNodeRenderer(node);
 
         if (node.rspOutput !== null) {
-            const drawMatrix = [
-                this.boneToWorldMatrixArray[node.boneIndex],
-                this.boneToWorldMatrixArray[node.boneIndex],
-            ];
+            const baseMat = node.boneIndex === -1 ? this.modelMatrix : this.boneToWorldMatrixArray[node.boneIndex];
+            const drawMatrix = [baseMat, baseMat];
 
             // Skinned meshes need the parent bone as the second draw matrix.
             const animationSetup = this.animationSetup;
@@ -1309,7 +1277,7 @@ export class GeometryRenderer {
         const animator = this.boneAnimators[newIndex];
         if (animator === undefined)
             throw `bad animation index ${newIndex}`;
-        this.animationController.adjust(animator.fps());
+        this.animationController.adjust(animator.fps(), 0);
     }
 
     public animationPhaseTrigger(phase: number): boolean {
@@ -1493,8 +1461,8 @@ const emittedParticleCombine: CombineParams = {
     a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
 };
 
-const baseFlipbookOtherModeH = TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT;
-const baseFlipbookOtherModeL = 1 << OtherModeL_Layout.Z_CMP
+const baseFlipbookOtherModeH = TextFilt.G_TF_BILERP << RDP.OtherModeH_Layout.G_MDSFT_TEXTFILT;
+const baseFlipbookOtherModeL = 1 << RDP.OtherModeL_Layout.Z_CMP
 
 export class FlipbookData {
     public renderData: RenderData;
@@ -1580,10 +1548,8 @@ export class FlipbookRenderer {
         let otherModeL = baseFlipbookOtherModeL;
         if (this.mode === FlipbookMode.AlphaTest)
             otherModeL |= 1; // alpha test against blend
-        const comb = vec4.create();
         const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
-        fillCombineParams(comb, 0, combine);
-        const program = new F3DEX_Program(otherModeH, otherModeL, comb);
+        const program = new F3DEX_Program(otherModeH, otherModeL, combine);
 
         program.defines.set('BONE_MATRIX_COUNT', '1');
 
@@ -1671,7 +1637,7 @@ export class FlipbookRenderer {
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.animateFlipbook(texMappingScratch, texMatrixScratch);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setInputLayoutAndState(this.flipbookData.renderData.inputLayout, this.flipbookData.renderData.inputState);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -1708,5 +1674,6 @@ export class FlipbookRenderer {
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         offs += fillVec4v(comb, offs, this.primColor);
         offs += fillVec4v(comb, offs, this.envColor);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }

@@ -5,7 +5,6 @@
 
 import { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
-import { NormalizedViewportCoords } from "../helpers/RenderTargetHelpers";
 
 export enum GfxCompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
@@ -93,7 +92,7 @@ export interface GfxInputLayoutBufferDescriptor {
 }
 
 export const enum GfxTextureDimension {
-    n2D, n2D_ARRAY
+    n2D, n2DArray, Cube,
 }
 
 export interface GfxTextureDescriptor {
@@ -105,7 +104,6 @@ export interface GfxTextureDescriptor {
     numLevels: number;
 }
 
-// TODO(jstpierre): Should this be moved to ../helpers?
 export function makeTextureDescriptor2D(pixelFormat: GfxFormat, width: number, height: number, numLevels: number): GfxTextureDescriptor {
     const dimension = GfxTextureDimension.n2D, depth = 1;
     return { dimension, pixelFormat, width, height, depth, numLevels };
@@ -263,14 +261,29 @@ export interface GfxBugQuirks {
     rowMajorMatricesBroken: boolean;
 }
 
+export const enum GfxClipSpaceNearZ {
+    NegativeOne,
+    Zero,
+}
+
 export interface GfxVendorInfo {
+    platformString: string;
     bugQuirks: GfxBugQuirks;
     glslVersion: string;
     explicitBindingLocations: boolean;
     separateSamplerTextures: boolean;
+    clipSpaceNearZ: GfxClipSpaceNearZ;
 }
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;
+
+// Viewport in normalized coordinate space, from 0 to 1.
+export interface GfxNormalizedViewportCoords {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
 
 export interface GfxSwapChain {
     configureSwapChain(width: number, height: number): void;
@@ -278,7 +291,7 @@ export interface GfxSwapChain {
     getOnscreenTexture(): GfxTexture;
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
-    present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: NormalizedViewportCoords): void;
+    present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: GfxNormalizedViewportCoords): void;
     createWebXRLayer(webXRSession: XRSession): XRWebGLLayer;
 }
 

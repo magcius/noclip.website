@@ -69,7 +69,7 @@ function readStringUTF8(buffer: ArrayBufferSlice, offs: number): string {
 
 export type StringTable = string[];
 export type ComplexNode = NodeDict | NodeArray | StringTable | ArrayBufferSlice | Float32Array;
-export type SimpleNode = number | string | boolean | null;
+export type SimpleNode = number | bigint | string | boolean | null;
 export type Node = ComplexNode | SimpleNode;
 
 export interface NodeDict { [key: string]: Node; }
@@ -204,11 +204,10 @@ function parseNode(context: ParseContext, buffer: ArrayBufferSlice, nodeType: No
         return view.getUint32(offs, context.littleEndian);
     case NodeType.Float:
         return view.getFloat32(offs, context.littleEndian);
-    // TODO(jstpierre): we need a BigInt?
     case NodeType.Int64:
-        return view.getInt32(offs, context.littleEndian);
+        return view.getBigInt64(offs, context.littleEndian);
     case NodeType.UInt64:
-        return view.getUint32(offs, context.littleEndian);
+        return view.getBigUint64(offs, context.littleEndian);
     case NodeType.Float64:
         return view.getFloat64(offs, context.littleEndian);
     case NodeType.Null:
@@ -522,7 +521,7 @@ function writeValue(w: WriteContext, nodeType: NodeType, v: Node, valueOffs: num
 }
 
 function gatherStrings(v: Node, keyStrings: Set<string>, valueStrings: Set<string>): void {
-    if (v === undefined || v === null || typeof v === 'number' || typeof v === 'boolean' || v instanceof Float32Array || v instanceof ArrayBufferSlice) {
+    if (v === undefined || v === null || typeof v === 'number' || typeof v === 'bigint' || typeof v === 'boolean' || v instanceof Float32Array || v instanceof ArrayBufferSlice) {
         // Nothing.
         return;
     } else if (typeof v === 'string') {

@@ -10,14 +10,14 @@ import * as Viewer from '../viewer';
 import { RoomRenderer, CtrTextureHolder, CmbInstance } from './render';
 import { SceneGroup } from '../viewer';
 import { assert, assertExists, hexzero } from '../util';
-import { DataFetcherFlags } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { OoT3DRenderer, ModelCache, maybeDecompress } from './oot3d_scenes';
+import { OoT3DRenderer, ModelCache } from './oot3d_scenes';
 import { TransparentBlack } from '../Color';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { SceneContext } from '../SceneBase';
 import { MathConstants } from "../MathHelpers";
+import { maybeDecompress } from '../Common/Compression/LzS';
 
 const pathBase = `mm3d`;
 
@@ -773,7 +773,7 @@ class SceneDesc implements Viewer.SceneDesc {
         else if (actor.actorId === ActorId.Obj_Lightswitch) {
             const gar = await fetchArchive(`zelda_lightswitch.gar.lzs`);
             const b = buildModel(gar, `model/switch_8_model.cmb`,0.1);
-            b.bindCMAB(parseCMAB(gar, `misc/switch_8_model.csab`));
+            b.bindCMAB(parseCMAB(gar, `misc/switch_8_model.cmab`));
             b.setVertexColorScale(characterLightScale);
             //buildModel(gar, `model/switch_8_fire1_model.cmb`,0.1);
             //buildModel(gar, `model/switch_8_fire2_model.cmb`,0.1);
@@ -875,7 +875,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const dataFetcher = context.dataFetcher;
 
         const [zarBuffer, zsiBuffer] = await Promise.all([
-            dataFetcher.fetchData(path_zar, DataFetcherFlags.ALLOW_404),
+            dataFetcher.fetchData(path_zar, { allow404: true }),
             dataFetcher.fetchData(path_info_zsi),
         ]);
 

@@ -11,7 +11,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MPHRenderer, G3DPass } from './render';
 import { assert, assertExists } from '../util';
-import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
@@ -78,9 +78,8 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
         this.textureHolder = new FakeTextureHolder(this.stageRenderer.viewerTextures);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(8/60);
-        return c;
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -101,7 +100,7 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
         this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
 

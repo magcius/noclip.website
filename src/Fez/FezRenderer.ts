@@ -70,7 +70,7 @@ in vec3 v_Normal;
 void main() {
     vec2 t_DiffuseTexCoord = mod(v_TexCoord, vec2(1.0, 1.0));
     t_DiffuseTexCoord = t_DiffuseTexCoord.xy * u_TexScaleBiasPost.xy + u_TexScaleBiasPost.zw;
-    vec4 t_DiffuseMapColor = texture(u_Texture[0], t_DiffuseTexCoord.xy);
+    vec4 t_DiffuseMapColor = texture(SAMPLER_2D(u_Texture[0]), t_DiffuseTexCoord.xy);
 
     float t_LightFalloff = clamp(dot(u_LightDirection.xyz, v_Normal.xyz), 0.0, 1.0);
     float t_Illum = clamp(t_LightFalloff + u_BaseAmbient, 0.0, 1.0);
@@ -81,7 +81,7 @@ void main() {
     // Add in the shadow texture
     vec2 t_ShadowTexCoord = ((v_ShadowTexCoord.xy / v_ShadowTexCoord.z) * vec2(0.5)) + vec2(0.5);
     t_ShadowTexCoord = t_ShadowTexCoord.xy * u_ShadowTexScaleBias.xy + u_ShadowTexScaleBias.zw;
-    vec4 t_ShadowMapColor = texture(u_Texture[1], t_ShadowTexCoord);
+    vec4 t_ShadowMapColor = texture(SAMPLER_2D(u_Texture[1]), t_ShadowTexCoord);
     vec4 t_ShadowMul = 1.0 - (t_ShadowMapColor * 0.25);
     gl_FragColor.rgb *= t_ShadowMul.rgb;
 }
@@ -183,9 +183,8 @@ export class FezRenderer implements Viewer.SceneGfx {
         this.levelRenderData.baseAmbient = level.baseAmbient;
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(16/60);
-        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
@@ -265,7 +264,7 @@ export class FezObjectRenderer {
         if (!viewerInput.camera.frustum.contains(bboxScratch))
             return;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
@@ -284,6 +283,7 @@ export class FezObjectRenderer {
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.drawIndexes(this.geometryData.indexCount);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -355,7 +355,7 @@ export class BackgroundPlaneRenderer {
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
@@ -378,6 +378,7 @@ export class BackgroundPlaneRenderer {
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.drawIndexes(this.staticData.indexCount);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

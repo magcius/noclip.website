@@ -16,6 +16,9 @@ export const enum FormatTypeFlags {
     BC2,
     BC3,
 
+    // Special-case packed texture formats.
+    U16_PACKED_5551 = 0x61,
+
     // Depth/stencil texture formats.
     D24 = 0x81,
     D32,
@@ -36,11 +39,12 @@ export function getFormatCompFlagsComponentCount(n: FormatCompFlags): number {
 }
 
 export const enum FormatFlags {
-    NONE       = 0x00,
-    NORMALIZED = 0x01,
-    SRGB       = 0x02,
-    DEPTH      = 0x04,
-    STENCIL    = 0x08,
+    NONE       = 0b00000000,
+    NORMALIZED = 0b00000001,
+    SRGB       = 0b00000010,
+    DEPTH      = 0b00000100,
+    STENCIL    = 0b00001000,
+    RT         = 0b00010000,
 }
 
 export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: FormatFlags): GfxFormat {
@@ -60,10 +64,10 @@ export enum GfxFormat {
     U8_RG_NORM    = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RG,   FormatFlags.NORMALIZED),
     U8_RGB        = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGB,  FormatFlags.NONE),
     U8_RGB_NORM   = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGB,  FormatFlags.NORMALIZED),
-    U8_RGB_SRGB   = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGB,  FormatFlags.SRGB),
+    U8_RGB_SRGB   = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGB,  FormatFlags.SRGB | FormatFlags.NORMALIZED),
     U8_RGBA       = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     U8_RGBA_NORM  = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
-    U8_RGBA_SRGB  = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
+    U8_RGBA_SRGB  = makeFormat(FormatTypeFlags.U8,  FormatCompFlags.COMP_RGBA, FormatFlags.SRGB | FormatFlags.NORMALIZED),
     U16_R         = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_R,    FormatFlags.NONE),
     U16_R_NORM    = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
     U16_RG_NORM   = makeFormat(FormatTypeFlags.U16, FormatCompFlags.COMP_RG,   FormatFlags.NORMALIZED),
@@ -73,7 +77,7 @@ export enum GfxFormat {
     U32_RG        = makeFormat(FormatTypeFlags.U32, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
     S8_R          = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NONE),
     S8_R_NORM     = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
-    S8_RG_NORM    = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_R,    FormatFlags.NORMALIZED),
+    S8_RG_NORM    = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_RG,   FormatFlags.NORMALIZED),
     S8_RGB_NORM   = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_RGB,  FormatFlags.NORMALIZED),
     S8_RGBA_NORM  = makeFormat(FormatTypeFlags.S8,  FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
     S16_R         = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_R,    FormatFlags.NONE),
@@ -84,6 +88,9 @@ export enum GfxFormat {
     S16_RGBA_NORM = makeFormat(FormatTypeFlags.S16, FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
     S32_R         = makeFormat(FormatTypeFlags.S32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
 
+    // Packed texture formats.
+    U16_RGBA_5551 = makeFormat(FormatTypeFlags.U16_PACKED_5551, FormatCompFlags.COMP_RGBA, FormatFlags.NORMALIZED),
+    
     // Compressed
     BC1           = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     BC1_SRGB      = makeFormat(FormatTypeFlags.BC1, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
@@ -97,6 +104,9 @@ export enum GfxFormat {
     D24_S8         = makeFormat(FormatTypeFlags.D24S8, FormatCompFlags.COMP_RG, FormatFlags.DEPTH | FormatFlags.STENCIL),
     D32F           = makeFormat(FormatTypeFlags.D32,   FormatCompFlags.COMP_R,  FormatFlags.DEPTH),
     D32F_S8        = makeFormat(FormatTypeFlags.D32S8, FormatCompFlags.COMP_RG, FormatFlags.DEPTH | FormatFlags.STENCIL),
+
+    // Special RT formats for preferred backend support.
+    U8_RGBA_RT     = makeFormat(FormatTypeFlags.U8,    FormatCompFlags.COMP_RGBA, FormatFlags.RT),
 }
 
 export function getFormatCompFlags(fmt: GfxFormat): FormatCompFlags {
@@ -145,4 +155,12 @@ export function getFormatByteSize(fmt: GfxFormat): number {
     const typeByteSize = getFormatTypeFlagsByteSize(getFormatTypeFlags(fmt));
     const componentCount = getFormatCompFlagsComponentCount(getFormatCompFlags(fmt));
     return typeByteSize * componentCount;
+}
+
+export function setFormatFlags(fmt: GfxFormat, flags: FormatFlags): GfxFormat {
+    return (fmt & 0xFFFFFF00) | flags;
+}
+
+export function setFormatComponentCount(fmt: GfxFormat, compFlags: FormatCompFlags): GfxFormat {
+    return (fmt & 0xFFFF00FF) | (compFlags << 8);
 }

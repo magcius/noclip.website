@@ -666,7 +666,7 @@ export class FragRenderer extends BaseRenderer {
     }
 
     public prepareRenderInst(renderInstManager: GfxRenderInstManager, viewSpaceDepth: number, secondPass: boolean) {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indices);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -689,6 +689,7 @@ export class FragRenderer extends BaseRenderer {
         
         renderInst.sortKey = setSortKeyDepth(this.sortKey, viewSpaceDepth);
         renderInst.filterKey = this.filterKey;
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public prepareToRender(renderState: RenderState) {
@@ -1011,9 +1012,8 @@ export class BFBBRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(0.025);
-        return c;
     }
 
     public update(renderState: RenderState) {

@@ -28,6 +28,7 @@ export class J3DFrameCtrl {
 
     public init(endFrame: number): void {
         this.loopMode = LoopMode.REPEAT;
+        this.updateFlags = 0;
         this.startFrame = 0;
         this.endFrame = endFrame;
         this.repeatStartFrame = 0;
@@ -59,12 +60,12 @@ export class J3DFrameCtrl {
                 this.currentTimeInFrames = this.startFrame;
             }
         } else if (this.loopMode === LoopMode.REPEAT) {
-            while (this.currentTimeInFrames > this.endFrame) {
+            while (this.currentTimeInFrames >= this.endFrame) {
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasRepeated;
                 this.currentTimeInFrames -= (this.endFrame - this.repeatStartFrame);
             }
         } else if (this.loopMode === LoopMode.MIRRORED_ONCE) {
-            if (this.currentTimeInFrames > this.endFrame) {
+            if (this.currentTimeInFrames >= this.endFrame) {
                 this.speedInFrames *= -1;
                 this.currentTimeInFrames = this.endFrame - (this.currentTimeInFrames - this.endFrame);
             }
@@ -75,7 +76,7 @@ export class J3DFrameCtrl {
                 this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasStopped;
             }
         } else if (this.loopMode === LoopMode.MIRRORED_REPEAT) {
-            if (this.currentTimeInFrames > this.endFrame) {
+            if (this.currentTimeInFrames >= this.endFrame - 1.0) {
                 this.speedInFrames *= -1;
                 this.currentTimeInFrames = this.endFrame - (this.currentTimeInFrames - this.endFrame);
             }
@@ -142,7 +143,6 @@ function findMaterialInstance(modelInstance: J3DModelInstance, name: string): Ma
     return null;
 }
 
-// TODO(jstpierre): Replace this with something that the J3DTexRegAnm, etc. structs directly.
 export function entryTevRegAnimator(modelInstance: J3DModelInstance, trk1: TRK1, frameCtrl: J3DFrameCtrl): void {
     for (let i = 0; i < trk1.animationEntries.length; i++) {
         const entry = trk1.animationEntries[i];

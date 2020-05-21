@@ -11,15 +11,16 @@ import { mat4, vec3 } from "gl-matrix";
 import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderer";
 import { assertExists, hexzero, assert } from "../util";
 import { SceneContext } from "../SceneBase";
-import { FloatingPanel, LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";
+import { LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";
 import { GridPlane } from "./GridPlane";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { createCsvParser } from "../SuperMarioGalaxy/JMapInfo";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
-import { fillSceneParamsDataOnTemplate, ub_SceneParams, u_SceneParamsBufferSize, gxBindingLayouts } from "../gx/gx_render";
+import { fillSceneParamsDataOnTemplate, ub_SceneParams, ub_SceneParamsBufferSize, gxBindingLayouts } from "../gx/gx_render";
 import { TextureMapping } from "../TextureHolder";
 import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
 import { NamedArrayBufferSlice } from "../DataFetcher";
+import { FloatingPanel } from "../DebugFloaters";
 
 function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
     m.gfxTexture = sceneTexture;
@@ -87,7 +88,6 @@ class BasicEffectSystem {
 
     public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
         this.drawInfo.posCamMtx = posCamMtx;
-        this.drawInfo.prjMtx = prjMtx;
         this.drawInfo.texPrjMtx = texPrjMtx;
     }
 
@@ -443,7 +443,7 @@ export class Explorer implements SceneGfx {
 
         const efTemplate = renderInstManager.pushTemplateRenderInst();
         efTemplate.setBindingLayouts(gxBindingLayouts);
-        efTemplate.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
+        efTemplate.allocateUniformBuffer(ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsDataOnTemplate(efTemplate, viewerInput);
 
         {

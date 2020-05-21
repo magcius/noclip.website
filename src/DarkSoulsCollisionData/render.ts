@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxHostAccessPass, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxHostAccessPass, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -123,9 +123,10 @@ class Chunk {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawPrimitives(this.numVertices);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -205,18 +206,18 @@ export class Scene implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(16/60);
-        return c;
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
+        template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
 
         let offs = template.allocateUniformBuffer(IVProgram.ub_SceneParams, 32);
-        const mapped = template.mapUniformBufferF32(offs);
+        const mapped = template.mapUniformBufferF32(IVProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 

@@ -93,6 +93,9 @@ function formatDecimal(value: number, places: number = 2): string {
     let valueStr = value.toFixed(places);
     while (valueStr.includes('.') && '.0'.includes(valueStr.slice(-1)))
         valueStr = valueStr.slice(0, -1);
+    // Hack for GLSL
+    if (!valueStr.includes('.'))
+        valueStr += '.0';
     return valueStr;
 }
 
@@ -121,7 +124,7 @@ class NumberDragger {
 
         this._toplevel = this._document.createElement('div');
         this._toplevel.style.position = 'absolute';
-        this._toplevel.style.transform = 'translate(0, -50%)';
+        this._toplevel.style.transform = 'translate(0, 0)';
         this._toplevel.style.fontFamily = MONOSPACE;
         this._toplevel.style.backgroundColor = '#232323';
         this._toplevel.style.color = '#c93';
@@ -222,8 +225,23 @@ class NumberDragger {
         this._anchorMouseX = e.clientX;
         this._anchorValue = value;
 
-        // reset
-        this._selectSegment(this._segments[2]);
+        // Select default segment based on powers of 10.
+        let segmentExp = 0;
+        for (let exp = -2; exp <= 2; exp++) {
+            const incr = Math.pow(10, exp + 1);
+            if (value > -incr && value < incr) {
+                segmentExp = exp;
+                break;
+            }
+        }
+
+        // segmentExp between -2 and 2. Our indexes range from 2 to -2.
+        const segmentIdx = 4 - (segmentExp + 2);
+        this._selectSegment(this._segments[segmentIdx]);
+
+        // Adjust the transform so the center of the segment box is in the middle.
+        const pcts = ['-10.5%', '-30%', '-50%', '-70%', '-89.5%'];
+        this._toplevel.style.transform = `translate(0, ${pcts[segmentIdx]}`;
 
         this._document.documentElement.addEventListener('mouseup', this._onMouseUp);
         // Delay the show a tiny bit...
@@ -280,7 +298,7 @@ interface SyntaxRun {
 };
 
 export default class CodeEditor {
-    public onvaluechanged: (() => void) | null = null;
+    public onvaluechanged: ((immediate: boolean) => void) | null = null;
     public elem: HTMLElement;
 
     private _toplevel: HTMLElement;
@@ -299,7 +317,9 @@ export default class CodeEditor {
     private _prefixLines: number;
     private _suffixLines: number;
 
-    private _needsRecalculate: boolean;
+    private _valueChanged: boolean = false;
+    private _valueChangedImmediate: boolean = false;
+    private _needsRecalculate: boolean = false;
 
     private _cols: number;
     private _height: number;
@@ -313,7 +333,7 @@ export default class CodeEditor {
     private _syntaxRuns: SyntaxRun[];
     private _textareaStyle: CSSStyleDeclaration;
     private _draggableNumbers: Range[];
-    private _valueChanged: boolean;
+    // Redraw-internal state.
     private _redraw_cursorPosition: number | undefined;
     private _redraw_cursorBlinkStart: number | undefined;
     private _mouseX: number | undefined;
@@ -321,7 +341,7 @@ export default class CodeEditor {
     private _mouseIdx: number | undefined;
     private _dragging: string | undefined;
     private _dragStartIdx: number;
-    private _draggingNumber: { start: number; end: number; value: number; } | null;
+    private _draggingNumber: { start: number; end: number; value: number; } | null = null;
 
     constructor(private _document: HTMLDocument) {
         this.onvaluechanged = null;
@@ -340,15 +360,15 @@ export default class CodeEditor {
         // Setup is particularly wacky... maybe clean it up at some point?
         this._document.body.appendChild(this._toplevel);
 
+        this._canvas = this._document.createElement('canvas');
+        this._toplevel.appendChild(this._canvas);
+
         this._textarea = this._document.createElement('textarea');
         this._textarea.style.fontFamily = MONOSPACE;
         this._textarea.oninput = this._onInput.bind(this);
         this._textarea.onkeydown = this._onKeyDown.bind(this);
         this._toplevel.appendChild(this._textarea);
 
-        this._canvas = this._document.createElement('canvas');
-
-        this._toplevel.appendChild(this._canvas);
         this._onMouseDown = this._onMouseDown.bind(this);
         this._onMouseMove = this._onMouseMove.bind(this);
         this._onMouseUp = this._onMouseUp.bind(this);
@@ -363,13 +383,6 @@ export default class CodeEditor {
         this._textarea.style.left = '-99999px';
         this._canvas.style.position = 'absolute';
 
-        this._needsRecalculate = false;
-        this._valueChanged = false;
-
-        // Redraw-internal state.
-        this._redraw_cursorPosition = undefined;
-        this._redraw_cursorBlinkStart = undefined;
-
         this._cursorOverride = new CursorOverride(this._document);
         this._numberDragger = new NumberDragger(this._document, this._cursorOverride);
         this._numberDragger.onvalue = this._onNumberDraggerValue.bind(this);
@@ -383,8 +396,10 @@ export default class CodeEditor {
     private _setNeedsRecalculate() {
         this._needsRecalculate = true;
     }
-    private _setValueChanged() {
+    private _setValueChanged(immediate: boolean = false) {
         this._valueChanged = true;
+        this._valueChangedImmediate = immediate;
+        this._needsRecalculate = true;
     }
 
     // Sets a chunk of text at the beginning and end that the user cannot modify.
@@ -424,11 +439,12 @@ export default class CodeEditor {
     public getValue() {
         return this._textarea.value;
     }
+
     public setValue(t: string) {
         this._textarea.value = t;
-        this._setValueChanged();
-        this._setNeedsRecalculate();
+        this._setValueChanged(true);
     }
+
     public getFullText() {
         return this._prefix + this._textarea.value + this._suffix;
     }
@@ -440,6 +456,7 @@ export default class CodeEditor {
             return true;
         return false;
     }
+
     private _recalculate() {
         if (!this._needsRecalculate)
             return;
@@ -483,11 +500,6 @@ export default class CodeEditor {
         const types = (/\b(void|bool|float|[ui]?vec[234]|mat[234]|mat[234]x[234]|[u]?int|sampler[23]D)\b/g);
         while ((match = types.exec(chars)) !== null)
             syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#6d9cbe' });
-        const numbers = (/\W-?\d+(\.\d+)?\b/g); // Don't bother supporting scientific notation on numbers...
-        while ((match = numbers.exec(chars)) !== null) {
-            syntaxRuns.push({ start: match.index+1, end: match.index + match[0].length, color: '#a5c261' });
-            draggableNumbers.push({ start: match.index+1, end: match.index + match[0].length });
-        }
         const strings = (/("[^"]*")|('[^']*')/g);
         while ((match = strings.exec(chars)) !== null)
             syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#6d9cbe' });
@@ -495,6 +507,16 @@ export default class CodeEditor {
         while ((match = comments.exec(chars)) !== null)
             syntaxRuns.push({ start: match.index, end: match.index + match[0].length, color: '#bc9458', style: 'italic' });
 
+        const numbers = (/\W-?\d+(\.\d+)?\b/g); // Don't bother supporting scientific notation on numbers...
+        while ((match = numbers.exec(chars)) !== null) {
+            const start = match.index + 1, end = start + match[0].length - 1;
+            // Look for an existing syntax run that encompasses this number. If so, skip it.
+            if (syntaxRuns.some((run) => start >= run.start && end <= run.end))
+                continue;
+            draggableNumbers.push({ start, end });
+            syntaxRuns.push({ start, end, color: '#a5c261' });
+        }
+    
         syntaxRuns.sort((a, b) => a.start - b.start);
 
         this._syntaxRuns = syntaxRuns;
@@ -550,9 +572,11 @@ export default class CodeEditor {
         this._recalculateMouseIdx();
 
         if (this._valueChanged && this.onvaluechanged)
-            this.onvaluechanged();
+            this.onvaluechanged(this._valueChangedImmediate);
         this._valueChanged = false;
+        this._valueChangedImmediate = false;
     }
+
     private _recalculateMouseIdx() {
         if (this._mouseX === undefined || this._mouseY === undefined) {
             this._mouseIdx = undefined;
@@ -563,6 +587,7 @@ export default class CodeEditor {
             this._mouseIdx = isLineLocked ? undefined : idx;
         }
     }
+
     private _calculateIndentedLineStart(line: Line) {
         const chars = this.getFullText();
         let idx = line.start;
@@ -570,10 +595,11 @@ export default class CodeEditor {
             idx++;
         return idx;
     }
+
     private _onInput() {
         this._setValueChanged();
-        this._setNeedsRecalculate();
     }
+
     private _onKeyDown(e: KeyboardEvent) {
         if (e.key === 'Tab' && !e.shiftKey) {
             // XXX: If we have a selection, then indent the selection.
@@ -600,6 +626,7 @@ export default class CodeEditor {
             }
         }
     }
+
     private _onMouseDown(e: MouseEvent) {
         e.preventDefault();
         const { row, col } = this._xyToRowCol(e.offsetX, e.offsetY);
@@ -644,12 +671,14 @@ export default class CodeEditor {
             }
         }
     }
+
     private _onMouseUp(e: MouseEvent) {
         this._dragging = undefined;
 
         this._document.documentElement.removeEventListener('mousemove', this._onMouseMove, { capture: true });
         this._document.documentElement.removeEventListener('mouseup', this._onMouseUp);
     }
+
     private _onMouseMove(e: MouseEvent) {
         e.stopPropagation();
 
@@ -686,22 +715,28 @@ export default class CodeEditor {
         else
             this._cursorOverride.setCursor(this, '');
     }
+
     private _onMouseLeave(e: MouseEvent) {
         this._mouseX = undefined;
         this._mouseY = undefined;
         this._mouseIdx = undefined;
     }
+
     private _onNumberDraggerValue(newValue: number) {
-        this._textarea.blur();
+        // This seems to break scrolling after refocusing from number dragging. Not sure exactly why, and I can't
+        // remember why I added it in the first place.
+        // this._textarea.blur();
         const { start, end } = this._draggingNumber!;
         const newValueString = formatDecimal(newValue);
         this.setValue(this._spliceValue(start, end, newValueString));
         this._draggingNumber!.end = start + newValueString.length;
         this._syncNumberDraggerPosition();
     }
+
     private _onNumberDraggerEnd() {
         this._draggingNumber = null;
     }
+
     private _syncNumberDraggerPosition() {
         const { end } = this._draggingNumber!;
         const endPos = this._getCharPos(this._textareaToIdx(end));
@@ -711,22 +746,27 @@ export default class CodeEditor {
         const absY = bbox.top + y + this._rowHeight / 2 + this._document.defaultView!.scrollY;
         this._numberDragger.setPosition(absX, absY);
     }
+
     private _spliceValue(start: number, end: number, v: string) {
         const chars = this.getValue();
         return chars.slice(0, start) + v + chars.slice(end);
     }
+
     private _findDraggableNumber(idx: number) {
         this._recalculate();
         return this._draggableNumbers.find(({ start, end }) => {
             return idx >= start && idx <= end;
         });
     }
+
     private _idxToTextarea(idx: number) {
         return idx - this._prefix.length;
     }
+
     private _textareaToIdx(idx: number) {
         return idx + this._prefix.length;
     }
+
     private _rowColToLineIdx(row: number, col: number, clampIdx: boolean) {
         this._recalculate();
         let line = this._lineModel[0];
@@ -752,6 +792,7 @@ export default class CodeEditor {
 
         return { line, idx };
     }
+
     private _xyToRowCol(x: number, y: number) {
         this._recalculate();
         y -= this._paddingTop * this._rowHeight;
@@ -767,11 +808,13 @@ export default class CodeEditor {
             col = Math.round(x / this._charWidth);
         return { row, col };
     }
+
     private _rowColToXY(row: number, col: number) {
         const x = this._gutterWidth + this._textMargin + col * this._charWidth;
         const y = (this._paddingTop + row) * this._rowHeight;
         return { x, y };
     }
+
     private _getRowLength(row: number) {
         this._recalculate();
         let line = this._lineModel[0];
@@ -788,6 +831,7 @@ export default class CodeEditor {
         else
             return this._cols;
     }
+
     private _getCharPos(idx: number) {
         this._recalculate();
         let line = this._lineModel[0];
@@ -805,9 +849,11 @@ export default class CodeEditor {
         const row = line.startRow + Math.min((lineIdx / this._cols) | 0, line.rows);
         return { line, lineIdx, row, col };
     }
+
     private _hasSelection() {
         return this._textarea.selectionStart !== this._textarea.selectionEnd;
     }
+
     private _getSelection() {
         const selStartIdx = this._textareaToIdx(this._textarea.selectionStart);
         const selEndIdx = this._textareaToIdx(this._textarea.selectionEnd);
@@ -817,19 +863,23 @@ export default class CodeEditor {
         else
             return [selEndIdx, selStartIdx];
     }
+
     private _getCursorIdx() {
         const [selectionPointIdx, cursorIdx] = this._getSelection();
         return cursorIdx;
     }
+
     private _setSelection(a: number, b: number) {
         // The selection starts at "a" and ends with the cursor position being at "b".
         const start = Math.min(a, b), end = Math.max(a, b);
         const direction = a < b ? 'forward' : 'backward';
         this._textarea.setSelectionRange(start, end, direction);
     }
+
     private _setCursor(a: number) {
         this._textarea.setSelectionRange(a, a);
     }
+
     private _insertAtCursor(s: string) {
         this._textarea.focus();
         if (!this._document.execCommand('insertText', false, s)) {
@@ -846,10 +896,10 @@ export default class CodeEditor {
             this._textarea.focus();
         }
         this._setValueChanged();
-        this._setNeedsRecalculate();
     }
+
     private _redraw(t: number) {
-        const hasFocus = this._textarea.matches(':focus');
+        const hasFocus = this._document.hasFocus();
 
         // Skip redrawing if we're up to date to cut down on costs...
         if (!this._needsRecalculate && !hasFocus)
@@ -979,7 +1029,7 @@ export default class CodeEditor {
 
         // Anything interesting under the mouse?
         let draggableNumber;
-        if (this._draggingNumber) {
+        if (this._draggingNumber !== null) {
             const { start, end } = this._draggingNumber;
             draggableNumber = { start: this._textareaToIdx(start), end: this._textareaToIdx(end) };
         } else if (!this._dragging && this._mouseIdx! > -1) {

@@ -14,6 +14,8 @@ import { DrawType } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
 import { XanimePlayer } from './Animation';
+import { getJointMtxByName } from './ActorUtil';
+import { Texture } from '../viewer';
 
 export class ParticleResourceHolder {
     private effectNames: string[];
@@ -52,9 +54,29 @@ export class ParticleResourceHolder {
             const cache = sceneObjHolder.modelCache.cache;
             const resData = new JPA.JPAResourceData(device, cache, this.jpacData, this.jpac.effects[idx]);
             resData.name = name;
+            this.addTexturesForResource(sceneObjHolder, resData);
             this.resourceDatas.set(idx, resData);
         }
+
         return this.resourceDatas.get(idx)!;
+    }
+
+    private addTexturesForResource(sceneObjHolder: SceneObjHolder, resData: JPA.JPAResourceData): void {
+        const viewerTextures: Texture[] = [];
+        for (let i = 0; i < resData.textureIds.length; i++) {
+            const textureId = resData.textureIds[i];
+            if (textureId === undefined)
+                continue;
+            const viewerTexture = this.jpacData.texData[textureId].viewerTexture;
+
+            if (!viewerTexture.extraInfo!.has('Category')) {
+                viewerTexture.extraInfo!.set('Category', 'JPA');
+                viewerTexture.name = `ParticleData/${viewerTexture.name}`;
+            }
+
+            viewerTextures.push(this.jpacData.texData[textureId].viewerTexture);
+        }
+        sceneObjHolder.modelCache.textureListHolder.addTextures(viewerTextures);
     }
 
     public getTextureMappingReference(name: string): TextureMapping | null {
@@ -431,6 +453,13 @@ export class MultiEmitter {
             this.singleEmitters[i].setGroupID(drawOrder);
     }
 
+    public isValid(): boolean {
+        for (let i = 0; i < this.singleEmitters.length; i++)
+            if (this.singleEmitters[i].isValid())
+                return true;
+        return false;
+    }
+
     public createEmitter(effectSystem: EffectSystem): void {
         for (let i = 0; i < this.singleEmitters.length; i++)
             effectSystem.createSingleEmitter(this.singleEmitters[i], this.emitterCallBack);
@@ -473,6 +502,8 @@ export class MultiEmitter {
     }
 
     public playEmitterOffClipped(): void {
+        // TODO(jstpierre): SyncEffectInfo
+
         for (let i = 0; i < this.singleEmitters.length; i++) {
             const emitter = this.singleEmitters[i];
             if (!emitter.isValid() || emitter.isOneTime())
@@ -494,6 +525,11 @@ export class MultiEmitter {
         }
     }
 
+    public playCalcAndDeleteForeverEmitter(): void {
+        this.playCalcEmitter(-1);
+        this.deleteForeverEmitter();
+    }
+
     public setName(name: string): void {
         this.name = name;
     }
@@ -506,6 +542,20 @@ export class MultiEmitter {
             if (!emitter.isValid())
                 continue;
             emitter.setDrawParticle(v);
+        }
+    }
+
+    public playCalcEmitter(emitterIndex: number = -1): void {
+        if (emitterIndex === -1) {
+            for (let i = 0; i < this.singleEmitters.length; i++) {
+                const emitter = this.singleEmitters[i];
+                if (emitter.isValid())
+                    emitter.particleEmitter!.baseEmitter!.flags &= ~JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
+            }
+        } else {
+            const emitter = this.singleEmitters[emitterIndex];
+            if (emitter.isValid())
+                emitter.particleEmitter!.baseEmitter!.flags &= ~JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
         }
     }
 
@@ -575,7 +625,7 @@ function registerAutoEffectInGroup(sceneObjHolder: SceneObjHolder, effectKeeper:
 }
 
 function isRegisteredBck(multiEmitter: MultiEmitter, currentBckName: string | null): boolean {
-    return currentBckName !== null ? multiEmitter.animNames!.includes(currentBckName.toLowerCase()) : false;
+    return currentBckName !== null ? multiEmitter.animNames!.includes(currentBckName) : false;
 }
 
 function checkPass(xanimePlayer: XanimePlayer, frame: number, deltaTimeFrames: number): boolean {
@@ -588,7 +638,8 @@ function checkPass(xanimePlayer: XanimePlayer, frame: number, deltaTimeFrames: n
 }
 
 function isCreate(multiEmitter: MultiEmitter, currentBckName: string | null, xanimePlayer: XanimePlayer, loopMode: EmitterLoopMode, changeBckReset: boolean, deltaTimeFrames: number): boolean {
-    if (isRegisteredBck(multiEmitter, currentBckName)) {
+    const registered = isRegisteredBck(multiEmitter, currentBckName);
+    if (registered) {
         if (loopMode === EmitterLoopMode.Forever)
             return true;
 
@@ -644,7 +695,7 @@ export class EffectKeeper {
 
         // registerEmitter
         if (jointName !== null) {
-            const jointMtx = assertExists(this.actor.getJointMtx(jointName));
+            const jointMtx = assertExists(getJointMtxByName(this.actor, jointName));
             m.emitterCallBack.setHostMtx(jointMtx);
         } else {
             const baseMtx = this.actor.getBaseMtx();
@@ -709,6 +760,11 @@ export class EffectKeeper {
     public stopEmitterOnClipped(): void {
         for (let i = 0; i < this.multiEmitters.length; i++)
             this.multiEmitters[i].stopEmitterOnClipped();
+    }
+
+    public clear(): void {
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            this.multiEmitters[i].playCalcAndDeleteForeverEmitter();
     }
 
     public changeBck(): void {
@@ -836,7 +892,6 @@ export class EffectSystem {
 
     public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
         this.drawInfo.posCamMtx = posCamMtx;
-        this.drawInfo.prjMtx = prjMtx;
         this.drawInfo.texPrjMtx = texPrjMtx;
     }
 
@@ -902,7 +957,7 @@ export class EffectSystem {
     }
 }
 
-export function deleteParticleEmitter(emitter: ParticleEmitter): void {
+function deleteParticleEmitter(emitter: ParticleEmitter): void {
     const baseEmitter = assertExists(emitter.baseEmitter);
     baseEmitter.flags |= JPA.BaseEmitterFlags.STOP_EMIT_PARTICLES;
     baseEmitter.maxFrame = 1;

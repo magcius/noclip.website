@@ -3,7 +3,7 @@ import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString, assertExists, assert, nArray, hexzero } from '../util';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 
 import * as Viewer from '../viewer';
 import * as BYML from '../byml';
@@ -35,6 +35,7 @@ import { d_a__RegisterConstructors } from './d_a';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor';
 import { PeekZManager } from './d_dlst_peekZ';
 import { dBgS } from './d_bg';
+import { dfRange } from '../DebugFloaters';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMap = { SymbolData: SymbolData[] };
@@ -260,7 +261,7 @@ export class ZWWExtraTextures {
     public textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
     public dynToonTex: DynToonTex;
 
-    @UI.dfRange(1, 15, 0.01)
+    @dfRange(1, 15, 0.01)
     public toonTexPower: number = 15;
 
     constructor(device: GfxDevice, ZAtoon: BTIData, ZBtoonEX: BTIData) {
@@ -273,7 +274,7 @@ export class ZWWExtraTextures {
         this.textureMapping[0].gfxTexture = this.dynToonTex.gfxTexture;
         this.textureMapping[1].gfxTexture = this.dynToonTex.gfxTexture;
 
-        window.main.ui.bindSliders(this);
+        window.main.ui.debugFloaterHolder.bindSliders(this);
     }
 
     public prepareToRender(device: GfxDevice): void {
@@ -379,7 +380,6 @@ class SimpleEffectSystem {
 
     public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
         this.drawInfo.posCamMtx = posCamMtx;
-        this.drawInfo.prjMtx = prjMtx;
         this.drawInfo.texPrjMtx = texPrjMtx;
     }
 
@@ -680,9 +680,9 @@ export class ModelCache {
         let fetchPath = path;
         if (cacheBust > 0)
             fetchPath = `${path}?cache_bust=${cacheBust}`;
-        const p = this.dataFetcher.fetchData(fetchPath, DataFetcherFlags.NONE, () => {
+        const p = this.dataFetcher.fetchData(fetchPath, { abortedCallback: () => {
             this.filePromiseCache.delete(path);
-        });
+        } });
         this.filePromiseCache.set(path, p);
         return p;
     }
@@ -706,12 +706,14 @@ export class ModelCache {
     }
 
     private async requestArchiveDataInternal(archivePath: string): Promise<RARC.JKRArchive> {
-        let buffer: ArrayBufferSlice = await this.dataFetcher.fetchData(archivePath);
+        let buffer: ArrayBufferSlice = await this.dataFetcher.fetchData(archivePath, { abortedCallback: () => {
+            this.archivePromiseCache.delete(archivePath);
+        } });
 
         if (readString(buffer, 0x00, 0x04) === 'Yaz0')
             buffer = Yaz0.decompressSync(this.yaz0Decompressor, buffer);
 
-        const rarc = RARC.parse(buffer, this.yaz0Decompressor);
+        const rarc = RARC.parse(buffer, '', this.yaz0Decompressor);
         this.archiveCache.set(archivePath, rarc);
         return rarc;
     }
@@ -1039,15 +1041,15 @@ const sceneDescs = [
     new SceneDesc("kazeMB", "Mini Boss Room", [6]),
 
     "Ganon's Tower",
-    new SceneDesc("GanonA", "Entrance"),
+    new SceneDesc("GanonA", "Entrance", [0, 1]),
     new SceneDesc("GanonB", "Room Towards Gohma"),
     new SceneDesc("GanonC", "Room Towards Molgera"),
     new SceneDesc("GanonD", "Room Towards Kalle Demos"),
     new SceneDesc("GanonE", "Room Towards Jalhalla"),
-    new SceneDesc("GanonJ", "Phantom Ganon's Maze"),
+    new SceneDesc("GanonJ", "Phantom Ganon's Maze", [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 13]),
     new SceneDesc("GanonK", "Puppet Ganon Fight"),
     new SceneDesc("GanonL", "Staircase Towards Puppet Ganon"),
-    new SceneDesc("GanonM", "Main Room"),
+    new SceneDesc("GanonM", "Main Room", [0, 1, 2]),
     new SceneDesc("GanonN", "Starcase to Main Room"),
     new SceneDesc("GTower", "Tower"),
     new SceneDesc("Xboss0", "Gohma Refight"),
@@ -1116,10 +1118,12 @@ const sceneDescs = [
     new SceneDesc("SubD51", "Early Bomb Island Cavern", [0, 1]),
     new SceneDesc("TF_07", "Stone Watcher Island Scenario Test", [1]),
     new SceneDesc("TF_05", "Early Battle Grotto", [0, 1, 2, 3, 4, 5, 6]),
-    new SceneDesc("sea_T", "sea_T"),
+    new SceneDesc("sea_T", "sea_T", [0, 44]),
     new SceneDesc("sea_E", "sea_E"),
+    new SceneDesc("I_SubAN", "I_SubAN", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
     new SceneDesc("ITest61", "ITest61"),
     new SceneDesc("ITest62", "ITest62"),
+    new SceneDesc("E3ROOP", "E3ROOP"),
     new SceneDesc("K_Test2", "K_Test2"),
     new SceneDesc("K_Test3", "K_Test3"),
     new SceneDesc("K_Test4", "K_Test4"),
@@ -1132,6 +1136,8 @@ const sceneDescs = [
     new SceneDesc("K_Testc", "K_Testc"),
     new SceneDesc("K_Testd", "K_Testd"),
     new SceneDesc("K_Teste", "K_Teste"),
+    new SceneDesc("DmSpot0", "DmSpot0"),
+    new SceneDesc("Amos_T", "Amos_T"),
 ];
 
 const id = "zww";

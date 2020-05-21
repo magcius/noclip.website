@@ -3,17 +3,18 @@ import * as Viewer from '../viewer';
 import * as BYML from '../byml';
 
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
-import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SnapPass, ModelRenderer, buildTransform } from './render';
-import { LevelArchive, parseLevel, isActor } from './room';
+import { LevelArchive, parseLevel, isActor, eggInputSetup } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';
 import { TextureHolder, FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
 import { CameraController } from '../Camera';
-import { createActor, LevelGlobals } from './actor';
+import { createActor, LevelGlobals, sceneActorInit } from './actor';
+import { ParticleManager } from './particles';
 
 const pathBase = `PokemonSnap`;
 
@@ -23,15 +24,15 @@ class SnapRenderer implements Viewer.SceneGfx {
 
     public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
-    public globals = new LevelGlobals();
+    public globals: LevelGlobals;
 
-    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>) {
+    constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, id: string) {
         this.renderHelper = new GfxRenderHelper(device);
+        this.globals = new LevelGlobals(id);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(32 / 60);
-        return c;
     }
 
     public createPanels(): UI.Panel[] {
@@ -55,6 +56,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         enableTextures.onchanged = () => {
             for (let i = 0; i < this.modelRenderers.length; i++)
                 this.modelRenderers[i].setTexturesEnabled(enableTextures.checked);
+            this.globals.particles.setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
@@ -67,6 +69,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         enableAlphaVisualizer.onchanged = () => {
             for (let i = 0; i < this.modelRenderers.length; i++)
                 this.modelRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+            this.globals.particles.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
@@ -78,6 +81,8 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.modelRenderers.length; i++)
             this.modelRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.globals);
+        this.globals.particles.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -90,7 +95,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, skyboxPassRenderer, SnapPass.SKYBOX);
         device.submitPass(skyboxPassRenderer);
 
@@ -107,6 +112,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.renderData.length; i++)
             this.renderData[i].destroy(device);
+        this.globals.particles.destroy(device);
     }
 
 }
@@ -127,19 +133,21 @@ class SceneDesc implements Viewer.SceneDesc {
                 fileList.push('pikachu', 'bulbasaur', 'zubat'); break;
         }
         return Promise.all(fileList.map((name) =>
-            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=3`))
+            context.dataFetcher.fetchData(`${pathBase}/${name}_arc.crg1?cache_bust=5`))
         ).then((files) => {
             const archives: LevelArchive[] = files.map((data) => BYML.parse(data, BYML.FileType.CRG1) as LevelArchive);
 
             const viewerTextures: Viewer.Texture[] = [];
             const holder = new FakeTextureHolder(viewerTextures);
 
-            const sceneRenderer = new SnapRenderer(device, holder);
+            const sceneRenderer = new SnapRenderer(device, holder, this.id);
             const level = parseLevel(archives);
             for (let i = 0; i < level.sharedCache.textures.length; i++)
                 viewerTextures.push(textureToCanvas(level.sharedCache.textures[i]));
 
             sceneRenderer.globals.collision = level.collision;
+
+            sceneActorInit();
 
             if (level.skybox !== null) {
                 const skyboxData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.skybox.node.model!.sharedOutput);
@@ -151,21 +159,50 @@ class SceneDesc implements Viewer.SceneDesc {
                 skyboxRenderer.forceLoop();
                 sceneRenderer.renderData.push(skyboxData);
                 sceneRenderer.modelRenderers.push(skyboxRenderer);
+                for (let j = 0; j < skyboxData.sharedOutput.textureCache.textures.length; j++) {
+                    viewerTextures.push(textureToCanvas(skyboxData.sharedOutput.textureCache.textures[j]));
+                }
             }
 
             const zeroOneData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.zeroOne.sharedOutput);
-            const zeroOne = new ModelRenderer(zeroOneData, level.zeroOne.nodes, level.zeroOne.animations);
-            zeroOne.forceLoop();
-            sceneRenderer.modelRenderers.push(zeroOne);
+            sceneRenderer.renderData.push(zeroOneData);
+
+            const projData: RenderData[] = [];
+            for (let i = 0; i < level.projectiles.length; i++)
+                projData.push(new RenderData(device, sceneRenderer.renderHelper.getCache(), level.projectiles[i].sharedOutput));
+            sceneRenderer.renderData.push(...projData);
 
             const objectDatas: RenderData[] = [];
             for (let i = 0; i < level.objectInfo.length; i++) {
                 const data = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.objectInfo[i].sharedOutput);
+                if (level.objectInfo[i].id === 601 || level.objectInfo[i].id === 602) // replace egg vertex buffers
+                    eggInputSetup(device, data, level.eggData!);
                 objectDatas.push(data);
                 sceneRenderer.renderData.push(data);
-                for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++)
+                for (let j = 0; j < data.sharedOutput.textureCache.textures.length; j++) {
+                    data.sharedOutput.textureCache.textures[j].name = `${level.objectInfo[i].id}_${j}`;
                     viewerTextures.push(textureToCanvas(data.sharedOutput.textureCache.textures[j]));
+                }
             }
+
+            let haunterData: RenderData | null = null;
+            if (level.haunterData) {
+                haunterData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.haunterData[1].model!.sharedOutput);
+                sceneRenderer.renderData.push(haunterData);
+                for (let j = 0; j < haunterData.sharedOutput.textureCache.textures.length; j++) {
+                    haunterData.sharedOutput.textureCache.textures[j].name = `93_${j + 1}`;
+                    viewerTextures.push(textureToCanvas(haunterData.sharedOutput.textureCache.textures[j]));
+                }
+            }
+
+            for (let particle of level.levelParticles.particleTextures)
+                for (let texture of particle)
+                    viewerTextures.push(textureToCanvas(texture));
+
+            sceneRenderer.modelRenderers.push(
+                ...sceneRenderer.globals.buildTempObjects(level.objectInfo, objectDatas, zeroOneData, projData, level)
+            );
+            sceneRenderer.globals.particles = new ParticleManager(device, sceneRenderer.renderHelper.getCache(), level.levelParticles, level.pesterParticles);
 
             for (let i = 0; i < level.rooms.length; i++) {
                 const renderData = new RenderData(device, sceneRenderer.renderHelper.getCache(), level.rooms[i].node.model!.sharedOutput);
@@ -189,6 +226,12 @@ class SceneDesc implements Viewer.SceneDesc {
                         const objectRenderer = createActor(objectDatas[objIndex], objects[j], def, sceneRenderer.globals);
                         if (def.id === 133) // eevee actually uses chansey's path
                             objectRenderer.motionData.path = objects.find((obj) => obj.id === 113)!.path;
+                        if (def.id === 93) {
+                            const fullHaunter = new ModelRenderer(haunterData!, level.haunterData!, []);
+                            (objectRenderer as any).fullModel = fullHaunter;
+                            fullHaunter.visible = false;
+                            sceneRenderer.modelRenderers.push(fullHaunter);
+                        }
                         sceneRenderer.globals.allActors.push(objectRenderer);
                         sceneRenderer.modelRenderers.push(objectRenderer);
                     } else {

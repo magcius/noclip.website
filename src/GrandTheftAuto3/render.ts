@@ -145,7 +145,7 @@ export class TextureArray extends TextureMapping {
         }
 
         const gfxTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D_ARRAY, pixelFormat,
+            dimension: GfxTextureDimension.n2DArray, pixelFormat,
             width, height, depth: textures.length, numLevels: mipmaps.length
         });
         const hostAccessPass = device.createHostAccessPass();
@@ -224,7 +224,7 @@ class BaseRenderer {
     constructor(protected program: DeviceProgram, protected atlas?: TextureArray) {}
 
     protected prepare(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indices);
 
@@ -278,6 +278,7 @@ export class SkyRenderer extends BaseRenderer {
             return;
         const renderInst = super.prepare(device, renderInstManager);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -573,6 +574,7 @@ export class SceneRenderer extends BaseRenderer {
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox);
         const renderInst = super.prepare(device, renderInstManager);
         renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -621,9 +623,8 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(0.01);
-        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

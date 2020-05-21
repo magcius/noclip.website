@@ -16,9 +16,11 @@ import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { computeViewSpaceDepthFromWorldSpaceAABB } from "../Camera";
 import { AABB } from "../Geometry";
 import { getImageFormatString } from "../BanjoKazooie/f3dex";
-import { TexCM, TextFilt } from '../Common/N64/Image';
+import { TextFilt } from '../Common/N64/Image';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
+import { calcTextureScaleForShift } from '../Common/N64/RSP';
+import { translateCM } from '../Common/N64/RDP';
 
 class PaperMario64Program extends DeviceProgram {
     public static a_Position = 0;
@@ -133,14 +135,6 @@ export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
     }
 }
 
-function translateCM(cm: TexCM): GfxWrapMode {
-    switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
-    }
-}
-
 class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
@@ -169,7 +163,7 @@ void main() {
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor = vec4(color.rgb, 1.0);
 }
 `;
@@ -202,7 +196,7 @@ export class BackgroundBillboardRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setInputLayoutAndState(null, null);
@@ -223,6 +217,7 @@ export class BackgroundBillboardRenderer {
         const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -232,14 +227,6 @@ export class BackgroundBillboardRenderer {
 
 enum RenderMode {
     OPA, XLU, DEC
-}
-
-function calcScaleForShift(shift: number): number {
-    if (shift <= 10) {
-        return 1 / (1 << shift);
-    } else {
-        return 1 << (16 - shift);
-    }
 }
 
 const modelViewScratch = mat4.create();
@@ -333,8 +320,6 @@ class ModelTreeLeafInstance {
         mat4.identity(dst);
 
         // tileMatrix[tileId] is specified in pixel units, so we need to convert to abstract space.
-        dst[0] = 1 / image.width;
-        dst[5] = 1 / image.height;
         if (this.texAnimEnabled && texAnimGroups[this.texAnimGroup] !== undefined)
             mat4.mul(dst, dst, texAnimGroups[this.texAnimGroup].tileMatrix[tileId]);
 
@@ -342,13 +327,13 @@ class ModelTreeLeafInstance {
         let scaleS, scaleT, offsetS, offsetT;
         if (tileId === 0) {
             // Tile 0's shift seems to always be 0x00.
-            scaleS = calcScaleForShift(0x00);
-            scaleT = calcScaleForShift(0x00);
+            scaleS = calcTextureScaleForShift(0x00);
+            scaleT = calcTextureScaleForShift(0x00);
             offsetS = 0;
             offsetT = 0;
         } else if (tileId === 1) {
-            scaleS = calcScaleForShift(this.secondaryTileShiftS);
-            scaleT = calcScaleForShift(this.secondaryTileShiftT);
+            scaleS = calcTextureScaleForShift(this.secondaryTileShiftS);
+            scaleT = calcTextureScaleForShift(this.secondaryTileShiftT);
             // Offset is in 10.2 coordinates (e.g. G_SETTILESIZE).
             offsetS = this.secondaryTileOffsetS / 0x04;
             offsetT = this.secondaryTileOffsetT / 0x04;
@@ -358,8 +343,13 @@ class ModelTreeLeafInstance {
 
         dst[0] *= scaleS;
         dst[5] *= scaleT;
-        dst[12] += offsetS;
-        dst[13] += offsetT;
+        dst[12] -= offsetS;
+        dst[13] -= offsetT;
+
+        dst[0] *= 1 / image.width;
+        dst[5] *= 1 / image.height;
+        dst[12] *= 1 / image.width;
+        dst[13] *= 1 / image.height;
     }
 
     public setTexAnimEnabled(enabled: boolean): void {
@@ -415,12 +405,13 @@ class ModelTreeLeafInstance {
 
         for (let i = 0; i < this.n64Data.rspOutput.drawCalls.length; i++) {
             const drawCall = this.n64Data.rspOutput.drawCalls[i];
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.drawIndexes(drawCall.indexCount, drawCall.firstIndex);
             const megaStateFlags = renderInst.getMegaStateFlags();
             megaStateFlags.cullMode = translateCullMode(drawCall.SP_GeometryMode);
 
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

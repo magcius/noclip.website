@@ -1,6 +1,6 @@
 
 import { GfxDevice, GfxAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, makeTextureDescriptor2D } from "../platform/GfxPlatform";
-import { colorNewFromRGBA, TransparentBlack, Color } from "../../Color";
+import { colorNewFromRGBA, TransparentBlack, Color, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 
 export const DEFAULT_NUM_SAMPLES = 4;
@@ -10,7 +10,7 @@ export class ColorTexture {
     public width: number = 0;
     public height: number = 0;
 
-    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_NORM) {
+    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_RT) {
     }
 
     public setParameters(device: GfxDevice, width: number, height: number): boolean {
@@ -39,7 +39,7 @@ export class ColorAttachment {
     public height: number = 0;
     public numSamples: number = 0;
 
-    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_NORM) {
+    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_RT) {
     }
 
     public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): boolean {
@@ -104,7 +104,6 @@ export function makeEmptyRenderPassDescriptor(): GfxRenderPassDescriptor {
     return makeClearRenderPassDescriptor(false, TransparentBlack);
 }
 
-// Normalized viewport coordinates
 export interface NormalizedViewportCoords {
     x: number;
     y: number;
@@ -196,6 +195,7 @@ export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearCo
 }
 
 export const standardFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(0.88, 0.88, 0.88, 1.0));
+export const opaqueBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
 export const transparentBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(true, TransparentBlack);
 export const depthClearRenderPassDescriptor = makeClearRenderPassDescriptor(false, TransparentBlack);
 export const noClearRenderPassDescriptor: GfxRenderPassDescriptor = {

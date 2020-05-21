@@ -108,7 +108,7 @@ ${KatamariDamacyProgram.reflectionDeclarations}
 void main() {
     vec4 t_Color;
 
-    t_Color = texture(u_Texture[0], v_TexCoord);
+    t_Color = texture(SAMPLER_2D(u_Texture[0]), v_TexCoord);
     t_Color.rgba *= u_Color.rgba;
 
     // Basic fake directional.
@@ -272,7 +272,7 @@ export class BINModelPartInstance {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
@@ -295,6 +295,7 @@ export class BINModelPartInstance {
         offs += fillMatrix4x3(mapped, offs, modelMatrix);
         offs += fillMatrix4x2(mapped, offs, textureMatrix);
         offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 

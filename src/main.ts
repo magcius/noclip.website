@@ -20,6 +20,7 @@ import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
 import * as Scenes_DarkSoulsCollision from './DarkSoulsCollisionData/scenes';
 import * as Scenes_MetroidPrime from './metroid_prime/scenes';
+import * as Scenes_DonkeyKong64 from './DonkeyKong64/scenes';
 import * as Scenes_DonkeyKongCountryReturns from './metroid_prime/dkcr_scenes';
 import * as Scenes_LuigisMansion from './luigis_mansion/scenes';
 import * as Scenes_PaperMario_TheThousandYearDoor from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
@@ -53,17 +54,19 @@ import * as Scenes_SpongeBobBFBB from './SpongeBobBFBB/scenes'
 import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperSmashBrosMelee';
 import * as Scenes_PokemonSnap from './PokemonSnap/scenes';
 import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters';
-<<<<<<< HEAD
-import * as Scenes_PokemonPL from './nns_g3d/pkmnpl_scenes';
-=======
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum';
->>>>>>> upstream/master
+import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
+import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
+import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
+import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
+import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
+import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
-import { hexdump, assertExists, assert, fallbackUndefined, magicstr, leftPad } from './util';
+import { assertExists, assert, fallbackUndefined } from './util';
 import { DataFetcher } from './DataFetcher';
 import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { atob, btoa } from './Ascii85';
@@ -77,10 +80,11 @@ import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
-import { downloadBlob, downloadBufferSlice, downloadBuffer } from './DownloadUtils';
+import { downloadBlob, downloadBuffer } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
 import { WebXRContext } from './WebXR';
+import { debugJunk } from './DebugJunk';
 
 const sceneGroups = [
     "Wii",
@@ -124,13 +128,16 @@ const sceneGroups = [
     "Xbox",
     Scenes_SpongeBobBFBB.sceneGroup,
     "Experimental",
+    Scenes_BanjoTooie.sceneGroup,
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
+    Scenes_DonkeyKong64.sceneGroup,
     Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_Elebits.sceneGroup,
     Scenes_Fez.sceneGroup,
     Scenes_GTA.sceneGroup.vc,
     Scenes_GTA.sceneGroup.sa,
+    Scenes_HalfLife2.sceneGroup,
     Scenes_LuigisMansion3D.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
@@ -141,10 +148,13 @@ const sceneGroups = [
     Scenes_StarFoxAdventures.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
+    Scenes_WiiUTransferTool.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
-    Scenes_PokemonPL.sceneGroup,
+    Scenes_GoldenEye007.sceneGroup,
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
+    Scenes_SunshineWater.sceneGroup,
+    Scenes_TeamFortress2.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
@@ -169,6 +179,33 @@ const enum SaveStatesAction {
     Delete
 };
 
+class AnimationLoop implements ViewerUpdateInfo {
+    public time: number = 0;
+    public webXRContext: WebXRContext | null = null;
+
+    public onupdate: ((updateInfo: ViewerUpdateInfo) => void);
+
+    // https://hackmd.io/lvtOckAtSrmIpZAwgtXptw#Use-requestPostAnimationFrame-not-requestAnimationFrame
+    // https://github.com/WICG/requestPostAnimationFrame
+    // https://github.com/gpuweb/gpuweb/issues/596#issuecomment-596769356
+
+    // XXX(jstpierre): Disabled for now. https://bugs.chromium.org/p/chromium/issues/detail?id=1065012
+    public useRequestPostAnimationFrame = false;
+
+    private _timeoutCallback = (): void => {
+        this.onupdate(this);
+    };
+
+    // Call this from within your requestAnimationFrame handler.
+    public requestPostAnimationFrame = (): void => {
+        this.time = window.performance.now();
+        if (this.useRequestPostAnimationFrame)
+            setTimeout(this._timeoutCallback, 0);
+        else
+            this.onupdate(this);
+    };
+}
+
 class Main {
     public toplevel: HTMLElement;
     public canvas: HTMLCanvasElement;
@@ -189,16 +226,23 @@ class Main {
     private dataFetcher: DataFetcher;
     private lastUpdatedURLTimeSeconds: number = -1;
 
-    public sceneTimeScale = 1.0;
-
-    private updateInfo: ViewerUpdateInfo;
+    private postAnimFrameCanvas = new AnimationLoop();
+    private postAnimFrameWebXR = new AnimationLoop();
     private webXRContext: WebXRContext;
+
+    public sceneTimeScale = 1.0;
+    public isEmbedMode = false;
+
+    // Link to debugJunk so we can reference it from the DevTools.
+    private debugJunk = debugJunk;
 
     constructor() {
         this.init();
     }
 
     public async init() {
+        this.isEmbedMode = window.location.pathname === '/embed.html';
+
         this.toplevel = document.createElement('div');
         document.body.appendChild(this.toplevel);
 
@@ -211,7 +255,14 @@ class Main {
         }
 
         this.webXRContext = new WebXRContext(this.viewer.gfxSwapChain);
-        this.webXRContext.onframe = this._onWebXRFrame.bind(this);
+        this.webXRContext.onframe = this.postAnimFrameWebXR.requestPostAnimationFrame;
+
+        this.postAnimFrameCanvas.onupdate = this._onPostAnimFrameUpdate;
+
+        // requestPostAnimationFrame breaks WebXR.
+        this.postAnimFrameWebXR.webXRContext = this.webXRContext;
+        this.postAnimFrameWebXR.useRequestPostAnimationFrame = false;
+        this.postAnimFrameWebXR.onupdate = this._onPostAnimFrameUpdate;
 
         this.toplevel.ondragover = (e) => {
             if (!e.dataTransfer || !e.dataTransfer.types.includes('Files'))
@@ -232,8 +283,8 @@ class Main {
         this.viewer.onstatistics = (statistics: RenderStatistics): void => {
             this.ui.statisticsPanel.addRenderStatistics(statistics);
         };
-        this.viewer.oncamerachanged = () => {
-            this._saveState();
+        this.viewer.oncamerachanged = (force: boolean) => {
+            this._saveState(force);
         };
         this.viewer.inputManager.onisdraggingchanged = () => {
             this.ui.setIsDragging(this.viewer.inputManager.isDragging());
@@ -242,6 +293,7 @@ class Main {
         this._makeUI();
 
         this.dataFetcher = new DataFetcher(this.ui.sceneSelect);
+        await this.dataFetcher.init();
 
         this.groups = sceneGroups;
 
@@ -272,11 +324,7 @@ class Main {
             this.ui.sceneSelect.setExpanded(true);
         }
 
-        this.updateInfo = {
-            time: 0,
-            isWebXR: false
-        };
-        this._updateLoop(window.performance.now());
+        this._onRequestAnimationFrameCanvas();
 
         if (!IS_DEVELOPMENT) {
             Sentry.init({
@@ -344,10 +392,9 @@ class Main {
     }
 
     private async _onWebXRStateRequested(state: boolean) {
-        if (!this.webXRContext) {
+        if (!this.webXRContext)
             return;
-        }
-        
+
         if (state) {
             try {
                 await this.webXRContext.start();
@@ -367,31 +414,17 @@ class Main {
         }
     }
 
-    private _onWebXRFrame(time: number) {
-        if (!this.paused) {
-            this.updateInfo.time = time;
-            this.updateInfo.isWebXR = true;
-            this.updateInfo.webXRContext = this.webXRContext;
-            this._runUpdate(this.updateInfo);
-        }
-    }
-
     public setPaused(v: boolean): void {
-        if (this.paused === v)
-            return;
-
-        this.paused = true;
-        if (!this.paused)
-            window.requestAnimationFrame(this._updateLoop);
+        this.paused = v;
     }
 
-    private _runUpdate(updateInfo: ViewerUpdateInfo) {
+    private _onPostAnimFrameUpdate = (updateInfo: ViewerUpdateInfo): void => {
         this.checkKeyShortcuts();
 
         prepareFrameDebugOverlayCanvas2D();
 
-        // Needs to be called before this.viewer.update
-        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7');
+        // Needs to be called before this.viewer.update()
+        const shouldTakeScreenshot = this.viewer.inputManager.isKeyDownEventTriggered('Numpad7') || this.viewer.inputManager.isKeyDownEventTriggered('BracketRight');
 
         this.viewer.sceneTimeScale = this.ui.isPlaying ? this.sceneTimeScale : 0.0;
 
@@ -401,17 +434,16 @@ class Main {
             this._takeScreenshot();
 
         this.ui.update();
-    }
+    };
 
-    private _updateLoop = (time: number) => {
-        if (this.paused)
-            return;
-        
-        this.updateInfo.time = time;
-        this.updateInfo.isWebXR = false;
-        this._runUpdate(this.updateInfo);
-        
-        window.requestAnimationFrame(this._updateLoop);
+    private _onRequestAnimationFrameCanvas = (): void => {
+        if (this.webXRContext.xrSession !== null) {
+            // Currently presenting to XR. Skip the canvas render.
+        } else {
+            this.postAnimFrameCanvas.requestPostAnimationFrame();
+        }
+
+        window.requestAnimationFrame(this._onRequestAnimationFrameCanvas);
     };
 
     private async _onDrop(e: DragEvent) {
@@ -610,7 +642,10 @@ class Main {
 
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);
+        this._saveStateAndUpdateURL();
 
+        if (scene.createCameraController !== undefined)
+            this.viewer.setCameraController(scene.createCameraController());
         if (this.viewer.cameraController === null)
             this.viewer.setCameraController(new FPSCameraController());
 
@@ -647,6 +682,8 @@ class Main {
         }
     }
 
+    private loadSceneDelta = 1;
+
     private _loadSceneDesc(sceneGroup: SceneGroup, sceneDesc: SceneDesc, sceneStateStr: string | null = null): void {
         if (this.currentSceneDesc === sceneDesc) {
             this._loadSceneSaveState(sceneStateStr);
@@ -682,18 +719,18 @@ class Main {
         const uiContainer: HTMLElement = document.createElement('div');
         this.ui.sceneUIContainer.appendChild(uiContainer);
         const destroyablePool: Destroyable[] = this.destroyablePool;
+        const inputManager = this.viewer.inputManager;
         const context: SceneContext = {
-            device, dataFetcher, dataShare, uiContainer, destroyablePool,
+            device, dataFetcher, dataShare, uiContainer, destroyablePool, inputManager,
         };
 
         // The age delta on pruneOldObjects determines whether any resources will be shared at all.
         // delta = 0 means that we destroy the set of resources used by the previous scene, before
         // we increment the age below fore the "new" scene, which is the only proper way to do leak
         // checking. Typically, we allow one old scene's worth of contents.
-        const delta: number = 1;
-        this.dataShare.pruneOldObjects(device, delta);
+        this.dataShare.pruneOldObjects(device, this.loadSceneDelta);
 
-        if (delta === 0)
+        if (this.loadSceneDelta === 0)
             this.viewer.gfxDevice.checkForLeaks();
 
         this.dataShare.loadNewScene();
@@ -743,6 +780,7 @@ class Main {
 
     private _makeUI() {
         this.ui = new UI(this.viewer);
+        this.ui.setEmbedMode(this.isEmbedMode);
         this.toplevel.appendChild(this.ui.elem);
         this.ui.sceneSelect.onscenedescselected = this._onSceneDescSelected.bind(this);
         this.ui.xrSettings.onWebXRStateRequested = this._onWebXRStateRequested.bind(this);
@@ -783,7 +821,8 @@ class Main {
             const tex = viewerTextures[i];
             for (let j = 0; j < tex.surfaces.length; j++) {
                 const filename = `${tex.name}_${j}.png`;
-                promises.push(convertCanvasToPNG(tex.surfaces[j]).then((blob) => blobToArrayBuffer(blob)).then((data) => {
+                promises.push(convertCanvasToPNG(tex.surfaces[j]).then((blob) => blobToArrayBuffer(blob)).then((buf) => {
+                    const data = new ArrayBufferSlice(buf);
                     zipFileEntries.push({ filename, data });
                 }));
             }
@@ -820,7 +859,7 @@ declare var gtag: (command: string, eventName: string, eventParameters: { [key: 
 // Declare a "main" object for easy access.
 declare global {
     interface Window {
-        main: any;
+        main: Main;
     }
 }
 
@@ -829,21 +868,8 @@ window.main = new Main();
 // Debug utilities.
 declare global {
     interface Window {
-        hexdump: any;
-        magicstr: any;
-        downloadBuffer: any;
         debug: any;
         debugObj: any;
         gl: any;
     }
 }
-window.hexdump = hexdump;
-window.magicstr = magicstr;
-window.downloadBuffer = (name: any, buffer: any) => {
-    if (buffer instanceof ArrayBufferSlice)
-        downloadBufferSlice(name, buffer);
-    else if (name.name && name.buffer)
-        window.downloadBuffer(name.name, name.buffer);
-    else if (buffer instanceof ArrayBuffer)
-        downloadBuffer(name, buffer);
-};

@@ -111,14 +111,14 @@ void main() {
 `;
     public frag = `
 precision mediump float;
-in vec2 v_TexCoord;
 in vec4 v_Color;
+in vec2 v_TexCoord;
 
 void main() {
     gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
 
 #ifdef USE_TEXTURE
-    gl_FragColor *= texture(u_Texture, v_TexCoord);
+    gl_FragColor *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
 #endif
 
 #ifdef USE_VERTEX_COLOR
@@ -407,8 +407,9 @@ class ShapeInstance {
 
         const nitroData = vertexData.nitroVertexData;
         for (let i = 0; i < nitroData.drawCalls.length; i++) {
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.drawIndexes(nitroData.drawCalls[i].numIndices, nitroData.drawCalls[i].startIndex);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();

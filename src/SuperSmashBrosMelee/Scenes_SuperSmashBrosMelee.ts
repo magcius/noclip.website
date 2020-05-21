@@ -6,7 +6,6 @@ import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneDesc, SceneContext } from "../SceneBase";
 import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive } from "./SYSDOLPHIN";
-import { IS_DEVELOPMENT } from "../BuildVersion";
 import { colorFromRGBA8 } from "../Color";
 import { assertExists, assert } from "../util";
 import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ftData } from "./Melee_ft";
@@ -641,5 +640,5 @@ const id = `SuperSmashBrosMelee`;
 const name = "Super Smash Bros. Melee";
 
 export const sceneGroup: SceneGroup = {
-    id, name, sceneDescs, hidden: !IS_DEVELOPMENT,
+    id, name, sceneDescs, hidden: true,
 };

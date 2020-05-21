@@ -4,13 +4,13 @@
 import * as Viewer from '../viewer';
 import * as NARC from './narc';
 
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
 import { assert, assertExists } from '../util';
 import { mat4 } from 'gl-matrix';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
@@ -78,9 +78,8 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
         this.textureHolder = new FakeTextureHolder(viewerTextures);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(10);
-        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -101,7 +100,7 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
         this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         device.submitPass(skyboxPassRenderer);

@@ -12,6 +12,18 @@ export default class BitMap {
         this.words = new Uint32Array(numWords);
     }
 
+    public fill(v: boolean): void {
+        const value = v ? 0xFFFFFFFF : 0;
+        for (let i = 0; i < this.words.length; i++)
+            this.words[i] = value;
+    }
+
+    public or(o: BitMap): void {
+        assert(this.words.length === o.words.length);
+        for (let i = 0; i < this.words.length; i++)
+            this.words[i] = o.words[i];
+    }
+
     public setWord(wordIndex: number, wordValue: number): void {
         this.words[wordIndex] = wordValue;
     }
@@ -43,12 +55,6 @@ export default class BitMap {
 
         return false;
     }
-}
-
-export function bitMapIntersect(dst: BitMap, s1: BitMap, s2: BitMap): void {
-    assert(dst.numBits === s1.numBits && dst.numBits === s2.numBits);
-    for (let i = 0; i < dst.words.length; i++)
-        dst.words[i] = s1.words[i] & s2.words[i];
 }
 
 export function bitMapSerialize(view: DataView, offs: number, bitMap: BitMap): number {

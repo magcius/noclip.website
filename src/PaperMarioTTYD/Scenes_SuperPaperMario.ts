@@ -14,9 +14,8 @@ import { assertExists } from '../util';
 import { CameraController } from '../Camera';
 
 class SuperPaperMarioRenderer extends WorldRenderer {
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(24/60);
-        return c;
     }
 }
 
@@ -40,11 +39,14 @@ class SPMSceneDesc implements Viewer.SceneDesc {
             const bDir = arc.findDir(`./dvd/bg`);
             let backgroundTextureName: string | null = null;
             if (bDir !== null) {
-                // TODO(jstpierre): Figure out how these BG files fit together.
-                const bFile = bDir.files[0];
-                backgroundTextureName = `bg_${this.id}`;
-                const bgTpl = TPL.parse(bFile.buffer, [backgroundTextureName]);
-                textureHolder.addTPLTextures(device, bgTpl);
+                for (let i = 0; i < bDir.files.length; i++) {
+                    const bFile = bDir.files[i];
+                    const bgTpl = TPL.parse(bFile.buffer, [bFile.name]);
+                    textureHolder.addTPLTextures(device, bgTpl);
+                }
+
+                // TODO(jstpierre): Figure out how the backgrounds are rendered.
+                backgroundTextureName = bDir.files[0].name;
             }
 
             return new SuperPaperMarioRenderer(device, d, textureHolder, backgroundTextureName);

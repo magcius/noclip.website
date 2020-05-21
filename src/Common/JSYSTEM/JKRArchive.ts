@@ -5,6 +5,7 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assert, readString } from '../../util';
 import * as Yay0 from '../Compression/Yay0';
 import * as Yaz0 from '../Compression/Yaz0';
+import { NamedArrayBufferSlice } from '../../DataFetcher';
 
 export const enum JKRFileAttr {
     Normal          = 0x01,
@@ -37,21 +38,14 @@ export interface RARCDir {
     subdirs: RARCDir[];
 }
 
-export function findFileInDir(dir: RARCDir, filename: string): RARCFile | null {
+function findFileInDir(dir: RARCDir, filename: string): RARCFile | null {
     const file = dir.files.find((file) => file.name.toLowerCase() === filename.toLowerCase());
     return file || null;
 }
 
-export function findFileDataInDir(dir: RARCDir, filename: string): ArrayBufferSlice | null {
-    const file = findFileInDir(dir, filename);
-    return file ? file.buffer : null;
-}
-
 export class JKRArchive {
-    // All the files in a flat list.
-    public files: RARCFile[];
-    // Root directory.
-    public root: RARCDir;
+    constructor(public files: RARCFile[], public root: RARCDir, public name: string) {
+    }
 
     public findDirParts(parts: string[]): RARCDir | null {
         let dir: RARCDir | undefined = this.root;
@@ -94,7 +88,7 @@ interface DirEntry {
     subdirIndexes: number[];
 }
 
-export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decompressor | null = null): JKRArchive {
+export function parse(buffer: ArrayBufferSlice, name: string = '', yaz0Decompressor: Yaz0.Yaz0Decompressor | null = null): JKRArchive {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'RARC');
@@ -166,6 +160,7 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
                     fileBuffer = rawFileBuffer;
                 }
 
+                (fileBuffer as NamedArrayBufferSlice).name = name;
                 const file: RARCFile = { index, id, name, flags, compressionType, buffer: fileBuffer };
                 files.push(file);
                 allFiles.push(file);
@@ -192,8 +187,5 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
     const root = translateDirEntry(0);
     assert(root.type === 'ROOT');
 
-    const rarc = new JKRArchive();
-    rarc.files = allFiles;
-    rarc.root = root;
-    return rarc;
+    return new JKRArchive(allFiles, root, name);
 }

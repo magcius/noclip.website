@@ -55,9 +55,6 @@ class cBgD__Inf_t {
 
 // Raw data.
 export class cBgD_t {
-    // TODO(jstpierre): Remove this junk.
-    public pos: vec3 = vec3.create();
-
     public vtxTbl: vec3[];
     public triTbl: cBgD__Tri_t[];
     public blkTbl: Uint16Array;

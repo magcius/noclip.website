@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from './ArrayBufferSlice';
-import { assert } from './util';
+import { assert, assertExists } from './util';
 import { IS_DEVELOPMENT } from './BuildVersion';
 import { ProgressMeter } from './SceneBase';
 
@@ -8,21 +8,16 @@ export interface NamedArrayBufferSlice extends ArrayBufferSlice {
     name: string;
 }
 
-function getDataStorageBaseURL(): string {
-    if (IS_DEVELOPMENT)
+function getDataStorageBaseURL(isDevelopment: boolean): string {
+    if (isDevelopment)
         return `/data`;
     else
         return `https://gznoclip1.b-cdn.net`;
 }
 
-export function getDataURLForPath(url: string): string {
+export function getDataURLForPath(url: string, isDevelopment: boolean = IS_DEVELOPMENT): string {
     assert(!url.startsWith(`data/`));
-    return `${getDataStorageBaseURL()}/${url}`;
-}
-
-export const enum DataFetcherFlags {
-    NONE = 0x00,
-    ALLOW_404 = 0x01,
+    return `${getDataStorageBaseURL(isDevelopment)}/${url}`;
 }
 
 export type AbortedCallback = () => void;
@@ -38,7 +33,7 @@ class DataFetcherRequest {
     private reject: (e: Error | null) => void;
     private retriesLeft = 2;
 
-    constructor(public url: string, private flags: DataFetcherFlags, private abortedCallback: AbortedCallback | null) {
+    constructor(public url: string, private options: DataFetcherOptions) {
         this.promise = new Promise((resolve, reject) => {
             this.resolve = resolve;
             this.reject = reject;
@@ -63,18 +58,13 @@ class DataFetcherRequest {
         if (request.status === 0)
             return true;
 
-        // This check is for development purposes, as Parcel will return the index page for non-existent data.
-        const contentType = request.getResponseHeader('Content-Type');
-        if (contentType !== null && contentType.startsWith('text/html'))
-            return true;
-
         return false;
     }
 
     private resolveError(): boolean {
         const request = this.request!;
 
-        const allow404 = !!(this.flags & DataFetcherFlags.ALLOW_404);
+        const allow404 = !!this.options.allow404;
         if (allow404 && this.isConsidered404Error()) {
             const emptySlice = new ArrayBufferSlice(new ArrayBuffer(0)) as NamedArrayBufferSlice;
             emptySlice.name = this.url;
@@ -83,7 +73,7 @@ class DataFetcherRequest {
             return true;
         }
 
-        if (request.status === 200)
+        if (request.status === 200 || request.status === 206)
             return false;
 
         if (this.retriesLeft > 0) {
@@ -103,14 +93,26 @@ class DataFetcherRequest {
         this.request = new XMLHttpRequest();
         this.request.open("GET", this.url, true);
         this.request.responseType = "arraybuffer";
+
+        let rangeStart = -1, rangeEnd = -1;
+        if (this.options.rangeStart !== undefined && this.options.rangeSize !== undefined) {
+            rangeStart = this.options.rangeStart;
+            rangeEnd = rangeStart + this.options.rangeSize + 1; // Range header is inclusive.
+            this.request.setRequestHeader('Range', `bytes=${rangeStart}-${rangeEnd}`);
+        }
         this.request.send();
         this.request.onload = (e) => {
             const hadError = this.resolveError();
             if (!hadError) {
-                const buffer: ArrayBuffer = this.request!.response;
-                const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
-                slice.name = this.url;
-                this.resolve(slice);
+                const request = this.request!;
+                const buffer: ArrayBuffer = request.response;
+
+                let slice = new ArrayBufferSlice(buffer);
+
+                const namedSlice = slice as NamedArrayBufferSlice;
+                namedSlice.name = this.url;
+
+                this.resolve(namedSlice);
                 this.done();
             }
         };
@@ -142,10 +144,25 @@ class DataFetcherRequest {
     public abort(): void {
         if (this.request !== null)
             this.request.abort();
-        if (this.abortedCallback !== null)
-            this.abortedCallback();
+        if (this.options.abortedCallback !== undefined)
+            this.options.abortedCallback();
         this.destroy();
     }
+}
+
+interface DataFetcherOptions {
+    allow404?: boolean;
+    abortedCallback?: AbortedCallback;
+    /**
+     * rangeStart: 0-based byte index for the range Header. Use to request part of a file.
+     * Must be specified in tandem with rangeSize.
+     */
+    rangeStart?: number;
+    /**
+     * rangeSize: Length for the range header.
+     * Must be specified together with rangeStart.
+     */
+    rangeSize?: number;
 }
 
 export class DataFetcher {
@@ -153,8 +170,24 @@ export class DataFetcher {
     public doneRequestCount: number = 0;
     public maxParallelRequests: number = 2;
     public aborted: boolean = false;
+    public useDevelopmentStorage: boolean | null = null;
 
     constructor(public progressMeter: ProgressMeter) {
+    }
+
+    public async init() {
+        if (IS_DEVELOPMENT) {
+            // Check for the existence of a /data directory.
+            const url = getDataURLForPath('', true);
+            try {
+                await this.fetchURL(url, {});
+                this.useDevelopmentStorage = true;
+            } catch(e) {
+                this.useDevelopmentStorage = false;
+            }
+        } else {
+            this.useDevelopmentStorage = false;
+        }
     }
 
     public abort(): void {
@@ -194,11 +227,11 @@ export class DataFetcher {
         }
     }
 
-    public fetchURL(url: string, flags: DataFetcherFlags = 0, abortedCallback: AbortedCallback | null = null): Promise<NamedArrayBufferSlice> {
+    public fetchURL(url: string, options: DataFetcherOptions): Promise<NamedArrayBufferSlice> {
         if (this.aborted)
             throw new Error("Tried to fetch new data while aborted; should not happen");
 
-        const request = new DataFetcherRequest(url, flags, abortedCallback);
+        const request = new DataFetcherRequest(url, options);
         this.requests.push(request);
         request.ondone = () => {
             this.doneRequestCount++;
@@ -213,8 +246,8 @@ export class DataFetcher {
         return request.promise!;
     }
 
-    public fetchData(path: string, flags: DataFetcherFlags = 0, abortedCallback: AbortedCallback | null = null): Promise<NamedArrayBufferSlice> {
-        const url = getDataURLForPath(path);
-        return this.fetchURL(url, flags, abortedCallback);
+    public fetchData(path: string, options: DataFetcherOptions = { }): Promise<NamedArrayBufferSlice> {
+        const url = getDataURLForPath(path, assertExists(this.useDevelopmentStorage));
+        return this.fetchURL(url, options);
     }
 }

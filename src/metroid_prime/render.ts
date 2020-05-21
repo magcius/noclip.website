@@ -149,7 +149,7 @@ class SurfaceInstance {
         else
             computeViewMatrix(viewMatrix, viewerInput.camera);
 
-        const renderInst = renderHelper.renderInstManager.pushRenderInst();
+        const renderInst = renderHelper.renderInstManager.newRenderInst();
         this.surfaceData.shapeHelper.setOnRenderInst(renderInst);
         this.materialGroupInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
 
@@ -393,6 +393,8 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         totalVertexCount,
         vertexId: 0,
         packets,
+        drawCalls: null,
+        dlView: null,
     };
 
     const loadedVertexLayout: LoadedVertexLayout = { ... surfaces[0].loadedVertexLayout };

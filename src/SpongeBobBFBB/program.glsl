@@ -100,7 +100,7 @@ void main() {
 
 #ifdef USE_TEXTURE
     if (USE_TEXTURE == 1)
-        t_Color *= texture(u_Texture, v_TexCoord);
+        t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
 #endif
 
     t_Color *= u_ModelColor;

@@ -14,7 +14,6 @@ import AnimationController from '../../../AnimationController';
 import { ColorKind } from '../../../gx/gx_render';
 import { AABB } from '../../../Geometry';
 import { getPointHermite } from '../../../Spline';
-import { computeModelMatrixSRT } from '../../../MathHelpers';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
 import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
@@ -392,7 +391,7 @@ export const enum ShapeDisplayFlags {
     NORMAL = 0,
     BILLBOARD = 1,
     Y_BILLBOARD = 2,
-    USE_PNMTXIDX = 3,
+    MULTI = 3,
 }
 
 export interface Shape {
@@ -474,7 +473,6 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
             attribIdx += 0x08;
         }
 
-        // TODO(jstpierre): Make sure these are compatible.
         // Since we patch the loadedVertexLayout in some games, we need to create a fresh one every time...
         const loadedVertexLayout = compileLoadedVertexLayout([vat], vcd);
         const vtxLoader = compileVtxLoader(vat, vcd);
@@ -596,11 +594,11 @@ export function calcTexMtx_Basic(dst: mat4, scaleS: number, scaleT: number, rota
 
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleS * -sinR;
-    dst[12] = translationS + centerS + scaleS * (sinR * centerT - cosR * centerS);
+    dst[12] = translationS + centerS - (dst[0] * centerS + dst[4] * centerT);
 
     dst[1]  = scaleT *  sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = translationT + centerT + -scaleT * (-sinR * centerS + cosR * centerT);
+    dst[13] = translationT + centerT - (dst[1] * centerS + dst[5] * centerT);
 }
 
 export function calcTexMtx_Maya(dst: mat4, scaleS: number, scaleT: number, rotation: number, translationS: number, translationT: number): void {
@@ -1322,8 +1320,9 @@ export function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopM
     return animFrame;
 }
 
-function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, t: number): number {
-    const length = k1.time - k0.time;
+function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, frame: number): number {
+    const length = (k1.time - k0.time);
+    const t = (frame - k0.time) / length;
     const p0 = k0.value;
     const p1 = k1.value;
     const s0 = k0.tangentOut * length;
@@ -1338,8 +1337,11 @@ function findKeyframe(frames: AnimationKeyframe[], time: number): number {
     return -1;
 }
 
-export function sampleAnimationData(track: AnimationTrack, frame: number) {
+export function sampleAnimationData(track: AnimationTrack, frame: number): number {
     const frames = track.frames;
+
+    if (frames.length === 1)
+        return frames[0].value;
 
     // Find the first frame.
     const idx1 = findKeyframe(frames, frame);
@@ -1352,18 +1354,10 @@ export function sampleAnimationData(track: AnimationTrack, frame: number) {
     const k0 = frames[idx0];
     const k1 = frames[idx1];
 
-    // HACK(jstpierre): Nintendo sometimes uses weird "reset" tangents
-    // which aren't supposed to be visible. They are visible for us because
-    // "frame" can have a non-zero fractional component. In this case, pick
-    // a value completely.
-    if ((k1.time - k0.time) === 1)
-        return k0.value;
-
-    const t = (frame - k0.time) / (k1.time - k0.time);
-    return hermiteInterpolate(k0, k1, t);
+    return hermiteInterpolate(k0, k1, frame);
 }
 
-function translateAnimationTrack(data: Float32Array | Int16Array, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
+function translateAnimationTrack(data: Float32Array | Int16Array, duration: number, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
     // Special exception.
     if (count === 1) {
         const value = data[index];
@@ -1383,6 +1377,10 @@ function translateAnimationTrack(data: Float32Array | Int16Array, scale: number,
                 frames.push({ time, value, tangentIn, tangentOut });
             }
         }
+
+        // Check for an unnecessary reset frame at the duration, as it can have messed up tangents.
+        if (frames[frames.length - 2].time === duration - 1 && frames[frames.length - 1].time === duration)
+            frames.pop();
 
         return { frames };
     }
@@ -1446,7 +1444,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, scale, count, index, tangent);
+        return translateAnimationTrack(data, duration, scale, count, index, tangent);
     }
 
     const uvAnimationEntries: TTK1AnimationEntry[] = [];
@@ -1574,7 +1572,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
+        return translateAnimationTrack(data, duration, 1 / 0xFF, count, index, tangent);
     }
 
     const animationEntries: TRK1AnimationEntry[] = [];
@@ -1678,7 +1676,7 @@ function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
+        return translateAnimationTrack(data, duration, 1 / 0xFF, count, index, tangent);
     }
 
     const animationEntries: TRK1AnimationEntry[] = [];
@@ -1757,7 +1755,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, scale, count, index, tangent);
+        return translateAnimationTrack(data, duration, scale, count, index, tangent);
     }
 
     const jointAnimationEntries: ANK1JointAnimationEntry[] = [];
@@ -1779,59 +1777,6 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
     }
 
     return { loopMode, duration, jointAnimationEntries };
-}
-
-export function calcJointMatrix(dst: mat4, jointIndex: number, bmd: BMD, ank1Animator: ANK1Animator | null): void {
-    let scaleX: number;
-    let scaleY: number;
-    let scaleZ: number;
-    let rotationX: number;
-    let rotationY: number;
-    let rotationZ: number;
-    let translationX: number;
-    let translationY: number;
-    let translationZ: number;
-
-    let entry: ANK1JointAnimationEntry | null = null;
-
-    if (ank1Animator !== null)
-        entry = ank1Animator.ank1.jointAnimationEntries[jointIndex] || null;
-
-    if (entry !== null) {
-        const frame = ank1Animator!.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(ank1Animator!.ank1, frame);
-
-        scaleX = sampleAnimationData(entry.scaleX, animFrame);
-        scaleY = sampleAnimationData(entry.scaleY, animFrame);
-        scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-        rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-        rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-        rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-        translationX = sampleAnimationData(entry.translationX, animFrame);
-        translationY = sampleAnimationData(entry.translationY, animFrame);
-        translationZ = sampleAnimationData(entry.translationZ, animFrame);
-    } else {
-        const jnt1 = bmd.jnt1.joints[jointIndex];
-        scaleX = jnt1.scaleX;
-        scaleY = jnt1.scaleY;
-        scaleZ = jnt1.scaleZ;
-        rotationX = jnt1.rotationX;
-        rotationY = jnt1.rotationY;
-        rotationZ = jnt1.rotationZ;
-        translationX = jnt1.translationX;
-        translationY = jnt1.translationY;
-        translationZ = jnt1.translationZ;
-    }
-
-    computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-}
-
-export class ANK1Animator { 
-    constructor(public animationController: AnimationController, public ank1: ANK1) {}
-}
-
-export function bindANK1Animator(animationController: AnimationController, ank1: ANK1): ANK1Animator {
-    return new ANK1Animator(animationController, ank1);
 }
 //#endregion
 //#region BCK

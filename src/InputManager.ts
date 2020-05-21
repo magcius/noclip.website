@@ -1,7 +1,6 @@
 
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { GlobalGrabManager } from './GrabManager';
-import { vec2 } from 'gl-matrix';
 
 declare global {
     interface HTMLElement {
@@ -40,10 +39,12 @@ export default class InputManager {
     public toplevel: HTMLElement;
     // tristate. non-existent = not pressed, false = pressed but not this frame, true = pressed this frame.
     public keysDown: Map<string, boolean>;
+    public mouseX: number = -1;
+    public mouseY: number = -1;
     public dx: number;
     public dy: number;
     public dz: number;
-    public button: number = -1;
+    public buttons: number = 0;
     public onisdraggingchanged: (() => void) | null = null;
     private listeners: Listener[] = [];
     private scrollListeners: Listener[] = [];
@@ -57,6 +58,7 @@ export default class InputManager {
     private dTouchX: number = 0;
     private dTouchY: number = 0;
     private dPinchDist: number = 0;
+    private releaseOnMouseUp: boolean = true;
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -69,14 +71,24 @@ export default class InputManager {
         document.addEventListener('keydown', this._onKeyDown, { capture: true });
         document.addEventListener('keyup', this._onKeyUp, { capture: true });
         window.addEventListener('blur', this._onBlur);
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
         this.toplevel.addEventListener('mousedown', (e) => {
             if (!this.isInteractive)
                 return;
-            this.button = e.button;
-            GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: true });
+            this.buttons = e.buttons;
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: this.releaseOnMouseUp });
             if (this.onisdraggingchanged !== null)
                 this.onisdraggingchanged();
+        });
+        this.toplevel.addEventListener('mousemove', (e) => {
+            this.mouseX = e.clientX;
+            this.mouseY = e.clientY;
+        });
+        this.toplevel.addEventListener('mouseup', (e) => {
+            this.buttons = e.buttons;
         });
 
         this.toplevel.addEventListener('touchstart', this._onTouchChange);
@@ -273,8 +285,12 @@ export default class InputManager {
         this.dy += dy;
     }
 
-    public onGrabReleased () {
-        this.button = -1;
+    public setCursor(cursor: string): void {
+        GlobalGrabManager.setCursor(cursor);
+    }
+
+    public onGrabReleased() {
+        this.buttons = 0;
         if (this.onisdraggingchanged !== null)
             this.onisdraggingchanged();
     }

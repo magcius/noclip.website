@@ -42,9 +42,8 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(6/60);
-        return c;
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

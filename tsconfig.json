@@ -14,6 +14,7 @@
             "es2015",
             "es2015.promise",
             "es2016.array.include",
+            "ESNext.BigInt",
             "dom"
         ],
         "sourceMap": true,
@@ -22,7 +23,8 @@
         "types": [
             "gl-matrix",
             "pako",
-            "filesystem"
+            "filesystem",
+            "webmidi"
         ]
     },
     "include": [

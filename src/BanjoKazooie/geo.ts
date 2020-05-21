@@ -1,10 +1,14 @@
 
-import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, nArray } from "../util";
 import * as F3DEX from "./f3dex";
+import * as F3DEX2 from "../PokemonSnap/f3dex2";
+import * as RDP from "../Common/N64/RDP";
+
+import ArrayBufferSlice from "../ArrayBufferSlice";
+import { assert, hexzero, assertExists, nArray, align } from "../util";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian";
-import { ImageFormat, ImageSize } from "../Common/N64/Image";
+import { ImageFormat, ImageSize, TexCM } from "../Common/N64/Image";
+import { DataMap, DataRange } from "../PokemonSnap/room";
 
 // Banjo-Kazooie Geometry
 
@@ -30,6 +34,18 @@ export interface VertexBoneTable {
     vertexBoneEntries: VertexBoneEntry[];
 }
 
+interface MorphEntry {
+    vertices: F3DEX.Vertex[];
+    indexLists: Uint16Array[];
+}
+
+export interface Morph {
+    id: number;
+    boneIndex: number;
+    entries: MorphEntry[];
+    affected: Uint16Array;
+}
+
 export interface TextureAnimationSetup {
     speed: number;
     blockCount: number;
@@ -42,34 +58,55 @@ export interface ModelPoint {
 }
 
 export const enum GeoFlags {
-    ComputeLookAt = 0x04,
+    RGBA16Mipmaps   = 0x002,
+    ComputeLookAt   = 0x004,
+    ExtraSegments   = 0x040,
+    CI8Mipmaps      = 0x080,
+    CI4Mipmaps      = 0x100,
 }
-
-export interface Geometry {
+export interface Geometry<N extends GeoNode> {
     geoFlags: number;
     animationSetup: AnimationSetup | null;
     vertexBoneTable: VertexBoneTable | null;
-    textureAnimationSetup: TextureAnimationSetup | null;
+    textureAnimationSetup: TextureAnimationSetup[];
     vertexEffects: VertexAnimationEffect[];
     modelPoints: ModelPoint[];
     sharedOutput: F3DEX.RSPSharedOutput;
-    rootNode: GeoNode;
+    rootNode: N;
+
+    normals?: vec3[];
+    softwareLighting?: SoftwareLightingEffect[];
+    colorMapping?: number[][];
+    morphs?: Morph[];
 }
 
 export const enum VertexEffectType {
     // id mapping is different from game table index (in comment)
-    FlowingWater = 1,       // 1
-    ColorFlicker = 2,       // 0
-    StillWater = 3,         // 3
-    ColorPulse = 5,         // 4
-    RipplingWater = 7,      // 5
-    AlphaBlink = 8,         // 6
-    LightningBolt = 9,      // 8
+    // names in the comment are from bt files
+    FlowingWater      = 1,  // 1 scroll
+    ColorFlicker      = 2,  // 0 light
+    StillWater        = 3,  // 3 water
+    ColorPulse        = 5,  // 4 glow
+    RipplingWater     = 7,  // 5 wave
+    AlphaBlink        = 8,  // 6 glowa
+    LightningBolt     = 9,  // 8
     LightningLighting = 10, // 7
 
     // these are still speculative
-    Interactive = 4,        // 2
-    OtherInteractive = 6,   // 2 again
+    Interactive       = 4,  // 2
+    OtherInteractive  = 6,  // 2 again
+
+    // tooie only, there are multiple tables so no meaningful index
+    FlashAlpha        = 9,
+    Flash             = 10,
+    Unknown           = 11,
+    Wibble            = 12,
+    Bounce            = 17,
+    Twinkle           = 18,
+    Flame             = 19,
+    TwinkleAlpha      = 20,
+    OtherWibble       = 21,
+    TwinkleColor      = 22,
 }
 
 interface BlinkStateMachine {
@@ -96,6 +133,7 @@ export interface VertexAnimationEffect {
     bbMax?: vec3;
     blinker?: BlinkStateMachine;
     pairedEffect?: VertexAnimationEffect;
+    timers?: Float32Array;
 }
 
 function otherModeLEntries(flags: number[]): ArrayBufferSlice {
@@ -202,6 +240,43 @@ const renderModeBuffers: ArrayBufferSlice[] = [
     ),
 ];
 
+// just create the first mipmap entry
+function mipmapEntries(fmt: ImageFormat, siz: ImageSize): ArrayBufferSlice {
+    const out = new ArrayBufferSlice(new ArrayBuffer(8 * 24));
+    const view = out.createDataView();
+    let w = 5;
+    let h = 5;
+    const line = Math.ceil((1 << (w + siz - 1)) / 8);
+    const lrs = (1 << (w + 2)) - 4;
+    const lrt = (1 << (h + 2)) - 4;
+
+    // wrap
+    view.setUint32(0x00, (F3DEX2.F3DEX2_GBI.G_SETTILE << 24) | (fmt << 21) | (siz << 19) | (line << 9));
+    view.setUint32(0x04, (2 << 24) | (h << 14) | (w << 4));
+
+    view.setUint8(0x08, F3DEX2.F3DEX2_GBI.G_SETTILESIZE);
+    view.setUint32(0x0C, (2 << 24) | (lrs << 12) | lrt);
+
+    view.setUint8(0x10, F3DEX2.F3DEX2_GBI.G_ENDDL);
+
+    // clamp
+    view.setUint32(0x60, (F3DEX2.F3DEX2_GBI.G_SETTILE << 24) | (fmt << 21) | (siz << 19) | (line << 9));
+    view.setUint32(0x64, (2 << 24) | (1 << 18) | (h << 14) | (1 << 8) | (w << 4));
+
+    view.setUint8(0x68, F3DEX2.F3DEX2_GBI.G_SETTILESIZE);
+    view.setUint32(0x6C, (2 << 24) | (lrs << 12) | lrt);
+
+    view.setUint8(0x70, F3DEX2.F3DEX2_GBI.G_ENDDL);
+
+    return out;
+}
+
+const mipmapSegments = [
+    mipmapEntries(ImageFormat.G_IM_FMT_CI, ImageSize.G_IM_SIZ_4b),
+    mipmapEntries(ImageFormat.G_IM_FMT_CI, ImageSize.G_IM_SIZ_8b),
+    mipmapEntries(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b),
+];
+
 export interface SelectorNode {
     kind: "select";
     stateIndex: number;
@@ -224,40 +299,141 @@ export function isSorter(node: SelectorNode | SortNode | null): node is SortNode
 export interface GeoNode {
     boneIndex: number;
     parentIndex: number;
-    rspState: F3DEX.RSPState;
     rspOutput: F3DEX.RSPOutput | null;
     children: GeoNode[];
     nodeData: SelectorNode | SortNode | null;
+    rspState: F3DEX.RSPState | F3DEX2.RSPState;
+    runDL: (addr: number) => void;
 }
 
-interface GeoContext {
+export interface SoftwareLightingEffect {
+    startVertex: number;
+    vertexCount: number;
+    bone: number;
+}
+
+type nodeBuilder<N extends GeoNode> = (bone: number, parent: number, ctx: GeoContext<N>) => N;
+
+interface GeoContext<N extends GeoNode> {
     buffer: ArrayBufferSlice;
 
     segmentBuffers: ArrayBufferSlice[];
+    dataMap?: DataMap;
     sharedOutput: F3DEX.RSPSharedOutput;
+    zMode: RenderZMode;
+
+    animationSetup: AnimationSetup | null;
+    vertexBoneTable: VertexBoneTable | null;
     modelPoints: ModelPoint[];
 
-    nodeStack: GeoNode[];
+    nodeStack: N[];
     buildSortNodes: boolean;
+    nodeBuilder: nodeBuilder<N>;
+
+    softwareLighting?: SoftwareLightingEffect[];
 }
 
-function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoNode {
-    const rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
-    // G_TF_BILERP
-    rspState.gDPSetOtherModeH(12, 2, 0x2000);
-    rspState.gDPSetOtherModeH(
-        F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
-        F3DEX.OtherModeH_CycleType.G_CYC_2CYCLE << F3DEX.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
-    );
-    setMipmapTiles(rspState);
-    const geoNode: GeoNode = {
-        boneIndex,
-        parentIndex,
-        children: [],
-        rspOutput: null,
-        rspState,
-        nodeData: null,
-    };
+export class BKGeoNode implements GeoNode {
+    public rspOutput: F3DEX.RSPOutput | null = null;
+    public children: GeoNode[] = [];
+    public nodeData: SelectorNode | SortNode | null = null;
+    public rspState: F3DEX.RSPState;
+
+    constructor(public boneIndex: number, public parentIndex: number, context: GeoContext<BKGeoNode>) {
+        this.rspState = new F3DEX.RSPState(context.segmentBuffers, context.sharedOutput);
+        // G_TF_BILERP
+        this.rspState.gDPSetOtherModeH(12, 2, 0x2000);
+        this.rspState.gDPSetOtherModeH(
+            RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
+            RDP.OtherModeH_CycleType.G_CYC_2CYCLE << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+        );
+        setMipmapTiles(this.rspState, TexCM.WRAP);
+    }
+
+    public runDL(addr: number): void {
+        F3DEX.runDL_F3DEX(this.rspState, addr);
+    }
+}
+
+const zBufferedOpaqueModes = [
+    0x0F0A4030, // OPA_SURF
+    0x0C192078, // AA_OPA_SURF
+    0x0C184270, // XLU_SURF
+    0x0C1841F8, // AA_XLU_SURF
+    0x0C184270, // XLU_SURF
+    0x0C1841F8, // AA_XLU_SURF
+];
+
+const noUpdateOpaqueModes = [
+    0x0F0A4010,
+    0x0C192058,
+    0x0C184250,
+    0x0C1841D8,
+    0x0C184250,
+    0x0C1841D8,
+];
+
+const backupModes = [
+    0x0C1843D8,
+    0x0C184E50,
+    0x0C184DD8,
+    0xC8104E50,
+    0xC8104DD8,
+];
+
+export class BTGeoNode implements GeoNode {
+    public rspOutput: F3DEX.RSPOutput | null = null;
+    public children: GeoNode[] = [];
+    public nodeData: SelectorNode | SortNode | null = null;
+    public rspState: F3DEX2.RSPState;
+
+    private zMode: RenderZMode;
+
+    constructor(public boneIndex: number, public parentIndex: number, context: GeoContext<BTGeoNode>) {
+        this.rspState = new F3DEX2.RSPState(context.sharedOutput, context.dataMap!, true);
+        // G_TF_BILERP
+        this.rspState.gDPSetOtherModeH(12, 2, 0x2000);
+        this.rspState.gDPSetOtherModeH(
+            RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2,
+            RDP.OtherModeH_CycleType.G_CYC_2CYCLE << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE,
+        );
+        this.zMode = context.zMode;
+        this.runDL(0x07 << 24); // set up mipmaps
+    }
+
+    private static opaHandler(state: F3DEX2.RSPState, addr: number): void {
+        BTGeoNode.modeHandler(state, addr, zBufferedOpaqueModes);
+    }
+
+    private static xluHandler(state: F3DEX2.RSPState, addr: number): void {
+        BTGeoNode.modeHandler(state, addr, noUpdateOpaqueModes);
+    }
+
+    private static modeHandler(state: F3DEX2.RSPState, addr: number, list: number[]): void {
+        if (addr >>> 24 !== 3)
+            return F3DEX2.runDL_F3DEX2(state, addr);
+        // each entry is two commands, so sixteen bytes
+        const index = (addr & 0xFFFFFF) >>> 4;
+        let mode = list[index % 6];
+        if (index < 24) {
+            const category = Math.floor(index / 6);
+            if (category & 1) // no z update
+                mode = mode & ~(1 << RDP.OtherModeL_Layout.Z_UPD);
+            if (category & 2) // fog
+                mode = (mode & ~0xCCCC0000) | 0xC8000000;
+        } else
+            mode = backupModes[index - 24];
+
+        state.gDPSetOtherModeL(3, 0x1D, mode);
+    }
+
+    public runDL(addr: number): void {
+        F3DEX2.runDL_F3DEX2(this.rspState, addr, this.zMode === RenderZMode.OPA ? BTGeoNode.opaHandler : BTGeoNode.xluHandler);
+    }
+}
+
+function pushGeoNode<N extends GeoNode>(context: GeoContext<N>, boneIndex = 0, parentIndex = -1): N {
+    const geoNode = context.nodeBuilder(boneIndex, parentIndex, context);
 
     if (context.nodeStack.length > 0)
         context.nodeStack[0].children.push(geoNode);
@@ -266,11 +442,11 @@ function pushGeoNode(context: GeoContext, boneIndex = 0, parentIndex = -1): GeoN
     return geoNode;
 }
 
-function peekGeoNode(context: GeoContext): GeoNode {
+function peekGeoNode<N extends GeoNode>(context: GeoContext<N>): N {
     return assertExists(context.nodeStack[0]);
 }
 
-function popGeoNode(context: GeoContext): GeoNode {
+function popGeoNode<N extends GeoNode>(context: GeoContext<N>): N {
     const geoNode = context.nodeStack.shift()!;
 
     // Finalize geo node.
@@ -279,25 +455,25 @@ function popGeoNode(context: GeoContext): GeoNode {
     return geoNode;
 }
 
-function setMipmapTiles(rspState: F3DEX.RSPState): void {
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0, 2, 0, 0, 5, 0, 0, 5, 0);
+function setMipmapTiles(rspState: F3DEX.RSPState, cm: TexCM): void {
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0, 2, 0, cm, 5, 0, cm, 5, 0);
     rspState.gDPSetTileSize(2, 0, 0, 0x7C, 0x7C);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x100, 3, 0, 0, 4, 0, 0, 4, 0);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x100, 3, 0, cm, 4, 0, cm, 4, 0);
     rspState.gDPSetTileSize(3, 0, 0, 0x3C, 0x3C);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x104, 4, 0, 0, 3, 0, 0, 3, 0);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x104, 4, 0, cm, 3, 0, cm, 3, 0);
     rspState.gDPSetTileSize(4, 0, 0, 0x1C, 0x1C);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x106, 5, 0, 0, 2, 0, 0, 2, 0);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x106, 5, 0, cm, 2, 0, cm, 2, 0);
     rspState.gDPSetTileSize(5, 0, 0, 0x0C, 0x0C);
-    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x107, 6, 0, 0, 1, 0, 0, 1, 0);
+    rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 8, 0x107, 6, 0, cm, 1, 0, cm, 1, 0);
     rspState.gDPSetTileSize(6, 0, 0, 0x04, 0x04);
 }
 
-function runDL(context: GeoContext, addr: number): void {
+function runDL<N extends GeoNode>(context: GeoContext<N>, addr: number): void {
     const node = peekGeoNode(context);
-    F3DEX.runDL_F3DEX(node.rspState, addr);
+    node.runDL(addr);
 }
 
-function runGeoLayout(context: GeoContext, geoIdx_: number): void {
+function runGeoLayout<N extends GeoNode>(context: GeoContext<N>, geoIdx_: number): void {
     const buffer = context.buffer;
     const view = buffer.createDataView();
 
@@ -359,19 +535,23 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
             }
         } else if (cmd === 0x02) {
             // Bone.
+            const geoOffset = view.getUint8(geoIdx + 0x08);
             const boneIndex = view.getInt8(geoIdx + 0x09);
             const parentNode = peekGeoNode(context);
 
-            pushGeoNode(context, boneIndex, parentNode.boneIndex);
-            runGeoLayout(context, geoIdx + view.getUint8(geoIdx + 0x08));
-            popGeoNode(context);
-        } else if (cmd === 0x03) {
+            // tooie has a bunch of these with zero offset, which seem to do nothing
+            if (geoOffset !== 0) {
+                pushGeoNode(context, boneIndex, parentNode.boneIndex);
+                runGeoLayout(context, geoIdx + geoOffset);
+                popGeoNode(context);
+            }
+        } else if (cmd === 0x03 || cmd === 0x11) {
             // DL.
             const segmentStart = view.getUint16(geoIdx + 0x08);
             const triCount = view.getUint16(geoIdx + 0x0A);
             runDL(context, 0x09000000 + segmentStart * 0x08);
-        } else if (cmd === 0x05) {
-            // Skinned DL (?)
+        } else if (cmd === 0x05 || cmd === 0x12) {
+            // Skinned DL
             // Does something fancy with matrices.
 
             const node = peekGeoNode(context);
@@ -443,9 +623,88 @@ function runGeoLayout(context: GeoContext, geoIdx_: number): void {
             // 1 for clamp, 2 for wrap
             const wrapMode = view.getInt32(geoIdx + 0x08);
             const node = peekGeoNode(context);
-            setMipmapTiles(node.rspState);
-        } else {
-            throw `whoops ${cmd}`;
+            // TODO: Make this less heinous
+            if (node.rspState instanceof F3DEX.RSPState)
+                setMipmapTiles(node.rspState, wrapMode === 1 ? TexCM.CLAMP : TexCM.WRAP);
+            else
+                node.runDL((7 << 24) | (2-wrapMode)*0x60);
+        } else if (cmd === 0x16 || cmd === 0x18) {
+            runDL(context, 0x09000000 + view.getUint16(geoIdx + 0x08) * 0x08);
+            const node = peekGeoNode(context);
+            let idx = 0x0A;
+            while (true) {
+                node.rspState.gSPResetMatrixStackDepth(0);
+                const segmentStart = view.getUint16(geoIdx + idx);
+                if (segmentStart === 0) // 0 after the first indicates the end
+                    break;
+                runDL(context, 0x09000000 + segmentStart * 0x08);
+                idx += 0x02;
+            }
+        }
+        if (cmd > 0x10) {
+            const node = peekGeoNode(context);
+            assert(node instanceof BTGeoNode);
+            switch (cmd) {
+                case 0x11: {
+                    if (!(view.getUint16(geoIdx + 0x0E) & 1))
+                        break;
+                    context.softwareLighting!.push({
+                        startVertex: view.getUint16(geoIdx + 0x0A),
+                        vertexCount: view.getUint16(geoIdx + 0x0C),
+                        bone: node.boneIndex,
+                    });
+                } break;
+                case 0x12:
+                case 0x18: {
+                    if (!(view.getUint16(geoIdx + 0x2E) & 1))
+                        break;
+                    let startVertex = view.getUint16(geoIdx + 0x2C);
+                    let vertexCount = 0;
+
+                    let idx = 0;
+                    while (true) {
+                        if (view.getUint16(geoIdx + idx + 0x08) === 0)
+                            break;
+                        vertexCount = view.getUint16(geoIdx + idx + 0x20);
+                        if (vertexCount > 0)
+                            context.softwareLighting!.push({startVertex, vertexCount, bone: node.boneIndex});
+                        startVertex += vertexCount;
+
+                        vertexCount = view.getUint16(geoIdx + idx + 0x14);
+                        if (vertexCount > 0)
+                            context.softwareLighting!.push({startVertex, vertexCount, bone: node.parentIndex});
+                        startVertex += vertexCount;
+                        idx += 2;
+                    }
+                } break;
+                // only active for the other lighting effects
+                // case 0x15: {
+                //     const count = view.getUint16(geoIdx + 0x08);
+                //     let startVertex = view.getUint16(geoIdx + 0x0A);
+                //     for (let i = 0; i < count; i++) {
+                //         const vertexCount = view.getUint16(geoIdx + 4*i + 0x0E);
+                //         context.softwareLighting!.push({
+                //             startVertex,
+                //             vertexCount,
+                //             bone: view.getInt16(geoIdx + 4*i + 0x0C),
+                //         });
+                //         startVertex += vertexCount;
+                //     }
+                // }
+                case 0x17: {
+                    if (!(view.getUint16(geoIdx + 0x0E) & 1))
+                        break;
+                    let startVertex = view.getUint16(geoIdx + 0x08);
+                    let vertexCount = view.getUint16(geoIdx + 0x0A);
+                    if (vertexCount > 0)
+                        context.softwareLighting!.push({startVertex, vertexCount, bone: node.boneIndex});
+                    startVertex += vertexCount;
+
+                    vertexCount = view.getUint16(geoIdx + 0x0C);
+                    if (vertexCount > 0)
+                        context.softwareLighting!.push({startVertex, vertexCount, bone: node.parentIndex});
+                } break;
+            }
         }
 
         if (nextSiblingOffs === 0)
@@ -461,12 +720,10 @@ export const enum RenderZMode {
     XLU = 2,
 }
 
-export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: boolean): Geometry {
+function commonSetup<N extends GeoNode>(buffer: ArrayBufferSlice, isTooie: boolean, builder: nodeBuilder<N>, zMode: number, textureData?: ArrayBufferSlice): GeoContext<N> {
     const view = buffer.createDataView();
 
     assert(view.getUint32(0x00) == 0x0B);
-    const geoOffs = view.getUint32(0x04);
-    const geoFlags = view.getUint16(0x0A);
 
     const f3dexOffs = view.getUint32(0x0C);
     const f3dexCount = view.getUint32(f3dexOffs + 0x00);
@@ -497,10 +754,66 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
         animationSetup = { translationScale, bones };
     }
 
+    const vertexDataOffs = view.getUint32(0x10);
+    const vertexCount = isTooie ? view.getUint16(vertexDataOffs + 0x16) / 2 : view.getUint16(0x32);
+    const vertexData = buffer.subarray(vertexDataOffs + 0x18, vertexCount * 0x10);
+
+    if (!textureData) {
+        const textureSetupOffs = view.getUint16(0x08);
+        const textureSetupSize = view.getUint32(textureSetupOffs + 0x00);
+        const textureCount = view.getUint8(textureSetupOffs + 0x05);
+        const entrySize = isTooie ? 8 : 16;
+        const textureHeaderSize = 0x08 + (textureCount * entrySize);
+        textureData = buffer.subarray(textureSetupOffs + textureHeaderSize, Math.max(textureSetupSize - textureHeaderSize, 0));
+    }
+
+    const segmentBuffers: ArrayBufferSlice[] = [];
+    segmentBuffers[0x01] = vertexData;
+    segmentBuffers[0x02] = textureData;
+    segmentBuffers[0x09] = f3dexData;
+    segmentBuffers[0x0B] = textureData;
+    segmentBuffers[0x0C] = textureData;
+    segmentBuffers[0x0D] = textureData;
+    segmentBuffers[0x0E] = textureData;
+    segmentBuffers[0x0F] = textureData;
+
+    const sharedOutput = new F3DEX.RSPSharedOutput();
+    sharedOutput.setVertexBufferFromData(vertexData.createDataView());
+    const modelPoints: ModelPoint[] = [];
+
+    const out: GeoContext<N> = {
+        buffer,
+
+        segmentBuffers,
+        sharedOutput,
+        zMode,
+
+        animationSetup,
+        vertexBoneTable: null,
+        modelPoints,
+
+        nodeStack: [],
+        buildSortNodes: zMode === RenderZMode.XLU,
+        nodeBuilder: builder,
+    };
+    return out;
+}
+
+function bkBuilder(bone: number, parent: number, ctx: GeoContext<BKGeoNode>): BKGeoNode {
+    return new BKGeoNode(bone, parent, ctx);
+}
+
+function btBuilder(bone: number, parent: number, ctx: GeoContext<BTGeoNode>): BTGeoNode {
+    return new BTGeoNode(bone, parent, ctx);
+}
+
+export function parseBK(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: boolean): Geometry<BKGeoNode> {
+    const context = commonSetup(buffer, false, bkBuilder, zMode);
+
+    const view = buffer.createDataView();
     const vertexBoneTableOffs = view.getUint32(0x28);
-    let vertexBoneTable: VertexBoneTable | null = null;
     if (vertexBoneTableOffs !== 0) {
-        assert(animationSetup !== null); // not sure what this would mean
+        assert(context.animationSetup !== null); // not sure what this would mean
         const vertexBoneEntries: VertexBoneEntry[] = [];
         const tableCount = view.getUint16(vertexBoneTableOffs);
         let tableOffs = vertexBoneTableOffs + 0x04;
@@ -522,89 +835,219 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
 
             tableOffs += 0x02 * boneVertexCount;
         }
-        vertexBoneTable = { vertexBoneEntries };
+        context.vertexBoneTable = { vertexBoneEntries };
     }
 
-    const vertexDataOffs = view.getUint32(0x10);
-    const vertexCount = view.getUint16(0x32);
-    const vertexWordCount = view.getUint16(vertexDataOffs + 0x16);
-    const vertexData = buffer.subarray(vertexDataOffs + 0x18, vertexCount * 0x10);
-
-    const textureSetupOffs = view.getUint16(0x08);
-    const textureSetupSize = view.getUint32(textureSetupOffs + 0x00);
-    const textureCount = view.getUint8(textureSetupOffs + 0x05);
-    const textureDataOffs = textureSetupOffs + 0x08 + (textureCount * 0x10);
-    const textureData = buffer.slice(textureDataOffs, textureSetupOffs + textureSetupSize);
-
     const renderModeIndex = zMode + (opaque ? 0 : 3);
+    context.segmentBuffers[0x03] = renderModeBuffers[renderModeIndex];
+    return parse<BKGeoNode>(buffer, context);
+}
 
-    const segmentBuffers: ArrayBufferSlice[] = [];
-    segmentBuffers[0x01] = vertexData;
-    segmentBuffers[0x02] = textureData;
-    segmentBuffers[0x03] = renderModeBuffers[renderModeIndex];
-    segmentBuffers[0x09] = f3dexData;
-    segmentBuffers[0x0F] = textureData;
+export function parseBT(buffer: ArrayBufferSlice, zMode: RenderZMode, textureData?: ArrayBufferSlice, trackColor = false): Geometry<BTGeoNode> {
+    const context = commonSetup(buffer, true, btBuilder, zMode, textureData);
 
-    const sharedOutput = new F3DEX.RSPSharedOutput();
-    sharedOutput.setVertexBufferFromData(vertexData.createDataView());
-    const modelPoints: ModelPoint[] = [];
-
-    const geoContext: GeoContext = {
-        buffer,
-
-        segmentBuffers,
-        sharedOutput,
-        modelPoints,
-
-        nodeStack: [],
-        buildSortNodes: zMode === RenderZMode.XLU,
-    };
-
-    const rootNode = pushGeoNode(geoContext, 0);
-    runGeoLayout(geoContext, geoOffs);
-    const rootNode2 = popGeoNode(geoContext);
-    assert(rootNode === rootNode2);
-
-    let textureAnimationSetup: TextureAnimationSetup | null = null;
-    const textureAnimationSetupOffs = view.getInt32(0x2c);
-    if (textureAnimationSetupOffs > 0) {
-        let offs = textureAnimationSetupOffs;
-        const blockSize = view.getUint16(offs + 0x00);
-        const blockCount = view.getUint16(offs + 0x02);
-        const speed = view.getFloat32(offs + 0x04);
-
-        const indexLists: number[][] = [];
-        const baseTextureCount = sharedOutput.textureCache.textures.length;
-        for (let i = 0; i < baseTextureCount; i++) {
-            const tex = sharedOutput.textureCache.textures[i];
-            let addr = tex.dramAddr;
-            let palAddr = tex.dramPalAddr;
-            // seems like all of the animations are just rgba8
-            const animate = tex.dramAddr >>> 24 === 0xf;
-            const animatePalette = tex.dramPalAddr !== 0 && tex.dramPalAddr >>> 24 === 0xf;
-            if (!animate && !animatePalette) {
+    const view = buffer.createDataView();
+    const vertexBoneTableOffs = view.getUint32(0x28);
+    if (vertexBoneTableOffs !== 0) {
+        assert(context.animationSetup !== null); // not sure what this would mean
+        const vertexBoneEntries: VertexBoneEntry[] = [];
+        const hasNorms = view.getUint16(vertexBoneTableOffs + 0x00) !== 0;
+        const tableCount = view.getUint16(vertexBoneTableOffs + 0x02);
+        let tableOffs = vertexBoneTableOffs + 0x04;
+        for (let i = 0; i < tableCount; i++) {
+            const boneID = view.getInt16(tableOffs + 0x00);
+            const posCount = view.getInt16(tableOffs + 0x02);
+            const vertexCount = view.getInt16(tableOffs + 0x04);
+            tableOffs += 0x06;
+            let currPos = tableOffs;
+            tableOffs += 0x06 * posCount;
+            // ignoring normals for now
+            if (hasNorms)
+                tableOffs += 0x04 * vertexCount;
+            let entryStart = tableOffs;
+            if (boneID === -1) {
+                tableOffs += 2 * (vertexCount + posCount);
                 continue;
             }
-
-            // first texture is the one we already have
-            const textureFrames: number[] = [i];
-            for (let j = 1; j < blockCount; j++) {
-                if (animate)
-                    addr += blockSize;
-                if (animatePalette)
-                    palAddr += blockSize;
-                textureFrames.push(sharedOutput.textureCache.translateTileTexture(segmentBuffers, addr, palAddr, tex.tile));
+            while (true) {
+                const idx = view.getInt16(tableOffs);
+                if (idx < 0) {
+                    const vertexIDs = buffer.createTypedArray(Uint16Array, entryStart, (tableOffs - entryStart) / 2, Endianness.BIG_ENDIAN);
+                    const position = vec3.fromValues(view.getInt16(currPos), view.getInt16(currPos + 2), view.getInt16(currPos + 4));
+                    if (vertexIDs.length > 0)
+                        vertexBoneEntries.push({ position, boneID, vertexIDs });
+                    currPos += 0x06;
+                    entryStart = tableOffs + 2;
+                }
+                tableOffs += 2;
+                if (idx === -2)
+                    break;
             }
-
-            indexLists.push(textureFrames);
         }
+        context.vertexBoneTable = { vertexBoneEntries };
+    }
 
-        // while the code supports up to 4 animated texture segments (f,e,d,c),
-        // only one ever gets used
-        const nextBlockSize = view.getUint16(offs + 0x08);
-        assert(nextBlockSize === 0);
+    let mipmapIndex = 0;
+    const geoFlags = view.getUint16(0x0A);
+    if (geoFlags & GeoFlags.CI8Mipmaps)
+        mipmapIndex = 1;
+    else if (geoFlags & GeoFlags.RGBA16Mipmaps)
+        mipmapIndex = 2;
+    context.segmentBuffers[7] = mipmapSegments[mipmapIndex];
 
-        textureAnimationSetup = { blockCount, speed, indexLists };
+    context.softwareLighting = [];
+
+    // build data map for the f3dex2 interpreter
+    const ranges: DataRange[] = [];
+    for (let i = 0; i < context.segmentBuffers.length; i++) {
+        if (context.segmentBuffers[i])
+            ranges.push({ start: i << 24, data: context.segmentBuffers[i] });
+    }
+    context.dataMap = new DataMap(ranges);
+    const geo = parse<BTGeoNode>(buffer, context);
+    if (context.softwareLighting && context.softwareLighting.length > 0) {
+        geo.softwareLighting = context.softwareLighting;
+        const normalOffset = view.getUint32(0x38);
+        geo.normals = [];
+        for (let i = 0; i < context.sharedOutput.vertices.length; i++) {
+            const n = vec3.fromValues(
+                view.getInt8(normalOffset + 4 * i + 0),
+                view.getInt8(normalOffset + 4 * i + 1),
+                view.getInt8(normalOffset + 4 * i + 2),
+            );
+            vec3.normalize(n, n);
+            geo.normals.push(n);
+        }
+    }
+
+    if (trackColor) {
+        const colorMap: number[][] = [];
+        const vertexView = context.segmentBuffers[1].createDataView();
+        for (let offs = 0; offs < vertexView.byteLength; offs += 0x10) {
+            const colorIndex = vertexView.getUint16(offs + 0x06) & 0x1FF;
+            if (colorMap[colorIndex] === undefined)
+                colorMap[colorIndex] = [];
+            colorMap[colorIndex].push(offs >>> 4);
+        }
+        geo.colorMapping = colorMap;
+    }
+
+    const morphDataOffset = view.getUint32(0x40);
+    if (morphDataOffset !== 0) {
+        assert(context.animationSetup !== null);
+        const morphs: Morph[] = [];
+
+        const morphCount = view.getInt16(morphDataOffset + 0x00);
+        let morphOffs = morphDataOffset + 0x04;
+        for (let i = 0; i < morphCount; i++) {
+            const boneIndex = view.getInt16(morphOffs + 0x00);
+            const id = view.getUint8(morphOffs + 0x02);
+            const entryCount = view.getUint8(morphOffs + 0x03);
+            const firstVertex = view.getUint16(morphOffs + 0x04);
+            const affectedCount = view.getUint16(morphOffs + 0x06);
+            const dataLength = view.getUint32(morphOffs + 0x08);
+            const next = morphOffs + dataLength;
+            morphOffs += 0x0C;
+
+            const affected = new Uint16Array(affectedCount);
+            const entries: MorphEntry[] = [];
+
+            // check vertex flags to find which vertices are affected by this morph
+            let found = 0;
+            const vtxView = context.segmentBuffers[1].createDataView();
+            for (let j = firstVertex; found < affectedCount; j++)
+                if (vtxView.getUint16(j * 0x10 + 0x06) & 0x4000)
+                    affected[found++] = j;
+
+            // load extra vertex data for skinning
+            for (let j = 0; j < entryCount; j++) {
+                const vertexCount = view.getUint16(morphOffs + 0x00);
+                morphOffs += 4;
+
+                const vertices: F3DEX.Vertex[] = [];
+                for (let k = 0; k < vertexCount; k++) {
+                    const vtx = new F3DEX.StagingVertex();
+                    vtx.setFromView(view, morphOffs);
+                    vertices.push(vtx);
+                    morphOffs += 0x10;
+                }
+
+                let listStart = morphOffs;
+                const indexLists: Uint16Array[] = [];
+                while (true) {
+                    const idx = view.getInt16(morphOffs);
+                    if (idx < 0) {
+                        const indices = buffer.createTypedArray(Uint16Array, listStart, (morphOffs - listStart) / 2, Endianness.BIG_ENDIAN);
+                        indexLists.push(indices);
+                        listStart = morphOffs + 2;
+                    }
+                    morphOffs += 2;
+                    if (idx === -2)
+                        break;
+                }
+
+                entries.push({ vertices, indexLists });
+                morphOffs = align(morphOffs, 4);
+            }
+            morphs.push({ id, boneIndex, entries, affected });
+            assert(morphOffs === next);
+        }
+        geo.morphs = morphs;
+    }
+
+    return geo;
+}
+
+export function parse<N extends GeoNode>(buffer: ArrayBufferSlice, geoContext: GeoContext<N>): Geometry<N> {
+    const view = buffer.createDataView();
+    const geoOffs = view.getUint32(0x04);
+    const geoFlags = view.getUint16(0x0A);
+
+    const sharedOutput = geoContext.sharedOutput;
+
+    const rootNode = pushGeoNode<N>(geoContext, -1);
+    runGeoLayout<N>(geoContext, geoOffs);
+    const rootNode2 = popGeoNode<N>(geoContext);
+    assert(rootNode === rootNode2);
+
+    let textureAnimationSetup: TextureAnimationSetup[] = [];
+    const textureAnimationSetupOffs = view.getInt32(0x2c);
+    if (textureAnimationSetupOffs > 0) {
+        const baseTextureCount = sharedOutput.textureCache.textures.length;
+        let offs = textureAnimationSetupOffs;
+        for (let seg = 0xF; seg >= 0xB; seg--) {
+            const blockSize = view.getUint16(offs + 0x00);
+            const blockCount = view.getUint16(offs + 0x02);
+            const speed = view.getFloat32(offs + 0x04);
+            offs += 8;
+            if (blockSize === 0)
+                break;
+            const indexLists: number[][] = [];
+            for (let i = 0; i < baseTextureCount; i++) {
+                const tex = sharedOutput.textureCache.textures[i];
+                let addr = tex.dramAddr;
+                let palAddr = tex.dramPalAddr;
+                // seems like all of the animations are just rgba8
+                const animate = tex.dramAddr >>> 24 === seg;
+                const animatePalette = tex.dramPalAddr >>> 24 === seg;
+                if (!animate && !animatePalette) {
+                    continue;
+                }
+
+                // first texture is the one we already have
+                const textureFrames: number[] = [i];
+                for (let j = 1; j < blockCount; j++) {
+                    if (animate)
+                        addr += blockSize;
+                    if (animatePalette)
+                        palAddr += blockSize;
+                    textureFrames.push(sharedOutput.textureCache.translateTileTexture(geoContext.segmentBuffers, addr, palAddr, tex.tile));
+                }
+
+                indexLists.push(textureFrames);
+            }
+            textureAnimationSetup.push({ blockCount, speed, indexLists });
+        }
     }
 
     const effectSetupOffs = view.getUint32(0x24);
@@ -636,11 +1079,11 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
 
             const effect: VertexAnimationEffect = {
                 type, subID, vertexIndices, baseVertexValues,
-                xPhase: 0, yPhase: 0, dy: 0, dtx: 0, dty: 0, colorFactor: 1
+                xPhase: 0, yPhase: 0, dy: 0, dtx: 0, dty: 0, colorFactor: 1,
             };
 
-            if (type === VertexEffectType.RipplingWater) {
-                // rippling water computes its amplitude from the bounding box
+            if (type === VertexEffectType.RipplingWater || type >= VertexEffectType.Wibble) {
+                // compute bounding box to determine amplitude
                 const vertexPos = vec3.create();
                 const bbMin = vec3.fromValues(baseVertexValues[0].x, baseVertexValues[0].y, baseVertexValues[0].z);
                 const bbMax = vec3.clone(bbMin);
@@ -667,7 +1110,10 @@ export function parse(buffer: ArrayBufferSlice, zMode: RenderZMode, opaque: bool
         }
     }
 
-    return { geoFlags, animationSetup, vertexBoneTable, vertexEffects, textureAnimationSetup, rootNode, sharedOutput, modelPoints };
+    return {
+        geoFlags, vertexEffects, textureAnimationSetup, rootNode, sharedOutput,
+        animationSetup: geoContext.animationSetup, vertexBoneTable: geoContext.vertexBoneTable, modelPoints: geoContext.modelPoints
+    };
 }
 
 function initEffectState(effect: VertexAnimationEffect) {
@@ -687,5 +1133,22 @@ function initEffectState(effect: VertexAnimationEffect) {
             duration: 1,
             timer: 0,
         };
+    } else if (effect.type > VertexEffectType.Wibble && effect.type < VertexEffectType.Bounce) {
+        effect.subID += 100 * (effect.type - VertexEffectType.Wibble);
+        effect.type = VertexEffectType.Wibble;
+        if (effect.subID > 400) {
+            const baseline = (effect.bbMax![1] + effect.bbMin![1]) / 2;
+            for (let i = 0; i < effect.baseVertexValues.length; i++) {
+                effect.baseVertexValues[i].y = baseline;
+            }
+        }
+    } else if (effect.type === VertexEffectType.OtherWibble) {
+        effect.type = VertexEffectType.Wibble;
+        effect.subID += 300;
+    } else if (effect.type === VertexEffectType.Twinkle) {
+        effect.yPhase = Math.random() * (1 + .1 * effect.subID);
+        effect.timers = new Float32Array(effect.vertexIndices.length);
+        for (let i = 0; i < effect.baseVertexValues.length; i++)
+            effect.baseVertexValues[i].a = 0;
     }
 }

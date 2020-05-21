@@ -14,6 +14,8 @@ function initHitSensorGroup(sceneObjHolder: SceneObjHolder, sensor: HitSensor): 
 
 export const enum HitSensorType {
     Player = 0x01,
+    Npc    = 0x05,
+    MapObj = 0x46,
 }
 
 export class HitSensor {
@@ -37,6 +39,7 @@ export class HitSensor {
     public invalidateBySystem(): void {
         if (this.sensorValid) {
             arrayRemove(this.group, this);
+            this.sensorValid = false;
         }
     }
 
@@ -56,10 +59,10 @@ export class HitSensorInfo {
         vec3.copy(this.offset, offset);
     }
 
-    public doObjCol(): void {
+    public doObjCol(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < this.sensor.pairwiseSensors.length; i++) {
             if (!isDead(this.sensor.pairwiseSensors[i].actor))
-                this.sensor.actor.attackSensor(this.sensor, this.sensor.pairwiseSensors[i]);
+                this.sensor.actor.attackSensor(sceneObjHolder, this.sensor, this.sensor.pairwiseSensors[i]);
         }
     }
 
@@ -119,9 +122,9 @@ export class HitSensorKeeper {
             this.sensorInfos[i].sensor.pairwiseSensors.length = 0;
     }
 
-    public doObjCol(): void {
+    public doObjCol(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < this.sensorInfos.length; i++)
-            this.sensorInfos[i].doObjCol();
+            this.sensorInfos[i].doObjCol(sceneObjHolder);
     }
 
     public update(): void {

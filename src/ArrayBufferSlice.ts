@@ -12,6 +12,18 @@
 import { assert } from "./util";
 import { getSystemEndianness, Endianness } from "./endian";
 
+// Limited amounts of structural typing.
+declare global {
+    interface ArrayBuffer { [Symbol.species]?: "ArrayBuffer"; }
+    interface Uint8Array { [Symbol.species]?: "Uint8Array"; }
+    interface Uint16Array { [Symbol.species]?: "Uint16Array"; }
+    interface Uint32Array { [Symbol.species]?: "Uint32Array"; }
+    interface Int8Array { [Symbol.species]?: "Int8Array"; }
+    interface Int16Array { [Symbol.species]?: "Int16Array"; }
+    interface Int32Array { [Symbol.species]?: "Int32Array"; }
+    interface Float32Array { [Symbol.species]?: "Float32Array"; }
+}
+
 // Install our dummy ArrayBuffer.prototype.slice to catch any rogue offenders.
 export const ArrayBuffer_slice = ArrayBuffer.prototype.slice;
 ArrayBuffer.prototype.slice = (begin: number, end?: number): ArrayBuffer => {
@@ -35,9 +47,19 @@ export default class ArrayBufferSlice {
         // class as incompatible with the ArrayBuffer interface.
         public readonly arrayBuffer: ArrayBuffer,
         public readonly byteOffset: number = 0,
-        public readonly byteLength: number = arrayBuffer.byteLength
+        public readonly byteLength: number = arrayBuffer.byteLength - byteOffset
     ) {
         assert(byteOffset >= 0 && byteLength >= 0 && (byteOffset + byteLength) <= this.arrayBuffer.byteLength);
+    }
+
+    /**
+     * Detach this ArrayBufferSlice from its underlying contents, in the hope that the underlying
+     * ArrayBuffer storage can be GC'd. Note that this will break any type-safety that the ArrayBufferSlice
+     * has. It is a quick fix for where it might be difficult to break reference cycles elswhere.
+     * Use with caution!
+     */
+    public destroy(): void {
+        (this as any).arrayBuffer = null!;
     }
 
     /**
@@ -47,15 +69,21 @@ export default class ArrayBufferSlice {
      *
      * If you want a sub-section from a begin and *length* pair, see {@see subarray}.
      *
-     * Note that this sub-section is not a copy like {@see ArrayBuffer.prototype.slice}, it is a new
-     * {@see ArrayBufferSlice} object with the same underlying {@see ArrayBuffer}.
+     * Note that by default, this sub-section is not a copy like {@see ArrayBuffer.prototype.slice},
+     * it is a new {@see ArrayBufferSlice} object with the same underlying {@see ArrayBuffer}. However,
+     * {@param copyData} can be passed in which will force a copy of the underlying {@see ArrayBuffer}.
+     * This can be useful if there are plans to modify the underlying data, or if one wishes to save
+     * off a small section of a larger buffer, letting the larger buffer get garbage collected.
      */
-    public slice(begin: number, end: number = 0): ArrayBufferSlice {
+    public slice(begin: number, end: number = 0, copyData: boolean = false): ArrayBufferSlice {
         const absBegin = this.byteOffset + begin;
         const absEnd = this.byteOffset + (end !== 0 ? end : this.byteLength);
         const byteLength = absEnd - absBegin;
         assert(byteLength >= 0 && byteLength <= this.byteLength);
-        return new ArrayBufferSlice(this.arrayBuffer, absBegin, absEnd - absBegin);
+        if (copyData)
+            return new ArrayBufferSlice(ArrayBuffer_slice.call(this.arrayBuffer, absBegin, absEnd));
+        else
+            return new ArrayBufferSlice(this.arrayBuffer, absBegin, byteLength);
     }
 
     /**
@@ -65,15 +93,21 @@ export default class ArrayBufferSlice {
      *
      * If you want a sub-section from a begin and *end* byte offset pair, see {@see slice}.
      *
-     * Note that this sub-section is not a copy like {@see ArrayBuffer.prototype.slice}, it is a new
-     * {@see ArrayBufferSlice} object with the same underlying {@see ArrayBuffer}.
+     * Note that by default, this sub-section is not a copy like {@see ArrayBuffer.prototype.slice},
+     * it is a new {@see ArrayBufferSlice} object with the same underlying {@see ArrayBuffer}. However,
+     * {@param copyData} can be passed in which will force a copy of the underlying {@see ArrayBuffer}.
+     * This can be useful if there are plans to modify the underlying data, or if one wishes to save
+     * off a small section of a larger buffer, letting the larger buffer get garbage collected.
      */
-    public subarray(begin: number, byteLength?: number): ArrayBufferSlice {
+    public subarray(begin: number, byteLength?: number, copyData: boolean = false): ArrayBufferSlice {
         const absBegin = this.byteOffset + begin;
         if (byteLength === undefined)
             byteLength = this.byteLength - begin;
         assert(byteLength >= 0 && byteLength <= this.byteLength);
-        return new ArrayBufferSlice(this.arrayBuffer, absBegin, byteLength);
+        if (copyData)
+            return new ArrayBufferSlice(ArrayBuffer_slice.call(this.arrayBuffer, absBegin, absBegin + byteLength));
+        else
+            return new ArrayBufferSlice(this.arrayBuffer, absBegin, byteLength);
     }
 
     /**

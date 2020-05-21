@@ -3,14 +3,19 @@ import * as RDP from "../Common/N64/RDP";
 import * as MIPS from "./mips";
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { RSPSharedOutput, OtherModeH_Layout, OtherModeH_CycleType } from "../BanjoKazooie/f3dex";
+import { RSPSharedOutput, StagingVertex } from "../BanjoKazooie/f3dex";
 import { vec3, vec4 } from "gl-matrix";
 import { assert, hexzero, assertExists, nArray } from "../util";
 import { TextFilt, ImageFormat, ImageSize } from "../Common/N64/Image";
 import { Endianness } from "../endian";
 import { findNewTextures } from "./animation";
-import {MotionParser, Motion, FollowPath} from "./motion";
-import { Vec3UnitY, Vec3One } from "../MathHelpers";
+import { MotionParser, Motion, Splash, Direction } from "./motion";
+import { Vec3UnitY, Vec3One, bitsAsFloat32 } from "../MathHelpers";
+import {parseParticles, ParticleSystem } from "./particles";
+import { GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { RenderData } from "../BanjoKazooie/render";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { EggProgram } from "./render";
 
 export interface Level {
     sharedCache: RDP.TextureCache;
@@ -19,6 +24,12 @@ export interface Level {
     objectInfo: ObjectDef[];
     collision: CollisionTree | null;
     zeroOne: ZeroOne;
+    projectiles: ProjectileData[];
+    fishTable: FishEntry[];
+    levelParticles: ParticleSystem;
+    pesterParticles: ParticleSystem;
+    eggData?: Float32Array;
+    haunterData?: GFXNode[];
 }
 
 export interface Room {
@@ -47,6 +58,8 @@ export interface ActorDef {
     nodes: GFXNode[];
     sharedOutput: RSPSharedOutput;
     scale: vec3;
+    center: vec3;
+    radius: number;
     flags: number;
     spawn: SpawnType;
     stateGraph: StateGraph;
@@ -59,7 +72,7 @@ export interface StaticDef {
     sharedOutput: RSPSharedOutput;
 }
 
-type ObjectDef = ActorDef | StaticDef;
+export type ObjectDef = ActorDef | StaticDef;
 
 export function isActor(def: ObjectDef): def is ActorDef {
     return !!(def as any).stateGraph;
@@ -69,16 +82,20 @@ export interface LevelArchive {
     Name: number;
     Data: ArrayBufferSlice;
     Code: ArrayBufferSlice;
+    Photo: ArrayBufferSlice;
     StartAddress: number;
     CodeStartAddress: number;
+    PhotoStartAddress: number;
     Header: number;
     Objects: number;
     Collision: number;
+    ParticleData: ArrayBufferSlice;
 };
 
 export interface DataRange {
     data: ArrayBufferSlice;
     start: number;
+    overlay?: number; // 0 or undefined is always loaded
 }
 
 interface ZeroOne {
@@ -87,7 +104,14 @@ interface ZeroOne {
     sharedOutput: RSPSharedOutput;
 }
 
+export interface ProjectileData {
+    nodes: GFXNode[];
+    animations: AnimationData[];
+    sharedOutput: RSPSharedOutput;
+}
+
 export class DataMap {
+    public overlay = 0;
     constructor(public ranges: DataRange[]) { }
 
     public getView(addr: number): DataView {
@@ -95,8 +119,10 @@ export class DataMap {
         return range.data.createDataView(addr - range.start);
     }
 
-    public getRange(addr: number): DataRange {
+    public getRange(addr: number, overlay = 0): DataRange {
         for (let i = 0; i < this.ranges.length; i++) {
+            if (this.ranges[i].overlay && this.overlay && this.ranges[i].overlay !== this.overlay)
+                continue;
             const offset = addr - this.ranges[i].start;
             if (0 <= offset && offset < this.ranges[i].data.byteLength)
                 return this.ranges[i];
@@ -149,12 +175,14 @@ export function parseLevel(archives: LevelArchive[]): Level {
 
     const dataMap = new DataMap([
         { data: level.Data, start: level.StartAddress },
-        { data: level.Code, start: level.CodeStartAddress },
+        { data: level.Code, start: level.CodeStartAddress},
+        { data: level.Photo, start: level.PhotoStartAddress },
     ]);
     for (let i = 1; i < archives.length; i++) {
         dataMap.ranges.push(
-            { data: archives[i].Data, start: archives[i].StartAddress },
+            { data: archives[i].Data, start: archives[i].StartAddress, overlay: i === 1 ? 1 : 0 },
             { data: archives[i].Code, start: archives[i].CodeStartAddress },
+            { data: archives[i].Photo, start: archives[i].PhotoStartAddress, overlay: 2 },
         );
     }
 
@@ -243,6 +271,9 @@ export function parseLevel(archives: LevelArchive[]): Level {
             },
         );
 
+    spawnParser.dataMap = dataMap;
+    const fishTable = parseFishTable(dataMap, level.Name);
+
     const objectInfo: ObjectDef[] = [];
     if (level.Objects !== 0) {
         const objFunctionView = dataMap.getView(level.Objects);
@@ -251,31 +282,16 @@ export function parseLevel(archives: LevelArchive[]): Level {
             const id = objFunctionView.getInt32(offs + 0x00);
             const initFunc = objFunctionView.getUint32(offs + 0x04);
             offs += 0x10;
-
-            const initView = dataMap.getView(initFunc);
-            assert(dataFinder.parseFromView(initView) || initFunc === 0x802EAF18, `bad parse for init function ${hexzero(initFunc, 8)}`);
-            const objectView = dataMap.getView(dataFinder.dataAddress);
-
-            const graphStart = objectView.getUint32(0x00);
-            const materials = objectView.getUint32(0x04);
-            const renderer = objectView.getUint32(0x08);
-            const animationStart = objectView.getUint32(0x0C);
-            const scale = getVec3(objectView, 0x10);
-            vec3.scale(scale, scale, 0.1);
-            // four floats
-            const flags = objectView.getUint16(0x2C);
-            const extraTransforms = objectView.getUint32(0x2E) >>> 8;
-
-            const sharedOutput = new RSPSharedOutput();
-            try {
-                const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
-                const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
-                objectInfo.push({ id, flags, nodes, scale, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
-            } catch (e) {
-                console.warn("failed parse", hexzero(id, 3), e);
-            }
-
+            parseObject(dataMap, id, initFunc, objectInfo);
         }
+    }
+
+    if (level.Name === 16)
+        parseObject(dataMap, 1006, 0x802CBDA0, objectInfo);
+    let haunterData : GFXNode[] | undefined = undefined;
+    if (level.Name === 18) {
+        const sharedOutput = new RSPSharedOutput();
+        haunterData = parseGraph(dataMap, 0x801A5CC0, 0, 0x800A1650, sharedOutput);
     }
 
     const statics = dataMap.deref(level.Header + 0x04);
@@ -310,12 +326,70 @@ export function parseLevel(archives: LevelArchive[]): Level {
     }
 
     const zeroOne = buildZeroOne(dataMap, level.Name);
+    const projectiles = buildProjectiles(dataMap);
 
     let collision: CollisionTree | null = null;
     if (level.Collision !== 0)
         collision = parseCollisionTree(dataMap, level.Collision);
 
-    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne};
+    const levelParticles = parseParticles(archives[0].ParticleData, false);
+    const pesterParticles = parseParticles(archives[1].ParticleData, true);
+
+    const eggData = buildEggData(dataMap, level.Name);
+
+    return { rooms, skybox, sharedCache, objectInfo, collision, zeroOne, projectiles, fishTable, levelParticles, pesterParticles, eggData, haunterData };
+}
+
+const photoDataStart = 0x800ADBEC;
+
+function parseObject(dataMap: DataMap, id: number, initFunc: number, defs: ObjectDef[]): void {
+    const initView = dataMap.getView(initFunc);
+    assert(dataFinder.parseFromView(initView) || initFunc === 0x802EAF18, `bad parse for init function ${hexzero(initFunc, 8)}`);
+    const objectView = dataMap.getView(dataFinder.dataAddress);
+
+    let graphStart = objectView.getUint32(0x00);
+    let materials = objectView.getUint32(0x04);
+    let renderer = objectView.getUint32(0x08);
+
+    let usePhoto = false;
+
+    if (id !== 93 && id !== 101) { // preserve haunter's original data
+        const photoView = dataMap.getView(photoDataStart);
+        let offs = 0;
+        while (offs < photoView.byteLength) {
+            const photoID = photoView.getUint32(offs);
+            if (photoID !== id) {
+                offs += 0x14;
+                continue;
+            }
+            graphStart = photoView.getUint32(offs + 0x08);
+            materials = photoView.getUint32(offs + 0x0C);
+            renderer = photoView.getUint32(offs + 0x10);
+            usePhoto = true;
+            break;
+        }
+    }
+    const animationStart = objectView.getUint32(0x0C);
+    const scale = getVec3(objectView, 0x10);
+    const center = getVec3(objectView, 0x1C);
+    const radius = objectView.getFloat32(0x28) * scale[1];
+    const flags = objectView.getUint16(0x2C);
+    const extraTransforms = objectView.getUint32(0x2E) >>> 8;
+
+    vec3.div(center, center, scale);
+    vec3.scale(scale, scale, 0.1);
+
+    const sharedOutput = new RSPSharedOutput();
+    try {
+        if (usePhoto && id !== 1003) // special case for splash, for some reason
+            dataMap.overlay = 2;
+        const nodes = parseGraph(dataMap, graphStart, materials, renderer, sharedOutput);
+        const stateGraph = parseStateGraph(dataMap, animationStart, nodes);
+        dataMap.overlay = 0;
+        defs.push({ id, flags, nodes, scale, center, radius, sharedOutput, spawn: getSpawnType(dataFinder.spawnFunc), stateGraph, globalPointer: dataFinder.globalRef });
+    } catch (e) {
+        console.warn("failed parse", id, e);
+    }
 }
 
 class ObjectDataFinder extends MIPS.NaiveInterpreter {
@@ -418,7 +492,7 @@ export const enum MaterialFlags {
     Ambient = 0x2000,
 }
 
-function getVec3(view: DataView, offs: number): vec3 {
+export function getVec3(view: DataView, offs: number): vec3 {
     return vec3.fromValues(
         view.getFloat32(offs + 0x00),
         view.getFloat32(offs + 0x04),
@@ -426,7 +500,7 @@ function getVec3(view: DataView, offs: number): vec3 {
     );
 }
 
-function getColor(view: DataView, offs: number): vec4 {
+export function getColor(view: DataView, offs: number): vec4 {
     return vec4.fromValues(
         view.getUint8(offs + 0x00) / 0xFF,
         view.getUint8(offs + 0x01) / 0xFF,
@@ -512,8 +586,11 @@ function selectRenderer(addr: number): graphRenderer {
     switch (addr) {
         case 0x80014F98:
         case 0x800a15D8:
+
         case 0x803594DC: // object
             return runRoomDL;
+        case 0x800A1650: // fog
+        case 0x800A1680:
         case 0x8035942C: // object, fog
         case 0x8035958C: // object
             return runSplitDL;
@@ -531,7 +608,7 @@ function selectRenderer(addr: number): graphRenderer {
     }
 }
 
-function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, renderFunc: number, output: RSPSharedOutput): GFXNode[] {
+function parseGraph(dataMap: DataMap, graphStart: number, materialList: number, renderFunc: number, output: RSPSharedOutput, overlay = 0): GFXNode[] {
     const view = dataMap.getView(graphStart);
     const nodes: GFXNode[] = [];
 
@@ -663,9 +740,9 @@ function initDL(rspState: F3DEX2.RSPState, opaque: boolean): void {
         rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_LIGHTING);
     } else
         rspState.gDPSetOtherModeL(0, 29, 0x005049D8); // translucent surfaces
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT);
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << RDP.OtherModeH_Layout.G_MDSFT_TEXTFILT);
     // initially 2-cycle, though this can change
-    rspState.gDPSetOtherModeH(OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, OtherModeH_CycleType.G_CYC_2CYCLE << OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, RDP.OtherModeH_CycleType.G_CYC_2CYCLE << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     // some objects seem to assume this gets set, might rely on stage rendering first
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
 }
@@ -683,10 +760,10 @@ function runSplitDL(dataMap: DataMap, dlPair: number, states: F3DEX2.RSPState[],
     const firstDL = view.getUint32(0x00);
     const secondDL = view.getUint32(0x04);
     const rspState = states[0];
-    rspState.SP_MatrixIndex = 1;
+    rspState.gSPResetMatrixStackDepth(1);
     if (firstDL !== 0)
         F3DEX2.runDL_F3DEX2(rspState, firstDL, materialDLHandler(materials));
-    rspState.SP_MatrixIndex = 0;
+    rspState.gSPResetMatrixStackDepth(0);
     if (secondDL !== 0)
         F3DEX2.runDL_F3DEX2(rspState, secondDL, materialDLHandler(materials));
     const rspOutput = rspState.finish();
@@ -1080,6 +1157,62 @@ function buildZeroOne(dataMap: DataMap, id: number, ): ZeroOne {
     return {nodes, sharedOutput, animations}
 }
 
+function buildProjectiles(dataMap: DataMap): ProjectileData[] {
+    const out: ProjectileData[] = [];
+    { // apple
+        const sharedOutput = new RSPSharedOutput();
+        const nodes = parseGraph(dataMap, 0x800EAED0, 0x800EAC58, 0x800A15D8, sharedOutput);
+        const animations: AnimationData[] = [{
+            fps: 12,
+            frames: 0,
+            tracks: [null, null],
+            materialTracks: parseMaterialAnimation(dataMap, 0x800EAF60, nodes),
+        }];
+        out.push({ nodes, sharedOutput, animations });
+    }
+    { // pester ball
+        const sharedOutput = new RSPSharedOutput();
+        const nodes = parseGraph(dataMap, 0x800E9138, 0x800E8EB8, 0x800A15D8, sharedOutput);
+        const animations: AnimationData[] = [{
+            fps: 12,
+            frames: 0,
+            tracks: [null, null],
+            materialTracks: parseMaterialAnimation(dataMap, 0x800E91C0, nodes),
+        }];
+        out.push({ nodes, sharedOutput, animations });
+    }
+    { // water splash
+        const sharedOutput = new RSPSharedOutput();
+        const nodes = parseGraph(dataMap, 0x800EB430, 0x800EB510, 0x800A1608, sharedOutput);
+        const tracks: (AnimationTrack | null)[] = [];
+        for (let i = 0; i < nodes.length; i++)
+            tracks.push(parseAnimationTrack(dataMap, dataMap.deref(0x800EAFB0 + 4 * i)));
+        const animations: AnimationData[] = [{
+            fps: 27,
+            frames: 0,
+            tracks,
+            materialTracks: parseMaterialAnimation(dataMap, 0x800EB0C0, nodes),
+        }];
+        out.push({ nodes, sharedOutput, animations });
+    }
+    { // lava splash
+        const sharedOutput = new RSPSharedOutput();
+        const nodes = parseGraph(dataMap, 0x800EDAB0, 0x800EDB90, 0x800A1608, sharedOutput);
+        const tracks: (AnimationTrack | null)[] = [];
+        for (let i = 0; i < nodes.length; i++)
+            tracks.push(parseAnimationTrack(dataMap, dataMap.deref(0x800ED5B0 + 4 * i)));
+        const animations: AnimationData[] = [{
+            fps: 27,
+            frames: 0,
+            tracks,
+            materialTracks: parseMaterialAnimation(dataMap, 0x800ED6B0, nodes),
+        }];
+        out.push({ nodes, sharedOutput, animations });
+    }
+
+    return out;
+}
+
 export interface GroundPlane {
     normal: vec3; // not actually normalized, really the equation coefficients
     offset: number;
@@ -1098,7 +1231,7 @@ export function findGroundHeight(tree: CollisionTree | null, x: number, z: numbe
     return computePlaneHeight(findGroundPlane(tree, x, z), x, z);
 }
 
-export function computePlaneHeight(plane: GroundPlane | null, x: number, z: number): number {
+export function computePlaneHeight(plane: GroundPlane, x: number, z: number): number {
     if (plane === null)
         return 0;
     if (plane.normal[1] === 0)
@@ -1106,13 +1239,22 @@ export function computePlaneHeight(plane: GroundPlane | null, x: number, z: numb
     return -100 * (x * plane.normal[0] / 100 + z * plane.normal[2] / 100 + plane.offset) / plane.normal[1];
 }
 
+// returned if there *is* ground collision data, but nothing is found
+// maybe never happens?
+const nullPlane: GroundPlane = {
+    normal: vec3.create(),
+    type: 0,
+    offset: 0,
+}
+
+// ground result for a level without ground collision data (rainbow cloud)
 const defaultPlane: GroundPlane = {
     normal: vec3.clone(Vec3UnitY),
     type: -1,
     offset: 0,
 };
 
-export function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane | null {
+export function findGroundPlane(tree: CollisionTree | null, x: number, z: number): GroundPlane {
     x/= 100;
     z/= 100;
     if (tree === null)
@@ -1123,13 +1265,13 @@ export function findGroundPlane(tree: CollisionTree | null, x: number, z: number
             if (tree.posPlane)
                 return tree.posPlane;
             if (tree.posSubtree === null)
-                return null;
+                return nullPlane;
             tree = tree.posSubtree;
         } else {
             if (tree.negPlane)
                 return tree.negPlane;
             if (tree.negSubtree === null)
-                return null;
+                return nullPlane;
             tree = tree.negSubtree;
         }
     }
@@ -1197,14 +1339,15 @@ export const enum InteractionType {
     AppleLanded     = 0x0E,
     FindApple       = 0x0F,
     NearPlayer      = 0x10,
-    Collision       = 0x11,
+    CheckCollision  = 0x11, // check for collision outside of normal process
     PhotoTaken      = 0x12, // sent to every object when a photo is taken
     EnterRoom       = 0x13,
     GravelerLanded  = 0x14,
     AppleRemoved    = 0x15,
     TargetRemoved   = 0x16,
-
+    PhotoFocus      = 0x17, // checks if the camera is focused at the same pokemon for a long time
     PhotoSubject    = 0x18,
+    Collided        = 0x1A, // collided with another object, at most once per collision round (in game)
 
     EndMarker       = 0x3A,
     // not used by game
@@ -1217,7 +1360,7 @@ export const enum InteractionType {
     NoTarget,
     HasTarget,
     HasApple,
-    OverWater,
+    OverSurface,
     Unknown,
 }
 
@@ -1231,6 +1374,8 @@ export interface StateEdge {
 interface Signal {
     value: number;
     target: number;
+    condition: InteractionType;
+    conditionParam: number;
 }
 
 export interface StateBlock {
@@ -1240,10 +1385,16 @@ export interface StateBlock {
     force: boolean;
     signals: Signal[];
     wait: WaitParams | null;
+
     flagSet: number;
     flagClear: number;
     ignoreGround?: boolean;
     eatApple?: boolean;
+    forwardSpeed?: number;
+    tangible?: boolean;
+    splash?: Splash;
+    spawn?: SpawnData;
+
     edges: StateEdge[];
 }
 
@@ -1286,10 +1437,14 @@ function parseStateGraph(dataMap: DataMap, addr: number, nodes: GFXNode[]): Stat
 }
 
 export const enum GeneralFuncs {
+    RunProcess  = 0x08C28,
+    EndProcess  = 0x08F2C,
+
     Signal      = 0x0B774,
     SignalAll   = 0x0B830,
     Yield       = 0x0BCA8,
-    EndProcess  = 0x08F2C,
+
+    AnimateNode = 0x11090,
 
     ArcTan      = 0x19ABC,
     Random      = 0x19DB0,
@@ -1307,9 +1462,16 @@ export const enum StateFuncs {
     Random          = 0x35ECAC,
     RunAux          = 0x35ED90,
     EndAux          = 0x35EDC8,
-
     Cleanup         = 0x35FD70,
     EatApple        = 0x36010C,
+
+    SpawnActorHere  = 0x35FE24,
+    SpawnActor      = 0x363C48,
+
+    SplashAt        = 0x35E174,
+    SplashBelow     = 0x35E1D4,
+    DratiniSplash   = 0x35E238,
+    SplashOnImpact  = 0x35E298,
 
     // only in cave
     DanceInteract   = 0x2C1440,
@@ -1317,13 +1479,22 @@ export const enum StateFuncs {
 }
 
 export const enum ObjectField {
-    SomeBool        = 0x10,
+    ObjectFlags     = 0x08,
+    Tangible        = 0x10,
     // on the root node
     TranslationX    = 0x1C,
     TranslationY    = 0x20,
     TranslationZ    = 0x24,
+    // on the root node transform
+    Pitch           = 0x1C,
+    Yaw             = 0x20,
+    Roll            = 0x24,
+    ScaleX          = 0x2C,
+    ScaleY          = 0x30,
+    ScaleZ          = 0x34,
 
-    MiscFlags       = 0x50, // actually on the parent object
+    Transform       = 0x4C,
+    ParentFlags     = 0x50, // actually on the parent object
 
     Apple           = 0x64,
     Target          = 0x70,
@@ -1341,6 +1512,7 @@ export const enum ObjectField {
     Mystery         = 0xC0,
     GroundList      = 0xCC,
 
+    Path            = 0xE8,
     PathParam       = 0xEC,
 }
 
@@ -1351,18 +1523,25 @@ export const enum EndCondition {
     Aux         = 0x08,
     Target      = 0x10,
     Pause       = 0x20, // used to pause motion, not as a condition
+    Misc        = 0x1000,
 
-    Dance       = 0x100000, // special dance-related behavior in cave
-    // actually from a different set of flags
-    Hidden      = 0x200000,
-    PauseAnim   = 0x400000,
+    Dance       = 0x010000, // special dance-related behavior in cave
+    // from flags on the parent object
+    Hidden      = 0x020000,
+    PauseAnim   = 0x040000,
+    // a separate set of object flags
+    Collide     = 0x080000,
+    AllowBump   = 0x200000,
 }
 
 function emptyStateBlock(block: StateBlock): boolean {
-    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 && block.flagSet === 0 && block.ignoreGround === undefined && block.auxAddress === -1 && block.eatApple === undefined;
+    return block.animation === -1 && block.motion === null && block.signals.length === 0 && block.flagClear === 0 && block.auxAddress === -1 && block.spawn === undefined &&
+    block.flagSet === 0 && block.ignoreGround === undefined && block.eatApple === undefined && block.forwardSpeed === undefined && block.tangible === undefined && block.splash === undefined;
 }
 
 const motionParser = new MotionParser();
+
+export const fakeAuxFlag = 0x1000;
 
 const dummyRegs: MIPS.Register[] = nArray(2, () => <MIPS.Register> {value: 0, lastOp: MIPS.Opcode.NOP});
 class StateParser extends MIPS.NaiveInterpreter {
@@ -1451,7 +1630,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                             type = InteractionType.NotFlag;
                         param = branch.comparator.value;
                     } else if (branch.comparator.lastOp === MIPS.Opcode.ADDIU) {
-                        type = InteractionType.Behavior;
+                        type = branch.comparator.value < 10 ? InteractionType.Behavior : InteractionType.OverSurface;
                     } else if (branch.comparator.lastOp === MIPS.Opcode.LW) {
                         // see if we are testing an object member against 0
                         switch (branch.comparator.value) {
@@ -1474,7 +1653,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                         }
                     } else if (branch.comparator.lastOp === MIPS.Opcode.ORI) {
                         // this is admittedly a bit of a stretch, but it's a very rare condition
-                        type = InteractionType.OverWater;
+                        type = InteractionType.OverSurface;
                     } else {
                         this.valid = false;
                         type = InteractionType.Unknown;
@@ -1607,10 +1786,20 @@ class StateParser extends MIPS.NaiveInterpreter {
             case GeneralFuncs.SignalAll: {
                 // only fails because we aren't actually handling conditionals
                 // assert(a0.value === 3, `signal to unknown link ${hexzero(this.state.startAddress, 8)} ${a0.value}`);
-                this.currBlock.signals.push({value: a1.value, target: 0});
+                this.currBlock.signals.push({value: a1.value, target: 0, condition: InteractionType.Basic, conditionParam: 0});
             } break;
             case GeneralFuncs.Signal: {
-                this.currBlock.signals.push({value: a1.value, target: a0.value});
+                const target = (a0.value > 0x80000000 || a0.value === ObjectField.Target) ? a0.value : 0;
+                this.currBlock.signals.push({value: a1.value, target, condition: InteractionType.Basic, conditionParam: 0});
+            } break;
+            case GeneralFuncs.RunProcess: {
+                if (a1.value === 0x80000000 + GeneralFuncs.AnimateNode)
+                    break;
+                spawnParser.parseFromView(this.dataMap.getView(a1.value));
+                if (spawnParser.foundSpawn) {
+                    assert(spawnParser.data.id !== 0 && this.currBlock.spawn === undefined);
+                    this.currBlock.spawn = spawnParser.data;
+                }
             } break;
             case StateFuncs.RunAux: {
                 if (a1.value === 0x802C7F74) { // lapras uses an auxiliary function for its normal state logic
@@ -1634,7 +1823,26 @@ class StateParser extends MIPS.NaiveInterpreter {
             case StateFuncs.EatApple: {
                 this.currBlock.eatApple = true;
             } break;
+            case StateFuncs.SplashAt:
+            case StateFuncs.SplashBelow:
+            case StateFuncs.DratiniSplash: {
+                assert(this.currBlock.splash === undefined)
+                this.currBlock.splash = {
+                    kind: "splash",
+                    onImpact: false,
+                    index: -1,
+                    scale: Vec3One,
+                };
+            } break;
             default:
+                if (func > 0x200000 && func < 0x350200) {
+                    // see if level-specific functions are spawning something
+                    spawnParser.parseFromView(this.dataMap.getView(0x80000000 + func));
+                    if (spawnParser.foundSpawn) {
+                        assert(spawnParser.data.id !== 0 && this.currBlock.spawn === undefined);
+                        this.currBlock.spawn = spawnParser.data;
+                    }
+                }
                 this.valid = false;
         }
         return 0;
@@ -1659,13 +1867,15 @@ class StateParser extends MIPS.NaiveInterpreter {
                         if (type === InteractionType.EndMarker)
                             break;
                         const stateAddr = tView.getUint32(offs + 0x04);
-                        const radius = tView.getFloat32(offs + 0x08);
-                        const auxFunc = tView.getUint32(offs + 0x0C);
+                        const param = tView.getFloat32(offs + 0x08);
+                        let auxFunc = tView.getUint32(offs + 0x0C);
+                        // special handling for poliwag, which sets some animations in aux
+                        if (auxFunc === 0x802DCB0C)
+                            auxFunc = 0x1000 | parseStateSubgraph(this.dataMap, auxFunc, this.allStates, this.animationAddresses);
                         offs += 0x10;
-
                         this.currWait.interactions.push({
                             type,
-                            param: radius,
+                            param,
                             index: stateAddr > 0 ? parseStateSubgraph(this.dataMap, stateAddr, this.allStates, this.animationAddresses) : -1,
                             auxFunc,
                         });
@@ -1695,7 +1905,7 @@ class StateParser extends MIPS.NaiveInterpreter {
                     else
                         console.warn('unknown flag op', value.lastOp, hexzero(value.value, 8))
                 } break;
-                case ObjectField.MiscFlags: {
+                case ObjectField.ParentFlags: {
                     if (value.lastOp === MIPS.Opcode.ORI || value.lastOp === MIPS.Opcode.OR)
                         this.currBlock.flagSet |= value.value * EndCondition.Hidden;
                     else if ((value.lastOp === MIPS.Opcode.ANDI || value.lastOp === MIPS.Opcode.AND) && value.value < 0)
@@ -1703,10 +1913,12 @@ class StateParser extends MIPS.NaiveInterpreter {
                     else if (value.lastOp === MIPS.Opcode.NOP && value.value === 0)
                         this.currBlock.flagClear |= EndCondition.Hidden | EndCondition.PauseAnim;
                 } break;
+                case ObjectField.Tangible: {
+                    this.currBlock.tangible = value.value === 1;
+                } break;
                 case ObjectField.GroundList: {
                     this.currBlock.ignoreGround = value.value !== 0;
                 } break;
-                case ObjectField.SomeBool:
                 case ObjectField.FrameTarget:
                 case ObjectField.Apple:
                 case ObjectField.StoredValues:
@@ -1715,6 +1927,16 @@ class StateParser extends MIPS.NaiveInterpreter {
 
                 default:
                     this.valid = false;
+            }
+        } else if (op === MIPS.Opcode.SWC1 && (target.lastOp === MIPS.Opcode.LW || target.lastOp === MIPS.Opcode.NOP) && offset === ObjectField.ForwardSpeed) {
+            this.currBlock.forwardSpeed = bitsAsFloat32(value.value);
+        } else if (op === MIPS.Opcode.SH && (target.lastOp === MIPS.Opcode.LW || target.lastOp === MIPS.Opcode.NOP)) {
+            if (offset === ObjectField.ObjectFlags) {
+                if (value.lastOp === MIPS.Opcode.ORI || value.lastOp === MIPS.Opcode.OR){
+                    this.currBlock.flagSet |= (value.value >>> 9) * EndCondition.Collide;
+                } else if ((value.lastOp === MIPS.Opcode.ANDI || value.lastOp === MIPS.Opcode.AND) && (value.value >>> 0) > 0x8000){
+                    this.currBlock.flagClear |= (~value.value >>> 9) * EndCondition.Collide;
+                }
             }
         } else {
             if (op === MIPS.Opcode.SW && value.value > 0x80000000 && this.loadAddress === 0)
@@ -1761,7 +1983,7 @@ function parseStateSubgraph(dataMap: DataMap, addr: number, states: State[], ani
     parser.parse();
 
     if (!parser.trivial)
-        fixupState(states[parser.stateIndex]);
+        fixupState(states[parser.stateIndex], animationAddresses);
 
     return parser.stateIndex;
 }
@@ -1769,13 +1991,13 @@ function parseStateSubgraph(dataMap: DataMap, addr: number, states: State[], ani
 export const fakeAux = 0x123456;
 
 // make minor changes to specific states
-function fixupState(state: State): void {
+function fixupState(state: State, animationAddresses: number[]): void {
     switch (state.startAddress) {
         // switch statements
         case 0x802DBBA0: {
             state.blocks[0].edges[0].type = InteractionType.Behavior;
-            state.blocks[0].edges[1].type = InteractionType.Behavior;
             state.blocks[0].edges[0].param = 1;
+            state.blocks[0].edges[1].type = InteractionType.Behavior;
             state.blocks[0].edges[1].param = 2;
             state.blocks[0].edges[2].type = InteractionType.Behavior;
             state.blocks[0].edges[2].param = 3;
@@ -1802,35 +2024,354 @@ function fixupState(state: State): void {
         case 0x802CBD74: {
             state.blocks[0].auxAddress = 0;
         } break;
-        // for some reason follows the ground in an aux process
-        // do it the easy way instead
-        case 0x802CC104: {
-            (state.blocks[1].motion![0] as FollowPath).flags = 0x3;
-            state.blocks[1].auxAddress = 0;
-        } break;
         // add fake handling for lapras photo interaction
         case 0x802C7F74: {
             state.blocks[0].wait!.allowInteraction = true;
-            state.blocks[0].wait!.interactions.push({type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux});
+            state.blocks[0].wait!.interactions.push({ type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux });
             state.blocks[1].wait!.allowInteraction = true;
-            state.blocks[1].wait!.interactions.push({type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux});
+            state.blocks[1].wait!.interactions.push({ type: InteractionType.PhotoSubject, param: 0, index: -1, auxFunc: fakeAux });
         } break;
-        // these use doubles for the increment, easier to just fix by hand
-        case 0x802CB9BC: {
-            assert(state.blocks[0].motion![0].kind === "linear");
-            state.blocks[0].motion![0].velocity[1] = -60;
+        // fix second signal value (conditionals again)
+        case 0x802D97B8: {
+            state.blocks[1].signals[0].condition = InteractionType.Behavior;
+            state.blocks[1].signals[0].conditionParam = 1;
+            state.blocks[1].signals[1].condition = InteractionType.Behavior;
+            state.blocks[1].signals[1].conditionParam = 2;
+            state.blocks[1].signals[1].value = 0x28;
         } break;
-        case 0x802CBC74: {
-            assert(state.blocks[0].motion![0].kind === "linear");
-            state.blocks[0].motion![0].velocity[1] = -15;
+        // restrict weepinbell pool signal
+        case 0x802BF894: {
+            state.blocks[2].signals[0].condition = InteractionType.OverSurface;
         } break;
-        case 0x802DFCD0: {
-            assert(state.blocks[0].motion![0].kind === "linear");
-            state.blocks[0].motion![0].velocity[1] = -150;
+        // ignore victreebel distance check
+        case 0x802BFE34: {
+            assert(state.blocks.length === 3);
+            state.blocks.splice(0, 1);
         } break;
-        case 0x802DFA5C: {
-            assert(state.blocks[3].motion![0].kind === "linear");
-            state.blocks[3].motion![0].velocity[1] = -150;
+        // send signal from motion
+        case 0x802DC4F0:
+        case 0x802DC590: {
+            state.blocks[1].signals.push({
+                target: 0,
+                value: 0x1C,
+                condition: InteractionType.OverSurface,
+                conditionParam: 0,
+            });
+        } break;
+        // set splash scale
+        case 0x802CA020: {
+            assertExists(state.blocks[0].splash).scale = vec3.fromValues(15, 15, 10);
+        } break;
+        // state transition after cleanup - maybe fix this automatically?
+        case 0x802BEB24: {
+            assert(state.doCleanup);
+            state.blocks[0].edges = [];
+        } break;
+        // staryu random animation
+        case 0x802CD0B8: {
+            const index = animationAddresses.indexOf(0x802D3808);
+            assert(index >= 0);
+            // create a duplicate block, and use actor code to randomly pick one
+            state.blocks.push({
+                animation: index,
+                force: false,
+                edges: state.blocks[0].edges, // copy existing edges
+
+                motion: null,
+                auxAddress: -1,
+                wait: null,
+                flagClear: 0,
+                flagSet: 0,
+                signals: [],
+            });
+        } break;
+        // let actor choose signals
+        case 0x802CD4F4: {
+            state.blocks[1].signals[0].condition = InteractionType.Unknown;
+            state.blocks[1].signals[1].condition = InteractionType.Unknown;
+            state.blocks[1].signals[2].condition = InteractionType.Unknown;
+        } break;
+        // mark edge as off by default
+        case 0x802D9074: {
+            state.blocks[0].edges[0].type = InteractionType.Unknown;
+        } break;
+        case 0x802E4434: {
+            state.blocks[1].signals[0].condition = InteractionType.Unknown;
+        } break;
+        // these spawns look like they were copied from elsewhere, without changing the ID
+        // they work in game, but break our simple detection logic
+        case 0x802D9B8C: {
+            assert(state.blocks[0].spawn !== undefined);
+            state.blocks[0].spawn.id = 1002;
+        } break;
+        case 0x802D9C84: {
+            assert(state.blocks[0].spawn !== undefined);
+            state.blocks[0].spawn.id = 5;
+        } break;
+        // carry over timer from previous state
+        case 0x802E7D04: {
+            assert(state.blocks[0].wait !== null);
+            state.blocks[0].wait.duration = 6;
+        } break;
+        // add psyduck initial state
+        case 0x802DB0A0: {
+            const firstEdge = state.blocks[0].edges[0];
+            state.blocks[0].edges.splice(1, 0, {
+                param: 2,
+                type: firstEdge.type,
+                index: firstEdge.index,
+                auxFunc: firstEdge.auxFunc,
+            });
+        } break;
+        // add signal condition
+        case 0x802DB78C: {
+            state.blocks[2].signals[0].condition = InteractionType.Behavior;
+            state.blocks[2].signals[0].conditionParam = 2;
+        } break;
+        case 0x802DC6BC: {
+            state.blocks[1].signals[0].condition = InteractionType.Behavior;
+            state.blocks[1].signals[0].conditionParam = 1;
+            state.blocks[1].signals[1].condition = InteractionType.Behavior;
+            state.blocks[1].signals[1].conditionParam = 2;
+            state.blocks[1].signals[2].condition = InteractionType.Behavior;
+            state.blocks[1].signals[2].conditionParam = 3;
+        } break;
+        // add missing transitions
+        case 0x802DCBB8: {
+            const signal = state.blocks[0].wait!.interactions[0].type;
+            const index = state.blocks[0].wait!.interactions[0].index;
+            const flagSet = state.blocks[0].flagSet;
+            const flagClear = state.blocks[0].flagClear;
+
+            state.blocks[1].wait!.interactions = [{
+                type: signal + 1,
+                index,
+                param: 0,
+                auxFunc: 0,
+            }];
+            state.blocks[1].flagSet = flagSet;
+            state.blocks[1].flagClear = flagClear;
+
+            state.blocks[2].wait!.interactions = [{
+                type: signal + 2,
+                index,
+                param: 0,
+                auxFunc: 0,
+            }];
+            state.blocks[2].flagSet = flagSet;
+            state.blocks[2].flagClear = flagClear;
+        } break;
+        // make tunnel doors make sense for a viewer
+        case 0x802EA79C:
+        case 0x802EA970: {
+            state.blocks[0].animation = 1;
+            state.blocks[1].animation = 2;
+            state.blocks[1].signals = []; // don't send room cleanup signal
+            // open and close on a timer
+            assert(state.blocks[0].wait !== null);
+            state.blocks[0].wait.duration = 10;
+            state.blocks[0].wait.durationRange = 2;
+            state.blocks[0].wait.endCondition = EndCondition.Timer;
+            state.blocks[1].wait = {
+                allowInteraction: false,
+                interactions: [],
+                duration: 6,
+                endCondition: EndCondition.Timer,
+                durationRange: .5,
+                loopTarget: 1,
+            };
+            // loop
+            state.blocks[1].edges.push({ type: InteractionType.Basic, index: 1, param: 0, auxFunc: 0 });
+            state.doCleanup = false;
         } break;
     }
+}
+
+interface SpawnData {
+    id: number;
+    behavior: number;
+    scale: vec3;
+    yaw: Direction;
+}
+
+class SpawnParser extends MIPS.NaiveInterpreter {
+    public dataMap: DataMap;
+    public data: SpawnData;
+    public foundSpawn = false;
+
+    public reset(): void {
+        super.reset();
+        this.data = {
+            id: 0,
+            behavior: -1,
+            scale: vec3.clone(Vec3One),
+            yaw: Direction.Constant,
+        };
+        this.foundSpawn = false;
+    }
+
+    protected handleFunction(func: number, a0: MIPS.Register, a1: MIPS.Register, a2: MIPS.Register, a3: MIPS.Register, stackArgs: MIPS.Register[]): number {
+        if (func === StateFuncs.SpawnActor) {
+            assert(this.data.id !== 0);
+            this.data.behavior = 0;
+            this.foundSpawn = true;
+        } else if (func === StateFuncs.SpawnActorHere) {
+            this.data.id = a1.value;
+            this.foundSpawn = true;
+        }
+        return 0;
+    }
+
+    protected handleStore(op: MIPS.Opcode, value: MIPS.Register, target: MIPS.Register, offset: number): void {
+        if (op === MIPS.Opcode.SW && offset === 0 && target.lastOp === MIPS.Opcode.ADDIU && this.data.id === 0)
+            this.data.id = value.value;
+        if (!this.foundSpawn)
+            return; // can't modify parameters until we have a pointer
+        if (op === MIPS.Opcode.SW && target.lastOp === MIPS.Opcode.LW && offset === ObjectField.Behavior)
+            this.data.behavior = value.value;
+        else if (op === MIPS.Opcode.SWC1 && target.lastOp === MIPS.Opcode.LW && target.value === ObjectField.Transform && value.lastOp === MIPS.Opcode.MULS) {
+            switch (offset) {
+                case ObjectField.ScaleX:
+                case ObjectField.ScaleY:
+                case ObjectField.ScaleZ:
+                    this.data.scale[(offset - ObjectField.ScaleX) >>> 2] = value.value; break;
+            }
+        } else if (op === MIPS.Opcode.SWC1 && target.lastOp === MIPS.Opcode.LW && target.value === ObjectField.Transform && value.lastOp === MIPS.Opcode.ADDS) {
+            switch (offset) {
+                case ObjectField.ScaleX:
+                case ObjectField.ScaleY:
+                case ObjectField.ScaleZ:
+                    this.data.scale[(offset - ObjectField.ScaleX) >>> 2] = 2; break;
+                case ObjectField.Yaw:
+                    this.data.yaw = Direction.Backward; break;
+            }
+        } else if (op === MIPS.Opcode.SWC1 && target.lastOp === MIPS.Opcode.LW && target.value === ObjectField.Transform && value.lastOp === MIPS.Opcode.LWC1) {
+            if (offset === ObjectField.Yaw && value.value === ObjectField.Yaw)
+                this.data.yaw = Direction.Forward;
+        }
+    }
+
+    protected finish(): void {
+        if (!this.foundSpawn)
+            return;
+        if (this.data.id > 0x80000000)
+            this.data.id = this.dataMap.deref(this.data.id);
+        for (let i = 0; i < 3; i++) {
+            let value = this.data.scale[i];
+            if (value === 1)
+                continue;
+            if (value > 0x80000000)
+                value = this.dataMap.deref(value);
+            this.data.scale[i] = bitsAsFloat32(value);
+        }
+    }
+}
+
+const spawnParser = new SpawnParser();
+
+export interface FishEntry {
+    probability: number;
+    id: number;
+}
+
+function parseFishTable(dataMap: DataMap, id: number): FishEntry[] {
+    let fishStart = 0;
+    switch (id) {
+        case 16: fishStart = 0x802CC004; break;
+        case 18: fishStart = 0x802EE120; break;
+        case 20: fishStart = 0x802C6368; break;
+        case 22: fishStart = 0x802E2908; break;
+        case 24: fishStart = 0x802E0EA4; break;
+        case 26: fishStart = 0x802D29B4; break;
+    }
+    if (fishStart === 0)
+        return [];
+    const fish: FishEntry[] = [];
+    const view = dataMap.getView(fishStart);
+    let offs = 0;
+    let total = 0;
+    while (true) {
+        const probability = view.getInt8(offs + 0x00);
+        const spawner = view.getUint32(offs + 0x04);
+        offs += 8;
+
+        if (probability < 0)
+            break; // table ended
+        total += probability;
+        if (spawner === 0) {
+            fish.push({ probability, id: 0 });
+            break;
+        }
+        spawnParser.parseFromView(dataMap.getView(spawner));
+        assert(spawnParser.data.id !== 0);
+        fish.push({ probability, id: spawnParser.data.id });
+    }
+    if (id === 22)
+        total = 100;
+    for (let i = 0; i < fish.length; i++)
+        fish[i].probability /= total;
+    return fish;
+}
+
+function buildEggData(dataMap: DataMap, id: number): Float32Array | undefined {
+    let start = 0;
+    let count = 0;
+    if (id === 18) {
+        start = 0x8018A6F0;
+        count = 0x154;
+    } else if (id === 20) {
+        start = 0x8017C090;
+        count = 0x148;
+    } else
+        return undefined;
+    const data = new Float32Array(count * 6);
+    const view = dataMap.getView(start);
+    const dummyVertex = new StagingVertex();
+    let j = 0;
+    // add all of the end position vertices in order
+    // in principle we would have to be careful about matching the order of the original buffer, filtered through our processing,
+    // but it turns out all the triangles are just drawn in order, since there aren't shared vertices
+    for (let i = 0; i < count; i++) {
+        dummyVertex.setFromView(view, i << 4);
+        data[j++] = dummyVertex.x;
+        data[j++] = dummyVertex.y;
+        data[j++] = dummyVertex.z;
+        data[j++] = dummyVertex.c0;
+        data[j++] = dummyVertex.c1;
+        data[j++] = dummyVertex.c2;
+    }
+    return data;
+}
+
+export function eggInputSetup(device: GfxDevice, data: RenderData, vertices: Float32Array): void {
+    const eggBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertices.buffer);
+    data.dynamicBufferCopies.push(eggBuffer); // put it here to make sure it gets destroyed later
+
+    // clear existing input objects, but leave the buffers
+    device.destroyInputLayout(data.inputLayout);
+    device.destroyInputState(data.inputState);
+
+    const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+        { location: EggProgram.a_Position, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 0 * 0x04, },
+        { location: EggProgram.a_TexCoord, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 4 * 0x04, },
+        { location: EggProgram.a_Color, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 6 * 0x04, },
+        { location: EggProgram.a_EndPosition, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 0 * 0x04, },
+        { location: EggProgram.a_EndColor, bufferIndex: 1, format: GfxFormat.F32_RGB, bufferByteOffset: 3 * 0x04, },
+    ];
+
+    const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+        { byteStride: 10 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+        { byteStride: 6 * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX },
+    ];
+
+    data.inputLayout = device.createInputLayout({
+        indexBufferFormat: GfxFormat.U32_R,
+        vertexBufferDescriptors,
+        vertexAttributeDescriptors,
+    });
+
+    data.inputState = device.createInputState(data.inputLayout, [
+        { buffer: data.vertexBuffer, byteOffset: 0 },
+        { buffer: eggBuffer, byteOffset: 0 }
+    ], { buffer: data.indexBuffer, byteOffset: 0 });
 }

@@ -6,7 +6,7 @@ import { quatFromEulerRadians } from "../MathHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 import { J3DModelInstance, J3DModelData, JointMatrixCalc } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, Joint, sampleAnimationData, LoopMode, JNT1 } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, Joint, sampleAnimationData, LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
@@ -190,8 +190,8 @@ const scratchQuat = quat.create();
 export class XanimeCore implements JointMatrixCalc {
     public curAnmTime = 0.0;
     public interpoleRatio = 0.0;
-    public freeze: boolean = false;
-    public resetJointXform: boolean = false;
+    public isFrozen: boolean = false;
+    public updateFrozenJoints: boolean = false;
     private ank1: ANK1 | null = null;
     private joints: XjointInfo[];
 
@@ -215,12 +215,13 @@ export class XanimeCore implements JointMatrixCalc {
     }
 
     public doFreeze(): void {
-        this.freeze = true;
+        this.isFrozen = true;
+        this.interpoleRatio = 0.0;
     }
 
     public updateFrame(): void {
-        this.resetJointXform = this.freeze;
-        this.freeze = false;
+        this.updateFrozenJoints = this.isFrozen;
+        this.isFrozen = false;
     }
 
     public setBck(track: number, ank1: ANK1): void {
@@ -251,7 +252,7 @@ export class XanimeCore implements JointMatrixCalc {
             vec3.set(anmTrans, translationX, translationY, translationZ);
             quatFromEulerRadians(anmRot, rotationX, rotationY, rotationZ);
 
-            if (this.resetJointXform)
+            if (this.updateFrozenJoints)
                 xj.xformFrozen.copy(xj.xformAnm);
 
             if (this.interpoleRatio < 1.0) {

@@ -4,7 +4,6 @@ import { vec3 } from "gl-matrix";
 import { SceneObjHolder } from "./Main";
 import { assertExists, assert, fallback } from "../util";
 import { clamp, isNearZero, isNearZeroVec3 } from "../MathHelpers";
-import { LiveActor } from "./LiveActor";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine } from "../DebugJunk";
 import { Camera } from "../Camera";
 import { Magenta, Yellow, Cyan } from "../Color";
@@ -310,14 +309,14 @@ export class BezierRail {
     }
 
     public getCurrentCtrlPointIndex(coord: number, direction: RailDirection): number {
-        coord = this.normalizePos(coord, direction === RailDirection.TOWARDS_START ? -1 : 1);
+        coord = this.normalizePos(coord, direction === RailDirection.TowardsStart ? -1 : 1);
 
         if (isNearZero(coord, 0.001))
             return 0;
         if (isNearZero(this.getTotalLength() - coord, 0.001))
-            return this.isClosed ? this.pointRecordCount - 1 : 0;
+            return this.isClosed ? 0 : this.pointRecordCount - 1;
 
-        if (direction === RailDirection.TOWARDS_END) {
+        if (direction === RailDirection.TowardsEnd) {
             for (let i = 0; i < this.railPartCoords.length; i++)
                 if (coord < this.railPartCoords[i])
                     return i;
@@ -402,7 +401,7 @@ export function isConnectedWithRail(actorIter: JMapInfoIter) {
     return fallback(actorIter.getValueNumberNoInit('CommonPath_ID'), 0xFFFF) !== 0xFFFF;
 }
 
-export const enum RailDirection { TOWARDS_END, TOWARDS_START }
+export const enum RailDirection { TowardsEnd, TowardsStart }
 
 const scratchVec3c = vec3.create();
 
@@ -413,11 +412,11 @@ export class RailRider {
     public currentPointId: number = -1;
     public coord: number = 0;
     public speed: number = 0;
-    public direction: RailDirection = RailDirection.TOWARDS_END;
+    public direction: RailDirection = RailDirection.TowardsEnd;
     public startPos = vec3.create();
     public endPos = vec3.create();
 
-    constructor(sceneObjHolder: SceneObjHolder, private actor: LiveActor, actorIter: JMapInfoIter) {
+    constructor(sceneObjHolder: SceneObjHolder, actorIter: JMapInfoIter) {
         assert(isConnectedWithRail(actorIter));
         this.bezierRail = getBezierRailForActor(sceneObjHolder, actorIter);
 
@@ -438,7 +437,7 @@ export class RailRider {
             this.bezierRail.calcDirection(this.currentDir, this.bezierRail.getTotalLength() - 0.1);
         }
 
-        if (this.direction === RailDirection.TOWARDS_START)
+        if (this.direction === RailDirection.TowardsStart)
             vec3.negate(this.currentDir, this.currentDir);
 
         this.currentPointId = this.bezierRail.getCurrentCtrlPointIndex(this.coord, this.direction);
@@ -480,7 +479,7 @@ export class RailRider {
     }
 
     public move(): void {
-        if (this.direction === RailDirection.TOWARDS_END)
+        if (this.direction === RailDirection.TowardsEnd)
             this.coord += this.speed;
         else
             this.coord -= this.speed;
@@ -490,7 +489,7 @@ export class RailRider {
     }
 
     public reverse(): void {
-        this.direction = this.direction === RailDirection.TOWARDS_END ? RailDirection.TOWARDS_START : RailDirection.TOWARDS_END;
+        this.direction = this.direction === RailDirection.TowardsEnd ? RailDirection.TowardsStart : RailDirection.TowardsEnd;
         this.syncPosDir();
     }
 
@@ -519,7 +518,7 @@ export class RailRider {
         if (this.bezierRail.isClosed)
             return false;
 
-        const dist = (this.direction === RailDirection.TOWARDS_END) ? this.getTotalLength() - this.coord : this.coord;
+        const dist = (this.direction === RailDirection.TowardsEnd) ? this.getTotalLength() - this.coord : this.coord;
         return isNearZero(dist, 0.001);
     }
 
@@ -544,10 +543,19 @@ export class RailRider {
         return this.bezierRail.getRailPosCoord(this.currentPointId);
     }
 
+    public getPointCoord(i: number): number {
+        return this.bezierRail.getRailPosCoord(i);
+    }
+
     public getNextPointNo(): number {
-        const delta = (this.direction === RailDirection.TOWARDS_END) ? 1 : -1;
+        const delta = (this.direction === RailDirection.TowardsEnd) ? 1 : -1;
         const numParts = this.bezierRail.railParts.length;
-        return (this.currentPointId + delta + numParts) % numParts;
+        const nextPointNo = this.currentPointId + delta;
+        if (this.bezierRail.isClosed) {
+            return (nextPointNo + numParts) % numParts;
+        } else {
+            return clamp(nextPointNo, 0, numParts - 1);
+        }
     }
 
     public getNextPointCoord(): number {
@@ -580,6 +588,20 @@ export class RailRider {
             const param = part.getParam(this.bezierRail.getCoordForRailPartIdx(partIdx, coord));
             drawWorldSpaceText(ctx, camera, scratchVec3a, param.toFixed(2), Yellow);
             */
+        }
+    }
+
+    public debugDrawRailLine(camera: Camera, nPoints: number = 100): void {
+        const totalLength = this.getTotalLength();
+        const speed = totalLength / nPoints;
+        const ctx = getDebugOverlayCanvas2D();
+
+        for (let i = 0; i < nPoints; i++) {
+            const coord0 = this.bezierRail.normalizePos((i - 1) * speed, 1);
+            const coord1 = this.bezierRail.normalizePos(i * speed, 1);
+            this.bezierRail.calcPos(scratchVec3b, coord0);
+            this.bezierRail.calcPos(scratchVec3c, coord1);
+            drawWorldSpaceLine(ctx, camera, scratchVec3b, scratchVec3c, Magenta, 1);
         }
     }
 }

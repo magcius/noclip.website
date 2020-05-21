@@ -1,103 +1,17 @@
 import * as Viewer from '../viewer';
-import { DataFetcher } from '../DataFetcher';
-import ArrayBufferSlice from '../ArrayBufferSlice';
 
-import { SFAMapSceneDesc, AncientMapSceneDesc } from './maps';
-import { BlockFetcher } from './blocks';
-import { loadRes, getSubdir } from './resource';
+import { SFAMapSceneDesc, SwapcircleSceneDesc, AncientMapSceneDesc } from './maps';
 import { SFAWorldSceneDesc } from './world';
+import { ModelVersion } from './models';
+import { SFAModelExhibitSceneDesc } from './modelexhibit';
 
 export interface GameInfo {
     pathBase: string;
     subdirs: {[key: number]: string};
-    makeBlockFetcher: (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => Promise<BlockFetcher>;
-}
-
-class SFABlockFetcher implements BlockFetcher {
-    public blocksTab: DataView;
-    public blocksBin: ArrayBufferSlice;
-    public trkblkTab: DataView;
-    public locationNum: number;
-
-    constructor(private isDeletedMap: boolean) {
-    }
-
-    public async create(locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) {
-        this.locationNum = locationNum;
-        const pathBase = gameInfo.pathBase;
-        this.trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
-        const subdir = getSubdir(locationNum, gameInfo);
-        if (this.isDeletedMap) {
-            console.log(`isDeletedMap; subdir ${subdir}`);
-            // this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`)).createDataView();
-            // this.blocksBin = await dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.bin`);
-            const [blocksTab, blocksBin] = await Promise.all([
-                dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.tab`),
-                dataFetcher.fetchData(`${pathBase}/mod${getModNumber(locationNum)}.bin`),
-            ]);
-            this.blocksTab = blocksTab.createDataView();
-            this.blocksBin = blocksBin;
-        } else {
-            const [blocksTab, blocksBin] = await Promise.all([
-                dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.tab`),
-                dataFetcher.fetchData(`${pathBase}/${subdir}/mod${getModNumber(locationNum)}.zlb.bin`),
-            ]);
-            this.blocksTab = blocksTab.createDataView();
-            this.blocksBin = blocksBin;
-        }
-    }
-
-    public getBlock(mod: number, sub: number): ArrayBufferSlice | null {
-        if (this.isDeletedMap) {
-            // Different handling for blocks from the demo version's deleted maps
-            // Find a workable block number...
-            let firstBlockNum = 0;
-            for (let i = 0; i < this.blocksTab.byteLength/4; i++) {
-                if (this.blocksTab.getUint32(i * 4) == 0x10000000)
-                    break;
-                firstBlockNum++;
-            }
-
-            const num = firstBlockNum + sub;
-            if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
-                return null;
-            }
-            const tabValue = this.blocksTab.getUint32(num * 4);
-            if (!(tabValue & 0x10000000)) {
-                return null;
-            }
-            const blockOffset = tabValue & 0xFFFFFF;
-            console.log(`Loading deleted block from offset 0x${blockOffset.toString(16)} (location num ${this.locationNum})`);
-            const blocksBinPart = this.blocksBin.slice(blockOffset);
-            return blocksBinPart;
-        }
-
-        if (mod < 0 || mod * 2 >= this.trkblkTab.byteLength) {
-            return null;
-        }
-        const trkblk = this.trkblkTab.getUint16(mod * 2);
-        const blockNum = trkblk + sub;
-        if (blockNum < 0 || blockNum * 4 >= this.blocksTab.byteLength) {
-            return null;
-        }
-        const tabValue = this.blocksTab.getUint32(blockNum * 4);
-        if (!(tabValue & 0x10000000)) {
-            return null;
-        }
-        const blockOffset = tabValue & 0xFFFFFF;
-        const blocksBinPart = this.blocksBin.slice(blockOffset);
-        const uncomp = loadRes(blocksBinPart);
-        return uncomp;
-    }
 }
 
 export const SFA_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventures',
-    makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
-        const result = new SFABlockFetcher(false);
-        await result.create(locationNum, dataFetcher, gameInfo);
-        return result;
-    },
     subdirs: {
         0: 'animtest',
         1: 'animtest',
@@ -173,96 +87,10 @@ export const SFA_GAME_INFO: GameInfo = {
         71: 'linkj',
         72: 'linki',
     },
-}
-
-// Maps mod numbers to block numbers. Values are hand-crafted. 
-const ANCIENT_TRKBLK: {[key: number]: number} = {
-    1: 0x16, // mod1.0..12
-    2: 0x23, // mod2.0..21
-    3: 0x39, // mod3.0..29
-    4: 0x57, // mod4.0..54
-    5: 0x0, // mod5.0..21
-    6: 0x8e, // mod6.0..21
-    7: 0xa4, // mod7.0..21
-    8: 0xba, // mod8.0..21
-    9: 0xd0, // mod9.0..21
-    10: 0xe6, // mod10.0..21
-    11: 0xfc, // mod11.0..22
-    12: 0x113, // mod12.0..21
-    13: 0x129, // mod13.0..25
-    14: 0x143, // mod14.0..21
-    15: 0x159, // mod15.0..38
-    16: 0x180, // mod16.0..63
-    17: 0x1c0, // mod17.0..4
-    18: 0x1c5, // mod18.0..21
-    19: 0x1db, // mod19.0..34
-    20: 0x1fe, // mod20.0..21
-    21: 0x214, // mod21.0..21
-    22: 0x22a, // mod22.0..21
-    23: 0x240, // mod23.0..21
-    24: 0x256, // mod24.0..21
-    25: 0x26c, // mod25.0..21
-    26: 0x282, // mod26.0..21
-    27: 0x298, // mod27.0..43
-    28: 0x2c4, // mod28.0..21
-    29: 0x2da, // mod29.0..21
-    30: 0x2f0, // mod30.0..21
-    31: 0x306, // mod31.0..13
-    32: 0x314, // mod32.0..16
-    33: 0x325, // mod33.0..15
-    34: 0x335, // mod34.0..21
-    35: 0x34b, // mod35.0..23
-    36: 0x363, // mod36.0..4
-    37: 0x368, // mod37.0..21
-    38: 0x37e, // mod38.0..21
-    39: 0x394, // mod39.0..21
-    40: 0x3aa, // mod40.0..21
-    41: 0x3c0, // mod41.0..21
-    42: 0x3d6, // mod42.0..21
-    43: 0x3ec, // mod43.0..21
-    44: 0x402, // mod44.0..21
-    45: 0x418, // mod45.0..21
-    46: 0x42e, // mod46.0
-    47: 0x42f, // mod47.0..21
-    48: 0x445, // mod48.0..21
-    49: 0x45b, // mod49.0..21
-    50: 0x471, // mod50.0..21
-    51: 0x487, // mod51.0..23
-    52: 0x49f, // mod52.0..21
-    53: 0x4b5, // mod53.0..21
-    54: 0x4cb, // mod54.0..15
-    55: 0x4db, // mod55.0..21
 };
 
-class AncientBlockFetcher implements BlockFetcher {
-    blocksTab: DataView;
-    blocksBin: ArrayBufferSlice;
-
-    public async create(dataFetcher: DataFetcher, gameInfo: GameInfo) {
-        const pathBase = gameInfo.pathBase;
-        this.blocksTab = (await dataFetcher.fetchData(`${pathBase}/BLOCKS.tab`)).createDataView();
-        this.blocksBin = await dataFetcher.fetchData(`${pathBase}/BLOCKS.bin`);
-    }
-
-    public getBlock(mod: number, sub: number): ArrayBufferSlice | null {
-        const num = ANCIENT_TRKBLK[mod] + sub;
-        if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
-            return null;
-        }
-        const blockOffset = this.blocksTab.getUint32(num * 4);
-        console.log(`Loading block ${num} from BLOCKS.bin offset 0x${blockOffset.toString(16)}`);
-        const blocksBinPart = this.blocksBin.slice(blockOffset);
-        return blocksBinPart;
-    }
-}
-
-const SFADEMO_GAME_INFO: GameInfo = {
+export const SFADEMO_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventuresDemo',
-    makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
-        const result = new SFABlockFetcher(true); // Change to true if you want to see earlier prototype blocks!
-        await result.create(locationNum, dataFetcher, gameInfo);
-        return result;
-    },
     subdirs: {
         0: 'animtest',
         1: 'animtest',
@@ -337,69 +165,12 @@ const SFADEMO_GAME_INFO: GameInfo = {
         71: 'linkj',
         72: 'linki',
     }
-}
+};
 
 const ANCIENT_DP_GAME_INFO: GameInfo = {
     pathBase: 'StarFoxAdventuresDemo',
-    makeBlockFetcher: async (locationNum: number, dataFetcher: DataFetcher, gameInfo: GameInfo) => {
-        const result = new AncientBlockFetcher();
-        await result.create(dataFetcher, gameInfo);
-        return result;
-    },
     subdirs: [], // N/A
-}
-
-function getModNumber(locationNum: number): number {
-    if (locationNum < 5) // This is strange, but it matches the decompilation.
-        return locationNum
-    else
-        return locationNum + 1
-}
-
-class BlockExhibitFetcher implements BlockFetcher {
-    blocksTab: DataView;
-    blocksBin: ArrayBufferSlice;
-    public blockOffsets: number[] = [];
-
-    constructor(public useCompression: boolean) {
-    }
-
-    public async create(dataFetcher: DataFetcher, directory: string, blocksTabName: string, blocksBinName: string) {
-        this.blocksTab = (await dataFetcher.fetchData(`${directory}/${blocksTabName}`)).createDataView();
-        this.blocksBin = await dataFetcher.fetchData(`${directory}/${blocksBinName}`);
-        let offs = 0;
-        while (offs < this.blocksTab.byteLength) {
-            const tabValue = this.blocksTab.getUint32(offs);
-            if (tabValue == 0xFFFFFFFF) {
-                break;
-            }
-            if (this.useCompression) {
-                if ((tabValue >> 24) == 0x10) {
-                    this.blockOffsets.push(tabValue & 0xFFFFFF);
-                }
-            } else {
-                this.blockOffsets.push(tabValue);
-            }
-            offs += 4;
-        }
-        console.log(`Loaded ${this.blockOffsets.length} blocks`)
-    }
-
-    public getBlock(num: number): ArrayBufferSlice | null {
-        if (num < 0 || num >= this.blockOffsets.length) {
-            return null;
-        }
-        const blockOffset = this.blockOffsets[num];
-        // console.log(`Loading block from offset 0x${blockOffset.toString(16)}`);
-        const blocksBinPart = this.blocksBin.slice(blockOffset);
-        if (this.useCompression) {
-            const uncomp = loadRes(blocksBinPart);
-            return uncomp;
-        } else {
-            return blocksBinPart;
-        }
-    }
-}
+};
 
 const sceneDescs = [
     'Maps',
@@ -526,11 +297,34 @@ const sceneDescs = [
     // new SFAMapDesc(116, 'loc116', 'Location'), 
     // (end)
 
-    // 'Full Scenes',
-    // new SFAWorldSceneDesc('capeclaw', 'Cape Claw'),
-    // new SFAWorldSceneDesc('hollow', 'ThornTail Hollow'),
-    // new SFAWorldSceneDesc('moonpass', 'Moon Mountain Pass'),
-    // new SFAWorldSceneDesc('warlock', 'Krazoa Palace'),
+    'Full Scenes (HIGHLY EXPERIMENTAL)',
+    // new SFAWorldSceneDesc('arwing', 'arwing', 58, 'Arwing'),
+    // new SFAWorldSceneDesc('arwingtoplanet', 'arwingtoplanet', 58, 'Arwing Flight (Main Planet)'),
+    // new SFAWorldSceneDesc('galleonship', 'shipbattle', null, "General Scales' Galleon"),
+    // new SFAWorldSceneDesc('gamefront', 'gamefront', 63, 'Great Fox'),
+    new SFAWorldSceneDesc('warlock', 'warlock', 11, 'Krazoa Palace'),
+    new SFAWorldSceneDesc('hollow', 'swaphol', 7, 'ThornTail Hollow'),
+    new SFAWorldSceneDesc('swapstore', 'shop', 51, 'ThornTail Shop'),
+    // new SFAWorldSceneDesc('hollow2', 'swapholbot', 8, 'ThornTail Hollow Well'),
+    new SFAWorldSceneDesc('moonpass', 'mmpass', 18, 'Moon Mountain Pass'),
+    new SFAWorldSceneDesc('wastes', 'nwastes', 10, 'SnowHorn Wastes'),
+    new SFAWorldSceneDesc('snowmines', 'darkicemines', 19, 'DarkIce Mines Exterior'),
+    new SFAWorldSceneDesc('snowmines2', 'darkicemines2', 27, 'DarkIce Mines Interior'),
+    // new SFAWorldSceneDesc('newicemount', 'icemountain', 23, 'Ice Mountain'),
+    new SFAWorldSceneDesc('capeclaw', 'capeclaw', 29, 'Cape Claw'),
+    new SFAWorldSceneDesc('swapcircle', 'lightfoot', 14, 'LightFoot Village'),
+    new SFAWorldSceneDesc('fortress', 'crfort', 12, 'CloudRunner Fortress'),
+    // new SFAWorldSceneDesc('clouddungeon', 'clouddungeon', 16, 'CloudRunner Fortress Dungeon'),
+    // new SFAWorldSceneDesc('linki', 'linki', 74, 'CloudRunner Fortress 2?'),
+    // new SFAWorldSceneDesc('animtest', 'animtest', 26, 'Test Map (animtest)'),
+    // new SFAWorldSceneDesc('bossdrakorflatr', 'bossdrakor', 44, 'Boss Drakor'),
+    new SFAWorldSceneDesc('wallcity', 'wallcity', 13, 'Walled City'),
+    new SFAWorldSceneDesc('dragrock', 'dragrock', 2, 'Dragon Rock'),
+
+    // 'Miscellaneous',
+    // new SwapcircleSceneDesc(22, 'betaswapcircle', 'Swap Circle', SFADEMO_GAME_INFO),
+    // new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit', 'swaphol', ModelVersion.Final),
+    // new SFAModelExhibitSceneDesc('betamodelexhibit', 'Beta Model Exhibit', 'swapcircle', ModelVersion.Beta, SFADEMO_GAME_INFO),
 
     // 'Demo Maps',
     // new SFAMapDesc(1, 'demo1', 'Location', SFADEMO_GAME_INFO, false),
@@ -623,9 +417,6 @@ const sceneDescs = [
     // new SFAMapDesc(109, 'demo109', 'Early Map', SFADEMO_GAME_INFO, false),
     // (end)
 
-    // 'Ancient Block Exhibits',
-    // new SFABlockExhibitDesc('', 'BLOCKS', 'Ancient Blocks', SFADEMO_GAME_INFO, false, true, true),
-
     'Ancient Maps',
     new AncientMapSceneDesc('ancient0', "Ancient Unknown Pit Room", ANCIENT_DP_GAME_INFO, 0),
     new AncientMapSceneDesc('ancient1', "Ancient Dragon Rock", ANCIENT_DP_GAME_INFO, 1),
@@ -643,7 +434,6 @@ const sceneDescs = [
     new AncientMapSceneDesc('ancient13', "Ancient DarkIce Mines Boss Room", ANCIENT_DP_GAME_INFO, 13),
     new AncientMapSceneDesc('ancient14', "Ancient CloudRunner Fortress Race", ANCIENT_DP_GAME_INFO, 14),
     new AncientMapSceneDesc('ancient15', "Ancient Boss T-rex", ANCIENT_DP_GAME_INFO, 15),
-    // new SFASandboxDesc('ancientdp', 'Ancient Map Sandbox', ANCIENT_DP_GAME_INFO, true),
 ];
 
 const id = 'sfa';

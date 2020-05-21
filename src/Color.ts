@@ -161,6 +161,7 @@ export function colorFromHSL(dst: Color, hue: number, saturation: number, lightn
 
 export const TransparentBlack = colorNewFromRGBA(0, 0, 0, 0);
 export const OpaqueBlack      = colorNewFromRGBA(0, 0, 0, 1);
+export const TransparentWhite = colorNewFromRGBA(1, 1, 1, 0);
 export const White            = colorNewFromRGBA(1, 1, 1, 1);
 export const Red              = colorNewFromRGBA(1, 0, 0, 1);
 export const Green            = colorNewFromRGBA(0, 1, 0, 1);

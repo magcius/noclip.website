@@ -13,17 +13,18 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import { ub_PacketParams, PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { ub_PacketParams, PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { makeTriangleIndexBuffer, GfxTopology } from '../gfx/helpers/TopologyHelpers';
-import { computeViewMatrix } from '../Camera';
+import { computeViewMatrix, OrbitCameraController } from '../Camera';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SceneContext } from '../SceneBase';
+import { SceneContext, SceneDesc, SceneGroup } from '../SceneBase';
 import { assertExists } from '../util';
+import { VertexAttributeInput } from '../gx/gx_displaylist';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -67,9 +68,8 @@ class PlaneShape {
         this.idxBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, makeTriangleIndexBuffer(GfxTopology.TRISTRIP, 0, 4).buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: GX_Material.getVertexAttribLocation(GX.Attr.PNMTXIDX), format: GfxFormat.U8_R, bufferByteOffset: 0, bufferIndex: 1, },
-            { location: GX_Material.getVertexAttribLocation(GX.Attr.POS), format: GfxFormat.F32_RGB, bufferByteOffset: 4*0, bufferIndex: 0, },
-            { location: GX_Material.getVertexAttribLocation(GX.Attr.TEX0), format: GfxFormat.F32_RG, bufferByteOffset: 4*3, bufferIndex: 0, },
+            { location: GX_Material.getVertexInputLocation(VertexAttributeInput.POS), format: GfxFormat.F32_RGB, bufferByteOffset: 4*0, bufferIndex: 0, },
+            { location: GX_Material.getVertexInputLocation(VertexAttributeInput.TEX01), format: GfxFormat.F32_RG, bufferByteOffset: 4*3, bufferIndex: 0, },
         ];
 
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
@@ -92,16 +92,18 @@ class PlaneShape {
 
     public prepareToRender(renderHelper: GXRenderHelperGfx, packetParams: PacketParams): void {
         const renderInstManager = renderHelper.renderInstManager;
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         // Force this so it renders after the skybox.
         renderInst.filterKey = SMSPass.OPAQUE;
         renderInst.sortKey = makeSortKey((GfxRendererLayer.TRANSLUCENT | GfxRendererLayer.OPAQUE) + 10);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(6);
 
-        let offs = renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        let offs = renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(ub_PacketParams);
         fillPacketParamsData(d, offs, packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice) {
@@ -113,7 +115,7 @@ class PlaneShape {
 }
 
 const packetParams = new PacketParams();
-class SeaPlaneScene {
+class SunshineWaterModel {
     private seaMaterialInstance: MaterialInstance;
     private shapeInstanceState = new ShapeInstanceState();
     private materialInstanceState = new MaterialInstanceState();
@@ -213,24 +215,28 @@ class SeaPlaneScene {
 }
 
 class SeaRenderer extends SunshineRenderer {
-    public seaPlaneScene: SeaPlaneScene;
+    public sunshineWaterModel: SunshineWaterModel;
+
+    public createCameraController() {
+        return new OrbitCameraController(true);
+    }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
-        this.seaPlaneScene.prepareToRender(device, this.renderHelper, viewerInput);
+        this.sunshineWaterModel.prepareToRender(device, this.renderHelper, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         super.prepareToRender(device, hostAccessPass, viewerInput);
     }
 }
 
-export function createScene(context: SceneContext, name: string): Promise<SceneGfx> {
-    const device = context.device;
-    const dataFetcher = context.dataFetcher;
+export class SunshineWaterSceneDesc implements SceneDesc {
+    constructor(public id: string, public name: string = id) {
+    }
 
-    return dataFetcher.fetchData("j3d/sms/dolpic0.szs").then((buffer: ArrayBufferSlice) => {
-        return Yaz0.decompress(buffer);
-    }).then((buffer: ArrayBufferSlice) => {
-        const rarc = RARC.parse(buffer);
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+    
+        const rarc = RARC.parse(await Yaz0.decompress(await dataFetcher.fetchData("j3d/sms/dolpic0.szs")));
 
         const renderer = new SeaRenderer(device, rarc);
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
@@ -240,8 +246,19 @@ export function createScene(context: SceneContext, name: string): Promise<SceneG
         const bmd = BMD.parse(rarc.findFileData('map/map/sea.bmd')!);
         const btk = BTK.parse(rarc.findFileData('map/map/sea.btk')!);
 
-        const seaScene = new SeaPlaneScene(device, cache, bmd, btk, name);
-        renderer.seaPlaneScene = seaScene;
+        const seaScene = new SunshineWaterModel(device, cache, bmd, btk, this.id);
+        renderer.sunshineWaterModel = seaScene;
         return renderer;
-    });
+    }
 }
+
+const id = 'sunshine_water';
+const name = 'Sunshine Water';
+const sceneDescs = [
+    new SunshineWaterSceneDesc('full'),
+    new SunshineWaterSceneDesc('opaque-layer0-nomip-noalpha-noblend'),
+    new SunshineWaterSceneDesc('opaque-both-nomip-noalpha-noblend'),
+    new SunshineWaterSceneDesc('nomip-noalpha'),
+    new SunshineWaterSceneDesc('texture-noalpha'),
+];
+export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };

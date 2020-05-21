@@ -1,15 +1,20 @@
 import * as Viewer from '../viewer';
-import { DataFetcher } from '../DataFetcher';
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
+import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
-import { SFARenderer, ModelInstance } from './render';
-import { BlockCollection, IBlockCollection, ModelHolder } from './blocks';
-import { SFA_GAME_INFO, GameInfo } from './scenes';
+import { SFARenderer } from './render';
+import { BlockRenderer, BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
+import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
+import { MaterialFactory } from './shaders';
+import { SFAAnimationController } from './animation';
+import { DataFetcher } from '../DataFetcher';
+import { SFATextureFetcher } from './textures';
+import { ModelViewState } from './models';
 
 export interface BlockInfo {
     mod: number;
@@ -23,6 +28,8 @@ export interface MapInfo {
     blockTableOffset: number;
     blockCols: number;
     blockRows: number;
+    originX: number;
+    originZ: number;
 }
 
 export function getBlockInfo(mapsBin: DataView, mapInfo: MapInfo, x: number, y: number): BlockInfo | null {
@@ -40,9 +47,15 @@ function getMapInfo(mapsTab: DataView, mapsBin: DataView, locationNum: number): 
     const offs = locationNum * 0x1c;
     const infoOffset = mapsTab.getUint32(offs + 0x0);
     const blockTableOffset = mapsTab.getUint32(offs + 0x4);
+
     const blockCols = mapsBin.getUint16(infoOffset + 0x0);
     const blockRows = mapsBin.getUint16(infoOffset + 0x2);
-    return { mapsBin, locationNum, infoOffset, blockTableOffset, blockCols, blockRows };
+
+    return {
+        mapsBin, locationNum, infoOffset, blockTableOffset, blockCols, blockRows,
+        originX: mapsBin.getInt16(infoOffset + 0x4),
+        originZ: mapsBin.getInt16(infoOffset + 0x6),
+    };
 }
 
 // Block table is addressed by blockTable[y][x].
@@ -63,26 +76,30 @@ function getBlockTable(mapInfo: MapInfo): (BlockInfo | null)[][] {
 interface MapSceneInfo {
     getNumCols(): number;
     getNumRows(): number;
-    getBlockCollection(mod: number): Promise<IBlockCollection>;
     getBlockInfoAt(col: number, row: number): BlockInfo | null;
+    getOrigin(): number[];
 }
 
-export class MapInstance implements ModelHolder {
+interface BlockIter {
+    x: number;
+    z: number;
+    block: BlockRenderer;
+}
+
+export class MapInstance {
     private matrix: mat4 = mat4.create();
-    private models: ModelInstance[] = [];
-    private modelMatrices: mat4[] = [];
     private numRows: number;
     private numCols: number;
-    private blockTable: (BlockInfo | null)[][] = [];
-    private blockCollections: IBlockCollection[] = [];
+    private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
+    private blocks: (BlockRenderer | null)[][] = []; // Addressed by blocks[z][x]
 
-    constructor(private info: MapSceneInfo) {
+    constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher) {
         this.numRows = info.getNumRows();
         this.numCols = info.getNumCols();
 
         for (let y = 0; y < this.numRows; y++) {
             const row: (BlockInfo | null)[] = [];
-            this.blockTable.push(row);
+            this.blockInfoTable.push(row);
             for (let x = 0; x < this.numCols; x++) {
                 const blockInfo = info.getBlockInfoAt(x, y);
                 row.push(blockInfo);
@@ -90,14 +107,8 @@ export class MapInstance implements ModelHolder {
         }
     }
     
-    public clearModels() {
-        this.models = [];
-        this.modelMatrices = [];
-    }
-
-    public addModel(model: ModelInstance, modelMatrix: mat4) {
-        this.models.push(model);
-        this.modelMatrices.push(modelMatrix);
+    public clearBlocks() {
+        this.blocks = [];
     }
 
     // Caution: Matrix will be referenced, not copied.
@@ -105,164 +116,116 @@ export class MapInstance implements ModelHolder {
         this.matrix = matrix;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
-        const modelMtx = mat4.create();
-        for (let i = 0; i < this.models.length; i++) {
-            mat4.mul(modelMtx, this.matrix, this.modelMatrices[i]);
-            this.models[i].prepareToRender(device, renderInstManager, viewerInput, modelMtx);
+    public getNumDrawSteps(): number {
+        return 3;
+    }
+
+    public* iterateBlocks(): Generator<BlockIter, void> {
+        for (let z = 0; z < this.blocks.length; z++) {
+            const row = this.blocks[z];
+            for (let x = 0; x < row.length; x++) {
+                if (row[x] !== null) {
+                    yield { x, z, block: row[x]! };
+                }
+            }
         }
+    }
+
+    public getBlockAtPosition(x: number, z: number): BlockRenderer | null {
+        const bx = Math.floor(x / 640);
+        const bz = Math.floor(z / 640);
+        const block = this.blocks[bz][bx];
+        if (block === undefined) {
+            return null;
+        }
+        return block;
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number, showDevGeometry: boolean) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
+
+        const modelViewState: ModelViewState = {
+            showDevGeometry,
+            ambienceNum: 0,
+        };
+
+        const matrix = mat4.create();
+        for (let b of this.iterateBlocks()) {
+            mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
+            mat4.mul(matrix, this.matrix, matrix);
+            b.block.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep, modelViewState);
+        }
+
         renderInstManager.popTemplateRenderInst();
     }
 
-    public async reloadBlocks() {
-        this.clearModels();
-        for (let y = 0; y < this.numRows; y++) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
+
+        const modelViewState: ModelViewState = {
+            showDevGeometry: true,
+            ambienceNum: 0, // TODO
+        };
+
+        const matrix = mat4.create();
+        for (let b of this.iterateBlocks()) {
+            mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
+            mat4.mul(matrix, this.matrix, matrix);
+            b.block.prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture, modelViewState);
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
+        
+        const modelViewState: ModelViewState = {
+            showDevGeometry: true,
+            ambienceNum: 0,
+        };
+
+        const matrix = mat4.create();
+        for (let b of this.iterateBlocks()) {
+            mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
+            mat4.mul(matrix, this.matrix, matrix);
+            b.block.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture, modelViewState);
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public async reloadBlocks(dataFetcher: DataFetcher) {
+        this.clearBlocks();
+        for (let z = 0; z < this.numRows; z++) {
+            const row: (BlockRenderer | null)[] = [];
+            this.blocks.push(row);
             for (let x = 0; x < this.numCols; x++) {
-                const blockInfo = this.blockTable[y][x];
-                if (blockInfo == null)
+                const blockInfo = this.blockInfoTable[z][x];
+                if (blockInfo == null) {
+                    row.push(null);
                     continue;
+                }
 
                 try {
-                    if (this.blockCollections[blockInfo.mod] == undefined) {
-                        this.blockCollections[blockInfo.mod] = await this.info.getBlockCollection(blockInfo.mod);
-                    }
-                    const blockColl = this.blockCollections[blockInfo.mod];
-
-                    const blockRenderer = blockColl.getBlock(blockInfo.mod, blockInfo.sub);
+                    const blockRenderer = await this.blockFetcher.fetchBlock(blockInfo.mod, blockInfo.sub, dataFetcher);
                     if (blockRenderer) {
-                        const modelMatrix: mat4 = mat4.create();
-                        mat4.fromTranslation(modelMatrix, [640 * x, 0, 640 * y]);
-                        blockRenderer.addToModelHolder(this, modelMatrix);
+                        row.push(blockRenderer);
                     }
                 } catch (e) {
-                    console.warn(`Skipping block at ${x},${y} due to exception:`);
+                    console.warn(`Skipping block at ${x},${z} due to exception:`);
                     console.error(e);
                 }
             }
         }
     }
-
-    public openEditor(): void {
-        const newWin = window.open('about:blank');
-        if (!newWin) {
-            console.warn(`Failed to open editor. Please allow pop-up windows and try again.`);
-            return;
-        }
-        newWin.onload = () => {
-            const inputs: HTMLInputElement[][] = [];
-            for (let y = 0; y < this.numRows; y++) {
-                const row: HTMLInputElement[] = [];
-                inputs.push(row);
-                for (let x = 0; x < this.numCols; x++) {
-                    const blockInfo = this.blockTable[y][x];
-                    const inputEl = newWin.document.createElement('input');
-                    inputEl.setAttribute('type', 'text');
-                    inputEl.setAttribute('value', `${blockInfo != null ? `${blockInfo.mod}.${blockInfo.sub}` : -1}`);
-                    row.push(inputEl);
-                }
-            }
-
-            const tableEl = newWin.document.createElement('table');
-            newWin.document.body.appendChild(tableEl);
-            for (let y = 0; y < this.numRows; y++) {
-                const trEl = newWin.document.createElement('tr');
-                tableEl.appendChild(trEl);
-                for (let x = 0 ; x < this.numCols; x++) {
-                    const tdEl = newWin.document.createElement('td');
-                    trEl.appendChild(tdEl);
-                    tdEl.appendChild(inputs[y][x]);
-                }
-            }
-
-            const jsonEl = newWin.document.createElement('textarea');
-            jsonEl.setAttribute('rows', '60');
-            jsonEl.setAttribute('cols', '100');
-            const updateJson = () => {
-                let topRow = -1
-                let leftCol = -1
-                let rightCol = -1
-                let bottomRow = -1
-                for (let row = 0; row < this.numRows; row++) {
-                    for (let col = 0; col < this.numCols; col++) {
-                        const info = this.blockTable[row][col];
-                        if (info != null) {
-                            if (topRow == -1) {
-                                topRow = row;
-                            }
-                            bottomRow = row;
-                            if (leftCol == -1) {
-                                leftCol = col;
-                            } else if (col < leftCol) {
-                                leftCol = col;
-                            }
-                            if (rightCol == -1) {
-                                rightCol = col;
-                            } else if (col > rightCol) {
-                                rightCol = col;
-                            }
-                        }
-                    }
-                }
-
-                if (topRow == -1) {
-                    // No blocks found
-                    jsonEl.textContent = '[]';
-                    return;
-                }
-
-                let json = '[';
-                for (let row = topRow; row <= bottomRow; row++) {
-                    json += row != topRow ? ',\n' : '\n';
-                    json += JSON.stringify(this.blockTable[row].slice(leftCol, rightCol + 1),
-                        (key, value) => {
-                            if (Array.isArray(value)) {
-                                return value;
-                            } else if (value === null) {
-                                return null;
-                            } else if (typeof value != 'object') {
-                                return null;
-                            } else {
-                                return `${value.mod}.${value.sub}`;
-                            }                
-                        });
-                }
-                json += '\n]';
-                jsonEl.textContent = json;
-            };
-
-            const submitEl = newWin.document.createElement('input');
-            submitEl.setAttribute('type', 'submit');
-            newWin.document.body.appendChild(submitEl);
-            submitEl.onclick = async() => {
-                console.log(`Reloading blocks...`);
-                for (let y = 0; y < this.numRows; y++) {
-                    for (let x = 0; x < this.numCols; x++) {
-                        const newValue = inputs[y][x].value.split('.', 2);
-                        if (newValue.length == 2) {
-                            const newMod = Number.parseInt(newValue[0]);
-                            const newSub = Number.parseInt(newValue[1]);
-                            this.blockTable[y][x] = {mod: newMod, sub: newSub}; // TODO: handle failures
-                        } else {
-                            this.blockTable[y][x] = null;
-                        }
-                    }
-                }
-                updateJson();
-                await this.reloadBlocks();
-            };
-
-            const divEl = newWin.document.createElement('div');
-            newWin.document.body.appendChild(divEl);
-            divEl.appendChild(jsonEl);
-        };
-    }
 }
 
-export async function loadMap(device: GfxDevice, context: SceneContext, mapNum: number, gameInfo: GameInfo, isAncient: boolean = false): Promise<MapSceneInfo> {
+export async function loadMap(gameInfo: GameInfo, dataFetcher: DataFetcher, mapNum: number): Promise<MapSceneInfo> {
     const pathBase = gameInfo.pathBase;
-    const dataFetcher = context.dataFetcher;
     const [mapsTab, mapsBin] = await Promise.all([
         dataFetcher.fetchData(`${pathBase}/MAPS.tab`),
         dataFetcher.fetchData(`${pathBase}/MAPS.bin`),
@@ -273,13 +236,11 @@ export async function loadMap(device: GfxDevice, context: SceneContext, mapNum: 
     return {
         getNumCols() { return mapInfo.blockCols; },
         getNumRows() { return mapInfo.blockRows; },
-        async getBlockCollection(mod: number): Promise<IBlockCollection> {
-            const blockColl = new BlockCollection(mod, isAncient);
-            await blockColl.create(device, context, gameInfo);
-            return blockColl;
-        },
         getBlockInfoAt(col: number, row: number): BlockInfo | null {
             return blockTable[row][col];
+        },
+        getOrigin(): number[] {
+            return [mapInfo.originX, mapInfo.originZ];
         }
     };
 }
@@ -287,13 +248,13 @@ export async function loadMap(device: GfxDevice, context: SceneContext, mapNum: 
 class MapSceneRenderer extends SFARenderer {
     private map: MapInstance;
 
-    constructor(device: GfxDevice) {
-        super(device);
+    constructor(private device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory) {
+        super(device, animController);
     }
 
-    public async create(info: MapSceneInfo): Promise<Viewer.SceneGfx> {
-        this.map = new MapInstance(info);
-        await this.map.reloadBlocks();
+    public async create(info: MapSceneInfo, gameInfo: GameInfo, dataFetcher: DataFetcher, blockFetcher: BlockFetcher): Promise<Viewer.SceneGfx> {
+        this.map = new MapInstance(info, blockFetcher);
+        await this.map.reloadBlocks(dataFetcher);
         return this;
     }
 
@@ -301,27 +262,84 @@ class MapSceneRenderer extends SFARenderer {
     public setMatrix(matrix: mat4) {
         this.map.setMatrix(matrix);
     }
+
+    protected update(viewerInput: Viewer.ViewerRenderInput) {
+        super.update(viewerInput);
+        this.materialFactory.update(this.animController);
+    }
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        this.map.prepareToRender(device, renderInstManager, viewerInput);
+        this.beginPass(viewerInput);
+        this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0, false);
+        this.endPass(device);
+
+        this.beginPass(viewerInput);
+        this.map.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
+        this.map.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
+        this.endPass(device);
+
+        for (let drawStep = 1; drawStep < this.map.getNumDrawSteps(); drawStep++) {
+            this.beginPass(viewerInput);
+            this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep, false);
+            this.endPass(device);
+        }        
     }
 }
 
 export class SFAMapSceneDesc implements Viewer.SceneDesc {
-    constructor(public mapNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO, private isEarly: boolean = false, private isAncient: boolean = false) {
+    constructor(public mapNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for ${this.name} (map #${this.mapNum}) ...`);
-        
-        const mapSceneInfo = await loadMap(device, context, this.mapNum, this.gameInfo, this.isAncient);
 
-        const mapRenderer = new MapSceneRenderer(device);
-        await mapRenderer.create(mapSceneInfo);
+        const animController = new SFAAnimationController();
+        const materialFactory = new MaterialFactory(device);
+        const mapSceneInfo = await loadMap(this.gameInfo, context.dataFetcher, this.mapNum);
+
+        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
+        const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, false);
+        const blockFetcher = await SFABlockFetcher.create(this.gameInfo,context.dataFetcher, device, materialFactory, animController, texFetcher);
+        await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, blockFetcher);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
         // when it is loaded for the first time.
-        // FIXME: The best method is to create default save states for each map.
+        const matrix = mat4.create();
+        mat4.rotateY(matrix, matrix, Math.PI * 3 / 4);
+        mapRenderer.setMatrix(matrix);
+
+        return mapRenderer;
+    }
+}
+
+export class SwapcircleSceneDesc implements Viewer.SceneDesc {
+    constructor(public mapNum: number, public id: string, public name: string, private gameInfo: GameInfo = SFADEMO_GAME_INFO) {
+    }
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        console.log(`Creating scene for ${this.name} (map #${this.mapNum}) ...`);
+
+        const animController = new SFAAnimationController();
+        const materialFactory = new MaterialFactory(device);
+        const mapSceneInfo: MapSceneInfo = {
+            getNumCols() { return 1; },
+            getNumRows() { return 1; },
+            getBlockInfoAt(col: number, row: number): BlockInfo | null {
+                return { mod: 22, sub: 7 };
+            },
+            getOrigin(): number[] {
+                return [0, 0];
+            }
+        };
+
+        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
+        const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, true);
+        await texFetcher.loadSubdir('swapcircle', context.dataFetcher);
+        const blockFetcher = await SwapcircleBlockFetcher.create(this.gameInfo,context.dataFetcher, device, materialFactory, animController, texFetcher);
+        await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, blockFetcher);
+
+        // Rotate camera 135 degrees to more reliably produce a good view of the map
+        // when it is loaded for the first time.
         const matrix = mat4.create();
         mat4.rotateY(matrix, matrix, Math.PI * 3 / 4);
         mapRenderer.setMatrix(matrix);
@@ -335,12 +353,14 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
     }
     
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        console.log(`Creating scene for ${this.name} ...`);
+
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
         const mapsJsonBuffer = await dataFetcher.fetchData(`${pathBase}/AncientMaps.json`);
 
-        console.log(`Creating scene for ${this.name} ...`);
-
+        const animController = new SFAAnimationController();
+        const materialFactory = new MaterialFactory(device);
         const mapsJsonString = new TextDecoder('utf-8').decode(mapsJsonBuffer.arrayBuffer);
         const mapsJson = JSON.parse(mapsJsonString);
         const map = mapsJson[this.mapKey];
@@ -363,22 +383,20 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
             }
         }
 
-        const self = this;
         const mapSceneInfo: MapSceneInfo = {
             getNumCols() { return numCols; },
             getNumRows() { return numRows; },
-            async getBlockCollection(mod: number): Promise<IBlockCollection> {
-                const blockColl = new BlockCollection(mod, true);
-                await blockColl.create(device, context, self.gameInfo);
-                return blockColl;
-            },
             getBlockInfoAt(col: number, row: number): BlockInfo | null {
                 return blockTable[row][col];
+            },
+            getOrigin(): number[] {
+                return [0, 0];
             }
         };
 
-        const mapRenderer = new MapSceneRenderer(device);
-        await mapRenderer.create(mapSceneInfo);
+        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
+        const blockFetcher = await AncientBlockFetcher.create(this.gameInfo, dataFetcher, device, animController);
+        await mapRenderer.create(mapSceneInfo, this.gameInfo, dataFetcher, blockFetcher);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
         // when it is loaded for the first time.
@@ -387,39 +405,6 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
         mat4.rotateY(matrix, matrix, Math.PI * 3 / 4);
         mapRenderer.setMatrix(matrix);
 
-        return mapRenderer;
-    }
-}
-
-export class SFASandboxDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, private gameInfo: GameInfo, private isAncient = false) {
-    }
-    
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        console.log(`Creating scene for ${this.name} ...`);
-
-        const COLS = 20;
-        const ROWS = 20;
-        const blockTable: (BlockInfo | null)[][] = nArray(ROWS, () => nArray(COLS, () => null));
-
-        const self = this;
-        const mapSceneInfo: MapSceneInfo = {
-            getNumCols() { return COLS; },
-            getNumRows() { return ROWS; },
-            async getBlockCollection(mod: number): Promise<IBlockCollection> {
-                const blockColl = new BlockCollection(mod, self.isAncient);
-                await blockColl.create(device, context, self.gameInfo);
-                return blockColl;
-            },
-            getBlockInfoAt(col: number, row: number): BlockInfo | null {
-                return blockTable[row][col];
-            }
-        };
-
-        console.log(`Welcome to the sandbox. Type main.scene.openEditor() to open the map editor.`);
-
-        const mapRenderer = new MapSceneRenderer(device);
-        await mapRenderer.create(mapSceneInfo);
         return mapRenderer;
     }
 }

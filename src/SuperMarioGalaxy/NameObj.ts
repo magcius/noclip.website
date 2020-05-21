@@ -1,5 +1,5 @@
 
-import { DrawBufferHolder, drawBufferInitialTable, LightType } from "./DrawBuffer";
+import { DrawBufferHolder, drawBufferInitialTable, LightType, DrawCameraType } from "./DrawBuffer";
 import { SceneObjHolder } from "./Main";
 import { ViewerRenderInput } from "../viewer";
 import { GfxTexture, GfxDevice } from "../gfx/platform/GfxPlatform";
@@ -8,8 +8,24 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { LiveActor } from "./LiveActor";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { JMapInfoIter } from "./JMapInfo";
+import { mat4 } from "gl-matrix";
+import { assert } from "../util";
+import { ub_SceneParams, ub_SceneParamsBufferSize } from "../gx/gx_render";
 
 export const enum MovementType {
+    ScreenEffect                   = 0x03,
+    AreaObj                        = 0x0D,
+    Model3DFor2D                   = 0x0E,
+    Planet                         = 0x1D,
+    CollisionMapObj                = 0x1E,
+    CollisionEnemy                 = 0x1F,
+    Environment                    = 0x21,
+    MapObj                         = 0x22,
+    MapObjDecoration               = 0x23,
+    Sky                            = 0x24,
+    NPC                            = 0x28,
+    Enemy                          = 0x2A,
+    Item                           = 0x2C,
 }
 
 export const enum CalcAnimType {
@@ -21,10 +37,16 @@ export const enum DrawType {
     OCEAN_BOWL                     = 0x07,
     OCEAN_RING                     = 0x08,
     OCEAN_RING_OUTSIDE             = 0x0A,
+    OCEAN_SPHERE                   = 0x0B,
     ELECTRIC_RAIL_HOLDER           = 0x0E,
     WARP_POD_PATH                  = 0x18,
     WATER_PLANT                    = 0x1B,
     FLAG                           = 0x1D,
+    ASTRO_DOME_SKY_CLEAR           = 0x1E,
+    ASTRO_DOME_ORBIT               = 0x1F,
+    OCEAN_BOWL_BLOOM_DRAWER        = 0x21,
+    BLOOM_MODEL                    = 0x36,
+    BRIGHT_SUN                     = 0x39,
     WATER_CAMERA_FILTER            = 0x3A,
 
     EFFECT_DRAW_3D                 = 0x47,
@@ -57,6 +79,8 @@ export const enum DrawBufferType {
     RIDE                                = 0x11,
     ENEMY                               = 0x12,
     ENEMY_DECORATION                    = 0x13,
+    MARIO_ACTOR                         = 0x14,
+    TORNADO_MARIO                       = 0x15,
     INDIRECT_MAP_OBJ                    = 0x19,
     INDIRECT_MAP_OBJ_STRONG_LIGHT       = 0x1A,
     INDIRECT_NPC                        = 0x1B,
@@ -64,6 +88,9 @@ export const enum DrawBufferType {
     INDIRECT_PLANET                     = 0x1D,
     BLOOM_MODEL                         = 0x1E,
     CRYSTAL                             = 0x20,
+    GLARING_LIGHT                       = 0x22,
+    ASTRO_DOME_SKY                      = 0x23,
+    _3D_MODEL_FOR_2D                    = 0x24,
     MIRROR_MAP_OBJ                      = 0x27,
 }
 
@@ -108,7 +135,7 @@ export class NameObj {
         // Default implementation; nothing.
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
         // Default implementation; nothing.
     }
 
@@ -163,6 +190,8 @@ export class NameObjGroup<T extends NameObj> extends NameObj {
 
     protected registerObj(obj: T): void {
         this.objArray.push(obj);
+
+        assert(this.objArray.length <= this.maxCount);
     }
 }
 
@@ -235,34 +264,63 @@ export class SceneNameObjListExecutor {
             const executeInfo = this.nameObjExecuteInfos[i];
             const nameObj = executeInfo.nameObj;
 
-            if (this.nameObjExecuteInfos[i].drawBufferType !== -1)
-                nameObj.calcViewAndEntry(sceneObjHolder, viewerInput);
+            if (this.nameObjExecuteInfos[i].drawBufferType !== -1) {
+                // HACK: Supply an ortho view matrix for 2D camera types.
+                // Need to find a better place to put this... executeDrawAll is a hack...
+
+                const group = this.drawBufferHolder.groups[this.nameObjExecuteInfos[i].drawBufferType];
+                if (group.tableEntry.DrawCameraType === DrawCameraType.DrawCameraType_3D)
+                    nameObj.calcViewAndEntry(sceneObjHolder, viewerInput.camera, viewerInput.camera.viewMatrix);
+                else if (group.tableEntry.DrawCameraType === DrawCameraType.DrawCameraType_2D)
+                    nameObj.calcViewAndEntry(sceneObjHolder, null, null);
+                else
+                    throw "whoops";
+            }
 
             if (this.nameObjExecuteInfos[i].drawType !== -1) {
                 // If this is an execute draw, then set up our filter key correctly...
                 const template = renderInstManager.pushTemplateRenderInst();
                 template.filterKey = createFilterKeyForDrawType(executeInfo.drawType);
+                // By default, the scene params are 3D.
+                template.setUniformBufferOffset(ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
                 nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
                 renderInstManager.popTemplateRenderInst();
             }
         }
     }
 
-    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
-        this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera, viewport);
+    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, cameraType: DrawCameraType): void {
+        this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera, viewport, cameraType);
     }
 
     public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {
         return this.drawBufferHolder.drawBufferHasVisible(drawBufferType);
     }
+}
 
-    // TODO(jstpierre): Workaround.
-    public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
-        for (let i = 0; i < this.nameObjExecuteInfos.length; i++) {
-            if (this.nameObjExecuteInfos[i].drawBufferType !== -1) {
-                const actor = this.nameObjExecuteInfos[i].nameObj as LiveActor;
-                actor.setIndirectTextureOverride(sceneTexture);
-            }
-        }
+export class NameObjAdaptor extends NameObj {
+    public calcAnimCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
+    public calcViewAndEntryCallback: ((sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null) => void) | null = null;
+    public movementCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
+    public drawCallback: ((sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) => void) | null = null;
+
+    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        if (this.calcAnimCallback !== null)
+            this.calcAnimCallback(sceneObjHolder, viewerInput);
+    }
+
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {
+        if (this.calcViewAndEntryCallback !== null)
+            this.calcViewAndEntryCallback(sceneObjHolder, camera, viewMatrix);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        if (this.movementCallback !== null)
+            this.movementCallback(sceneObjHolder, viewerInput);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.drawCallback !== null)
+            this.drawCallback(sceneObjHolder, renderInstManager, viewerInput);
     }
 }

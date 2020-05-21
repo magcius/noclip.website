@@ -1,7 +1,12 @@
+
+// Common utilities for the N64 Reality Display Processor (RDP).
+
 import { assert, hexzero } from "../../util";
-import { fillVec4 } from "../../gfx/helpers/UniformBufferHelpers";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4 } from "./Image";
+import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, decodeTex_RGBA16, decodeTex_RGBA32, decodeTex_I8, decodeTex_I4, decodeTex_IA16, parseTLUT, TextureLUT, decodeTex_IA4, TexCM, TextFilt } from "./Image";
+import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxMegaStateDescriptor, GfxBlendFactor, GfxBlendMode } from "../../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
+import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 export const enum CCMUX {
     COMBINED    = 0,
@@ -77,7 +82,7 @@ export function decodeCombineParams(w0: number, w1: number): CombineParams {
     const Ad1 = (w1 >>> 0) & 0x07;
 
     // CCMUX.ONE only applies to params a and d, the others are not implemented
-    assert(b0 != CCMUX.ONE && c0 != CCMUX.ONE && b1 != CCMUX.ONE && c1 != CCMUX.ONE);
+    assert(b0 !== CCMUX.ONE && c0 !== CCMUX.ONE && b1 !== CCMUX.ONE && c1 !== CCMUX.ONE);
 
     return {
         c0: { a: a0, b: b0, c: c0, d: d0 },
@@ -87,18 +92,21 @@ export function decodeCombineParams(w0: number, w1: number): CombineParams {
     };
 }
 
-function packParams(params: ColorCombinePass | AlphaCombinePass): number {
-    return (params.a << 12) | (params.b << 8) | (params.c << 4) | params.d;
+function colorCombinePassUsesT0(ccp: ColorCombinePass) {
+    return (ccp.a == CCMUX.TEXEL0) || (ccp.a == CCMUX.TEXEL0_A) ||
+        (ccp.b == CCMUX.TEXEL0) || (ccp.b == CCMUX.TEXEL0_A) ||
+        (ccp.c == CCMUX.TEXEL0) || (ccp.c == CCMUX.TEXEL0_A) ||
+        (ccp.d == CCMUX.TEXEL0) || (ccp.d == CCMUX.TEXEL0_A);
 }
 
-export function fillCombineParams(d: Float32Array, offs: number, params: CombineParams): number {
-    const cc0 = packParams(params.c0);
-    const cc1 = packParams(params.c1);
-    const ac0 = packParams(params.a0);
-    const ac1 = packParams(params.a1);
-    return fillVec4(d, offs, cc0, ac0, cc1, ac1);
+function alphaCombinePassUsesT0(acp: AlphaCombinePass) {
+    return (acp.a == ACMUX.TEXEL0 || acp.b == ACMUX.TEXEL0 || acp.c == ACMUX.TEXEL0 || acp.d == ACMUX.TEXEL0);
 }
 
+export function combineParamsUsesT0(cp: CombineParams) {
+    return colorCombinePassUsesT0(cp.c0) || colorCombinePassUsesT0(cp.c1) ||
+        alphaCombinePassUsesT0(cp.a0) || alphaCombinePassUsesT0(cp.a1);
+}
 
 function colorCombinePassUsesT1(ccp: ColorCombinePass) {
     return (ccp.a == CCMUX.TEXEL1) || (ccp.a == CCMUX.TEXEL1_A) ||
@@ -123,11 +131,13 @@ export class Texture {
 
     constructor(tile: TileState, public dramAddr: number, public dramPalAddr: number, public width: number, public height: number, public pixels: Uint8Array) {
         this.tile.copy(tile);
-        this.name = hexzero(this.dramAddr, 8);
+        const nameAddr = tile.cacheKey !== 0 ? tile.cacheKey : this.dramAddr;
+        this.name = hexzero(nameAddr, 8);
     }
 }
 
 export class TileState {
+    public cacheKey: number = 0;
     public fmt: number = 0;
     public siz: number = 0;
     public line: number = 0;
@@ -155,6 +165,7 @@ export class TileState {
     public copy(o: TileState): void {
         this.set(o.fmt, o.siz, o.line, o.tmem, o.palette, o.cmt, o.maskt, o.shiftt, o.cms, o.masks, o.shifts);
         this.setSize(o.uls, o.ult, o.lrs, o.lrt);
+        this.cacheKey = o.cacheKey;
     }
 }
 
@@ -196,14 +207,23 @@ export function getMaskedCMT(tile: TileState): number {
     return tile.cmt;
 }
 
-export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): Texture {
+export function texturePadWidth(siz: ImageSize, line: number, width: number): number {
+    if (line === 0)
+        return 0;
+    const padTexels = (line << (4 - siz)) - width;
+    if (siz === ImageSize.G_IM_SIZ_4b)
+        return padTexels >>> 1;
+    else
+        return padTexels << (siz - 1);
+}
+
+export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): Texture {
     const view = segmentBuffers[(dramAddr >>> 24)].createDataView();
     if (tile.fmt === ImageFormat.G_IM_FMT_CI)
         translateTLUT(tlutColorTable, segmentBuffers, dramPalAddr, tile.siz);
 
     const tileW = getTileWidth(tile);
     const tileH = getTileHeight(tile);
-
 
     // TODO(jstpierre): Support more tile parameters
     // assert(tile.shifts === 0); // G_TX_NOLOD
@@ -212,14 +232,14 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
     const dst = new Uint8Array(tileW * tileH * 4);
     const srcIdx = dramAddr & 0x00FFFFFF;
     switch ((tile.fmt << 4) | tile.siz) {
-    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line); break;
-    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line); break;
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_IA4(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_IA8(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_IA16(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_I4(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_I8(dst, view, srcIdx, tileW, tileH, tile.line); break;
-    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH, tile.line); break;
+    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_CI4(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_CI   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_CI8(dst, view, srcIdx, tileW, tileH, tlutColorTable, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_IA4(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_IA8(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_IA   << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_IA16(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_4b):  decodeTex_I4(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_I    << 4 | ImageSize.G_IM_SIZ_8b):  decodeTex_I8(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
+    case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_16b): decodeTex_RGBA16(dst, view, srcIdx, tileW, tileH, tile.line, deinterleave); break;
     case (ImageFormat.G_IM_FMT_RGBA << 4 | ImageSize.G_IM_SIZ_32b): decodeTex_RGBA32(dst, view, srcIdx, tileW, tileH); break;
     default:
         throw new Error(`Unknown image format ${tile.fmt} / ${tile.siz}`);
@@ -231,22 +251,221 @@ export function translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAdd
 
 // figure out if two textures with the same underlying data can reuse the same texture object
 // we assume that a texture has only one real size/tiling behavior, so just match on coords
+
+// TODO(jstpierre): Build a better upload tracker
 function textureMatch(a: TileState, b: TileState): boolean {
-    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt;
+    return a.uls === b.uls && a.ult === b.ult && a.lrs === b.lrs && a.lrt === b.lrt && a.cacheKey === b.cacheKey;
 }
 
 export class TextureCache {
     public textures: Texture[] = [];
 
-    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState): number {
+    public translateTileTexture(segmentBuffers: ArrayBufferSlice[], dramAddr: number, dramPalAddr: number, tile: TileState, deinterleave: boolean = false): number {
         const existingIndex = this.textures.findIndex((t) => t.dramAddr === dramAddr && (tile.fmt !== ImageFormat.G_IM_FMT_CI || t.dramPalAddr === dramPalAddr) && textureMatch(t.tile, tile));
         if (existingIndex >= 0) {
             return existingIndex;
         } else {
-            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile);
+            const texture = translateTileTexture(segmentBuffers, dramAddr, dramPalAddr, tile, deinterleave);
             const index = this.textures.length;
             this.textures.push(texture);
             return index;
         }
     }
+}
+
+export function translateToGfxTexture(device: GfxDevice, texture: Texture): GfxTexture {
+    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
+    device.setResourceName(gfxTexture, texture.name);
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
+    device.submitPass(hostAccessPass);
+    return gfxTexture;
+}
+
+export function translateCM(cm: TexCM): GfxWrapMode {
+    switch (cm) {
+    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
+    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
+    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
+    case TexCM.MIRROR_CLAMP:  return GfxWrapMode.MIRROR;
+    }
+}
+
+export function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
+    return cache.createSampler(device, {
+        // if the tile uses clamping, but sets the mask to a size smaller than the actual image size,
+        // it should repeat within the coordinate range, and clamp outside
+        // then ignore clamping here, and handle it in the shader
+        wrapS: translateCM(getMaskedCMS(texture.tile)),
+        wrapT: translateCM(getMaskedCMT(texture.tile)),
+        minFilter: GfxTexFilterMode.POINT,
+        magFilter: GfxTexFilterMode.POINT,
+        mipFilter: GfxMipFilterMode.NO_MIP,
+        minLOD: 0, maxLOD: 0,
+    });
+}
+
+export const enum OtherModeH_Layout {
+    G_MDSFT_BLENDMASK   = 0,
+    G_MDSFT_ALPHADITHER = 4,
+    G_MDSFT_RGBDITHER   = 6,
+    G_MDSFT_COMBKEY     = 8,
+    G_MDSFT_TEXTCONV    = 9,
+    G_MDSFT_TEXTFILT    = 12,
+    G_MDSFT_TEXTLUT     = 14,
+    G_MDSFT_TEXTLOD     = 16,
+    G_MDSFT_TEXTDETAIL  = 17,
+    G_MDSFT_TEXTPERSP   = 19,
+    G_MDSFT_CYCLETYPE   = 20,
+    G_MDSFT_COLORDITHER = 22,
+    G_MDSFT_PIPELINE    = 23,
+}
+
+export const enum OtherModeH_CycleType {
+    G_CYC_1CYCLE = 0x00,
+    G_CYC_2CYCLE = 0x01,
+    G_CYC_COPY   = 0x02,
+    G_CYC_FILL   = 0x03,
+}
+
+export function getCycleTypeFromOtherModeH(modeH: number): OtherModeH_CycleType {
+    return (modeH >>> OtherModeH_Layout.G_MDSFT_CYCLETYPE) & 0x03;
+}
+
+export function getTextFiltFromOtherModeH(modeH: number): TextFilt {
+    return (modeH >>> OtherModeH_Layout.G_MDSFT_TEXTFILT) & 0x03;
+}
+
+export const enum OtherModeL_Layout {
+    // cycle-independent
+    AA_EN         = 3,
+    Z_CMP         = 4,
+    Z_UPD         = 5,
+    IM_RD         = 6,
+    CLR_ON_CVG    = 7,
+    CVG_DST       = 8,
+    ZMODE         = 10,
+    CVG_X_ALPHA   = 12,
+    ALPHA_CVG_SEL = 13,
+    FORCE_BL      = 14,
+    // bit 15 unused, was "TEX_EDGE"
+    // cycle-dependent
+    B_2 = 16,
+    B_1 = 18,
+    M_2 = 20,
+    M_1 = 22,
+    A_2 = 24,
+    A_1 = 26,
+    P_2 = 28,
+    P_1 = 30,
+}
+
+export const enum ZMode {
+    ZMODE_OPA   = 0,
+    ZMODE_INTER = 1,
+    ZMODE_XLU   = 2, // translucent
+    ZMODE_DEC   = 3,
+}
+
+function translateZMode(zmode: ZMode): GfxCompareMode {
+    if (zmode === ZMode.ZMODE_OPA)
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_INTER) // TODO: understand this better
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_XLU)
+        return GfxCompareMode.GREATER;
+    if (zmode === ZMode.ZMODE_DEC)
+        return GfxCompareMode.GEQUAL;
+    throw "Unknown Z mode: " + zmode;
+}
+
+export const enum BlendParam_PM_Color {
+    G_BL_CLR_IN  = 0,
+    G_BL_CLR_MEM = 1,
+    G_BL_CLR_BL  = 2,
+    G_BL_CLR_FOG = 3,
+}
+
+export const enum BlendParam_A {
+    G_BL_A_IN    = 0,
+    G_BL_A_FOG   = 1,
+    G_BL_A_SHADE = 2,
+    G_BL_0       = 3,
+}
+
+export const enum BlendParam_B {
+    G_BL_1MA   = 0,
+    G_BL_A_MEM = 1,
+    G_BL_1     = 2,
+    G_BL_0     = 3,
+}
+
+function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): GfxBlendFactor {
+    if (paramB === BlendParam_B.G_BL_1MA) {
+        if (srcParam === GfxBlendFactor.SRC_ALPHA)
+            return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+        if (srcParam === GfxBlendFactor.ONE)
+            return GfxBlendFactor.ZERO;
+        return GfxBlendFactor.ONE;
+    }
+    if (paramB === BlendParam_B.G_BL_A_MEM)
+        return GfxBlendFactor.DST_ALPHA;
+    if (paramB === BlendParam_B.G_BL_1)
+        return GfxBlendFactor.ONE;
+    if (paramB === BlendParam_B.G_BL_0)
+        return GfxBlendFactor.ZERO;
+
+    throw "Unknown Blend Param B: "+paramB;
+}
+
+export function translateRenderMode(renderMode: number): Partial<GfxMegaStateDescriptor> {
+    const out: Partial<GfxMegaStateDescriptor> = {};
+
+    const srcColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.P_2) & 0x03;
+    const srcFactor: BlendParam_A = (renderMode >>> OtherModeL_Layout.A_2) & 0x03;
+    const dstColor: BlendParam_PM_Color = (renderMode >>> OtherModeL_Layout.M_2) & 0x03;
+    const dstFactor: BlendParam_B = (renderMode >>> OtherModeL_Layout.B_2) & 0x03;
+
+    const doBlend = !!(renderMode & (1 << OtherModeL_Layout.FORCE_BL)) && (dstColor === BlendParam_PM_Color.G_BL_CLR_MEM);
+    if (doBlend) {
+        assert(srcColor === BlendParam_PM_Color.G_BL_CLR_IN);
+
+        let blendSrcFactor: GfxBlendFactor;
+        if (srcFactor === BlendParam_A.G_BL_0) {
+            blendSrcFactor = GfxBlendFactor.ZERO;
+        } else if ((renderMode & (1 << OtherModeL_Layout.ALPHA_CVG_SEL)) &&
+            !(renderMode & (1 << OtherModeL_Layout.CVG_X_ALPHA))) {
+            // this is technically "coverage", admitting blending on edges
+            blendSrcFactor = GfxBlendFactor.ONE;
+        } else {
+            blendSrcFactor = GfxBlendFactor.SRC_ALPHA;
+        }
+        setAttachmentStateSimple(out, {
+            blendSrcFactor: blendSrcFactor,
+            blendDstFactor: translateBlendParamB(dstFactor, blendSrcFactor),
+            blendMode: GfxBlendMode.ADD,
+        });
+    } else {
+        // without FORCE_BL, blending only happens for AA of internal edges
+        // since we are ignoring n64 coverage values and AA, this means "never"
+        // if dstColor isn't the framebuffer, we'll take care of the "blending" in the shader
+        setAttachmentStateSimple(out, {
+            blendSrcFactor: GfxBlendFactor.ONE,
+            blendDstFactor: GfxBlendFactor.ZERO,
+            blendMode: GfxBlendMode.ADD,
+        });
+    }
+
+    if (renderMode & (1 << OtherModeL_Layout.Z_CMP)) {
+        const zmode: ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
+        out.depthCompare = translateZMode(zmode);
+    }
+
+    const zmode:ZMode = (renderMode >>> OtherModeL_Layout.ZMODE) & 0x03;
+    if (zmode === ZMode.ZMODE_DEC)
+        out.polygonOffset = true;
+
+    out.depthWrite = (renderMode & (1 << OtherModeL_Layout.Z_UPD)) !== 0;
+
+    return out;
 }

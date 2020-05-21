@@ -6,7 +6,7 @@ import { SceneDesc, SceneGroup, SceneGfx } from '../viewer';
 import { initializeBasis, BasisFile, BasisFormat } from '../vendor/basis_universal';
 import { inflate } from 'pako';
 import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
 import { SceneContext, Destroyable } from '../SceneBase';
 import { assert, assertExists, leftPad } from '../util';
@@ -119,7 +119,7 @@ export class GTA3SceneDesc implements SceneDesc {
         path = `${this.meta.id}/${path}`;
         let buffer = this.assetCache.get(path);
         if (buffer === undefined) {
-            buffer = await dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404);
+            buffer = await dataFetcher.fetchData(path, { allow404: true });
             if (buffer.byteLength === 0) {
                 console.error('Not found', path);
                 return null;

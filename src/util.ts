@@ -34,6 +34,10 @@ export function readString(buffer: ArrayBufferSlice, offs: number, length: numbe
     return S;
 }
 
+export function decodeString(buffer: ArrayBufferSlice, encoding = 'utf8'): string {
+    return new TextDecoder(encoding).decode(new Uint8Array(buffer.arrayBuffer, buffer.byteOffset, buffer.byteLength));
+}
+
 // Requires that multiple is a power of two.
 export function align(n: number, multiple: number): number {
     const mask = (multiple - 1);
@@ -44,10 +48,10 @@ export function alignNonPowerOfTwo(n: number, multiple: number): number {
     return (((n + multiple - 1) / multiple) | 0) * multiple;
 }
 
-export function nArray<T>(n: number, c: () => T): T[] {
+export function nArray<T>(n: number, c: (i: number) => T): T[] {
     const d = new Array(n);
     for (let i = 0; i < n; i++)
-        d[i] = c();
+        d[i] = c(i);
     return d;
 }
 
@@ -61,6 +65,13 @@ export function leftPad(S: string, spaces: number, ch: string = '0'): string {
 export function hexzero(n: number, spaces: number): string {
     let S = n.toString(16);
     return leftPad(S, spaces);
+}
+
+export function hexzero0x(n: number, spaces: number = 8): string {
+    if (n < 0)
+        return `-0x${hexzero(-n, spaces)}`;
+    else
+        return `0x${hexzero(n, spaces)}`;
 }
 
 export function hexdump(b_: ArrayBufferSlice | ArrayBuffer, offs: number = 0, length: number = 0x100): void {
@@ -132,4 +143,29 @@ export function arrayRemove<T>(L: T[], n: T): number {
     assert(idx >= 0);
     L.splice(idx, 1);
     return idx;
+}
+
+export function arrayRemoveIfExist<T>(L: T[], n: T): number {
+    const idx = L.indexOf(n);
+    if (idx >= 0)
+        L.splice(idx, 1);
+    return idx;
+}
+
+export function bisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): number {
+    let lo = 0, hi = L.length;
+    while (lo < hi) {
+        const mid = lo + ((hi - lo) >>> 1);
+        const cmp = compare(e, L[mid]);
+        if (cmp < 0)
+            hi = mid;
+        else
+            lo = mid + 1;
+    }
+    return lo;
+}
+
+export function spliceBisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): void {
+    const idx = bisectRight(L, e, compare);
+    L.splice(idx, 0, e);
 }

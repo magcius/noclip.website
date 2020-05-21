@@ -1,8 +1,15 @@
 import * as pako from 'pako';
 import { hexzero } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
+import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 
 import { GameInfo } from './scenes';
+import { DataFetcher } from '../DataFetcher';
+import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation';
+import { ModelFetcher, ModelVersion } from './models';
+import { TextureFetcher, SFATextureFetcher } from './textures';
+import { MaterialFactory } from './shaders';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 class ZLBHeader {
     public static readonly SIZE = 16;
@@ -41,154 +48,11 @@ function loadDIRn(data: ArrayBufferSlice): ArrayBuffer {
     return data.copyToBuffer(0x20, size);
 }
 
-// Reference: <https://www.kernel.org/doc/Documentation/lzo.txt>
-// FIXME: Replace with existing LZO implementation that I didn't realize existed!
 function loadLZOn(data: ArrayBufferSlice, srcOffs: number): ArrayBuffer {
     const dv = data.createDataView();
     const uncompSize = dv.getUint32(srcOffs + 0x8)
     srcOffs += 0x10
-    let dstOffs = 0;
-    const dst = new Uint8Array(uncompSize);
-
-    function getLength(code: number, numBits: number): number {
-        const mask = (1 << numBits) - 1;
-        let length = code & mask;
-        if (length == 0) {
-            length = mask;
-            while (dv.getUint8(srcOffs) == 0) {
-                length += 255;
-                srcOffs++;
-            }
-            length += dv.getUint8(srcOffs++);
-        }
-        return length;
-    }
-
-    let state = 0;
-    const firstByte = dv.getUint8(srcOffs++);
-    if (firstByte >= 0 && firstByte <= 16) {
-        // state 0 literal
-        let length = getLength(firstByte, 4) + 3;
-        state = 4;
-        for (let i = 0; i < length; i++) {
-            dst[dstOffs++] = dv.getUint8(srcOffs++);
-        }
-    } else if (firstByte == 17) {
-        throw Error(`RLE compression mode not implemented`);
-    } else if (firstByte >= 18 && firstByte <= 21) {
-        state = firstByte - 17;
-        for (let i = 0; i < state; i++) {
-            dst[dstOffs++] = dv.getUint8(srcOffs++);
-        }
-    } else {
-        throw Error(`firstByte in 22..255 not handled`);
-    }
-
-    while (dstOffs < uncompSize) {
-        const code = dv.getUint8(srcOffs++);
-        if (code >= 128) {
-            const s = code & 0x3;
-            state = s;
-            const d = (code >> 2) & 0x7;
-            const l = (code >> 5) & 0x3;
-            const length = 5 + l;
-            const h = dv.getUint8(srcOffs++);
-            const distance = (h << 3) + d + 1;
-            let msrc = dstOffs - distance;
-            for (let i = 0; i < length; i++) {
-                dst[dstOffs++] = dst[msrc++];
-            }
-            for (let i = 0; i < s; i++) {
-                dst[dstOffs++] = dv.getUint8(srcOffs++);
-            }
-        } else if (code >= 64) {
-            const l = (code >> 5) & 0x1;
-            const d = (code >> 2) & 0x7;
-            const s = code & 0x3;
-            state = s;
-            const length = 3 + l;
-            const h = dv.getUint8(srcOffs++);
-            const distance = (h << 3) + d + 1;
-            let msrc = dstOffs - distance;
-            for (let i = 0; i < length; i++) {
-                dst[dstOffs++] = dst[msrc++];
-            }
-            for (let i = 0; i < s; i++) {
-                dst[dstOffs++] = dv.getUint8(srcOffs++);
-            }
-        } else if (code >= 32) {
-            const length = getLength(code, 5) + 2;
-            const d = dv.getUint16(srcOffs, true) >> 2;
-            const s = dv.getUint16(srcOffs, true) & 0x3;
-            srcOffs += 2;
-            const distance = d + 1;
-            state = s;
-            let msrc = dstOffs - distance;
-            for (let i = 0; i < length; i++) {
-                dst[dstOffs++] = dst[msrc++];
-            }
-            for (let i = 0; i < s; i++) {
-                dst[dstOffs++] = dv.getUint8(srcOffs++);
-            }
-        } else if (code >= 16) {
-            const length = getLength(code, 3) + 2;
-            const h = (code >> 3) & 0x1;
-            const d = dv.getUint16(srcOffs, true) >> 2;
-            const s = dv.getUint16(srcOffs, true) & 0x3;
-            srcOffs += 2;
-            const distance = 16384 + (h << 14) + d;
-            state = s;
-            if (distance == 16384) {
-                // End
-                return dst.buffer;
-            }
-            let msrc = dstOffs - distance;
-            for (let i = 0; i < length; i++) {
-                dst[dstOffs++] = dst[msrc++];
-            }
-            for (let i = 0; i < s; i++) {
-                dst[dstOffs++] = dv.getUint8(srcOffs++);
-            }
-        } else {
-            if (state == 0) {
-                const length = getLength(code, 4) + 3;
-                state = 4;
-                for (let i = 0; i < length; i++) {
-                    dst[dstOffs++] = dv.getUint8(srcOffs++);
-                }
-            } else if (state >= 1 && state <= 3) {
-                const s = code & 0x3;
-                const d = (code >> 2) & 0x3;
-                const length = 2;
-                state = s;
-                const h = dv.getUint8(srcOffs++);
-                const distance = (h << 2) + d + 1;
-                let msrc = dstOffs - distance;
-                for (let i = 0; i < length; i++) {
-                    dst[dstOffs++] = dst[msrc++];
-                }
-                for (let i = 0; i < s; i++) {
-                    dst[dstOffs++] = dv.getUint8(srcOffs++);
-                }
-            } else if (state == 4) {
-                const s = code & 0x3;
-                state = s;
-                const length = 3;
-                const d = code >> 2;
-                const h = dv.getUint8(srcOffs++);
-                const distance = (h << 2) + d + 2049;
-                let msrc = dstOffs - distance;
-                for (let i = 0; i < length; i++) {
-                    dst[dstOffs++] = dst[msrc++];
-                }
-                for (let i = 0; i < s; i++) {
-                    dst[dstOffs++] = dv.getUint8(srcOffs++);
-                }
-            }
-        }
-    }
-
-    return dst.buffer;
+    return lzoDecompress(data.slice(srcOffs), uncompSize).arrayBuffer;
 }
 
 export function loadRes(data: ArrayBufferSlice): ArrayBufferSlice {
@@ -213,4 +77,42 @@ export function getSubdir(locationNum: number, gameInfo: GameInfo): string {
         throw Error(`Subdirectory for location ${locationNum} unknown`);
     }
     return gameInfo.subdirs[locationNum];
+}
+
+export class ResourceCollection {
+    public texFetcher: TextureFetcher;
+    public modelFetcher: ModelFetcher;
+    public animColl: AnimCollection;
+    public amapColl: AmapCollection;
+    public modanimColl: ModanimCollection;
+    public tablesTab: DataView;
+    public tablesBin: DataView;
+
+    constructor(private device: GfxDevice, private gameInfo: GameInfo, private subdir: string, private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
+    }
+
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, materialFactory: MaterialFactory, animController: SFAAnimationController): Promise<ResourceCollection> {
+        const self = new ResourceCollection(device, gameInfo, subdir, materialFactory, animController);
+
+        self.texFetcher = await SFATextureFetcher.create(self.gameInfo, dataFetcher, false); // TODO: support beta
+        await self.texFetcher.loadSubdir(subdir, dataFetcher);
+        self.modelFetcher = await ModelFetcher.create(device, gameInfo, dataFetcher, self.texFetcher, self.materialFactory, self.animController, ModelVersion.Final)
+        await self.modelFetcher.loadSubdir(subdir, dataFetcher);
+
+        const pathBase = self.gameInfo.pathBase;
+        const [animColl, amapColl, modanimColl, tablesTab, tablesBin] = await Promise.all([
+            AnimCollection.create(self.gameInfo, dataFetcher, subdir),
+            AmapCollection.create(self.gameInfo, dataFetcher),
+            ModanimCollection.create(self.gameInfo, dataFetcher),
+            dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
+            dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
+        ]);
+        self.animColl = animColl;
+        self.amapColl = amapColl;
+        self.modanimColl = modanimColl;
+        self.tablesTab = tablesTab.createDataView();
+        self.tablesBin = tablesBin.createDataView();
+
+        return self;
+    }
 }

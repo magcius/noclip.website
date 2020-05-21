@@ -44,42 +44,6 @@ export function coalesceBuffer(device: GfxDevice, usage: GfxBufferUsage, datas: 
 }
 
 // TODO(jstpierre): Remove the buffer coalescer... it doesn't really help as much as I thought it did.
-// At least remove everything but the combo version...
-
-export class GfxBufferCoalescer {
-    public coalescedBuffers: GfxCoalescedBuffers[];
-    private vertexBuffer: GfxBuffer | null = null;
-    private indexBuffer: GfxBuffer | null = null;
-
-    constructor(device: GfxDevice, vertexDatas: ArrayBufferSlice[], indexDatas: ArrayBufferSlice[]) {
-        assert(vertexDatas.length === indexDatas.length);
-
-        // Don't do anything if we have no data to care about.
-        if (vertexDatas.length === 0)
-            return;
-
-        const vertexCoalescedBuffers = coalesceBuffer(device, GfxBufferUsage.VERTEX, vertexDatas);
-        const indexCoalescedBuffers = coalesceBuffer(device, GfxBufferUsage.INDEX, indexDatas);
-
-        const coalescedBuffers = [];
-        for (let i = 0; i < vertexCoalescedBuffers.length; i++) {
-            const vertexBuffer = vertexCoalescedBuffers[i];
-            const indexBuffer = indexCoalescedBuffers[i];
-            coalescedBuffers.push({ vertexBuffer, indexBuffer });
-        }
-
-        this.coalescedBuffers = coalescedBuffers;
-        this.vertexBuffer = this.coalescedBuffers[0].vertexBuffer.buffer;
-        this.indexBuffer = this.coalescedBuffers[0].indexBuffer.buffer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        if (this.vertexBuffer !== null)
-            device.destroyBuffer(this.vertexBuffer);
-        if (this.indexBuffer !== null)
-            device.destroyBuffer(this.indexBuffer);
-    }
-}
 
 export interface GfxCoalescedBuffersCombo {
     vertexBuffers: GfxCoalescedBuffer[];

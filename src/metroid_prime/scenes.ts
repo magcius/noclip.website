@@ -9,11 +9,11 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 import { assert, assertExists } from '../util';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { opaqueBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
-import { FPSCameraController, CameraController } from '../Camera';
+import { CameraController } from '../Camera';
 import BitMap, { bitMapSerialize, bitMapDeserialize } from '../BitMap';
 import { CMDL } from './cmdl';
 import { colorNewCopy, OpaqueBlack } from '../Color';
@@ -44,15 +44,14 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(0.1);
-        return c;
     }
 
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         viewerInput.camera.setClipPlanes(0.2);
-        fillSceneParamsDataOnTemplate(template, viewerInput, false);
+        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
         for (let i = 0; i < this.areaRenderers.length; i++)
             this.areaRenderers[i].prepareToRender(device, this.renderHelper, viewerInput, this.worldAmbientColor);
         this.prepareToRenderSkybox(device, viewerInput);
@@ -88,7 +87,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(RetroPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         device.submitPass(skyboxPassRenderer);

@@ -1,5 +1,5 @@
 
-import { nArray, assert, assertExists } from "../../util";
+import { nArray, assert, assertExists, spliceBisectRight } from "../../util";
 import { clamp } from "../../MathHelpers";
 
 import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxBuffer, GfxRenderPipeline } from "../platform/GfxPlatform";
@@ -75,7 +75,7 @@ export function setSortKeyProgramKey(sortKey: number, programKey: number): numbe
     if (isTransparent)
         return sortKey;
     else
-        return ((sortKey & 0xFF0000FF) | ((programKey & 0xFFFF) << 16)) >>> 0;
+        return ((sortKey & 0xFF0000FF) | ((programKey & 0xFFFF) << 8)) >>> 0;
 }
 
 export function setSortKeyBias(sortKey: number, bias: number): number {
@@ -496,19 +496,6 @@ export function gfxRenderInstCompareSortKey(a: GfxRenderInst, b: GfxRenderInst):
     return a.sortKey - b.sortKey;
 }
 
-function bisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): number {
-    let lo = 0, hi = L.length;
-    while (lo < hi) {
-        const mid = lo + ((hi - lo) >>> 1);
-        const cmp = compare(e, L[mid]);
-        if (cmp < 0)
-            hi = mid;
-        else
-            lo = mid + 1;
-    }
-    return lo;
-}
-
 export const enum GfxRenderInstExecutionOrder {
     Forwards,
     Backwards,
@@ -518,7 +505,7 @@ export type GfxRenderInstCompareFunc = (a: GfxRenderInst, b: GfxRenderInst) => n
 
 export class GfxRenderInstList {
     public renderInsts: GfxRenderInst[] = [];
-    private needsSort = false;
+    private usePostSort: boolean = false;
 
     constructor(
         public compareFunction: GfxRenderInstCompareFunc | null = gfxRenderInstCompareSortKey,
@@ -526,10 +513,12 @@ export class GfxRenderInstList {
     ) {
     }
 
-    private flushSort(): void {
-        if (this.needsSort && this.compareFunction !== null)
-            this.renderInsts.sort(this.compareFunction);
-        this.needsSort = false;
+    /**
+     * Determine whether to use post-sorting, based on some heuristics.
+     */
+    public checkUsePostSort(): void {
+        // Over a certain threshold, it's faster to push and then sort than insort directly...
+        this.usePostSort = this.renderInsts.length >= 500;
     }
 
     /**
@@ -538,25 +527,15 @@ export class GfxRenderInstList {
      * fully constructed at this point.
      */
     public insertSorted(renderInst: GfxRenderInst): void {
-        this.flushSort();
-        if (this.compareFunction !== null) {
-            const idx = bisectRight(this.renderInsts, renderInst, this.compareFunction);
-            this.renderInsts.splice(idx, 0, renderInst);
-        } else {
+        if (this.compareFunction === null) {
             this.renderInsts.push(renderInst);
+        } else if (this.usePostSort) {
+            this.renderInsts.push(renderInst);
+        } else {
+            spliceBisectRight(this.renderInsts, renderInst, this.compareFunction);
         }
-    }
 
-    /**
-     * Insert a render inst to the list. This will mark the list for sorting, so the
-     * render inst does not need to be fully constructed at this time.
-     *
-     * {@deprecated}
-     */
-    public insertToEnd(renderInst: GfxRenderInst): void {
-        this.renderInsts.push(renderInst);
-        if (this.compareFunction !== null)
-            this.needsSort = true;
+        this.checkUsePostSort();
     }
 
     /**
@@ -568,7 +547,10 @@ export class GfxRenderInstList {
         if (this.renderInsts.length === 0)
             return;
 
-        this.flushSort();
+        if (this.usePostSort) {
+            this.renderInsts.sort(this.compareFunction!);
+            this.usePostSort = false;
+        }
 
         // TODO(jstpierre): Remove this?
         if (state === null) {
@@ -660,29 +642,11 @@ export class GfxRenderInstManager {
     }
 
     /**
-     * Creates a new render instance, immediately submits it to the current
-     * render inst list. Unlike {@param submitRenderInst}, this is slightly
-     * more efficient as this function cannot assume that the render inst is
-     * fully formed.
-     *
-     * {@deprecated}
-     */
-    public pushRenderInst(): GfxRenderInst {
-        const renderInst = this.newRenderInst();
-        // Submitted to the current list by default. We can't insert
-        // sorted because there's no guarantee the sortKey is correct
-        // at this point.
-        this.currentRenderInstList.insertToEnd(renderInst);
-        return renderInst;
-    }
-
-    /**
      * Sets the currently active render inst list. This is the list that will
-     * be used by {@param pushRenderInst} and {@param submitRenderInst}. If
-     * you use this function, please make sure to call {@see disableSimpleMode}
-     * when the GfxRenderInstManager is created, to ensure that nobody uses
-     * the "legacy" APIs. Failure to do so might cause memory leaks or other
-     * problems.
+     * be used by @param submitRenderInst}. If you use this function, please
+     * make sure to call {@see disableSimpleMode} when the GfxRenderInstManager
+     * is created, to ensure that nobody uses the "legacy" APIs. Failure to do
+     * so might cause memory leaks or other problems.
      */
     public setCurrentRenderInstList(list: GfxRenderInstList): void {
         assert(this.simpleRenderInstList === null);
@@ -761,11 +725,13 @@ export class GfxRenderInstManager {
      */
     public setVisibleByFilterKeyExact(filterKey: number): void {
         const list = assertExists(this.simpleRenderInstList);
+        // Guess whether we should speed things up with a post-sort by the previous contents of the list...
+        list.checkUsePostSort();
         list.renderInsts.length = 0;
 
         for (let i = 0; i < this.instPool.allocCount; i++)
             if (!!(this.instPool.pool[i]._flags & GfxRenderInstFlags.Draw) && this.instPool.pool[i].filterKey === filterKey)
-                list.insertToEnd(this.instPool.pool[i]);
+                list.insertSorted(this.instPool.pool[i]);
     }
 
     /**
@@ -794,9 +760,9 @@ export class GfxRenderInstManager {
 /**
  * {@deprecated}
  */
-export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, sort: boolean = true): void {
+export function executeOnPass(renderInstManager: GfxRenderInstManager, device: GfxDevice, passRenderer: GfxRenderPass, passMask: number, resetState: boolean = true): void {
     renderInstManager.setVisibleByFilterKeyExact(passMask);
-    renderInstManager.drawOnPassRenderer(device, passRenderer);
+    renderInstManager.drawOnPassRenderer(device, passRenderer, resetState ? null : defaultTransientState);
 }
 
 /**

@@ -42,6 +42,13 @@ export class DeviceProgram {
     public frag: string = '';
     public defines = new Map<string, string>();
 
+    public setDefineBool(name: string, v: boolean): void {
+        if (v)
+            this.defines.set(name, '1');
+        else
+            this.defines.delete(name);
+    }
+
     public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {
         if (this.preprocessedVert === '') {
             this.preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', this.both + this.vert, this.defines);
@@ -68,10 +75,16 @@ export class DeviceProgram {
                 this.preprocessedVert = '';
             };
 
-            editor.onvaluechanged = function() {
+            editor.onvaluechanged = function(immediate: boolean) {
                 if (timeout > 0)
                     clearTimeout(timeout);
-                timeout = window.setTimeout(tryCompile, 500);
+
+                if (immediate) {
+                    tryCompile();
+                } else {
+                    // debounce
+                    timeout = window.setTimeout(tryCompile, 500);
+                }
             };
             const onresize = win.onresize = () => {
                 editor.setSize(document.body.offsetWidth, window.innerHeight);

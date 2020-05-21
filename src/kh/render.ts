@@ -5,7 +5,7 @@ import * as Bin from './bin';
 import * as BinTex from './bin_tex';
 import * as UI from '../ui';
 import * as Viewer from '../viewer';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { DeviceProgram } from "../Program";
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCompareMode, GfxCullMode, GfxDevice, GfxFormat, GfxHostAccessPass, GfxInputLayout, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxSampler, GfxTexFilterMode, GfxTexture, GfxTextureDimension, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, GfxProgram, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
@@ -162,19 +162,17 @@ export class MapData {
                 return;
             }
             for (let i = 0; i < submesh.vtx.length; i++) {
-                const texScaleOffs = vec4.create();
-                texScaleOffs.set([1, 1, 0, 0]);
+                const texScaleOffs = vec4.fromValues(1, 1, 0, 0);
                 const atlasPos = bin.mapTextureAtlas.getTextureBlockPos(submesh.textureBlock);
                 if (atlasPos) {
-                    texScaleOffs.set([
+                    vec4.set(texScaleOffs,
                         submesh.textureBlock.width / bin.mapTextureAtlas.width,
                         submesh.textureBlock.height / bin.mapTextureAtlas.height,
                         atlasPos[0] * 256 / bin.mapTextureAtlas.width,
                         atlasPos[1] * 256 / bin.mapTextureAtlas.height,
-                    ]);
+                    );
                 }
                 const texture = submesh.textureBlock.textures[submesh.textureIndex];
-                const texClip = vec4.create();
                 let clipRight = texture.clipRight;
                 let clipBottom = texture.clipBottom;
                 const spriteAnim = submesh.textureBlock.textures[submesh.textureIndex].spriteAnim;
@@ -182,17 +180,16 @@ export class MapData {
                     clipRight = texture.clipLeft + spriteAnim.spriteWidth - 1;
                     clipBottom = texture.clipTop + spriteAnim.spriteHeight - 1;
                 }
-                texClip.set([
+                const texClip = vec4.fromValues(
                     (texture.clipLeft + 0.5) / submesh.textureBlock.width,
                     (clipRight + 0.5) / submesh.textureBlock.width,
                     (texture.clipTop + 0.5) / submesh.textureBlock.height,
                     (clipBottom + 0.5) / submesh.textureBlock.height,
-                ]);
-                const texRepeat = vec2.create();
-                texRepeat.set([
+                );
+                const texRepeat = vec2.fromValues(
                     texture.tiledU ? submesh.textureBlock.width / (texture.width()) : 0.5,
                     texture.tiledV ? submesh.textureBlock.height / (texture.height()) : 0.5
-                ]);
+                );
                 vBuf[vBufIndex++] = submesh.vtx[i][0];
                 vBuf[vBufIndex++] = submesh.vtx[i][1];
                 vBuf[vBufIndex++] = submesh.vtx[i][2];
@@ -422,7 +419,7 @@ class DrawCallInstance {
         if (!this.drawCall.layer!.visible)
             return;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.mapData.inputLayout, this.mapData.inputState);
         renderInst.sortKey = this.drawCallIndex;
 
@@ -452,6 +449,8 @@ class DrawCallInstance {
             mapped[offs++] = uvAnimOffsetScratch[0];
             mapped[offs++] = uvAnimOffsetScratch[1];
         }
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -594,7 +593,7 @@ export class KingdomHeartsRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Create render pass for skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         executeOnPass(this.renderInstManager, device, skyboxPassRenderer, RenderPass.SKYBOX);
         device.submitPass(skyboxPassRenderer);
         // Create main render pass.

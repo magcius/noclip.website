@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { readFileSync, writeFileSync } from "fs";
 import { assert, hexzero, hexdump, readString, assertExists } from "../../util";
 import { decode } from 'iconv-lite';
-import * as Yay0 from "../../compression/Yay0";
+import * as Yay0 from "../../Common/compression/Yay0";
 import * as BYML from "../../byml";
 
 function nulTerminate(S: string) {
