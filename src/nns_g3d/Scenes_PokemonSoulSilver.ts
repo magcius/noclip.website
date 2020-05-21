@@ -4,7 +4,7 @@
 import * as Viewer from '../viewer';
 import * as NARC from './narc';
 
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass } from './render';
@@ -245,7 +245,7 @@ const sceneDescs = [
     new PokemonSoulSilverSceneDesc("286", "Pokeathlon ???"),
     new PokemonSoulSilverSceneDesc("287", "Pokeathlon ???"),
     new PokemonSoulSilverSceneDesc("288", "Dojo?"),
-    new PokemonSoulSilverSceneDesc("299", "Not sure but its a place"),
+    new PokemonSoulSilverSceneDesc("299", "???"),
     new PokemonSoulSilverSceneDesc("301", "Elite Four Room ?"),
     new PokemonSoulSilverSceneDesc("302", "Elite Four Room ?"),
     new PokemonSoulSilverSceneDesc("303", "Elite Four Room ?"),
@@ -299,8 +299,8 @@ const sceneDescs = [
     new PokemonSoulSilverSceneDesc("374", "Celadon Department Store F5"),
     new PokemonSoulSilverSceneDesc("375", "Celadon Department Store F6"),
     new PokemonSoulSilverSceneDesc("379", "Celadon Department Store Roof", false),
-    new PokemonSoulSilverSceneDesc("376", "Rooms???"),
-    new PokemonSoulSilverSceneDesc("377", "Rooms???"),
+    new PokemonSoulSilverSceneDesc("376", "???"),
+    new PokemonSoulSilverSceneDesc("377", "???"),
     new PokemonSoulSilverSceneDesc("378", "???"),
     new PokemonSoulSilverSceneDesc("380", "???"),
     new PokemonSoulSilverSceneDesc("381", "???"),
