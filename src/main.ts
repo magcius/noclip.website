@@ -55,6 +55,7 @@ import * as Scenes_SuperSmashBrosMelee from './SuperSmashBrosMelee/Scenes_SuperS
 import * as Scenes_PokemonSnap from './PokemonSnap/scenes';
 import * as Scenes_MetroidPrimeHunters from './MetroidPrimeHunters/Scenes_MetroidPrimeHunters';
 import * as Scenes_PokemonPlatinum from './nns_g3d/Scenes_PokemonPlatinum';
+import * as Scenes_PokemonSoulSilver from './nns_g3d/Scenes_PokemonSoulSilver';
 import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
@@ -144,6 +145,7 @@ const sceneGroups = [
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_MetroidPrimeHunters.sceneGroup,
     Scenes_PokemonPlatinum.sceneGroup,
+    Scenes_PokemonSoulSilver.sceneGroup,
     Scenes_Psychonauts.sceneGroup,
     Scenes_SonicColors.sceneGroup,
     Scenes_StarFoxAdventures.sceneGroup,
