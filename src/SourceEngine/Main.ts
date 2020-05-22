@@ -260,6 +260,7 @@ class BSPModelRenderer {
     public entity: BaseEntity | null = null;
     public surfaces: BSPSurfaceRenderer[] = [];
     public displacementSurfaces: BSPSurfaceRenderer[] = [];
+    public materialInstances: BaseMaterial[] = [];
 
     constructor(renderContext: SourceRenderContext, public model: Model, public bsp: BSPFile) {
         for (let j = 0; j < model.surfaceCount; j++) {
@@ -285,10 +286,17 @@ class BSPModelRenderer {
 
     private async bindMaterial(renderContext: SourceRenderContext, surface: BSPSurfaceRenderer) {
         const materialCache = renderContext.materialCache;
-        const texinfo = this.bsp.texinfo[surface.surface.texinfo];
-        const materialInstance = await materialCache.createMaterialInstance(renderContext, texinfo.texName);
+
+        if (this.materialInstances[surface.surface.texinfo] === undefined) {
+            const texinfo = this.bsp.texinfo[surface.surface.texinfo];
+            const materialInstance = await materialCache.createMaterialInstance(renderContext, texinfo.texName);
+            this.materialInstances[surface.surface.texinfo] = materialInstance;
+        }
+
+        const materialInstance = this.materialInstances[surface.surface.texinfo];
         if (this.entity !== null)
             materialInstance.entityParams = this.entity.materialParams;
+
         surface.bindMaterial(materialInstance, renderContext.lightmapManager);
     }
 
