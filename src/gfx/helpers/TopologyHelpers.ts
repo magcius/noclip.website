@@ -50,7 +50,7 @@ export function convertToTriangles(dstBuffer: Uint16Array, dstOffs: number, topo
     }
 }
 
-export function convertToTrianglesRange(dstBuffer: Uint16Array, dstOffs: number, topology: GfxTopology, baseVertex: number, numVertices: number): void {
+export function convertToTrianglesRange(dstBuffer: Uint16Array | Uint32Array, dstOffs: number, topology: GfxTopology, baseVertex: number, numVertices: number): void {
     assert(dstOffs + getTriangleIndexCountForTopologyIndexCount(topology, numVertices) <= dstBuffer.length);
 
     let dst = dstOffs;

@@ -4,7 +4,7 @@ import { VMT, parseVMT, VKFPair, vmtParseVector } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderer";
 import { nArray, assert, assertExists } from "../util";
-import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "../gfx/helpers/UniformBufferHelpers";
@@ -287,12 +287,16 @@ export abstract class BaseMaterial {
     public async init(renderContext: SourceRenderContext) {
         this.initParameters();
 
-        setupParametersFromVMT(this.param, this.vmt);
+        this.setupParametersFromVMT();
         if (this.vmt.proxies !== undefined)
             this.proxyDriver = renderContext.materialProxySystem.createProxyDriver(this, this.vmt.proxies);
 
         await this.fetchResources(renderContext.materialCache);
         this.initStatic(renderContext.device, renderContext.cache);
+    }
+
+    protected setupParametersFromVMT(): void {
+        setupParametersFromVMT(this.param, this.vmt);
     }
 
     protected paramGetTexture(name: string): ParameterTexture {
@@ -359,6 +363,13 @@ export abstract class BaseMaterial {
         return texture.isTranslucent();
     }
 
+    protected setCullMode(megaStateFlags: Partial<GfxMegaStateDescriptor>): void {
+        megaStateFlags.frontFace = GfxFrontFaceMode.CW;
+
+        if (this.paramGetBoolean('$nocull'))
+            megaStateFlags.cullMode = GfxCullMode.NONE;
+    }
+
     protected setAlphaBlendMode(megaStateFlags: Partial<GfxMegaStateDescriptor>, alphaBlendMode: AlphaBlendMode): boolean {
         if (alphaBlendMode === AlphaBlendMode.BlendAdd) {
             setAttachmentStateSimple(megaStateFlags, {
@@ -421,6 +432,7 @@ export abstract class BaseMaterial {
         p['$opaquetexture']                = new ParameterBoolean(false, false);
         p['$vertexcolor']                  = new ParameterBoolean(false, false);
         p['$vertexalpha']                  = new ParameterBoolean(false, false);
+        p['$nocull']                       = new ParameterBoolean(false, false);
 
         // Base parameters
         p['$basetexture']                  = new ParameterTexture(VTFFlags.SRGB);
@@ -775,11 +787,17 @@ class Material_Generic extends BaseMaterial {
         p['$frame2']                       = new ParameterNumber(0.0);
     }
 
+    protected setupParametersFromVMT(): void {
+        super.setupParametersFromVMT();
+
+        if (this.vmt.lightmappedgeneric_dx9 !== undefined)
+            setupParametersFromVMT(this.param, this.vmt.lightmappedgeneric_dx9);
+    }
+
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         const shaderType = this.vmt._Root.toLowerCase();
 
         this.program = new GenericMaterialProgram();
-        this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
         if (this.paramGetVTF('$detail') !== null) {
             this.wantsDetail = true;
@@ -846,6 +864,8 @@ class Material_Generic extends BaseMaterial {
             const sortLayer = translucentLayer ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
             this.sortKeyBase = makeSortKey(sortLayer);
         }
+
+        this.setCullMode(this.megaStateFlags);
 
         this.gfxProgram = cache.createProgram(device, this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -994,12 +1014,12 @@ class Material_UnlitTwoTexture extends BaseMaterial {
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         this.program = new UnlitTwoTextureProgram();
 
-        this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
-
         const isTranslucent = this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
         const translucentLayer = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
         const sortLayer = translucentLayer ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
+
+        this.setCullMode(this.megaStateFlags);
 
         this.gfxProgram = cache.createProgram(device, this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -1180,10 +1200,11 @@ class Material_Water extends BaseMaterial {
             this.program.setDefineBool('USE_TEXSCROLL', true);
         }
 
-        this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
         const translucentLayer = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
         const sortLayer = translucentLayer ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
+
+        this.setCullMode(this.megaStateFlags);
 
         this.gfxProgram = cache.createProgram(device, this.program);
         this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
@@ -1241,7 +1262,9 @@ export class MaterialCache {
     }
 
     private resolvePath(path: string, ext: string): string {
-        return this.filesystem.resolvePath(`materials/${path}${ext}`);
+        if (!path.endsWith(ext))
+            path = `${path}${ext}`;
+        return this.filesystem.resolvePath(`materials/${path}`);
     }
 
     private async fetchMaterialDataInternal(name: string): Promise<VMT> {

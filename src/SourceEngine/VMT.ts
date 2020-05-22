@@ -19,7 +19,7 @@ export interface VMT {
     proxies: any;
 
     // generic
-    [k: string]: string;
+    [k: string]: any;
 }
 
 export type VKFPair = [string, any];
@@ -175,10 +175,24 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
         const str = new TextDecoder('utf8').decode(buffer.createTypedArray(Uint8Array));
 
         const [k, v] = new ValveKeyValueParser(str).pair();
-        const vmt = pairs2obj(v) as VMT;
+        const vmtObj = pairs2obj(v);
+        const vmt = vmtObj as VMT;
         vmt._Root = k;
         vmt._Filename = path;
 
+        // Recursively pairs2obj except on proxies.
+        for (const k in vmtObj) {
+            if (k === 'proxies' || k === 'replace' || k === 'insert')
+                continue;
+
+            if (typeof vmtObj[k] === 'object') {
+                // The result should be an array of pairs. Convert to object.
+                const pairs = vmtObj[k] as VKFPair[];
+                vmtObj[k] = pairs2obj(vmtObj[k], true);
+            }
+        }
+
+        // Now convert proxies special.
         if (vmt.proxies !== undefined) {
             const proxies = vmt.proxies as VKFPair[];
             for (let i = 0; i < proxies.length; i++)

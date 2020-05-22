@@ -415,7 +415,7 @@ export class BSPFile {
     public visibility: BSPVisibility;
     public lightmapPackerManager = new LightmapPackerManager();
 
-    public indexData: Uint16Array;
+    public indexData: Uint32Array;
     public vertexData: Float32Array;
 
     constructor(buffer: ArrayBufferSlice, mapname: string) {
@@ -650,8 +650,7 @@ export class BSPFile {
         // 3 pos, 4 normal, 4 tangent, 4 uv
         const vertexSize = (3+4+4+4);
         const vertexData = new Float32Array(vertCount * vertexSize);
-        assert(vertCount < 0xFFFF);
-        const indexData = new Uint16Array(indexCount);
+        const indexData = new Uint32Array(indexCount);
 
         const planes = getLumpData(LumpType.PLANES).createDataView();
         const vertexes = getLumpData(LumpType.VERTEXES).createTypedArray(Float32Array);

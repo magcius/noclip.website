@@ -422,7 +422,9 @@ export function interactiveVizSliderSelect(items: any[], fieldName: string = 'vi
 }
 
 function downloadBuffer2(name: any, buffer: any) {
-    if (buffer instanceof ArrayBufferSlice)
+    if (name.name && name.arrayBuffer)
+        downloadBufferSlice(name.name, name);
+    else if (buffer instanceof ArrayBufferSlice)
         downloadBufferSlice(name, buffer);
     else if (name.name && name.buffer)
         downloadBuffer2(name.name, name.buffer);

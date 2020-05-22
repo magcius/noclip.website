@@ -485,7 +485,7 @@ export class BSPRenderer {
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+4+4+4)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
-        const indexBufferFormat = GfxFormat.U16_R;
+        const indexBufferFormat = GfxFormat.U32_R;
         this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
         this.inputState = device.createInputState(this.inputLayout, [

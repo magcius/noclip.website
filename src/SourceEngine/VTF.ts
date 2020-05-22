@@ -163,6 +163,9 @@ export class VTF {
     public numFrames: number;
     public numLevels: number;
 
+    private versionMajor: number;
+    private versionMinor: number;
+
     constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, additionalFlags: VTFFlags) {
         if (buffer === null)
             return;
@@ -170,14 +173,14 @@ export class VTF {
         const view = buffer.createDataView();
 
         assert(readString(buffer, 0x00, 0x04, false) === 'VTF\0');
-        const versionMajor = view.getUint32(0x04, true);
-        const versionMinor = view.getUint32(0x08, true);
+        this.versionMajor = view.getUint32(0x04, true);
+        this.versionMinor = view.getUint32(0x08, true);
         const headerSize = view.getUint32(0x0C, true);
 
         let dataIdx: number;
 
-        if (versionMajor === 0x07) {
-            assert(versionMinor >= 0x01);
+        if (this.versionMajor === 0x07) {
+            assert(this.versionMinor >= 0x01);
 
             this.width = view.getUint16(0x10, true);
             this.height = view.getUint16(0x12, true);
@@ -194,13 +197,16 @@ export class VTF {
             const lowresImageWidth = view.getUint8(0x3D);
             const lowresImageHeight = view.getUint8(0x3E);
 
-            if (versionMinor >= 0x02) {
+            dataIdx = 0x40;
+
+            if (this.versionMinor >= 0x02) {
                 this.depth = Math.max(view.getUint16(0x41, true), 1);
+                dataIdx = 0x50;
             } else {
                 this.depth = 1;
             }
 
-            if (versionMinor >= 0x03) {
+            if (this.versionMinor >= 0x03) {
                 const numResources = view.getUint32(0x44, true);
                 let resourcesIdx = 0x50;
 
@@ -209,8 +215,6 @@ export class VTF {
                 }
 
                 dataIdx = resourcesIdx;
-            } else {
-                dataIdx = 0x40;
             }
 
             if (lowresImageFormat !== 0xFFFFFFFF) {
