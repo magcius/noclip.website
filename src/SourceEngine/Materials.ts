@@ -973,7 +973,7 @@ void mainPS() {
 }
 
 class Material_UnlitTwoTexture extends BaseMaterial {
-    private program: GenericMaterialProgram;
+    private program: UnlitTwoTextureProgram;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
@@ -987,6 +987,8 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         p['$texture2']                     = new ParameterTexture(VTFFlags.SRGB);
         p['$texture2transform']            = new ParameterMatrix();
         p['$frame2']                       = new ParameterNumber(0.0);
+
+        // TODO(jstpierre): MonitorScreen tint/constrast/saturation.
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
@@ -1263,7 +1265,7 @@ export class MaterialCache {
         const shaderType = vmt._Root.toLowerCase();
         if (shaderType === 'water')
             return new Material_Water(vmt);
-        else if (shaderType === 'unlittwotexture')
+        else if (shaderType === 'unlittwotexture' || shaderType === 'monitorscreen')
             return new Material_UnlitTwoTexture(vmt);
         else
             return new Material_Generic(vmt);
@@ -1652,8 +1654,8 @@ class ParameterReference {
                 this.value = new ParameterNumber(assertExists(defaultValue));
         } else if (str.startsWith('$')) {
             // '$envmaptint', '$envmaptint[1]'
-            const [, name, index] = assertExists(/([a-z0-9$_]+)(?:\[(\d+)\])?/.exec(str));
-            this.name = name;
+            const [, name, index] = assertExists(/([a-zA-Z0-9$_]+)(?:\[(\d+)\])?/.exec(str));
+            this.name = name.toLowerCase();
             if (index !== undefined)
                 this.index = Number(index);
         } else {

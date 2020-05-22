@@ -15,6 +15,7 @@ const enum ImageFormat {
     DXT1         = 0x0D,
     DXT3         = 0x0E,
     DXT5         = 0x0F,
+    BGRX8888     = 0x10,
     BGRA5551     = 0x15,
     UV88         = 0x16,
 }
@@ -34,6 +35,8 @@ function imageFormatGetBPP(fmt: ImageFormat): number {
     if (fmt === ImageFormat.ARGB8888)
         return 4;
     if (fmt === ImageFormat.BGRA8888)
+        return 4;
+    if (fmt === ImageFormat.BGRX8888)
         return 4;
     if (fmt === ImageFormat.BGR888)
         return 3;
@@ -74,6 +77,8 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (fmt === ImageFormat.BGRA8888)
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    else if (fmt === ImageFormat.BGRX8888)
+        return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (fmt === ImageFormat.BGRA5551)
         return GfxFormat.U16_RGBA_5551; // TODO(jstpierre): sRGB?
     else if (fmt === ImageFormat.UV88)
@@ -108,6 +113,20 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
             dst[i++] = src.getUint8(p + 1);
             dst[i++] = src.getUint8(p + 0);
             dst[i++] = src.getUint8(p + 3);
+            p += 4;
+        }
+        return dst;
+    } else if (fmt === ImageFormat.BGRX8888) {
+        // BGRA888 => RGBA8888
+        const src = data.createDataView();
+        const n = width * height * depth * 4;
+        const dst = new Uint8Array(n);
+        let p = 0;
+        for (let i = 0; i < n;) {
+            dst[i++] = src.getUint8(p + 2);
+            dst[i++] = src.getUint8(p + 1);
+            dst[i++] = src.getUint8(p + 0);
+            dst[i++] = 0xFF;
             p += 4;
         }
         return dst;
