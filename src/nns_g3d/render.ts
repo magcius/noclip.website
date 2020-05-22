@@ -7,7 +7,7 @@ import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parse
 import { NITRO_Program, VertexData } from '../SuperMario64DS/render';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { TextureMapping } from "../TextureHolder";
-import { fillMatrix4x3, fillMatrix4x4, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import AnimationController from "../AnimationController";
 import { nArray, assertExists } from "../util";
@@ -297,7 +297,7 @@ export const enum G3DPass {
     SKYBOX = 0x02,
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
+export const nnsG3dBindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 3, numSamplers: 1 }];
 
 const enum BillboardMode {
     NONE, BB, BBY,
@@ -427,13 +427,9 @@ export class MDL0Renderer {
             this.nodes[i].calcMatrix(this.modelMatrix);
 
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setBindingLayouts(bindingLayouts);
+        template.setBindingLayouts(nnsG3dBindingLayouts);
         template.filterKey = this.isSkybox ? G3DPass.SKYBOX : G3DPass.MAIN;
         template.setGfxProgram(this.gfxProgram);
-
-        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
-        const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
-        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.shapeInstances.length; i++)
             this.shapeInstances[i].prepareToRender(renderInstManager, viewerInput, this.isSkybox);

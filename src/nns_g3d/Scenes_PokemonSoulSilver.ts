@@ -6,20 +6,14 @@ import * as NARC from './narc';
 
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { MDL0Renderer, G3DPass } from './render';
-import { assert, assertExists, readString } from '../util';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { MDL0Renderer } from './render';
+import { assert, assertExists } from '../util';
 import { mat4 } from 'gl-matrix';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { FakeTextureHolder } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
-import { parseNSBMD, BTX0, parseNSBTX, fx32, TEX0, MDL0Model } from './NNS_G3D';
-import { CameraController, Camera } from '../Camera';
+import { parseNSBMD, BTX0, parseNSBTX, fx32 } from './NNS_G3D';
 import { AABB } from '../Geometry';
-import { MapData } from '../kh/render';
-import { PlatinumMapRenderer, tryMDL0, checkTEX0Compatible } from './Scenes_PokemonPlatinum';
+import { PlatinumMapRenderer, tryMDL0 } from './Scenes_PokemonPlatinum';
 
 const pathBase = `PokemonSoulSilver`;
 class ModelCache {

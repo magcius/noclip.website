@@ -7,7 +7,7 @@ import * as NARC from './narc';
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { MDL0Renderer, G3DPass } from './render';
+import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render';
 import { assert, assertExists } from '../util';
 import { mat4 } from 'gl-matrix';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -18,6 +18,8 @@ import { SceneContext } from '../SceneBase';
 import { parseNSBMD, BTX0, parseNSBTX, fx32, TEX0, MDL0Model } from './NNS_G3D';
 import { CameraController } from '../Camera';
 import { AABB } from '../Geometry';
+import { NITRO_Program } from '../SuperMario64DS/render';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 
 const pathBase = `PokemonPlatinum`;
 class ModelCache {
@@ -85,6 +87,12 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
+
+        template.setBindingLayouts(nnsG3dBindingLayouts);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
+        const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(this.renderInstManager, viewerInput);
         this.renderInstManager.popTemplateRenderInst();
