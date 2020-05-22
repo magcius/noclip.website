@@ -585,9 +585,6 @@ export class BSPFile {
 
             const texinfo = faces.getUint16(idx + 0x0A, true);
             const tex = this.texinfo[texinfo];
-            if (!!(tex.flags & TexinfoFlags.NODRAW)) {
-                continue;
-            }
 
             const numedges = faces.getUint16(idx + 0x08, true);
             const dispinfo = faces.getInt16(idx + 0x0C, true);
@@ -725,13 +722,17 @@ export class BSPFile {
 
                 // Load the four corner vertices.
                 let corners: vec3[] = [];
+                let startDist = Infinity;
                 let startIndex = -1;
                 for (let j = 0; j < 4; j++) {
                     const vertIndex = vertindices[firstedge + j];
                     const corner = vec3.fromValues(vertexes[vertIndex * 3 + 0], vertexes[vertIndex * 3 + 1], vertexes[vertIndex * 3 + 2]);
                     corners.push(corner);
-                    if (vec3.dist(corner, disp.startPos) < 1.0)
+                    const dist = vec3.dist(corner, disp.startPos);
+                    if (dist < startDist) {
                         startIndex = j;
+                        startDist = dist;
+                    }
                 }
                 assert(startIndex >= 0);
 
