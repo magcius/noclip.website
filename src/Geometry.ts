@@ -293,20 +293,21 @@ export class Frustum {
     public updateWorldFrustum(worldMatrix: mat4): void {
         const scratch = Frustum.scratchPlaneVec3;
 
-        const fn = this.isOrthographic ? 1 : this.far / this.near;
+        // From the perspective of building anything but our far plane, any finite number would work here.
+        const hasInfiniteFar = !Number.isFinite(this.far);
+        const finiteFar = hasInfiniteFar ? Math.sign(this.far) * (this.near + 1) : this.far;
+        const fn = this.isOrthographic ? 1 : finiteFar / this.near;
         vec3.set(scratch[0], this.left, this.top, this.near);
         vec3.set(scratch[1], this.right, this.top, this.near);
         vec3.set(scratch[2], this.right, this.bottom, this.near);
         vec3.set(scratch[3], this.left, this.bottom, this.near);
-        vec3.set(scratch[4], fn * this.left, fn * this.top, this.far);
-        vec3.set(scratch[5], fn * this.right, fn * this.top, this.far);
-        vec3.set(scratch[6], fn * this.right, fn * this.bottom, this.far);
-        vec3.set(scratch[7], fn * this.left, fn * this.bottom, this.far);
+        vec3.set(scratch[4], fn * this.left, fn * this.top, finiteFar);
+        vec3.set(scratch[5], fn * this.right, fn * this.top, finiteFar);
+        vec3.set(scratch[6], fn * this.right, fn * this.bottom, finiteFar);
+        vec3.set(scratch[7], fn * this.left, fn * this.bottom, finiteFar);
 
         for (let i = 0; i < 8; i++)
             transformVec3Mat4w1(scratch[i], worldMatrix, scratch[i]);
-
-        this.aabb.setFromPoints(scratch);
 
         this.planes[0].set(scratch[0], scratch[4], scratch[7]); // left plane
         this.planes[1].set(scratch[2], scratch[6], scratch[5]); // right plane
@@ -315,6 +316,15 @@ export class Frustum {
         this.planes[4].set(scratch[2], scratch[6], scratch[5]); // top plane
         this.planes[5].set(scratch[3], scratch[7], scratch[6]); // bottom plane
 
+        // mark the infinite far plane invalid if that's what's going on.
+        if (hasInfiniteFar) {
+            this.planes[3].d = Number.NaN;
+            this.aabb.minX = this.aabb.minY = this.aabb.minZ = Number.NaN;
+            this.aabb.maxX = this.aabb.maxY = this.aabb.maxZ = Number.NaN;
+        } else {
+            this.aabb.setFromPoints(scratch);
+        }
+
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;
             ctx.strokeStyle = 'red';
@@ -322,8 +332,8 @@ export class Frustum {
 
             vec3.set(scratch[0], this.left, 0, this.near);
             vec3.set(scratch[1], this.right, 0, this.near);
-            vec3.set(scratch[2], fn * this.right, 0, this.far);
-            vec3.set(scratch[3], fn * this.left, 0, this.far);
+            vec3.set(scratch[2], fn * this.right, 0, finiteFar);
+            vec3.set(scratch[3], fn * this.left, 0, finiteFar);
 
             ctx.strokeStyle = 'green';
             ctx.beginPath();
