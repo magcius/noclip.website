@@ -61,6 +61,7 @@ import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
+import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -155,6 +156,7 @@ const sceneGroups = [
     Scenes_InteractiveExamples.sceneGroup,
     Scenes_SunshineWater.sceneGroup,
     Scenes_TeamFortress2.sceneGroup,
+    Scenes_Portal.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
