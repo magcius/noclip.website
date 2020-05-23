@@ -193,7 +193,7 @@ export class SkyboxRenderer {
 class BSPSurfaceRenderer {
     public visible = true;
     public materialInstance: BaseMaterial | null = null;
-    public lightmap: SurfaceLightmap;
+    public lightmaps: SurfaceLightmap[] = [];
     // displacement
     public clusterset: number[] | null = null;
 
@@ -203,7 +203,7 @@ class BSPSurfaceRenderer {
     public bindMaterial(materialInstance: BaseMaterial, lightmapManager: LightmapManager): void {
         this.materialInstance = materialInstance;
 
-        this.lightmap = new SurfaceLightmap(lightmapManager, this.surface, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap);
+        this.lightmaps.push(new SurfaceLightmap(lightmapManager, this.surface, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap));
         this.materialInstance.setLightmapAllocation(lightmapManager.getPageTexture(this.surface.lightmapPageIndex), lightmapManager.gfxSampler);
     }
 
@@ -240,8 +240,8 @@ class BSPSurfaceRenderer {
                 return;
         }
 
-        if (this.lightmap !== null)
-            this.lightmap.buildLightmap(renderContext.worldLightingState);
+        for (let i = 0; i < this.lightmaps.length; i++)
+            this.lightmaps[i].buildLightmap(renderContext.worldLightingState);
 
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix);

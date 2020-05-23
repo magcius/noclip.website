@@ -505,7 +505,6 @@ layout(row_major, std140) uniform ub_ObjectParams {
 
 #define u_AlphaTestReference (u_Misc[0].x)
 #define u_DetailBlendFactor  (u_Misc[0].y)
-#define u_LightmapOffset     (u_Misc[0].z)
 
 // Base, Detail
 varying vec4 v_TexCoord0;
@@ -527,6 +526,9 @@ varying vec3 v_TangentSpaceBasis1;
 #endif
 // Just need the vertex normal component.
 varying vec3 v_TangentSpaceBasis2;
+#ifdef USE_BUMPMAP
+varying float v_LightmapOffset;
+#endif
 
 // Base, Detail, Bumpmap, Lightmap, Envmap Mask, BaseTexture2
 uniform sampler2D u_Texture[6];
@@ -572,7 +574,7 @@ void mainVS() {
     vec3 t_TangentSWorld = a_TangentS.xyz;
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
 
-    v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;
+    v_TangentSpaceBasis0 = t_TangentSWorld * sign(a_TangentS.w);
     v_TangentSpaceBasis1 = t_TangentTWorld;
 #endif
     v_TangentSpaceBasis2 = t_NormalWorld;
@@ -588,6 +590,7 @@ void mainVS() {
     v_TexCoord1.zw = CalcScaleBias(a_TexCoord.xy, u_EnvmapMaskScaleBias);
 #endif
 #ifdef USE_BUMPMAP
+    v_LightmapOffset = abs(a_TangentS.w);
     v_TexCoord2.xy = Mul(u_BumpmapTransform, vec4(a_TexCoord.xy, 1.0, 1.0));
 #endif
 }
@@ -661,9 +664,9 @@ void mainPS() {
     vec3 t_DiffuseLightingScale = u_ModulationColor.xyz;
 
 #ifdef USE_DIFFUSE_BUMPMAP
-    vec3 t_LightmapColor1 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, u_LightmapOffset * 1.0))).rgb;
-    vec3 t_LightmapColor2 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, u_LightmapOffset * 2.0))).rgb;
-    vec3 t_LightmapColor3 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, u_LightmapOffset * 3.0))).rgb;
+    vec3 t_LightmapColor1 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 1.0))).rgb;
+    vec3 t_LightmapColor2 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 2.0))).rgb;
+    vec3 t_LightmapColor3 = texture(SAMPLER_2D(u_Texture[3], v_TexCoord1.xy + vec2(0.0, v_LightmapOffset * 3.0))).rgb;
 
     vec3 t_Influence;
 

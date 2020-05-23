@@ -717,7 +717,8 @@ export class BSPFile {
 
             const center = vec3.create();
 
-            let createdNewSurface = true;
+            const page = this.lightmapPackerManager.pages[surfaceLighting.pageIndex];
+            const lightmapBumpOffset = surfaceLighting.hasBumpmapSamples ? (surfaceLighting.mapHeight / page.height) : 1;
 
             // vertex data
             if (dispinfo >= 0) {
@@ -767,7 +768,8 @@ export class BSPFile {
                         vertexData[dstOffs++] = scratchTangentS[0];
                         vertexData[dstOffs++] = scratchTangentS[1];
                         vertexData[dstOffs++] = scratchTangentS[2];
-                        vertexData[dstOffs++] = tangentSSign;
+                        // Tangent Sign and Lightmap Offset
+                        vertexData[dstOffs++] = tangentSSign * lightmapBumpOffset;
 
                         // Texture UV
                         calcTexCoord(scratchVec2, vertex.position, tex.textureMapping);
@@ -777,12 +779,11 @@ export class BSPFile {
                         vertexData[dstOffs++] = scratchVec2[1];
 
                         // Lightmap UV
-                        // Source seems to just have lightmaps in surface space, and ignore the mapping. (!!!)
+                        // Source seems to just have displacement lightmaps in surface space, and ignore the mapping. (!!!)
                         scratchVec2[0] = (vertex.uv[0] * m_LightmapTextureSizeInLuxels[0]) + 0.5;
                         scratchVec2[1] = (vertex.uv[1] * m_LightmapTextureSizeInLuxels[1]) + 0.5;
 
                         // Place into page.
-                        const page = this.lightmapPackerManager.pages[surfaceLighting.pageIndex];
                         scratchVec2[0] = (scratchVec2[0] + surfaceLighting.pagePosX) / page.width;
                         scratchVec2[1] = (scratchVec2[1] + surfaceLighting.pagePosY) / page.height;
 
@@ -835,7 +836,9 @@ export class BSPFile {
                     vertexData[dstOffs++] = scratchTangentS[0];
                     vertexData[dstOffs++] = scratchTangentS[1];
                     vertexData[dstOffs++] = scratchTangentS[2];
-                    vertexData[dstOffs++] = tangentSSign;
+                    // Tangent Sign and Lightmap Offset
+                    vertexData[dstOffs++] = tangentSSign * lightmapBumpOffset;
+
                     // Tangent T = Tangent S x Normal. Done in shader.
 
                     // Texture UV
