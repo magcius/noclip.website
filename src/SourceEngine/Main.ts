@@ -5,7 +5,7 @@ import { ViewerRenderInput, SceneGfx } from "../viewer";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { BSPFile, Surface, Model } from "./BSPFile";
+import { BSPFile, BSPLeaf, Surface, Model } from "./BSPFile";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, executeOnPass } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -13,9 +13,9 @@ import { mat4, vec3 } from "gl-matrix";
 import { VPKMount } from "./VPK";
 import { ZipFile } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightingInstance, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase } from "./Materials";
+import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase } from "./Materials";
 import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
-import { assert, assertExists } from "../util";
+import { assertExists } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { AABB, Frustum } from "../Geometry";
@@ -193,7 +193,7 @@ export class SkyboxRenderer {
 class BSPSurfaceRenderer {
     public visible = true;
     public materialInstance: BaseMaterial | null = null;
-    public surfaceLighting: SurfaceLightingInstance;
+    public lightmap: SurfaceLightmap;
     // displacement
     public clusterset: number[] | null = null;
 
@@ -203,8 +203,8 @@ class BSPSurfaceRenderer {
     public bindMaterial(materialInstance: BaseMaterial, lightmapManager: LightmapManager): void {
         this.materialInstance = materialInstance;
 
-        this.surfaceLighting = new SurfaceLightingInstance(lightmapManager, this.surface, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap);
-        this.materialInstance.setLightmapAllocation(this.surfaceLighting);
+        this.lightmap = new SurfaceLightmap(lightmapManager, this.surface, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap);
+        this.materialInstance.setLightmapAllocation(lightmapManager.getPageTexture(this.surface.lightmapPageIndex), lightmapManager.gfxSampler);
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -240,8 +240,8 @@ class BSPSurfaceRenderer {
                 return;
         }
 
-        if (this.surfaceLighting !== null)
-            this.surfaceLighting.buildLightmap(renderContext.worldLightingState);
+        if (this.lightmap !== null)
+            this.lightmap.buildLightmap(renderContext.worldLightingState);
 
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix);
@@ -262,7 +262,7 @@ class BSPModelRenderer {
     public surfacesByIdx: BSPSurfaceRenderer[] = [];
     public displacementSurfaces: BSPSurfaceRenderer[] = [];
     public materialInstances: BaseMaterial[] = [];
-    public liveSurfaceSet = new Set<BSPSurfaceRenderer>();
+    public liveSurfaceSet = new Set<number>();
 
     constructor(renderContext: SourceRenderContext, public model: Model, public bsp: BSPFile) {
         for (let i = 0; i < model.surfaces.length; i++) {
@@ -313,7 +313,7 @@ class BSPModelRenderer {
             this.surfaces[i].movement(renderContext);
     }
 
-    private gatherSurfaces(liveSurfaceSet: Set<BSPSurfaceRenderer>, nodeid: number, pvs: BitMap, cullFrustum: Frustum): void {
+    private gatherSurfaces(liveSurfaceSet: Set<number>, nodeid: number, pvs: BitMap, cullFrustum: Frustum): void {
         if (nodeid >= 0) {
             // node
             const node = this.bsp.nodelist[nodeid];
@@ -327,7 +327,7 @@ class BSPModelRenderer {
             this.gatherSurfaces(liveSurfaceSet, node.child1, pvs, cullFrustum);
 
             for (let i = 0; i < node.surfaces.length; i++)
-                liveSurfaceSet.add(this.surfacesByIdx[node.surfaces[i]]);
+                liveSurfaceSet.add(node.surfaces[i]);
         } else {
             // leaf
             const leafnum = -nodeid - 1;
@@ -342,7 +342,7 @@ class BSPModelRenderer {
                 return;
 
             for (let i = 0; i < leaf.surfaces.length; i++)
-                liveSurfaceSet.add(this.surfacesByIdx[leaf.surfaces[i]]);
+                liveSurfaceSet.add(leaf.surfaces[i]);
         }
     }
 
@@ -364,8 +364,8 @@ class BSPModelRenderer {
         this.liveSurfaceSet.clear();
         this.gatherSurfaces(this.liveSurfaceSet, this.model.headnode, pvs, viewerInput.camera.frustum);
 
-        for (const surface of this.liveSurfaceSet.values())
-            surface.prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix);
+        for (const surfaceIdx of this.liveSurfaceSet.values())
+            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix);
     }
 }
 
@@ -588,7 +588,7 @@ export class BSPRenderer {
         mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         for (let i = 0; i < this.detailSpriteLeafRenderers.length; i++) {
             const spr = this.detailSpriteLeafRenderers[i];
-            // TODO(jstpierre): This seems to have clusterless leaves ??????
+            // TODO(jstpierre): Traverse leaves at runtime
             const cluster = this.bsp.leaflist[spr.leaf].cluster;
             if (cluster !== 0xFFFF && !this.pvs.getBit(cluster))
                 continue;

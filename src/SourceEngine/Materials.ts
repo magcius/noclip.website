@@ -461,7 +461,7 @@ export abstract class BaseMaterial {
         return this.loaded;
     }
 
-    public setLightmapAllocation(lightmapAllocation: SurfaceLightingInstance): void {
+    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
         // Nothing by default.
     }
 
@@ -745,7 +745,6 @@ class Material_Generic extends BaseMaterial {
     private wantsEnvmapMask = false;
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
-    private lightmapAllocation: SurfaceLightingInstance | null = null;
 
     private program: GenericMaterialProgram;
     private gfxProgram: GfxProgram;
@@ -875,11 +874,10 @@ class Material_Generic extends BaseMaterial {
         return this.loaded;
     }
 
-    public setLightmapAllocation(lightmapAllocation: SurfaceLightingInstance): void {
-        this.lightmapAllocation = lightmapAllocation;
+    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
         const lightmapTextureMapping = this.textureMapping[3];
-        lightmapTextureMapping.gfxTexture = this.lightmapAllocation.gfxTexture;
-        lightmapTextureMapping.gfxSampler = this.lightmapAllocation.gfxSampler;
+        lightmapTextureMapping.gfxTexture = gfxTexture;
+        lightmapTextureMapping.gfxSampler = gfxSampler;
     }
 
     private updateTextureMappings(): void {
@@ -933,7 +931,9 @@ class Material_Generic extends BaseMaterial {
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
-        const lightmapOffset = this.lightmapAllocation !== null ? this.lightmapAllocation.bumpPageOffset : 0.0;
+        // TODO(jstpierre): Remove this as a uniform. Won't work when we pack surfaces together.
+        // const lightmapOffset = this.lightmapAllocation !== null ? this.lightmapAllocation.bumpPageOffset : 0.0;
+        const lightmapOffset = 0;
         offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, lightmapOffset);
 
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -1329,7 +1329,7 @@ export class MaterialCache {
 class LightmapPage {
     public gfxTexture: GfxTexture;
     public data: Uint8Array;
-    public instances: SurfaceLightingInstance[] = [];
+    public instances: SurfaceLightmap[] = [];
 
     constructor(device: GfxDevice, private packer: LightmapPackerPage) {
         const width = this.packer.width, height = this.packer.height;
@@ -1337,10 +1337,9 @@ class LightmapPage {
         this.data = new Uint8Array(width * height * 4);
     }
 
-    public registerInstance(instance: SurfaceLightingInstance): void {
+    public registerSurfaceLightmap(instance: SurfaceLightmap): void {
         this.instances.push(instance);
         instance.page = this;
-        instance.gfxTexture = this.gfxTexture;
         instance.bumpPageOffset = (instance.lighting.height / 4) / this.packer.height;
     }
 
@@ -1416,10 +1415,13 @@ export class LightmapManager {
             this.lightmapPages[i].prepareToRender(device);
     }
 
-    public registerInstance(instance: SurfaceLightingInstance): void {
+    public getPageTexture(pageIndex: number): GfxTexture {
+        return this.lightmapPages[pageIndex].gfxTexture;
+    }
+
+    public registerSurfaceLightmap(instance: SurfaceLightmap): void {
         // TODO(jstpierre): PageIndex isn't unique / won't work with multiple BSP files.
-        this.lightmapPages[instance.lighting.pageIndex].registerInstance(instance);
-        instance.gfxSampler = this.gfxSampler;
+        this.lightmapPages[instance.lighting.pageIndex].registerSurfaceLightmap(instance);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1581,15 +1583,13 @@ function createRuntimeLightmap(width: number, height: number, wantsLightmap: boo
     return new Uint8ClampedArray(numLightmaps * lightmapSize);
 }
 
-export class SurfaceLightingInstance {
+export class SurfaceLightmap {
     // The styles that we built our lightmaps for.
     public lightmapStyleIntensities: number[];
     public lightmapUploadDirty: boolean = false;
     public lighting: SurfaceLighting;
     public pixelData: Uint8ClampedArray | null;
 
-    public gfxTexture: GfxTexture | null = null;
-    public gfxSampler: GfxSampler | null = null;
     public page: LightmapPage | null = null;
     public bumpPageOffset: number = 0;
 
@@ -1605,7 +1605,7 @@ export class SurfaceLightingInstance {
 
         if (this.wantsLightmap) {
             // Associate ourselves with the right page.
-            lightmapManager.registerInstance(this);
+            lightmapManager.registerSurfaceLightmap(this);
         }
     }
 

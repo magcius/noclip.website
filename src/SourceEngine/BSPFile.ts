@@ -65,6 +65,7 @@ export interface Surface {
     startIndex: number;
     indexCount: number;
     center: vec3;
+    lightmapPageIndex: number;
     lighting: SurfaceLighting;
 
     // displacement info
@@ -641,6 +642,7 @@ export class BSPFile {
 
         // Sort surfaces by texinfo, and re-pack into fewer surfaces.
         const surfaceRemapTable = nArray(surfaces.length, () => -1);
+        // TODO(jstpierre): Unbreak this
         // surfaces.sort((a, b) => a.texinfo - b.texinfo);
 
         // 3 pos, 4 normal, 4 tangent, 4 uv
@@ -668,10 +670,12 @@ export class BSPFile {
         for (let i = 0; i < surfaces.length; i++) {
             const surface = surfaces[i];
 
+            const lightmapPageIndex = surface.lighting.pageIndex;
             // Determine if we can merge with the previous surface for output.
-            // TODO(jstpierre)
             const prevSurface = i > 0 ? surfaces[i - 1] : null;
-            surfaceRemapTable[surface.index] = i;
+            let mergeSurface: Surface | null = null;
+            if (prevSurface !== null && prevSurface.lighting.pageIndex === surface.lighting.pageIndex && prevSurface.texinfo === surface.texinfo)
+                mergeSurface = assertExists(this.surfaces[this.surfaces.length - 1]);
 
             const idx = surface.index * 0x38;
             const planenum = faces.getUint16(idx + 0x00, true);
@@ -712,6 +716,8 @@ export class BSPFile {
             const surfaceLighting = surface.lighting;
 
             const center = vec3.create();
+
+            let createdNewSurface = true;
 
             // vertex data
             if (dispinfo >= 0) {
@@ -800,7 +806,11 @@ export class BSPFile {
                 }
 
                 assert(m === ((disp.sideLength - 1) ** 2) * 6);
-                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: m, center, lighting: surfaceLighting, isDisplacement: true, bbox: builder.aabb });
+
+                // TODO(jstpierre): Merge disps
+                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: m, center, lighting: surfaceLighting, lightmapPageIndex, isDisplacement: true, bbox: builder.aabb });
+                mergeSurface = null;
+
                 dstOffsIndex += m;
                 dstIndexBase += disp.vertexCount;
             } else {
@@ -878,10 +888,14 @@ export class BSPFile {
                     convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
                 }
 
-                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: indexCount, center, lighting: surfaceLighting, isDisplacement: false, bbox: null });
+                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: indexCount, center, lighting: surfaceLighting, lightmapPageIndex, isDisplacement: false, bbox: null });
+                mergeSurface = null;
+
                 dstOffsIndex += indexCount;
                 dstIndexBase += numedges;
             }
+
+            surfaceRemapTable[surface.index] = this.surfaces.length - 1;
         }
 
         this.vertexData = vertexData;
