@@ -18,7 +18,7 @@ import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathCons
 import { assert, assertExists } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
-import { AABB } from "../Geometry";
+import { AABB, Frustum } from "../Geometry";
 import { DetailSpriteLeafRenderer } from "./StaticDetailObject";
 import BitMap from "../BitMap";
 
@@ -259,14 +259,19 @@ class BSPModelRenderer {
     public modelMatrix = mat4.create();
     public entity: BaseEntity | null = null;
     public surfaces: BSPSurfaceRenderer[] = [];
+    public surfacesByIdx: BSPSurfaceRenderer[] = [];
     public displacementSurfaces: BSPSurfaceRenderer[] = [];
     public materialInstances: BaseMaterial[] = [];
+    public liveSurfaceSet = new Set<BSPSurfaceRenderer>();
 
     constructor(renderContext: SourceRenderContext, public model: Model, public bsp: BSPFile) {
-        for (let j = 0; j < model.surfaceCount; j++) {
-            const surface = new BSPSurfaceRenderer(this.bsp.surfaces[this.model.surfaceStart + j]);
+        for (let i = 0; i < model.surfaces.length; i++) {
+            const surfaceIdx = model.surfaces[i];
+            const surface = new BSPSurfaceRenderer(this.bsp.surfaces[surfaceIdx]);
             this.bindMaterial(renderContext, surface);
+            // TODO(jstpierre): This is ugly
             this.surfaces.push(surface);
+            this.surfacesByIdx[surfaceIdx] = surface;
 
             if (surface.surface.isDisplacement) {
                 const aabb = surface.surface.bbox!;
@@ -280,7 +285,7 @@ class BSPModelRenderer {
     public setEntity(entity: BaseEntity): void {
         this.entity = entity;
         for (let i = 0; i < this.surfaces.length; i++)
-            if (this.surfaces[i].materialInstance !== null)
+            if (this.surfaces[i] !== undefined && this.surfaces[i].materialInstance !== null)
                 this.surfaces[i].materialInstance!.entityParams = entity.materialParams;
     }
 
@@ -308,21 +313,21 @@ class BSPModelRenderer {
             this.surfaces[i].movement(renderContext);
     }
 
-    private prepareToRenderBSP(nodeid: number, renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4, modelMatrixCull: mat4, pvs: BitMap): void {
+    private gatherSurfaces(liveSurfaceSet: Set<BSPSurfaceRenderer>, nodeid: number, pvs: BitMap, cullFrustum: Frustum): void {
         if (nodeid >= 0) {
             // node
             const node = this.bsp.nodelist[nodeid];
 
             mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
             scratchAABB.transform(node.bbox, scratchMatrixCull);
-            if (!viewerInput.camera.frustum.contains(scratchAABB))
+            if (!cullFrustum.contains(scratchAABB))
                 return;
 
-            this.prepareToRenderBSP(node.child0, renderContext, renderInstManager, viewerInput, viewMatrixZUp, modelMatrixCull, pvs);
-            this.prepareToRenderBSP(node.child1, renderContext, renderInstManager, viewerInput, viewMatrixZUp, modelMatrixCull, pvs);
+            this.gatherSurfaces(liveSurfaceSet, node.child0, pvs, cullFrustum);
+            this.gatherSurfaces(liveSurfaceSet, node.child1, pvs, cullFrustum);
 
-            for (let i = node.surfaceStart - this.model.surfaceStart; i < node.surfaceCount; i++)
-                this.surfaces[i].prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix);
+            for (let i = 0; i < node.surfaces.length; i++)
+                liveSurfaceSet.add(this.surfacesByIdx[node.surfaces[i]]);
         } else {
             // leaf
             const leafnum = -nodeid - 1;
@@ -333,14 +338,11 @@ class BSPModelRenderer {
 
             mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
             scratchAABB.transform(leaf.bbox, scratchMatrixCull);
-            if (!viewerInput.camera.frustum.contains(scratchAABB))
+            if (!cullFrustum.contains(scratchAABB))
                 return;
 
-            for (let i = 0; i < leaf.leaffaceCount; i++) {
-                const surfaceIdx = this.bsp.leaffacelist[leaf.leaffaceStart + i] - this.model.surfaceStart;
-                assert(surfaceIdx >= 0);
-                this.surfaces[surfaceIdx].prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix);
-            }
+            for (let i = 0; i < leaf.surfaces.length; i++)
+                liveSurfaceSet.add(this.surfacesByIdx[leaf.surfaces[i]]);
         }
     }
 
@@ -355,11 +357,15 @@ class BSPModelRenderer {
 
         // Render all displacement surfaces.
         // TODO(jstpierre): Move this to the BSP leaves
-        for (let i = 0; i < this.displacementSurfaces.length; i++) {
+        for (let i = 0; i < this.displacementSurfaces.length; i++)
             this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix, pvs);
-        }
 
-        this.prepareToRenderBSP(this.model.headnode, renderContext, renderInstManager, viewerInput, viewMatrixZUp, scratchMatrixCull, pvs);
+        // Gather all BSP surfaces.
+        this.liveSurfaceSet.clear();
+        this.gatherSurfaces(this.liveSurfaceSet, this.model.headnode, pvs, viewerInput.camera.frustum);
+
+        for (const surface of this.liveSurfaceSet.values())
+            surface.prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix);
     }
 }
 

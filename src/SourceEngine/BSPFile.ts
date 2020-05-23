@@ -107,23 +107,20 @@ export interface BSPNode {
     child1: number;
     bbox: AABB;
     area: number;
-    surfaceStart: number;
-    surfaceCount: number;
+    surfaces: number[];
 }
 
 export interface BSPLeaf {
     bbox: AABB;
     area: number;
     cluster: number;
-    leaffaceStart: number;
-    leaffaceCount: number;
+    surfaces: number[];
 }
 
 export interface Model {
     bbox: AABB;
     headnode: number;
-    surfaceStart: number;
-    surfaceCount: number;
+    surfaces: number[];
 }
 
 interface BSPDispInfo {
@@ -409,7 +406,6 @@ export class BSPFile {
     public nodelist: BSPNode[] = [];
     public leaflist: BSPLeaf[] = [];
     public cubemaps: string[] = [];
-    public leaffacelist: Uint16Array;
     public detailObjects: DetailObjects | null = null;
     public staticObjects: StaticObjects | null = null;
     public visibility: BSPVisibility;
@@ -643,8 +639,8 @@ export class BSPFile {
             surfaces.push({ index: i, texinfo, lighting: surfaceLighting });
         }
 
-        // Sort surfaces by texinfo.
-        // TODO(jstpierre): This requires changing surfaceStart
+        // Sort surfaces by texinfo, and re-pack into fewer surfaces.
+        const surfaceRemapTable = nArray(surfaces.length, () => -1);
         // surfaces.sort((a, b) => a.texinfo - b.texinfo);
 
         // 3 pos, 4 normal, 4 tangent, 4 uv
@@ -671,6 +667,11 @@ export class BSPFile {
         let vertnormalIdx = 0;
         for (let i = 0; i < surfaces.length; i++) {
             const surface = surfaces[i];
+
+            // Determine if we can merge with the previous surface for output.
+            // TODO(jstpierre)
+            const prevSurface = i > 0 ? surfaces[i - 1] : null;
+            surfaceRemapTable[surface.index] = i;
 
             const idx = surface.index * 0x38;
             const planenum = faces.getUint16(idx + 0x00, true);
@@ -912,13 +913,17 @@ export class BSPFile {
             const firstface = nodes.getUint16(idx + 0x18, true);
             const numfaces = nodes.getUint16(idx + 0x1A, true);
             const area = nodes.getInt16(idx + 0x1C, true);
-            this.nodelist.push({ plane, child0, child1, bbox, area, surfaceStart: firstface, surfaceCount: numfaces });
+
+            const surfaceset = new Set<number>();
+            for (let i = firstface; i < firstface + numfaces; i++)
+                surfaceset.add(surfaceRemapTable[i]);
+            this.nodelist.push({ plane, child0, child1, bbox, area, surfaces: [...surfaceset.values()] });
         }
 
         const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
         const leafs = leafsLump.createDataView();
 
-        this.leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
+        const leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
         for (let idx = 0x00; idx < leafs.byteLength; idx += 0x20) {
             const contents = leafs.getUint32(idx + 0x00, true);
             const cluster = leafs.getUint16(idx + 0x04, true);
@@ -943,7 +948,10 @@ export class BSPFile {
                 idx += 0x18;
             }
 
-            this.leaflist.push({ bbox, cluster, area, leaffaceStart: firstleafface, leaffaceCount: numleaffaces });
+            const surfaceset = new Set<number>();
+            for (let i = firstleafface; i < firstleafface + numleaffaces; i++)
+                surfaceset.add(leaffacelist[i]);
+            this.leaflist.push({ bbox, cluster, area, surfaces: [...surfaceset.values()] });
         }
 
         const models = getLumpData(LumpType.MODELS).createDataView();
@@ -964,7 +972,10 @@ export class BSPFile {
             const firstface = models.getUint32(idx + 0x28, true);
             const numfaces = models.getUint32(idx + 0x2C, true);
 
-            this.models.push({ bbox, headnode, surfaceStart: firstface, surfaceCount: numfaces });
+            const surfaceset = new Set<number>();
+            for (let i = firstface; i < firstface + numfaces; i++)
+                surfaceset.add(surfaceRemapTable[i]);
+            this.models.push({ bbox, headnode, surfaces: [...surfaceset.values()] });
         }
 
         const cubemaps = getLumpData(LumpType.CUBEMAPS).createDataView();
