@@ -11,7 +11,7 @@ import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "..
 import { VTF, VTFFlags } from "./VTF";
 import { SourceRenderContext, SourceFileSystem } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { Surface, SurfaceLighting, LightmapPackerManager, LightmapPackerPage } from "./BSPFile";
+import { Surface, SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite } from "../Color";
 
@@ -1332,7 +1332,7 @@ export class MaterialCache {
 class LightmapPage {
     public gfxTexture: GfxTexture;
     public data: Uint8Array;
-    public instances: SurfaceLightmap[] = [];
+    public surfaceLightmaps: SurfaceLightmap[] = [];
 
     constructor(device: GfxDevice, private packer: LightmapPackerPage) {
         const width = this.packer.width, height = this.packer.height;
@@ -1340,10 +1340,8 @@ class LightmapPage {
         this.data = new Uint8Array(width * height * 4);
     }
 
-    public registerSurfaceLightmap(instance: SurfaceLightmap): void {
-        this.instances.push(instance);
-        instance.page = this;
-        instance.bumpPageOffset = (instance.lighting.height / 4) / this.packer.height;
+    public registerSurfaceLightmap(surface: SurfaceLightmap): void {
+        this.surfaceLightmaps.push(surface);
     }
 
     public prepareToRender(device: GfxDevice): void {
@@ -1353,17 +1351,17 @@ class LightmapPage {
 
         // TODO(jstpierre): Maybe it makes more sense for packRuntimeLightmapData to do this positioning.
         let anyDirty = false;
-        for (let i = 0; i < this.instances.length; i++) {
-            const instance = this.instances[i];
+        for (let i = 0; i < this.surfaceLightmaps.length; i++) {
+            const instance = this.surfaceLightmaps[i];
             if (!instance.lightmapUploadDirty)
                 continue;
 
-            const alloc = instance.lighting;
+            const lightmapData = instance.lightmapData;
             const pixelData = instance.pixelData!;
 
             let srcOffs = 0;
-            for (let y = alloc.pagePosY; y < alloc.pagePosY + alloc.height; y++) {
-                for (let x = alloc.pagePosX; x < alloc.pagePosX + alloc.width; x++) {
+            for (let y = lightmapData.pagePosY; y < lightmapData.pagePosY + lightmapData.height; y++) {
+                for (let x = lightmapData.pagePosX; x < lightmapData.pagePosX + lightmapData.width; x++) {
                     let dstOffs = (y * this.packer.width + x) * 4;
                     // Copy one pixel.
                     data[dstOffs++] = pixelData[srcOffs++];
@@ -1424,7 +1422,7 @@ export class LightmapManager {
 
     public registerSurfaceLightmap(instance: SurfaceLightmap): void {
         // TODO(jstpierre): PageIndex isn't unique / won't work with multiple BSP files.
-        this.lightmapPages[instance.lighting.pageIndex].registerSurfaceLightmap(instance);
+        this.lightmapPages[instance.lightmapData.pageIndex].registerSurfaceLightmap(instance);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1590,21 +1588,16 @@ export class SurfaceLightmap {
     // The styles that we built our lightmaps for.
     public lightmapStyleIntensities: number[];
     public lightmapUploadDirty: boolean = false;
-    public lighting: SurfaceLighting;
     public pixelData: Uint8ClampedArray | null;
-
-    public page: LightmapPage | null = null;
-    public bumpPageOffset: number = 0;
 
     private scratchpad: Float32Array;
 
-    constructor(lightmapManager: LightmapManager, surface: Surface, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
+    constructor(lightmapManager: LightmapManager, public lightmapData: SurfaceLightmapData, private wantsLightmap: boolean, private wantsBumpmap: boolean) {
         this.scratchpad = lightmapManager.scratchpad;
 
-        this.lighting = assertExists(surface.lighting);
-        this.pixelData = createRuntimeLightmap(this.lighting.width, this.lighting.height, this.wantsLightmap, this.wantsBumpmap);
+        this.pixelData = createRuntimeLightmap(this.lightmapData.width, this.lightmapData.height, this.wantsLightmap, this.wantsBumpmap);
 
-        this.lightmapStyleIntensities = nArray(this.lighting.styles.length, () => -1);
+        this.lightmapStyleIntensities = nArray(this.lightmapData.styles.length, () => -1);
 
         if (this.wantsLightmap) {
             // Associate ourselves with the right page.
@@ -1615,8 +1608,8 @@ export class SurfaceLightmap {
     public buildLightmap(worldLightingState: WorldLightingState): void {
         // Check if our lightmap needs rebuilding.
         let dirty = false;
-        for (let i = 0; i < this.lighting.styles.length; i++) {
-            const styleIdx = this.lighting.styles[i];
+        for (let i = 0; i < this.lightmapData.styles.length; i++) {
+            const styleIdx = this.lightmapData.styles[i];
             if (worldLightingState.styleIntensities[styleIdx] !== this.lightmapStyleIntensities[i]) {
                 this.lightmapStyleIntensities[i] = worldLightingState.styleIntensities[styleIdx];
                 dirty = true;
@@ -1626,10 +1619,10 @@ export class SurfaceLightmap {
         if (!dirty)
             return;
 
-        const hasLightmap = this.lighting.samples !== null;
+        const hasLightmap = this.lightmapData.samples !== null;
         if (this.wantsLightmap && hasLightmap) {
-            const texelCount = this.lighting.mapWidth * this.lighting.mapHeight;
-            const srcNumLightmaps = (this.wantsBumpmap && this.lighting.hasBumpmapSamples) ? 4 : 1;
+            const texelCount = this.lightmapData.mapWidth * this.lightmapData.mapHeight;
+            const srcNumLightmaps = (this.wantsBumpmap && this.lightmapData.hasBumpmapSamples) ? 4 : 1;
             const srcSize = srcNumLightmaps * texelCount * 4;
 
             const scratchpad = this.scratchpad;
@@ -1637,14 +1630,14 @@ export class SurfaceLightmap {
             assert(scratchpad.byteLength >= srcSize);
 
             let srcOffs = 0;
-            for (let i = 0; i < this.lighting.styles.length; i++) {
-                const styleIdx = this.lighting.styles[i];
+            for (let i = 0; i < this.lightmapData.styles.length; i++) {
+                const styleIdx = this.lightmapData.styles[i];
                 const intensity = worldLightingState.styleIntensities[styleIdx];
-                lightmapAccumLight(scratchpad, 0, this.lighting.samples!, srcOffs, srcSize, intensity);
+                lightmapAccumLight(scratchpad, 0, this.lightmapData.samples!, srcOffs, srcSize, intensity);
                 srcOffs += srcSize;
             }
 
-            if (this.wantsBumpmap && !this.lighting.hasBumpmapSamples) {
+            if (this.wantsBumpmap && !this.lightmapData.hasBumpmapSamples) {
                 // Game wants bumpmap samples but has none. Copy from primary lightsource.
                 const src = new Float32Array(scratchpad.buffer, 0, srcSize * 3);
                 for (let i = 1; i < 4; i++) {

@@ -42,7 +42,7 @@ const enum LumpType {
     FACES_HDR            = 58,
 }
 
-export interface SurfaceLighting {
+export interface SurfaceLightmapData {
     // Size of a single lightmap.
     mapWidth: number;
     mapHeight: number;
@@ -57,16 +57,19 @@ export interface SurfaceLighting {
     pageIndex: number;
     pagePosX: number;
     pagePosY: number;
-    lightmapDirty: boolean;
 }
 
 export interface Surface {
     texinfo: number;
     startIndex: number;
     indexCount: number;
-    center: vec3;
+    center: vec3 | null;
+
+    // Since our surfaces are merged together from multiple other surfaces,
+    // we can have multiple surface lightmaps, but they're guaranteed to have
+    // been packed into the same lightmap page.
+    lightmapData: SurfaceLightmapData[];
     lightmapPageIndex: number;
-    lighting: SurfaceLighting;
 
     // displacement info
     isDisplacement: boolean;
@@ -81,6 +84,7 @@ interface TexinfoMapping {
 const enum TexinfoFlags {
     SKY2D     = 0x0002,
     SKY       = 0x0004,
+    TRANS     = 0x0010,
     NODRAW    = 0x0080,
     NOLIGHT   = 0x0400,
     BUMPLIGHT = 0x0800,
@@ -326,7 +330,7 @@ export class LightmapPackerPage {
         this.skyline = new Uint16Array(this.maxHeight);
     }
 
-    public allocate(allocation: SurfaceLighting): boolean {
+    public allocate(allocation: SurfaceLightmapData): boolean {
         const w = allocation.width, h = allocation.height;
 
         // March downwards until we find a span of skyline that will fit.
@@ -379,7 +383,7 @@ export class LightmapPackerManager {
     constructor(public pageWidth: number = 2048, public pageHeight: number = 2048) {
     }
 
-    public allocate(allocation: SurfaceLighting): void {
+    public allocate(allocation: SurfaceLightmapData): void {
         for (let i = 0; i < this.pages.length; i++) {
             if (this.pages[i].allocate(allocation)) {
                 allocation.pageIndex = i;
@@ -565,7 +569,7 @@ export class BSPFile {
         interface BasicSurface {
             index: number;
             texinfo: number;
-            lighting: SurfaceLighting;
+            lightmapData: SurfaceLightmapData;
         }
 
         const surfaces: BasicSurface[] = [];
@@ -629,21 +633,20 @@ export class BSPFile {
             if (lightofs !== -1)
                 samples = lighting.subarray(lightofs, lightmapSize).createTypedArray(Uint8Array);
 
-            const surfaceLighting: SurfaceLighting = {
+            const surfaceLighting: SurfaceLightmapData = {
                 mapWidth, mapHeight, width, height, styles, lightmapSize, samples, hasBumpmapSamples,
-                pageIndex: -1, pagePosX: -1, pagePosY: -1, lightmapDirty: true,
+                pageIndex: -1, pagePosX: -1, pagePosY: -1,
             };
 
             // Allocate ourselves a page.
             this.lightmapPackerManager.allocate(surfaceLighting);
 
-            surfaces.push({ index: i, texinfo, lighting: surfaceLighting });
+            surfaces.push({ index: i, texinfo, lightmapData: surfaceLighting });
         }
 
         // Sort surfaces by texinfo, and re-pack into fewer surfaces.
         const surfaceRemapTable = nArray(surfaces.length, () => -1);
-        // TODO(jstpierre): Unbreak this
-        // surfaces.sort((a, b) => a.texinfo - b.texinfo);
+        surfaces.sort((a, b) => a.texinfo - b.texinfo);
 
         // 3 pos, 4 normal, 4 tangent, 4 uv
         const vertexSize = (3+4+4+4);
@@ -670,11 +673,17 @@ export class BSPFile {
         for (let i = 0; i < surfaces.length; i++) {
             const surface = surfaces[i];
 
-            const lightmapPageIndex = surface.lighting.pageIndex;
+            const tex = this.texinfo[surface.texinfo];
+
+            // Translucent surfaces require a sort, so they can't be merged.
+            const isTranslucent = !!(tex.flags & TexinfoFlags.TRANS);
+            const center = isTranslucent ? vec3.create() : null;
+
+            const lightmapPageIndex = surface.lightmapData.pageIndex;
             // Determine if we can merge with the previous surface for output.
             const prevSurface = i > 0 ? surfaces[i - 1] : null;
             let mergeSurface: Surface | null = null;
-            if (prevSurface !== null && prevSurface.lighting.pageIndex === surface.lighting.pageIndex && prevSurface.texinfo === surface.texinfo)
+            if (!isTranslucent && prevSurface !== null && prevSurface.lightmapData.pageIndex === surface.lightmapData.pageIndex && prevSurface.texinfo === surface.texinfo)
                 mergeSurface = assertExists(this.surfaces[this.surfaces.length - 1]);
 
             const idx = surface.index * 0x38;
@@ -703,7 +712,6 @@ export class BSPFile {
             const planeZ = planes.getFloat32(planenum * 0x14 + 0x08, true);
             vec3.set(scratchPosition, planeX, planeY, planeZ);
 
-            const tex = this.texinfo[surface.texinfo];
             vec3.set(scratchTangentS, tex.textureMapping.s[0], tex.textureMapping.s[1], tex.textureMapping.s[2]);
             vec3.normalize(scratchTangentS, scratchTangentS);
             vec3.set(scratchTangentT, tex.textureMapping.t[0], tex.textureMapping.t[1], tex.textureMapping.t[2]);
@@ -713,12 +721,10 @@ export class BSPFile {
             const tangentSSign = vec3.dot(scratchPosition, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
             const texinfo = surface.texinfo;
-            const surfaceLighting = surface.lighting;
+            const lightmapData = surface.lightmapData;
 
-            const center = vec3.create();
-
-            const page = this.lightmapPackerManager.pages[surfaceLighting.pageIndex];
-            const lightmapBumpOffset = surfaceLighting.hasBumpmapSamples ? (surfaceLighting.mapHeight / page.height) : 1;
+            const page = this.lightmapPackerManager.pages[lightmapData.pageIndex];
+            const lightmapBumpOffset = lightmapData.hasBumpmapSamples ? (lightmapData.mapHeight / page.height) : 1;
 
             // vertex data
             if (dispinfo >= 0) {
@@ -784,8 +790,8 @@ export class BSPFile {
                         scratchVec2[1] = (vertex.uv[1] * m_LightmapTextureSizeInLuxels[1]) + 0.5;
 
                         // Place into page.
-                        scratchVec2[0] = (scratchVec2[0] + surfaceLighting.pagePosX) / page.width;
-                        scratchVec2[1] = (scratchVec2[1] + surfaceLighting.pagePosY) / page.height;
+                        scratchVec2[0] = (scratchVec2[0] + lightmapData.pagePosX) / page.width;
+                        scratchVec2[1] = (scratchVec2[1] + lightmapData.pagePosY) / page.height;
 
                         vertexData[dstOffs++] = scratchVec2[0];
                         vertexData[dstOffs++] = scratchVec2[1];
@@ -809,8 +815,10 @@ export class BSPFile {
                 assert(m === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: m, center, lighting: surfaceLighting, lightmapPageIndex, isDisplacement: true, bbox: builder.aabb });
-                mergeSurface = null;
+                const surface: Surface = { texinfo, startIndex: dstOffsIndex, indexCount: m, center, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb };
+                this.surfaces.push(surface);
+
+                surface.lightmapData.push(lightmapData);
 
                 dstOffsIndex += m;
                 dstIndexBase += disp.vertexCount;
@@ -821,7 +829,9 @@ export class BSPFile {
                     vertexData[dstOffs++] = scratchPosition[0] = vertexes[vertIndex * 3 + 0];
                     vertexData[dstOffs++] = scratchPosition[1] = vertexes[vertIndex * 3 + 1];
                     vertexData[dstOffs++] = scratchPosition[2] = vertexes[vertIndex * 3 + 2];
-                    vec3.scaleAndAdd(center, center, scratchPosition, 1/numedges);
+
+                    if (center !== null)
+                        vec3.scaleAndAdd(center, center, scratchPosition, 1/numedges);
 
                     // Normal
                     const normIndex = vertnormalindices[vertnormBase + j];
@@ -857,9 +867,9 @@ export class BSPFile {
                         scratchVec2[1] += 0.5 - m_LightmapTextureMinsInLuxels[1];
 
                         // Place into page.
-                        const page = this.lightmapPackerManager.pages[surfaceLighting.pageIndex];
-                        scratchVec2[0] = (scratchVec2[0] + surfaceLighting.pagePosX) / page.width;
-                        scratchVec2[1] = (scratchVec2[1] + surfaceLighting.pagePosY) / page.height;
+                        const page = this.lightmapPackerManager.pages[lightmapData.pageIndex];
+                        scratchVec2[0] = (scratchVec2[0] + lightmapData.pagePosX) / page.width;
+                        scratchVec2[1] = (scratchVec2[1] + lightmapData.pagePosY) / page.height;
                     }
 
                     vertexData[dstOffs++] = scratchVec2[0];
@@ -891,8 +901,15 @@ export class BSPFile {
                     convertToTrianglesRange(indexData, dstOffsIndex, GfxTopology.TRIFAN, dstIndexBase, numedges);
                 }
 
-                this.surfaces.push({ texinfo, startIndex: dstOffsIndex, indexCount: indexCount, center, lighting: surfaceLighting, lightmapPageIndex, isDisplacement: false, bbox: null });
-                mergeSurface = null;
+                let surface = mergeSurface;
+
+                if (surface === null) {
+                    surface = { texinfo, startIndex: dstOffsIndex, indexCount: 0, center, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null };
+                    this.surfaces.push(surface);
+                }
+
+                surface.indexCount += indexCount;
+                surface.lightmapData.push(lightmapData);
 
                 dstOffsIndex += indexCount;
                 dstIndexBase += numedges;
@@ -967,7 +984,7 @@ export class BSPFile {
 
             const surfaceset = new Set<number>();
             for (let i = firstleafface; i < firstleafface + numleaffaces; i++)
-                surfaceset.add(leaffacelist[i]);
+                surfaceset.add(surfaceRemapTable[leaffacelist[i]]);
             this.leaflist.push({ bbox, cluster, area, surfaces: [...surfaceset.values()] });
         }
 

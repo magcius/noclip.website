@@ -203,7 +203,11 @@ class BSPSurfaceRenderer {
     public bindMaterial(materialInstance: BaseMaterial, lightmapManager: LightmapManager): void {
         this.materialInstance = materialInstance;
 
-        this.lightmaps.push(new SurfaceLightmap(lightmapManager, this.surface, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap));
+        for (let i = 0; i < this.surface.lightmapData.length; i++) {
+            const lightmapData = this.surface.lightmapData[i];
+            this.lightmaps.push(new SurfaceLightmap(lightmapManager, lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap));
+        }
+
         this.materialInstance.setLightmapAllocation(lightmapManager.getPageTexture(this.surface.lightmapPageIndex), lightmapManager.gfxSampler);
     }
 
@@ -246,8 +250,10 @@ class BSPSurfaceRenderer {
         const renderInst = renderInstManager.newRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
-        const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrixZUp, this.surface.center);
-        renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+        if (this.surface.center !== null) {
+            const depth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrixZUp, this.surface.center);
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+        }
         renderInstManager.submitRenderInst(renderInst);
     }
 }
