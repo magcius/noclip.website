@@ -570,6 +570,7 @@ export class BSPFile {
             index: number;
             texinfo: number;
             lightmapData: SurfaceLightmapData;
+            vertnormalBase: number;
         }
 
         const surfaces: BasicSurface[] = [];
@@ -577,6 +578,9 @@ export class BSPFile {
         let lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
         if (lighting.byteLength === 0)
             lighting = getLumpData(LumpType.LIGHTING, 1);
+
+        // Normals are packed in surface order (???), so we need to unpack these before the initial sort.
+        let vertnormalIdx = 0;
 
         // Do some initial surface parsing, pack lightmaps, and count up the number of vertices we need.
         let vertCount = 0;
@@ -589,6 +593,10 @@ export class BSPFile {
 
             const numedges = faces.getUint16(idx + 0x08, true);
             const dispinfo = faces.getInt16(idx + 0x0C, true);
+
+            // Normals are stored in the data for all surfaces, even for displacements.
+            const vertnormalBase = vertnormalIdx;
+            vertnormalIdx += numedges;
 
             // Count vertices.
             if (dispinfo >= 0) {
@@ -633,15 +641,15 @@ export class BSPFile {
             if (lightofs !== -1)
                 samples = lighting.subarray(lightofs, lightmapSize).createTypedArray(Uint8Array);
 
-            const surfaceLighting: SurfaceLightmapData = {
+            const lightmapData: SurfaceLightmapData = {
                 mapWidth, mapHeight, width, height, styles, lightmapSize, samples, hasBumpmapSamples,
                 pageIndex: -1, pagePosX: -1, pagePosY: -1,
             };
 
             // Allocate ourselves a page.
-            this.lightmapPackerManager.allocate(surfaceLighting);
+            this.lightmapPackerManager.allocate(lightmapData);
 
-            surfaces.push({ index: i, texinfo, lightmapData: surfaceLighting });
+            surfaces.push({ index: i, texinfo, lightmapData, vertnormalBase });
         }
 
         // Sort surfaces by texinfo, and re-pack into fewer surfaces.
@@ -669,24 +677,26 @@ export class BSPFile {
         let dstOffs = 0;
         let dstOffsIndex = 0;
         let dstIndexBase = 0;
-        let vertnormalIdx = 0;
         for (let i = 0; i < surfaces.length; i++) {
-            const surface = surfaces[i];
+            const basicSurface = surfaces[i];
 
-            const tex = this.texinfo[surface.texinfo];
+            const tex = this.texinfo[basicSurface.texinfo];
 
             // Translucent surfaces require a sort, so they can't be merged.
             const isTranslucent = !!(tex.flags & TexinfoFlags.TRANS);
             const center = isTranslucent ? vec3.create() : null;
 
-            const lightmapPageIndex = surface.lightmapData.pageIndex;
+            const lightmapPageIndex = basicSurface.lightmapData.pageIndex;
             // Determine if we can merge with the previous surface for output.
+
+            // TODO(jstpierre): We need to check that we're inside two different entities.
+            // The hope is that texinfo's will differ in this case, but this is not 100% guaranteed.
             const prevSurface = i > 0 ? surfaces[i - 1] : null;
             let mergeSurface: Surface | null = null;
-            if (!isTranslucent && prevSurface !== null && prevSurface.lightmapData.pageIndex === surface.lightmapData.pageIndex && prevSurface.texinfo === surface.texinfo)
+            if (!isTranslucent && prevSurface !== null && prevSurface.lightmapData.pageIndex === basicSurface.lightmapData.pageIndex && prevSurface.texinfo === basicSurface.texinfo)
                 mergeSurface = assertExists(this.surfaces[this.surfaces.length - 1]);
 
-            const idx = surface.index * 0x38;
+            const idx = basicSurface.index * 0x38;
             const planenum = faces.getUint16(idx + 0x00, true);
             const side = faces.getUint8(idx + 0x02);
             const onNode = faces.getUint8(idx + 0x03);
@@ -703,9 +713,6 @@ export class BSPFile {
             const firstPrimID = faces.getUint16(idx + 0x32, true);
             const smoothingGroups = faces.getUint32(idx + 0x34, true);
 
-            const vertnormBase = vertnormalIdx;
-            vertnormalIdx += numedges;
-
             // Tangent space setup.
             const planeX = planes.getFloat32(planenum * 0x14 + 0x00, true);
             const planeY = planes.getFloat32(planenum * 0x14 + 0x04, true);
@@ -720,8 +727,8 @@ export class BSPFile {
             // Detect if we need to flip tangents.
             const tangentSSign = vec3.dot(scratchPosition, scratchNormal) > 0.0 ? -1.0 : 1.0;
 
-            const texinfo = surface.texinfo;
-            const lightmapData = surface.lightmapData;
+            const texinfo = basicSurface.texinfo;
+            const lightmapData = basicSurface.lightmapData;
 
             const page = this.lightmapPackerManager.pages[lightmapData.pageIndex];
             const lightmapBumpOffset = lightmapData.hasBumpmapSamples ? (lightmapData.mapHeight / page.height) : 1;
@@ -833,8 +840,11 @@ export class BSPFile {
                     if (center !== null)
                         vec3.scaleAndAdd(center, center, scratchPosition, 1/numedges);
 
+                    // Leave normal for later, as we need to do a different method of parsing them out.
+
                     // Normal
-                    const normIndex = vertnormalindices[vertnormBase + j];
+                    const vertnormalBase = basicSurface.vertnormalBase;
+                    const normIndex = vertnormalindices[vertnormalBase + j];
                     vertexData[dstOffs++] = scratchNormal[0] = vertnormals[normIndex * 3 + 0];
                     vertexData[dstOffs++] = scratchNormal[1] = vertnormals[normIndex * 3 + 1];
                     vertexData[dstOffs++] = scratchNormal[2] = vertnormals[normIndex * 3 + 2];
@@ -915,7 +925,7 @@ export class BSPFile {
                 dstIndexBase += numedges;
             }
 
-            surfaceRemapTable[surface.index] = this.surfaces.length - 1;
+            surfaceRemapTable[basicSurface.index] = this.surfaces.length - 1;
         }
 
         this.vertexData = vertexData;

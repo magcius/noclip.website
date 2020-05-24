@@ -11,7 +11,7 @@ import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "..
 import { VTF, VTFFlags } from "./VTF";
 import { SourceRenderContext, SourceFileSystem } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { Surface, SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage } from "./BSPFile";
+import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite } from "../Color";
 
@@ -1334,8 +1334,8 @@ class LightmapPage {
     public data: Uint8Array;
     public surfaceLightmaps: SurfaceLightmap[] = [];
 
-    constructor(device: GfxDevice, private packer: LightmapPackerPage) {
-        const width = this.packer.width, height = this.packer.height;
+    constructor(device: GfxDevice, private page: LightmapPackerPage) {
+        const width = this.page.width, height = this.page.height;
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_SRGB, width, height, 1));
         this.data = new Uint8Array(width * height * 4);
     }
@@ -1362,7 +1362,7 @@ class LightmapPage {
             let srcOffs = 0;
             for (let y = lightmapData.pagePosY; y < lightmapData.pagePosY + lightmapData.height; y++) {
                 for (let x = lightmapData.pagePosX; x < lightmapData.pagePosX + lightmapData.width; x++) {
-                    let dstOffs = (y * this.packer.width + x) * 4;
+                    let dstOffs = (y * this.page.width + x) * 4;
                     // Copy one pixel.
                     data[dstOffs++] = pixelData[srcOffs++];
                     data[dstOffs++] = pixelData[srcOffs++];
