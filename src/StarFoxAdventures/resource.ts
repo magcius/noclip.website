@@ -88,20 +88,22 @@ export class ResourceCollection {
     public tablesTab: DataView;
     public tablesBin: DataView;
 
-    constructor(private device: GfxDevice, private gameInfo: GameInfo, private subdir: string, private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
+    constructor(private device: GfxDevice, private gameInfo: GameInfo, private subdirs: string[], private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
     }
 
-    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, materialFactory: MaterialFactory, animController: SFAAnimationController): Promise<ResourceCollection> {
-        const self = new ResourceCollection(device, gameInfo, subdir, materialFactory, animController);
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[], materialFactory: MaterialFactory, animController: SFAAnimationController): Promise<ResourceCollection> {
+        const self = new ResourceCollection(device, gameInfo, subdirs, materialFactory, animController);
 
         self.texFetcher = await SFATextureFetcher.create(self.gameInfo, dataFetcher, false); // TODO: support beta
-        await self.texFetcher.loadSubdir(subdir, dataFetcher);
-        self.modelFetcher = await ModelFetcher.create(device, gameInfo, dataFetcher, self.texFetcher, self.materialFactory, self.animController, ModelVersion.Final)
-        await self.modelFetcher.loadSubdir(subdir, dataFetcher);
+        self.modelFetcher = await ModelFetcher.create(device, gameInfo, dataFetcher, self.texFetcher, self.materialFactory, self.animController, ModelVersion.Final);
+        for (let subdir of subdirs) {
+            await self.texFetcher.loadSubdir(subdir, dataFetcher);
+            await self.modelFetcher.loadSubdir(subdir, dataFetcher);
+        }
 
         const pathBase = self.gameInfo.pathBase;
         const [animColl, amapColl, modanimColl, tablesTab, tablesBin] = await Promise.all([
-            AnimCollection.create(self.gameInfo, dataFetcher, subdir),
+            AnimCollection.create(self.gameInfo, dataFetcher, subdirs[0]),
             AmapCollection.create(self.gameInfo, dataFetcher),
             ModanimCollection.create(self.gameInfo, dataFetcher),
             dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
