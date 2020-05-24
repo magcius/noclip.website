@@ -21,6 +21,7 @@ import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera
 import { AABB, Frustum } from "../Geometry";
 import { DetailSpriteLeafRenderer } from "./StaticDetailObject";
 import BitMap from "../BitMap";
+import { StudioModelCache } from "./Studio";
 
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
@@ -527,6 +528,13 @@ export class BSPRenderer {
         if (this.bsp.detailObjects !== null)
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
                 this.detailSpriteLeafRenderers.push(new DetailSpriteLeafRenderer(renderContext, this.bsp.detailObjects, leaf));
+
+        if (this.bsp.staticObjects !== null) {
+            for (const obj of this.bsp.staticObjects.staticObjects) {
+                renderContext.studioModelCache.fetchStudioModelData(obj.propName);
+                break;
+            }
+        }
     }
 
     private spawnEntities(renderContext: SourceRenderContext): void {
@@ -617,6 +625,7 @@ export class BSPRenderer {
 
 export class SourceRenderContext {
     public lightmapManager: LightmapManager;
+    public studioModelCache: StudioModelCache;
     public materialCache: MaterialCache;
     public worldLightingState = new WorldLightingState();
     public globalTime: number = 0;
@@ -629,6 +638,7 @@ export class SourceRenderContext {
     constructor(public device: GfxDevice, public cache: GfxRenderCache, public filesystem: SourceFileSystem) {
         this.lightmapManager = new LightmapManager(device, cache);
         this.materialCache = new MaterialCache(device, cache, this.filesystem);
+        this.studioModelCache = new StudioModelCache(this, this.filesystem);
     }
 
     public destroy(device: GfxDevice): void {
