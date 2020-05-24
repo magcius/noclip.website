@@ -1847,6 +1847,7 @@ void main() {
             descriptor.ensurePreprocessed(this.queryVendorInfo());
             program.compileDirty = true;
             this._tryCompileProgram(program);
+            this._checkProgramCompilationForErrors(program);
         }
 
         this._useProgram(program);
