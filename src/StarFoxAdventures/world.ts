@@ -61,16 +61,16 @@ export class World {
     public objectInstances: ObjectInstance[] = [];
 
     // TODO: we might have to support worlds that are comprised of multiple subdirectories
-    private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdir: string) {
+    private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[]) {
     }
 
-    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string): Promise<World> {
-        const self = new World(device, gameInfo, subdir);
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[]): Promise<World> {
+        const self = new World(device, gameInfo, subdirs);
         
         self.animController = new SFAAnimationController();
         self.envfxMan = await EnvfxManager.create(self, dataFetcher);
         self.materialFactory = new MaterialFactory(device, self.envfxMan);
-        self.resColl = await ResourceCollection.create(device, gameInfo, dataFetcher, subdir, self.materialFactory, self.animController);
+        self.resColl = await ResourceCollection.create(device, gameInfo, dataFetcher, subdirs, self.materialFactory, self.animController);
         self.blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, device, self.materialFactory, self.animController, self.resColl.texFetcher);
         self.objectMan = await ObjectManager.create(self, dataFetcher, false);
 
@@ -81,7 +81,7 @@ export class World {
         this.mapInstance = mapInstance;
     }
 
-    public spawnObjectsFromRomlist(romlist: DataView) {
+    public spawnObjectsFromRomlist(romlist: DataView, parent: ObjectInstance | null = null) {
         const mapObjectOrigin = vec3.create();
         if (this.mapInstance !== null) {
             vec3.set(mapObjectOrigin, 640 * this.mapInstance.info.getOrigin()[0], 0, 640 * this.mapInstance.info.getOrigin()[1]);
@@ -100,6 +100,7 @@ export class World {
             vec3.add(posInMap, posInMap, mapObjectOrigin);
 
             const obj = this.objectMan.createObjectInstance(typeNum, objParams, posInMap);
+            obj.setParent(parent);
             this.objectInstances.push(obj);
 
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
@@ -370,7 +371,21 @@ class WorldRenderer extends SFARenderer {
 }
 
 export class SFAWorldSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, private subdir: string, private mapNum: number | null, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    public id: string;
+    private subdirs: string[];
+
+    constructor(public id_: string | string[], subdir_: string | string[], private mapNum: number | null, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+        if (Array.isArray(id_)) {
+            this.id = id_[0];
+        } else {
+            this.id = id_;
+        }
+
+        if (Array.isArray(subdir_)) {
+            this.subdirs = subdir_;
+        } else {
+            this.subdirs = [subdir_];
+        }
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -378,7 +393,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
-        const world = await World.create(device, this.gameInfo, dataFetcher, this.subdir);
+        const world = await World.create(device, this.gameInfo, dataFetcher, this.subdirs);
         
         let mapInstance: MapInstance | null = null;
         if (this.mapNum !== null) {
@@ -400,60 +415,31 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
         // Set default atmosphere: "InstallShield Blue"
         // world.envfxMan.loadEnvfx(0x3c);
 
-        const [romlistFile] = await Promise.all([
-            dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
-        ]);
-        const romlist = loadRes(romlistFile).createDataView();
+        const romlistNames: string[] = Array.isArray(this.id_) ? this.id_ : [this.id_];
+        let parentObj: ObjectInstance | null = null;
+        for (let name of romlistNames) {
+            console.log(`Loading romlist ${name}.romlist.zlb...`);
 
-        world.spawnObjectsFromRomlist(romlist);
+            const [romlistFile] = await Promise.all([
+                dataFetcher.fetchData(`${pathBase}/${name}.romlist.zlb`),
+            ]);
+            const romlist = loadRes(romlistFile).createDataView();
+    
+            world.spawnObjectsFromRomlist(romlist, parentObj);
+
+            // XXX: In the Ship Battle scene, attach galleonship objects to the ship.
+            if (name === 'frontend') {
+                parentObj = world.objectInstances[2];
+                console.log(`parentObj is ${parentObj.objType.name}`);
+            }
+        }
         
         (window.main as any).lookupObject = (objType: number, skipObjindex: boolean = false) => {
             const obj = world.objectMan.getObjectType(objType, skipObjindex);
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
-        // window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => {
-        //     const obj = earlyObjectMan.getObjectType(objType, skipObjindex);
-        //     console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
-        // };
-
-        const testModels: (ModelInstance | null)[] = [];
-        // console.log(`Loading Fox....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, this.gameInfo, this.subdir, 1)); // Fox
-        // console.log(`Loading SharpClaw....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
-        // console.log(`Loading General Scales....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, this.gameInfo, 'shipbattle', 0x140 / 4)); // General Scales
-        // console.log(`Loading SharpClaw (demo version)....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFADEMO_GAME_INFO, 'warlock', 0x1394 / 4, ModelVersion.Demo)); // SharpClaw (beta version)
-        // console.log(`Loading General Scales (demo version)....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFADEMO_GAME_INFO, 'shipbattle', 0x138 / 4, ModelVersion.Demo)); // General Scales (beta version)
-        // console.log(`Loading Beta Fox....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta, true)); // Fox (beta version)
-        // console.log(`Loading a model (really old version)....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x28 / 4, ModelVersion.Beta));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 11, ModelVersion.Final));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 14, ModelVersion.Final));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 23, ModelVersion.Final));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'capeclaw', 26, ModelVersion.Final));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'capeclaw', 29, ModelVersion.Final));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'capeclaw', 148, ModelVersion.Final));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'swaphol', 212, ModelVersion.Final));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'swaphol', 220, ModelVersion.Final));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'capeclaw', 472, ModelVersion.Final));
-        // console.log(`Loading a model with PNMTX 9 stuff....`);
-        // testModels.push(await testLoadingAModel(device, animController, dataFetcher, SFA_GAME_INFO, 'warlock', 606, ModelVersion.Final));
-
-        const renderer = new WorldRenderer(world, testModels);
+        const renderer = new WorldRenderer(world, []);
         return renderer;
     }
 }

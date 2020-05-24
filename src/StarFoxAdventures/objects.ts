@@ -469,6 +469,7 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [473]: commonClass(0x18),
     [477]: commonClass(0x18),
     [487]: commonClass(),
+    [488]: commonClass(),
     [489]: { // SB_Propelle
         setup: (obj: ObjectInstance, data: DataView) => {
             const modelNum = data.getInt8(0x1a);
@@ -724,6 +725,8 @@ export class ObjectType {
 export class ObjectInstance {
     private modelInst: ModelInstance | null = null;
 
+    public parent: ObjectInstance | null = null;
+
     public position: vec3 = vec3.create();
     public yaw: number = 0;
     public pitch: number = 0;
@@ -767,7 +770,14 @@ export class ObjectInstance {
         }
     }
 
-    public getSRT(): mat4 {
+    public setParent(parent: ObjectInstance | null) {
+        this.parent = parent;
+        if (parent !== null) {
+            console.log(`attaching this object (${this.objType.name}) to parent ${parent?.objType.name}`);
+        }
+    }
+
+    public getLocalSRT(): mat4 {
         if (this.srtDirty) {
             mat4.fromTranslation(this.srtMatrix, this.position);
             mat4.scale(this.srtMatrix, this.srtMatrix, [this.scale, this.scale, this.scale]);
@@ -778,6 +788,27 @@ export class ObjectInstance {
         }
 
         return this.srtMatrix;
+    }
+
+    public getSRTForChildren(): mat4 {
+        const result = mat4.create();
+        mat4.fromTranslation(result, this.position);
+        // mat4.scale(result, result, [this.scale, this.scale, this.scale]);
+        mat4.rotateY(result, result, this.yaw);
+        mat4.rotateX(result, result, this.pitch);
+        mat4.rotateZ(result, result, this.roll);
+        return result;
+    }
+
+    public getWorldSRT(): mat4 {
+        const localSrt = this.getLocalSRT();
+        if (this.parent !== null) {
+            const result = mat4.create();
+            mat4.mul(result, this.parent.getSRTForChildren(), localSrt);
+            return result;
+        } else {
+            return localSrt;
+        }
     }
 
     public getType(): ObjectType {
@@ -871,7 +902,7 @@ export class ObjectInstance {
         this.update();
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
-            const mtx = this.getSRT();
+            const mtx = this.getWorldSRT();
             const modelViewState: ModelViewState = {
                 showDevGeometry: true,
                 ambienceNum: this.ambienceNum,

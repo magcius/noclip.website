@@ -302,6 +302,7 @@ const sceneDescs = [
     // new SFAWorldSceneDesc('arwingtoplanet', 'arwingtoplanet', 58, 'Arwing Flight (Main Planet)'),
     // new SFAWorldSceneDesc('galleonship', 'shipbattle', null, "General Scales' Galleon"),
     // new SFAWorldSceneDesc('gamefront', 'gamefront', 63, 'Great Fox'),
+    new SFAWorldSceneDesc(['frontend', 'galleonship'], ['shipbattle', 'warlock'], null, 'Ship Battle'),
     new SFAWorldSceneDesc('warlock', 'warlock', 11, 'Krazoa Palace'),
     new SFAWorldSceneDesc('hollow', 'swaphol', 7, 'ThornTail Hollow'),
     new SFAWorldSceneDesc('swapstore', 'shop', 51, 'ThornTail Shop'),
