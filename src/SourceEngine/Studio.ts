@@ -3,10 +3,15 @@
 // https://developer.valvesoftware.com/wiki/Studiomodel
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { assert, readString, nArray } from "../util";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { assert, readString, nArray, assertExists } from "../util";
 import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
+import { MaterialProgramBase, BaseMaterial } from "./Materials";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { mat4 } from "gl-matrix";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -17,14 +22,130 @@ const enum StudioModelFlags {
     CONSTANT_DIRECTIONAL_LIGHT_DOT = 0x2000,
 }
 
+const enum OptimizeStripGroupFlags {
+    IS_FLEXED                      = 0x01,
+    IS_HWSKINNED                   = 0x02,
+    IS_DELTA_FLEXED                = 0x04,
+}
+
+const enum OptimizeStripFlags {
+    IS_TRILIST                     = 0x01,
+    IS_TRISTRIP                    = 0x02,
+}
+
+class StudioModelStripData {
+    constructor(public firstIndex: number, public indexCount: number) {
+    }
+}
+
+// TODO(jstpierre): Coalesce all buffers for a studio model?
+class StudioModelStripGroupData {
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+
+    public stripData: StudioModelStripData[] = [];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, vertexData: ArrayBuffer, indexData: ArrayBufferSlice) {
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData);
+        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, indexData);
+
+        const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
+            { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
+            { location: MaterialProgramBase.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialProgramBase.a_TangentS, bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
+            { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RG, },
+
+            // TODO(jstpierre): Dynamic color model?
+        ];
+        const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
+            { byteStride: (3+4+4+2)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        ];
+        const indexBufferFormat = GfxFormat.U16_R;
+        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+
+        this.inputState = device.createInputState(this.inputLayout, [
+            { buffer: this.vertexBuffer, byteOffset: 0, },
+        ], { buffer: this.indexBuffer, byteOffset: 0, });
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
+        device.destroyInputState(this.inputState);
+    }
+}
+
+class StudioModelMeshData {
+    public stripGroupData: StudioModelStripGroupData[] = [];
+
+    constructor(public materialName: string) {
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.stripGroupData.length; i++)
+            this.stripGroupData[i].destroy(device);
+    }
+}
+
+class StudioModelLODData {
+    public meshData: StudioModelMeshData[] = [];
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.meshData.length; i++)
+            this.meshData[i].destroy(device);
+    }
+}
+
+class StudioModelSubmodelData {
+    public lodData: StudioModelLODData[] = [];
+
+    constructor(public name: string) {
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.lodData.length; i++)
+            this.lodData[i].destroy(device);
+    }
+}
+
+class StudioModelBodyPartData {
+    public submodelData: StudioModelSubmodelData[] = [];
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.submodelData.length; i++)
+            this.submodelData[i].destroy(device);
+    }
+}
+
+interface FixupRemapping { copySrc: number; copyDst: number; count: number; }
+function fixupRemappingSearch(fixupTable: FixupRemapping[], dstIdx: number): number {
+    for (let i = 0; i < fixupTable.length; i++) {
+        const map = fixupTable[i];
+        const idx = dstIdx - map.copyDst;
+        if (idx >= 0 && idx < map.count)
+            return map.copySrc + idx;
+    }
+
+    // remap did not copy over this vertex, return as is.
+    return dstIdx;
+}
+
 export class StudioModelData {
+    public bodyPartData: StudioModelBodyPartData[] = [];
+
     constructor(renderContext: SourceRenderContext, mdlBuffer: ArrayBufferSlice, vvdBuffer: ArrayBufferSlice, vtxBuffer: ArrayBufferSlice) {
         const mdlView = mdlBuffer.createDataView();
 
         // Parse MDL header
         assert(readString(mdlBuffer, 0x00, 0x04) === 'IDST');
         const mdlVersion = mdlView.getUint32(0x04, true);
-        assert(mdlVersion === 0x2C);
+        assert(mdlVersion === 0x2C || mdlVersion === 0x2E);
 
         const mdlChecksum = mdlView.getUint32(0x08, true);
 
@@ -54,13 +175,18 @@ export class StudioModelData {
         const bboxMaxZ = mdlView.getFloat32(0x94, true);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
-        const flags = mdlView.getUint32(0x98, true);
+        const flags: StudioModelFlags = mdlView.getUint32(0x98, true);
+        const isStaticProp = !!(flags & StudioModelFlags.STATIC_PROP);
+        // We only support static props right now.
+        assert(isStaticProp);
 
         const numbones = mdlView.getUint32(0x9C, true);
         const boneindex = mdlView.getUint32(0xA0, true);
 
         const numbonecontrollers = mdlView.getUint32(0xA4, true);
         const bonecontrollerindex = mdlView.getUint32(0xA8, true);
+        if (isStaticProp)
+            assert(numbonecontrollers === 0);
 
         const numhitboxsets = mdlView.getUint32(0xAC, true);
         const hitboxsetindex = mdlView.getUint32(0xB0, true);
@@ -78,6 +204,15 @@ export class StudioModelData {
 
         const numcdtextures = mdlView.getUint32(0xD4, true);
         const cdtextureindex = mdlView.getUint32(0xD8, true);
+
+        const materialSearchDirs: string[] = [];
+        let cdtextureIdx = cdtextureindex;
+        for (let i = 0; i < numcdtextures; i++) {
+            const textureDir = readString(mdlBuffer, mdlView.getUint32(cdtextureIdx + 0x00, true));
+            const materialSearchDir = `materials/${textureDir}`;
+            materialSearchDirs.push(materialSearchDir);
+            cdtextureIdx += 0x04;
+        }
 
         const numskinref = mdlView.getUint32(0xDC, true);
         const numskinfamilies = mdlView.getUint32(0xE0, true);
@@ -168,6 +303,21 @@ export class StudioModelData {
         const vvdVertexDataStart = vvdView.getUint32(0x38, true);
         const vvdTangentDataStart = vvdView.getUint32(0x3C, true);
 
+        const fixupRemappings: FixupRemapping[] = [];
+        let vvdFixupTableIdx = vvdFixupTableStart;
+        let fixupTableCopyDstIdx = 0;
+        for (let i = 0; i < vvdNumFixups; i++) {
+            const lod = vvdView.getUint32(vvdFixupTableIdx + 0x00, true);
+            // The fixup table works by memcpy-ing vertex data from src -> dst. So the indices in the
+            // MDL/VTX files are in copyDst range, and the vertices in the VVD file are in copySrc.
+            const copySrc = vvdView.getUint32(vvdFixupTableIdx + 0x04, true);
+            const copyDst = fixupTableCopyDstIdx;
+            const count = vvdView.getUint32(vvdFixupTableIdx + 0x08, true);
+            fixupRemappings.push({ copySrc, copyDst, count });
+            fixupTableCopyDstIdx += count;
+            vvdFixupTableIdx += 0x0C;
+        }
+
         // Parse VTX header
         const vtxView = vtxBuffer.createDataView();
 
@@ -205,7 +355,7 @@ export class StudioModelData {
             // assert(material === 0);
             const clientmaterial = mdlView.getUint32(textureIdx + 0x14, true);
             assert(clientmaterial === 0);
-            baseMaterialNames.push(materialName);
+            baseMaterialNames.push(assertExists(renderContext.filesystem.searchPath(materialSearchDirs, materialName, '.vmt')));
             textureIdx += 0x40;
         }
 
@@ -222,7 +372,7 @@ export class StudioModelData {
                 assert(materialID < materialNames.length);
                 const nameOffset = replacementIdx + vtxView.getUint32(replacementIdx + 0x04, true);
                 const replacementName = readString(vtxBuffer, nameOffset);
-                materialNames[materialID] = replacementName;
+                materialNames[materialID] = assertExists(renderContext.filesystem.searchPath(materialSearchDirs, replacementName, '.vmt'));
             }
 
             lodMaterialNames.push(materialNames);
@@ -235,7 +385,7 @@ export class StudioModelData {
         // VVD = Valve Vertex Data, contains actual vertex data.
         // VTX = Optimized Model, contains per-LOD information (index buffer, optimized trilist information & material replacement).
 
-            // The hierarchy of a model is Body Part -> Submodel -> Submodel LOD -> Mesh -> Mesh Group -> Strip
+        // The hierarchy of a model is Body Part -> Submodel -> Submodel LOD -> Mesh -> Mesh Group -> Strip
         // Note that "strips" might not actually be tristrips. They appear to be trilists in modern models.
 
         let mdlBodyPartIdx = bodypartindex;
@@ -250,7 +400,10 @@ export class StudioModelData {
             assert(mdlNumModels === vtxNumModels);
             const vtxModelOffs = vtxView.getUint32(vtxBodyPartOffset + 0x04, true);
 
-            let mdlSubmodelIdx = mdlModelindex;
+            const bodyPartData = new StudioModelBodyPartData();
+            this.bodyPartData.push(bodyPartData);
+
+            let mdlSubmodelIdx = mdlBodyPartIdx + mdlModelindex;
             let vtxSubmodelIdx = vtxBodyPartIdx + vtxModelOffs;
             for (let j = 0; j < mdlNumModels; j++) {
                 const mdlSubmodelName = readString(mdlBuffer, mdlSubmodelIdx + 0x00);
@@ -268,20 +421,219 @@ export class StudioModelData {
                 const mdlSubmodelEyeballindex = mdlView.getUint32(mdlSubmodelIdx + 0x68, true);
 
                 // mstudio_modelvertexdata_t
-                const mdlSubmodelVertexDataPtr = mdlView.getUint32(mdlSubmodelIdx + 0x70, true);
-                assert(mdlSubmodelVertexDataPtr === 0);
-                const mdlSubmodelTangentsDataPtr = mdlView.getUint32(mdlSubmodelIdx + 0x74, true);
-                assert(mdlSubmodelTangentsDataPtr === 0);
+                // const mdlSubmodelVertexDataPtr = mdlView.getUint32(mdlSubmodelIdx + 0x6C, true); junk pointer
+                // const mdlSubmodelTangentsDataPtr = mdlView.getUint32(mdlSubmodelIdx + 0x70, true); junk pointer
+                const vvdSubmodelVertexDataOffs = vvdVertexDataStart + mdlSubmodelVertexindex;
+                const vvdSubmodelTangentDataOffs = vvdTangentDataStart + mdlSubmodelTangentsindex;
 
                 // int unused[8];
 
                 const vtxSubmodelNumLODs = vtxView.getUint32(vtxSubmodelIdx + 0x00, true);
                 assert(vtxSubmodelNumLODs === vtxNumLODs);
-                const vtxSubmodelLODOffset = vtxView.getUint32(vtxSubmodelIdx + 0x04, true);
+                const vtxSubmodelLODOffset = vtxSubmodelIdx + vtxView.getUint32(vtxSubmodelIdx + 0x04, true);
 
-                // TODO(jstpierre): Support multiple model LODs. For now, we only support the first model.
+                const submodelData = new StudioModelSubmodelData(mdlSubmodelName);
+                bodyPartData.submodelData.push(submodelData);
 
-                mdlSubmodelIdx += 0x98;
+                let vtxLODIdx = vtxSubmodelLODOffset;
+                for (let lod = 0; lod < vtxSubmodelNumLODs; lod++) {
+                    const vtxNumMeshes = vtxView.getUint32(vtxLODIdx + 0x00, true);
+                    assert(vtxNumMeshes === mdlSubmodelNumMeshes);
+                    const vtxMeshOffset = vtxView.getUint32(vtxLODIdx + 0x04, true);
+                    const vtxSwitchPoint = vtxView.getFloat32(vtxLODIdx + 0x08, true);
+
+                    const lodData = new StudioModelLODData();
+                    submodelData.lodData.push(lodData);
+
+                    let mdlMeshIdx = mdlSubmodelIdx + mdlSubmodelMeshindex;
+                    let vtxMeshIdx = vtxLODIdx + vtxMeshOffset;
+                    for (let m = 0; m < mdlSubmodelNumMeshes; m++) {
+                        // MDL data is not LOD-specific, we reparse this for each LOD.
+                        const material = mdlView.getUint32(mdlMeshIdx + 0x00, true);
+                        const modelindex = mdlView.getUint32(mdlMeshIdx + 0x04, true);
+                        const materialName = lodMaterialNames[lod][material];
+
+                        const mdlMeshNumvertices = mdlView.getUint32(mdlMeshIdx + 0x08, true);
+                        const mdlMeshVertexoffset = mdlView.getUint32(mdlMeshIdx + 0x0C, true);
+
+                        const numflexes = mdlView.getUint32(mdlMeshIdx + 0x10, true);
+                        const flexindex = mdlView.getUint32(mdlMeshIdx + 0x14, true);
+
+                        const materialtype = mdlView.getUint32(mdlMeshIdx + 0x18, true);
+                        assert(materialtype === 0); // not eyeballs
+                        const materialparam = mdlView.getUint32(mdlMeshIdx + 0x1C, true);
+
+                        const meshid = mdlView.getUint32(mdlMeshIdx + 0x20, true);
+                        const centerX = mdlView.getFloat32(mdlMeshIdx + 0x24, true);
+                        const centerY = mdlView.getFloat32(mdlMeshIdx + 0x28, true);
+                        const centerZ = mdlView.getFloat32(mdlMeshIdx + 0x2C, true);
+
+                        // mstudio_meshvertexdata_t
+                        // const modelvertexdata = mdlView.getUint32(mdlMeshIdx + 0x30, true); junk pointer
+                        const numLODVertices = nArray(8, (i) => mdlView.getUint32(mdlMeshIdx + 0x34 + i * 0x04, true));
+
+                        // On the VTX side, each mesh contains a number of "strip groups". In theory, there can be up to
+                        // four different strip groups for the 2x2 combinatoric matrix of "hw skin" and "is flex".
+                        // We load the DX90 VTX files, which always have hw skin enabled, so we should see at most two
+                        // flex groups.
+                        const vtxNumStripGroups = vtxView.getUint32(vtxMeshIdx + 0x00, true);
+                        assert(vtxNumStripGroups === 1 || vtxNumStripGroups === 2);
+                        const vtxStripGroupHeaderOffset = vtxView.getUint32(vtxMeshIdx + 0x04, true);
+                        const vtxMeshFlags = vtxView.getUint8(vtxMeshIdx + 0x08);
+
+                        const meshData = new StudioModelMeshData(materialName);
+                        lodData.meshData.push(meshData);
+    
+                        let vtxStripGroupIdx = vtxMeshIdx + vtxStripGroupHeaderOffset;
+                        for (let g = 0; g < vtxNumStripGroups; g++) {
+                            const numVerts = vtxView.getUint32(vtxStripGroupIdx + 0x00, true);
+                            const vertOffset = vtxView.getUint32(vtxStripGroupIdx + 0x04, true);
+
+                            const numIndices = vtxView.getUint32(vtxStripGroupIdx + 0x08, true);
+                            const indexOffset = vtxView.getUint32(vtxStripGroupIdx + 0x0C, true);
+
+                            const numStrips = vtxView.getUint32(vtxStripGroupIdx + 0x10, true);
+                            const stripOffset = vtxView.getUint32(vtxStripGroupIdx + 0x14, true);
+
+                            const stripGroupFlags: OptimizeStripGroupFlags = vtxView.getUint8(vtxStripGroupIdx + 0x18);
+                            // DX90 VTX models should always have hw skin enabled.
+                            assert(!!(stripGroupFlags & OptimizeStripGroupFlags.IS_HWSKINNED));
+
+                            // Allocate the vertex / index data for our strip group, before unpacking each strip.
+
+                            // 3 pos, 4 normal, 4 tangent, 2 uv
+                            const vertexSize = (3+4+4+2);
+                            const vertexData = new Float32Array(vertexSize * numVerts);
+
+                            // Build the vertex data for our strip group.
+                            let dstOffs = 0;
+                            let vertIdx = vtxStripGroupIdx + vertOffset;
+                            for (let v = 0; v < numVerts; v++) {
+                                // VTX Bone weight data.
+                                const vtxBoneWeightIdx0 = vtxView.getUint8(vertIdx + 0x00);
+                                const vtxBoneWeightIdx1 = vtxView.getUint8(vertIdx + 0x01);
+                                const vtxBoneWeightIdx2 = vtxView.getUint8(vertIdx + 0x02);
+                                const vtxNumBones = vtxView.getUint8(vertIdx + 0x03);
+                                assert(vtxNumBones === 0);
+
+                                const vtxOrigMeshVertID = vtxView.getUint16(vertIdx + 0x04, true);
+                                const vtxBoneID0 = vtxView.getUint8(vertIdx + 0x06);
+                                const vtxBoneID1 = vtxView.getUint8(vertIdx + 0x07);
+                                const vtxBoneID2 = vtxView.getUint8(vertIdx + 0x08);
+
+                                // Pull out VVD vertex data.
+                                const modelVertIndex = (mdlMeshVertexoffset + vtxOrigMeshVertID);
+                                const vvdVertIndex = fixupRemappingSearch(fixupRemappings, modelVertIndex);
+                                const vvdVertexOffs = vvdSubmodelVertexDataOffs + 0x30 * vvdVertIndex;
+                                const vvdTangentOffs = vvdSubmodelTangentDataOffs + 0x10 * vvdVertIndex;
+
+                                const vvdBoneWeight0 = vvdView.getFloat32(vvdVertexOffs + 0x00, true);
+                                const vvdBoneWeight1 = vvdView.getFloat32(vvdVertexOffs + 0x04, true);
+                                const vvdBoneWeight2 = vvdView.getFloat32(vvdVertexOffs + 0x08, true);
+                                const vvdBoneIdx0 = vvdView.getUint8(vvdVertexOffs + 0x0C);
+                                const vvdBoneIdx1 = vvdView.getUint8(vvdVertexOffs + 0x0D);
+                                const vvdBoneIdx2 = vvdView.getUint8(vvdVertexOffs + 0x0E);
+                                const vvdNumBones = vvdView.getUint8(vvdVertexOffs + 0x0F);
+
+                                const vvdPositionX = vvdView.getFloat32(vvdVertexOffs + 0x10, true);
+                                const vvdPositionY = vvdView.getFloat32(vvdVertexOffs + 0x14, true);
+                                const vvdPositionZ = vvdView.getFloat32(vvdVertexOffs + 0x18, true);
+
+                                const vvdNormalX = vvdView.getFloat32(vvdVertexOffs + 0x1C, true);
+                                const vvdNormalY = vvdView.getFloat32(vvdVertexOffs + 0x20, true);
+                                const vvdNormalZ = vvdView.getFloat32(vvdVertexOffs + 0x24, true);
+
+                                const vvdTexCoordS = vvdView.getFloat32(vvdVertexOffs + 0x28, true);
+                                const vvdTexCoordT = vvdView.getFloat32(vvdVertexOffs + 0x2C, true);
+
+                                const vvdTangentSX = vvdView.getFloat32(vvdTangentOffs + 0x00, true);
+                                const vvdTangentSY = vvdView.getFloat32(vvdTangentOffs + 0x04, true);
+                                const vvdTangentSZ = vvdView.getFloat32(vvdTangentOffs + 0x08, true);
+                                const vvdTangentSW = vvdView.getFloat32(vvdTangentOffs + 0x0C, true);
+
+                                // Sanity check our tangent sign data.
+                                // TODO(jstpierre): Check the tangent data validity against our material.
+                                assert(vvdTangentSW === 0.0 || vvdTangentSW === 1.0 || vvdTangentSW === -1.0);
+
+                                // Position
+                                vertexData[dstOffs++] = vvdPositionX;
+                                vertexData[dstOffs++] = vvdPositionY;
+                                vertexData[dstOffs++] = vvdPositionZ;
+
+                                // Normal
+                                vertexData[dstOffs++] = vvdNormalX;
+                                vertexData[dstOffs++] = vvdNormalY;
+                                vertexData[dstOffs++] = vvdNormalZ;
+                                vertexData[dstOffs++] = 1.0; // vertex alpha
+
+                                // Tangent
+                                vertexData[dstOffs++] = vvdTangentSX;
+                                vertexData[dstOffs++] = vvdTangentSY;
+                                vertexData[dstOffs++] = vvdTangentSZ;
+                                vertexData[dstOffs++] = vvdTangentSW;
+
+                                // Texcoord
+                                vertexData[dstOffs++] = vvdTexCoordS;
+                                vertexData[dstOffs++] = vvdTexCoordT;
+
+                                vertIdx += 0x09;
+                            }
+
+                            // Index data is directly from the strip
+                            const indexIdx = vtxStripGroupIdx + indexOffset;
+                            const indexData = vtxBuffer.subarray(indexIdx, numIndices * 2);
+
+                            const device = renderContext.device, cache = renderContext.cache;
+
+                            const stripGroupData = new StudioModelStripGroupData(device, cache, vertexData.buffer, indexData);
+                            meshData.stripGroupData.push(stripGroupData);
+
+                            // Note that as noted before, "tristrip" in modern models refers mostly to trilists, not tristrips.
+                            // We can have multiple strips in a strip group if we have a bone change table between strips.
+                            // For unskinned / static prop models without bones, we should always have one strip.
+                            // TODO(jstpierre): Handle skinned models.
+                            let vtxStripIdx = vtxStripGroupIdx + stripOffset;
+                            assert(numStrips === 1);
+                            for (let s = 0; s < numStrips; s++) {
+                                const stripNumIndices = vtxView.getUint32(vtxStripIdx + 0x00, true);
+                                const stripIndexOffset = vtxView.getUint32(vtxStripIdx + 0x04, true);
+                                assert(stripNumIndices === numIndices);
+                                assert(stripIndexOffset === 0);
+
+                                const stripNumVerts = vtxView.getUint32(vtxStripIdx + 0x08, true);
+                                const stripVertOffset = vtxView.getUint32(vtxStripIdx + 0x0C, true);
+                                assert(stripNumVerts === numVerts);
+                                assert(stripVertOffset === 0);
+
+                                const numBones = vtxView.getUint16(vtxStripIdx + 0x10, true);
+                                assert(numBones === 0);
+
+                                const stripFlags: OptimizeStripFlags = vtxView.getUint8(vtxStripIdx + 0x12);
+                                assert(stripFlags === OptimizeStripFlags.IS_TRILIST);
+
+                                const numBoneStateChanges = vtxView.getUint32(vtxStripIdx + 0x13, true);
+                                const boneStateChangeOffset = vtxView.getUint32(vtxStripIdx + 0x17, true);
+                                assert(numBoneStateChanges === 0);
+
+                                stripGroupData.stripData.push(new StudioModelStripData(stripIndexOffset, stripNumIndices));
+
+                                vtxStripIdx += 0x1C;
+                            }
+
+                            vtxStripGroupIdx += 0x1C;
+                        }
+
+                        mdlMeshIdx += 0x74;
+                        vtxMeshIdx += 0x09;
+                    }
+
+                    vtxLODIdx += 0x0C;
+
+                    // TODO(jstpierre): Support multiple model LODs. For now, we only support the first LOD.
+                    break;
+                }
+
+                mdlSubmodelIdx += 0x94;
                 vtxSubmodelIdx += 0x08;
             }
 
@@ -291,6 +643,8 @@ export class StudioModelData {
     }
 
     public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.bodyPartData.length; i++)
+            this.bodyPartData[i].destroy(device);
     }
 }
 
@@ -306,7 +660,7 @@ export class StudioModelCache {
             path = path.slice(0, -4);
         if (!path.endsWith(ext))
             path = `${path}${ext}`;
-        return this.filesystem.resolvePath(path);
+        return this.filesystem.resolvePath(path, ext);
     }
 
     private async fetchStudioModelDataInternal(name: string): Promise<StudioModelData> {
@@ -330,5 +684,106 @@ export class StudioModelCache {
     public destroy(device: GfxDevice): void {
         for (const vtf of this.modelData.values())
             vtf.destroy(device);
+    }
+}
+
+class StudioModelMeshInstance {
+    private visible = true;
+    private materialInstance: BaseMaterial | null = null;
+
+    constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData) {
+        this.bindMaterial(renderContext);
+    }
+
+    private async bindMaterial(renderContext: SourceRenderContext): Promise<void> {
+        this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialName);
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        if (!this.visible || this.materialInstance === null)
+            return;
+
+        this.materialInstance.movement(renderContext);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: mat4) {
+        if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
+            return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        this.materialInstance.setOnRenderInst(renderContext, template, modelMatrix);
+
+        for (let i = 0; i < this.meshData.stripGroupData.length; i++) {
+            const stripGroupData = this.meshData.stripGroupData[i];
+            stripGroupData.setOnRenderInst(template);
+
+            for (let j = 0; j < stripGroupData.stripData.length; j++) {
+                const stripData = stripGroupData.stripData[j];
+                const renderInst = renderInstManager.newRenderInst();
+                renderInst.drawIndexes(stripData.indexCount, stripData.firstIndex);
+                renderInstManager.submitRenderInst(renderInst);
+            }
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+}
+
+class StudioModelLODInstance {
+    public meshInstance: StudioModelMeshInstance[] = [];
+
+    constructor(renderContext: SourceRenderContext, private lodData: StudioModelLODData) {
+        for (let i = 0; i < this.lodData.meshData.length; i++)
+            this.meshInstance.push(new StudioModelMeshInstance(renderContext, this.lodData.meshData[i]));
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        for (let i = 0; i < this.meshInstance.length; i++)
+            this.meshInstance[i].movement(renderContext);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: mat4) {
+        for (let i = 0; i < this.meshInstance.length; i++)
+            this.meshInstance[i].prepareToRender(renderContext, renderInstManager, modelMatrix);
+    }
+}
+
+export class StudioModelInstance {
+    public visible: boolean = true;
+    public modelMatrix = mat4.create();
+
+    private lodInstance: StudioModelLODInstance[] = [];
+
+    constructor(renderContext: SourceRenderContext, private modelData: StudioModelData) {
+        for (let i = 0; i < this.modelData.bodyPartData.length; i++) {
+            const bodyPartData = this.modelData.bodyPartData[i];
+            for (let j = 0; j < bodyPartData.submodelData.length; j++) {
+                const submodelData = bodyPartData.submodelData[j];
+                for (let k = 0; k < submodelData.lodData.length; k++) {
+                    const lodData = submodelData.lodData[k];
+                    this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData));
+                }
+            }
+        }
+    }
+
+    private getLODModelIndex(renderContext: SourceRenderContext): number {
+        // TODO(jstpierre): Pull out the proper LOD model.
+        return 0;
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        const lodIndex = this.getLODModelIndex(renderContext);
+        this.lodInstance[lodIndex].movement(renderContext);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager) {
+        if (!this.visible)
+            return;
+
+        // TODO(jstpierre): Leaf visibility, frustum culling
+
+        const lodIndex = this.getLODModelIndex(renderContext);
+        this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix);
     }
 }

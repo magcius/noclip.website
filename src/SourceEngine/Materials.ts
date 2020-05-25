@@ -466,6 +466,9 @@ export abstract class BaseMaterial {
     }
 
     public movement(renderContext: SourceRenderContext): void {
+        if (!this.visible || !this.isMaterialLoaded())
+            return;
+
         if (this.proxyDriver !== null)
             this.proxyDriver.update(renderContext, this.entityParams);
     }
@@ -934,10 +937,7 @@ class Material_Generic extends BaseMaterial {
 
         const alphaTestReference = this.paramGetNumber('$alphatestreference');
         const detailBlendFactor = this.paramGetNumber('$detailblendfactor');
-        // TODO(jstpierre): Remove this as a uniform. Won't work when we pack surfaces together.
-        // const lightmapOffset = this.lightmapAllocation !== null ? this.lightmapAllocation.bumpPageOffset : 0.0;
-        const lightmapOffset = 0;
-        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor, lightmapOffset);
+        offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
 
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -1264,15 +1264,14 @@ export class MaterialCache {
         this.textureCache.set('env_cubemap', vtf);
     }
 
-    private resolvePath(path: string, ext: string): string {
-        if (!path.endsWith(ext))
-            path = `${path}${ext}`;
-        return this.filesystem.resolvePath(`materials/${path}`);
+    private resolvePath(path: string): string {
+        if (!path.startsWith(`materials/`))
+            path = `materials/${path}`;
+        return path;
     }
 
     private async fetchMaterialDataInternal(name: string): Promise<VMT> {
-        const path = this.resolvePath(name, '.vmt');
-        return parseVMT(this.filesystem, path);
+        return parseVMT(this.filesystem, this.resolvePath(name));
     }
 
     private fetchMaterialData(path: string): Promise<VMT> {
@@ -1305,7 +1304,7 @@ export class MaterialCache {
     }
 
     private async fetchVTFInternal(name: string, additionalFlags: VTFFlags): Promise<VTF> {
-        const path = this.resolvePath(name, '.vtf');
+        const path = this.filesystem.resolvePath(this.resolvePath(name), '.vtf');
         const data = await this.filesystem.fetchFileData(path);
         const vtf = new VTF(this.device, this.cache, data, path, additionalFlags);
         this.textureCache.set(name, vtf);

@@ -335,7 +335,7 @@ export class DetailSpriteLeafRenderer {
 }
 //#endregion
 
-interface StaticObject {
+export interface StaticObject {
     pos: vec3;
     rot: vec3;
     propName: string;
@@ -404,7 +404,8 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         }
 
         const pos = vec3.fromValues(posX, posY, posZ);
-        const rot = vec3.fromValues(rotX, rotY, rotZ);
+        // This was empirically determined. TODO(jstpierre): Should computeModelMatrixPosRot in general do this?
+        const rot = vec3.fromValues(rotZ, rotX, rotY);
         const propName = staticModelDict[propType];
         staticObjects.push({ pos, rot, propName, firstLeaf, leafCount, fadeMinDist, fadeMaxDist })
     }

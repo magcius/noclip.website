@@ -19,29 +19,67 @@ import { assertExists } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { AABB, Frustum } from "../Geometry";
-import { DetailSpriteLeafRenderer } from "./StaticDetailObject";
+import { DetailSpriteLeafRenderer, StaticObject } from "./StaticDetailObject";
 import BitMap from "../BitMap";
-import { StudioModelCache } from "./Studio";
+import { StudioModelCache, StudioModelInstance } from "./Studio";
 
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
     public mounts: VPKMount[] = [];
 
-    public resolvePath(path: string): string {
-        path = path.toLowerCase().replace('\\', '/');
+    public resolvePath(path: string, ext: string): string {
+        path = path.toLowerCase().replace(/\\/g, '/');
+        if (!path.endsWith(ext))
+            path = `${path}${ext}`;
         return path;
     }
 
-    public async fetchFileData(path: string): Promise<ArrayBufferSlice | null> {
+    public searchPath(searchDirs: string[], path: string, ext: string): string | null {
+        for (let i = 0; i < searchDirs.length; i++) {
+            let searchDir = searchDirs[i];
+
+            // Normalize path separators.
+            searchDir = searchDir.replace(/\\/g, '/');
+            searchDir = searchDir.replace(/\/\//g, '/');
+            if (searchDir.endsWith('/'))
+                searchDir = searchDir.slice(0, -1);
+
+            // Attempt searching for a path.
+            const finalPath = this.resolvePath(`${searchDir}/${path}`, ext);
+            if (this.hasEntry(finalPath))
+                return finalPath;
+        }
+
+        return null;
+    }
+
+    private hasEntry(resolvedPath: string): boolean {
         for (let i = 0; i < this.mounts.length; i++) {
-            const entry = this.mounts[i].findEntry(path);
+            const entry = this.mounts[i].findEntry(resolvedPath);
+            if (entry !== null)
+                return true;
+        }
+
+        for (let i = 0; i < this.pakfiles.length; i++) {
+            const pakfile = this.pakfiles[i];
+            const entry = pakfile.find((entry) => entry.filename === resolvedPath);
+            if (entry !== undefined)
+                return true;
+        }
+
+        return false;
+    }
+
+    public async fetchFileData(resolvedPath: string): Promise<ArrayBufferSlice | null> {
+        for (let i = 0; i < this.mounts.length; i++) {
+            const entry = this.mounts[i].findEntry(resolvedPath);
             if (entry !== null)
                 return this.mounts[i].fetchFileData(entry);
         }
 
         for (let i = 0; i < this.pakfiles.length; i++) {
             const pakfile = this.pakfiles[i];
-            const entry = pakfile.find((entry) => entry.filename === path);
+            const entry = pakfile.find((entry) => entry.filename === resolvedPath);
             if (entry !== undefined)
                 return entry.data;
         }
@@ -213,7 +251,7 @@ class BSPSurfaceRenderer {
     }
 
     public movement(renderContext: SourceRenderContext): void {
-        if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
+        if (!this.visible || this.materialInstance === null)
             return;
 
         this.materialInstance.movement(renderContext);
@@ -376,6 +414,16 @@ class BSPModelRenderer {
     }
 }
 
+function computeModelMatrixPosRot(dst: mat4, pos: vec3, rot: vec3): void {
+    const rotX = MathConstants.DEG_TO_RAD * rot[0];
+    const rotY = MathConstants.DEG_TO_RAD * rot[1];
+    const rotZ = MathConstants.DEG_TO_RAD * rot[2];
+    const transX = pos[0];
+    const transY = pos[1];
+    const transZ = pos[2];
+    computeModelMatrixSRT(dst, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
+}
+
 class BaseEntity {
     public model: BSPModelRenderer | null = null;
     public origin = vec3.create();
@@ -407,13 +455,7 @@ class BaseEntity {
 
     public movement(): void {
         if (this.model !== null) {
-            const rotX = MathConstants.DEG_TO_RAD * this.angles[0];
-            const rotY = MathConstants.DEG_TO_RAD * this.angles[1];
-            const rotZ = MathConstants.DEG_TO_RAD * this.angles[2];
-            const transX = this.origin[0];
-            const transY = this.origin[1];
-            const transZ = this.origin[2];
-            computeModelMatrixSRT(this.model.modelMatrix, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
+            computeModelMatrixPosRot(this.model.modelMatrix, this.origin, this.angles);
             this.model.visible = this.visible;
 
             vec3.copy(this.materialParams.position, this.origin);
@@ -488,6 +530,7 @@ export class BSPRenderer {
     private entities: BaseEntity[] = [];
     public models: BSPModelRenderer[] = [];
     public detailSpriteLeafRenderers: DetailSpriteLeafRenderer[] = [];
+    public staticModelInstances: StudioModelInstance[] = [];
     public pvs: BitMap;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
@@ -529,17 +572,25 @@ export class BSPRenderer {
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
                 this.detailSpriteLeafRenderers.push(new DetailSpriteLeafRenderer(renderContext, this.bsp.detailObjects, leaf));
 
-        if (this.bsp.staticObjects !== null) {
-            for (const obj of this.bsp.staticObjects.staticObjects) {
-                renderContext.studioModelCache.fetchStudioModelData(obj.propName);
-                break;
-            }
-        }
+        this.spawnStaticModels(renderContext);
     }
 
     private spawnEntities(renderContext: SourceRenderContext): void {
         for (let i = 0; i < this.bsp.entities.length; i++)
             this.entities.push(renderContext.entitySystem.createEntity(renderContext, this, this.bsp.entities[i]));
+    }
+
+    private spawnStaticModels(renderContext: SourceRenderContext): void {
+        if (this.bsp.staticObjects !== null)
+            for (const obj of this.bsp.staticObjects.staticObjects)
+                this.spawnStaticModel(renderContext, obj);
+    }
+
+    private async spawnStaticModel(renderContext: SourceRenderContext, obj: StaticObject) {
+        const modelData = await renderContext.studioModelCache.fetchStudioModelData(obj.propName);
+        const modelInstance = new StudioModelInstance(renderContext, modelData);
+        computeModelMatrixPosRot(modelInstance.modelMatrix, obj.pos, obj.rot);
+        this.staticModelInstances.push(modelInstance);
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -549,18 +600,9 @@ export class BSPRenderer {
             this.models[i].movement(renderContext);
     }
 
-    private prepareToRenderInternal(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelMatrix: mat4 | null, pvs: BitMap): void {
+    private prepareToRenderInternal(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, pvs: BitMap): void {
         const template = renderInstManager.pushTemplateRenderInst();
-
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
-
-        let offs = template.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
-        const d = template.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
-        mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSourceEngineSpace);
-        if (modelMatrix !== null)
-            mat4.mul(scratchMatrix, scratchMatrix, modelMatrix);
-        offs += fillMatrix4x4(d, offs, scratchMatrix);
-        offs += fillVec3v(d, offs, renderContext.cameraPos);
 
         mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         for (let i = 0; i < this.models.length; i++)
@@ -590,6 +632,14 @@ export class BSPRenderer {
             this.pvs.fill(true);
         }
 
+        const template = renderInstManager.pushTemplateRenderInst();
+
+        let offs = template.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
+        const d = template.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
+        mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSourceEngineSpace);
+        offs += fillMatrix4x4(d, offs, scratchMatrix);
+        offs += fillVec3v(d, offs, renderContext.cameraPos);
+
         // TODO(jstpierre): Skybox
         /*const skybox = this.entities.find((entity) => entity instanceof sky_camera) as sky_camera | undefined;
         if (skybox !== undefined) {
@@ -609,7 +659,12 @@ export class BSPRenderer {
             spr.prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix);
         }
 
-        this.prepareToRenderInternal(renderContext, renderInstManager, viewerInput, null, this.pvs);
+        for (let i = 0; i < this.staticModelInstances.length; i++)
+            this.staticModelInstances[i].prepareToRender(renderContext, renderInstManager);
+
+        this.prepareToRenderInternal(renderContext, renderInstManager, viewerInput, this.pvs);
+
+        renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
