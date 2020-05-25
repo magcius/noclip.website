@@ -206,10 +206,18 @@ class ParameterVector {
     }
 
     public parse(S: string): void {
-        const numbers = vmtParseVector(S);
-        this.internal.length = numbers.length;
-        for (let i = 0; i < numbers.length; i++)
-            this.internal[i] = new ParameterNumber(numbers[i]);
+        if (S.startsWith('[') || S.startsWith('{')) {
+            const numbers = vmtParseVector(S);
+            if (this.internal.length !== 0)
+                assert(this.internal.length === numbers.length);
+            this.internal.length = numbers.length;
+            for (let i = 0; i < numbers.length; i++)
+                this.internal[i] = new ParameterNumber(numbers[i]);
+        } else {
+            const v = Number(S);
+            for (let i = 0; i < this.internal.length; i++)
+                this.internal[i].value = v;
+        }
     }
 
     public index(i: number): ParameterNumber {

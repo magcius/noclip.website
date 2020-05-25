@@ -9,9 +9,13 @@ import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescr
 import { transformVec3Mat4w0, computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { computeViewSpaceDepthFromWorldSpacePoint } from "../Camera";
+import { computeViewSpaceDepthFromWorldSpacePoint, Camera } from "../Camera";
 import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
+import { StudioModelInstance } from "./Studio";
+import { computeModelMatrixPosRot } from "./Main";
+import BitMap from "../BitMap";
+import { BSPFile } from "./BSPFile";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -151,7 +155,7 @@ function computeMatrixForForwardDir(dst: mat4, fwd: vec3, pos: vec3): void {
 
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
-export class DetailSpriteLeafRenderer {
+export class DetailPropLeafRenderer {
     private materialInstance: BaseMaterial | null = null;
     private inputLayout: GfxInputLayout;
 
@@ -225,7 +229,7 @@ export class DetailSpriteLeafRenderer {
         this.bindMaterial(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, camera: Camera): void {
         if (this.materialInstance === null)
             return;
 
@@ -242,10 +246,10 @@ export class DetailSpriteLeafRenderer {
         const sortList: DetailSpriteEntry[] = [];
         for (let i = 0; i < this.spriteEntries.length; i++) {
             const entry = this.spriteEntries[i];
-            if (!viewerInput.camera.frustum.containsSphere(entry.origin, entry.radius))
+            if (!camera.frustum.containsSphere(entry.origin, entry.radius))
                 continue;
             // compute distance from camera
-            entry.cameraDepth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera, entry.origin);
+            entry.cameraDepth = computeViewSpaceDepthFromWorldSpacePoint(camera, entry.origin);
             sortList.push(entry);
         }
         sortList.sort((a, b) => b.cameraDepth - a.cameraDepth);
@@ -335,18 +339,17 @@ export class DetailSpriteLeafRenderer {
 }
 //#endregion
 
-export interface StaticObject {
+interface StaticProp {
     pos: vec3;
     rot: vec3;
     propName: string;
-    firstLeaf: number;
-    leafCount: number;
+    leafList: Uint16Array;
     fadeMinDist: number;
     fadeMaxDist: number;
 }
 
 export interface StaticObjects {
-    staticObjects: StaticObject[];
+    staticProps: StaticProp[];
 }
 
 export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: number): StaticObjects | null {
@@ -367,7 +370,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
     const leafList = buffer.createTypedArray(Uint16Array, idx, leafListCount, Endianness.LITTLE_ENDIAN);
     idx += leafList.byteLength;
 
-    const staticObjects: StaticObject[] = [];
+    const staticObjects: StaticProp[] = [];
     const staticObjectCount = sprp.getUint32(idx, true);
     idx += 0x04;
     for (let i = 0; i < staticObjectCount; i++) {
@@ -407,8 +410,51 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         // This was empirically determined. TODO(jstpierre): Should computeModelMatrixPosRot in general do this?
         const rot = vec3.fromValues(rotZ, rotX, rotY);
         const propName = staticModelDict[propType];
-        staticObjects.push({ pos, rot, propName, firstLeaf, leafCount, fadeMinDist, fadeMaxDist })
+        const propLeafList = leafList.slice(firstLeaf, leafCount);
+        staticObjects.push({ pos, rot, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist })
     }
 
-    return { staticObjects };
+    return { staticProps: staticObjects };
+}
+
+export class StaticPropRenderer {
+    private studioModelInstance: StudioModelInstance | null = null;
+
+    constructor(renderContext: SourceRenderContext, private staticProp: StaticProp) {
+        this.createInstance(renderContext);
+    }
+
+    private async createInstance(renderContext: SourceRenderContext) {
+        const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.staticProp.propName);
+        const modelInstance = new StudioModelInstance(renderContext, modelData);
+        computeModelMatrixPosRot(modelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
+        this.studioModelInstance = modelInstance;
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        if (this.studioModelInstance !== null)
+            this.studioModelInstance.movement(renderContext);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, bsp: BSPFile, pvs: BitMap): void {
+        if (this.studioModelInstance === null)
+            return;
+
+        // Test whether the prop is visible through the PVS.
+
+        let visible = false;
+        for (let i = 0; i < this.staticProp.leafList.length; i++) {
+            const leafidx = this.staticProp.leafList[i];
+            const cluster = bsp.leaflist[leafidx].cluster;
+            if (pvs.getBit(cluster)) {
+                visible = true;
+                break;
+            }
+        }
+
+        if (!visible)
+            return;
+
+        this.studioModelInstance.prepareToRender(renderContext, renderInstManager);
+    }
 }

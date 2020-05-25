@@ -5,7 +5,7 @@ import { ViewerRenderInput, SceneGfx } from "../viewer";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { BSPFile, BSPLeaf, Surface, Model } from "./BSPFile";
+import { BSPFile, Surface, Model } from "./BSPFile";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, executeOnPass } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -17,11 +17,11 @@ import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLig
 import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
 import { assertExists } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix, Camera } from "../Camera";
 import { AABB, Frustum } from "../Geometry";
-import { DetailSpriteLeafRenderer, StaticObject } from "./StaticDetailObject";
+import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
+import { StudioModelCache } from "./Studio";
 import BitMap from "../BitMap";
-import { StudioModelCache, StudioModelInstance } from "./Studio";
 
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
@@ -257,7 +257,7 @@ class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4, modelMatrix: mat4, pvs: BitMap | null = null) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, camera: Camera, viewMatrixZUp: mat4, modelMatrix: mat4, pvs: BitMap | null = null) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
             return;
 
@@ -279,7 +279,7 @@ class BSPSurfaceRenderer {
         if (this.surface.bbox !== null) {
             mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, modelMatrix);
             scratchAABB.transform(this.surface.bbox, scratchMatrixCull);
-            if (!viewerInput.camera.frustum.contains(scratchAABB))
+            if (!camera.frustum.contains(scratchAABB))
                 return;
         }
 
@@ -391,30 +391,30 @@ class BSPModelRenderer {
         }
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, viewMatrixZUp: mat4, pvs: BitMap): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, camera: Camera, viewMatrixZUp: mat4, pvs: BitMap): void {
         if (!this.visible)
             return;
 
         mat4.mul(scratchMatrixCull, noclipSpaceFromSourceEngineSpace, this.modelMatrix);
         scratchAABB.transform(this.model.bbox, scratchMatrixCull);
-        if (!viewerInput.camera.frustum.contains(scratchAABB))
+        if (!camera.frustum.contains(scratchAABB))
             return;
 
         // Render all displacement surfaces.
         // TODO(jstpierre): Move this to the BSP leaves
         for (let i = 0; i < this.displacementSurfaces.length; i++)
-            this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix, pvs);
+            this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, camera, viewMatrixZUp, this.modelMatrix, pvs);
 
         // Gather all BSP surfaces.
         this.liveSurfaceSet.clear();
-        this.gatherSurfaces(this.liveSurfaceSet, this.model.headnode, pvs, viewerInput.camera.frustum);
+        this.gatherSurfaces(this.liveSurfaceSet, this.model.headnode, pvs, camera.frustum);
 
         for (const surfaceIdx of this.liveSurfaceSet.values())
-            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, viewerInput, viewMatrixZUp, this.modelMatrix);
+            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, camera, viewMatrixZUp, this.modelMatrix);
     }
 }
 
-function computeModelMatrixPosRot(dst: mat4, pos: vec3, rot: vec3): void {
+export function computeModelMatrixPosRot(dst: mat4, pos: vec3, rot: vec3): void {
     const rotX = MathConstants.DEG_TO_RAD * rot[0];
     const rotY = MathConstants.DEG_TO_RAD * rot[1];
     const rotZ = MathConstants.DEG_TO_RAD * rot[2];
@@ -529,8 +529,8 @@ export class BSPRenderer {
     private inputState: GfxInputState;
     private entities: BaseEntity[] = [];
     public models: BSPModelRenderer[] = [];
-    public detailSpriteLeafRenderers: DetailSpriteLeafRenderer[] = [];
-    public staticModelInstances: StudioModelInstance[] = [];
+    public detailPropLeafRenderers: DetailPropLeafRenderer[] = [];
+    public staticPropRenderers: StaticPropRenderer[] = [];
     public pvs: BitMap;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
@@ -568,11 +568,13 @@ export class BSPRenderer {
 
         this.spawnEntities(renderContext);
 
+        if (this.bsp.staticObjects !== null)
+            for (const staticProp of this.bsp.staticObjects.staticProps)
+                this.staticPropRenderers.push(new StaticPropRenderer(renderContext, staticProp));
+
         if (this.bsp.detailObjects !== null)
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
-                this.detailSpriteLeafRenderers.push(new DetailSpriteLeafRenderer(renderContext, this.bsp.detailObjects, leaf));
-
-        this.spawnStaticModels(renderContext);
+                this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, this.bsp.detailObjects, leaf));
     }
 
     private spawnEntities(renderContext: SourceRenderContext): void {
@@ -580,33 +582,45 @@ export class BSPRenderer {
             this.entities.push(renderContext.entitySystem.createEntity(renderContext, this, this.bsp.entities[i]));
     }
 
-    private spawnStaticModels(renderContext: SourceRenderContext): void {
-        if (this.bsp.staticObjects !== null)
-            for (const obj of this.bsp.staticObjects.staticObjects)
-                this.spawnStaticModel(renderContext, obj);
-    }
-
-    private async spawnStaticModel(renderContext: SourceRenderContext, obj: StaticObject) {
-        const modelData = await renderContext.studioModelCache.fetchStudioModelData(obj.propName);
-        const modelInstance = new StudioModelInstance(renderContext, modelData);
-        computeModelMatrixPosRot(modelInstance.modelMatrix, obj.pos, obj.rot);
-        this.staticModelInstances.push(modelInstance);
-    }
-
     public movement(renderContext: SourceRenderContext): void {
         for (let i = 0; i < this.entities.length; i++)
             this.entities[i].movement();
         for (let i = 0; i < this.models.length; i++)
             this.models[i].movement(renderContext);
+        for (let i = 0; i < this.staticPropRenderers.length; i++)
+            this.staticPropRenderers[i].movement(renderContext);
     }
 
-    private prepareToRenderInternal(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, pvs: BitMap): void {
+    private prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, camera: Camera): void {
         const template = renderInstManager.pushTemplateRenderInst();
-        template.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
+        // TODO(jstpierre): Clean up multi-view systems.
+
+        let offs = template.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
+        const d = template.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
+        mat4.mul(scratchMatrix, camera.clipFromWorldMatrix, noclipSpaceFromSourceEngineSpace);
+        offs += fillMatrix4x4(d, offs, scratchMatrix);
+        offs += fillVec3v(d, offs, renderContext.cameraPos);
+
+        // BSP models.
+        template.setInputLayoutAndState(this.inputLayout, this.inputState);
+        mat4.mul(scratchMatrix, camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
         for (let i = 0; i < this.models.length; i++)
-            this.models[i].prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix, pvs);
+            this.models[i].prepareToRender(renderContext, renderInstManager, camera, scratchMatrix, this.pvs);
+
+        // Static props.
+        for (let i = 0; i < this.staticPropRenderers.length; i++)
+            this.staticPropRenderers[i].prepareToRender(renderContext, renderInstManager, this.bsp, this.pvs);
+
+        // Detail props.
+        for (let i = 0; i < this.detailPropLeafRenderers.length; i++) {
+            const spr = this.detailPropLeafRenderers[i];
+            // TODO(jstpierre): Traverse leaves at runtime
+            const cluster = this.bsp.leaflist[spr.leaf].cluster;
+            if (cluster !== 0xFFFF && !this.pvs.getBit(cluster))
+                continue;
+            spr.prepareToRender(renderContext, renderInstManager, camera);
+        }
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -632,39 +646,8 @@ export class BSPRenderer {
             this.pvs.fill(true);
         }
 
-        const template = renderInstManager.pushTemplateRenderInst();
-
-        let offs = template.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
-        const d = template.mapUniformBufferF32(MaterialProgramBase.ub_SceneParams);
-        mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromSourceEngineSpace);
-        offs += fillMatrix4x4(d, offs, scratchMatrix);
-        offs += fillVec3v(d, offs, renderContext.cameraPos);
-
-        // TODO(jstpierre): Skybox
-        /*const skybox = this.entities.find((entity) => entity instanceof sky_camera) as sky_camera | undefined;
-        if (skybox !== undefined) {
-            const template = renderInstManager.pushTemplateRenderInst();
-            template.filterKey = FilterKey.Skybox;
-            this.prepareToRenderInternal(renderContext, renderInstManager, viewerInput, skybox.modelMatrix, skybox.area);
-            renderInstManager.popTemplateRenderInst();
-        }*/
-
-        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, noclipSpaceFromSourceEngineSpace);
-        for (let i = 0; i < this.detailSpriteLeafRenderers.length; i++) {
-            const spr = this.detailSpriteLeafRenderers[i];
-            // TODO(jstpierre): Traverse leaves at runtime
-            const cluster = this.bsp.leaflist[spr.leaf].cluster;
-            if (cluster !== 0xFFFF && !this.pvs.getBit(cluster))
-                continue;
-            spr.prepareToRender(renderContext, renderInstManager, viewerInput, scratchMatrix);
-        }
-
-        for (let i = 0; i < this.staticModelInstances.length; i++)
-            this.staticModelInstances[i].prepareToRender(renderContext, renderInstManager);
-
-        this.prepareToRenderInternal(renderContext, renderInstManager, viewerInput, this.pvs);
-
-        renderInstManager.popTemplateRenderInst();
+        // Now draw.
+        this.prepareToRenderView(renderContext, renderInstManager, viewerInput.camera);
     }
 
     public destroy(device: GfxDevice): void {
@@ -672,9 +655,8 @@ export class BSPRenderer {
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputState(this.inputState);
 
-        for (let i = 0; i < this.detailSpriteLeafRenderers.length; i++) {
-            this.detailSpriteLeafRenderers[i].destroy(device);
-        }
+        for (let i = 0; i < this.detailPropLeafRenderers.length; i++)
+            this.detailPropLeafRenderers[i].destroy(device);
     }
 }
 

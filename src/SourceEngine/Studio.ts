@@ -783,8 +783,6 @@ export class StudioModelInstance {
         if (!this.visible)
             return;
 
-        // TODO(jstpierre): Leaf visibility, frustum culling
-
         const lodIndex = this.getLODModelIndex(renderContext);
         this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix);
     }
