@@ -79,4 +79,4 @@ const sceneDescs = [
     new PortalSceneDesc('testchmb_a_14_advanced'),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };

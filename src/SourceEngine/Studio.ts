@@ -145,7 +145,9 @@ export class StudioModelData {
         // Parse MDL header
         assert(readString(mdlBuffer, 0x00, 0x04) === 'IDST');
         const mdlVersion = mdlView.getUint32(0x04, true);
-        assert(mdlVersion === 0x2C || mdlVersion === 0x2E);
+
+        const supportedVersions = [44, 45, 46, 47, 48];
+        assert(supportedVersions.includes(mdlVersion));
 
         const mdlChecksum = mdlView.getUint32(0x08, true);
 

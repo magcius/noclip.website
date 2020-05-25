@@ -88,8 +88,14 @@ class ParameterTexture {
     constructor(public additionalFlags: VTFFlags = 0) {
     }
 
-    public parse(S: string): void { this.ref = S; }
-    public index(i: number): Parameter { throw "whoops"; }
+    public parse(S: string): void {
+        this.ref = S;
+    }
+
+    public index(i: number): Parameter {
+        throw "whoops";
+    }
+
     public set(param: Parameter): void {
         // Cannot dynamically change at runtime.
         throw "whoops";
@@ -108,8 +114,15 @@ class ParameterTexture {
 
 class ParameterString {
     public value: string = '';
-    public parse(S: string): void { this.value = S; }
-    public index(i: number): Parameter { throw "whoops"; }
+
+    public parse(S: string): void {
+        this.value = S;
+    }
+
+    public index(i: number): Parameter {
+        throw "whoops";
+    }
+
     public set(param: Parameter): void {
         // Cannot dynamically change at runtime.
         throw "whoops";
@@ -117,9 +130,24 @@ class ParameterString {
 }
 
 class ParameterNumber {
-    constructor(public value: number, private dynamic: boolean = true) { }
-    public parse(S: string): void { this.value = Number(S); }
-    public index(i: number): Parameter { throw "whoops"; }
+    constructor(public value: number, private dynamic: boolean = true) {
+    }
+
+    public parse(S: string): void {
+        if (S.startsWith('[') || S.startsWith('{')) {
+            // Numbers and vectors are the same thing inside the Source engine, where
+            // numbers just are the first value in a vector.
+            const v = vmtParseVector(S);
+            this.value = v[0];
+        } else {
+            this.value = Number(S);
+        }
+    }
+
+    public index(i: number): Parameter {
+        throw "whoops";
+    }
+
     public set(param: Parameter): void {
         assert(param instanceof ParameterNumber);
         assert(this.dynamic);
@@ -128,15 +156,18 @@ class ParameterNumber {
 }
 
 class ParameterBoolean extends ParameterNumber {
-    constructor(value: boolean, dynamic: boolean = true) { super(value ? 1 : 0, dynamic); }
-    public getBool(): boolean { return !!this.value; }
+    constructor(value: boolean, dynamic: boolean = true) {
+        super(value ? 1 : 0, dynamic);
+    }
+
+    public getBool(): boolean {
+        return !!this.value;
+    }
 }
 
 const scratchMatrix = mat4.create();
 class ParameterMatrix {
     public matrix = mat4.create();
-
-    constructor() { }
 
     public setMatrix(cx: number, cy: number, sx: number, sy: number, r: number, tx: number, ty: number): void {
         mat4.identity(this.matrix);
@@ -158,8 +189,13 @@ class ParameterMatrix {
         this.setMatrix(cx, cy, sx, sy, r, tx, ty);
     }
 
-    public index(i: number): Parameter { throw "whoops"; }
-    public set(param: Parameter): void { throw "whoops"; }
+    public index(i: number): Parameter {
+        throw "whoops";
+    }
+
+    public set(param: Parameter): void {
+        throw "whoops";
+    }
 }
 
 class ParameterVector {
