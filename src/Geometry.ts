@@ -280,6 +280,10 @@ export class Frustum {
         return this.visualizer;
     }
 
+    public copyViewFrustum(other: Frustum): void {
+        this.setViewFrustum(other.left, other.right, other.bottom, other.top, -other.near, -other.far, other.isOrthographic);
+    }
+
     public setViewFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number, isOrthographic: boolean): void {
         this.left = left;
         this.right = right;

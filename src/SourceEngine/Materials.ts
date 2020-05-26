@@ -830,6 +830,7 @@ class Material_Generic extends BaseMaterial {
         p['$alphatestreference']           = new ParameterNumber(0.4);
         p['$nodiffusebumplighting']        = new ParameterBoolean(false, false);
         p['$ssbump']                       = new ParameterBoolean(false, false);
+        p['$selfillumtint']                = new ParameterColor(1, 1, 1);
 
         // World Vertex Transition
         p['$basetexture2']                 = new ParameterTexture(VTFFlags.SRGB);
@@ -2093,7 +2094,7 @@ class MaterialProxy_PlayerProximity {
             return;
 
         const scale = paramGetNum(map, this.scale);
-        const dist = vec3.distance(renderContext.cameraPos, entityParams.position);
+        const dist = vec3.distance(renderContext.currentView.cameraPos, entityParams.position);
         paramSetNum(map, this.resultvar, dist * scale);
     }
 }
@@ -2115,6 +2116,11 @@ class MaterialProxy_AnimatedTexture {
 
     public update(map: ParameterMap, renderContext: SourceRenderContext, entityParams: EntityMaterialParameters | null): void {
         const ptex = paramLookup<ParameterTexture>(map, this.animatedtexturevar);
+
+        // This can happen if the parameter is not actually a texture, if we haven't implemented something yet.
+        if (ptex.texture === undefined)
+            return;
+
         if (ptex.texture === null)
             return;
 

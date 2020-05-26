@@ -19,9 +19,9 @@ export default class BitMap {
     }
 
     public or(o: BitMap): void {
-        assert(this.words.length === o.words.length);
-        for (let i = 0; i < this.words.length; i++)
-            this.words[i] = o.words[i];
+        assert(this.words.length >= o.words.length);
+        for (let i = 0; i < o.words.length; i++)
+            this.words[i] |= o.words[i];
     }
 
     public setWord(wordIndex: number, wordValue: number): void {

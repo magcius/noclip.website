@@ -4,12 +4,11 @@ import { assert, readString } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGB32Exp, BaseMaterial, MaterialProgramBase } from "./Materials";
-import { SourceRenderContext, noclipSpaceFromSourceEngineSpace } from "./Main";
+import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
-import { transformVec3Mat4w0, computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
+import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { ViewerRenderInput } from "../viewer";
-import { computeViewSpaceDepthFromWorldSpacePoint, Camera } from "../Camera";
+import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { StudioModelInstance } from "./Studio";
@@ -205,8 +204,6 @@ export class DetailPropLeafRenderer {
                 vec3.copy(entry.origin, detailModel.pos);
                 // Sprite is planted at bottom center. Adjust to true center.
                 entry.origin[2] += entry.height * 0.5;
-                // Pre-translate into zup.
-                transformVec3Mat4w0(entry.origin, noclipSpaceFromSourceEngineSpace, entry.origin);
                 entry.pos = detailModel.pos;
                 entry.texcoord = desc.texcoord;
                 entry.color = detailModel.lighting;
@@ -229,7 +226,7 @@ export class DetailPropLeafRenderer {
         this.bindMaterial(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, camera: Camera): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
         if (this.materialInstance === null)
             return;
 
@@ -246,10 +243,10 @@ export class DetailPropLeafRenderer {
         const sortList: DetailSpriteEntry[] = [];
         for (let i = 0; i < this.spriteEntries.length; i++) {
             const entry = this.spriteEntries[i];
-            if (!camera.frustum.containsSphere(entry.origin, entry.radius))
+            if (!view.frustum.containsSphere(entry.origin, entry.radius))
                 continue;
             // compute distance from camera
-            entry.cameraDepth = computeViewSpaceDepthFromWorldSpacePoint(camera, entry.origin);
+            entry.cameraDepth = computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(view.viewFromWorldMatrix, entry.origin);
             sortList.push(entry);
         }
         sortList.sort((a, b) => b.cameraDepth - a.cameraDepth);
@@ -257,7 +254,7 @@ export class DetailPropLeafRenderer {
         for (let i = 0; i < sortList.length; i++) {
             const entry = sortList[i];
 
-            vec3.sub(scratchVec3, renderContext.cameraPos, entry.pos);
+            vec3.sub(scratchVec3, view.cameraPos, entry.pos);
             scratchVec3[2] = 0.0;
             computeMatrixForForwardDir(scratchMatrix, scratchVec3, entry.pos);
             // mat4.fromTranslation(scratchMatrix, entry.pos);
@@ -410,7 +407,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         // This was empirically determined. TODO(jstpierre): Should computeModelMatrixPosRot in general do this?
         const rot = vec3.fromValues(rotZ, rotX, rotY);
         const propName = staticModelDict[propType];
-        const propLeafList = leafList.slice(firstLeaf, leafCount);
+        const propLeafList = leafList.subarray(firstLeaf, firstLeaf + leafCount);
         staticObjects.push({ pos, rot, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist })
     }
 

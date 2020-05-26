@@ -61,6 +61,7 @@ export interface SurfaceLightmapData {
 
 export interface Surface {
     texinfo: number;
+    onNode: boolean;
     startIndex: number;
     indexCount: number;
     center: vec3 | null;
@@ -573,7 +574,7 @@ export class BSPFile {
             vertnormalBase: number;
         }
 
-        const surfaces: BasicSurface[] = [];
+        const basicSurfaces: BasicSurface[] = [];
 
         let lighting = getLumpData(LumpType.LIGHTING_HDR, 1);
         if (lighting.byteLength === 0)
@@ -649,12 +650,12 @@ export class BSPFile {
             // Allocate ourselves a page.
             this.lightmapPackerManager.allocate(lightmapData);
 
-            surfaces.push({ index: i, texinfo, lightmapData, vertnormalBase });
+            basicSurfaces.push({ index: i, texinfo, lightmapData, vertnormalBase });
         }
 
         // Sort surfaces by texinfo, and re-pack into fewer surfaces.
-        const surfaceRemapTable = nArray(surfaces.length, () => -1);
-        surfaces.sort((a, b) => a.texinfo - b.texinfo);
+        const surfaceRemapTable = nArray(basicSurfaces.length, () => -1);
+        basicSurfaces.sort((a, b) => a.texinfo - b.texinfo);
 
         // 3 pos, 4 normal, 4 tangent, 4 uv
         const vertexSize = (3+4+4+4);
@@ -677,8 +678,8 @@ export class BSPFile {
         let dstOffs = 0;
         let dstOffsIndex = 0;
         let dstIndexBase = 0;
-        for (let i = 0; i < surfaces.length; i++) {
-            const basicSurface = surfaces[i];
+        for (let i = 0; i < basicSurfaces.length; i++) {
+            const basicSurface = basicSurfaces[i];
 
             const tex = this.texinfo[basicSurface.texinfo];
 
@@ -691,15 +692,17 @@ export class BSPFile {
 
             // TODO(jstpierre): We need to check that we're inside two different entities.
             // The hope is that texinfo's will differ in this case, but this is not 100% guaranteed.
-            const prevSurface = i > 0 ? surfaces[i - 1] : null;
             let mergeSurface: Surface | null = null;
-            if (!isTranslucent && prevSurface !== null && prevSurface.lightmapData.pageIndex === basicSurface.lightmapData.pageIndex && prevSurface.texinfo === basicSurface.texinfo)
-                mergeSurface = assertExists(this.surfaces[this.surfaces.length - 1]);
+            if (!isTranslucent && this.surfaces.length > 0) {
+                const potentialMergeSurface = this.surfaces[this.surfaces.length - 1];
+                if (potentialMergeSurface.texinfo === basicSurface.texinfo && potentialMergeSurface.lightmapPageIndex === lightmapPageIndex)
+                    mergeSurface = potentialMergeSurface;
+            }
 
             const idx = basicSurface.index * 0x38;
             const planenum = faces.getUint16(idx + 0x00, true);
             const side = faces.getUint8(idx + 0x02);
-            const onNode = faces.getUint8(idx + 0x03);
+            const onNode = !!faces.getUint8(idx + 0x03);
             const firstedge = faces.getUint32(idx + 0x04, true);
             const numedges = faces.getUint16(idx + 0x08, true);
             const dispinfo = faces.getInt16(idx + 0x0C, true);
@@ -822,7 +825,7 @@ export class BSPFile {
                 assert(m === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                const surface: Surface = { texinfo, startIndex: dstOffsIndex, indexCount: m, center, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb };
+                const surface: Surface = { texinfo, onNode, startIndex: dstOffsIndex, indexCount: m, center, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb };
                 this.surfaces.push(surface);
 
                 surface.lightmapData.push(lightmapData);
@@ -914,7 +917,7 @@ export class BSPFile {
                 let surface = mergeSurface;
 
                 if (surface === null) {
-                    surface = { texinfo, startIndex: dstOffsIndex, indexCount: 0, center, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null };
+                    surface = { texinfo, onNode, startIndex: dstOffsIndex, indexCount: 0, center, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null };
                     this.surfaces.push(surface);
                 }
 
@@ -959,8 +962,12 @@ export class BSPFile {
             const area = nodes.getInt16(idx + 0x1C, true);
 
             const surfaceset = new Set<number>();
-            for (let i = firstface; i < firstface + numfaces; i++)
-                surfaceset.add(surfaceRemapTable[i]);
+            for (let i = firstface; i < firstface + numfaces; i++) {
+                const surfaceIdx = surfaceRemapTable[i];
+                if (surfaceIdx === -1)
+                    continue;
+                surfaceset.add(surfaceIdx);
+            }
             this.nodelist.push({ plane, child0, child1, bbox, area, surfaces: [...surfaceset.values()] });
         }
 
@@ -993,8 +1000,12 @@ export class BSPFile {
             }
 
             const surfaceset = new Set<number>();
-            for (let i = firstleafface; i < firstleafface + numleaffaces; i++)
-                surfaceset.add(surfaceRemapTable[leaffacelist[i]]);
+            for (let i = firstleafface; i < firstleafface + numleaffaces; i++) {
+                const surfaceIdx = surfaceRemapTable[leaffacelist[i]];
+                if (surfaceIdx === -1)
+                    continue;
+                surfaceset.add(surfaceIdx);
+            }
             this.leaflist.push({ bbox, cluster, area, surfaces: [...surfaceset.values()] });
         }
 
@@ -1017,8 +1028,12 @@ export class BSPFile {
             const numfaces = models.getUint32(idx + 0x2C, true);
 
             const surfaceset = new Set<number>();
-            for (let i = firstface; i < firstface + numfaces; i++)
-                surfaceset.add(surfaceRemapTable[i]);
+            for (let i = firstface; i < firstface + numfaces; i++) {
+                const surfaceIdx = surfaceRemapTable[i];
+                if (surfaceIdx === -1)
+                    continue;
+                surfaceset.add(surfaceIdx);
+            }
             this.models.push({ bbox, headnode, surfaces: [...surfaceset.values()] });
         }
 
