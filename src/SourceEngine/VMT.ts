@@ -119,7 +119,7 @@ class ValveKeyValueParser {
     }
 
     private unquote(start: string): string {
-        return this.run(/[a-zA-Z$]/, start);
+        return this.run(/[a-zA-Z0-9$%<>=]/, start);
     }
 
     public unit(): any {
@@ -130,7 +130,7 @@ class ValveKeyValueParser {
             return this.obj();
         else if (tok === '"')
             return this.quote(tok);
-        else if (/[a-zA-Z$%]/.test(tok))
+        else if (/[a-zA-Z$%<>=]/.test(tok))
             return this.unquote(tok);
         else if (/[-0-9.]/.test(tok))
             return this.num(tok);
@@ -139,7 +139,9 @@ class ValveKeyValueParser {
     }
 
     public pair(): VKFPair {
-        const k = (this.unit() as string).toLowerCase();
+        const kk = this.unit();
+        if (typeof kk !== 'string') debugger;
+        const k = (kk as string).toLowerCase();
         const v = this.unit();
         return [k, v];
     }

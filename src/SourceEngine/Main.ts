@@ -11,17 +11,41 @@ import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, e
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
 import { VPKMount } from "./VPK";
-import { ZipFile } from "../ZipFile";
+import { ZipFile, ZipFileEntry, ZipCompressionMethod } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase } from "./Materials";
 import { clamp, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
-import { assertExists } from "../util";
+import { assertExists, assert } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix, Camera } from "../Camera";
 import { AABB, Frustum } from "../Geometry";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
 import BitMap from "../BitMap";
+import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
+
+function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
+    if (entry.compressionMethod === ZipCompressionMethod.None) {
+        return entry.data;
+    } else if (entry.compressionMethod === ZipCompressionMethod.LZMA) {
+        // Parse out the ZIP-style LZMA header. See APPNOTE.txt section 5.8.8
+        const view = entry.data.createDataView();
+
+        // First two bytes are LZMA version.
+        // const versionMajor = view.getUint8(0x00);
+        // const versionMinor = view.getUint8(0x00);
+        // Next two bytes are "properties size", which should be 5 in all valid files.
+        const propertiesSize = view.getUint16(0x02, true);
+        assert(propertiesSize === 5);
+
+        const properties = decodeLZMAProperties(entry.data.subarray(0x04, propertiesSize));
+        // Compressed data comes immediately after the properties.
+        const compressedData = entry.data.slice(0x04 + propertiesSize);
+        return new ArrayBufferSlice(decompress(compressedData, properties, entry.uncompressedSize!));
+    } else {
+        throw "whoops";
+    }
+}
 
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
@@ -81,7 +105,7 @@ export class SourceFileSystem {
             const pakfile = this.pakfiles[i];
             const entry = pakfile.find((entry) => entry.filename === resolvedPath);
             if (entry !== undefined)
-                return entry.data;
+                return decompressZipFileEntry(entry);
         }
 
         return null;

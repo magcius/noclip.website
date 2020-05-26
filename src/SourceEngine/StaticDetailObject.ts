@@ -350,7 +350,7 @@ export interface StaticObjects {
 }
 
 export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: number): StaticObjects | null {
-    assert(version === 4 || version === 5 || version === 6);
+    assert(version === 4 || version === 5 || version === 6 || version === 10);
     const sprp = buffer.createDataView();
     let idx = 0x00;
 
@@ -381,7 +381,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         const firstLeaf = sprp.getUint16(idx + 0x1A, true);
         const leafCount = sprp.getUint16(idx + 0x1C, true);
         const solid = sprp.getUint8(idx + 0x1E);
-        const flags = sprp.getUint8(idx + 0x1F);
+        let flags = sprp.getUint8(idx + 0x1F);
         const skin = sprp.getInt32(idx + 0x20, true);
         const fadeMinDist = sprp.getFloat32(idx + 0x24, true);
         const fadeMaxDist = sprp.getFloat32(idx + 0x28, true);
@@ -403,6 +403,13 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
             idx += 0x04;
         }
 
+        if (version >= 7) {
+            flags = sprp.getUint32(idx + 0x00, true);
+            const lightmapResolutionX = sprp.getUint16(idx + 0x04, true);
+            const lightmapResolutionY = sprp.getUint16(idx + 0x06, true);
+            idx += 0x08;
+        }
+
         const pos = vec3.fromValues(posX, posY, posZ);
         // This was empirically determined. TODO(jstpierre): Should computeModelMatrixPosRot in general do this?
         const rot = vec3.fromValues(rotZ, rotX, rotY);
@@ -416,6 +423,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
 
 export class StaticPropRenderer {
     private studioModelInstance: StudioModelInstance | null = null;
+    private visible = true;
 
     constructor(renderContext: SourceRenderContext, private staticProp: StaticProp) {
         this.createInstance(renderContext);
@@ -435,6 +443,9 @@ export class StaticPropRenderer {
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, bsp: BSPFile, pvs: BitMap): void {
         if (this.studioModelInstance === null)
+            return;
+
+        if (!this.visible)
             return;
 
         // Test whether the prop is visible through the PVS.

@@ -57,6 +57,13 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('background01'),
     new TeamFortress2SceneDesc('cp_dustbowl'),
     new TeamFortress2SceneDesc('ctf_2fort'),
+    new TeamFortress2SceneDesc('pl_goldrush'),
+    new TeamFortress2SceneDesc('pl_badwater'),
+    new TeamFortress2SceneDesc('pl_barnblitz'),
+    new TeamFortress2SceneDesc('pl_frontier_final'),
+    new TeamFortress2SceneDesc('pl_thundermountain'),
+    new TeamFortress2SceneDesc('pl_upward'),
+    new TeamFortress2SceneDesc('pl_hoodoo_final'),
     new TeamFortress2SceneDesc('plr_hightower'),
 ];
 

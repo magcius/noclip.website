@@ -1,13 +1,21 @@
 
 // Quick hack to make a zipfile from scratch.
+// https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
 
 import * as CRC32 from 'crc-32';
 import ArrayBufferSlice from './ArrayBufferSlice';
-import { assertExists, readString, assert } from './util';
+import { readString, assert } from './util';
+
+export const enum ZipCompressionMethod {
+    None = 0,
+    LZMA = 14,
+}
 
 export interface ZipFileEntry {
     filename: string;
     data: ArrayBufferSlice;
+    uncompressedSize?: number;
+    compressionMethod?: ZipCompressionMethod;
 }
 
 export type ZipFile = ZipFileEntry[];
@@ -40,6 +48,7 @@ function makeLocalFileHeader(fileEntry: ZipFileEntry, crc32: number): ArrayBuffe
 
     writeString(buf, 0x00, 'PK\x03\x04');
     view.setUint16(0x04, 0x14, true);
+    assert(fileEntry.compressionMethod === undefined);
     // no flags, no compression, no mod time/date
     view.setUint32(0x0E, crc32, true);
     view.setUint32(0x12, dataSize, true);
@@ -139,15 +148,17 @@ export function parseZipFile(buffer: ArrayBufferSlice): ZipFile {
     let cdIdx = cdOffs;
     for (let i = 0; i < numEntries; i++) {
         assert(readString(buffer, cdIdx + 0x00, 0x04) === 'PK\x01\x02');
+        const compressionMethod = view.getUint32(cdIdx + 0x0A, true);
         const dataSize = view.getUint32(cdIdx + 0x14, true);
-        const filenameSize = view.getUint32(cdIdx + 0x1C, true);
-        const localHeaderOffset = view.getUint32(cdIdx + 0x2A, true)
+        const uncompressedSize = view.getUint32(cdIdx + 0x18, true);
+        const filenameSize = view.getUint16(cdIdx + 0x1C, true);
+        const localHeaderOffset = view.getUint32(cdIdx + 0x2A, true);
         const filename = readString(buffer, cdIdx + 0x2E, filenameSize);
         cdIdx += 0x2E + filenameSize;
 
         assert(readString(buffer, localHeaderOffset + 0x00, 0x04) === 'PK\x03\x04');
         const data = buffer.subarray(localHeaderOffset + 0x1E + filenameSize, dataSize);
-        entries.push({ filename, data });
+        entries.push({ filename, data, uncompressedSize, compressionMethod });
     }
 
     return entries;

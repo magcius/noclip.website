@@ -10,6 +10,7 @@ import { parseEntitiesLump, BSPEntity } from "./VMT";
 import { Plane, AABB } from "../Geometry";
 import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject";
 import BitMap from "../BitMap";
+import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
 
 const enum LumpType {
     ENTITIES             = 0,
@@ -378,6 +379,20 @@ export class LightmapPackerPage {
     }
 }
 
+function decompressLZMA(compressedData: ArrayBufferSlice, uncompressedSize: number): ArrayBufferSlice {
+    const compressedView = compressedData.createDataView();
+
+    // Parse Valve's lzma_header_t.
+    assert(readString(compressedData, 0x00, 0x04) === 'LZMA');
+    const actualSize = compressedView.getUint32(0x04, true);
+    assert(actualSize === uncompressedSize);
+    const lzmaSize = compressedView.getUint32(0x08, true);
+    assert(lzmaSize + 0x11 <= compressedData.byteLength);
+    const lzmaProperties = decodeLZMAProperties(compressedData.slice(0x0C));
+
+    return new ArrayBufferSlice(decompress(compressedData.slice(0x11), lzmaProperties, actualSize));
+}
+
 export class LightmapPackerManager {
     public pages: LightmapPackerPage[] = [];
 
@@ -434,8 +449,14 @@ export class BSPFile {
             const size = view.getUint32(idx + 0x04, true);
             const version = view.getUint32(idx + 0x08, true);
             const uncompressedSize = view.getUint32(idx + 0x0C, true);
-            assert(uncompressedSize === 0x00);
-            return [buffer.subarray(offs, size), version];
+            if (uncompressedSize !== 0) {
+                // LZMA compression.
+                const compressedData = buffer.subarray(offs, size);
+                const decompressed = decompressLZMA(compressedData, uncompressedSize);
+                return [decompressed, version];
+            } else {
+                return [buffer.subarray(offs, size), version];
+            }
         }
 
         function getLumpData(lumpType: LumpType, expectedVersion: number = 0): ArrayBufferSlice {
@@ -453,13 +474,26 @@ export class BSPFile {
             for (let i = 0; i < lumpCount; i++) {
                 const lumpmagic = game_lump.getUint32(idx + 0x00, true);
                 if (lumpmagic === needle) {
-                    const flags = game_lump.getUint16(idx + 0x04, true);
+                    const enum GameLumpFlags { COMPRESSED = 0x01, }
+                    const flags: GameLumpFlags = game_lump.getUint16(idx + 0x04, true);
                     const version = game_lump.getUint16(idx + 0x06, true);
                     const fileofs = game_lump.getUint32(idx + 0x08, true);
                     const filelen = game_lump.getUint32(idx + 0x0C, true);
-                    assert(flags === 0);
-                    const lump = buffer.subarray(fileofs, filelen);
-                    return [lump, version];
+
+                    if (!!(flags & GameLumpFlags.COMPRESSED)) {
+                        // Find next offset to find compressed size length.
+                        let compressedEnd: number;
+                        if (i + 1 < lumpCount)
+                            compressedEnd = game_lump.getUint32(idx + 0x10 + 0x08, true);
+                        else
+                            compressedEnd = game_lump.byteOffset + game_lump.byteLength;
+                        const compressed = buffer.slice(fileofs, compressedEnd);
+                        const lump = decompressLZMA(compressed, filelen);
+                        return [lump, version];
+                    } else {
+                        const lump = buffer.subarray(fileofs, filelen);
+                        return [lump, version];
+                    }
                 }
                 idx += 0x10;
             }
@@ -608,7 +642,8 @@ export class BSPFile {
             } else {
                 vertCount += numedges;
 
-                const m_NumPrims = faces.getUint16(idx + 0x30, true);
+                const m_NumPrimsRaw = faces.getUint16(idx + 0x30, true);
+                const m_NumPrims = m_NumPrimsRaw & 0x7FFF;
                 const firstPrimID = faces.getUint16(idx + 0x32, true);
                 if (m_NumPrims !== 0) {
                     const primOffs = firstPrimID * 0x0A;
@@ -712,7 +747,8 @@ export class BSPFile {
             const m_LightmapTextureMinsInLuxels = nArray(2, (i) => faces.getInt32(idx + 0x1C + i * 4, true));
             const m_LightmapTextureSizeInLuxels = nArray(2, (i) => faces.getUint32(idx + 0x24 + i * 4, true));
             const origFace = faces.getUint32(idx + 0x2C, true);
-            const m_NumPrims = faces.getUint16(idx + 0x30, true);
+            const m_NumPrimsRaw = faces.getUint16(idx + 0x30, true);
+            const m_NumPrims = m_NumPrimsRaw & 0x7FFF;
             const firstPrimID = faces.getUint16(idx + 0x32, true);
             const smoothingGroups = faces.getUint32(idx + 0x34, true);
 

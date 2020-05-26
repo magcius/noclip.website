@@ -235,6 +235,12 @@ class ParameterVector {
         }
     }
 
+    public setFromColor(c: Color): void {
+        this.internal[0].value = c.r;
+        this.internal[1].value = c.g;
+        this.internal[2].value = c.b;
+    }
+
     public fillColor(d: Float32Array, offs: number, a: number): number {
         assert(this.internal.length === 3);
         return fillVec4(d, offs, this.internal[0].value, this.internal[1].value, this.internal[2].value, a);
@@ -483,6 +489,7 @@ export abstract class BaseMaterial {
         p['$basetexturetransform']         = new ParameterMatrix();
         p['$frame']                        = new ParameterNumber(0);
         p['$color']                        = new ParameterColor(1, 1, 1);
+        p['$color2']                       = new ParameterColor(1, 1, 1);
         p['$alpha']                        = new ParameterNumber(1);
     }
 
@@ -513,6 +520,15 @@ export abstract class BaseMaterial {
         if (!this.visible || !this.isMaterialLoaded())
             return;
 
+        if (this.entityParams !== null) {
+            // Update our color/alpha based on entity params.
+            const color = assertExists(this.paramGetVector('$color'));
+            color.setFromColor(this.entityParams.blendColor);
+
+            const alpha = assertExists(this.param['$alpha']) as ParameterNumber;
+            alpha.value = this.entityParams.blendColor.a;
+        }
+
         if (this.proxyDriver !== null)
             this.proxyDriver.update(renderContext, this.entityParams);
     }
@@ -521,8 +537,8 @@ export abstract class BaseMaterial {
 }
 //#endregion
 
-//#region Generic (LightmappedGeneric, UnlitGeneric, VertexLightingGeneric, VertexWorldTransition)
-class GenericMaterialProgram extends MaterialProgramBase {
+//#region Generic (LightmappedGeneric, UnlitGeneric, VertexLightingGeneric, WorldVertexTransition)
+class Material_Generic_Program extends MaterialProgramBase {
     public static ub_ObjectParams = 1;
 
     public both = `
@@ -605,6 +621,7 @@ void mainVS() {
 #endif
 
 #ifdef USE_MODULATIONCOLOR_COLOR
+    // TODO(jstpierre): Support
     v_Color.rgb *= u_ModulationColor.rgb;
 #endif
 
@@ -645,13 +662,41 @@ void mainVS() {
 
 #ifdef FRAG
 
-#define COMBINE_MODE_MUL_DETAIL2        (0)
+#define COMBINE_MODE_MUL_DETAIL2                             (0)
+#define COMBINE_MODE_RGB_ADDITIVE                            (1)
+#define COMBINE_MODE_DETAIL_OVER_BASE                        (2)
+#define COMBINE_MODE_FADE                                    (3)
+#define COMBINE_MODE_BASE_OVER_DETAIL                        (4)
+#define COMBINE_MODE_RGB_ADDITIVE_SELFILLUM                  (5)
+#define COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE   (6)
+
 vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
     if (t_CombineMode == COMBINE_MODE_MUL_DETAIL2) {
         return t_BaseTexture * mix(vec4(1.0), t_DetailTexture * 2.0, t_BlendFactor);
+    } else if (t_CombineMode == COMBINE_MODE_BASE_OVER_DETAIL) {
+        return vec4(mix(t_BaseTexture.rgb, t_DetailTexture.rgb, (t_BlendFactor * (1.0 - t_BaseTexture.a))), t_DetailTexture.a);
+    } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
+        // Done in Post-Lighting.
+        return t_BaseTexture;
     } else {
         // Unknown.
         return t_BaseTexture + vec4(1.0, 0.0, 1.0, 0.0);
+    }
+}
+
+vec3 TextureCombinePostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
+    if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
+        // Remap.
+        if (t_BlendFactor >= 0.5) {
+            float t_Mult = (1.0 / t_BlendFactor);
+            return t_DiffuseColor + clamp((t_Mult * t_DetailTexture.rgb) + (1.0 - t_Mult), 0.0, 1.0);
+        } else {
+            float t_Mult = (4.0 * t_BlendFactor);
+            return t_DiffuseColor + clamp((t_Mult * t_DetailTexture.rgb) + (-0.5 * t_Mult), 0.0, 1.0);
+        }
+    } else {
+        // Nothing to do.
+        return t_DiffuseColor;
     }
 }
 
@@ -746,7 +791,13 @@ void mainPS() {
     t_DiffuseLighting = vec3(1.0);
 #endif
 
-    t_FinalColor.rgb += t_DiffuseLighting * t_Albedo.rgb;
+    vec3 t_FinalDiffuse = t_DiffuseLighting * t_Albedo.rgb;
+
+#ifdef USE_DETAIL
+    t_FinalDiffuse = TextureCombinePostLighting(t_FinalDiffuse, t_DetailTexture.rgb, DETAIL_COMBINE_MODE, u_DetailBlendFactor);
+#endif
+
+    t_FinalColor.rgb += t_FinalDiffuse;
 
 #ifdef USE_ENVMAP
     vec3 t_SpecularFactor = vec3(u_EnvmapTint);
@@ -796,7 +847,7 @@ class Material_Generic extends BaseMaterial {
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
 
-    private program: GenericMaterialProgram;
+    private program: Material_Generic_Program;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
@@ -845,9 +896,25 @@ class Material_Generic extends BaseMaterial {
     }
 
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
-        const shaderType = this.vmt._Root.toLowerCase();
+        const shaderTypeStr = this.vmt._Root.toLowerCase();
 
-        this.program = new GenericMaterialProgram();
+        const enum ShaderType {
+            LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Unknown,
+        };
+
+        let shaderType: ShaderType;
+        if (shaderTypeStr === 'lightmappedgeneric')
+            shaderType = ShaderType.LightmappedGeneric;
+        else if (shaderTypeStr === 'vertexlitgeneric')
+            shaderType = ShaderType.VertexLitGeneric;
+        else if (shaderTypeStr === 'unlitgeneric')
+            shaderType = ShaderType.UnlitGeneric;
+        else if (shaderTypeStr === 'worldvertextransition')
+            shaderType = ShaderType.WorldVertexTransition;
+        else
+            shaderType = ShaderType.Unknown;
+
+        this.program = new Material_Generic_Program();
 
         if (this.paramGetVTF('$detail') !== null) {
             this.wantsDetail = true;
@@ -875,19 +942,29 @@ class Material_Generic extends BaseMaterial {
             this.program.setDefineBool('USE_ENVMAP', true);
         }
 
-        // Use modulation by default.
-        // TODO(jstpierre): Figure out where modulation is actually used.
-        this.program.setDefineBool('USE_MODULATIONCOLOR_COLOR', false);
-        this.program.setDefineBool('USE_MODULATIONCOLOR_ALPHA', false);
-
-        if (shaderType === 'lightmappedgeneric' || shaderType === 'worldvertextransition') {
+        if (shaderType === ShaderType.LightmappedGeneric || shaderType === ShaderType.WorldVertexTransition) {
             this.wantsLightmap = true;
             this.program.setDefineBool('USE_LIGHTMAP', true);
         }
 
-        if (shaderType === 'worldvertextransition') {
+        if (shaderType === ShaderType.WorldVertexTransition) {
             this.wantsBaseTexture2 = true;
             this.program.setDefineBool('USE_BASETEXTURE2', true);
+        }
+
+        // Modulation color is used differently between lightmapped and non-lightmapped.
+        // In vertexlit / unlit, then the modulation color is multiplied in with the texture (and possibly blended).
+        // In lightmappedgeneric, then the modulation color is used as the diffuse lightmap scale, and contains the
+        // lightmap scale factor.
+        // USE_MODULATIONCOLOR_COLOR only handles the vertexlit / unlit case. USE_LIGHTMAP will also use the modulation
+        // color if necessary.
+        if (this.wantsLightmap) {
+            this.program.setDefineBool('USE_MODULATIONCOLOR_COLOR', false);
+            // TODO(jstpierre): Figure out if modulation alpha is used in lightmappedgeneric.
+            this.program.setDefineBool('USE_MODULATIONCOLOR_ALPHA', false);
+        } else {
+            this.program.setDefineBool('USE_MODULATIONCOLOR_COLOR', true);
+            this.program.setDefineBool('USE_MODULATIONCOLOR_ALPHA', true);
         }
 
         if (this.paramGetBoolean('$vertexcolor') || this.paramGetBoolean('$vertexalpha'))
@@ -946,8 +1023,8 @@ class Material_Generic extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
-        let offs = renderInst.allocateUniformBuffer(GenericMaterialProgram.ub_ObjectParams, 64);
-        const d = renderInst.mapUniformBufferF32(GenericMaterialProgram.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
 
         offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
@@ -972,11 +1049,15 @@ class Material_Generic extends BaseMaterial {
         }
 
         // Compute modulation color.
-        colorCopy(scratchColor, this.entityParams !== null ? this.entityParams.blendColor : White);
+        colorCopy(scratchColor, White);
         this.paramGetVector('$color').mulColor(scratchColor);
+        this.paramGetVector('$color2').mulColor(scratchColor);
 
-        const lightMapScale = gammaToLinear(2.0);
-        colorScaleAndAdd(scratchColor, scratchColor, TransparentWhite, lightMapScale);
+        if (this.wantsLightmap) {
+            const lightMapScale = gammaToLinear(2.0);
+            colorScaleAndAdd(scratchColor, scratchColor, TransparentWhite, lightMapScale);
+        }
+
         scratchColor.a *= this.paramGetNumber('$alpha');
         offs += fillColor(d, offs, scratchColor);
 
@@ -1082,8 +1163,8 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
-        let offs = renderInst.allocateUniformBuffer(GenericMaterialProgram.ub_ObjectParams, 64);
-        const d = renderInst.mapUniformBufferF32(GenericMaterialProgram.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
         offs += this.paramFillScaleBias(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', '$alpha');
@@ -1211,7 +1292,7 @@ void mainPS() {
 }
 
 class Material_Water extends BaseMaterial {
-    private program: GenericMaterialProgram;
+    private program: Material_Generic_Program;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
@@ -1267,8 +1348,8 @@ class Material_Water extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
-        let offs = renderInst.allocateUniformBuffer(GenericMaterialProgram.ub_ObjectParams, 64);
-        const d = renderInst.mapUniformBufferF32(GenericMaterialProgram.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
 
         if (this.wantsTexScroll) {
