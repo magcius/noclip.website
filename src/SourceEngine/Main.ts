@@ -3,7 +3,7 @@ import { SceneContext } from "../SceneBase";
 import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { fillMatrix4x4, fillVec3v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { BSPFile, Surface, Model } from "./BSPFile";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
@@ -14,8 +14,8 @@ import { VPKMount } from "./VPK";
 import { ZipFile } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase } from "./Materials";
-import { clamp, computeMatrixWithoutTranslation, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
-import { assertExists, assert } from "../util";
+import { clamp, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
+import { assertExists } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix, Camera } from "../Camera";
 import { AABB, Frustum } from "../Geometry";
@@ -352,21 +352,24 @@ class BSPModelRenderer {
             this.surfaces[i].movement(renderContext);
     }
 
-    private gatherSurfaces(liveSurfaceSet: Set<number>, liveLeafSet: Set<number>, nodeid: number, pvs: BitMap, cullFrustum: Frustum): void {
+    public gatherSurfaces(liveSurfaceSet: Set<number> | null, liveLeafSet: Set<number> | null, pvs: BitMap, view: SourceEngineView, nodeid: number = this.model.headnode): void {
         if (nodeid >= 0) {
             // node
             const node = this.bsp.nodelist[nodeid];
 
             scratchAABB.transform(node.bbox, this.modelMatrix);
-            if (!cullFrustum.contains(scratchAABB))
+            if (!view.frustum.contains(scratchAABB))
                 return;
 
-            this.gatherSurfaces(liveSurfaceSet, liveLeafSet, node.child0, pvs, cullFrustum);
-            this.gatherSurfaces(liveSurfaceSet, liveLeafSet, node.child1, pvs, cullFrustum);
+            this.gatherSurfaces(liveSurfaceSet, liveLeafSet, pvs, view, node.child0);
+            this.gatherSurfaces(liveSurfaceSet, liveLeafSet, pvs, view, node.child1);
 
-            // TODO(jstpierre): Do we ever need node surfaces?
-            // for (let i = 0; i < node.surfaces.length; i++)
-            //     liveSurfaceSet.add(node.surfaces[i]);
+            // Node surfaces are func_detail meshes, but they appear to also be in leaves... don't know if we need them.
+            /*
+            if (liveSurfaceSet !== null)
+                for (let i = 0; i < node.surfaces.length; i++)
+                    liveSurfaceSet.add(node.surfaces[i]);
+            */
         } else {
             // leaf
             const leafnum = -nodeid - 1;
@@ -376,17 +379,19 @@ class BSPModelRenderer {
                 return;
 
             scratchAABB.transform(leaf.bbox, this.modelMatrix);
-            if (!cullFrustum.contains(scratchAABB))
+            if (!view.frustum.contains(scratchAABB))
                 return;
 
-            liveLeafSet.add(leafnum);
+            if (liveLeafSet !== null)
+                liveLeafSet.add(leafnum);
 
-            for (let i = 0; i < leaf.surfaces.length; i++)
-                liveSurfaceSet.add(leaf.surfaces[i]);
+            if (liveSurfaceSet !== null)
+                for (let i = 0; i < leaf.surfaces.length; i++)
+                    liveSurfaceSet.add(leaf.surfaces[i]);
         }
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap, liveLeafSet: Set<number>): void {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap, traverseBrush: boolean): void {
         if (!this.visible)
             return;
 
@@ -399,12 +404,18 @@ class BSPModelRenderer {
         for (let i = 0; i < this.displacementSurfaces.length; i++)
             this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, pvs);
 
-        // Gather all BSP surfaces.
-        this.liveSurfaceSet.clear();
-        this.gatherSurfaces(this.liveSurfaceSet, liveLeafSet, this.model.headnode, pvs, view.frustum);
+        if (traverseBrush) {
+            // Gather all BSP surfaces, and cull based on that.
+            this.liveSurfaceSet.clear();
+            this.gatherSurfaces(this.liveSurfaceSet, null, pvs, view);
 
-        for (const surfaceIdx of this.liveSurfaceSet.values())
-            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
+            for (const surfaceIdx of this.liveSurfaceSet.values())
+                this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
+        } else {
+            // Entities don't use the BSP tree, they simply render all surfaces back to back in a batch.
+            for (let i = 0; i < this.model.surfaces.length; i++)
+                this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
+        }
     }
 }
 
@@ -547,6 +558,13 @@ export class SourceEngineView {
     }
 }
 
+const enum RenderObjectKind {
+    WorldSpawn  = 1 << 0,
+    Entities    = 1 << 1,
+    StaticProps = 1 << 2,
+    DetailProps = 1 << 3,
+}
+
 export class BSPRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
@@ -584,7 +602,7 @@ export class BSPRenderer {
         for (let i = 0; i < this.bsp.models.length; i++) {
             const model = this.bsp.models[i];
             const modelRenderer = new BSPModelRenderer(renderContext, model, bsp);
-            // Submodels are invisible by default.
+            // Non-world-spawn models are invisible by default (they're lifted into the world by entities).
             modelRenderer.visible = (i === 0);
             this.models.push(modelRenderer);
         }
@@ -618,7 +636,7 @@ export class BSPRenderer {
             this.staticPropRenderers[i].movement(renderContext);
     }
 
-    public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap): void {
+    public prepareToRenderView(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap, kinds: RenderObjectKind): void {
         const template = renderInstManager.pushTemplateRenderInst();
 
         let offs = template.allocateUniformBuffer(MaterialProgramBase.ub_SceneParams, 32);
@@ -626,22 +644,34 @@ export class BSPRenderer {
         offs += fillMatrix4x4(d, offs, view.clipFromWorldMatrix);
         offs += fillVec3v(d, offs, view.cameraPos);
 
-        // BSP models.
-        this.liveLeafSet.clear();
         template.setInputLayoutAndState(this.inputLayout, this.inputState);
-        for (let i = 0; i < this.models.length; i++)
-            this.models[i].prepareToRender(renderContext, renderInstManager, view, pvs, this.liveLeafSet);
+
+        // Render the world-spawn model.
+        if (!!(kinds & RenderObjectKind.WorldSpawn))
+            this.models[0].prepareToRender(renderContext, renderInstManager, view, pvs, true);
+
+        if (!!(kinds & RenderObjectKind.Entities)) {
+            for (let i = 1; i < this.models.length; i++)
+                this.models[i].prepareToRender(renderContext, renderInstManager, view, pvs, false);
+        }
 
         // Static props.
-        for (let i = 0; i < this.staticPropRenderers.length; i++)
-            this.staticPropRenderers[i].prepareToRender(renderContext, renderInstManager, this.bsp, pvs);
+        if (!!(kinds & RenderObjectKind.StaticProps)) {
+            for (let i = 0; i < this.staticPropRenderers.length; i++)
+                this.staticPropRenderers[i].prepareToRender(renderContext, renderInstManager, this.bsp, pvs);
+        }
 
         // Detail props.
-        for (let i = 0; i < this.detailPropLeafRenderers.length; i++) {
-            const detailPropLeafRenderer = this.detailPropLeafRenderers[i];
-            if (!this.liveLeafSet.has(detailPropLeafRenderer.leaf))
-                continue;
+        if (!!(kinds & RenderObjectKind.DetailProps)) {
+            this.liveLeafSet.clear();
+            this.models[0].gatherSurfaces(null, this.liveLeafSet, pvs, view);
+
+            for (let i = 0; i < this.detailPropLeafRenderers.length; i++) {
+                const detailPropLeafRenderer = this.detailPropLeafRenderers[i];
+                if (!this.liveLeafSet.has(detailPropLeafRenderer.leaf))
+                    continue;
                 detailPropLeafRenderer.prepareToRender(renderContext, renderInstManager, view);
+            }
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -768,7 +798,7 @@ export class SourceRenderer implements SceneGfx {
             if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.skyboxView))
                 continue;
 
-            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.skyboxView, this.pvsScratch);
+            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.skyboxView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps);
         }
 
         template.filterKey = FilterKey.Main;
@@ -780,7 +810,7 @@ export class SourceRenderer implements SceneGfx {
                 this.pvsScratch.fill(true);
             }
 
-            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch);
+            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps);
         }
 
         renderInstManager.popTemplateRenderInst();

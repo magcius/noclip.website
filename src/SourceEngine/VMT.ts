@@ -179,7 +179,6 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
         const vmt = vmtObj as VMT;
         vmt._Root = k;
         vmt._Filename = path;
-        vmt._String = str;
 
         // Recursively pairs2obj except on proxies.
         for (const k in vmtObj) {
