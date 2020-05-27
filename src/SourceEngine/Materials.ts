@@ -226,10 +226,13 @@ class ParameterVector {
 
     public set(param: Parameter): void {
         if (param instanceof ParameterVector) {
-            this.internal
             this.internal[0].value = param.internal[0].value;
             this.internal[1].value = param.internal[1].value;
             this.internal[2].value = param.internal[2].value;
+        } else if (param instanceof ParameterNumber) {
+            this.internal[0].value = param.value;
+            this.internal[1].value = param.value;
+            this.internal[2].value = param.value;
         } else {
             throw "whoops";
         }

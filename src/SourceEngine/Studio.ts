@@ -138,6 +138,7 @@ function fixupRemappingSearch(fixupTable: FixupRemapping[], dstIdx: number): num
 
 export class StudioModelData {
     public bodyPartData: StudioModelBodyPartData[] = [];
+    public checksum: number;
 
     constructor(renderContext: SourceRenderContext, mdlBuffer: ArrayBufferSlice, vvdBuffer: ArrayBufferSlice, vtxBuffer: ArrayBufferSlice) {
         const mdlView = mdlBuffer.createDataView();
@@ -149,7 +150,7 @@ export class StudioModelData {
         const supportedVersions = [44, 45, 46, 47, 48];
         assert(supportedVersions.includes(mdlVersion));
 
-        const mdlChecksum = mdlView.getUint32(0x08, true);
+        this.checksum = mdlView.getUint32(0x08, true);
 
         const name = readString(mdlBuffer, 0x0C, 0x40, true);
         const length = mdlView.getUint32(0x4C, true);
@@ -297,7 +298,7 @@ export class StudioModelData {
         const vvdVersion = vvdView.getUint32(0x04, true);
         assert(vvdVersion === 0x04);
         const vvdChecksum = vvdView.getUint32(0x08, true);
-        assert(vvdChecksum === mdlChecksum);
+        assert(vvdChecksum === this.checksum);
         const vvdNumLODs = vvdView.getUint32(0x0C, true);
         const vvdNumLODVertexes = nArray(8, (i) => vvdView.getUint32(0x10 + i * 0x04, true));
         const vvdNumFixups = vvdView.getUint32(0x30, true);
@@ -333,7 +334,7 @@ export class StudioModelData {
         const vtxMaxBonesPerVert = vtxView.getUint32(0x0C, true);
 
         const vtxChecksum = vtxView.getUint32(0x10, true);
-        assert(mdlChecksum === vtxChecksum);
+        assert(vtxChecksum === this.checksum);
 
         const vtxNumLODs = vtxView.getUint32(0x14, true);
         assert(vtxNumLODs === vvdNumLODs);
@@ -647,6 +648,79 @@ export class StudioModelData {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.bodyPartData.length; i++)
             this.bodyPartData[i].destroy(device);
+    }
+}
+
+// Hardware verts, used for static color data
+
+interface HardwareVertDataMesh {
+    lod: number;
+    indexInsideLOD: number;
+    vertexCount: number;
+    byteOffset: number;
+    byteSize: number;
+}
+
+export class HardwareVertData {
+    public checksum: number;
+    public buffer: GfxBuffer;
+    public mesh: HardwareVertDataMesh[] = [];
+
+    constructor(renderContext: SourceRenderContext, buffer: ArrayBufferSlice) {
+        const view = buffer.createDataView();
+
+        const version = view.getUint32(0x00, true);
+        assert(version === 0x02);
+
+        this.checksum = view.getUint32(0x04, true);
+
+        // Hardware verts are used solely for vertex colors
+
+        const enum VertexFlags { POSITION = 0x01, NORMAL = 0x02, COLOR = 0x04, SPECULAR = 0x08, TANGENT_S = 0x10, TANGENT_T = 0x20, }
+        const vertexFlags: VertexFlags = view.getUint32(0x08, true);
+        assert(vertexFlags === VertexFlags.COLOR);
+
+        const vertexSize: number = view.getUint32(0x0C, true);
+        assert(vertexSize === 4);
+
+        const vertexCount = view.getUint32(0x10, true);
+
+        const numMeshes = view.getUint32(0x14, true);
+
+        // 0x10 bytes of padding.
+        const vertexData = new Uint8Array(vertexCount * 4);
+        let vertexOffs = 0;
+
+        let lastLOD = -1;
+        let indexInsideLOD = 0;
+
+        let meshHeaderIdx = 0x28;
+        for (let i = 0; i < numMeshes; i++) {
+            const lod = view.getUint32(meshHeaderIdx + 0x00, true);
+            if (lastLOD !== lod) {
+                indexInsideLOD = 0;
+                lastLOD = lod;
+            }
+
+            const meshVertexCount = view.getUint32(meshHeaderIdx + 0x04, true);
+            const offset = view.getUint32(meshHeaderIdx + 0x08, true);
+
+            const meshByteSize = meshVertexCount * 4;
+
+            // Input and output data are both RGBA
+            vertexData.set(buffer.createTypedArray(Uint8Array, offset, meshByteSize), vertexOffs);
+            this.mesh.push({ lod, indexInsideLOD, vertexCount: meshVertexCount, byteOffset: vertexOffs, byteSize: meshByteSize });
+            vertexOffs += meshVertexCount * 4;
+
+            // 0x10 bytes of padding.
+            meshHeaderIdx += 0x1C;
+        }
+
+        this.buffer = makeStaticDataBuffer(renderContext.device, GfxBufferUsage.VERTEX, vertexData.buffer);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.buffer);
     }
 }
 
