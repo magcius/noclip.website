@@ -17,7 +17,6 @@ import { Shape, Model, ModelInstance, ModelViewState, ModelVersion } from './mod
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
-import { Color } from '../Color';
 
 export abstract class BlockFetcher {
     public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null>;
@@ -88,16 +87,24 @@ function getModFileNum(mod: number): number {
 export class SFABlockFetcher implements BlockFetcher {
     private trkblkTab: DataView;
     private blockColls: BlockCollection[] = [];
+    private texFetcher: TextureFetcher;
 
-    private constructor(private gameInfo: GameInfo, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texFetcher: TextureFetcher) {
+    private constructor(private gameInfo: GameInfo, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texFetcher: TextureFetcher) {
-        const self = new SFABlockFetcher(gameInfo, device, materialFactory, animController, texFetcher);
+    private async init(dataFetcher: DataFetcher, texFetcherPromise: Promise<TextureFetcher>) {
+        const pathBase = this.gameInfo.pathBase;
+        const [trkblk, texFetcher] = await Promise.all([
+            dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`),
+            texFetcherPromise,
+        ]);
+        this.trkblkTab = trkblk.createDataView();
+        this.texFetcher = texFetcher;
+    }
 
-        const pathBase = gameInfo.pathBase;
-        self.trkblkTab = (await dataFetcher.fetchData(`${pathBase}/TRKBLK.tab`)).createDataView();
-
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texFetcherPromise: Promise<TextureFetcher>) {
+        const self = new SFABlockFetcher(gameInfo, device, materialFactory, animController);
+        await self.init(dataFetcher, texFetcherPromise);
         return self;
     }
 
@@ -115,11 +122,14 @@ export class SFABlockFetcher implements BlockFetcher {
     private async fetchBlockCollection(mod: number, dataFetcher: DataFetcher): Promise<BlockCollection> {
         if (this.blockColls[mod] === undefined) {
             const subdir = getSubdir(mod, this.gameInfo);
-            await this.texFetcher.loadSubdir(subdir, dataFetcher);
             const modNum = getModFileNum(mod);
             const tabPath = `${subdir}/mod${modNum}.tab`;
             const binPath = `${subdir}/mod${modNum}.zlb.bin`;
-            this.blockColls[mod] = await BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, this.device, this.materialFactory, this.animController, this.texFetcher);
+            const [blockColl, _] = await Promise.all([
+                BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, this.device, this.materialFactory, this.animController, this.texFetcher),
+                this.texFetcher.loadSubdirs([subdir], dataFetcher),
+            ]);
+            this.blockColls[mod] = blockColl;
         }
 
         return this.blockColls[mod];

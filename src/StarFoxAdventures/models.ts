@@ -1446,17 +1446,19 @@ class ModelsFile {
     private constructor(private device: GfxDevice, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, device: GfxDevice, materialFactory: MaterialFactory, texFetcher: TextureFetcher, animController: SFAAnimationController, modelVersion: ModelVersion): Promise<ModelsFile> {
-        const self = new ModelsFile(device, materialFactory, texFetcher, animController, modelVersion);
-
+    private async init(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string) {
         const pathBase = gameInfo.pathBase;
         const [tab, bin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
             dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
         ]);
-        self.tab = tab.createDataView();
-        self.bin = bin;
+        this.tab = tab.createDataView();
+        this.bin = bin;
+    }
 
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, device: GfxDevice, materialFactory: MaterialFactory, texFetcher: TextureFetcher, animController: SFAAnimationController, modelVersion: ModelVersion): Promise<ModelsFile> {
+        const self = new ModelsFile(device, materialFactory, texFetcher, animController, modelVersion);
+        await self.init(gameInfo, dataFetcher, subdir);
         return self;
     }
 
@@ -1496,13 +1498,13 @@ export class ModelFetcher {
     private constructor(private device: GfxDevice, private gameInfo: GameInfo, private texFetcher: TextureFetcher, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
     }
 
-    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, texFetcher: TextureFetcher, materialFactory: MaterialFactory, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelFetcher> {
-        const self = new ModelFetcher(device, gameInfo, texFetcher, materialFactory, animController, modelVersion);
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, texFetcher: Promise<TextureFetcher>, materialFactory: MaterialFactory, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelFetcher> {
+        const self = new ModelFetcher(device, gameInfo, await texFetcher, materialFactory, animController, modelVersion);
 
         return self;
     }
 
-    public async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
+    private async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
         if (this.files[subdir] === undefined) {
             this.files[subdir] = await ModelsFile.create(this.gameInfo, dataFetcher, subdir, this.device, this.materialFactory, this.texFetcher, this.animController, this.modelVersion);
 
@@ -1513,6 +1515,15 @@ export class ModelFetcher {
                 await this.loadSubdir('swaphol', dataFetcher);
             }
         }
+    }
+
+    public async loadSubdirs(subdirs: string[], dataFetcher: DataFetcher) {
+        const promises = [];
+        for (let subdir of subdirs) {
+            promises.push(this.loadSubdir(subdir, dataFetcher));
+        }
+
+        await Promise.all(promises);
     }
 
     public getNumModels() {
