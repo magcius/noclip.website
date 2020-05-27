@@ -283,7 +283,7 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
         const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, this.subdir);
         const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, this.modelVersion === ModelVersion.Beta);
         await texFetcher.loadSubdirs([this.subdir], context.dataFetcher);
-        const modelFetcher = await ModelFetcher.create(device, this.gameInfo, context.dataFetcher, texFetcher, materialFactory, animController, this.modelVersion);
+        const modelFetcher = await ModelFetcher.create(device, this.gameInfo, context.dataFetcher, Promise.resolve(texFetcher), materialFactory, animController, this.modelVersion);
         await modelFetcher.loadSubdirs([this.subdir], context.dataFetcher);
 
         return new ModelExhibitRenderer(device, this.subdir, animController, materialFactory, texFetcher, modelFetcher, animColl, amapColl, modanimColl);
