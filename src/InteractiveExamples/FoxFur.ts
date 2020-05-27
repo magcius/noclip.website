@@ -268,9 +268,7 @@ class FurObj {
     private gfxProgram: GfxProgram;
     private vertexBuffer: GfxBuffer;
     private inputState: GfxInputState;
-    @dfHide()
     private indexCount: number;
-    @dfHide()
     private modelMatrix = mat4.create();
 
     @dfRange(1, 32, 1)
@@ -291,7 +289,9 @@ class FurObj {
     public poreInd = new IndSettings();
 
     // TODO(jstpierre): Color picker UI
+    @dfShow()
     public rootColor = colorNewFromRGBA(0.2, 0.2, 0.2, 1.0);
+    @dfShow()
     public tipColor = colorNewFromRGBA(1.0, 1.0, 1.0, 0.2);
 
     constructor(device: GfxDevice, objText: string, bodyImgData: ImageData) {
