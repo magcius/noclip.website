@@ -299,7 +299,7 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
 
         const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
         const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, false);
-        const blockFetcher = await SFABlockFetcher.create(this.gameInfo,context.dataFetcher, device, materialFactory, animController, texFetcher);
+        const blockFetcher = await SFABlockFetcher.create(this.gameInfo,context.dataFetcher, device, materialFactory, animController, Promise.resolve(texFetcher));
         await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, blockFetcher);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
@@ -334,7 +334,7 @@ export class SwapcircleSceneDesc implements Viewer.SceneDesc {
 
         const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
         const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, true);
-        await texFetcher.loadSubdir('swapcircle', context.dataFetcher);
+        await texFetcher.loadSubdirs(['swapcircle'], context.dataFetcher);
         const blockFetcher = await SwapcircleBlockFetcher.create(this.gameInfo,context.dataFetcher, device, materialFactory, animController, texFetcher);
         await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, blockFetcher);
 

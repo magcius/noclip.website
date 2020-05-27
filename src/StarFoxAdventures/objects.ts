@@ -944,19 +944,21 @@ export class ObjectManager {
     private constructor(private world: World, private useEarlyObjects: boolean) {
     }
 
-    public static async create(world: World, dataFetcher: DataFetcher, useEarlyObjects: boolean): Promise<ObjectManager> {
-        const self = new ObjectManager(world, useEarlyObjects);
-
-        const pathBase = world.gameInfo.pathBase;
+    private async init(dataFetcher: DataFetcher) {
+        const pathBase = this.world.gameInfo.pathBase;
         const [objectsTab, objectsBin, objindexBin] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/OBJECTS.tab`),
             dataFetcher.fetchData(`${pathBase}/OBJECTS.bin`),
-            !self.useEarlyObjects ? dataFetcher.fetchData(`${pathBase}/OBJINDEX.bin`) : null,
+            !this.useEarlyObjects ? dataFetcher.fetchData(`${pathBase}/OBJINDEX.bin`) : null,
         ]);
-        self.objectsTab = objectsTab.createDataView();
-        self.objectsBin = objectsBin.createDataView();
-        self.objindexBin = !self.useEarlyObjects ? objindexBin!.createDataView() : null;
+        this.objectsTab = objectsTab.createDataView();
+        this.objectsBin = objectsBin.createDataView();
+        this.objindexBin = !this.useEarlyObjects ? objindexBin!.createDataView() : null;
+    }
 
+    public static async create(world: World, dataFetcher: DataFetcher, useEarlyObjects: boolean): Promise<ObjectManager> {
+        const self = new ObjectManager(world, useEarlyObjects);
+        await self.init(dataFetcher);
         return self;
     }
 

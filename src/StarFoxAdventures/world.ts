@@ -60,20 +60,32 @@ export class World {
     public resColl: ResourceCollection;
     public objectInstances: ObjectInstance[] = [];
 
-    // TODO: we might have to support worlds that are comprised of multiple subdirectories
     private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[]) {
+    }
+
+    private async init(dataFetcher: DataFetcher) {
+        this.animController = new SFAAnimationController();
+        this.envfxMan = await EnvfxManager.create(this, dataFetcher);
+        this.materialFactory = new MaterialFactory(this.device, this.envfxMan);
+        
+        const resCollPromise = ResourceCollection.create(this.device, this.gameInfo, dataFetcher, this.subdirs, this.materialFactory, this.animController);
+        const texFetcherPromise = async () => {
+            return (await resCollPromise).texFetcher;
+        };
+
+        const [resColl, blockFetcher, objectMan] = await Promise.all([
+            resCollPromise,
+            SFABlockFetcher.create(this.gameInfo, dataFetcher, this.device, this.materialFactory, this.animController, texFetcherPromise()),
+            ObjectManager.create(this, dataFetcher, false),
+        ]);
+        this.resColl = resColl;
+        this.blockFetcher = blockFetcher;
+        this.objectMan = objectMan;
     }
 
     public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[]): Promise<World> {
         const self = new World(device, gameInfo, subdirs);
-        
-        self.animController = new SFAAnimationController();
-        self.envfxMan = await EnvfxManager.create(self, dataFetcher);
-        self.materialFactory = new MaterialFactory(device, self.envfxMan);
-        self.resColl = await ResourceCollection.create(device, gameInfo, dataFetcher, subdirs, self.materialFactory, self.animController);
-        self.blockFetcher = await SFABlockFetcher.create(gameInfo, dataFetcher, device, self.materialFactory, self.animController, self.resColl.texFetcher);
-        self.objectMan = await ObjectManager.create(self, dataFetcher, false);
-
+        await self.init(dataFetcher);
         return self;
     }
 

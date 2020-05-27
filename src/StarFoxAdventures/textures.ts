@@ -20,7 +20,7 @@ export interface SFATextureArray {
 }
 
 export abstract class TextureFetcher {
-    public abstract async loadSubdir(subdir: string, dataFetcher: DataFetcher): Promise<void>;
+    public abstract async loadSubdirs(subdirs: string[], dataFetcher: DataFetcher): Promise<void>;
     public abstract getTextureArray(device: GfxDevice, num: number, alwaysUseTex1: boolean): SFATextureArray | null;
     public getTexture(device: GfxDevice, num: number, alwaysUseTex1: boolean) : SFATexture | null {
         const texArray = this.getTextureArray(device, num, alwaysUseTex1);
@@ -223,7 +223,7 @@ export class FakeTextureFetcher extends TextureFetcher {
         return this.textures[num];
     }
 
-    public async loadSubdir(subdir: string) {
+    public async loadSubdirs(subdirs: string[]) {
     }
 }
 
@@ -261,7 +261,7 @@ export class SFATextureFetcher extends TextureFetcher {
         return self;
     }
 
-    public async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
+    private async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
         if (this.subdirTextureFiles[subdir] === undefined) {
             const pathBase = this.gameInfo.pathBase;
             const [tex0, tex1] = await Promise.all([
@@ -289,6 +289,15 @@ export class SFATextureFetcher extends TextureFetcher {
                 await this.loadSubdir('swaphol', dataFetcher);
             }
         }
+    }
+
+    public async loadSubdirs(subdirs: string[], dataFetcher: DataFetcher) {
+        const promises = [];
+        for (let subdir of subdirs) {
+            promises.push(this.loadSubdir(subdir, dataFetcher));
+        }
+        
+        await Promise.all(promises);
     }
 
     public getTextureArray(device: GfxDevice, texId: number, useTex1: boolean): SFATextureArray | null {

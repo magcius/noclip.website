@@ -88,33 +88,38 @@ export class ResourceCollection {
     public tablesTab: DataView;
     public tablesBin: DataView;
 
-    constructor(private device: GfxDevice, private gameInfo: GameInfo, private subdirs: string[], private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
+    private constructor(private device: GfxDevice, private gameInfo: GameInfo, private subdirs: string[], private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
+    }
+
+    private async init(dataFetcher: DataFetcher) {
+        const texFetcherPromise = SFATextureFetcher.create(this.gameInfo, dataFetcher, false); // TODO: support beta
+        const pathBase = this.gameInfo.pathBase;
+        const [texFetcher, modelFetcher, animColl, amapColl, modanimColl, tablesTab, tablesBin] = await Promise.all([
+            texFetcherPromise,
+            ModelFetcher.create(this.device, this.gameInfo, dataFetcher, texFetcherPromise, this.materialFactory, this.animController, ModelVersion.Final),
+            AnimCollection.create(this.gameInfo, dataFetcher, this.subdirs[0]),
+            AmapCollection.create(this.gameInfo, dataFetcher),
+            ModanimCollection.create(this.gameInfo, dataFetcher),
+            dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
+            dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
+        ]);
+        this.texFetcher = texFetcher;
+        this.modelFetcher = modelFetcher;
+        this.animColl = animColl;
+        this.amapColl = amapColl;
+        this.modanimColl = modanimColl;
+        this.tablesTab = tablesTab.createDataView();
+        this.tablesBin = tablesBin.createDataView();
+        
+        await Promise.all([
+            this.texFetcher.loadSubdirs(this.subdirs, dataFetcher),
+            this.modelFetcher.loadSubdirs(this.subdirs, dataFetcher),
+        ]);
     }
 
     public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[], materialFactory: MaterialFactory, animController: SFAAnimationController): Promise<ResourceCollection> {
         const self = new ResourceCollection(device, gameInfo, subdirs, materialFactory, animController);
-
-        self.texFetcher = await SFATextureFetcher.create(self.gameInfo, dataFetcher, false); // TODO: support beta
-        self.modelFetcher = await ModelFetcher.create(device, gameInfo, dataFetcher, self.texFetcher, self.materialFactory, self.animController, ModelVersion.Final);
-        for (let subdir of subdirs) {
-            await self.texFetcher.loadSubdir(subdir, dataFetcher);
-            await self.modelFetcher.loadSubdir(subdir, dataFetcher);
-        }
-
-        const pathBase = self.gameInfo.pathBase;
-        const [animColl, amapColl, modanimColl, tablesTab, tablesBin] = await Promise.all([
-            AnimCollection.create(self.gameInfo, dataFetcher, subdirs[0]),
-            AmapCollection.create(self.gameInfo, dataFetcher),
-            ModanimCollection.create(self.gameInfo, dataFetcher),
-            dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
-            dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
-        ]);
-        self.animColl = animColl;
-        self.amapColl = amapColl;
-        self.modanimColl = modanimColl;
-        self.tablesTab = tablesTab.createDataView();
-        self.tablesBin = tablesBin.createDataView();
-
+        await self.init(dataFetcher);
         return self;
     }
 }
