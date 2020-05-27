@@ -25,6 +25,7 @@ export class MaterialProgramBase extends DeviceProgram {
     public static a_TangentS = 2;
     public static a_TexCoord = 3;
     public static a_Color = 4;
+    public static a_StaticVertexLighting = 5;
 
     public static ub_SceneParams = 0;
 
@@ -57,6 +58,11 @@ float CalcFresnelTerm(float t_DotProduct) {
 
 vec3 UnpackUnsignedNormalMap(in vec3 t_NormalMapSample) {
     return t_NormalMapSample * 2.0 - 1.0;
+}
+
+// For vertex colors and other places without native sRGB data.
+vec3 GammaToLinear(in vec3 t_Color) {
+    return pow(t_Color, vec3(2.2));
 }
 
 #ifdef FRAG
@@ -348,6 +354,18 @@ export abstract class BaseMaterial {
         this.initStatic(renderContext.device, renderContext.cache);
     }
 
+    public isMaterialLoaded(): boolean {
+        return this.loaded;
+    }
+
+    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
+        // Nothing by default.
+    }
+
+    public setUseStaticVertexLighting(v: boolean): void {
+        // Nothing by default.
+    }
+
     protected setupParametersFromVMT(): void {
         setupParametersFromVMT(this.param, this.vmt);
     }
@@ -511,14 +529,6 @@ export abstract class BaseMaterial {
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
     }
 
-    public isMaterialLoaded(): boolean {
-        return this.loaded;
-    }
-
-    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
-        // Nothing by default.
-    }
-
     public movement(renderContext: SourceRenderContext): void {
         if (!this.visible || !this.isMaterialLoaded())
             return;
@@ -609,6 +619,9 @@ layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
 #ifdef USE_VERTEX_COLOR
 layout(location = ${MaterialProgramBase.a_Color}) attribute vec4 a_Color;
 #endif
+#ifdef USE_STATIC_VERTEX_LIGHTING
+layout(location = ${MaterialProgramBase.a_StaticVertexLighting}) attribute vec3 a_StaticVertexLighting;
+#endif
 
 void mainVS() {
     vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
@@ -623,8 +636,14 @@ void mainVS() {
     v_Color = vec4(1.0);
 #endif
 
+// This should be mutually exclusive with USE_VERTEX_COLOR, so overwrite.
+#ifdef USE_STATIC_VERTEX_LIGHTING
+    // 2.0 here is overbright.
+    v_Color.rgb = GammaToLinear(a_StaticVertexLighting) * 2.0;
+#endif
+
+// TODO(jstpierre): Move ModulationColor to PS, support $blendtintbybasealpha and $blendtintcoloroverbase
 #ifdef USE_MODULATIONCOLOR_COLOR
-    // TODO(jstpierre): Support
     v_Color.rgb *= u_ModulationColor.rgb;
 #endif
 
@@ -843,18 +862,36 @@ void mainPS() {
 `;
 }
 
+const enum ShaderType {
+    LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Unknown,
+};
+
 class Material_Generic extends BaseMaterial {
     private wantsDetail = false;
     private wantsBumpmap = false;
     private wantsEnvmapMask = false;
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
+    private shaderType: ShaderType;
 
     private program: Material_Generic_Program;
-    private gfxProgram: GfxProgram;
+    private gfxProgram: GfxProgram | null = null;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
     private textureMapping: TextureMapping[] = nArray(7, () => new TextureMapping());
+
+    public setUseStaticVertexLighting(v: boolean): void {
+        if (this.shaderType === ShaderType.VertexLitGeneric) {
+            this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', v);
+            this.gfxProgram = null;
+        }
+    }
+
+    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
+        const lightmapTextureMapping = this.textureMapping[3];
+        lightmapTextureMapping.gfxTexture = gfxTexture;
+        lightmapTextureMapping.gfxSampler = gfxSampler;
+    }
 
     protected initParameters(): void {
         super.initParameters();
@@ -898,24 +935,26 @@ class Material_Generic extends BaseMaterial {
             setupParametersFromVMT(this.param, this.vmt.lightmappedgeneric_dx9);
     }
 
+    private recacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
+        if (this.gfxProgram === null) {
+            this.gfxProgram = cache.createProgram(device, this.program);
+            this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+        }
+    }
+
     protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
         const shaderTypeStr = this.vmt._Root.toLowerCase();
 
-        const enum ShaderType {
-            LightmappedGeneric, VertexLitGeneric, UnlitGeneric, WorldVertexTransition, Unknown,
-        };
-
-        let shaderType: ShaderType;
         if (shaderTypeStr === 'lightmappedgeneric')
-            shaderType = ShaderType.LightmappedGeneric;
+            this.shaderType = ShaderType.LightmappedGeneric;
         else if (shaderTypeStr === 'vertexlitgeneric')
-            shaderType = ShaderType.VertexLitGeneric;
+            this.shaderType = ShaderType.VertexLitGeneric;
         else if (shaderTypeStr === 'unlitgeneric')
-            shaderType = ShaderType.UnlitGeneric;
+            this.shaderType = ShaderType.UnlitGeneric;
         else if (shaderTypeStr === 'worldvertextransition')
-            shaderType = ShaderType.WorldVertexTransition;
+            this.shaderType = ShaderType.WorldVertexTransition;
         else
-            shaderType = ShaderType.Unknown;
+            this.shaderType = ShaderType.Unknown;
 
         this.program = new Material_Generic_Program();
 
@@ -945,12 +984,12 @@ class Material_Generic extends BaseMaterial {
             this.program.setDefineBool('USE_ENVMAP', true);
         }
 
-        if (shaderType === ShaderType.LightmappedGeneric || shaderType === ShaderType.WorldVertexTransition) {
+        if (this.shaderType === ShaderType.LightmappedGeneric || this.shaderType === ShaderType.WorldVertexTransition) {
             this.wantsLightmap = true;
             this.program.setDefineBool('USE_LIGHTMAP', true);
         }
 
-        if (shaderType === ShaderType.WorldVertexTransition) {
+        if (this.shaderType === ShaderType.WorldVertexTransition) {
             this.wantsBaseTexture2 = true;
             this.program.setDefineBool('USE_BASETEXTURE2', true);
         }
@@ -997,18 +1036,7 @@ class Material_Generic extends BaseMaterial {
 
         this.setCullMode(this.megaStateFlags);
 
-        this.gfxProgram = cache.createProgram(device, this.program);
-        this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
-    }
-
-    public isMaterialLoaded(): boolean {
-        return this.loaded;
-    }
-
-    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
-        const lightmapTextureMapping = this.textureMapping[3];
-        lightmapTextureMapping.gfxTexture = gfxTexture;
-        lightmapTextureMapping.gfxSampler = gfxSampler;
+        this.recacheProgram(device, cache);
     }
 
     private updateTextureMappings(): void {
@@ -1025,6 +1053,7 @@ class Material_Generic extends BaseMaterial {
     public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: mat4): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
+        this.recacheProgram(renderContext.device, renderContext.cache);
 
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
@@ -1069,7 +1098,7 @@ class Material_Generic extends BaseMaterial {
         offs += fillVec4(d, offs, alphaTestReference, detailBlendFactor);
 
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setGfxProgram(this.gfxProgram!);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.sortKey = this.sortKeyBase;
     }
@@ -1166,8 +1195,8 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 64);
-        const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
         offs += this.paramFillScaleBias(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', '$alpha');
@@ -1351,8 +1380,8 @@ class Material_Water extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 64);
-        const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(WaterCheapMaterialProgram.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(WaterCheapMaterialProgram.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
 
         if (this.wantsTexScroll) {

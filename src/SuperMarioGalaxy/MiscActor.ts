@@ -37,7 +37,7 @@ import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToM
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis, drawWorldSpaceVector } from '../DebugJunk';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis } from '../DebugJunk';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -3354,17 +3354,17 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         for (let i = 0; i < this.seaGullGroup.points.length; i++) {
             const p = this.seaGullGroup.points[i];
             if (i === this.chasePointIndex)
-                drawWorldSpacePoint(ctx, viewerInput.camera, p, Green, 10);
+                drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, p, Green, 10);
             else
-                drawWorldSpacePoint(ctx, viewerInput.camera, p, Yellow, 4);
+                drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, p, Yellow, 4);
         }
 
         if (this.getCurrentNerve() === SeaGullNrv.HoverFront)
-            drawWorldSpacePoint(ctx, viewerInput.camera, this.translation, OpaqueBlack, 10);
+            drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, this.translation, OpaqueBlack, 10);
         else if (this.getCurrentNerve() === SeaGullNrv.HoverRight)
-            drawWorldSpacePoint(ctx, viewerInput.camera, this.translation, Green, 10);
+            drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, this.translation, Green, 10);
         else if (this.getCurrentNerve() === SeaGullNrv.HoverLeft)
-            drawWorldSpacePoint(ctx, viewerInput.camera, this.translation, Red, 10);
+            drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, this.translation, Red, 10);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SeaGullNrv, deltaTimeFrames: number): void {

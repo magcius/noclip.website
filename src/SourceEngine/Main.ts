@@ -23,6 +23,8 @@ import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject
 import { StudioModelCache } from "./Studio";
 import BitMap from "../BitMap";
 import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
+import { Green } from "../Color";
 
 function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
     if (entry.compressionMethod === ZipCompressionMethod.None) {
@@ -708,6 +710,8 @@ export class BSPRenderer {
 
         for (let i = 0; i < this.detailPropLeafRenderers.length; i++)
             this.detailPropLeafRenderers[i].destroy(device);
+        for (let i = 0; i < this.staticPropRenderers.length; i++)
+            this.staticPropRenderers[i].destroy(device);
     }
 }
 

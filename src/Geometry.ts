@@ -44,12 +44,12 @@ const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
 export class AABB {
     constructor(
-        public minX: number = 0,
-        public minY: number = 0,
-        public minZ: number = 0,
-        public maxX: number = 0,
-        public maxY: number = 0,
-        public maxZ: number = 0,
+        public minX: number = Infinity,
+        public minY: number = Infinity,
+        public minZ: number = Infinity,
+        public maxX: number = -Infinity,
+        public maxY: number = -Infinity,
+        public maxZ: number = -Infinity,
     ) {}
 
     public transform(src: AABB, m: mat4): void {
@@ -154,9 +154,9 @@ export class AABB {
     }
 
     public extents(v: vec3): void {
-        v[0] = (this.maxX - this.minX) / 2;
-        v[1] = (this.maxY - this.minY) / 2;
-        v[2] = (this.maxZ - this.minZ) / 2;
+        v[0] = Math.max((this.maxX - this.minX) / 2, 0);
+        v[1] = Math.max((this.maxY - this.minY) / 2, 0);
+        v[2] = Math.max((this.maxZ - this.minZ) / 2, 0);
     }
 
     public centerPoint(v: vec3): void {

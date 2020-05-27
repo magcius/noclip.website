@@ -7,7 +7,7 @@ import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
 import { AABB } from "../Geometry";
 import { NameObj } from "./NameObj";
 import { vecKillElement } from "./ActorUtil";
-import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener, addSleepControlForLiveActor } from "./Switch";
+import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener } from "./Switch";
 import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 interface AreaFormBase {
@@ -66,7 +66,7 @@ class AreaFormCube implements AreaFormBase {
 
     public debugDraw(sceneObjHolder: SceneObjHolder): void {
         const ctx = getDebugOverlayCanvas2D();
-        drawWorldSpaceAABB(ctx, sceneObjHolder.viewerInput.camera, this.aabb, this.worldMatrix);
+        drawWorldSpaceAABB(ctx, sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.aabb, this.worldMatrix);
     }
 
     private calcWorldMtx(dst: mat4): void {

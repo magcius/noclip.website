@@ -42,11 +42,17 @@ export class DeviceProgram {
     public frag: string = '';
     public defines = new Map<string, string>();
 
+    public definesChanged(): void {
+        this.preprocessedVert = '';
+        this.preprocessedFrag = '';
+    }
+
     public setDefineBool(name: string, v: boolean): void {
         if (v)
             this.defines.set(name, '1');
         else
             this.defines.delete(name);
+        this.definesChanged();
     }
 
     public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {

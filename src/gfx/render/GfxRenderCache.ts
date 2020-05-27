@@ -1,7 +1,7 @@
 
 import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler, GfxProgramDescriptor, GfxProgramDescriptorSimple } from "../platform/GfxPlatform";
 import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
-import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals } from '../platform/GfxPlatformUtil';
+import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals, gfxInputLayoutDescriptorCopy } from '../platform/GfxPlatformUtil';
 
 function gfxProgramDescriptorEquals(a: GfxProgramDescriptorSimple, b: GfxProgramDescriptorSimple): boolean {
     return a.preprocessedVert === b.preprocessedVert && a.preprocessedFrag === b.preprocessedFrag;
@@ -58,8 +58,9 @@ export class GfxRenderCache {
     public createInputLayout(device: GfxDevice, descriptor: GfxInputLayoutDescriptor): GfxInputLayout {
         let inputLayout = this.gfxInputLayoutsCache.get(descriptor);
         if (inputLayout === null) {
-            inputLayout = device.createInputLayout(descriptor);
-            this.gfxInputLayoutsCache.add(descriptor, inputLayout);
+            const descriptorCopy = gfxInputLayoutDescriptorCopy(descriptor);
+            inputLayout = device.createInputLayout(descriptorCopy);
+            this.gfxInputLayoutsCache.add(descriptorCopy, inputLayout);
         }
         return inputLayout;
     }

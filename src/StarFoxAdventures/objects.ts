@@ -4,7 +4,7 @@ import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
 import { ModelInstance, ModelViewState } from './models';
 import { dataSubarray, angle16ToRads, readVec3 } from './util';
@@ -927,7 +927,7 @@ export class ObjectInstance {
                         mat4.getTranslation(parentPt, parentMtx);
                         drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
                     } else {
-                        drawWorldSpacePoint(ctx, viewerInput.camera, jointPt);
+                        drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, jointPt);
                     }
                 }
             }

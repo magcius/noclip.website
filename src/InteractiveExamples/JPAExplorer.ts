@@ -435,7 +435,7 @@ export class Explorer implements SceneGfx {
                 vec3.set(this.emitters[i].emitterTrs, 0, 0, 0);
 
             const ctx = getDebugOverlayCanvas2D();
-            drawWorldSpacePoint(ctx, viewerInput.camera, this.emitters[i].globalTranslation);
+            drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, this.emitters[i].globalTranslation);
         }
 
         this.effectSystem.calc(viewerInput);

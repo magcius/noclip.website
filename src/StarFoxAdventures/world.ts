@@ -310,7 +310,7 @@ class WorldRenderer extends SFARenderer {
                     mat4.getTranslation(parentPt, parentMtx);
                     drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
                 } else {
-                    drawWorldSpacePoint(ctx, viewerInput.camera, jointPt);
+                    drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, jointPt);
                 }
             }
         }

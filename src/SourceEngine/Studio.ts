@@ -3,14 +3,14 @@
 // https://developer.valvesoftware.com/wiki/Studiomodel
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { assert, readString, nArray, assertExists } from "../util";
 import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { makeStaticDataBuffer, makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { MaterialProgramBase, BaseMaterial } from "./Materials";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4 } from "gl-matrix";
 
 // Encompasses the MDL, VVD & VTX formats.
@@ -40,56 +40,63 @@ class StudioModelStripData {
 
 // TODO(jstpierre): Coalesce all buffers for a studio model?
 class StudioModelStripGroupData {
-    private vertexBuffer: GfxBuffer;
-    private indexBuffer: GfxBuffer;
-    private inputLayout: GfxInputLayout;
-    private inputState: GfxInputState;
-
     public stripData: StudioModelStripData[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, vertexData: ArrayBuffer, indexData: ArrayBufferSlice) {
+    constructor() {
+    }
+}
+
+class StudioModelMeshData {
+    public vertexBuffer: GfxBuffer;
+    public indexBuffer: GfxBuffer;
+    public inputLayoutWithoutColorMesh: GfxInputLayout;
+    public inputStateWithoutColorMesh: GfxInputState;
+    public inputLayoutWithColorMesh: GfxInputLayout;
+
+    public stripGroupData: StudioModelStripGroupData[] = [];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public materialName: string, vertexData: ArrayBuffer, indexData: ArrayBuffer) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData);
-        this.indexBuffer = makeStaticDataBufferFromSlice(device, GfxBufferUsage.INDEX, indexData);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialProgramBase.a_Position, bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
             { location: MaterialProgramBase.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
             { location: MaterialProgramBase.a_TangentS, bufferIndex: 0, bufferByteOffset: 7*0x04, format: GfxFormat.F32_RGBA, },
             { location: MaterialProgramBase.a_TexCoord, bufferIndex: 0, bufferByteOffset: 11*0x04, format: GfxFormat.F32_RG, },
-
-            // TODO(jstpierre): Dynamic color model?
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: (3+4+4+2)*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
         const indexBufferFormat = GfxFormat.U16_R;
-        this.inputLayout = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+        this.inputLayoutWithoutColorMesh = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
 
-        this.inputState = device.createInputState(this.inputLayout, [
+        // Tack on the color mesh.
+        vertexAttributeDescriptors.push(
+            { location: MaterialProgramBase.a_StaticVertexLighting, bufferIndex: 1, bufferByteOffset: 0*0x04, format: GfxFormat.U8_RGBA_NORM, },
+        );
+        vertexBufferDescriptors.push(
+            { byteStride: 0x04,           frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+        );
+        this.inputLayoutWithColorMesh = cache.createInputLayout(device, { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat });
+
+        // Create our base input state.
+        this.inputStateWithoutColorMesh = device.createInputState(this.inputLayoutWithoutColorMesh, [
             { buffer: this.vertexBuffer, byteOffset: 0, },
         ], { buffer: this.indexBuffer, byteOffset: 0, });
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst): void {
-        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+    public createInputStateWithColorMesh(device: GfxDevice, meshBufferDescriptor: GfxVertexBufferDescriptor): GfxInputState {
+        return device.createInputState(this.inputLayoutWithColorMesh, [
+            { buffer: this.vertexBuffer, byteOffset: 0, },
+            meshBufferDescriptor,
+        ], { buffer: this.indexBuffer, byteOffset: 0, });
     }
 
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
-        device.destroyInputState(this.inputState);
-    }
-}
-
-class StudioModelMeshData {
-    public stripGroupData: StudioModelStripGroupData[] = [];
-
-    constructor(public materialName: string) {
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.stripGroupData.length; i++)
-            this.stripGroupData[i].destroy(device);
+        device.destroyInputState(this.inputStateWithoutColorMesh);
     }
 }
 
@@ -135,6 +142,52 @@ function fixupRemappingSearch(fixupTable: FixupRemapping[], dstIdx: number): num
     // remap did not copy over this vertex, return as is.
     return dstIdx;
 }
+
+/*
+class ResizableArrayBuffer {
+    private buffer: ArrayBuffer;
+    private byteSize: number;
+    private byteCapacity: number;
+
+    constructor(initialSize: number = 0x400) {
+        this.byteSize = 0;
+        this.byteCapacity = initialSize;
+        this.buffer = new ArrayBuffer(initialSize);
+    }
+
+    public ensureSize(byteSize: number): void {
+        this.byteSize = byteSize;
+
+        if (byteSize > this.byteCapacity) {
+            this.byteCapacity = Math.max(byteSize, this.byteCapacity * 2);
+            const oldBuffer = this.buffer;
+            const newBuffer = new ArrayBuffer(this.byteCapacity);
+            new Uint8Array(newBuffer).set(new Uint8Array(oldBuffer));
+            this.buffer = newBuffer;
+        }
+    }
+
+    public addByteSize(byteSize: number): void {
+        this.ensureSize(this.byteSize + byteSize);
+    }
+
+    public addUint16(count: number): [number, Uint16Array] {
+        const offs = this.byteSize;
+        this.addByteSize(count << 1);
+        return [offs >>> 1, new Uint16Array(this.buffer, offs, count)];
+    }
+
+    public addFloat32(count: number): [number, Float32Array] {
+        const offs = this.byteSize;
+        this.addByteSize(count << 2);
+        return [offs >>> 2, new Float32Array(this.buffer, offs, count)];
+    }
+
+    public finalize(): ArrayBuffer {
+        return ArrayBuffer_slice.call(this.buffer, 0, this.byteSize);
+    }
+}
+*/
 
 export class StudioModelData {
     public bodyPartData: StudioModelBodyPartData[] = [];
@@ -447,7 +500,6 @@ export class StudioModelData {
 
                     const lodData = new StudioModelLODData();
                     submodelData.lodData.push(lodData);
-
                     let mdlMeshIdx = mdlSubmodelIdx + mdlSubmodelMeshindex;
                     let vtxMeshIdx = vtxLODIdx + vtxMeshOffset;
                     for (let m = 0; m < mdlSubmodelNumMeshes; m++) {
@@ -473,7 +525,7 @@ export class StudioModelData {
 
                         // mstudio_meshvertexdata_t
                         // const modelvertexdata = mdlView.getUint32(mdlMeshIdx + 0x30, true); junk pointer
-                        const numLODVertices = nArray(8, (i) => mdlView.getUint32(mdlMeshIdx + 0x34 + i * 0x04, true));
+                        const lodVertices = mdlView.getUint32(mdlMeshIdx + 0x34 + lod * 0x04, true);
 
                         // On the VTX side, each mesh contains a number of "strip groups". In theory, there can be up to
                         // four different strip groups for the 2x2 combinatoric matrix of "hw skin" and "is flex".
@@ -484,10 +536,29 @@ export class StudioModelData {
                         const vtxStripGroupHeaderOffset = vtxView.getUint32(vtxMeshIdx + 0x04, true);
                         const vtxMeshFlags = vtxView.getUint8(vtxMeshIdx + 0x08);
 
-                        const meshData = new StudioModelMeshData(materialName);
-                        lodData.meshData.push(meshData);
-    
+                        let meshNumVertices = 0;
+                        let meshNumIndices = 0;
                         let vtxStripGroupIdx = vtxMeshIdx + vtxStripGroupHeaderOffset;
+                        for (let g = 0; g < vtxNumStripGroups; g++) {
+                            const numVerts = vtxView.getUint32(vtxStripGroupIdx + 0x00, true);
+                            const numIndices = vtxView.getUint32(vtxStripGroupIdx + 0x08, true);
+                            meshNumVertices += numVerts;
+                            meshNumIndices += numIndices;
+                        }
+
+                        // 3 pos, 4 normal, 4 tangent, 2 uv
+                        const vertexSize = (3+4+4+2);
+                        const meshVtxData = new Float32Array(meshNumVertices * vertexSize);
+                        const meshIdxData = new Uint16Array(meshNumIndices);
+
+                        let dataOffs = 0x00;
+                        let meshIdxBase = 0;
+                        let idxOffs = 0x00;
+                        let meshFirstIdx = 0;
+
+                        const stripGroupDatas: StudioModelStripGroupData[] = [];
+
+                        vtxStripGroupIdx = vtxMeshIdx + vtxStripGroupHeaderOffset;
                         for (let g = 0; g < vtxNumStripGroups; g++) {
                             const numVerts = vtxView.getUint32(vtxStripGroupIdx + 0x00, true);
                             const vertOffset = vtxView.getUint32(vtxStripGroupIdx + 0x04, true);
@@ -502,14 +573,7 @@ export class StudioModelData {
                             // DX90 VTX models should always have hw skin enabled.
                             assert(!!(stripGroupFlags & OptimizeStripGroupFlags.IS_HWSKINNED));
 
-                            // Allocate the vertex / index data for our strip group, before unpacking each strip.
-
-                            // 3 pos, 4 normal, 4 tangent, 2 uv
-                            const vertexSize = (3+4+4+2);
-                            const vertexData = new Float32Array(vertexSize * numVerts);
-
                             // Build the vertex data for our strip group.
-                            let dstOffs = 0;
                             let vertIdx = vtxStripGroupIdx + vertOffset;
                             for (let v = 0; v < numVerts; v++) {
                                 // VTX Bone weight data.
@@ -559,37 +623,39 @@ export class StudioModelData {
                                 assert(vvdTangentSW === 0.0 || vvdTangentSW === 1.0 || vvdTangentSW === -1.0);
 
                                 // Position
-                                vertexData[dstOffs++] = vvdPositionX;
-                                vertexData[dstOffs++] = vvdPositionY;
-                                vertexData[dstOffs++] = vvdPositionZ;
+                                meshVtxData[dataOffs++] = vvdPositionX;
+                                meshVtxData[dataOffs++] = vvdPositionY;
+                                meshVtxData[dataOffs++] = vvdPositionZ;
 
                                 // Normal
-                                vertexData[dstOffs++] = vvdNormalX;
-                                vertexData[dstOffs++] = vvdNormalY;
-                                vertexData[dstOffs++] = vvdNormalZ;
-                                vertexData[dstOffs++] = 1.0; // vertex alpha
+                                meshVtxData[dataOffs++] = vvdNormalX;
+                                meshVtxData[dataOffs++] = vvdNormalY;
+                                meshVtxData[dataOffs++] = vvdNormalZ;
+                                meshVtxData[dataOffs++] = 1.0; // vertex alpha
 
                                 // Tangent
-                                vertexData[dstOffs++] = vvdTangentSX;
-                                vertexData[dstOffs++] = vvdTangentSY;
-                                vertexData[dstOffs++] = vvdTangentSZ;
-                                vertexData[dstOffs++] = vvdTangentSW;
+                                meshVtxData[dataOffs++] = vvdTangentSX;
+                                meshVtxData[dataOffs++] = vvdTangentSY;
+                                meshVtxData[dataOffs++] = vvdTangentSZ;
+                                meshVtxData[dataOffs++] = vvdTangentSW;
 
                                 // Texcoord
-                                vertexData[dstOffs++] = vvdTexCoordS;
-                                vertexData[dstOffs++] = vvdTexCoordT;
+                                meshVtxData[dataOffs++] = vvdTexCoordS;
+                                meshVtxData[dataOffs++] = vvdTexCoordT;
 
                                 vertIdx += 0x09;
                             }
 
-                            // Index data is directly from the strip
-                            const indexIdx = vtxStripGroupIdx + indexOffset;
-                            const indexData = vtxBuffer.subarray(indexIdx, numIndices * 2);
+                            let indexIdx = vtxStripGroupIdx + indexOffset;
+                            for (let i = 0; i < numIndices; i++) {
+                                meshIdxData[idxOffs++] = meshIdxBase + vtxView.getUint16(indexIdx, true);
+                                indexIdx += 0x02;
+                            }
 
-                            const device = renderContext.device, cache = renderContext.cache;
+                            meshIdxBase += numVerts;
 
-                            const stripGroupData = new StudioModelStripGroupData(device, cache, vertexData.buffer, indexData);
-                            meshData.stripGroupData.push(stripGroupData);
+                            const stripGroupData = new StudioModelStripGroupData();
+                            stripGroupDatas.push(stripGroupData);
 
                             // Note that as noted before, "tristrip" in modern models refers mostly to trilists, not tristrips.
                             // We can have multiple strips in a strip group if we have a bone change table between strips.
@@ -618,13 +684,21 @@ export class StudioModelData {
                                 const boneStateChangeOffset = vtxView.getUint32(vtxStripIdx + 0x17, true);
                                 assert(numBoneStateChanges === 0);
 
-                                stripGroupData.stripData.push(new StudioModelStripData(stripIndexOffset, stripNumIndices));
+                                stripGroupData.stripData.push(new StudioModelStripData(meshFirstIdx + stripIndexOffset, stripNumIndices));
 
                                 vtxStripIdx += 0x1C;
                             }
 
+                            meshFirstIdx += numIndices;
+
                             vtxStripGroupIdx += 0x1C;
                         }
+
+                        const device = renderContext.device, cache = renderContext.cache;
+                        const meshData = new StudioModelMeshData(device, cache, materialName, meshVtxData.buffer, meshIdxData.buffer);
+                        for (let i = 0; i < stripGroupDatas.length; i++)
+                            meshData.stripGroupData.push(stripGroupDatas[i]);
+                        lodData.meshData.push(meshData);
 
                         mdlMeshIdx += 0x74;
                         vtxMeshIdx += 0x09;
@@ -766,13 +840,29 @@ export class StudioModelCache {
 class StudioModelMeshInstance {
     private visible = true;
     private materialInstance: BaseMaterial | null = null;
+    private inputStateWithColorMesh: GfxInputState | null = null;
 
     constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData) {
         this.bindMaterial(renderContext);
     }
 
+    private syncMaterialInstanceStaticVertexLighting(): void {
+        if (this.materialInstance !== null)
+            this.materialInstance.setUseStaticVertexLighting(this.inputStateWithColorMesh !== null);
+    }
+
     private async bindMaterial(renderContext: SourceRenderContext): Promise<void> {
         this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialName);
+        this.syncMaterialInstanceStaticVertexLighting();
+    }
+
+    public bindColorMeshData(device: GfxDevice, data: HardwareVertData, mesh: HardwareVertDataMesh): void {
+        assert(this.inputStateWithColorMesh === null);
+
+        const colorDescriptor: GfxVertexBufferDescriptor = { buffer: data.buffer, byteOffset: mesh.byteOffset };
+        this.inputStateWithColorMesh = this.meshData.createInputStateWithColorMesh(device, colorDescriptor);
+
+        this.syncMaterialInstanceStaticVertexLighting();
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -789,9 +879,14 @@ class StudioModelMeshInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         this.materialInstance.setOnRenderInst(renderContext, template, modelMatrix);
 
+        // Bind color mesh if we have a per-instance version.
+        if (this.inputStateWithColorMesh !== null)
+            template.setInputLayoutAndState(this.meshData.inputLayoutWithColorMesh, this.inputStateWithColorMesh);
+        else
+            template.setInputLayoutAndState(this.meshData.inputLayoutWithoutColorMesh, this.meshData.inputStateWithoutColorMesh);
+
         for (let i = 0; i < this.meshData.stripGroupData.length; i++) {
             const stripGroupData = this.meshData.stripGroupData[i];
-            stripGroupData.setOnRenderInst(template);
 
             for (let j = 0; j < stripGroupData.stripData.length; j++) {
                 const stripData = stripGroupData.stripData[j];
@@ -802,6 +897,11 @@ class StudioModelMeshInstance {
         }
 
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.inputStateWithColorMesh !== null)
+            device.destroyInputState(this.inputStateWithColorMesh);
     }
 }
 
@@ -822,6 +922,11 @@ class StudioModelLODInstance {
         for (let i = 0; i < this.meshInstance.length; i++)
             this.meshInstance[i].prepareToRender(renderContext, renderInstManager, modelMatrix);
     }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.meshInstance.length; i++)
+            this.meshInstance[i].destroy(device);
+    }
 }
 
 export class StudioModelInstance {
@@ -831,14 +936,37 @@ export class StudioModelInstance {
     private lodInstance: StudioModelLODInstance[] = [];
 
     constructor(renderContext: SourceRenderContext, private modelData: StudioModelData) {
-        for (let i = 0; i < this.modelData.bodyPartData.length; i++) {
-            const bodyPartData = this.modelData.bodyPartData[i];
-            for (let j = 0; j < bodyPartData.submodelData.length; j++) {
-                const submodelData = bodyPartData.submodelData[j];
-                for (let k = 0; k < submodelData.lodData.length; k++) {
-                    const lodData = submodelData.lodData[k];
-                    this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData));
-                }
+        assert(this.modelData.bodyPartData.length === 1);
+        const bodyPartData = this.modelData.bodyPartData[0];
+
+        assert(bodyPartData.submodelData.length === 1);
+        const submodelData = bodyPartData.submodelData[0];
+
+        for (let k = 0; k < submodelData.lodData.length; k++) {
+            const lodData = submodelData.lodData[k];
+            this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData));
+        }
+    }
+
+    public setColorMeshData(device: GfxDevice, data: HardwareVertData): void {
+        // In some TF2 games, checksums don't match. For now, apply the static lighting anyway,
+        // as it won't look as bad as unlit models. If/when we do proper lighting for light probes,
+        // then this can go away.
+
+        // if (data.checksum !== this.modelData.checksum)
+        //     return;
+
+        for (let i = 0; i < this.lodInstance.length; i++) {
+            const lodInstance = this.lodInstance[i];
+            for (let j = 0; j < lodInstance.meshInstance.length; j++) {
+                const meshInstance = lodInstance.meshInstance[j];
+
+                // Find proper color mesh.
+                const colorMesh = data.mesh.find((mesh) => mesh.lod === i && mesh.indexInsideLOD === j);
+                if (colorMesh === undefined)
+                    continue;
+
+                meshInstance.bindColorMeshData(device, data, colorMesh);
             }
         }
     }
@@ -859,5 +987,10 @@ export class StudioModelInstance {
 
         const lodIndex = this.getLODModelIndex(renderContext);
         this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.lodInstance.length; i++)
+            this.lodInstance[i].destroy(device);
     }
 }

@@ -573,7 +573,7 @@ export class RailRider {
 
             const partIdx = this.bezierRail.getIncludedSectionIdx(coord, 1);
             this.bezierRail.calcPos(scratchVec3c, coord);
-            drawWorldSpacePoint(ctx, camera, scratchVec3c, partIdx !== lastPartIdx ? Cyan : Magenta, 10);
+            drawWorldSpacePoint(ctx, camera.clipFromWorldMatrix, scratchVec3c, partIdx !== lastPartIdx ? Cyan : Magenta, 10);
 
             lastPartIdx = partIdx;
 

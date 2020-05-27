@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
+import { assert, readString, assertExists } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGB32Exp, BaseMaterial, MaterialProgramBase } from "./Materials";
@@ -11,7 +11,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { StudioModelInstance } from "./Studio";
+import { StudioModelInstance, HardwareVertData } from "./Studio";
 import { computeModelMatrixPosRot } from "./Main";
 import BitMap from "../BitMap";
 import { BSPFile } from "./BSPFile";
@@ -336,9 +336,19 @@ export class DetailPropLeafRenderer {
 }
 //#endregion
 
+export const enum StaticPropFlags {
+    IGNORE_NORMALS         = 0x0008,
+    NO_SHADOW              = 0x0010,
+    SCREEN_SPACE_FADE      = 0x0020,
+    NO_PER_VERTEX_LIGHTING = 0x0040,
+    NO_PER_TEXEL_LIGHTING  = 0x0100,
+}
+
 interface StaticProp {
+    index: number;
     pos: vec3;
     rot: vec3;
+    flags: StaticPropFlags;
     propName: string;
     leafList: Uint16Array;
     fadeMinDist: number;
@@ -381,7 +391,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         const firstLeaf = sprp.getUint16(idx + 0x1A, true);
         const leafCount = sprp.getUint16(idx + 0x1C, true);
         const solid = sprp.getUint8(idx + 0x1E);
-        let flags = sprp.getUint8(idx + 0x1F);
+        let flags: StaticPropFlags = sprp.getUint8(idx + 0x1F);
         const skin = sprp.getInt32(idx + 0x20, true);
         const fadeMinDist = sprp.getFloat32(idx + 0x24, true);
         const fadeMaxDist = sprp.getFloat32(idx + 0x28, true);
@@ -410,12 +420,13 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
             idx += 0x08;
         }
 
+        const index = i;
         const pos = vec3.fromValues(posX, posY, posZ);
         // This was empirically determined. TODO(jstpierre): Should computeModelMatrixPosRot in general do this?
         const rot = vec3.fromValues(rotZ, rotX, rotY);
         const propName = staticModelDict[propType];
         const propLeafList = leafList.subarray(firstLeaf, firstLeaf + leafCount);
-        staticObjects.push({ pos, rot, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist })
+        staticObjects.push({ index, pos, rot, flags, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist });
     }
 
     return { staticProps: staticObjects };
@@ -424,6 +435,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
 export class StaticPropRenderer {
     private studioModelInstance: StudioModelInstance | null = null;
     private visible = true;
+    private colorMeshData: HardwareVertData | null = null;
 
     constructor(renderContext: SourceRenderContext, private staticProp: StaticProp) {
         this.createInstance(renderContext);
@@ -434,6 +446,15 @@ export class StaticPropRenderer {
         const modelInstance = new StudioModelInstance(renderContext, modelData);
         computeModelMatrixPosRot(modelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
         this.studioModelInstance = modelInstance;
+
+        // Bind static lighting data, if we have it...
+        if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {
+            const staticLightingData = await renderContext.filesystem.fetchFileData(`sp_${this.staticProp.index}.vhv`);
+            if (staticLightingData !== null) {
+                this.colorMeshData = new HardwareVertData(renderContext, staticLightingData);
+                this.studioModelInstance.setColorMeshData(renderContext.device, this.colorMeshData);
+            }
+        }
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -464,5 +485,12 @@ export class StaticPropRenderer {
             return;
 
         this.studioModelInstance.prepareToRender(renderContext, renderInstManager);
+    }
+
+    public destroy(device: GfxDevice): void {
+        if (this.studioModelInstance !== null)
+            this.studioModelInstance.destroy(device);
+        if (this.colorMeshData !== null)
+            this.colorMeshData.destroy(device);
     }
 }
