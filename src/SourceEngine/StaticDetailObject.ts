@@ -203,7 +203,7 @@ export class DetailPropLeafRenderer {
                 entry.radius = Math.hypot(entry.halfWidth, entry.height * 0.5);
                 vec3.copy(entry.origin, detailModel.pos);
                 // Sprite is planted at bottom center. Adjust to true center.
-                entry.origin[2] += entry.height * 0.5;
+                entry.origin[2] -= entry.height * 0.5;
                 entry.pos = detailModel.pos;
                 entry.texcoord = desc.texcoord;
                 entry.color = detailModel.lighting;
