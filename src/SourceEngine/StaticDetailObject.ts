@@ -349,6 +349,7 @@ interface StaticProp {
     pos: vec3;
     rot: vec3;
     flags: StaticPropFlags;
+    skin: number;
     propName: string;
     leafList: Uint16Array;
     fadeMinDist: number;
@@ -426,7 +427,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         const rot = vec3.fromValues(rotZ, rotX, rotY);
         const propName = staticModelDict[propType];
         const propLeafList = leafList.subarray(firstLeaf, firstLeaf + leafCount);
-        staticObjects.push({ index, pos, rot, flags, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist });
+        staticObjects.push({ index, pos, rot, flags, skin, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist });
     }
 
     return { staticProps: staticObjects };

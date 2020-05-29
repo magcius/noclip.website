@@ -617,8 +617,8 @@ uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor = vec4(color.rgb, 1.0);
+    vec4 t_Color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    gl_FragColor = vec4(t_Color.rgb, 1.0);
 }
 `;
 
@@ -798,6 +798,7 @@ void main() {
         case GfxFormat.U8_RGBA_RT:
             return WebGL2RenderingContext.RGBA8;
         case GfxFormat.U8_RGBA_SRGB:
+        case GfxFormat.U8_RGBA_RT_SRGB:
             return WebGL2RenderingContext.SRGB8_ALPHA8;
         case GfxFormat.S8_RGBA_NORM:
             return WebGL2RenderingContext.RGBA8_SNORM;

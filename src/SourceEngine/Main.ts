@@ -1,8 +1,8 @@
 
 import { SceneContext } from "../SceneBase";
-import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState, GfxTexture } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { BSPFile, Surface, Model } from "./BSPFile";
@@ -15,7 +15,7 @@ import { ZipFile, ZipFileEntry, ZipCompressionMethod } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase } from "./Materials";
 import { clamp, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
-import { assertExists, assert } from "../util";
+import { assertExists, assert, nArray } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix, Camera } from "../Camera";
 import { AABB, Frustum } from "../Geometry";
@@ -23,8 +23,9 @@ import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject
 import { StudioModelCache } from "./Studio";
 import BitMap from "../BitMap";
 import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
-import { drawWorldSpaceAABB, getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
-import { Green } from "../Color";
+import { DeviceProgram } from "../Program";
+import { TextureMapping } from "../TextureHolder";
+import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
     if (entry.compressionMethod === ZipCompressionMethod.None) {
@@ -743,10 +744,44 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 7 },
 ];
 
+const bindingLayoutsGammaCorrect: GfxBindingLayoutDescriptor[] = [
+    { numUniformBuffers: 0, numSamplers: 1 },
+];
+
+class FullscreenGammaCorrectProgram extends DeviceProgram {
+    public vert: string = `
+out vec2 v_TexCoord;
+
+void main() {
+    vec2 p;
+    p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
+    p.y = (gl_VertexID == 2) ? 2.0 : 0.0;
+    gl_Position.xy = p * vec2(2) - vec2(1);
+    gl_Position.zw = vec2(-1, 1);
+    v_TexCoord = p;
+}
+`;
+
+    public frag: string = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+void main() {
+    vec4 t_Color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
+    t_Color.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
+    gl_FragColor = t_Color;
+}
+`;
+}
+
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class SourceRenderer implements SceneGfx {
-    private renderTarget = new BasicRenderTarget();
+    private renderTarget = new BasicRenderTarget(GfxFormat.U8_RGBA_RT_SRGB);
+    private resolvedSRGB = new ColorTexture(GfxFormat.U8_RGBA_RT_SRGB);
+    private renderTargetUNorm = new BasicRenderTarget(GfxFormat.U8_RGBA_RT);
+    private gammaCorrectProgram = new FullscreenGammaCorrectProgram();
+    private gammaCorrectTextureMapping = nArray(1, () => new TextureMapping());
     public renderHelper: GfxRenderHelper;
     public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
@@ -849,24 +884,43 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.renderTargetUNorm.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 1);
+        this.resolvedSRGB.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         let passRenderer: GfxRenderPass;
         passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, FilterKey.Skybox);
         device.submitPass(passRenderer);
 
-        passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
+        passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.resolvedSRGB.gfxTexture!);
         executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, FilterKey.Main);
         device.submitPass(passRenderer);
 
+        // Now do a fullscreen gamma-correct pass to output to our UNORM backbuffer.
+        const cache = this.renderContext.cache;
+        passRenderer = this.renderTargetUNorm.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor, viewerInput.onscreenTexture);
+        const gammaCorrectRenderInst = this.renderHelper.renderInstManager.newRenderInst();
+        gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsGammaCorrect);
+        gammaCorrectRenderInst.setInputLayoutAndState(null, null);
+        const gammaCorrectProgram = cache.createProgram(device, this.gammaCorrectProgram);
+        this.gammaCorrectTextureMapping[0].gfxTexture = this.resolvedSRGB.gfxTexture!;
+        gammaCorrectRenderInst.setGfxProgram(gammaCorrectProgram);
+        gammaCorrectRenderInst.setSamplerBindingsFromTextureMappings(this.gammaCorrectTextureMapping);
+        gammaCorrectRenderInst.setMegaStateFlags(fullscreenMegaState);
+        gammaCorrectRenderInst.drawPrimitives(3);
+        gammaCorrectRenderInst.drawOnPass(device, cache, passRenderer);
+        this.renderHelper.renderInstManager.returnRenderInst(gammaCorrectRenderInst);
+        device.submitPass(passRenderer);
+
         this.renderHelper.renderInstManager.resetRenderInsts();
-        return passRenderer;
+
+        return null;
     }
 
     public destroy(device: GfxDevice): void {

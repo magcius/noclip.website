@@ -130,9 +130,13 @@ export function setScissorOnRenderPass(renderPass: GfxRenderPass, viewport: Norm
 export const IdentityViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
 
 export class BasicRenderTarget {
-    public colorAttachment = new ColorAttachment();
+    public colorAttachment: ColorAttachment;
     public depthStencilAttachment = new DepthStencilAttachment();
     private renderPassDescriptor = makeEmptyRenderPassDescriptor();
+
+    constructor(colorFormat: GfxFormat = GfxFormat.U8_RGBA_RT) {
+        this.colorAttachment = new ColorAttachment(colorFormat);
+    }
 
     public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
         this.colorAttachment.setParameters(device, width, height, numSamples);

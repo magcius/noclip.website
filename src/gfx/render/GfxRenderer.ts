@@ -458,13 +458,15 @@ export class GfxRenderInst {
         }
     }
 
-    public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+    public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
         assert(!!(this._flags & GfxRenderInstFlags.Draw));
 
         if (this._renderPipeline !== null) {
             passRenderer.setPipeline(this._renderPipeline);
         } else {
             const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
+            if (!device.queryPipelineReady(gfxPipeline))
+                return false;
             passRenderer.setPipeline(gfxPipeline);
         }
 
@@ -485,6 +487,8 @@ export class GfxRenderInst {
         } else {
             passRenderer.draw(this._drawCount, this._drawStart);
         }
+
+        return true;
     }
 }
 //#endregion

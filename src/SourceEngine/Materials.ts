@@ -67,9 +67,8 @@ vec3 GammaToLinear(in vec3 t_Color) {
 
 #ifdef FRAG
 void OutputLinearColor(in vec4 t_Color) {
-    // Gamma Correction
-    gl_FragColor.rgb = pow(t_Color.rgb, vec3(1.0 / 2.2));
-    gl_FragColor.a = t_Color.a;
+    // We do gamma correction in post now, as we need linear blending.
+    gl_FragColor.rgba = t_Color.rgba;
 }
 #endif
 `;
