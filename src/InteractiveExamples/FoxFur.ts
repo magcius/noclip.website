@@ -20,7 +20,7 @@ import { captureScene } from '../CaptureHelpers';
 import { downloadBuffer } from '../DownloadUtils';
 import { makeZipFile } from '../ZipFile';
 import { GridPlane } from './GridPlane';
-import { dfRange, dfHide, dfShow } from '../DebugFloaters';
+import { dfRange, dfShow } from '../DebugFloaters';
 
 const pathBase = `FoxFur`;
 

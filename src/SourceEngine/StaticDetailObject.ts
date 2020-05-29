@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists } from "../util";
+import { assert, readString } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGB32Exp, BaseMaterial, MaterialProgramBase } from "./Materials";

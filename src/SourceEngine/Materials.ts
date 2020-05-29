@@ -1014,7 +1014,7 @@ class Material_Generic extends BaseMaterial {
         if (this.paramGetBoolean('$basealphaenvmapmask'))
             this.program.setDefineBool('USE_BASE_ALPHA_ENVMAP_MASK', true);
 
-        if (this.paramGetBoolean('$normalmapalphaenvmapmask'))
+        if (this.paramGetBoolean('$normalmapalphaenvmapmask') && this.wantsBumpmap)
             this.program.setDefineBool('USE_NORMALMAP_ALPHA_ENVMAP_MASK', true);
 
         if (this.paramGetBoolean('$ssbump'))
