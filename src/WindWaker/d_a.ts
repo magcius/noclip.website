@@ -759,11 +759,26 @@ class d_a_vrbox2 extends fopAc_ac_c {
     }
 }
 
+const enum KytagEffectMode {
+    None = 0x00,
+    Rain = 0x01,
+    Moya2 = 0x02,
+    Moya3 = 0x03,
+    Moya4 = 0x04,
+    Moya5 = 0x05,
+    Housi = 0x06,
+    Thunder = 0x07,
+    ThunderAndRain = 0x08,
+    Moya9 = 0x09,
+    MoyaA = 0x0A,
+    MoyaB = 0x0B,
+};
+
 class d_a_kytag00 extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_kytag00;
 
     private pselIdx = 0;
-    private effectMode = 0;
+    private effectMode = KytagEffectMode.None;
     private invert = false;
     private alwaysCheckPlayerPos = false;
     private target = 0.0;
@@ -889,16 +904,16 @@ class d_a_kytag00 extends fopAc_ac_c {
             // wether_tag_efect_move
             this.effectSet = true;
 
-            if (this.effectMode === 1) {
+            if (this.effectMode === KytagEffectMode.Rain) {
                 this.raincnt_set(globals, target);
-            } else if (this.effectMode === 7) {
+            } else if (this.effectMode === KytagEffectMode.Thunder) {
                 if (envLight.thunderMode === 0)
                     envLight.thunderMode = 2;
-            } else if (this.effectMode === 8) {
+            } else if (this.effectMode === KytagEffectMode.ThunderAndRain) {
                 if (envLight.thunderMode === 0)
                     envLight.thunderMode = 2;
                 this.raincnt_set(globals, target);
-            } else if (this.effectMode === 9) {
+            } else if (this.effectMode === KytagEffectMode.Moya9) {
                 // TODO(jstpierre): moya
                 if (envLight.thunderMode === 0)
                     envLight.thunderMode = 2;
@@ -918,16 +933,16 @@ class d_a_kytag00 extends fopAc_ac_c {
             if (this.effectSet) {
                 this.effectSet = false;
 
-                if (this.effectMode === 1) {
+                if (this.effectMode === KytagEffectMode.Rain) {
                     this.raincnt_cut(globals);
-                } else if (this.effectMode === 7) {
+                } else if (this.effectMode === KytagEffectMode.Thunder) {
                     if (envLight.thunderMode === 2)
                         envLight.thunderMode = 0;
-                } else if (this.effectMode === 8) {
+                } else if (this.effectMode === KytagEffectMode.ThunderAndRain) {
                     if (envLight.thunderMode === 2)
                         envLight.thunderMode = 0;
                     this.raincnt_cut(globals);
-                } else if (this.effectMode === 9) {
+                } else if (this.effectMode === KytagEffectMode.Moya9) {
                     // TODO(jstpierre): moya
                     if (envLight.thunderMode === 2)
                         envLight.thunderMode = 0;
@@ -950,10 +965,40 @@ class d_a_kytag01 extends fopAc_ac_c {
         this.influence.outerRadius = Math.max(this.scale[2] * 5000.0, this.influence.innerRadius + 500.0);
         dKy__waveinfl_set(globals.g_env_light, this.influence);
 
-        // TODO(jstpierre): Need a Create/Destroy hook that happens on room load / unload.
-        // this.wave_make(globals);
+        // TODO(jstpierre): Need a Create/Destroy hook that happens on room load / unload for this to work on sea stage.
+        if (globals.stageName !== 'sea')
+            this.wave_make(globals);
 
         return cPhs__Status.Next;
+    }
+
+    private wave_make(globals: dGlobals): void {
+        const envLight = globals.g_env_light;
+
+        if (envLight.waveCount === 0) {
+            envLight.waveSpawnDist = 20000.0;
+            envLight.waveSpawnRadius = 22000.0;
+            envLight.waveReset = false;
+            envLight.waveScale = 300.0;
+            envLight.waveScaleRand = 0.001;
+            envLight.waveScaleBottom = 6.0;
+            envLight.waveCount = 300;
+            envLight.waveSpawnRadius = 30;
+            envLight.waveFlatInter = 0;
+
+            if (globals.stageName === 'MajyuE') {
+                envLight.waveSpawnDist = 25000.0;
+                envLight.waveSpawnRadius = 27000.0;
+                envLight.waveScaleBottom = 8.0;
+            } else if (globals.stageName === 'M_NewD2') {
+                envLight.waveSpawnDist = 35000.0;
+                envLight.waveSpawnRadius = 37000.0;
+                envLight.waveScaleBottom = 8.0;
+                envLight.waveCounterSpeedScale = 1.5;
+                envLight.waveScale = 500.0;
+                envLight.waveSpeed = 55.0;
+            }
+        }
     }
 
     public delete(globals: dGlobals): void {

@@ -527,6 +527,18 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         throw "whoops";
     }
 
+    private getSingleRoomVisible(): number {
+        let count = 0;
+        for (let i = 0; i < this.rooms.length; i++)
+            if (this.rooms[i].visible)
+                count++;
+        if (count === 1)
+            for (let i = 0; i < this.rooms.length; i++)
+                if (this.rooms[i].visible)
+                    return this.rooms[i].roomNo;
+        return -1;
+    }
+
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
@@ -540,6 +552,11 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             // Update the "player position" from the camera.
             vec3.copy(this.globals.playerPosition, this.globals.cameraPosition);
         }
+
+        // noclip hack: if only one room is visible, make it the mStayNo
+        const singleRoomVisibleNo = this.getSingleRoomVisible();
+        if (singleRoomVisibleNo !== -1)
+            this.globals.mStayNo = singleRoomVisibleNo;
 
         // Update actor visibility from settings.
         // TODO(jstpierre): Figure out a better place to put this?
