@@ -51,7 +51,7 @@ export class GrabManager {
 
     private _onMouseDown = (e: MouseEvent) => {
         const grabElement = this.grabOptions!.grabElement;
-        if (grabElement && !containsElement(e.target as HTMLElement, grabElement))
+        if (!grabElement || !containsElement(e.target as HTMLElement, grabElement))
             this.releaseGrab();
     };
 
@@ -84,24 +84,24 @@ export class GrabManager {
     }
 
     public takeGrab(grabListener: GrabListener, e: MouseEvent, grabOptions: GrabOptions): void {
-        if (this.grabListener !== null) {
-            e.preventDefault();
+        e.preventDefault();
+
+        if (this.grabListener !== null)
             return;
-        }
 
         this.grabListener = grabListener;
         this.grabOptions = grabOptions;
 
-        if (grabOptions.useGrabbingCursor)
+        if (grabOptions.useGrabbingCursor) {
+            // Needed to make the cursor update in Chrome. See:
+            // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
+            document.body.focus();
             document.body.style.cursor = 'grabbing';
+        }
 
         this.lastX = e.pageX;
         this.lastY = e.pageY;
         this.grabButton = e.button;
-        // Needed to make the cursor update in Chrome. See:
-        // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
-        document.body.focus();
-        e.preventDefault();
 
         const target = e.target as HTMLElement;
         if (grabOptions.takePointerLock && target.requestPointerLock !== undefined) {
@@ -129,8 +129,12 @@ export class GrabManager {
                 document.exitPointerLock();
         }
 
-        if (this.grabOptions!.useGrabbingCursor)
+        if (this.grabOptions!.useGrabbingCursor) {
+            // Needed to make the cursor update in Chrome. See:
+            // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
+            document.body.focus();
             document.body.style.cursor = this.currentCursor;
+        }
 
         // Call onGrabReleased after we set the grabListener to null so that if the callback calls
         // isDragging() or hasDragListener() we appear as if we have no grab.
