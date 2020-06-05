@@ -9,16 +9,20 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF, VTFFlags } from "./VTF";
-import { SourceRenderContext, SourceFileSystem, BSPRenderer } from "./Main";
+import { SourceRenderContext, SourceFileSystem } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
-import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite } from "../Color";
+import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA } from "../Color";
 import { AABB } from "../Geometry";
 
 //#region Base Classes
 const scratchVec4 = vec4.create();
 const scratchColor = colorNewCopy(White);
+
+export const enum LateBindingTexture {
+    FramebufferTexture = 'framebuffer-texture',
+}
 
 export class MaterialProgramBase extends DeviceProgram {
     public static a_Position = 0;
@@ -57,7 +61,7 @@ float CalcFresnelTerm(float t_DotProduct) {
     return pow(1.0 - max(0.0, t_DotProduct), 5.0);
 }
 
-vec3 UnpackUnsignedNormalMap(in vec3 t_NormalMapSample) {
+vec4 UnpackUnsignedNormalMap(in vec4 t_NormalMapSample) {
     return t_NormalMapSample * 2.0 - 1.0;
 }
 
@@ -90,6 +94,7 @@ interface Parameter {
 class ParameterTexture {
     public ref: string | null = null;
     public texture: VTF | null = null;
+    public lateBindingTexture: LateBindingTexture | null = null;
 
     constructor(public additionalFlags: VTFFlags = 0) {
     }
@@ -113,8 +118,12 @@ class ParameterTexture {
     }
 
     public fillTextureMapping(m: TextureMapping, frame: number): void {
-        if (this.texture !== null)
+        if (this.texture !== null) {
             this.texture.fillTextureMapping(m, frame);
+        } else if (this.lateBindingTexture !== null) {
+            assert(frame === 0);
+            m.lateBinding = this.lateBindingTexture;
+        }
     }
 }
 
@@ -244,15 +253,14 @@ class ParameterVector {
         }
     }
 
+    public fillColor(c: Color, a: number): void {
+        colorFromRGBA(c, this.internal[0].value, this.internal[1].value, this.internal[2].value, a);
+    }
+
     public setFromColor(c: Color): void {
         this.internal[0].value = c.r;
         this.internal[1].value = c.g;
         this.internal[2].value = c.b;
-    }
-
-    public fillColor(d: Float32Array, offs: number, a: number): number {
-        assert(this.internal.length === 3);
-        return fillVec4(d, offs, this.internal[0].value, this.internal[1].value, this.internal[2].value, a);
     }
 
     public mulColor(c: Color): void {
@@ -330,10 +338,18 @@ const enum AlphaBlendMode {
     None, Blend, Add, BlendAdd,
 }
 
+function colorGammaToLinear(c: Color, src: Color): void {
+    c.r = gammaToLinear(src.r);
+    c.g = gammaToLinear(src.g);
+    c.b = gammaToLinear(src.b);
+    c.a = src.a;
+}
+
 export abstract class BaseMaterial {
     public visible = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
+    public isTranslucent = false;
     public param: ParameterMap = {};
     public entityParams: EntityMaterialParameters | null = null;
 
@@ -412,7 +428,9 @@ export abstract class BaseMaterial {
 
     protected paramFillColor(d: Float32Array, offs: number, name: string, alphaname: string | null = null): number {
         const alpha = alphaname !== null ? this.paramGetNumber(alphaname) : 1.0;
-        return (this.param[name] as ParameterVector).fillColor(d, offs, alpha);
+        this.paramGetVector(name).fillColor(scratchColor, alpha);
+        colorGammaToLinear(scratchColor, scratchColor);
+        return fillColor(d, offs, scratchColor);
     }
 
     protected textureIsTranslucent(name: string): boolean {
@@ -762,7 +780,7 @@ void mainPS() {
     vec3 t_BumpmapNormal = normalize(g_RNBasis0*t_BumpmapSample.x + g_RNBasis1*t_BumpmapSample.y + g_RNBasis2*t_BumpmapSample.z);
 #else
     // In non-SSBUMP, this is a traditional normal map with signed offsets.
-    vec3 t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapSample.rgb);
+    vec3 t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapSample).rgb;
 #endif
 
     // Transform from tangent space into world-space.
@@ -1029,8 +1047,8 @@ class Material_Generic extends BaseMaterial {
             if (this.textureIsTranslucent('$basetexture'))
                 isTranslucent = true;
 
-            const translucentLayer = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
-            const sortLayer = translucentLayer ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+            this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
+            const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
             this.sortKeyBase = makeSortKey(sortLayer);
         }
 
@@ -1176,8 +1194,8 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         this.program = new UnlitTwoTextureProgram();
 
         const isTranslucent = this.textureIsTranslucent('$basetexture') || this.textureIsTranslucent('$texture2');
-        const translucentLayer = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
-        const sortLayer = translucentLayer ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, this.getAlphaBlendModeFromTexture(isTranslucent));
+        const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
         this.setCullMode(this.megaStateFlags);
@@ -1280,17 +1298,17 @@ void mainVS() {
 void mainPS() {
     // Sample our normal map with scroll offsets.
     vec2 t_BumpmapCoord0 = v_TexCoord0.xy;
-    vec3 t_BumpmapSample0 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord0)).rgb;
+    vec4 t_BumpmapSample0 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord0));
 #ifdef USE_TEXSCROLL
     vec2 t_BumpmapCoord1 = vec2(t_BumpmapCoord0.x + t_BumpmapCoord0.y, -t_BumpmapCoord0.x + t_BumpmapCoord0.y) + 0.1 * u_TexScroll.xy;
-    vec3 t_BumpmapSample1 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord1)).rgb;
+    vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord1));
     vec2 t_BumpmapCoord2 = t_BumpmapCoord0.yx + 0.45 * u_TexScroll.zw;
-    vec3 t_BumpmapSample2 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord2)).rgb;
-    vec3 t_BumpmapNormal = 0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2);
+    vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord2));
+    vec4 t_BumpmapNormal = 0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2);
 #else
-    vec3 t_BumpmapNormal = t_BumpmapSample0;
+    vec4 t_BumpmapNormal = t_BumpmapSample0;
 #endif
-    t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapNormal);
+    t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapNormal).rgb;
 
     vec3 t_NormalWorld = CalcNormalWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
 
@@ -1324,7 +1342,7 @@ void mainPS() {
 }
 
 class Material_Water extends BaseMaterial {
-    private program: Material_Generic_Program;
+    private program: WaterCheapMaterialProgram;
     private gfxProgram: GfxProgram;
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
@@ -1361,8 +1379,8 @@ class Material_Water extends BaseMaterial {
             this.program.setDefineBool('USE_TEXSCROLL', true);
         }
 
-        const translucentLayer = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
-        const sortLayer = translucentLayer ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
+        const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKeyBase = makeSortKey(sortLayer);
 
         this.setCullMode(this.megaStateFlags);
@@ -1397,6 +1415,209 @@ class Material_Water extends BaseMaterial {
         const cheapwaterstartdistance = this.paramGetNumber('$cheapwaterstartdistance');
         const cheapwaterenddistance = this.paramGetNumber('$cheapwaterenddistance');
         offs += fillVec4(d, offs, cheapwaterstartdistance, cheapwaterenddistance);
+
+        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+        renderInst.setGfxProgram(this.gfxProgram);
+        renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.sortKey = this.sortKeyBase;
+    }
+}
+//#endregion
+
+//#region Refract
+class RefractMaterialProgram extends MaterialProgramBase {
+    public static ub_ObjectParams = 1;
+
+    public both = `
+precision mediump float;
+
+${this.Common}
+
+layout(row_major, std140) uniform ub_ObjectParams {
+    Mat4x3 u_ModelMatrix;
+    vec4 u_RefractTint;
+#ifdef USE_ENVMAP
+    vec4 u_EnvmapTint;
+    vec4 u_EnvmapContrastSaturationFresnel;
+#endif
+};
+
+#define u_RefractAmount (u_RefractTint.a)
+
+// Base Texture Coordinates
+varying vec3 v_TexCoord0;
+// Normal Map Coordinates
+varying vec2 v_TexCoord1;
+varying vec3 v_PositionWorld;
+
+// 3x3 matrix for our tangent space basis.
+varying vec3 v_TangentSpaceBasis0;
+varying vec3 v_TangentSpaceBasis1;
+varying vec3 v_TangentSpaceBasis2;
+
+// Base Texture, Normalmap
+uniform sampler2D u_Texture[2];
+// Envmap
+uniform samplerCube u_TextureCube[1];
+
+#ifdef VERT
+layout(location = ${MaterialProgramBase.a_Position}) attribute vec3 a_Position;
+layout(location = ${MaterialProgramBase.a_Normal}) attribute vec4 a_Normal;
+layout(location = ${MaterialProgramBase.a_TangentS}) attribute vec4 a_TangentS;
+layout(location = ${MaterialProgramBase.a_TexCoord}) attribute vec4 a_TexCoord;
+
+void mainVS() {
+    vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
+    gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
+
+    v_PositionWorld.xyz = t_PositionWorld;
+    vec3 t_NormalWorld = a_Normal.xyz;
+
+    vec3 t_TangentSWorld = a_TangentS.xyz;
+    vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
+
+    v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;
+    v_TangentSpaceBasis1 = t_TangentTWorld;
+    v_TangentSpaceBasis2 = t_NormalWorld;
+
+    // Convert from projected position to texture space.
+    vec2 t_ProjTexCoord = (gl_Position.xy + gl_Position.w) * 0.5;
+    v_TexCoord0.xyz = vec3(t_ProjTexCoord, gl_Position.w);
+
+    v_TexCoord1.xy = a_TexCoord.xy;
+}
+#endif
+
+#ifdef FRAG
+void mainPS() {
+    // Sample our normal map with scroll offsets.
+    vec2 t_BumpmapCoord0 = v_TexCoord1.xy;
+    vec4 t_BumpmapSample = UnpackUnsignedNormalMap(texture(SAMPLER_2D(u_Texture[1], t_BumpmapCoord0)));
+    vec3 t_BumpmapNormal = t_BumpmapSample.rgb;
+
+    vec4 t_FinalColor = vec4(0);
+
+    vec2 t_ProjTexCoord = v_TexCoord0.xy / v_TexCoord0.z;
+    vec2 t_RefractTexCoord = t_ProjTexCoord + (u_RefractAmount * t_BumpmapSample.a) * t_BumpmapNormal.xy;
+
+    vec4 t_BlurAccum = vec4(0);
+    int g_BlurAmount = BLUR_AMOUNT;
+    int g_BlurWidth = g_BlurAmount * 2 + 1;
+    float g_BlurWeight = 1.0 / float(g_BlurWidth * g_BlurWidth);
+
+    vec2 t_FramebufferSize = vec2(textureSize(u_Texture[0], 0));
+    vec2 t_BlurSampleOffset = vec2(1.0) / t_FramebufferSize;
+    for (int y = -g_BlurAmount; y <= g_BlurAmount; y++) {
+        for (int x = -g_BlurAmount; x <= g_BlurAmount; x++) {
+            vec2 t_TexCoord = t_RefractTexCoord + vec2(t_BlurSampleOffset.x * float(x), t_BlurSampleOffset.y * float(y));
+            t_BlurAccum += g_BlurWeight * texture(SAMPLER_2D(u_Texture[0]), t_TexCoord);
+        }
+    }
+
+    t_FinalColor += t_BlurAccum;
+
+#ifdef USE_ENVMAP
+    vec3 t_NormalWorld = CalcNormalWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
+
+    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
+    vec3 t_Reflection = CalcReflection(t_NormalWorld, t_PositionToEye);
+
+    vec3 t_SpecularFactor = vec3(u_EnvmapTint);
+    t_SpecularFactor.rgb *= t_BumpmapSample.a;
+
+    vec3 t_SpecularLighting = vec3(0.0);
+    t_SpecularLighting += texture(u_TextureCube[0], t_Reflection).rgb;
+    t_SpecularLighting *= t_SpecularFactor;
+
+    t_SpecularLighting = mix(t_SpecularLighting, t_SpecularLighting*t_SpecularLighting, u_EnvmapContrastSaturationFresnel.x);
+    t_SpecularLighting = mix(vec3(dot(vec3(0.299, 0.587, 0.114), t_SpecularLighting)), t_SpecularLighting, u_EnvmapContrastSaturationFresnel.y);
+
+    t_FinalColor.rgb += t_SpecularLighting;
+#endif
+
+    t_FinalColor.a = t_BumpmapSample.a;
+    OutputLinearColor(t_FinalColor);
+}
+#endif
+`;
+}
+
+class Material_Refract extends BaseMaterial {
+    private wantsEnvmap: boolean = false;
+
+    private program: RefractMaterialProgram;
+    private gfxProgram: GfxProgram;
+    private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
+    private sortKeyBase: number = 0;
+    private textureMapping: TextureMapping[] = nArray(3, () => new TextureMapping());
+
+    protected initParameters(): void {
+        super.initParameters();
+
+        const p = this.param;
+
+        p['$normalmap']                    = new ParameterTexture();
+        p['$bumpframe']                    = new ParameterNumber(0);
+        p['$bumptransform']                = new ParameterMatrix();
+        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB);
+        p['$envmapframe']                  = new ParameterNumber(0);
+        p['$refracttint']                  = new ParameterColor(1, 1, 1);
+        p['$refractamount']                = new ParameterNumber(2);
+        p['$envmaptint']                   = new ParameterColor(1, 1, 1);
+        p['$envmapcontrast']               = new ParameterNumber(0);
+        p['$envmapsaturation']             = new ParameterNumber(1);
+        p['$fresnelreflection']            = new ParameterNumber(1);
+        p['$bluramount']                   = new ParameterNumber(1, false);
+    }
+
+    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
+        this.program = new RefractMaterialProgram();
+
+        if (this.paramGetVTF('$basetexture') === null) {
+            // We fall back to the framebuffer texture.
+            this.paramGetTexture('$basetexture').lateBindingTexture = LateBindingTexture.FramebufferTexture;
+        }
+
+        if (this.paramGetVTF('$envmap') !== null) {
+            this.wantsEnvmap = true;
+            this.program.setDefineBool('USE_ENVMAP', true);
+        }
+
+        this.program.defines.set('BLUR_AMOUNT', '' + this.paramGetNumber('$bluramount'));
+
+        this.isTranslucent = this.setAlphaBlendMode(this.megaStateFlags, AlphaBlendMode.Blend);
+        const sortLayer = this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        this.sortKeyBase = makeSortKey(sortLayer);
+
+        this.setCullMode(this.megaStateFlags);
+
+        this.gfxProgram = cache.createProgram(device, this.program);
+        this.sortKeyBase = setSortKeyProgramKey(this.sortKeyBase, this.gfxProgram.ResourceUniqueId);
+    }
+
+    private updateTextureMappings(): void {
+        this.paramGetTexture('$basetexture').fillTextureMapping(this.textureMapping[0], this.paramGetInt('$frame'));
+        this.paramGetTexture('$normalmap').fillTextureMapping(this.textureMapping[1], this.paramGetInt('$bumpframe'));
+        this.paramGetTexture('$envmap').fillTextureMapping(this.textureMapping[2], this.paramGetInt('$envmapframe'));
+    }
+
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: mat4): void {
+        assert(this.isMaterialLoaded());
+        this.updateTextureMappings();
+
+        let offs = renderInst.allocateUniformBuffer(WaterCheapMaterialProgram.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(WaterCheapMaterialProgram.ub_ObjectParams);
+        offs += fillMatrix4x3(d, offs, modelMatrix);
+
+        offs += this.paramFillColor(d, offs, '$refracttint', '$refractamount');
+
+        if (this.wantsEnvmap) {
+            offs += this.paramFillColor(d, offs, '$envmaptint');
+            const envmapContrast = this.paramGetNumber('$envmapcontrast');
+            const envmapSaturation = this.paramGetNumber('$envmapsaturation');
+            const fresnelReflection = this.paramGetNumber('$fresnelreflection');
+            offs += fillVec4(d, offs, envmapContrast, envmapSaturation, fresnelReflection);
+        }
 
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.setGfxProgram(this.gfxProgram);
@@ -1450,6 +1671,8 @@ export class MaterialCache {
             return new Material_Water(vmt);
         else if (shaderType === 'unlittwotexture' || shaderType === 'monitorscreen')
             return new Material_UnlitTwoTexture(vmt);
+        else if (shaderType === 'refract')
+            return new Material_Refract(vmt);
         else
             return new Material_Generic(vmt);
     }

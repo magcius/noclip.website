@@ -1,19 +1,19 @@
 
 import { SceneContext } from "../SceneBase";
-import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState, GfxSamplerBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { BSPFile, Surface, Model } from "./BSPFile";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, executeOnPass } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
 import { VPKMount } from "./VPK";
 import { ZipFile, ZipFileEntry, ZipCompressionMethod } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase } from "./Materials";
+import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase, LateBindingTexture } from "./Materials";
 import { clamp, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
 import { assertExists, assert, nArray } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
@@ -315,6 +315,9 @@ class BSPSurfaceRenderer {
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
 
+        if (this.materialInstance.isTranslucent)
+            renderInst.filterKey = FilterKey.Translucent;
+
         renderInstManager.submitRenderInst(renderInst);
     }
 }
@@ -327,14 +330,12 @@ class BSPModelRenderer {
     public surfaces: BSPSurfaceRenderer[] = [];
     public surfacesByIdx: BSPSurfaceRenderer[] = [];
     public displacementSurfaces: BSPSurfaceRenderer[] = [];
-    public materialInstances: BaseMaterial[] = [];
     public liveSurfaceSet = new Set<number>();
 
     constructor(renderContext: SourceRenderContext, public model: Model, public bsp: BSPFile) {
         for (let i = 0; i < model.surfaces.length; i++) {
             const surfaceIdx = model.surfaces[i];
             const surface = new BSPSurfaceRenderer(this.bsp.surfaces[surfaceIdx]);
-            this.bindMaterial(renderContext, surface);
             // TODO(jstpierre): This is ugly
             this.surfaces.push(surface);
             this.surfacesByIdx[surfaceIdx] = surface;
@@ -346,6 +347,8 @@ class BSPModelRenderer {
                 this.bsp.markClusterSet(surface.clusterset, aabb);
             }
         }
+
+        this.bindMaterials(renderContext);
     }
 
     public setEntity(entity: BaseEntity): void {
@@ -355,20 +358,27 @@ class BSPModelRenderer {
                 this.surfaces[i].materialInstance!.entityParams = entity.materialParams;
     }
 
-    private async bindMaterial(renderContext: SourceRenderContext, surface: BSPSurfaceRenderer) {
-        const materialCache = renderContext.materialCache;
-
-        if (this.materialInstances[surface.surface.texinfo] === undefined) {
-            const texinfo = this.bsp.texinfo[surface.surface.texinfo];
-            const materialInstance = await materialCache.createMaterialInstance(renderContext, texinfo.texName);
-            this.materialInstances[surface.surface.texinfo] = materialInstance;
+    private async bindMaterials(renderContext: SourceRenderContext) {
+        // Gather all materials.
+        const texinfos = new Set<number>();
+        for (let i = 0; i < this.surfaces.length; i++) {
+            const surface = this.surfaces[i];
+            texinfos.add(surface.surface.texinfo);
         }
 
-        const materialInstance = this.materialInstances[surface.surface.texinfo];
-        if (this.entity !== null)
-            materialInstance.entityParams = this.entity.materialParams;
+        const materialInstances = await Promise.all([...texinfos].map(async (i: number): Promise<[number, BaseMaterial]> => {
+            const texinfo = this.bsp.texinfo[i];
+            const materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, texinfo.texName);
+            if (this.entity !== null)
+                materialInstance.entityParams = this.entity.materialParams;
+            return [i, materialInstance];
+        }));
 
-        surface.bindMaterial(materialInstance, renderContext.lightmapManager);
+        for (let i = 0; i < this.surfaces.length; i++) {
+            const surface = this.surfaces[i];
+            const [texinfo, materialInstance] = assertExists(materialInstances.find(([i]) => surface.surface.texinfo === i));
+            surface.bindMaterial(materialInstance, renderContext.lightmapManager);
+        }
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -568,7 +578,7 @@ class EntitySystem {
     }
 }
 
-const enum FilterKey { Skybox, Main }
+const enum FilterKey { Skybox, Main, Translucent }
 
 // A "View" is effectively a camera, but in Source engine space.
 export class SourceEngineView {
@@ -792,8 +802,10 @@ const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class SourceRenderer implements SceneGfx {
     private renderTarget = new BasicRenderTarget(GfxFormat.U8_RGBA_RT_SRGB);
+    private framebufferTexture = new ColorTexture(GfxFormat.U8_RGBA_RT_SRGB);
     private resolvedSRGB = new ColorTexture(GfxFormat.U8_RGBA_RT_SRGB);
     private renderTargetUNorm = new BasicRenderTarget(GfxFormat.U8_RGBA_RT);
+    private framebufferTextureMapping = new TextureMapping();
     private gammaCorrectProgram = new FullscreenGammaCorrectProgram();
     private gammaCorrectTextureMapping = nArray(1, () => new TextureMapping());
     public renderHelper: GfxRenderHelper;
@@ -810,6 +822,16 @@ export class SourceRenderer implements SceneGfx {
         const device = context.device;
         this.renderHelper = new GfxRenderHelper(device);
         this.renderContext = new SourceRenderContext(device, this.renderHelper.getCache(), filesystem);
+
+        this.framebufferTextureMapping.gfxSampler = this.renderContext.cache.createSampler(device, {
+            magFilter: GfxTexFilterMode.BILINEAR,
+            minFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 100,
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+        });
     }
 
     private movement(): void {
@@ -898,6 +920,15 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
+    private executeOnPass(passRenderer: GfxRenderPass, filterKey: FilterKey): void {
+        const device = this.renderContext.device;
+        const r = this.renderHelper.renderInstManager;
+
+        r.setVisibleByFilterKeyExact(filterKey);
+        r.simpleRenderInstList!.resolveLateSamplerBinding(LateBindingTexture.FramebufferTexture, this.framebufferTextureMapping);
+        r.drawOnPassRenderer(device, passRenderer);
+    }
+
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
@@ -905,15 +936,22 @@ export class SourceRenderer implements SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.renderTargetUNorm.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 1);
+        this.framebufferTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.resolvedSRGB.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
+        this.framebufferTextureMapping.gfxTexture = this.framebufferTexture.gfxTexture!;
 
         let passRenderer: GfxRenderPass;
         passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, FilterKey.Skybox);
+        this.executeOnPass(passRenderer, FilterKey.Skybox);
+        device.submitPass(passRenderer);
+        passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.framebufferTexture.gfxTexture!);
+
+        this.executeOnPass(passRenderer, FilterKey.Main);
         device.submitPass(passRenderer);
 
-        passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.resolvedSRGB.gfxTexture!);
-        executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, FilterKey.Main);
+        passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, this.resolvedSRGB.gfxTexture!);
+        this.executeOnPass(passRenderer, FilterKey.Translucent);
         device.submitPass(passRenderer);
 
         // Now do a fullscreen gamma-correct pass to output to our UNORM backbuffer.
