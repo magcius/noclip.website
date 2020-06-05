@@ -418,31 +418,38 @@ class BSPModelRenderer {
         }
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap, traverseBrush: boolean): void {
+    private prepareToRenderCommon(view: SourceEngineView): boolean {
         if (!this.visible)
-            return;
+            return false;
 
         scratchAABB.transform(this.model.bbox, this.modelMatrix);
         if (!view.frustum.contains(scratchAABB))
+            return false;
+
+        return true;
+    }
+
+    public prepareToRenderModel(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+        if (!this.prepareToRenderCommon(view))
             return;
 
+        // Submodels don't use the BSP tree, they simply render all surfaces back to back in a batch.
+        for (let i = 0; i < this.model.surfaces.length; i++)
+            this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
+    }
+
+    public prepareToRenderWorld(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap): void {
         // Render all displacement surfaces.
         // TODO(jstpierre): Move this to the BSP leaves
         for (let i = 0; i < this.displacementSurfaces.length; i++)
             this.displacementSurfaces[i].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix, pvs);
 
-        if (traverseBrush) {
-            // Gather all BSP surfaces, and cull based on that.
-            this.liveSurfaceSet.clear();
-            this.gatherSurfaces(this.liveSurfaceSet, null, pvs, view);
+        // Gather all BSP surfaces, and cull based on that.
+        this.liveSurfaceSet.clear();
+        this.gatherSurfaces(this.liveSurfaceSet, null, pvs, view);
 
-            for (const surfaceIdx of this.liveSurfaceSet.values())
-                this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
-        } else {
-            // Entities don't use the BSP tree, they simply render all surfaces back to back in a batch.
-            for (let i = 0; i < this.model.surfaces.length; i++)
-                this.surfacesByIdx[this.model.surfaces[i]].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
-        }
+        for (const surfaceIdx of this.liveSurfaceSet.values())
+            this.surfacesByIdx[surfaceIdx].prepareToRender(renderContext, renderInstManager, view, this.modelMatrix);
     }
 }
 
@@ -460,6 +467,7 @@ class BaseEntity {
     public model: BSPModelRenderer | null = null;
     public origin = vec3.create();
     public angles = vec3.create();
+    public renderamt: number = 1.0;
     public visible = true;
     public materialParams = new EntityMaterialParameters();
 
@@ -483,12 +491,20 @@ class BaseEntity {
             const angles = vmtParseNumbers(entity.angles);
             vec3.set(this.angles, angles[0], angles[1], angles[2]);
         }
+
+        if (entity.renderamt)
+            this.renderamt = Number(entity.renderamt) / 255.0;
     }
 
     public movement(): void {
         if (this.model !== null) {
             computeModelMatrixPosRot(this.model.modelMatrix, this.origin, this.angles);
-            this.model.visible = this.visible;
+
+            let visible = this.visible;
+            if (this.renderamt === 0)
+                visible = false;
+
+            this.model.visible = visible;
 
             vec3.copy(this.materialParams.position, this.origin);
         }
@@ -675,18 +691,16 @@ export class BSPRenderer {
 
         // Render the world-spawn model.
         if (!!(kinds & RenderObjectKind.WorldSpawn))
-            this.models[0].prepareToRender(renderContext, renderInstManager, view, pvs, true);
+            this.models[0].prepareToRenderWorld(renderContext, renderInstManager, view, pvs);
 
-        if (!!(kinds & RenderObjectKind.Entities)) {
+        if (!!(kinds & RenderObjectKind.Entities))
             for (let i = 1; i < this.models.length; i++)
-                this.models[i].prepareToRender(renderContext, renderInstManager, view, pvs, false);
-        }
+                this.models[i].prepareToRenderModel(renderContext, renderInstManager, view);
 
         // Static props.
-        if (!!(kinds & RenderObjectKind.StaticProps)) {
+        if (!!(kinds & RenderObjectKind.StaticProps))
             for (let i = 0; i < this.staticPropRenderers.length; i++)
                 this.staticPropRenderers[i].prepareToRender(renderContext, renderInstManager, this.bsp, pvs);
-        }
 
         // Detail props.
         if (!!(kinds & RenderObjectKind.DetailProps)) {

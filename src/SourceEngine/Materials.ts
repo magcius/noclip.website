@@ -9,11 +9,12 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF, VTFFlags } from "./VTF";
-import { SourceRenderContext, SourceFileSystem } from "./Main";
+import { SourceRenderContext, SourceFileSystem, BSPRenderer } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage } from "./BSPFile";
+import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite } from "../Color";
+import { AABB } from "../Geometry";
 
 //#region Base Classes
 const scratchVec4 = vec4.create();
@@ -1117,7 +1118,7 @@ ${this.Common}
 
 layout(row_major, std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
-    vec4 u_Texture2ScaleBias;
+    Mat4x2 u_Texture2Transform;
     vec4 u_ModulationColor;
 };
 
@@ -1137,7 +1138,7 @@ void mainVS() {
 
     // TODO(jstpierre): BaseTransform
     v_TexCoord0.xy = a_TexCoord.xy;
-    v_TexCoord0.zw = CalcScaleBias(a_TexCoord.xy, u_Texture2ScaleBias);
+    v_TexCoord0.zw = Mul(u_Texture2Transform, vec4(a_TexCoord.xy, 1.0, 1.0));
 }
 #endif
 
@@ -1197,7 +1198,7 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         let offs = renderInst.allocateUniformBuffer(UnlitTwoTextureProgram.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(UnlitTwoTextureProgram.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
-        offs += this.paramFillScaleBias(d, offs, '$texture2transform');
+        offs += this.paramFillTextureMatrix(d, offs, '$texture2transform');
         offs += this.paramFillColor(d, offs, '$color', '$alpha');
 
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -1416,8 +1417,8 @@ export class MaterialCache {
         this.textureCache.set('_rt_Camera', new VTF(device, cache, null, '_rt_Camera', 0));
     }
 
-    public async bindLocalCubemap(path: string) {
-        const vtf = await this.fetchVTF(path, VTFFlags.SRGB);
+    public async bindLocalCubemap(cubemap: Cubemap) {
+        const vtf = await this.fetchVTF(cubemap.filename, VTFFlags.SRGB);
         this.textureCache.set('env_cubemap', vtf);
     }
 
@@ -1480,6 +1481,36 @@ export class MaterialCache {
     public destroy(device: GfxDevice): void {
         for (const vtf of this.textureCache.values())
             vtf.destroy(device);
+    }
+}
+//#endregion
+
+//#region Runtime Lighting / Lightcache
+function findEnvCubemapTexture(bspfile: BSPFile, pos: vec3): Cubemap {
+    let bestDistance = Infinity;
+    let bestIndex = -1;
+
+    for (let i = 0; i < bspfile.cubemaps.length; i++) {
+        const distance = vec3.distance(pos, bspfile.cubemaps[i].pos);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+        }
+    }
+
+    assert(bestIndex >= 0);
+    return bspfile.cubemaps[bestIndex];
+}
+
+class StaticLightingCache {
+    private leaf: number = -1;
+    private envCubemap: Cubemap;
+
+    constructor(bspfile: BSPFile, pos: vec3, bbox: AABB) {
+        this.leaf = bspfile.findLeafForPoint(pos);
+        assert(this.leaf >= 0);
+
+        this.envCubemap = findEnvCubemapTexture(bspfile, pos);
     }
 }
 //#endregion

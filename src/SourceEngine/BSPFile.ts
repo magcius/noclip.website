@@ -415,6 +415,11 @@ export class LightmapPackerManager {
     }
 }
 
+export interface Cubemap {
+    pos: vec3;
+    filename: string;
+}
+
 const scratchVec3 = vec3.create();
 export class BSPFile {
     public version: number;
@@ -426,7 +431,7 @@ export class BSPFile {
     public pakfile: ZipFile | null = null;
     public nodelist: BSPNode[] = [];
     public leaflist: BSPLeaf[] = [];
-    public cubemaps: string[] = [];
+    public cubemaps: Cubemap[] = [];
     public detailObjects: DetailObjects | null = null;
     public staticObjects: StaticObjects | null = null;
     public visibility: BSPVisibility;
@@ -1078,8 +1083,9 @@ export class BSPFile {
             const posX = cubemaps.getInt32(idx + 0x00, true);
             const posY = cubemaps.getInt32(idx + 0x04, true);
             const posZ = cubemaps.getInt32(idx + 0x08, true);
-            const cubemapSample = `maps/${mapname}/c${posX}_${posY}_${posZ}`;
-            this.cubemaps.push(cubemapSample);
+            const pos = vec3.fromValues(posX, posY, posZ);
+            const filename = `maps/${mapname}/c${posX}_${posY}_${posZ}`;
+            this.cubemaps.push({ pos, filename });
         }
 
         const dprp = getGameLumpData('dprp');

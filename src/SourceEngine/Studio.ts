@@ -262,8 +262,8 @@ export class StudioModelData {
         const cdtextureindex = mdlView.getUint32(0xD8, true);
 
         const materialSearchDirs: string[] = [];
-        let cdtextureIdx = cdtextureindex;
         for (let i = 0; i < numcdtextures; i++) {
+            let cdtextureIdx = cdtextureindex;
             const textureDir = readString(mdlBuffer, mdlView.getUint32(cdtextureIdx + 0x00, true));
             const materialSearchDir = `materials/${textureDir}`;
             materialSearchDirs.push(materialSearchDir);
@@ -411,7 +411,15 @@ export class StudioModelData {
             // assert(material === 0);
             const clientmaterial = mdlView.getUint32(textureIdx + 0x14, true);
             assert(clientmaterial === 0);
-            baseMaterialNames.push(assertExists(renderContext.filesystem.searchPath(materialSearchDirs, materialName, '.vmt')));
+
+            const resolvedPath = renderContext.filesystem.searchPath(materialSearchDirs, materialName, '.vmt');
+            if (resolvedPath !== null) {
+                baseMaterialNames.push(resolvedPath);
+            } else {
+                // TODO(jstpierre): Error material
+                baseMaterialNames.push('materials/editor/obsolete.vmt');
+            }
+
             textureIdx += 0x40;
         }
 

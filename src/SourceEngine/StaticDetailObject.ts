@@ -336,6 +336,7 @@ export class DetailPropLeafRenderer {
 }
 //#endregion
 
+//#region Static Models
 export const enum StaticPropFlags {
     IGNORE_NORMALS         = 0x0008,
     NO_SHADOW              = 0x0010,
@@ -421,6 +422,8 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
             idx += 0x08;
         }
 
+        const lightingOrigin = vec3.fromValues(lightingOriginX, lightingOriginY, lightingOriginZ);
+
         const index = i;
         const pos = vec3.fromValues(posX, posY, posZ);
         // This was empirically determined. TODO(jstpierre): Should computeModelMatrixPosRot in general do this?
@@ -495,3 +498,4 @@ export class StaticPropRenderer {
             this.colorMeshData.destroy(device);
     }
 }
+////#endregion
