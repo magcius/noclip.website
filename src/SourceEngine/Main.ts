@@ -449,6 +449,9 @@ class BSPModelRenderer {
     }
 
     public prepareToRenderWorld(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, pvs: BitMap): void {
+        if (!this.prepareToRenderCommon(view))
+            return;
+
         // Render all displacement surfaces.
         // TODO(jstpierre): Move this to the BSP leaves
         for (let i = 0; i < this.displacementSurfaces.length; i++)
