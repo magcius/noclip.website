@@ -24,7 +24,8 @@ function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
 export function gfxSamplerBindingCopy(a: GfxSamplerBinding): GfxSamplerBinding {
     const gfxSampler = a.gfxSampler;
     const gfxTexture = a.gfxTexture;
-    return { gfxSampler, gfxTexture };
+    const lateBinding = a.lateBinding;
+    return { gfxSampler, gfxTexture, lateBinding };
 }
 
 export function gfxBufferBindingCopy(a: GfxBufferBinding): GfxBufferBinding {

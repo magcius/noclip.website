@@ -10,8 +10,8 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
-import { executeOnPass } from '../gfx/render/GfxRenderer';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxSamplerBinding } from '../gfx/platform/GfxPlatform';
+import { executeOnPass, GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
 
@@ -71,14 +71,13 @@ function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
 }
 
 export const enum SpecialTextureType {
-    OpaqueSceneTexture,
-    ImageEffectTexture1,
-    Count,
+    OpaqueSceneTexture = 'opaque-scene-texture',
+    ImageEffectTexture1 = 'image-effect-texture-1',
 }
 
 class SpecialTextureBinder {
-    private textureMappings: TextureMapping[][] = nArray(SpecialTextureType.Count, () => []);
     private mirrorSampler: GfxSampler;
+    private textureMapping = new TextureMapping();
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.mirrorSampler = cache.createSampler(device, {
@@ -93,20 +92,16 @@ class SpecialTextureBinder {
     }
 
     public registerTextureMapping(m: TextureMapping, textureType: SpecialTextureType): void {
-        if (this.textureMappings[textureType].includes(m))
-            return;
-        this.textureMappings[textureType].push(m);
+        m.width = EFB_WIDTH;
+        m.height = EFB_HEIGHT;
+        m.flipY = true;
+        m.lateBinding = textureType;
     }
 
-    public lateBindTexture(textureType: SpecialTextureType, gfxTexture: GfxTexture): void {
-        const m = this.textureMappings[textureType];
-        for (let i = 0; i < m.length; i++) {
-            m[i].gfxTexture = gfxTexture;
-            m[i].gfxSampler = this.mirrorSampler;
-            m[i].width = EFB_WIDTH;
-            m[i].height = EFB_HEIGHT;
-            m[i].flipY = true;
-        }
+    public lateBindTexture(list: GfxRenderInstList, textureType: SpecialTextureType, gfxTexture: GfxTexture): void {
+        this.textureMapping.gfxTexture = gfxTexture;
+        this.textureMapping.gfxSampler = this.mirrorSampler;
+        list.resolveLateSamplerBinding(textureType, this.textureMapping);
     }
 }
 
@@ -248,16 +243,27 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
     }
 
+    private executeOnPass(passRenderer: GfxRenderPass, filterKey: number): void {
+        const r = this.renderHelper.renderInstManager;
+        r.setVisibleByFilterKeyExact(filterKey);
+
+        const t = this.sceneObjHolder.specialTextureBinder;
+        t.lateBindTexture(r.simpleRenderInstList!, SpecialTextureType.OpaqueSceneTexture, this.opaqueSceneTexture.gfxTexture!);
+        t.lateBindTexture(r.simpleRenderInstList!, SpecialTextureType.ImageEffectTexture1, this.imageEffectTexture1.gfxTexture!);
+
+        r.drawOnPassRenderer(this.sceneObjHolder.modelCache.device, passRenderer);
+    }
+
     private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType));
+        this.executeOnPass(passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType));
     }
 
     private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType));
+        this.executeOnPass(passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType));
     }
 
     private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
-        executeOnPass(this.renderHelper.renderInstManager, this.sceneObjHolder.modelCache.device, passRenderer, createFilterKeyForDrawType(drawType));
+        this.executeOnPass(passRenderer, createFilterKeyForDrawType(drawType));
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
@@ -288,6 +294,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(sceneParamsOffs2D, ub_SceneParamsBufferSize), sceneParamsOffs2D, sceneParams);
         this.sceneObjHolder.renderParams.sceneParamsOffs2D = sceneParamsOffs2D;
 
+        const renderInstManager = this.renderHelper.renderInstManager;
         const template = this.renderHelper.pushTemplateRenderInst();
 
         const effectSystem = this.sceneObjHolder.effectSystem;
@@ -299,10 +306,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
             if (indDummy !== null)
                 this.sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
         }
-
-        // TODO(jstpierre): Fix late binding :/
-        this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, this.opaqueSceneTexture.gfxTexture!);
-        this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.ImageEffectTexture1, this.imageEffectTexture1.gfxTexture!);
 
         // Prepare all of our NameObjs.
         executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
@@ -453,6 +456,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, this.imageEffectTexture1.gfxTexture);
 
+        // TODO(jstpierre): Fix late binding :/
+        this.sceneObjHolder.specialTextureBinder.lateBindTexture(renderInstManager.simpleRenderInstList!, SpecialTextureType.OpaqueSceneTexture, this.opaqueSceneTexture.gfxTexture!);
+
         // executeDrawAfterIndirect()
         this.drawOpa(passRenderer, DrawBufferType.INDIRECT_PLANET);
         this.drawOpa(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ);
@@ -478,6 +484,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         // Resolve for WaterCameraFilter.
         device.submitPass(passRenderer);
+
+        this.sceneObjHolder.specialTextureBinder.lateBindTexture(renderInstManager.simpleRenderInstList!, SpecialTextureType.ImageEffectTexture1, this.imageEffectTexture1.gfxTexture!);
 
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, null);
         this.execute(passRenderer, DrawType.WATER_CAMERA_FILTER);

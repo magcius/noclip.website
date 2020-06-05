@@ -135,6 +135,8 @@ export interface GfxBufferBinding {
 export interface GfxSamplerBinding {
     gfxTexture: GfxTexture | null;
     gfxSampler: GfxSampler | null;
+    // Late binding API, intended for GfxRenderer... not the best API layering....
+    lateBinding: string | null;
 }
 
 export interface GfxBindingLayoutDescriptor {

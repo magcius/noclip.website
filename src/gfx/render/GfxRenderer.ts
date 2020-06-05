@@ -165,12 +165,18 @@ const defaultTransientState = gfxRendererTransientStateNew();
 //#region GfxRenderInst
 // TODO(jstpierre): Very little of this is used, could be removed.
 const enum GfxRenderInstFlags {
-    Template = 1 << 0,
-    Draw = 1 << 1,
-    Indexed = 1 << 2,
+    Indexed = 1 << 0,
+
+    // Mostly for error checking.
+    Template = 1 << 1,
+    Draw = 1 << 2,
+
+    // We allow 16 late-binding textures, which should be good enough for most circumstances.
+    HasLateTextureBinding0 = 1 << 3,
+    HasLateTextureBindingMask = 0xFFFF << 3,
 
     // Which flags are inherited from templates...
-    InheritedFlags = (Indexed),
+    InheritedFlags = (Indexed | HasLateTextureBindingMask),
 }
 
 export class GfxRenderInst {
@@ -188,6 +194,7 @@ export class GfxRenderInst {
     private _dynamicUniformBufferByteOffsets: number[] = nArray(4, () => 0);
 
     public _flags: number = 0;
+    private _lateSamplerBindings: string[] = [];
     private _inputState: GfxInputState | null = null;
     private _drawStart: number = 0;
     private _drawCount: number = 0;
@@ -243,6 +250,8 @@ export class GfxRenderInst {
         for (let i = 0; i < Math.min(tbd.uniformBufferBindings.length, obd.uniformBufferBindings.length); i++)
             tbd.uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
         this.setSamplerBindingsFromTextureMappings(obd.samplerBindings);
+        for (let i = 0; i < o._lateSamplerBindings.length; i++)
+            this._lateSamplerBindings[i] = o._lateSamplerBindings[i];
         for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)
             this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
     }
@@ -302,7 +311,7 @@ export class GfxRenderInst {
         for (let i = this._bindingDescriptors[0].uniformBufferBindings.length; i < bindingLayout.numUniformBuffers; i++)
             this._bindingDescriptors[0].uniformBufferBindings.push({ buffer: null!, wordCount: 0, wordOffset: 0 });
         for (let i = this._bindingDescriptors[0].samplerBindings.length; i < bindingLayout.numSamplers; i++)
-            this._bindingDescriptors[0].samplerBindings.push({ gfxSampler: null, gfxTexture: null });
+            this._bindingDescriptors[0].samplerBindings.push({ gfxSampler: null, gfxTexture: null, lateBinding: null });
     }
 
     /**
@@ -396,22 +405,64 @@ export class GfxRenderInst {
 
     /**
      * Sets the {@param GfxSamplerBinding}s in use by this render instance.
+     *
+     * Note that {@see GfxRenderInst} has a method of doing late binding, intended to solve cases where live render
+     * targets are used, which can have difficult control flow consequences for users of GfxRenderer. Pass a string
+     * instead of a GfxSamplerBinding to record that it can be resolved later, and use
+     * {@see GfxRenderInst.resolveLateSamplerBinding} or equivalent to fill it in later.
      */
-    public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
+    public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | string | null)[]): void {
         for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
             const dst = this._bindingDescriptors[0].samplerBindings[i];
-            if (m[i] !== undefined && m[i] !== null) {
-                dst.gfxTexture = m[i]!.gfxTexture;
-                dst.gfxSampler = m[i]!.gfxSampler;
-            } else {
+            const binding = m[i];
+
+            const lateBit = GfxRenderInstFlags.HasLateTextureBinding0 << i;
+
+            if (binding === undefined || binding === null) {
+                this._flags &= ~lateBit;
                 dst.gfxTexture = null;
                 dst.gfxSampler = null;
+                continue;
+            }
+
+            // Check if this is a late binding.
+            if (typeof binding === 'string' || binding.lateBinding !== null) {
+                this._flags |= lateBit;
+                this._lateSamplerBindings[i] = typeof binding === 'string' ? binding : binding.lateBinding!;
+            } else {
+                dst.gfxTexture = binding!.gfxTexture;
+                dst.gfxSampler = binding!.gfxSampler;
+            }
+        }
+    }
+
+    /**
+     * Resolve a previously registered "late bound" sampler binding for the given {@param name} to the provided
+     * {@param binding}, as registered through {@see setSamplerBindingsFromTextureMappings}.
+     *
+     * This is intended to be called by high-level code, and is especially helpful when juggling render targets
+     * for framebuffer effects.
+     */
+    public resolveLateSamplerBinding(name: string, binding: GfxSamplerBinding | null): void {
+        for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
+            const lateBit = GfxRenderInstFlags.HasLateTextureBinding0 << i;
+            const dst = this._bindingDescriptors[0].samplerBindings[i];
+            if (!!(this._flags & lateBit) && this._lateSamplerBindings[i] === name) {
+                this._flags &= ~lateBit;
+                if (binding === null) {
+                    dst.gfxTexture = null;
+                    dst.gfxSampler = null;
+                } else {
+                    dst.gfxTexture = binding!.gfxTexture;
+                    dst.gfxSampler = binding!.gfxSampler;
+                }
             }
         }
     }
 
     public drawOnPassWithState(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState): void {
         assert(!!(this._flags & GfxRenderInstFlags.Draw));
+        assert((this._flags & GfxRenderInstFlags.HasLateTextureBindingMask) === 0);
 
         if (this._renderPipeline !== null) {
             state.currentRenderPipelineDescriptor = null;
@@ -460,6 +511,7 @@ export class GfxRenderInst {
 
     public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
         assert(!!(this._flags & GfxRenderInstFlags.Draw));
+        assert((this._flags & GfxRenderInstFlags.HasLateTextureBindingMask) === 0);
 
         if (this._renderPipeline !== null) {
             passRenderer.setPipeline(this._renderPipeline);
@@ -543,6 +595,15 @@ export class GfxRenderInstList {
     }
 
     /**
+     * Resolve sampler bindings for all render insts on this render inst list. See the
+     * documentation for {@see GfxRenderInst.resolveLateSamplerBinding}.
+     */
+    public resolveLateSamplerBinding(name: string, binding: GfxSamplerBinding): void {
+        for (let i = 0; i < this.renderInsts.length; i++)
+            this.renderInsts[i].resolveLateSamplerBinding(name, binding);
+    }
+
+    /**
      * Execute all scheduled render insts in this list onto the {@param GfxRenderPass},
      * using {@param device} and {@param cache} to create any device-specific resources
      * necessary to complete the draws.
@@ -616,7 +677,7 @@ export class GfxRenderInstManager {
     public gfxRenderCache = new GfxRenderCache();
     public instPool = new GfxRenderInstPool();
     public templatePool = new GfxRenderInstPool();
-    private simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
+    public simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
     private currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
 
     /**
@@ -632,7 +693,7 @@ export class GfxRenderInstManager {
             renderInst.setFromTemplate(this.templatePool.pool[templateIndex]);
         else
             renderInst.reset();
-        renderInst._flags = GfxRenderInstFlags.Draw;
+        renderInst._flags |= GfxRenderInstFlags.Draw;
         return renderInst;
     }
 
@@ -682,7 +743,7 @@ export class GfxRenderInstManager {
         const newTemplate = this.templatePool.pool[newTemplateIndex];
         if (templateIndex >= 0)
             newTemplate.setFromTemplate(this.templatePool.pool[templateIndex]);
-        newTemplate._flags = GfxRenderInstFlags.Template;
+        newTemplate._flags |= GfxRenderInstFlags.Template;
         return newTemplate;
     }
 

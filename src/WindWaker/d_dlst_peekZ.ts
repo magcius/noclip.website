@@ -126,7 +126,7 @@ export class PeekZManager {
                 });
             }
 
-            const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: this.depthTexture.gfxTexture, gfxSampler: this.depthSampler }];
+            const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: this.depthTexture.gfxTexture, gfxSampler: this.depthSampler, lateBinding: null }];
             this.fullscreenCopyBindings = device.createBindings({ bindingLayout: { numSamplers: 1, numUniformBuffers: 0 }, samplerBindings, uniformBufferBindings: [], });
         }
 
