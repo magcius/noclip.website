@@ -262,8 +262,8 @@ export class StudioModelData {
         const cdtextureindex = mdlView.getUint32(0xD8, true);
 
         const materialSearchDirs: string[] = [];
+        let cdtextureIdx = cdtextureindex;
         for (let i = 0; i < numcdtextures; i++) {
-            let cdtextureIdx = cdtextureindex;
             const textureDir = readString(mdlBuffer, mdlView.getUint32(cdtextureIdx + 0x00, true));
             const materialSearchDir = `materials/${textureDir}`;
             materialSearchDirs.push(materialSearchDir);
@@ -789,10 +789,21 @@ export class HardwareVertData {
 
             const meshByteSize = meshVertexCount * 4;
 
-            // Input and output data are both RGBA
-            vertexData.set(buffer.createTypedArray(Uint8Array, offset, meshByteSize), vertexOffs);
             this.mesh.push({ lod, indexInsideLOD, vertexCount: meshVertexCount, byteOffset: vertexOffs, byteSize: meshByteSize });
-            vertexOffs += meshVertexCount * 4;
+
+            // Input and output data are both RGBA
+            // Input is BGRA, we need RGBA
+            let dataOffs = offset;
+            for (let i = 0; i < meshVertexCount; i++) {
+                const b = view.getUint8(dataOffs++);
+                const g = view.getUint8(dataOffs++);
+                const r = view.getUint8(dataOffs++);
+                const a = view.getUint8(dataOffs++);
+                vertexData[vertexOffs++] = r;
+                vertexData[vertexOffs++] = g;
+                vertexData[vertexOffs++] = b;
+                vertexData[vertexOffs++] = a;
+            }
 
             // 0x10 bytes of padding.
             meshHeaderIdx += 0x1C;
