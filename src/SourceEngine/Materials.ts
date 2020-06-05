@@ -1304,11 +1304,11 @@ void mainPS() {
     vec4 t_BumpmapSample1 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord1));
     vec2 t_BumpmapCoord2 = t_BumpmapCoord0.yx + 0.45 * u_TexScroll.zw;
     vec4 t_BumpmapSample2 = texture(SAMPLER_2D(u_Texture[0], t_BumpmapCoord2));
-    vec4 t_BumpmapNormal = 0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2);
+    vec4 t_BumpmapSample = (0.33 * (t_BumpmapSample0 + t_BumpmapSample1 + t_BumpmapSample2));
 #else
-    vec4 t_BumpmapNormal = t_BumpmapSample0;
+    vec4 t_BumpmapSample = t_BumpmapSample0;
 #endif
-    t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapNormal).rgb;
+    vec3 t_BumpmapNormal = UnpackUnsignedNormalMap(t_BumpmapSample).rgb;
 
     vec3 t_NormalWorld = CalcNormalWorld(t_BumpmapNormal, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
 
