@@ -180,7 +180,7 @@ export class VTF {
         let dataIdx: number;
 
         if (this.versionMajor === 0x07) {
-            assert(this.versionMinor >= 0x01);
+            assert(this.versionMinor >= 0x00);
 
             this.width = view.getUint16(0x10, true);
             this.height = view.getUint16(0x12, true);
