@@ -579,16 +579,28 @@ export abstract class BaseMaterial {
 class Material_Generic_Program extends MaterialProgramBase {
     public static ub_ObjectParams = 1;
 
+    public static MaxDynamicWorldLights = 2;
+
     public both = `
 precision mediump float;
 
 ${this.Common}
+
+struct WorldLight {
+    vec4 Position;
+    vec4 Direction;
+    vec4 Color;
+    // TODO(jstpierre): Spot/Directional Lights
+};
 
 layout(row_major, std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
 #ifdef USE_AMBIENT_CUBE
     // TODO(jstpierre): Pack this more efficiently?
     vec4 u_AmbientCube[6];
+#endif
+#ifdef USE_DYNAMIC_VERTEX_LIGHTING
+    // We support up to N lights.
 #endif
     vec4 u_BaseTextureScaleBias;
 #ifdef USE_DETAIL
@@ -2185,6 +2197,7 @@ export class MaterialProxySystem {
         this.registerProxyFactory(MaterialProxy_PlayerProximity);
         this.registerProxyFactory(MaterialProxy_GaussianNoise);
         this.registerProxyFactory(MaterialProxy_AnimatedTexture);
+        this.registerProxyFactory(MaterialProxy_MaterialModifyAnimated);
         this.registerProxyFactory(MaterialProxy_WaterLOD);
         this.registerProxyFactory(MaterialProxy_TextureTransform);
         this.registerProxyFactory(MaterialProxy_ToggleTexture);
@@ -2545,6 +2558,10 @@ class MaterialProxy_AnimatedTexture {
 
         paramSetNum(map, this.animatedtextureframenumvar, frame);
     }
+}
+
+class MaterialProxy_MaterialModifyAnimated extends MaterialProxy_AnimatedTexture {
+    public static type = 'materialmodifyanimated';
 }
 
 class MaterialProxy_WaterLOD {

@@ -1068,9 +1068,9 @@ export class BSPFile {
         if (leafambientindex.byteLength === 0)
             leafambientindex = getLumpData(LumpType.LEAF_AMBIENT_INDEX).createDataView();
 
-        let leafambientlighting = getLumpData(LumpType.LEAF_AMBIENT_LIGHTING_HDR).createDataView();
+        let leafambientlighting = getLumpData(LumpType.LEAF_AMBIENT_LIGHTING_HDR, 1).createDataView();
         if (leafambientlighting.byteLength === 0)
-            leafambientlighting = getLumpData(LumpType.LEAF_AMBIENT_LIGHTING).createDataView();
+            leafambientlighting = getLumpData(LumpType.LEAF_AMBIENT_LIGHTING, 1).createDataView();
 
         const leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
         for (let idx = 0x00; idx < leafs.byteLength;) {
@@ -1091,6 +1091,7 @@ export class BSPFile {
             const firstleafbrush = leafs.getUint16(idx + 0x18, true);
             const numleafbrushes = leafs.getUint16(idx + 0x1A, true);
             const leafwaterdata = leafs.getInt16(idx + 0x1C, true);
+            const leafindex = this.leaflist.length;
 
             idx += 0x1E;
 
@@ -1101,7 +1102,7 @@ export class BSPFile {
 
                 for (let j = 0; j < 6; j++) {
                     const exp = leafs.getUint8(idx + 0x03);
-                    // Game seems to accidentally include an extra factor of 255.0
+                    // Game seems to accidentally include an extra factor of 255.0.
                     const r = unpackColorRGBExp32(leafs.getUint8(idx + 0x00), exp) * 255.0;
                     const g = unpackColorRGBExp32(leafs.getUint8(idx + 0x01), exp) * 255.0;
                     const b = unpackColorRGBExp32(leafs.getUint8(idx + 0x02), exp) * 255.0;
@@ -1119,8 +1120,8 @@ export class BSPFile {
                 // Padding.
                 idx += 0x02;
             } else {
-                const ambientSampleCount = leafambientindex.getUint16(idx * 0x04 + 0x00, true);
-                const firstAmbientSample = leafambientindex.getUint16(idx * 0x04 + 0x02, true);
+                const ambientSampleCount = leafambientindex.getUint16(leafindex * 0x04 + 0x00, true);
+                const firstAmbientSample = leafambientindex.getUint16(leafindex * 0x04 + 0x02, true);
                 for (let i = 0; i < ambientSampleCount; i++) {
                     const ambientSampleOffs = (firstAmbientSample + i) * 0x1C;
 
@@ -1129,9 +1130,9 @@ export class BSPFile {
                     let ambientSampleColorIdx = ambientSampleOffs;
                     for (let j = 0; j < 6; j++) {
                         const exp = leafambientlighting.getUint8(ambientSampleColorIdx + 0x03);
-                        const r = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x00), exp);
-                        const g = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x01), exp);
-                        const b = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x02), exp);
+                        const r = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x00), exp) * 255.0;
+                        const g = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x01), exp) * 255.0;
+                        const b = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x02), exp) * 255.0;
                         ambientCube.push(colorNewFromRGBA(r, g, b));
                     }
 
@@ -1147,7 +1148,10 @@ export class BSPFile {
 
                     ambientLightSamples.push({ ambientCube, pos });
                 }
-            }
+
+                // Padding.
+                idx += 0x02;
+        }
 
             const surfaceset = new Set<number>();
             for (let i = firstleafface; i < firstleafface + numleaffaces; i++) {
