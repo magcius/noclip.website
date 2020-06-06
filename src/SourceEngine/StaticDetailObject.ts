@@ -3,7 +3,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, nArray } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
 import { Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from "../Color";
-import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase } from "./Materials";
+import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache } from "./Materials";
 import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
@@ -15,6 +15,7 @@ import { StudioModelInstance, HardwareVertData } from "./Studio";
 import { computeModelMatrixPosRot } from "./Main";
 import BitMap from "../BitMap";
 import { BSPFile, computeAmbientCubeFromLeaf } from "./BSPFile";
+import { AABB } from "../Geometry";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -445,6 +446,8 @@ export class StaticPropRenderer {
     private visible = true;
     private colorMeshData: HardwareVertData | null = null;
     private ambientCube: Color[] = nArray(6, () => colorNewCopy(TransparentBlack));
+    private lightCache: LightCache;
+    private bbox = new AABB();
 
     constructor(renderContext: SourceRenderContext, bsp: BSPFile, private staticProp: StaticProp) {
         this.createInstance(renderContext, bsp);
@@ -463,6 +466,10 @@ export class StaticPropRenderer {
         const leaf = bsp.leaflist[leafidx];
         computeAmbientCubeFromLeaf(this.ambientCube, leaf, lightingOrigin);
         this.studioModelInstance.setAmbientCubeData(this.ambientCube);
+
+        this.bbox.transform(modelData.bbox, modelInstance.modelMatrix);
+        this.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);
+        this.studioModelInstance.setLightCache(this.lightCache);
 
         // Bind static lighting data, if we have it...
         if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {

@@ -531,3 +531,14 @@ export function reflectVec3(dst: vec3, source: vec3, normal: vec3): void {
     const dot = -2*vec3.dot(source, normal);
     vec3.scaleAndAdd(dst, source, normal, dot);
 }
+
+export function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
+    // Quantize to nearest world axis.
+    const x = m[0], y = m[1], z = m[2], speed = vec3.length(m);
+    if (Math.abs(x) > Math.abs(y) && Math.abs(x) > Math.abs(z))
+        vec3.set(dst, speed * Math.sign(x), 0, 0);
+    else if (Math.abs(y) > Math.abs(x) && Math.abs(y) > Math.abs(z))
+        vec3.set(dst, 0, speed * Math.sign(y), 0);
+    else if (Math.abs(z) > Math.abs(y) && Math.abs(z) > Math.abs(x))
+        vec3.set(dst, 0, 0, speed * Math.sign(z));
+}

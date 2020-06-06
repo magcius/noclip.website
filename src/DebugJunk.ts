@@ -277,11 +277,11 @@ interface TextOptions {
     outline?: number;
 }
 
-export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, camera: Camera, v: vec3, text: string, offsY: number = 0, color: Color = Magenta, options: TextOptions = {}): void {
+export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: mat4, v: vec3, text: string, offsY: number = 0, color: Color = Magenta, options: TextOptions = {}): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
     vec4.set(p[0], v[0], v[1], v[2], 1.0);
-    transformToClipSpace(ctx, camera.clipFromWorldMatrix, 1);
+    transformToClipSpace(ctx, clipFromWorldMatrix, 1);
     if (shouldCull(p[0])) return;
 
     const x = ( p[0][0] + 1) * cw / 2;

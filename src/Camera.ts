@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4, quat } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 import { WebXRContext } from './WebXR';
@@ -314,6 +314,7 @@ export class FPSCameraController implements CameraController {
     private keyMoveDrag = 0.8;
     private keyAngleChangeVelFast = 0.1;
     private keyAngleChangeVelSlow = 0.02;
+    private worldForward: vec3 | null = null;
 
     private mouseLookSpeed = 500;
     private mouseLookDragFast = 0;
@@ -354,6 +355,20 @@ export class FPSCameraController implements CameraController {
         let keyMoveMult = 1;
         if (isShiftPressed)
             keyMoveMult = this.keyMoveShiftMult;
+
+        if (inputManager.isKeyDownEventTriggered('Numpad4') || inputManager.isKeyDownEventTriggered('Numpad1')) {
+            // Save world forward vector from current position.
+            if (this.worldForward === null) {
+                this.worldForward = vec3.create();
+                getMatrixAxisZ(this.worldForward, camera.worldMatrix);
+
+                if (inputManager.isKeyDownEventTriggered('Numpad4'))
+                    vec3QuantizeMajorAxis(this.worldForward, this.worldForward);
+            } else {
+                // Toggle.
+                this.worldForward = null;
+            }
+        }
 
         const keyMoveSpeedCap = this.keyMoveSpeed * keyMoveMult;
         const keyMoveVelocity = keyMoveSpeedCap * this.keyMoveVelocityMult;
@@ -402,11 +417,27 @@ export class FPSCameraController implements CameraController {
             vec3.set(viewUp, 0, 1, 0);
         }
 
+        const viewRight = scratchVec3c;
+        const viewForward = scratchVec3d;
+
+        if (this.worldForward !== null) {
+            transformVec3Mat4w0(viewForward, camera.viewMatrix, this.worldForward);
+            vec3.cross(viewRight, viewUp, viewForward);
+        } else {
+            vec3.copy(viewRight, Vec3UnitX);
+            vec3.copy(viewForward, Vec3UnitZ);
+        }
+
         if (!vec3.exactEquals(keyMovement, Vec3Zero)) {
             const finalMovement = scratchVec3a;
-            vec3.set(finalMovement, keyMovement[0], 0, keyMovement[2]);
+            vec3.set(finalMovement, 0, 0, 0);
+
+            vec3.scaleAndAdd(finalMovement, finalMovement, viewRight, keyMovement[0]);
+            vec3.scaleAndAdd(finalMovement, finalMovement, viewForward, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, viewUp, keyMovement[1]);
+
             vec3.scale(finalMovement, finalMovement, this.sceneMoveSpeedMult);
+
             vec3.copy(camera.linearVelocity, finalMovement);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
             updated = true;

@@ -3,18 +3,19 @@ import { DeviceProgram } from "../Program";
 import { VMT, parseVMT, VKFPair, vmtParseVector } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderer";
-import { nArray, assert, assertExists } from "../util";
+import { nArray, assert, assertExists, spliceBisectRight } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3 } from "gl-matrix";
-import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF, VTFFlags } from "./VTF";
 import { SourceRenderContext, SourceFileSystem } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube } from "./BSPFile";
+import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA } from "../Color";
 import { AABB } from "../Geometry";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 //#region Base Classes
 const scratchVec4 = vec4.create();
@@ -22,8 +23,8 @@ const scratchColor = colorNewCopy(White);
 
 export const enum StaticLightingMode {
     None,
-    VertexLighting,
-    AmbientCube,
+    StudioVertexLighting,
+    StudioAmbientCube,
 }
 
 export const enum LateBindingTexture {
@@ -339,6 +340,7 @@ export class EntityMaterialParameters {
     public textureFrameIndex = 0;
     public blendColor = colorNewCopy(White);
     public ambientCube: AmbientCube | null = null;
+    public lightCache: LightCache | null = null;
 }
 
 const enum AlphaBlendMode {
@@ -576,6 +578,10 @@ export abstract class BaseMaterial {
 //#endregion
 
 //#region Generic (LightmappedGeneric, UnlitGeneric, VertexLightingGeneric, WorldVertexTransition)
+const enum ShaderWorldLightType {
+    None, Point, Spot, Directional,
+}
+
 class Material_Generic_Program extends MaterialProgramBase {
     public static ub_ObjectParams = 1;
 
@@ -587,9 +593,10 @@ precision mediump float;
 ${this.Common}
 
 struct WorldLight {
+    // w = ShaderWorldLightType. Directional has a world-space direction in here.
     vec4 Position;
-    vec4 Direction;
     vec4 Color;
+    vec4 Attenuation;
     // TODO(jstpierre): Spot/Directional Lights
 };
 
@@ -601,6 +608,7 @@ layout(row_major, std140) uniform ub_ObjectParams {
 #endif
 #ifdef USE_DYNAMIC_VERTEX_LIGHTING
     // We support up to N lights.
+    WorldLight u_WorldLights[${Material_Generic_Program.MaxDynamicWorldLights}];
 #endif
     vec4 u_BaseTextureScaleBias;
 #ifdef USE_DETAIL
@@ -676,6 +684,74 @@ vec3 AmbientLight(in vec3 t_NormalWorld) {
 }
 #endif
 
+#ifdef USE_DYNAMIC_VERTEX_LIGHTING
+float ApplyAttenuation(vec3 t_Coeff, float t_Value) {
+    return dot(t_Coeff, vec3(1.0, t_Value, t_Value*t_Value));
+}
+
+float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWorld) {
+    int t_LightType = int(t_WorldLight.Position.w);
+
+    float t_Attenuation = 1.0;
+    bool t_UseDistanceAttenuation = (t_LightType == ${ShaderWorldLightType.Point} || t_LightType == ${ShaderWorldLightType.Spot});
+    bool t_UseAngleAttenuation = (t_LightType == ${ShaderWorldLightType.Spot});
+
+    if (t_UseDistanceAttenuation) {
+        float t_Distance = distance(t_WorldLight.Position.xyz, t_PositionWorld);
+        t_Attenuation *= 1.0 / ApplyAttenuation(t_WorldLight.Attenuation.xyz, t_Distance);
+
+        if (t_UseAngleAttenuation) {
+            // TODO(jstpierre): Spotlight angle attenuation
+        }
+    }
+
+    return t_Attenuation;
+}
+
+float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWorld, in vec3 t_NormalWorld, bool t_HalfLambert) {
+    int t_LightType = int(t_WorldLight.Position.w);
+
+    // Calculate incoming light direction.
+    vec3 t_LightDirectionWorld;
+
+    if (t_LightType == ${ShaderWorldLightType.Directional}) {
+        // Directionals just have incoming light direction stored in Position field.
+        t_LightDirectionWorld = -t_WorldLight.Position.xyz;
+    } else {
+        t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
+    }
+
+    float t_NoL = dot(t_NormalWorld, t_LightDirectionWorld);
+    if (t_HalfLambert) {
+        // Valve's Half-Lambert / Wrapped lighting term.
+        t_NoL = t_NoL * 0.5 + 0.5;
+        t_NoL = t_NoL * t_NoL;
+        return t_NoL;
+    } else {
+        return max(0.0, t_NoL);
+    }
+}
+
+vec3 WorldLightCalc(in vec3 t_PositionWorld, in vec3 t_NormalWorld, in WorldLight t_WorldLight) {
+    int t_LightType = int(t_WorldLight.Position.w);
+
+    if (t_LightType == ${ShaderWorldLightType.None})
+        return vec3(0.0);
+
+    const bool t_HalfLambert = false;
+    float t_Attenuation = WorldLightCalcAttenuation(t_WorldLight, t_PositionWorld);
+    float t_Visibility = WorldLightCalcVisibility(t_WorldLight, t_PositionWorld, t_NormalWorld, t_HalfLambert);
+    return t_Visibility * t_Attenuation * t_WorldLight.Color.rgb;
+}
+
+vec3 WorldLightCalcAll(in vec3 t_PositionWorld, in vec3 t_NormalWorld) {
+    vec3 t_FinalWorldLight = vec3(0.0);
+    for (int i = 0; i < ${Material_Generic_Program.MaxDynamicWorldLights}; i++)
+        t_FinalWorldLight += WorldLightCalc(t_PositionWorld, t_NormalWorld, u_WorldLights[i]);
+    return t_FinalWorldLight;
+}
+#endif
+
 void mainVS() {
     vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
@@ -699,6 +775,10 @@ void mainVS() {
 // Mutually exclusive with above.
 #ifdef USE_AMBIENT_CUBE
     v_Color.rgb = AmbientLight(t_NormalWorld);
+#endif
+
+#ifdef USE_DYNAMIC_VERTEX_LIGHTING
+    v_Color.rgb += WorldLightCalcAll(t_PositionWorld, t_NormalWorld);
 #endif
 
 // TODO(jstpierre): Move ModulationColor to PS, support $blendtintbybasealpha and $blendtintcoloroverbase
@@ -931,6 +1011,9 @@ class Material_Generic extends BaseMaterial {
     private wantsEnvmapMask = false;
     private wantsBaseTexture2 = false;
     private wantsEnvmap = false;
+    private wantsStaticVertexLighting = false;
+    private wantsDynamicVertexLighting = false;
+    private wantsAmbientCube = false;
     private shaderType: ShaderType;
 
     private program: Material_Generic_Program;
@@ -938,19 +1021,17 @@ class Material_Generic extends BaseMaterial {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
     private textureMapping: TextureMapping[] = nArray(7, () => new TextureMapping());
-    private staticLightingMode = StaticLightingMode.None;
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
-        if (this.staticLightingMode === staticLightingMode)
-            return;
-
         if (this.shaderType === ShaderType.VertexLitGeneric) {
-            this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', staticLightingMode === StaticLightingMode.VertexLighting);
-            this.program.setDefineBool('USE_AMBIENT_CUBE', staticLightingMode === StaticLightingMode.AmbientCube);
+            this.wantsStaticVertexLighting = staticLightingMode === StaticLightingMode.StudioVertexLighting;
+            this.wantsDynamicVertexLighting = staticLightingMode === StaticLightingMode.StudioAmbientCube;
+            this.wantsAmbientCube = staticLightingMode === StaticLightingMode.StudioAmbientCube;
+            this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', this.wantsStaticVertexLighting);
+            this.program.setDefineBool('USE_DYNAMIC_VERTEX_LIGHTING', this.wantsDynamicVertexLighting);
+            this.program.setDefineBool('USE_AMBIENT_CUBE', this.wantsAmbientCube);
             this.gfxProgram = null;
         }
-
-        this.staticLightingMode = staticLightingMode;
     }
 
     public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
@@ -1121,14 +1202,19 @@ class Material_Generic extends BaseMaterial {
         this.updateTextureMappings();
         this.recacheProgram(renderContext.device, renderContext.cache);
 
-        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 64);
+        let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 128);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
 
-        if (this.staticLightingMode === StaticLightingMode.AmbientCube) {
+        if (this.wantsAmbientCube) {
             const ambientCube = assertExists(assertExists(this.entityParams).ambientCube);
             for (let i = 0; i < 6; i++)
                 offs += fillColor(d, offs, ambientCube[i]);
+        }
+
+        if (this.wantsDynamicVertexLighting) {
+            const lightCache = assertExists(assertExists(this.entityParams).lightCache);
+            offs += lightCache.fillWorldLights(d, offs);
         }
 
         offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
@@ -1659,8 +1745,8 @@ class Material_Refract extends BaseMaterial {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
 
-        let offs = renderInst.allocateUniformBuffer(WaterCheapMaterialProgram.ub_ObjectParams, 64);
-        const d = renderInst.mapUniformBufferF32(WaterCheapMaterialProgram.ub_ObjectParams);
+        let offs = renderInst.allocateUniformBuffer(RefractMaterialProgram.ub_ObjectParams, 64);
+        const d = renderInst.mapUniformBufferF32(RefractMaterialProgram.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
 
         offs += this.paramFillColor(d, offs, '$refracttint', '$refractamount');
@@ -1762,7 +1848,7 @@ export class MaterialCache {
 }
 //#endregion
 
-//#region Runtime Lighting / Lightcache
+//#region Runtime Lighting / LightCache
 function findEnvCubemapTexture(bspfile: BSPFile, pos: vec3): Cubemap {
     let bestDistance = Infinity;
     let bestIndex = -1;
@@ -1779,15 +1865,153 @@ function findEnvCubemapTexture(bspfile: BSPFile, pos: vec3): Cubemap {
     return bspfile.cubemaps[bestIndex];
 }
 
-class StaticLightingCache {
+function worldLightInsideRadius(light: WorldLight, delta: vec3): boolean {
+    return light.radius <= 0.0 || vec3.squaredLength(delta) <= light.radius**2;
+}
+
+function worldLightDistanceFalloff(light: WorldLight, delta: vec3): number {
+    if (light.type === WorldLightType.Surface) {
+        if (!worldLightInsideRadius(light, delta))
+            return 0.0;
+        return Math.max(0.0, 1.0 / vec3.squaredLength(delta));
+    } else if (light.type === WorldLightType.Point || light.type === WorldLightType.Spotlight) {
+        if (!worldLightInsideRadius(light, delta))
+            return 0.0;
+
+        // Compute quadratic attn falloff.
+        const sqdist = vec3.squaredLength(delta), dist = Math.sqrt(sqdist);
+        const denom = (1.0*light.attn[0] + dist*light.attn[1] + sqdist*light.attn[2]);
+        return 1.0 / denom;
+    } else if (light.type === WorldLightType.SkyLight) {
+        // Sky light requires visibility to the sky. Until we can do a raycast,
+        // just place low on the list...
+        return 0.1;
+    } else if (light.type === WorldLightType.SkyAmbient) {
+        // Already in ambient cube; ignore.
+        return 0.0;
+    } else if (light.type === WorldLightType.QuakeLight) {
+        return Math.max(0.0, light.attn[1] - vec3.length(delta));
+    } else {
+        throw "whoops";
+    }
+}
+
+const scratchVec3 = vec3.create();
+const ntscGrayscale = vec3.fromValues(0.299, 0.587, 0.114);
+
+function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null): number {
+    const base = offs;
+
+    if (light === null) {
+        offs += fillVec4(d, offs, 0);
+        offs += fillVec4(d, offs, 0);
+        offs += fillVec4(d, offs, 0);
+    } else if (light.type === WorldLightType.Surface) {
+        // 180 degree spotlight.
+        const type = ShaderWorldLightType.Spot;
+        offs += fillVec3v(d, offs, light.pos, type);
+        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec4(d, offs, 0, 0, 1);
+    } else if (light.type === WorldLightType.Spotlight) {
+        // Controllable spotlight.
+        const type = ShaderWorldLightType.Spot;
+        offs += fillVec3v(d, offs, light.pos, type);
+        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, light.attn);
+    } else if (light.type === WorldLightType.Point) {
+        const type = ShaderWorldLightType.Point;
+        offs += fillVec3v(d, offs, light.pos, type);
+        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec3v(d, offs, light.attn);
+    } else if (light.type === WorldLightType.SkyLight) {
+        // Directional.
+        const type = ShaderWorldLightType.Directional;
+        offs += fillVec3v(d, offs, light.normal, type);
+        offs += fillVec3v(d, offs, light.intensity);
+        offs += fillVec4(d, offs, 0);
+    } else {
+        debugger;
+    }
+
+    return offs - base;
+}
+
+class LightCacheWorldLight {
+    public worldLight: WorldLight | null = null;
+    public intensity: number = 0;
+
+    public copy(o: LightCacheWorldLight): void {
+        this.worldLight = o.worldLight;
+        this.intensity = o.intensity;
+    }
+
+    public reset(): void {
+        this.worldLight = null;
+        this.intensity = 0;
+    }
+
+    public fill(d: Float32Array, offs: number): number {
+        return fillWorldLight(d, offs, this.worldLight);
+    }
+}
+
+export class LightCache {
     private leaf: number = -1;
     private envCubemap: Cubemap;
+    private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
 
-    constructor(bspfile: BSPFile, pos: vec3, bbox: AABB) {
+    constructor(bspfile: BSPFile, private pos: vec3, bbox: AABB) {
         this.leaf = bspfile.findLeafForPoint(pos);
         assert(this.leaf >= 0);
 
         this.envCubemap = findEnvCubemapTexture(bspfile, pos);
+
+        this.cacheWorldLights(bspfile.worldlights);
+    }
+
+    public cacheWorldLights(worldLights: WorldLight[]): void {
+        for (let i = 0; i < this.worldLights.length; i++)
+            this.worldLights[i].reset();
+
+        for (let i = 0; i < worldLights.length; i++) {
+            const light = worldLights[i];
+
+            vec3.sub(scratchVec3, light.pos, this.pos);
+            const ratio = worldLightDistanceFalloff(light, scratchVec3);
+            const intensity = ratio * vec3.dot(light.intensity, ntscGrayscale);
+            // TODO(jstpierre): Angle attenuation.
+
+            if (window.debug)
+                console.log(i, vec3.length(scratchVec3), ratio, intensity);
+
+            if (intensity <= 0.0)
+                continue;
+
+            // Look for a place to insert.
+            for (let j = 0; j < this.worldLights.length; j++) {
+                if (intensity <= this.worldLights[j].intensity)
+                    continue;
+
+                // Found a better light than the one we have right now. Move down the remaining ones to make room.
+                for (let k = this.worldLights.length - 2; k > j; k--)
+                    this.worldLights[k].copy(this.worldLights[k + 1]);
+
+                this.worldLights[j].worldLight = light;
+                this.worldLights[j].intensity = intensity;
+                break;
+            }
+        }
+    }
+
+    public async loadEnvCubemap(renderContext: SourceRenderContext): Promise<VTF> {
+        return renderContext.materialCache.fetchVTF(this.envCubemap.filename);
+    }
+
+    public fillWorldLights(d: Float32Array, offs: number): number {
+        const base = offs;
+        for (let i = 0; i < this.worldLights.length; i++)
+            offs += this.worldLights[i].fill(d, offs);
+        return offs - base;
     }
 }
 //#endregion

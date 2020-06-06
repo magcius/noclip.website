@@ -26,6 +26,7 @@ import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceText } from "../DebugJunk";
 
 function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
     if (entry.compressionMethod === ZipCompressionMethod.None) {
@@ -727,6 +728,13 @@ export class BSPRenderer {
                 detailPropLeafRenderer.prepareToRender(renderContext, renderInstManager, view);
             }
         }
+
+        /*
+        for (let i = 0; i < this.bsp.worldlights.length; i++) {
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.bsp.worldlights[i].pos, '' + i);
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.bsp.worldlights[i].pos);
+        }
+        */
 
         renderInstManager.popTemplateRenderInst();
     }

@@ -9,7 +9,7 @@ import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode } from "./Materials";
+import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, LightCache } from "./Materials";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4 } from "gl-matrix";
 import { AmbientCube } from "./BSPFile";
@@ -194,6 +194,7 @@ class ResizableArrayBuffer {
 export class StudioModelData {
     public bodyPartData: StudioModelBodyPartData[] = [];
     public checksum: number;
+    public bbox: AABB;
 
     constructor(renderContext: SourceRenderContext, mdlBuffer: ArrayBufferSlice, vvdBuffer: ArrayBufferSlice, vtxBuffer: ArrayBufferSlice) {
         const mdlView = mdlBuffer.createDataView();
@@ -231,7 +232,7 @@ export class StudioModelData {
         const bboxMaxX = mdlView.getFloat32(0x8C, true);
         const bboxMaxY = mdlView.getFloat32(0x90, true);
         const bboxMaxZ = mdlView.getFloat32(0x94, true);
-        const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
+        this.bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
         const flags: StudioModelFlags = mdlView.getUint32(0x98, true);
         const isStaticProp = !!(flags & StudioModelFlags.STATIC_PROP);
@@ -869,7 +870,7 @@ class StudioModelMeshInstance {
 
     private syncMaterialInstanceStaticLightingMode(): void {
         if (this.materialInstance !== null) {
-            const staticLightingMode = (this.inputStateWithColorMesh !== null) ? StaticLightingMode.VertexLighting : StaticLightingMode.AmbientCube;
+            const staticLightingMode = (this.inputStateWithColorMesh !== null) ? StaticLightingMode.StudioVertexLighting : StaticLightingMode.StudioAmbientCube;
             this.materialInstance.setStaticLightingMode(staticLightingMode);
         }
     }
@@ -956,6 +957,7 @@ class StudioModelLODInstance {
 export class StudioModelInstance {
     public visible: boolean = true;
     public modelMatrix = mat4.create();
+    // TODO(jstpierre): This should be moved to the entity (StaticPropRenderer), probably?
     public materialParams = new EntityMaterialParameters();
 
     private lodInstance: StudioModelLODInstance[] = [];
@@ -975,6 +977,10 @@ export class StudioModelInstance {
 
     public setAmbientCubeData(ambientCube: AmbientCube): void {
         this.materialParams.ambientCube = ambientCube;
+    }
+
+    public setLightCache(lightCache: LightCache): void {
+        this.materialParams.lightCache = lightCache;
     }
 
     public setColorMeshData(device: GfxDevice, data: HardwareVertData): void {

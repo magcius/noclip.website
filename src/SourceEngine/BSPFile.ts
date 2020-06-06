@@ -29,6 +29,7 @@ const enum LumpType {
     EDGES                     = 12,
     SURFEDGES                 = 13,
     MODELS                    = 14,
+    WORLDLIGHTS               = 15,
     LEAFFACES                 = 16,
     DISPINFO                  = 26,
     VERTNORMALS               = 30,
@@ -45,6 +46,7 @@ const enum LumpType {
     LEAF_AMBIENT_INDEX_HDR    = 51,
     LEAF_AMBIENT_INDEX        = 52,
     LIGHTING_HDR              = 53,
+    WORLDLIGHTS_HDR           = 54,
     LEAF_AMBIENT_LIGHTING_HDR = 55,
     LEAF_AMBIENT_LIGHTING     = 56,
     FACES_HDR                 = 58,
@@ -177,6 +179,24 @@ export interface Model {
     bbox: AABB;
     headnode: number;
     surfaces: number[];
+}
+
+export const enum WorldLightType {
+    Surface,
+    Point,
+    Spotlight,
+    SkyLight,
+    QuakeLight,
+    SkyAmbient,
+}
+
+export interface WorldLight {
+    pos: vec3;
+    intensity: vec3;
+    normal: vec3;
+    type: WorldLightType;
+    radius: number;
+    attn: vec3;
 }
 
 interface BSPDispInfo {
@@ -481,6 +501,7 @@ export class BSPFile {
     public nodelist: BSPNode[] = [];
     public leaflist: BSPLeaf[] = [];
     public cubemaps: Cubemap[] = [];
+    public worldlights: WorldLight[] = [];
     public detailObjects: DetailObjects | null = null;
     public staticObjects: StaticObjects | null = null;
     public visibility: BSPVisibility;
@@ -1200,6 +1221,77 @@ export class BSPFile {
             const pos = vec3.fromValues(posX, posY, posZ);
             const filename = `maps/${mapname}/c${posX}_${posY}_${posZ}`;
             this.cubemaps.push({ pos, filename });
+        }
+
+        let worldlights = getLumpData(LumpType.WORLDLIGHTS_HDR).createDataView();
+        let worldlightsIsHDR = true;
+        if (worldlights.byteLength === 0) {
+            worldlights = getLumpData(LumpType.WORLDLIGHTS).createDataView();
+            worldlightsIsHDR = false;
+        }
+
+        for (let idx = 0x00; idx < worldlights.byteLength; idx += 0x58) {
+            const posX = worldlights.getFloat32(idx + 0x00, true);
+            const posY = worldlights.getFloat32(idx + 0x04, true);
+            const posZ = worldlights.getFloat32(idx + 0x08, true);
+            const intensityX = worldlights.getFloat32(idx + 0x0C, true);
+            const intensityY = worldlights.getFloat32(idx + 0x10, true);
+            const intensityZ = worldlights.getFloat32(idx + 0x14, true);
+            const normalX = worldlights.getFloat32(idx + 0x18, true);
+            const normalY = worldlights.getFloat32(idx + 0x1C, true);
+            const normalZ = worldlights.getFloat32(idx + 0x20, true);
+            const cluster = worldlights.getUint32(idx + 0x24, true);
+            const type = worldlights.getUint32(idx + 0x28, true);
+            const style = worldlights.getUint32(idx + 0x2C, true);
+            // cone angles for spotlights
+            const stopdot = worldlights.getFloat32(idx + 0x30, true);
+            const stopdot2 = worldlights.getFloat32(idx + 0x34, true);
+            let exponent = worldlights.getFloat32(idx + 0x38, true);
+            let radius = worldlights.getFloat32(idx + 0x3C, true);
+            let constant_attn = worldlights.getFloat32(idx + 0x40, true);
+            let linear_attn = worldlights.getFloat32(idx + 0x44, true);
+            let quadratic_attn = worldlights.getFloat32(idx + 0x48, true);
+            const flags = worldlights.getUint32(idx + 0x4C, true);
+            const texinfo = worldlights.getUint32(idx + 0x50, true);
+            const owner = worldlights.getUint32(idx + 0x54, true);
+
+            // Fixups for old data.
+            if (quadratic_attn === 0.0 && linear_attn === 0.0 && constant_attn === 0.0 && (type === WorldLightType.Point || type === WorldLightType.Spotlight))
+                quadratic_attn = 1.0;
+
+            if (exponent === 0.0 && type === WorldLightType.Point)
+                exponent = 1.0;
+
+            const pos = vec3.fromValues(posX, posY, posZ);
+            const intensity = vec3.fromValues(intensityX, intensityY, intensityZ);
+            const normal = vec3.fromValues(normalX, normalY, normalZ);
+
+            if (radius === 0.0) {
+                // Compute a proper radius from our attenuation factors.
+                if (quadratic_attn === 0.0 && linear_attn === 0.0) {
+                    // Constant light with no distance falloff. Pick a radius.
+                    radius = 2000.0;
+                } else if (quadratic_attn === 0.0) {
+                    // Linear falloff.
+                    const intensityScalar = vec3.length(intensity);
+                    const minLightValue = worldlightsIsHDR ? 0.015 : 0.03;
+                    radius = ((intensityScalar / minLightValue) - constant_attn) / linear_attn;
+                } else {
+                    // Solve quadratic equation.
+                    const intensityScalar = vec3.length(intensity);
+                    const minLightValue = worldlightsIsHDR ? 0.015 : 0.03;
+                    const a = quadratic_attn, b = linear_attn, c = (constant_attn - intensityScalar / minLightValue);
+                    const rad = (b ** 2) + 4 * a * c;
+                    if (rad > 0.0)
+                        radius = -b + Math.sqrt(rad) / 2.0 * a;
+                    else
+                        radius = 2000.0;
+                }
+            }
+
+            const attn = vec3.fromValues(constant_attn, linear_attn, quadratic_attn);
+
+            this.worldlights.push({ pos, intensity, normal, type, radius, attn });
         }
 
         const dprp = getGameLumpData('dprp');

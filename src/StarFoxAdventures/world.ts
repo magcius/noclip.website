@@ -340,7 +340,7 @@ class WorldRenderer extends SFARenderer {
         
                     const drawLabels = false;
                     if (drawLabels) {
-                        drawWorldSpaceText(ctx, viewerInput.camera, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+                        drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
                     }
                 }
             }
