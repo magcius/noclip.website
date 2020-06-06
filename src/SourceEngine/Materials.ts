@@ -11,7 +11,7 @@ import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor } from "..
 import { VTF, VTFFlags } from "./VTF";
 import { SourceRenderContext, SourceFileSystem } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile } from "./BSPFile";
+import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube } from "./BSPFile";
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA } from "../Color";
 import { AABB } from "../Geometry";
@@ -19,6 +19,12 @@ import { AABB } from "../Geometry";
 //#region Base Classes
 const scratchVec4 = vec4.create();
 const scratchColor = colorNewCopy(White);
+
+export const enum StaticLightingMode {
+    None,
+    VertexLighting,
+    AmbientCube,
+}
 
 export const enum LateBindingTexture {
     FramebufferTexture = 'framebuffer-texture',
@@ -332,6 +338,7 @@ export class EntityMaterialParameters {
     public animationStartTime = 0;
     public textureFrameIndex = 0;
     public blendColor = colorNewCopy(White);
+    public ambientCube: AmbientCube | null = null;
 }
 
 const enum AlphaBlendMode {
@@ -378,7 +385,7 @@ export abstract class BaseMaterial {
         // Nothing by default.
     }
 
-    public setUseStaticVertexLighting(v: boolean): void {
+    public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
         // Nothing by default.
     }
 
@@ -579,6 +586,10 @@ ${this.Common}
 
 layout(row_major, std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
+#ifdef USE_AMBIENT_CUBE
+    // TODO(jstpierre): Pack this more efficiently?
+    vec4 u_AmbientCube[6];
+#endif
     vec4 u_BaseTextureScaleBias;
 #ifdef USE_DETAIL
     vec4 u_DetailScaleBias;
@@ -641,6 +652,21 @@ layout(location = ${MaterialProgramBase.a_Color}) attribute vec4 a_Color;
 layout(location = ${MaterialProgramBase.a_StaticVertexLighting}) attribute vec3 a_StaticVertexLighting;
 #endif
 
+#ifdef USE_AMBIENT_CUBE
+vec3 AmbientLight(in vec3 t_NormalWorld) {
+    vec3 t_Weight = t_NormalWorld * t_NormalWorld;
+    bvec3 t_WhichCubeFace = lessThan(t_NormalWorld, vec3(0.0));
+    return u_AmbientCube[0].rgb;
+    /*
+    return (
+        t_Weight.x * u_AmbientCube[t_WhichCubeFace.x ? 1 : 0].rgb +
+        t_Weight.y * u_AmbientCube[t_WhichCubeFace.y ? 3 : 2].rgb +
+        t_Weight.z * u_AmbientCube[t_WhichCubeFace.z ? 5 : 4].rgb
+    );
+    */
+}
+#endif
+
 void mainVS() {
     vec3 t_PositionWorld = Mul(u_ModelMatrix, vec4(a_Position, 1.0));
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
@@ -656,8 +682,14 @@ void mainVS() {
 
 // This should be mutually exclusive with USE_VERTEX_COLOR, so overwrite.
 #ifdef USE_STATIC_VERTEX_LIGHTING
+    // Static vertex lighting should already include ambient lighting.
     // 2.0 here is overbright.
     v_Color.rgb = GammaToLinear(a_StaticVertexLighting) * 2.0;
+#endif
+
+// Mutually exclusive with above.
+#ifdef USE_AMBIENT_CUBE
+    v_Color.rgb = AmbientLight(t_NormalWorld);
 #endif
 
 // TODO(jstpierre): Move ModulationColor to PS, support $blendtintbybasealpha and $blendtintcoloroverbase
@@ -897,12 +929,19 @@ class Material_Generic extends BaseMaterial {
     private megaStateFlags: Partial<GfxMegaStateDescriptor> = {};
     private sortKeyBase: number = 0;
     private textureMapping: TextureMapping[] = nArray(7, () => new TextureMapping());
+    private staticLightingMode = StaticLightingMode.None;
 
-    public setUseStaticVertexLighting(v: boolean): void {
+    public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
+        if (this.staticLightingMode === staticLightingMode)
+            return;
+
         if (this.shaderType === ShaderType.VertexLitGeneric) {
-            this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', v);
+            this.program.setDefineBool('USE_STATIC_VERTEX_LIGHTING', staticLightingMode === StaticLightingMode.VertexLighting);
+            this.program.setDefineBool('USE_AMBIENT_CUBE', staticLightingMode === StaticLightingMode.AmbientCube);
             this.gfxProgram = null;
         }
+
+        this.staticLightingMode = staticLightingMode;
     }
 
     public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
@@ -1076,6 +1115,12 @@ class Material_Generic extends BaseMaterial {
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 64);
         const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_ObjectParams);
         offs += fillMatrix4x3(d, offs, modelMatrix);
+
+        if (this.staticLightingMode === StaticLightingMode.AmbientCube) {
+            const ambientCube = assertExists(assertExists(this.entityParams).ambientCube);
+            for (let i = 0; i < 6; i++)
+                offs += fillColor(d, offs, ambientCube[i]);
+        }
 
         offs += this.paramFillScaleBias(d, offs, '$basetexturetransform');
 
@@ -1842,7 +1887,7 @@ export class LightmapManager {
 }
 
 // Convert from RGBM-esque storage to linear light
-export function unpackColorRGB32Exp(v: number, exp: number): number {
+export function unpackColorRGBExp32(v: number, exp: number): number {
     // exp comes in unsigned, sign extend
     exp = (exp << 24) >> 24;
     const m = Math.pow(2.0, exp) / 0xFF;
@@ -1852,9 +1897,9 @@ export function unpackColorRGB32Exp(v: number, exp: number): number {
 function lightmapAccumLight(dst: Float32Array, dstOffs: number, src: Uint8Array, srcOffs: number, size: number, m: number): void {
     for (let i = 0; i < size; i += 4) {
         const sr = src[srcOffs + i + 0], sg = src[srcOffs + i + 1], sb = src[srcOffs + i + 2], exp = src[srcOffs + i + 3];
-        dst[dstOffs++] += m * unpackColorRGB32Exp(sr, exp);
-        dst[dstOffs++] += m * unpackColorRGB32Exp(sg, exp);
-        dst[dstOffs++] += m * unpackColorRGB32Exp(sb, exp);
+        dst[dstOffs++] += m * unpackColorRGBExp32(sr, exp);
+        dst[dstOffs++] += m * unpackColorRGBExp32(sg, exp);
+        dst[dstOffs++] += m * unpackColorRGBExp32(sb, exp);
     }
 }
 

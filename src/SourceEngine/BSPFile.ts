@@ -11,36 +11,43 @@ import { Plane, AABB } from "../Geometry";
 import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject";
 import BitMap from "../BitMap";
 import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
+import { Color, colorNewFromRGBA, colorCopy, TransparentBlack, colorScaleAndAdd, colorScale } from "../Color";
+import { unpackColorRGBExp32 } from "./Materials";
+import { lerp } from "../MathHelpers";
 
 const enum LumpType {
-    ENTITIES             = 0,
-    PLANES               = 1,
-    TEXDATA              = 2,
-    VERTEXES             = 3,
-    VISIBILITY           = 4,
-    NODES                = 5,
-    TEXINFO              = 6,
-    FACES                = 7,
-    LIGHTING             = 8,
-    LEAFS                = 10,
-    EDGES                = 12,
-    SURFEDGES            = 13,
-    MODELS               = 14,
-    LEAFFACES            = 16,
-    DISPINFO             = 26,
-    VERTNORMALS          = 30,
-    VERTNORMALINDICES    = 31,
-    DISP_VERTS           = 33,
-    GAME_LUMP            = 35,
-    PRIMITIVES           = 37,
-    PRIMINDICES          = 39,
-    PAKFILE              = 40,
-    CUBEMAPS             = 42,
-    TEXDATA_STRING_DATA  = 43,
-    TEXDATA_STRING_TABLE = 44,
-    OVERLAYS             = 45,
-    LIGHTING_HDR         = 53,
-    FACES_HDR            = 58,
+    ENTITIES                  = 0,
+    PLANES                    = 1,
+    TEXDATA                   = 2,
+    VERTEXES                  = 3,
+    VISIBILITY                = 4,
+    NODES                     = 5,
+    TEXINFO                   = 6,
+    FACES                     = 7,
+    LIGHTING                  = 8,
+    LEAFS                     = 10,
+    EDGES                     = 12,
+    SURFEDGES                 = 13,
+    MODELS                    = 14,
+    LEAFFACES                 = 16,
+    DISPINFO                  = 26,
+    VERTNORMALS               = 30,
+    VERTNORMALINDICES         = 31,
+    DISP_VERTS                = 33,
+    GAME_LUMP                 = 35,
+    PRIMITIVES                = 37,
+    PRIMINDICES               = 39,
+    PAKFILE                   = 40,
+    CUBEMAPS                  = 42,
+    TEXDATA_STRING_DATA       = 43,
+    TEXDATA_STRING_TABLE      = 44,
+    OVERLAYS                  = 45,
+    LEAF_AMBIENT_INDEX_HDR    = 51,
+    LEAF_AMBIENT_INDEX        = 52,
+    LIGHTING_HDR              = 53,
+    LEAF_AMBIENT_LIGHTING_HDR = 55,
+    LEAF_AMBIENT_LIGHTING     = 56,
+    FACES_HDR                 = 58,
 }
 
 export interface SurfaceLightmapData {
@@ -117,11 +124,53 @@ export interface BSPNode {
     surfaces: number[];
 }
 
+export type AmbientCube = Color[];
+
+export interface BSPLeafAmbientSample {
+    ambientCube: AmbientCube;
+    pos: vec3;
+}
+
 export interface BSPLeaf {
     bbox: AABB;
     area: number;
     cluster: number;
+    ambientLightSamples: BSPLeafAmbientSample[];
     surfaces: number[];
+}
+
+export function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: vec3): void {
+    assert(leaf.bbox.containsPoint(pos));
+
+    if (leaf.ambientLightSamples.length === 0) {
+        // TODO(jstpierre): Figure out what to do in this scenario
+    } else if (leaf.ambientLightSamples.length === 1) {
+        // Fast path.
+        const sample = leaf.ambientLightSamples[0];
+        for (let p = 0; p < 6; p++)
+            colorCopy(dst[p], sample.ambientCube[p]);
+    } else if (leaf.ambientLightSamples.length > 1) {
+        // Slow path.
+        for (let p = 0; p < 6; p++)
+            colorCopy(dst[p], TransparentBlack);
+
+        let totalWeight = 0.0;
+
+        for (let i = 0; i < leaf.ambientLightSamples.length; i++) {
+            const sample = leaf.ambientLightSamples[i];
+
+            // Compute the weight for each sample, using inverse square falloff.
+            const dist2 = vec3.squaredDistance(sample.pos, pos);
+            const weight = 1.0 / (dist2 + 1.0);
+            totalWeight += weight;
+
+            for (let p = 0; p < 6; p++)
+                colorScaleAndAdd(dst[p], dst[p], sample.ambientCube[p], weight);
+        }
+
+        for (let p = 0; p < 6; p++)
+            colorScale(dst[p], dst[p], 1.0 / totalWeight);
+    }
 }
 
 export interface Model {
@@ -1015,8 +1064,16 @@ export class BSPFile {
         const [leafsLump, leafsVersion] = getLumpDataEx(LumpType.LEAFS);
         const leafs = leafsLump.createDataView();
 
+        let leafambientindex = getLumpData(LumpType.LEAF_AMBIENT_INDEX_HDR).createDataView();
+        if (leafambientindex.byteLength === 0)
+            leafambientindex = getLumpData(LumpType.LEAF_AMBIENT_INDEX).createDataView();
+
+        let leafambientlighting = getLumpData(LumpType.LEAF_AMBIENT_LIGHTING_HDR).createDataView();
+        if (leafambientlighting.byteLength === 0)
+            leafambientlighting = getLumpData(LumpType.LEAF_AMBIENT_LIGHTING).createDataView();
+
         const leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
-        for (let idx = 0x00; idx < leafs.byteLength; idx += 0x20) {
+        for (let idx = 0x00; idx < leafs.byteLength;) {
             const contents = leafs.getUint32(idx + 0x00, true);
             const cluster = leafs.getUint16(idx + 0x04, true);
             const areaAndFlags = leafs.getUint16(idx + 0x06, true);
@@ -1035,9 +1092,61 @@ export class BSPFile {
             const numleafbrushes = leafs.getUint16(idx + 0x1A, true);
             const leafwaterdata = leafs.getInt16(idx + 0x1C, true);
 
-            // AmbientLighting info in version 0 is here.
+            idx += 0x1E;
+
+            const ambientLightSamples: BSPLeafAmbientSample[] = [];
             if (leafsVersion === 0) {
-                idx += 0x18;
+                // We only have one ambient cube sample, in the middle of the leaf.
+                const ambientCube: Color[] = [];
+
+                for (let j = 0; j < 6; j++) {
+                    const exp = leafs.getUint8(idx + 0x03);
+                    // Game seems to accidentally include an extra factor of 255.0
+                    const r = unpackColorRGBExp32(leafs.getUint8(idx + 0x00), exp) * 255.0;
+                    const g = unpackColorRGBExp32(leafs.getUint8(idx + 0x01), exp) * 255.0;
+                    const b = unpackColorRGBExp32(leafs.getUint8(idx + 0x02), exp) * 255.0;
+                    ambientCube.push(colorNewFromRGBA(r, g, b));
+                    idx += 0x04;
+                }
+
+                const x = lerp(bboxMinX, bboxMaxX, 0.5);
+                const y = lerp(bboxMinY, bboxMaxY, 0.5);
+                const z = lerp(bboxMinZ, bboxMaxZ, 0.5);
+                const pos = vec3.fromValues(x, y, z);
+
+                ambientLightSamples.push({ ambientCube, pos });
+
+                // Padding.
+                idx += 0x02;
+            } else {
+                const ambientSampleCount = leafambientindex.getUint16(idx * 0x04 + 0x00, true);
+                const firstAmbientSample = leafambientindex.getUint16(idx * 0x04 + 0x02, true);
+                for (let i = 0; i < ambientSampleCount; i++) {
+                    const ambientSampleOffs = (firstAmbientSample + i) * 0x1C;
+
+                    // Ambient cube samples
+                    const ambientCube: Color[] = [];
+                    let ambientSampleColorIdx = ambientSampleOffs;
+                    for (let j = 0; j < 6; j++) {
+                        const exp = leafambientlighting.getUint8(ambientSampleColorIdx + 0x03);
+                        const r = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x00), exp);
+                        const g = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x01), exp);
+                        const b = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x02), exp);
+                        ambientCube.push(colorNewFromRGBA(r, g, b));
+                    }
+
+                    // Fraction of bbox.
+                    const xf = leafambientlighting.getUint8(ambientSampleOffs + 0x18) / 0xFF;
+                    const yf = leafambientlighting.getUint8(ambientSampleOffs + 0x19) / 0xFF;
+                    const zf = leafambientlighting.getUint8(ambientSampleOffs + 0x1A) / 0xFF;
+
+                    const x = lerp(bboxMinX, bboxMaxX, xf);
+                    const y = lerp(bboxMinY, bboxMaxY, yf);
+                    const z = lerp(bboxMinZ, bboxMaxZ, zf);
+                    const pos = vec3.fromValues(x, y, z);
+
+                    ambientLightSamples.push({ ambientCube, pos });
+                }
             }
 
             const surfaceset = new Set<number>();
@@ -1047,7 +1156,8 @@ export class BSPFile {
                     continue;
                 surfaceset.add(surfaceIdx);
             }
-            this.leaflist.push({ bbox, cluster, area, surfaces: [...surfaceset.values()] });
+
+            this.leaflist.push({ bbox, cluster, area, ambientLightSamples, surfaces: [...surfaceset.values()] });
         }
 
         const models = getLumpData(LumpType.MODELS).createDataView();

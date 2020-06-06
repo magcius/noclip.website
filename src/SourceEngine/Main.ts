@@ -670,7 +670,7 @@ export class BSPRenderer {
         // Spawn static objects.
         if (this.bsp.staticObjects !== null)
             for (const staticProp of this.bsp.staticObjects.staticProps)
-                this.staticPropRenderers.push(new StaticPropRenderer(renderContext, staticProp));
+                this.staticPropRenderers.push(new StaticPropRenderer(renderContext, this.bsp, staticProp));
 
         // Spawn detail objects.
         if (this.bsp.detailObjects !== null)

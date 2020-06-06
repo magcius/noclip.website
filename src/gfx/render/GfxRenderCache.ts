@@ -2,9 +2,18 @@
 import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler, GfxProgramDescriptor, GfxProgramDescriptorSimple } from "../platform/GfxPlatform";
 import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
 import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals, gfxInputLayoutDescriptorCopy } from '../platform/GfxPlatformUtil';
+import { assert } from "../../util";
 
-function gfxProgramDescriptorEquals(a: GfxProgramDescriptorSimple, b: GfxProgramDescriptorSimple): boolean {
+function gfxProgramDescriptorSimpleEquals(a: GfxProgramDescriptorSimple, b: GfxProgramDescriptorSimple): boolean {
+    assert(a.preprocessedVert !== '' && b.preprocessedVert !== '');
+    assert(a.preprocessedFrag !== '' && b.preprocessedFrag !== '');
     return a.preprocessedVert === b.preprocessedVert && a.preprocessedFrag === b.preprocessedFrag;
+}
+
+function gfxProgramDescriptorSimpleCopy(a: GfxProgramDescriptorSimple): GfxProgramDescriptorSimple {
+    const preprocessedVert = a.preprocessedVert;
+    const preprocessedFrag = a.preprocessedFrag;
+    return { preprocessedVert, preprocessedFrag };
 }
 
 function gfxRenderPipelineDescriptorHash(a: GfxRenderPipelineDescriptor): number {
@@ -29,7 +38,7 @@ export class GfxRenderCache {
     private gfxBindingsCache = new HashMap<GfxBindingsDescriptor, GfxBindings>(gfxBindingsDescriptorEquals, gfxBindingsDescriptorHash, 64, 4);
     private gfxRenderPipelinesCache = new HashMap<GfxRenderPipelineDescriptor, GfxRenderPipeline>(gfxRenderPipelineDescriptorEquals, gfxRenderPipelineDescriptorHash, 16, 4);
     private gfxInputLayoutsCache = new HashMap<GfxInputLayoutDescriptor, GfxInputLayout>(gfxInputLayoutDescriptorEquals, nullHashFunc);
-    private gfxProgramCache = new HashMap<GfxProgramDescriptorSimple, GfxProgram>(gfxProgramDescriptorEquals, nullHashFunc);
+    private gfxProgramCache = new HashMap<GfxProgramDescriptorSimple, GfxProgram>(gfxProgramDescriptorSimpleEquals, nullHashFunc);
     private gfxSamplerCache = new HashMap<GfxSamplerDescriptor, GfxSampler>(gfxSamplerDescriptorEquals, nullHashFunc);
 
     constructor() {
@@ -68,8 +77,9 @@ export class GfxRenderCache {
     public createProgramSimple(device: GfxDevice, gfxProgramDescriptor: GfxProgramDescriptorSimple): GfxProgram {
         let program = this.gfxProgramCache.get(gfxProgramDescriptor);
         if (program === null) {
-            program = device.createProgramSimple(gfxProgramDescriptor);
-            this.gfxProgramCache.add(gfxProgramDescriptor, program);
+            const descriptorCopy = gfxProgramDescriptorSimpleCopy(gfxProgramDescriptor);
+            program = device.createProgramSimple(descriptorCopy);
+            this.gfxProgramCache.add(descriptorCopy, program);
         }
         return program;
     }
@@ -77,12 +87,7 @@ export class GfxRenderCache {
     public createProgram(device: GfxDevice, gfxProgramDescriptor: GfxProgramDescriptor): GfxProgram {
         // TODO(jstpierre): Remove the ensurePreprocessed here... this should be done by higher-level code.
         gfxProgramDescriptor.ensurePreprocessed(device.queryVendorInfo());
-        let program = this.gfxProgramCache.get(gfxProgramDescriptor);
-        if (program === null) {
-            program = device.createProgram(gfxProgramDescriptor);
-            this.gfxProgramCache.add(gfxProgramDescriptor, program);
-        }
-        return program;
+        return this.createProgramSimple(device, gfxProgramDescriptor);
     }
 
     public createSampler(device: GfxDevice, descriptor: GfxSamplerDescriptor): GfxSampler {

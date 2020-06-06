@@ -1,9 +1,9 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString } from "../util";
+import { assert, readString, nArray } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
-import { Color, colorNewFromRGBA } from "../Color";
-import { unpackColorRGB32Exp, BaseMaterial, MaterialProgramBase } from "./Materials";
+import { Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from "../Color";
+import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase } from "./Materials";
 import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
@@ -14,7 +14,7 @@ import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { StudioModelInstance, HardwareVertData } from "./Studio";
 import { computeModelMatrixPosRot } from "./Main";
 import BitMap from "../BitMap";
-import { BSPFile } from "./BSPFile";
+import { BSPFile, computeAmbientCubeFromLeaf } from "./BSPFile";
 
 //#region Detail Models
 const enum DetailPropOrientation { NORMAL, SCREEN_ALIGNED, SCREEN_ALIGNED_VERTICAL, }
@@ -95,9 +95,9 @@ export function deserializeGameLump_dprp(buffer: ArrayBufferSlice, version: numb
         const detailModel = dprp.getUint16(idx + 0x18, true);
         const leaf = dprp.getUint16(idx + 0x1A, true);
         const lightingExp = dprp.getUint8(idx + 0x1F);
-        const lightingR = unpackColorRGB32Exp(dprp.getUint8(idx + 0x1C), lightingExp);
-        const lightingG = unpackColorRGB32Exp(dprp.getUint8(idx + 0x1D), lightingExp);
-        const lightingB = unpackColorRGB32Exp(dprp.getUint8(idx + 0x1E), lightingExp);
+        const lightingR = unpackColorRGBExp32(dprp.getUint8(idx + 0x1C), lightingExp);
+        const lightingG = unpackColorRGBExp32(dprp.getUint8(idx + 0x1D), lightingExp);
+        const lightingB = unpackColorRGBExp32(dprp.getUint8(idx + 0x1E), lightingExp);
         const lightStyles = dprp.getInt32(idx + 0x20, true);
         const lightStyleCount = dprp.getUint8(idx + 0x24);
         const swayAmount = dprp.getUint8(idx + 0x25);
@@ -338,6 +338,7 @@ export class DetailPropLeafRenderer {
 
 //#region Static Models
 export const enum StaticPropFlags {
+    USE_LIGHTING_ORIGIN    = 0x0002,
     IGNORE_NORMALS         = 0x0008,
     NO_SHADOW              = 0x0010,
     SCREEN_SPACE_FADE      = 0x0020,
@@ -355,6 +356,7 @@ interface StaticProp {
     leafList: Uint16Array;
     fadeMinDist: number;
     fadeMaxDist: number;
+    lightingOrigin: vec3 | null;
 }
 
 export interface StaticObjects {
@@ -379,7 +381,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
     const leafList = buffer.createTypedArray(Uint16Array, idx, leafListCount, Endianness.LITTLE_ENDIAN);
     idx += leafList.byteLength;
 
-    const staticObjects: StaticProp[] = [];
+    const staticProps: StaticProp[] = [];
     const staticObjectCount = sprp.getUint32(idx, true);
     idx += 0x04;
     for (let i = 0; i < staticObjectCount; i++) {
@@ -422,7 +424,9 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
             idx += 0x08;
         }
 
-        const lightingOrigin = vec3.fromValues(lightingOriginX, lightingOriginY, lightingOriginZ);
+        let lightingOrigin: vec3 | null = null;
+        if (!!(flags & StaticPropFlags.USE_LIGHTING_ORIGIN))
+            lightingOrigin = vec3.fromValues(lightingOriginX, lightingOriginY, lightingOriginZ);
 
         const index = i;
         const pos = vec3.fromValues(posX, posY, posZ);
@@ -430,26 +434,35 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
         const rot = vec3.fromValues(rotZ, rotX, rotY);
         const propName = staticModelDict[propType];
         const propLeafList = leafList.subarray(firstLeaf, firstLeaf + leafCount);
-        staticObjects.push({ index, pos, rot, flags, skin, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist });
+        staticProps.push({ index, pos, rot, flags, skin, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist, lightingOrigin });
     }
 
-    return { staticProps: staticObjects };
+    return { staticProps };
 }
 
 export class StaticPropRenderer {
     private studioModelInstance: StudioModelInstance | null = null;
     private visible = true;
     private colorMeshData: HardwareVertData | null = null;
+    private ambientCube: Color[] = nArray(6, () => colorNewCopy(TransparentBlack));
 
-    constructor(renderContext: SourceRenderContext, private staticProp: StaticProp) {
-        this.createInstance(renderContext);
+    constructor(renderContext: SourceRenderContext, bsp: BSPFile, private staticProp: StaticProp) {
+        this.createInstance(renderContext, bsp);
     }
 
-    private async createInstance(renderContext: SourceRenderContext) {
+    private async createInstance(renderContext: SourceRenderContext, bsp: BSPFile) {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.staticProp.propName);
         const modelInstance = new StudioModelInstance(renderContext, modelData);
         computeModelMatrixPosRot(modelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
         this.studioModelInstance = modelInstance;
+
+        // TODO(jstpierre): studiohdr2_t illumposition
+        const lightingOrigin = this.staticProp.lightingOrigin !== null ? this.staticProp.lightingOrigin : this.staticProp.pos;
+        const leafidx = bsp.findLeafForPoint(lightingOrigin);
+        assert(leafidx >= 0);
+        const leaf = bsp.leaflist[leafidx];
+        computeAmbientCubeFromLeaf(this.ambientCube, leaf, lightingOrigin);
+        this.studioModelInstance.setAmbientCubeData(this.ambientCube);
 
         // Bind static lighting data, if we have it...
         if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {

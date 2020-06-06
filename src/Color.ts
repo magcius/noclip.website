@@ -84,6 +84,13 @@ export function colorClampLDR(dst: Color, a: Color) {
     dst.a = saturate(a.a);
 }
 
+export function colorScale(dst: Color, a: Color, v: number) {
+    dst.r = a.r * v;
+    dst.g = a.g * v;
+    dst.b = a.b * v;
+    dst.a = a.a * v;
+}
+
 export function colorMult(dst: Color, k0: Color, k1: Color): void {
     dst.g = k0.g * k1.g;
     dst.r = k0.r * k1.r;

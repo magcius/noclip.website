@@ -9,9 +9,11 @@ import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { MaterialProgramBase, BaseMaterial } from "./Materials";
+import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode } from "./Materials";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4 } from "gl-matrix";
+import { AmbientCube } from "./BSPFile";
+import { getMatrixTranslation } from "../MathHelpers";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -861,18 +863,21 @@ class StudioModelMeshInstance {
     private materialInstance: BaseMaterial | null = null;
     private inputStateWithColorMesh: GfxInputState | null = null;
 
-    constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData) {
-        this.bindMaterial(renderContext);
+    constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData, entityParams: EntityMaterialParameters) {
+        this.bindMaterial(renderContext, entityParams);
     }
 
-    private syncMaterialInstanceStaticVertexLighting(): void {
-        if (this.materialInstance !== null)
-            this.materialInstance.setUseStaticVertexLighting(this.inputStateWithColorMesh !== null);
+    private syncMaterialInstanceStaticLightingMode(): void {
+        if (this.materialInstance !== null) {
+            const staticLightingMode = (this.inputStateWithColorMesh !== null) ? StaticLightingMode.VertexLighting : StaticLightingMode.AmbientCube;
+            this.materialInstance.setStaticLightingMode(staticLightingMode);
+        }
     }
 
-    private async bindMaterial(renderContext: SourceRenderContext): Promise<void> {
+    private async bindMaterial(renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): Promise<void> {
         this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialName);
-        this.syncMaterialInstanceStaticVertexLighting();
+        this.materialInstance.entityParams = entityParams;
+        this.syncMaterialInstanceStaticLightingMode();
     }
 
     public bindColorMeshData(device: GfxDevice, data: HardwareVertData, mesh: HardwareVertDataMesh): void {
@@ -881,7 +886,7 @@ class StudioModelMeshInstance {
         const colorDescriptor: GfxVertexBufferDescriptor = { buffer: data.buffer, byteOffset: mesh.byteOffset };
         this.inputStateWithColorMesh = this.meshData.createInputStateWithColorMesh(device, colorDescriptor);
 
-        this.syncMaterialInstanceStaticVertexLighting();
+        this.syncMaterialInstanceStaticLightingMode();
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -927,9 +932,9 @@ class StudioModelMeshInstance {
 class StudioModelLODInstance {
     public meshInstance: StudioModelMeshInstance[] = [];
 
-    constructor(renderContext: SourceRenderContext, private lodData: StudioModelLODData) {
+    constructor(renderContext: SourceRenderContext, private lodData: StudioModelLODData, entityParams: EntityMaterialParameters) {
         for (let i = 0; i < this.lodData.meshData.length; i++)
-            this.meshInstance.push(new StudioModelMeshInstance(renderContext, this.lodData.meshData[i]));
+            this.meshInstance.push(new StudioModelMeshInstance(renderContext, this.lodData.meshData[i], entityParams));
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -951,6 +956,7 @@ class StudioModelLODInstance {
 export class StudioModelInstance {
     public visible: boolean = true;
     public modelMatrix = mat4.create();
+    public materialParams = new EntityMaterialParameters();
 
     private lodInstance: StudioModelLODInstance[] = [];
 
@@ -963,8 +969,12 @@ export class StudioModelInstance {
 
         for (let k = 0; k < submodelData.lodData.length; k++) {
             const lodData = submodelData.lodData[k];
-            this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData));
+            this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData, this.materialParams));
         }
+    }
+
+    public setAmbientCubeData(ambientCube: AmbientCube): void {
+        this.materialParams.ambientCube = ambientCube;
     }
 
     public setColorMeshData(device: GfxDevice, data: HardwareVertData): void {
@@ -1003,6 +1013,8 @@ export class StudioModelInstance {
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager) {
         if (!this.visible)
             return;
+
+        getMatrixTranslation(this.materialParams.position, this.modelMatrix);
 
         const lodIndex = this.getLODModelIndex(renderContext);
         this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix);
