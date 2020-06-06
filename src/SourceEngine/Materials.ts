@@ -655,15 +655,12 @@ layout(location = ${MaterialProgramBase.a_StaticVertexLighting}) attribute vec3 
 #ifdef USE_AMBIENT_CUBE
 vec3 AmbientLight(in vec3 t_NormalWorld) {
     vec3 t_Weight = t_NormalWorld * t_NormalWorld;
-    bvec3 t_WhichCubeFace = lessThan(t_NormalWorld, vec3(0.0));
-    return u_AmbientCube[0].rgb;
-    /*
+    bvec3 t_Negative = lessThan(t_NormalWorld, vec3(0.0));
     return (
-        t_Weight.x * u_AmbientCube[t_WhichCubeFace.x ? 1 : 0].rgb +
-        t_Weight.y * u_AmbientCube[t_WhichCubeFace.y ? 3 : 2].rgb +
-        t_Weight.z * u_AmbientCube[t_WhichCubeFace.z ? 5 : 4].rgb
+        t_Weight.x * u_AmbientCube[t_Negative.x ? 1 : 0].rgb +
+        t_Weight.y * u_AmbientCube[t_Negative.y ? 3 : 2].rgb +
+        t_Weight.z * u_AmbientCube[t_Negative.z ? 5 : 4].rgb
     );
-    */
 }
 #endif
 
@@ -672,7 +669,7 @@ void mainVS() {
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
     v_PositionWorld.xyz = t_PositionWorld;
-    vec3 t_NormalWorld = a_Normal.xyz;
+    vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
 #ifdef USE_VERTEX_COLOR
     v_Color = a_Color;
@@ -1326,7 +1323,7 @@ void mainVS() {
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
     v_PositionWorld.xyz = t_PositionWorld;
-    vec3 t_NormalWorld = a_Normal.xyz;
+    vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
     vec3 t_TangentSWorld = a_TangentS.xyz;
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
@@ -1516,7 +1513,7 @@ void mainVS() {
     gl_Position = Mul(u_ProjectionView, vec4(t_PositionWorld, 1.0));
 
     v_PositionWorld.xyz = t_PositionWorld;
-    vec3 t_NormalWorld = a_Normal.xyz;
+    vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
     vec3 t_TangentSWorld = a_TangentS.xyz;
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
