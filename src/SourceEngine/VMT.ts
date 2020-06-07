@@ -73,6 +73,7 @@ class ValveKeyValueParser {
         // already consumed "{"
         const val: VKFPair[] = [];
         while (this.hastok()) {
+            this.skipcomment();
             const tok = this.chew();
             if (tok == "}") {
                 return val;
@@ -81,7 +82,6 @@ class ValveKeyValueParser {
             }
 
             val.push(this.pair());
-            this.skipcomment();
         }
         return val;
     }
@@ -119,7 +119,7 @@ class ValveKeyValueParser {
     }
 
     private unquote(start: string): string {
-        return this.run(/[a-zA-Z0-9$%<>=]/, start);
+        return this.run(/[0-9a-zA-Z$%<>=/\\_]/, start);
     }
 
     public unit(): any {
@@ -130,7 +130,7 @@ class ValveKeyValueParser {
             return this.obj();
         else if (tok === '"')
             return this.quote(tok);
-        else if (/[a-zA-Z$%<>=]/.test(tok))
+        else if (/[a-zA-Z$%<>=/\\_]/.test(tok))
             return this.unquote(tok);
         else if (/[-0-9.]/.test(tok))
             return this.num(tok);

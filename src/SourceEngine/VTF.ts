@@ -10,6 +10,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 const enum ImageFormat {
     RGBA8888     = 0x00,
     BGR888       = 0x03,
+    I8           = 0x05,
     ARGB8888     = 0x0B,
     BGRA8888     = 0x0C,
     DXT1         = 0x0D,
@@ -44,6 +45,8 @@ function imageFormatGetBPP(fmt: ImageFormat): number {
         return 2;
     if (fmt === ImageFormat.UV88)
         return 2;
+    if (fmt === ImageFormat.I8)
+        return 1;
     throw "whoops";
 }
 
@@ -83,6 +86,8 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
         return GfxFormat.U16_RGBA_5551; // TODO(jstpierre): sRGB?
     else if (fmt === ImageFormat.UV88)
         return GfxFormat.S8_RG_NORM;
+    else if (fmt === ImageFormat.I8)
+        return GfxFormat.U8_RGBA_NORM;
     else
         throw "whoops";
 }
@@ -134,6 +139,20 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
         return data.createTypedArray(Int8Array);
     } else if (fmt === ImageFormat.BGRA5551) {
         return data.createTypedArray(Uint16Array);
+    } else if (fmt === ImageFormat.I8) {
+        // I8 => RGBA8888
+        const src = data.createDataView();
+        const n = width * height * depth * 4;
+        const dst = new Uint8Array(n);
+        let p = 0;
+        for (let i = 0; i < n;) {
+            const m = src.getUint8(p++);
+            dst[i++] = m;
+            dst[i++] = m;
+            dst[i++] = m;
+            dst[i++] = 0xFF;
+        }
+        return dst;
     } else {
         return data.createTypedArray(Uint8Array);
     }

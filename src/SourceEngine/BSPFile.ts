@@ -69,6 +69,9 @@ export interface SurfaceLightmapData {
     pagePosY: number;
 }
 
+export interface Overlay {
+}
+
 export interface Surface {
     texinfo: number;
     onNode: boolean;
@@ -85,6 +88,9 @@ export interface Surface {
     // displacement info
     isDisplacement: boolean;
     bbox: AABB | null;
+
+    // overlay data
+    overlays: Overlay[];
 }
 
 interface TexinfoMapping {
@@ -936,7 +942,7 @@ export class BSPFile {
                 assert(m === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                const surface: Surface = { texinfo, onNode, startIndex: dstOffsIndex, indexCount: m, center, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb };
+                const surface: Surface = { texinfo, onNode, startIndex: dstOffsIndex, indexCount: m, center, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb, overlays: [] };
                 this.surfaces.push(surface);
 
                 surface.lightmapData.push(lightmapData);
@@ -1028,7 +1034,7 @@ export class BSPFile {
                 let surface = mergeSurface;
 
                 if (surface === null) {
-                    surface = { texinfo, onNode, startIndex: dstOffsIndex, indexCount: 0, center, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null };
+                    surface = { texinfo, onNode, startIndex: dstOffsIndex, indexCount: 0, center, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null, overlays: [] };
                     this.surfaces.push(surface);
                 }
 

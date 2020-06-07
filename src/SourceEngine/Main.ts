@@ -10,7 +10,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
-import { VPKMount } from "./VPK";
+import { VPKMount, createVPKMount } from "./VPK";
 import { ZipFile, ZipFileEntry, ZipCompressionMethod } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase, LateBindingTexture } from "./Materials";
@@ -26,7 +26,7 @@ import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceText } from "../DebugJunk";
+import { DataFetcher } from "../DataFetcher";
 
 function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
     if (entry.compressionMethod === ZipCompressionMethod.None) {
@@ -54,6 +54,13 @@ function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
     public mounts: VPKMount[] = [];
+
+    constructor(private dataFetcher: DataFetcher) {
+    }
+
+    public async createVPKMount(path: string) {
+        this.mounts.push(await createVPKMount(this.dataFetcher, path));
+    }
 
     public resolvePath(path: string, ext: string): string {
         path = path.toLowerCase().replace(/\\/g, '/');
