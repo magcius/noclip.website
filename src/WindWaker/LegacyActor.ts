@@ -1500,7 +1500,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Roten3') fetchArchive(`Roten`).then((rarc) => buildModel(rarc, `bdl/roten03.bdl`));
     else if (actorName === 'Roten4') fetchArchive(`Roten`).then((rarc) => buildModel(rarc, `bdl/roten04.bdl`));
     else if (actorName === 'Fdai') fetchArchive(`Fdai`).then((rarc) => buildModel(rarc, `bdl/fdai.bdl`));
-    else if (actorName === 'GBoard') fetchArchive(`Kaisen_e`).then((rarc) => buildModel(rarc, `bdl/akbod.bdl`));
     else if (actorName === 'Nzfall') fetchArchive(`Pfall`).then((rarc) => buildModel(rarc, `bdl/nz.bdl`).bindANK1(parseBCK(rarc, `bcks/nz_wait.bck`)));
     else if (actorName === 'Paper') fetchArchive(`Opaper`).then((rarc) => {
         const m = buildModel(rarc, `bdl/opaper.bdl`);
