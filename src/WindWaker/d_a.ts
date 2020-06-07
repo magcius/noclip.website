@@ -26,6 +26,7 @@ import * as GX from '../gx/gx_enum';
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
+import { GlobalSaveManager } from "../SaveManager";
 
 // Framework'd actors
 
@@ -1564,6 +1565,7 @@ class d_a_mgameboard extends fopAc_ac_c {
     private highscoreLabel: dDlst_2DObject_c;
     private highscorePad: dDlst_2DObject_c;
     private highscoreNum = new dDlst_2DNumber_c(2);
+    private highscore = 23;
     private minigameResetTimer = -1;
     private minigameActive = false;
 
@@ -1589,11 +1591,24 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.highscorePad = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x11));
         this.highscoreLabel = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x0E));
 
+        this.loadHighscore();
         this.minigameInit(globals);
 
         this.setDrawMtx();
 
         return cPhs__Status.Next;
+    }
+
+    private highscoreSetting = 'WindWaker/Kaisen_e_HighScore';
+    private loadHighscore(): void {
+        this.highscore = GlobalSaveManager.loadSetting(this.highscoreSetting, this.highscore);
+    }
+
+    private saveHighscore(newScore: number): void {
+        if (newScore < this.highscore) {
+            this.highscore = newScore;
+            GlobalSaveManager.saveSetting(this.highscoreSetting, this.highscore);
+        }
     }
 
     private minigameInit(globals: dGlobals): void {
@@ -1636,8 +1651,6 @@ class d_a_mgameboard extends fopAc_ac_c {
     }
 
     public move(y: number, x: number): void {
-        if (this.minigameResetTimer >= 0)
-            return;
         this.cursorX = clamp(this.cursorX + x, 0, this.minigame.gridWidth - 1);
         this.cursorY = clamp(this.cursorY + y, 0, this.minigame.gridHeight - 1);
     }
@@ -1659,8 +1672,6 @@ class d_a_mgameboard extends fopAc_ac_c {
     }
 
     public fire(): void {
-        if (this.minigameResetTimer >= 0)
-            return;
         this.minigame.attack(this.cursorY, this.cursorX);
     }
 
@@ -1760,7 +1771,7 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.positionM(this.scoreNum.modelMatrix, -168, 130, 0, 8);
 
         this.highscoreNum.spacing = 0.8;
-        this.highscoreNum.value = 15;
+        this.highscoreNum.value = this.highscore;
         this.positionM(this.highscoreNum.modelMatrix, 111, 128, 12, 8);
 
         this.positionM(this.highscoreLabel.modelMatrix, 28, 128, 5, 55, 11);
@@ -1796,14 +1807,20 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.setDrawMtx();
     }
 
+    private minigameDone(globals: dGlobals): void {
+        this.saveHighscore(this.minigame.bulletFiredNum);
+        this.setDrawMtx();
+        this.minigameResetTimer = 30;
+    }
+
     public execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const inputManager = globals.context.inputManager;
         if (this.minigameResetTimer >= 0) {
-            this.minigameResetTimer -= deltaTimeInFrames;
+            // this.minigameResetTimer -= deltaTimeInFrames;
             if (this.minigameResetTimer <= 0 || inputManager.isKeyDownEventTriggered('KeyF'))
                 this.minigameDeactivate(globals);
         } else if (this.minigame.bulletNum === 0 || this.minigame.aliveShipNum === 0) {
-            this.minigameResetTimer = 30;
+            this.minigameDone(globals);
         } else if (this.minigameActive) {
             this.minigameMain(globals);
         } else {
@@ -1840,8 +1857,8 @@ class d_a_mgameboard extends fopAc_ac_c {
             const ship = this.minigame.ships[i];
 
             // Only show dead ships, or after the game is over.
-            if (ship.numAliveParts !== 0 && this.minigame.bulletNum !== 0)
-                continue;
+            //if (ship.numAliveParts !== 0 && this.minigame.bulletNum !== 0)
+            //    continue;
 
             const model = this.shipModels[i];
             setLightTevColorType(globals, model, this.tevStr, viewerInput.camera);
