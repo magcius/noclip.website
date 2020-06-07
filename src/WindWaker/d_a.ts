@@ -4,21 +4,28 @@ import { dGlobals } from "./zww_scenes";
 import { vec3, mat4, quat } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
 import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF } from "./SComponent";
 import { dStage_Multi_c } from "./d_stage";
-import { nArray, assertExists, assert } from "../util";
+import { nArray, assertExists } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8 } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc } from "./d_kankyo_wether";
-import { ColorKind } from "../gx/gx_render";
+import { ColorKind, GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, MaterialParams, PacketParams, fillPacketParamsData } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
+import { TSDraw } from "../SuperMarioGalaxy/DDraw";
+import { BTIData } from "../Common/JSYSTEM/JUTTexture";
+import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
+import * as GX from '../gx/gx_enum';
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 
 // Framework'd actors
 
@@ -1328,6 +1335,8 @@ class daSeaFightGame_info_c {
             }
 
             this.grid[index] = 2;
+        } else {
+            return;
         }
 
         this.bulletNum--;
@@ -1385,6 +1394,153 @@ class daSeaFightGame_info_c {
     }
 }
 
+// TODO(jstpierre): This is a hack to put it in 3D.
+const materialParams = new MaterialParams();
+const packetParams = new PacketParams();
+
+// Simple quad shape & input.
+export class dDlst_2DStatic_c {
+    private ddraw = new TSDraw();
+
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        const size = 1;
+        this.ddraw.beginDraw();
+        this.ddraw.begin(GX.Command.DRAW_QUADS, 4);
+        this.ddraw.position3f32(-size, -size, 0);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
+        this.ddraw.position3f32(-size, size, 0);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0, 0);
+        this.ddraw.position3f32(size, size, 0);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1, 0);
+        this.ddraw.position3f32(size, -size, 0);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1, 1);
+        this.ddraw.end();
+
+        this.ddraw.endDraw(device, cache);
+    }
+
+    public setOnRenderInst(renderInst: GfxRenderInst): void {
+        this.ddraw.setOnRenderInst(renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
+class dDlst_2DBase_c {
+    public materialHelper: GXMaterialHelperGfx;
+    public modelMatrix = mat4.create();
+
+    constructor() {
+        const mb = new GXMaterialBuilder('2D Object');
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+}
+
+class dDlst_2DObject_c extends dDlst_2DBase_c {
+    public whichTex = 0;
+
+    constructor(private tex0: BTIData, private tex1: BTIData | null = null) {
+        super();
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+        const renderInst = renderInstManager.newRenderInst();
+
+        globals.quadStatic.setOnRenderInst(renderInst);
+
+        const tex = this.whichTex === 0 ? this.tex0 : this.tex1!;
+        tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        const offs = this.materialHelper.allocateMaterialParams(renderInst);
+        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+}
+
+class dDlst_2DNumber_c extends dDlst_2DBase_c {
+    private texData: BTIData[] = [];
+    public spacing: number = 1;
+    public value: number = 0;
+
+    constructor(private numDigits: number) {
+        super();
+    }
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = globals.modelCache.requestMsgData(`menures`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        for (let i = 0; i <= 9; i++)
+            this.texData[i] = assertExists(globals.resCtrl.getResByName(ResType.Bti, `menures`, `rupy_num_0${i}.bti`, resCtrl.resSystem));
+
+        return cPhs__Status.Complete;
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const device = globals.modelCache.device;
+        const template = renderInstManager.pushTemplateRenderInst();
+
+        globals.quadStatic.setOnRenderInst(template);
+
+        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+        const offs = this.materialHelper.allocateMaterialParams(template);
+        this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
+
+        let value = this.value;
+
+        let x = 0;
+        for (let i = 0; i < this.numDigits; i++) {
+            const digit = value % 10;
+            value = (value / 10) | 0;
+
+            const renderInst = renderInstManager.newRenderInst();
+            this.texData[digit].fillTextureMapping(materialParams.m_TextureMapping[0]);
+            renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+            renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+
+            vec3.set(scratchVec3a, x, 0, 0);
+            mat4.translate(scratchMat4a, this.modelMatrix, scratchVec3a);
+            mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+            x -= this.spacing * 2;
+
+            fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+            renderInstManager.submitRenderInst(renderInst);
+
+            // No more digits.
+            if (value === 0)
+                break;
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+}
+
 class d_a_mgameboard extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_mgameboard;
 
@@ -1398,16 +1554,35 @@ class d_a_mgameboard extends fopAc_ac_c {
     private hitModelCount: number = 0;
     private shipModels: J3DModelInstance[] = [];
     private minigame = new daSeaFightGame_info_c();
+    private bullet: dDlst_2DObject_c[] = [];
+    private squid: dDlst_2DObject_c[] = [];
+    private scoreNum = new dDlst_2DNumber_c(2);
+    private highscoreLabel: dDlst_2DObject_c;
+    private highscorePad: dDlst_2DObject_c;
+    private highscoreNum = new dDlst_2DNumber_c(2);
 
     public subload(globals: dGlobals): cPhs__Status {
-        const status = dComIfG_resLoad(globals, `Kaisen_e`);
+        let status: cPhs__Status;
+
+        status = dComIfG_resLoad(globals, `Kaisen_e`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = this.scoreNum.subload(globals);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = this.highscoreNum.subload(globals);
         if (status !== cPhs__Status.Complete)
             return status;
 
         const resCtrl = globals.resCtrl;
 
-        this.boardModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 8));
-        this.cursorModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 9));
+        this.boardModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 0x08));
+        this.cursorModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 0x09));
+        this.highscorePad = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x11));
+        this.highscoreLabel = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x0E));
+
         this.minigameInit(globals);
 
         this.setDrawMtx();
@@ -1425,6 +1600,16 @@ class d_a_mgameboard extends fopAc_ac_c {
 
         for (let i = this.hitModels.length; i < this.minigame.bulletNum; i++)
             this.hitModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 7)));
+
+        const bulletData0 = resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x0F);
+        const bulletData1 = resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x10);
+        for (let i = this.bullet.length; i < this.minigame.bulletNum; i++)
+            this.bullet.push(new dDlst_2DObject_c(bulletData0, bulletData1));
+
+        const squidData0 = resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x12);
+        const squidData1 = resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x13);
+        for (let i = this.squid.length; i < this.minigame.ships.length; i++)
+            this.squid.push(new dDlst_2DObject_c(squidData0, squidData1));
 
         this.shipModels.length = 0;
         for (let i = 0; i < this.minigame.ships.length; i++) {
@@ -1469,14 +1654,41 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.minigame.attack(this.cursorY, this.cursorX);
     }
 
-    private positionFromGrid(dst: mat4, y: number, x: number): void {
-        const xw = -87.5 + x * 25.0;
-        const yw = -87.5 + y * 25.0;
+    private positionM(dst: mat4, xw: number, yw: number, zw: number, scaleX: number = 1, scaleY: number = scaleX): void {
         vec3.copy(scratchVec3a, this.pos);
         scratchVec3a[0] += xw;
         scratchVec3a[1] += yw;
+        scratchVec3a[2] += zw;
         MtxTrans(scratchVec3a, false, dst);
-        mDoMtx_YrotM(this.boardModel.modelMatrix, this.rot[1]);
+        mDoMtx_YrotM(dst, this.rot[1]);
+        vec3.set(scratchVec3a, scaleX, scaleY, 1.0);
+        mat4.scale(dst, dst, scratchVec3a);
+    }
+
+    private positionGrid(dst: mat4, y: number, x: number): void {
+        const xw = -87.5 + x * 25.0;
+        const yw = -87.5 + y * 25.0;
+        return this.positionM(dst, xw, yw, 0.0);
+    }
+
+    private positionBullet(dst: mat4, i: number): void {
+        // Original game uses 2D ortho view for this. We don't have that, so this was matched by hand.
+
+        // Three columns of 8.
+        const xc = (i / 8) | 0;
+        const yc = (i % 8);
+
+        const xw = -220 + xc * 26;
+        const yw = 100 - yc * 26;
+        return this.positionM(dst, xw, yw, 0.0, 12);
+    }
+
+    private positionSquid(dst: mat4, i: number): void {
+        // Original game uses 2D ortho view for this. We don't have that, so this was matched by hand.
+
+        const xw = 180;
+        const yw = 100 - i * 40;
+        return this.positionM(dst, xw, yw, 0.0, 24);
     }
 
     private setDrawMtx(): void {
@@ -1484,7 +1696,7 @@ class d_a_mgameboard extends fopAc_ac_c {
         MtxTrans(this.pos, false, this.boardModel.modelMatrix);
         mDoMtx_YrotM(this.boardModel.modelMatrix, this.rot[1]);
 
-        this.positionFromGrid(this.cursorModel.modelMatrix, this.cursorY, this.cursorX);
+        this.positionGrid(this.cursorModel.modelMatrix, this.cursorY, this.cursorX);
 
         this.hitModelCount = 0;
         this.missModelCount = 0;
@@ -1505,7 +1717,7 @@ class d_a_mgameboard extends fopAc_ac_c {
                 if (model === null)
                     continue;
 
-                this.positionFromGrid(model.modelMatrix, y, x);
+                this.positionGrid(model.modelMatrix, y, x);
             }
         }
 
@@ -1514,12 +1726,35 @@ class d_a_mgameboard extends fopAc_ac_c {
             const model = this.shipModels[i];
 
             // Place ship model.
-            this.positionFromGrid(model.modelMatrix, ship.y1, ship.x1);
+            this.positionGrid(model.modelMatrix, ship.y1, ship.x1);
             if (ship.direction === 'right')
                 mDoMtx_ZrotM(model.modelMatrix, 0x4000);
             else if (ship.direction === 'down')
                 mDoMtx_ZrotM(model.modelMatrix, -0x8000);
         }
+
+        for (let i = 0; i < this.bullet.length; i++) {
+            const bullet = this.bullet[i];
+            bullet.whichTex = (i >= this.minigame.bulletFiredNum) ? 0 : 1;
+            this.positionBullet(bullet.modelMatrix, i);
+        }
+
+        for (let i = 0; i < this.squid.length; i++) {
+            const squid = this.squid[i];
+            squid.whichTex = (this.minigame.ships[i].numAliveParts > 0) ? 0 : 1;
+            this.positionSquid(squid.modelMatrix, i);
+        }
+
+        this.scoreNum.spacing = 0.8;
+        this.scoreNum.value = this.minigame.bulletFiredNum;
+        this.positionM(this.scoreNum.modelMatrix, -168, 130, 0, 8);
+
+        this.highscoreNum.spacing = 0.8;
+        this.highscoreNum.value = 15;
+        this.positionM(this.highscoreNum.modelMatrix, 111, 128, 12, 8);
+
+        this.positionM(this.highscoreLabel.modelMatrix, 28, 128, 5, 55, 11);
+        this.positionM(this.highscorePad.modelMatrix, 105, 128, 10, 20);
     }
 
     public execute(globals: dGlobals, deltaTimeInFrames: number): void {
@@ -1557,6 +1792,16 @@ class d_a_mgameboard extends fopAc_ac_c {
             setLightTevColorType(globals, model, this.tevStr, viewerInput.camera);
             mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
         }
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.ui[1]);
+        for (let i = 0; i < this.bullet.length; i++)
+            this.bullet[i].draw(globals, renderInstManager, viewerInput);
+        for (let i = 0; i < this.squid.length; i++)
+            this.squid[i].draw(globals, renderInstManager, viewerInput);
+        this.scoreNum.draw(globals, renderInstManager, viewerInput);
+        this.highscoreNum.draw(globals, renderInstManager, viewerInput);
+        this.highscoreLabel.draw(globals, renderInstManager, viewerInput);
+        this.highscorePad.draw(globals, renderInstManager, viewerInput);
     }
 }
 

@@ -46,7 +46,6 @@ export default class InputManager {
     public dz: number;
     public buttons: number = 0;
     public onisdraggingchanged: (() => void) | null = null;
-    private listeners: Listener[] = [];
     private scrollListeners: Listener[] = [];
     private usePointerLock: boolean = true;
     public isInteractive: boolean = true;
@@ -105,10 +104,6 @@ export default class InputManager {
         GlobalSaveManager.addSettingListener('InvertX', (saveManager: SaveManager, key: string) => {
             this.invertX = saveManager.loadSetting<boolean>(key, false);
         });
-    }
-
-    public addListener(listener: Listener): void {
-        this.listeners.push(listener);
     }
 
     public addScrollListener(listener: Listener): void {
@@ -171,11 +166,6 @@ export default class InputManager {
         return document.activeElement === document.body || document.activeElement === this.toplevel;
     }
 
-    private callListeners(): void {
-        for (let i = 0; i < this.listeners.length; i++)
-            this.listeners[i](this);
-    }
-
     private callScrollListeners(): void {
         for (let i = 0; i < this.scrollListeners.length; i++)
             this.scrollListeners[i](this);
@@ -189,17 +179,14 @@ export default class InputManager {
         }
 
         this.keysDown.set(e.code, !e.repeat);
-        this.callListeners();
     };
 
     private _onKeyUp = (e: KeyboardEvent) => {
         this.keysDown.delete(e.code);
-        this.callListeners();
     };
 
     private _onBlur = () => {
         this.keysDown.clear();
-        this.callListeners();
     };
 
     private _onWheel = (e: WheelEvent) => {

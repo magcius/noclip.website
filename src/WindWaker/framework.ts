@@ -499,6 +499,7 @@ export class fopAc_ac_c extends leafdraw_class {
         }
 
         const status = this.subload(globals, prm);
+        assert(status !== cPhs__Status.Complete);
         if (status === cPhs__Status.Next)
             fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
         return status;

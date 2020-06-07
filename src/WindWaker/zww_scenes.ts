@@ -31,7 +31,7 @@ import { dStage_stageDt_c, dStage_dt_c_stageLoader, dStage_dt_c_stageInitLoader,
 import { dScnKy_env_light_c, dKy_tevstr_init, dKy_setLight, dKy__RegisterConstructors, dKankyo_create } from './d_kankyo';
 import { dKyw__RegisterConstructors } from './d_kankyo_wether';
 import { fGlobals, fpc_pc__ProfileList, fopScn, cPhs__Status, fpcCt_Handler, fopAcM_create, fpcM_Management, fopDw_Draw, fpcSCtRq_Request, fpc__ProcessName, fpcPf__Register, fopAcM_prm_class, fpcLy_SetCurrentLayer, fopAc_ac_c } from './framework';
-import { d_a__RegisterConstructors } from './d_a';
+import { d_a__RegisterConstructors, dDlst_2DStatic_c } from './d_a';
 import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor';
 import { PeekZManager } from './d_dlst_peekZ';
 import { dBgS } from './d_bg';
@@ -170,6 +170,8 @@ export class dGlobals {
     // TODO(jstpierre): Remove
     public renderer: WindWakerRenderer;
 
+    public quadStatic: dDlst_2DStatic_c;
+
     public renderHacks = new RenderHacks();
 
     private relNameTable: { [id: number]: string };
@@ -185,6 +187,8 @@ export class dGlobals {
             this.roomStatus[i].roomNo = i;
             dKy_tevstr_init(this.roomStatus[i].tevStr, i);
         }
+
+        this.quadStatic = new dDlst_2DStatic_c(modelCache.device, modelCache.cache);
     }
 
     public dStage_searchName(name: string): dStage__ObjectNameTableEntry | null {
@@ -216,6 +220,7 @@ export class dGlobals {
 
     public destroy(device: GfxDevice): void {
         this.dlst.destroy(device);
+        this.quadStatic.destroy(device);
     }
 }
 
@@ -762,6 +767,11 @@ export class ModelCache {
         return archive;
     }
 
+    public async fetchMsgData(arcName: string) {
+        const archive = await this.fetchArchive(`${pathBase}/Msg/${arcName}.arc`);
+        this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resSystem);
+    }
+
     public requestObjectData(arcName: string): cPhs__Status {
         const archivePath = `${pathBase}/Object/${arcName}.arc`;
 
@@ -770,6 +780,18 @@ export class ModelCache {
 
         if (!this.archivePromiseCache.has(archivePath))
             this.fetchObjectData(arcName);
+
+        return cPhs__Status.Loading;
+    }
+
+    public requestMsgData(arcName: string): cPhs__Status {
+        const archivePath = `${pathBase}/Msg/${arcName}.arc`;
+
+        if (this.archiveCache.has(archivePath))
+            return cPhs__Status.Complete;
+
+        if (!this.archivePromiseCache.has(archivePath))
+            this.fetchMsgData(arcName);
 
         return cPhs__Status.Loading;
     }
