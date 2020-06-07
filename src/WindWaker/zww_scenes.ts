@@ -177,7 +177,7 @@ export class dGlobals {
     private relNameTable: { [id: number]: string };
     private objectNameTable: dStage__ObjectNameTable;
 
-    constructor(public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
+    constructor(public context: SceneContext, public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
         this.resCtrl = this.modelCache.resCtrl;
 
         this.relNameTable = createRelNameTable(extraSymbolData);
@@ -913,7 +913,7 @@ class SceneDesc {
         LegacyActor__RegisterFallbackConstructor(framework);
 
         const symbolMap = BYML.parse<SymbolMap>(modelCache.getFileData(`${pathBase}/extra.crg1_arc`), BYML.FileType.CRG1);
-        const globals = new dGlobals(modelCache, symbolMap, framework);
+        const globals = new dGlobals(context, modelCache, symbolMap, framework);
         globals.stageName = this.stageDir;
 
         const renderer = new WindWakerRenderer(device, globals);

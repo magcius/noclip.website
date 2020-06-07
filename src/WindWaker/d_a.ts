@@ -1301,6 +1301,7 @@ class daSeaFightGame_info_c {
 
     public init(bulletNum: number, scenario: number): void {
         this.bulletNum = bulletNum;
+        this.bulletFiredNum = 0;
 
         // Reset grid.
         for (let i = 0; i < this.grid.length; i++)
@@ -1319,6 +1320,9 @@ class daSeaFightGame_info_c {
     }
 
     public attack(y: number, x: number): void {
+        if (this.bulletNum === 0)
+            return;
+
         const index = y * this.gridWidth + x;
 
         if (this.grid[index] === 0) {
@@ -1560,6 +1564,8 @@ class d_a_mgameboard extends fopAc_ac_c {
     private highscoreLabel: dDlst_2DObject_c;
     private highscorePad: dDlst_2DObject_c;
     private highscoreNum = new dDlst_2DNumber_c(2);
+    private minigameResetTimer = -1;
+    private minigameActive = false;
 
     public subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
@@ -1630,6 +1636,8 @@ class d_a_mgameboard extends fopAc_ac_c {
     }
 
     public move(y: number, x: number): void {
+        if (this.minigameResetTimer >= 0)
+            return;
         this.cursorX = clamp(this.cursorX + x, 0, this.minigame.gridWidth - 1);
         this.cursorY = clamp(this.cursorY + y, 0, this.minigame.gridHeight - 1);
     }
@@ -1651,6 +1659,8 @@ class d_a_mgameboard extends fopAc_ac_c {
     }
 
     public fire(): void {
+        if (this.minigameResetTimer >= 0)
+            return;
         this.minigame.attack(this.cursorY, this.cursorX);
     }
 
@@ -1757,14 +1767,59 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.positionM(this.highscorePad.modelMatrix, 105, 128, 10, 20);
     }
 
-    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+    private minigameMain(globals: dGlobals): void {
+        const inputManager = globals.context.inputManager;
+        if (inputManager.isKeyDownEventTriggered('ArrowDown'))
+            this.down();
+        if (inputManager.isKeyDownEventTriggered('ArrowUp'))
+            this.up();
+        if (inputManager.isKeyDownEventTriggered('ArrowLeft'))
+            this.left();
+        if (inputManager.isKeyDownEventTriggered('ArrowRight'))
+            this.right();
+
+        if (inputManager.isKeyDownEventTriggered('KeyF'))
+            this.fire();
+
         this.setDrawMtx();
+    }
+
+    private minigameDeactivate(globals: dGlobals): void {
+        // Generate a new board for next time.
+        this.minigameInit(globals);
+        this.minigameResetTimer = -1;
+        this.minigameActive = false;
+    }
+
+    private minigameActivate(globals: dGlobals): void {
+        this.minigameActive = true;
+        this.setDrawMtx();
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        const inputManager = globals.context.inputManager;
+        if (this.minigameResetTimer >= 0) {
+            this.minigameResetTimer -= deltaTimeInFrames;
+            if (this.minigameResetTimer <= 0 || inputManager.isKeyDownEventTriggered('KeyF'))
+                this.minigameDeactivate(globals);
+        } else if (this.minigame.bulletNum === 0 || this.minigame.aliveShipNum === 0) {
+            this.minigameResetTimer = 30;
+        } else if (this.minigameActive) {
+            this.minigameMain(globals);
+        } else {
+            // happy easter!!!!!!!!!!!!!!!!!!!!!!!!!
+            if (inputManager.isKeyDownEventTriggered('KeyF'))
+                this.minigameActivate(globals);
+        }
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.boardModel, this.tevStr, viewerInput.camera);
         mDoExt_modelUpdateDL(globals, this.boardModel, renderInstManager, viewerInput);
+
+        if (!this.minigameActive)
+            return;
 
         setLightTevColorType(globals, this.cursorModel, this.tevStr, viewerInput.camera);
         mDoExt_modelUpdateDL(globals, this.cursorModel, renderInstManager, viewerInput, globals.dlst.ui);
@@ -1784,8 +1839,8 @@ class d_a_mgameboard extends fopAc_ac_c {
         for (let i = 0; i < this.minigame.ships.length; i++) {
             const ship = this.minigame.ships[i];
 
-            // Only show dead ships.
-            if (ship.numAliveParts !== 0)
+            // Only show dead ships, or after the game is over.
+            if (ship.numAliveParts !== 0 && this.minigame.bulletNum !== 0)
                 continue;
 
             const model = this.shipModels[i];
