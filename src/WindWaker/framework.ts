@@ -11,6 +11,7 @@ export const enum fpc__ProcessName {
     d_kankyo            = 0x0015,
     d_envse             = 0x0017,
     d_a_sea             = 0x0028,
+    d_a_mgameboard      = 0x0040,
     d_a_obj_lpalm       = 0x004B,
     d_a_obj_Ygush00     = 0x0099,
     d_a_ep              = 0x00BA,

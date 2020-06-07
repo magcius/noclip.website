@@ -9,15 +9,15 @@ import { ViewerRenderInput } from "../viewer";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
-import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX } from "./SComponent";
+import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF } from "./SComponent";
 import { dStage_Multi_c } from "./d_stage";
-import { nArray, assertExists } from "../util";
+import { nArray, assertExists, assert } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8 } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc } from "./d_kankyo_wether";
 import { ColorKind } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
-import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation } from "../MathHelpers";
+import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
 
 // Framework'd actors
@@ -1267,6 +1267,299 @@ class d_a_swhit0 extends fopAc_ac_c {
     }
 }
 
+interface daSeaFightGame__Ship {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    direction: 'right' | 'down';
+    numTotalParts: number;
+    numAliveParts: number;
+}
+
+class daSeaFightGame_info_c {
+    // Grid details: 0 = empty, 1 = shot fired, missed, 2 = shot fired, hit, 100+ = hidden ship part
+    public gridWidth = 8;
+    public gridHeight = 8;
+    public grid: number[] = nArray(this.gridWidth * this.gridHeight, () => 0);
+    public ships: daSeaFightGame__Ship[] = [];
+    public aliveShipNum = 0;
+    public deadShipNum = 0;
+    public bulletNum = 0;
+    public bulletFiredNum = 0;
+
+    public index(y: number, x: number): number {
+        return y * this.gridWidth + x;
+    }
+
+    public init(bulletNum: number, scenario: number): void {
+        this.bulletNum = bulletNum;
+
+        // Reset grid.
+        for (let i = 0; i < this.grid.length; i++)
+            this.grid[i] = 0;
+
+        if (scenario === 3) {
+            this.aliveShipNum = 3;
+            this.put_ship(0, 2);
+            this.put_ship(1, 3);
+            this.put_ship(2, 4);
+        } else {
+            // Could do other scenarios if wanted.
+        }
+
+        this.deadShipNum = 0;
+    }
+
+    public attack(y: number, x: number): void {
+        const index = y * this.gridWidth + x;
+
+        if (this.grid[index] === 0) {
+            // Miss.
+            this.grid[index] = 1;
+        } else if (this.grid[index] >= 100) {
+            const shipIndex = this.grid[index] - 100;
+            const ship = assertExists(this.ships[shipIndex]);
+
+            ship.numAliveParts--;
+            if (ship.numAliveParts === 0) {
+                this.aliveShipNum--;
+                this.deadShipNum++;
+            }
+
+            this.grid[index] = 2;
+        }
+
+        this.bulletNum--;
+        this.bulletFiredNum++;
+    }
+
+    private put_ship(shipIndex: number, numParts: number): void {
+        const ship: daSeaFightGame__Ship = {
+            x1: -1, y1: -1,
+            x2: -1, y2: -1,
+            numAliveParts: numParts,
+            numTotalParts: numParts,
+            direction: null!,
+        };
+
+        while (true) {
+            // Find a place to put the ship.
+            ship.y1 = Math.floor(cM_rndF(this.gridHeight));
+            ship.x1 = Math.floor(cM_rndF(this.gridWidth));
+
+            if (cM_rndF(1) < 0.5) {
+                ship.direction = 'right';
+                ship.x2 = ship.x1 + numParts;
+                ship.y2 = ship.y1 + 1;
+            } else {
+                ship.direction = 'down';
+                ship.x2 = ship.x1 + 1;
+                ship.y2 = ship.y1 + numParts;
+            }
+
+            if (this.checkPutShip(ship))
+                break;
+        }
+
+        // Stamp ship down.
+
+        for (let y = ship.y1; y < ship.y2; y++)
+            for (let x = ship.x1; x < ship.x2; x++)
+                this.grid[this.index(y, x)] = 100 + shipIndex;
+        this.ships[shipIndex] = ship;
+    }
+
+    private checkPutShip(ship: daSeaFightGame__Ship): boolean {
+        if (ship.x2 >= this.gridWidth)
+            return false;
+        if (ship.y2 >= this.gridHeight)
+            return false;
+
+        for (let y = ship.y1; y < ship.y2; y++)
+            for (let x = ship.x1; x < ship.x2; x++)
+                if (this.grid[this.index(y, x)] !== 0)
+                    return false;
+
+        return true;
+    }
+}
+
+class d_a_mgameboard extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_mgameboard;
+
+    private boardModel: J3DModelInstance;
+    private cursorX = 0;
+    private cursorY = 0;
+    private cursorModel: J3DModelInstance;
+    private missModels: J3DModelInstance[] = [];
+    private hitModels: J3DModelInstance[] = [];
+    private missModelCount: number = 0;
+    private hitModelCount: number = 0;
+    private shipModels: J3DModelInstance[] = [];
+    private minigame = new daSeaFightGame_info_c();
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, `Kaisen_e`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+
+        this.boardModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 8));
+        this.cursorModel = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 9));
+        this.minigameInit(globals);
+
+        this.setDrawMtx();
+
+        return cPhs__Status.Next;
+    }
+
+    private minigameInit(globals: dGlobals): void {
+        const resCtrl = globals.resCtrl;
+
+        this.minigame.init(24, 3);
+
+        for (let i = this.missModels.length; i < this.minigame.bulletNum; i++)
+            this.missModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 10)));
+
+        for (let i = this.hitModels.length; i < this.minigame.bulletNum; i++)
+            this.hitModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 7)));
+
+        this.shipModels.length = 0;
+        for (let i = 0; i < this.minigame.ships.length; i++) {
+            const ship = this.minigame.ships[i];
+            const size = ship.numTotalParts;
+            if (size === 2)
+                this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 4)));
+            else if (size === 3)
+                this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 5)));
+            else if (size === 4)
+                this.shipModels.push(new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Kaisen_e`, 6)));
+            else
+                throw "whoops";
+        }
+
+        this.cursorX = 0;
+        this.cursorY = this.minigame.gridHeight - 1;
+    }
+
+    public move(y: number, x: number): void {
+        this.cursorX = clamp(this.cursorX + x, 0, this.minigame.gridWidth - 1);
+        this.cursorY = clamp(this.cursorY + y, 0, this.minigame.gridHeight - 1);
+    }
+
+    public up(): void {
+        this.move(1, 0);
+    }
+
+    public down(): void {
+        this.move(-1, 0);
+    }
+
+    public right(): void {
+        this.move(0, 1);
+    }
+
+    public left(): void {
+        this.move(0, -1);
+    }
+
+    public fire(): void {
+        this.minigame.attack(this.cursorY, this.cursorX);
+    }
+
+    private positionFromGrid(dst: mat4, y: number, x: number): void {
+        const xw = -87.5 + x * 25.0;
+        const yw = -87.5 + y * 25.0;
+        vec3.copy(scratchVec3a, this.pos);
+        scratchVec3a[0] += xw;
+        scratchVec3a[1] += yw;
+        MtxTrans(scratchVec3a, false, dst);
+        mDoMtx_YrotM(this.boardModel.modelMatrix, this.rot[1]);
+    }
+
+    private setDrawMtx(): void {
+        vec3.copy(this.boardModel.baseScale, this.scale);
+        MtxTrans(this.pos, false, this.boardModel.modelMatrix);
+        mDoMtx_YrotM(this.boardModel.modelMatrix, this.rot[1]);
+
+        this.positionFromGrid(this.cursorModel.modelMatrix, this.cursorY, this.cursorX);
+
+        this.hitModelCount = 0;
+        this.missModelCount = 0;
+
+        for (let y = 0; y < this.minigame.gridHeight; y++) {
+            for (let x = 0; x < this.minigame.gridWidth; x++) {
+                const grid = this.minigame.grid[this.minigame.index(y, x)];
+
+                let model: J3DModelInstance | null = null;
+                if (grid === 1) {
+                    // Miss
+                    model = this.missModels[this.missModelCount++];
+                } else if (grid === 2) {
+                    // Hit
+                    model = this.hitModels[this.hitModelCount++];
+                }
+
+                if (model === null)
+                    continue;
+
+                this.positionFromGrid(model.modelMatrix, y, x);
+            }
+        }
+
+        for (let i = 0; i < this.minigame.ships.length; i++) {
+            const ship = this.minigame.ships[i];
+            const model = this.shipModels[i];
+
+            // Place ship model.
+            this.positionFromGrid(model.modelMatrix, ship.y1, ship.x1);
+            if (ship.direction === 'right')
+                mDoMtx_ZrotM(model.modelMatrix, 0x4000);
+            else if (ship.direction === 'down')
+                mDoMtx_ZrotM(model.modelMatrix, -0x8000);
+        }
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.setDrawMtx();
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.boardModel, this.tevStr, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.boardModel, renderInstManager, viewerInput);
+
+        setLightTevColorType(globals, this.cursorModel, this.tevStr, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.cursorModel, renderInstManager, viewerInput, globals.dlst.ui);
+
+        for (let i = 0; i < this.hitModelCount; i++) {
+            const model = this.hitModels[i];
+            setLightTevColorType(globals, model, this.tevStr, viewerInput.camera);
+            mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
+        }
+
+        for (let i = 0; i < this.missModelCount; i++) {
+            const model = this.missModels[i];
+            setLightTevColorType(globals, model, this.tevStr, viewerInput.camera);
+            mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
+        }
+
+        for (let i = 0; i < this.minigame.ships.length; i++) {
+            const ship = this.minigame.ships[i];
+
+            // Only show dead ships.
+            if (ship.numAliveParts !== 0)
+                continue;
+
+            const model = this.shipModels[i];
+            setLightTevColorType(globals, model, this.tevStr, viewerInput.camera);
+            mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
+        }
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -1288,4 +1581,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_obj_lpalm);
     R(d_a_obj_zouK1);
     R(d_a_swhit0);
+    R(d_a_mgameboard);
 }

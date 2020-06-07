@@ -121,6 +121,10 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
     ];
+    public ui: dDlst_list_Set = [
+        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
+        new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards),
+    ];
     public peekZ = new PeekZManager();
 
     public reset(): void {
@@ -132,6 +136,8 @@ export class dDlst_list_c {
         this.wetherEffect.reset();
         for (let i = 0; i < this.effect.length; i++)
             this.effect[i].reset();
+        this.ui[0].reset();
+        this.ui[1].reset();
     }
 
     public destroy(device: GfxDevice): void {
@@ -643,6 +649,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.main);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Main]);
         this.executeList(device, renderInstManager, mainPassRenderer, dlst.wetherEffect);
+        this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.ui);
         device.submitPass(mainPassRenderer);
 
         // Execute PeekZ.
