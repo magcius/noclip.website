@@ -3,10 +3,10 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, nArray } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
 import { Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from "../Color";
-import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache } from "./Materials";
+import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
 import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
-import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants } from "../MathHelpers";
+import { computeModelMatrixSRT, transformVec3Mat4w1, MathConstants, getMatrixTranslation } from "../MathHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Endianness } from "../endian";
@@ -445,9 +445,8 @@ export class StaticPropRenderer {
     private studioModelInstance: StudioModelInstance | null = null;
     private visible = true;
     private colorMeshData: HardwareVertData | null = null;
-    private ambientCube: Color[] = nArray(6, () => colorNewCopy(TransparentBlack));
-    private lightCache: LightCache;
     private bbox = new AABB();
+    private materialParams = new EntityMaterialParameters();
 
     constructor(renderContext: SourceRenderContext, bsp: BSPFile, private staticProp: StaticProp) {
         this.createInstance(renderContext, bsp);
@@ -455,21 +454,23 @@ export class StaticPropRenderer {
 
     private async createInstance(renderContext: SourceRenderContext, bsp: BSPFile) {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.staticProp.propName);
-        const modelInstance = new StudioModelInstance(renderContext, modelData);
-        computeModelMatrixPosRot(modelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
-        this.studioModelInstance = modelInstance;
 
         // TODO(jstpierre): studiohdr2_t illumposition
         const lightingOrigin = this.staticProp.lightingOrigin !== null ? this.staticProp.lightingOrigin : this.staticProp.pos;
         const leafidx = bsp.findLeafForPoint(lightingOrigin);
         assert(leafidx >= 0);
         const leaf = bsp.leaflist[leafidx];
-        computeAmbientCubeFromLeaf(this.ambientCube, leaf, lightingOrigin);
-        this.studioModelInstance.setAmbientCubeData(this.ambientCube);
+        const ambientCube = nArray(6, () => colorNewCopy(TransparentBlack));
+        computeAmbientCubeFromLeaf(ambientCube, leaf, lightingOrigin);
+        this.materialParams.ambientCube = ambientCube;
 
-        this.bbox.transform(modelData.bbox, modelInstance.modelMatrix);
-        this.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);
-        this.studioModelInstance.setLightCache(this.lightCache);
+        computeModelMatrixPosRot(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
+        this.bbox.transform(modelData.bbox, scratchMatrix);
+
+        this.materialParams.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);;
+
+        this.studioModelInstance = new StudioModelInstance(renderContext, modelData, this.materialParams);
+        mat4.copy(this.studioModelInstance.modelMatrix, scratchMatrix);
 
         // Bind static lighting data, if we have it...
         if (!(this.staticProp.flags & StaticPropFlags.NO_PER_VERTEX_LIGHTING)) {
@@ -508,6 +509,7 @@ export class StaticPropRenderer {
         if (!visible)
             return;
 
+        getMatrixTranslation(this.materialParams.position, this.studioModelInstance.modelMatrix);
         this.studioModelInstance.prepareToRender(renderContext, renderInstManager);
     }
 

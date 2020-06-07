@@ -3,7 +3,7 @@ import { DeviceProgram } from "../Program";
 import { VMT, parseVMT, VKFPair, vmtParseVector } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderer";
-import { nArray, assert, assertExists, spliceBisectRight } from "../util";
+import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3 } from "gl-matrix";
@@ -15,7 +15,6 @@ import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap
 import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA } from "../Color";
 import { AABB } from "../Geometry";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 //#region Base Classes
 const scratchVec4 = vec4.create();
@@ -103,7 +102,7 @@ class ParameterTexture {
     public texture: VTF | null = null;
     public lateBindingTexture: LateBindingTexture | null = null;
 
-    constructor(public additionalFlags: VTFFlags = 0) {
+    constructor(public additionalFlags: VTFFlags = 0, public isEnvmap: boolean = false) {
     }
 
     public parse(S: string): void {
@@ -119,9 +118,14 @@ class ParameterTexture {
         throw "whoops";
     }
 
-    public async fetch(materialCache: MaterialCache): Promise<void> {
-        if (this.ref !== null)
-            this.texture = await materialCache.fetchVTF(this.ref, this.additionalFlags);
+    public async fetch(materialCache: MaterialCache, entityParams: EntityMaterialParameters | null): Promise<void> {
+        if (this.ref !== null) {
+            // Special case env_cubemap if we have a local override.
+            let filename = this.ref;
+            if (this.isEnvmap && this.ref === 'env_cubemap' && entityParams !== null && entityParams.lightCache !== null)
+                filename = entityParams.lightCache.envCubemap.filename;
+            this.texture = await materialCache.fetchVTF(filename, this.additionalFlags);
+        }
     }
 
     public fillTextureMapping(m: TextureMapping, frame: number): void {
@@ -547,7 +551,7 @@ export abstract class BaseMaterial {
         for (const k in this.param) {
             const v = this.param[k];
             if (v instanceof ParameterTexture)
-                promises.push(v.fetch(materialCache));
+                promises.push(v.fetch(materialCache, this.entityParams));
         }
         await Promise.all(promises);
         this.loaded = true;
@@ -1046,7 +1050,7 @@ class Material_Generic extends BaseMaterial {
         const p = this.param;
 
         // Generic
-        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB);
+        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB, true);
         p['$envmapframe']                  = new ParameterNumber(0);
         p['$envmapmask']                   = new ParameterTexture();
         p['$envmapmaskframe']              = new ParameterNumber(0);
@@ -1498,7 +1502,7 @@ class Material_Water extends BaseMaterial {
         p['$normalmap']                    = new ParameterTexture();
         p['$bumpframe']                    = new ParameterNumber(0);
         p['$bumptransform']                = new ParameterMatrix();
-        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB);
+        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB, true);
         p['$envmapframe']                  = new ParameterNumber(0);
         p['$reflecttint']                  = new ParameterColor(1, 1, 1);
         p['$reflectamount']                = new ParameterNumber(0.8);
@@ -1699,7 +1703,7 @@ class Material_Refract extends BaseMaterial {
         p['$normalmap']                    = new ParameterTexture();
         p['$bumpframe']                    = new ParameterNumber(0);
         p['$bumptransform']                = new ParameterMatrix();
-        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB);
+        p['$envmap']                       = new ParameterTexture(VTFFlags.SRGB, true);
         p['$envmapframe']                  = new ParameterNumber(0);
         p['$refracttint']                  = new ParameterColor(1, 1, 1);
         p['$refractamount']                = new ParameterNumber(2);
@@ -1817,9 +1821,10 @@ export class MaterialCache {
             return new Material_Generic(vmt);
     }
 
-    public async createMaterialInstance(renderContext: SourceRenderContext, path: string): Promise<BaseMaterial> {
+    public async createMaterialInstance(renderContext: SourceRenderContext, path: string, entityParams: EntityMaterialParameters | null = null): Promise<BaseMaterial> {
         const vmt = await this.fetchMaterialData(path);
         const materialInstance = this.createMaterialInstanceInternal(vmt);
+        materialInstance.entityParams = entityParams;
         await materialInstance.init(renderContext);
         return materialInstance;
     }
@@ -1957,7 +1962,7 @@ class LightCacheWorldLight {
 
 export class LightCache {
     private leaf: number = -1;
-    private envCubemap: Cubemap;
+    public envCubemap: Cubemap;
     private worldLights: LightCacheWorldLight[] = nArray(Material_Generic_Program.MaxDynamicWorldLights, () => new LightCacheWorldLight());
 
     constructor(bspfile: BSPFile, private pos: vec3, bbox: AABB) {
@@ -2001,10 +2006,6 @@ export class LightCache {
                 break;
             }
         }
-    }
-
-    public async loadEnvCubemap(renderContext: SourceRenderContext): Promise<VTF> {
-        return renderContext.materialCache.fetchVTF(this.envCubemap.filename);
     }
 
     public fillWorldLights(d: Float32Array, offs: number): number {

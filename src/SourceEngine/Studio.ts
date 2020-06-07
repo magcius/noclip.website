@@ -876,8 +876,7 @@ class StudioModelMeshInstance {
     }
 
     private async bindMaterial(renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): Promise<void> {
-        this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialName);
-        this.materialInstance.entityParams = entityParams;
+        this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialName, entityParams);
         this.syncMaterialInstanceStaticLightingMode();
     }
 
@@ -957,12 +956,10 @@ class StudioModelLODInstance {
 export class StudioModelInstance {
     public visible: boolean = true;
     public modelMatrix = mat4.create();
-    // TODO(jstpierre): This should be moved to the entity (StaticPropRenderer), probably?
-    public materialParams = new EntityMaterialParameters();
 
     private lodInstance: StudioModelLODInstance[] = [];
 
-    constructor(renderContext: SourceRenderContext, private modelData: StudioModelData) {
+    constructor(renderContext: SourceRenderContext, private modelData: StudioModelData, materialParams: EntityMaterialParameters) {
         assert(this.modelData.bodyPartData.length === 1);
         const bodyPartData = this.modelData.bodyPartData[0];
 
@@ -971,16 +968,8 @@ export class StudioModelInstance {
 
         for (let k = 0; k < submodelData.lodData.length; k++) {
             const lodData = submodelData.lodData[k];
-            this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData, this.materialParams));
+            this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData, materialParams));
         }
-    }
-
-    public setAmbientCubeData(ambientCube: AmbientCube): void {
-        this.materialParams.ambientCube = ambientCube;
-    }
-
-    public setLightCache(lightCache: LightCache): void {
-        this.materialParams.lightCache = lightCache;
     }
 
     public setColorMeshData(device: GfxDevice, data: HardwareVertData): void {
@@ -1019,8 +1008,6 @@ export class StudioModelInstance {
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager) {
         if (!this.visible)
             return;
-
-        getMatrixTranslation(this.materialParams.position, this.modelMatrix);
 
         const lodIndex = this.getLODModelIndex(renderContext);
         this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix);
