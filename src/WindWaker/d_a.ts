@@ -11,7 +11,7 @@ import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm } fro
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF } from "./SComponent";
 import { dStage_Multi_c } from "./d_stage";
-import { nArray, assertExists } from "../util";
+import { nArray, assertExists, assert } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8 } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc } from "./d_kankyo_wether";
@@ -1320,15 +1320,21 @@ class daSeaFightGame_info_c {
         this.deadShipNum = 0;
     }
 
-    public attack(y: number, x: number): void {
-        if (this.bulletNum === 0)
-            return;
+    private useBullet(): void {
+        this.bulletNum--;
+        this.bulletFiredNum++;
+    }
+
+    public attack(y: number, x: number): number {
+        assert(this.bulletNum > 0);
 
         const index = y * this.gridWidth + x;
 
         if (this.grid[index] === 0) {
             // Miss.
             this.grid[index] = 1;
+            this.useBullet();
+            return -1;
         } else if (this.grid[index] >= 100) {
             const shipIndex = this.grid[index] - 100;
             const ship = assertExists(this.ships[shipIndex]);
@@ -1340,12 +1346,12 @@ class daSeaFightGame_info_c {
             }
 
             this.grid[index] = 2;
+            this.useBullet();
+            return shipIndex;
         } else {
-            return;
+            // No effect.
+            return -2;
         }
-
-        this.bulletNum--;
-        this.bulletFiredNum++;
     }
 
     private put_ship(shipIndex: number, numParts: number): void {
@@ -1672,7 +1678,21 @@ class d_a_mgameboard extends fopAc_ac_c {
     }
 
     public fire(): void {
-        this.minigame.attack(this.cursorY, this.cursorX);
+        if (this.minigame.bulletNum === 0)
+            return;
+
+        const ret = this.minigame.attack(this.cursorY, this.cursorX);
+
+        if (ret === -2) {
+            // No effect.
+            return;
+        }
+
+        if (ret === -1) {
+            // Miss.
+        } else {
+            // Hit ship.
+        }
     }
 
     private positionM(dst: mat4, xw: number, yw: number, zw: number, scaleX: number = 1, scaleY: number = scaleX): void {
@@ -1756,13 +1776,13 @@ class d_a_mgameboard extends fopAc_ac_c {
 
         for (let i = 0; i < this.bullet.length; i++) {
             const bullet = this.bullet[i];
-            bullet.whichTex = (i >= this.minigame.bulletFiredNum) ? 0 : 1;
+            bullet.whichTex = (i < this.minigame.bulletFiredNum) ? 1 : 0;
             this.positionBullet(bullet.modelMatrix, i);
         }
 
         for (let i = 0; i < this.squid.length; i++) {
             const squid = this.squid[i];
-            squid.whichTex = (this.minigame.ships[i].numAliveParts > 0) ? 0 : 1;
+            squid.whichTex = (i < this.minigame.deadShipNum) ? 1 : 0;
             this.positionSquid(squid.modelMatrix, i);
         }
 
