@@ -588,8 +588,6 @@ class SceneRenderer {
         template.setMegaStateFlags(this.megaStateFlags);
         template.filterKey = RenderPass.MAIN;
 
-        viewerInput.camera.setClipPlanes(/*n=*/20, /*f=*/500000);
-
         let offs = template.allocateUniformBuffer(KingdomHeartsIIProgram.ub_SceneParams, 20);
         const sceneParamsMapped = template.mapUniformBufferF32(KingdomHeartsIIProgram.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
