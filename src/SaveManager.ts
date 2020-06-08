@@ -49,7 +49,7 @@ export class SaveManager {
     }
 
     public saveSetting<T>(key: string, value: T, force: boolean = false): void {
-        if (force || (this.loadSetting<T | null>(key, null) === value))
+        if (!force && this.loadSetting<T | null>(key, null) === value)
             return;
         window.localStorage.setItem(this.getSettingKey(key), JSON.stringify(value));
         for (let i = 0; i < this.settingListeners.length; i++)
