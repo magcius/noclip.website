@@ -1857,8 +1857,8 @@ class d_a_mgameboard extends fopAc_ac_c {
             const ship = this.minigame.ships[i];
 
             // Only show dead ships, or after the game is over.
-            //if (ship.numAliveParts !== 0 && this.minigame.bulletNum !== 0)
-            //    continue;
+            if (ship.numAliveParts !== 0 && this.minigame.bulletNum !== 0)
+                continue;
 
             const model = this.shipModels[i];
             setLightTevColorType(globals, model, this.tevStr, viewerInput.camera);
