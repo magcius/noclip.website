@@ -591,7 +591,7 @@ function GxFogSet_Sub(fog: FogBlock, tevStr: { fogStartZ: number, fogEndZ: numbe
     colorCopy(fog.Color, fogColor);
 
     // Empirically decided.
-    const fogFarPlane = 32000;
+    const fogFarPlane = 100000;
 
     fogBlockSet(fog, FogType.PERSP_LIN, tevStr.fogStartZ, tevStr.fogEndZ, -camera.frustum.near, fogFarPlane);
 }

@@ -372,6 +372,8 @@ export class d_a_sea extends fopAc_ac_c {
 
         const gridSize = 800.0;
         const texCoordScale = 5.0e-4;
+
+        // Draw main sea part if requested
         if (!this.cullStopFlag) {
             for (let z = 0; z < 64; z++) {
                 const pz0 = this.drawMinZ + gridSize * z;
@@ -397,44 +399,16 @@ export class d_a_sea extends fopAc_ac_c {
             }
         }
 
-        // noclip modification: Draw skirts even when the cull flag is set.
-        if (this.drawMinZ > -450000.0) {
-            const px0 = -450000.0, px1 = 450000.0;
-            const pz0 = -450000.0, pz1 = this.drawMinZ;
-
-            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
-            this.ddraw.position3f32(px0, this.baseHeight, pz1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz1);
-            this.ddraw.position3f32(px0, this.baseHeight, pz0);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz0);
-            this.ddraw.position3f32(px1, this.baseHeight, pz1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz1);
-            this.ddraw.position3f32(px1, this.baseHeight, pz0);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
-            this.ddraw.end();
-        }
-
-        if (this.drawMaxZ < 450000.0) {
-            const px0 = -450000.0, px1 = 450000.0;
-            const pz0 = this.drawMaxZ, pz1 = 450000.0;
-
-            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
-            this.ddraw.position3f32(px0, this.baseHeight, pz1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz1);
-            this.ddraw.position3f32(px0, this.baseHeight, pz0);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz0);
-            this.ddraw.position3f32(px1, this.baseHeight, pz1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz1);
-            this.ddraw.position3f32(px1, this.baseHeight, pz0);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
-            this.ddraw.end();
-        }
-
-        if (this.drawMinZ > -450000.0 && this.drawMaxZ < 450000.0) {
-            const pz0 = this.drawMinZ, pz1 = this.drawMaxZ;
-
-            if (this.drawMinX > -450000.0) {
-                const px0 = -450000.0, px1 = this.drawMinX;
+        // noclip modification: draw skirt even when cull flag is set. This will cause clouds to render a bit weird...
+        const drawSkirt = true;
+        if (drawSkirt) {
+            const skirtMinX = -450000.0;
+            const skirtMaxX =  450000.0;
+            const skirtMinZ = -450000.0;
+            const skirtMaxZ =  450000.0;
+            if (this.drawMinZ > skirtMinZ) {
+                const px0 = skirtMinX, px1 = skirtMaxX;
+                const pz0 = skirtMinZ, pz1 = this.drawMinZ;
 
                 this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
                 this.ddraw.position3f32(px0, this.baseHeight, pz1);
@@ -448,8 +422,9 @@ export class d_a_sea extends fopAc_ac_c {
                 this.ddraw.end();
             }
 
-            if (this.drawMaxX < 450000.0) {
-                const px0 = this.drawMaxX, px1 = 450000.0;
+            if (this.drawMaxZ < skirtMaxZ) {
+                const px0 = skirtMinX, px1 = skirtMaxX;
+                const pz0 = this.drawMaxZ, pz1 = skirtMaxZ;
 
                 this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
                 this.ddraw.position3f32(px0, this.baseHeight, pz1);
@@ -461,6 +436,40 @@ export class d_a_sea extends fopAc_ac_c {
                 this.ddraw.position3f32(px1, this.baseHeight, pz0);
                 this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
                 this.ddraw.end();
+            }
+
+            if (this.drawMinZ > skirtMinZ && this.drawMaxZ < skirtMaxZ) {
+                const pz0 = this.drawMinZ, pz1 = this.drawMaxZ;
+
+                if (this.drawMinX > skirtMinX) {
+                    const px0 = skirtMinX, px1 = this.drawMinX;
+
+                    this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+                    this.ddraw.position3f32(px0, this.baseHeight, pz1);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz1);
+                    this.ddraw.position3f32(px0, this.baseHeight, pz0);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz0);
+                    this.ddraw.position3f32(px1, this.baseHeight, pz1);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz1);
+                    this.ddraw.position3f32(px1, this.baseHeight, pz0);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
+                    this.ddraw.end();
+                }
+
+                if (this.drawMaxX < skirtMaxX) {
+                    const px0 = this.drawMaxX, px1 = skirtMaxX;
+
+                    this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+                    this.ddraw.position3f32(px0, this.baseHeight, pz1);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz1);
+                    this.ddraw.position3f32(px0, this.baseHeight, pz0);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz0);
+                    this.ddraw.position3f32(px1, this.baseHeight, pz1);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz1);
+                    this.ddraw.position3f32(px1, this.baseHeight, pz0);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
+                    this.ddraw.end();
+                }
             }
         }
 
@@ -525,10 +534,10 @@ export class d_a_sea extends fopAc_ac_c {
         if (globals.stageName === 'sea' && isFullSea) {
             const roomNo = clamp(((this.idxZ - 1) * 7) + this.idxX, 1, 49);
             globals.mStayNo = roomNo;
-        }
 
-        if (this.roomNo !== globals.mStayNo && globals.mStayNo !== 0)
-            this.CheckRoomChange(globals);
+            if (this.roomNo !== globals.mStayNo && globals.mStayNo !== 0)
+                this.CheckRoomChange(globals);
+        }
 
         this.CalcFlatInter(globals);
         dKy_usonami_set(globals, this.flatInter);

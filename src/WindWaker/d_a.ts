@@ -25,7 +25,6 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from '../gx/gx_enum';
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
 import { GlobalSaveManager } from "../SaveManager";
 
 // Framework'd actors
@@ -744,10 +743,10 @@ class d_a_vrbox2 extends fopAc_ac_c {
         let skyboxOffsY = 0;
         const fili = globals.roomStatus[globals.mStayNo].fili;
         if (fili !== null)
-            skyboxOffsY = 0.09 * (globals.cameraPosition[1] - fili.skyboxY);
+            skyboxOffsY = fili.skyboxY;
 
         MtxTrans(globals.cameraPosition, false);
-        calc_mtx[13] -= skyboxOffsY;
+        calc_mtx[13] -= 0.09 * (globals.cameraPosition[1] - skyboxOffsY);
 
         if (this.usoUmi !== null) {
             mat4.copy(this.usoUmi.modelMatrix, calc_mtx);
@@ -761,6 +760,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
             mDoExt_modelUpdateDL(globals, this.kasumiMae, renderInstManager, viewerInput, globals.dlst.sky);
         }
 
+        calc_mtx[13] += 100.0;
         mat4.copy(this.backCloud.modelMatrix, calc_mtx);
         dKy_setLight__OnModelInstance(envLight, this.backCloud, viewerInput.camera);
         mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, viewerInput, globals.dlst.sky);
@@ -1853,16 +1853,13 @@ class d_a_mgameboard extends fopAc_ac_c {
             mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
         }
 
-        for (let i = 0; i < this.minigame.ships.length; i++) {
-            const ship = this.minigame.ships[i];
-
-            // Only show dead ships, or after the game is over.
-            if (ship.numAliveParts !== 0 && this.minigame.bulletNum !== 0)
-                continue;
-
-            const model = this.shipModels[i];
-            setLightTevColorType(globals, model, this.tevStr, viewerInput.camera);
-            mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
+        // Show ships after the game ends.
+        if (this.minigame.bulletNum === 0) {
+            for (let i = 0; i < this.minigame.ships.length; i++) {
+                const model = this.shipModels[i];
+                setLightTevColorType(globals, model, this.tevStr, viewerInput.camera);
+                mDoExt_modelUpdateDL(globals, model, renderInstManager, viewerInput, globals.dlst.ui);
+            }
         }
 
         renderInstManager.setCurrentRenderInstList(globals.dlst.ui[1]);

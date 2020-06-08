@@ -1184,6 +1184,7 @@ const sceneDescs = [
     new SceneDesc("K_Teste", "K_Teste"),
     new SceneDesc("DmSpot0", "DmSpot0"),
     new SceneDesc("Amos_T", "Amos_T"),
+    new SceneDesc("A_umikz", "A_umikz"),
 ];
 
 const id = "zww";

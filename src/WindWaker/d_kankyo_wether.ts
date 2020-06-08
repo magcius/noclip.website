@@ -1402,6 +1402,8 @@ function dKyr_sun_move(globals: dGlobals): void {
     const envLight = globals.g_env_light;
     const pkt = envLight.sunPacket!;
 
+    return;
+
     const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
     if (envLight.baseLight.color.r === 0.0 && roomType !== 2) {
         dKyr_get_vectle_calc(globals.cameraPosition, envLight.baseLight.pos, scratchVec3);
@@ -2067,7 +2069,8 @@ function vrkumo_move(globals: dGlobals, deltaTimeInFrames: number): void {
             skyboxY = fili.skyboxY;
         if (globals.stageName === 'Siren' && globals.mStayNo === 17)
             skyboxY = -14101.0;
-        skyboxOffsY -= 0.09 * (globals.cameraPosition[1] - skyboxY);
+        // TODO(jstpierre): Re-enable this?
+        // skyboxOffsY -= 0.09 * (globals.cameraPosition[1] - skyboxY);
     }
 
     for (let i = 0; i < 100; i++) {
