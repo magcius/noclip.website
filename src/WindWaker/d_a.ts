@@ -1816,7 +1816,7 @@ class d_a_mgameboard extends fopAc_ac_c {
     public execute(globals: dGlobals, deltaTimeInFrames: number): void {
         const inputManager = globals.context.inputManager;
         if (this.minigameResetTimer >= 0) {
-            // this.minigameResetTimer -= deltaTimeInFrames;
+            this.minigameResetTimer -= deltaTimeInFrames;
             if (this.minigameResetTimer <= 0 || inputManager.isKeyDownEventTriggered('KeyF'))
                 this.minigameDeactivate(globals);
         } else if (this.minigame.bulletNum === 0 || this.minigame.aliveShipNum === 0) {
