@@ -1402,8 +1402,6 @@ function dKyr_sun_move(globals: dGlobals): void {
     const envLight = globals.g_env_light;
     const pkt = envLight.sunPacket!;
 
-    return;
-
     const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
     if (envLight.baseLight.color.r === 0.0 && roomType !== 2) {
         dKyr_get_vectle_calc(globals.cameraPosition, envLight.baseLight.pos, scratchVec3);

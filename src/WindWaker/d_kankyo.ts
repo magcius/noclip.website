@@ -7,7 +7,7 @@ import { lerp, invlerp, clamp, MathConstants } from "../MathHelpers";
 import { nArray, assert, arrayRemove, assertExists } from "../util";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Camera } from "../Camera";
-import { ColorKind } from "../gx/gx_render";
+import { ColorKind, MaterialParams } from "../gx/gx_render";
 import { dGlobals } from "./zww_scenes";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { dKyw_rain_set, ThunderState, ThunderMode, dKyw_wether_move, dKyw_wether_move_draw, dKankyo_sun_Packet, dKyr__sun_arrival_check, dKyw_wether_draw, dKankyo_vrkumo_Packet, dKyw_wether_move_draw2, dKyw_wether_draw2, dKankyo__CommonTextures, dKankyo_rain_Packet, dKankyo__Windline, dKankyo_wave_Packet, dKy_wave_chan_init, dKankyo_star_Packet, dKyw_wind_set } from "./d_kankyo_wether";
@@ -612,6 +612,11 @@ export function dKy_setLight__OnModelInstance(envLight: dScnKy_env_light_c, mode
 
     const light1 = modelInstance.getGXLightReference(1);
     lightSetFromWorldLight(light1, envLight.lightStatus[1], camera);
+}
+
+export function dKy_setLight__OnMaterialParams(envLight: dScnKy_env_light_c, materialParams: MaterialParams, camera: Camera): void {
+    lightSetFromWorldLight(materialParams.u_Lights[0], envLight.lightStatus[0], camera);
+    lightSetFromWorldLight(materialParams.u_Lights[1], envLight.lightStatus[1], camera);
 }
 
 export function setLightTevColorType(globals: dGlobals, modelInstance: J3DModelInstance, tevStr: dKy_tevstr_c, camera: Camera): void {

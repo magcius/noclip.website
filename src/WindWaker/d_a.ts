@@ -6,7 +6,7 @@ import { dComIfG_resLoad, ResType } from "./d_resorce";
 import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set } from "./d_kankyo";
+import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_setLight, dKy_setLight__OnMaterialParams } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF } from "./SComponent";
@@ -19,14 +19,15 @@ import { ColorKind, GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferS
 import { d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, MathConstants, transformVec3Mat4w1 } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
-import { TSDraw } from "../SuperMarioGalaxy/DDraw";
+import { TSDraw, TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from '../gx/gx_enum';
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GlobalSaveManager } from "../SaveManager";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector } from "../DebugJunk";
+import { TevDefaultSwapTables } from "../gx/gx_material";
 
 // Framework'd actors
 
@@ -1912,6 +1913,9 @@ class dCloth_packet_c {
     private globalWind = vec3.clone(Vec3UnitZ);
     private scale = vec3.clone(Vec3One);
     private wave = 0;
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+    private materialHelperBack: GXMaterialHelperGfx;
 
     // Settings.
     public gravity = 0;
@@ -1940,6 +1944,54 @@ class dCloth_packet_c {
         }
 
         this.setNrm();
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.NRM, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        const mb = new GXMaterialBuilder();
+        mb.setUsePnMtxIdx(false);
+
+        mb.setChanCtrl(0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0x03, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD1, GX.TexGenType.SRTG, GX.TexGenSrc.COLOR0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevSwapMode(0, TevDefaultSwapTables[0], TevDefaultSwapTables[1]);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevSwapMode(1, TevDefaultSwapTables[0], TevDefaultSwapTables[0]);
+        mb.setTevColorIn(1, GX.CC.ZERO, GX.CC.TEXC, GX.CC.CPREV, GX.CC.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevSwapMode(2, TevDefaultSwapTables[0], TevDefaultSwapTables[2]);
+        mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.C2, GX.CC.TEXC, GX.CC.CPREV);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        // d_cloth_packet::matDL has these settings
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+
+        mb.setCullMode(GX.CullMode.BACK);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish('Flag Front'));
+
+        mb.setCullMode(GX.CullMode.FRONT);
+        this.materialHelperBack = new GXMaterialHelperGfx(mb.finish('Flag Back'));
+
+        // We reuse the same material data for both sides. We should totally be able to do that.
+        assert(this.materialHelper.materialParamsBufferSize === this.materialHelperBack.materialParamsBufferSize);
     }
 
     protected factorCheck(fly: number, hoist: number): boolean {
@@ -1959,8 +2011,8 @@ class dCloth_packet_c {
 
         for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
             for (let fly = 0; fly < this.flyGridSize; fly++) {
-                const pos = posArr[this.getIndex(hoist, fly)];
-                const dst = nrmArr[this.getIndex(hoist, fly)];
+                const pos = posArr[this.getIndex(fly, hoist)];
+                const dst = nrmArr[this.getIndex(fly, hoist)];
 
                 vec3.set(dst, 0, 0, 0);
 
@@ -1974,7 +2026,7 @@ class dCloth_packet_c {
 
                     if (hoistM1 !== hoist) {
                         vec3.sub(scratchVec3b, posArr[this.getIndex(fly, hoistM1)], pos);
-                        vec3.cross(scratchVec3c, scratchVec3a, scratchVec3b);
+                        vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
                         vec3.normalize(scratchVec3c, scratchVec3c);
                         vec3.add(dst, dst, scratchVec3c);
                     }
@@ -1999,7 +2051,7 @@ class dCloth_packet_c {
 
                     if (hoistP1 !== hoist) {
                         vec3.sub(scratchVec3b, posArr[this.getIndex(fly, hoistP1)], pos);
-                        vec3.cross(scratchVec3c, scratchVec3a, scratchVec3b);
+                        vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
                         vec3.normalize(scratchVec3c, scratchVec3c);
                         vec3.add(dst, dst, scratchVec3c);
                     }
@@ -2007,7 +2059,7 @@ class dCloth_packet_c {
 
                 vec3.normalize(dst, dst);
 
-                const theta = this.rotateY + Math.sin((this.wave + this.ripple * (fly + hoist)) * kUshortTo2PI);
+                const theta = (kUshortTo2PI * this.rotateY) * Math.sin((this.wave + this.ripple * (fly + hoist)) * kUshortTo2PI);
                 computeModelMatrixR(scratchMat4a, 0, theta, 0);
                 transformVec3Mat4w0(dst, scratchMat4a, dst);
             }
@@ -2076,7 +2128,7 @@ class dCloth_packet_c {
                 this.getFactor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, distFly, distHoist, distBoth, fly, hoist, deltaTimeInFrames);
                 vec3.add(this.speedArr[idx], this.speedArr[idx], scratchVec3c);
                 vec3.scale(this.speedArr[idx], this.speedArr[idx], this.drag ** deltaTimeInFrames);
-                vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], deltaTimeInFrames);
+                vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], clamp(deltaTimeInFrames, 0, 1));
             }
         }
 
@@ -2084,15 +2136,81 @@ class dCloth_packet_c {
         this.setNrm();
     }
 
+    private plotPoint(ddraw: TDDraw, fly: number, hoist: number, front: boolean): void {
+        const posArr = this.posArr[this.curArr];
+        const nrmArr = this.nrmArr;
+
+        const tx = (fly + 0) / (this.flyGridSize - 1);
+        const ty = (hoist / (this.hoistGridSize - 1));
+        const idx = this.getIndex(fly, hoist);
+
+        ddraw.position3vec3(posArr[idx]);
+        if (front) {
+            ddraw.normal3vec3(nrmArr[idx]);
+        } else {
+            const x = nrmArr[idx][0], y = nrmArr[idx][1], z = nrmArr[idx][2];
+            ddraw.normal3f32(-x, -y, -z);
+        }
+        ddraw.texCoord2f32(GX.Attr.TEX0, tx, ty);
+    }
+
+    private plot(ddraw: TDDraw, front: boolean): void {
+        for (let fly = 0; fly < this.flyGridSize - 1; fly++) {
+            ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+
+            for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
+                this.plotPoint(ddraw, fly + 0, hoist, front);
+                this.plotPoint(ddraw, fly + 1, hoist, front);
+            }
+
+            ddraw.end();
+        }
+    }
+
+    private drawSide(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw, front: boolean): void {
+        this.plot(ddraw, front);
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        const materialHelper = front ? this.materialHelper : this.materialHelperBack;
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
     public cloth_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        /*
         const ctx = getDebugOverlayCanvas2D();
 
         for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
             for (let fly = 0; fly < this.flyGridSize; fly++) {
                 transformVec3Mat4w1(scratchVec3a, this.mtx, this.posArr[this.curArr][this.getIndex(fly, hoist)]);
-                drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a);
+                transformVec3Mat4w0(scratchVec3b, this.mtx, this.nrmArr[this.getIndex(fly, hoist)]);
+                drawWorldSpaceVector(ctx, viewerInput.camera, scratchVec3a, scratchVec3b, 50);
             }
         }
+        */
+
+        const template = renderInstManager.pushTemplateRenderInst();
+
+        dKy_setLight__OnMaterialParams(globals.g_env_light, materialParams, viewerInput.camera);
+        this.flagTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        this.toonTex.fillTextureMapping(materialParams.m_TextureMapping[1]);
+        template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        const offs = this.materialHelper.allocateMaterialParams(template);
+        this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.tevstr.colorC0);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.tevstr.colorK0);
+        colorCopy(materialParams.u_Color[ColorKind.C2], this.tevstr.colorK1);
+        template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
+        fillPacketParamsData(template.mapUniformBufferF32(ub_PacketParams), template.getUniformBufferOffset(ub_PacketParams), packetParams);
+
+        const ddraw = this.ddraw;
+        const device = globals.modelCache.device;
+        ddraw.beginDraw();
+        this.drawSide(device, renderInstManager, ddraw, true);
+        this.drawSide(device, renderInstManager, ddraw, false);
+        ddraw.endAndUpload(device, renderInstManager);
+
+        renderInstManager.popTemplateRenderInst();
     }
 
     public setGlobalWind(v: vec3): void {
@@ -2107,6 +2225,10 @@ class dCloth_packet_c {
 
     public setMtx(m: mat4): void {
         mat4.copy(this.mtx, m);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
     }
 }
 
@@ -2170,7 +2292,7 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.ripple = 900;
         this.cloth.rotateY = -800;
         this.cloth.windSpeed = 13.0;
-        this.cloth.windSpeedWave = 7.0;
+        this.cloth.windSpeedWave = 8.0;
         this.cloth.setGlobalWind(this.windvec);
         this.cloth.cloth_move(deltaTimeInFrames);
     }
@@ -2182,6 +2304,10 @@ class d_a_sie_flag extends fopAc_ac_c {
         mat4.copy(this.model.modelMatrix, calc_mtx);
         MtxTrans(this.flagOffset, true);
         this.cloth.setMtx(calc_mtx);
+    }
+
+    public delete(globals: dGlobals): void {
+        this.cloth.destroy(globals.modelCache.device);
     }
 }
 

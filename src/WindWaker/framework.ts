@@ -423,7 +423,7 @@ export function fpcM_Management(globals: fGlobals, globalUserData: GlobalUserDat
     fpcCt_Handler(globals, globalUserData);
     // fpcPi_Handler(globals);
     // fpcCt_Handler(globals);
-    const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 30;
+    const deltaTimeInFrames = Math.min(viewerInput.deltaTime / 1000 * 30, 5);
     fpcEx_Handler(globals, globalUserData, deltaTimeInFrames);
     fpcDw_Handler(globals, globalUserData, renderInstManager, viewerInput);
 }

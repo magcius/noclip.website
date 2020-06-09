@@ -64,6 +64,8 @@ function copyTevStage(tevStage: TevStage): TevStage {
         indTexWrapT: tevStage.indTexWrapT,
         indTexAddPrev: tevStage.indTexAddPrev,
         indTexUseOrigLOD: tevStage.indTexUseOrigLOD,
+        texSwapTable: tevStage.texSwapTable,
+        rasSwapTable: tevStage.rasSwapTable,
     };
 }
 
