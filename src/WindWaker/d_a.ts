@@ -991,7 +991,7 @@ class d_a_kytag01 extends fopAc_ac_c {
             envLight.waveScaleRand = 0.001;
             envLight.waveScaleBottom = 6.0;
             envLight.waveCount = 300;
-            envLight.waveSpawnRadius = 30;
+            envLight.waveSpeed = 30;
             envLight.waveFlatInter = 0;
 
             if (globals.stageName === 'MajyuE') {

@@ -591,15 +591,16 @@ export class d_a_sea extends fopAc_ac_c {
         let waveTheta2_Base = (this.scratchThetaX[2] * offsX) + (this.scratchThetaZ[2] * offsZ - this.scratchOffsAnim[2]) + this.waveInfo.waveParam[2].phase;
         let waveTheta3_Base = (this.scratchThetaX[3] * offsX) + (this.scratchThetaZ[3] * offsZ - this.scratchOffsAnim[3]) + this.waveInfo.waveParam[3].phase;
 
-        let idx = 65;
-        for (let z = 1; z < 64; z++) {
+        // noclip modification: Base game doesn't handle sea actors at anything other than y=0.
+        // Normally this is unused, but Siren Room 18 has such an actor out of bounds. Make it look somewhat nice.
+        for (let z = 0; z <= 64; z++) {
             let waveTheta0 = waveTheta0_Base;
             let waveTheta1 = waveTheta1_Base;
             let waveTheta2 = waveTheta2_Base;
             let waveTheta3 = waveTheta3_Base;
 
-            for (let x = 0; x < 64; x++) {
-                this.heightTable[idx++] = (this.baseHeight +
+            for (let x = 0; x <= 64; x++) {
+                this.heightTable[z*65 + x] = this.baseHeight + (
                     (this.scratchHeight[0] * Math.cos(waveTheta0)) +
                     (this.scratchHeight[1] * Math.cos(waveTheta1)) +
                     (this.scratchHeight[2] * Math.cos(waveTheta2)) +
@@ -616,7 +617,6 @@ export class d_a_sea extends fopAc_ac_c {
             waveTheta1_Base += gridSize * this.scratchThetaZ[1];
             waveTheta2_Base += gridSize * this.scratchThetaZ[2];
             waveTheta3_Base += gridSize * this.scratchThetaZ[3];
-            idx++;
         }
 
         this.waveInfo.AddCounter(deltaTimeInFrames);
