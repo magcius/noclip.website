@@ -17,7 +17,7 @@ import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8 } from "..
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc } from "./d_kankyo_wether";
 import { ColorKind, GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, MaterialParams, PacketParams, fillPacketParamsData } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
-import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp } from "../MathHelpers";
+import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, MathConstants, transformVec3Mat4w1 } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
 import { TSDraw } from "../SuperMarioGalaxy/DDraw";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
@@ -26,6 +26,7 @@ import * as GX from '../gx/gx_enum';
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GlobalSaveManager } from "../SaveManager";
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 
 // Framework'd actors
 
@@ -52,6 +53,12 @@ export function mDoMtx_ZYXrotM(dst: mat4, v: vec3): void {
     mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
     mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
     mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
+}
+
+export function mDoMtx_ZXYrotM(dst: mat4, v: vec3): void {
+    mat4.rotateZ(dst, dst, v[2] * kUshortTo2PI);
+    mat4.rotateX(dst, dst, v[0] * kUshortTo2PI);
+    mat4.rotateY(dst, dst, v[1] * kUshortTo2PI);
 }
 
 export function mDoMtx_XYZrotM(dst: mat4, v: vec3): void {
@@ -82,6 +89,7 @@ export function quatM(q: quat, dst = calc_mtx, scratch = scratchMat4a): void {
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 
 class d_a_grass extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_grass;
@@ -395,12 +403,12 @@ class daBg_btkAnm_c {
         // this.isSC_01 = modelData.bmd.mat3.materialEntries[0].name.startsWith('SC_01');
     }
 
-    public play(deltaTimeFrames: number): void {
+    public play(deltaTimeInFrames: number): void {
         if (this.isSC_01) {
             // Sync to SE timer.
-            this.anm.play(deltaTimeFrames);
+            this.anm.play(deltaTimeInFrames);
         } else {
-            this.anm.play(deltaTimeFrames);
+            this.anm.play(deltaTimeInFrames);
         }
     }
 }
@@ -416,8 +424,8 @@ class daBg_brkAnm_c {
         this.anm.entry(modelInstance);
     }
 
-    public play(deltaTimeFrames: number): void {
-        this.anm.play(deltaTimeFrames);
+    public play(deltaTimeInFrames: number): void {
+        this.anm.play(deltaTimeInFrames);
     }
 }
 
@@ -1894,6 +1902,288 @@ class d_a_mgameboard extends fopAc_ac_c {
     }
 }
 
+class dCloth_packet_c {
+    private posArr: vec3[][];
+    private nrmArr: vec3[];
+    private speedArr: vec3[];
+    private curArr: number = 0;
+
+    private mtx = mat4.create();
+    private globalWind = vec3.clone(Vec3UnitZ);
+    private scale = vec3.clone(Vec3One);
+    private wave = 0;
+
+    // Settings.
+    public gravity = 0;
+    public spring = 1;
+    public waveSpeed = 0x0400;
+    public windSpeed = 10;
+    public windSpeedWave = 5;
+    public flyFlex = 1;
+    public hoistFlex = 1;
+    public drag = 1;
+    public normalRotateY = 0;
+    public normalRotateYWaveDiag = 0;
+
+    constructor(private toonTex: BTIData, private flagTex: BTIData, private flyGridSize: number, private hoistGridSize: number, private flyLength: number, private hoistLength: number, private tevstr: dKy_tevstr_c) {
+        const gridSize = this.flyGridSize * this.hoistGridSize;
+        this.posArr = nArray(2, () => nArray(gridSize, () => vec3.create()));
+        this.nrmArr = nArray(gridSize, () => vec3.create());
+        this.speedArr = nArray(gridSize, () => vec3.create());
+
+        for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
+            for (let fly = 0; fly < this.flyGridSize; fly++) {
+                const idx = this.getIndex(fly, hoist);
+                vec3.set(this.posArr[0][idx], 0, this.hoistLength * (hoist / (this.hoistGridSize - 1)), this.flyLength * (fly / (this.flyGridSize - 1)));
+                vec3.copy(this.posArr[1][idx], this.posArr[0][idx]);
+            }
+        }
+
+        this.setNrm();
+    }
+
+    protected factorCheck(f: number, h: number): boolean {
+        if (f === 0)
+            return true;
+
+        return false;
+    }
+
+    private getIndex(fly: number, hoist: number): number {
+        return hoist * this.flyGridSize + fly;
+    }
+
+    private setNrm(): void {
+        const posArr = this.posArr[this.curArr];
+        const nrmArr = this.nrmArr;
+
+        for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
+            for (let fly = 0; fly < this.flyGridSize; fly++) {
+                const pos = posArr[this.getIndex(hoist, fly)];
+                const dst = nrmArr[this.getIndex(hoist, fly)];
+
+                vec3.set(dst, 0, 0, 0);
+
+                const flyM1 = clamp(fly - 1, 0, this.flyGridSize - 1);
+                const flyP1 = clamp(fly + 1, 0, this.flyGridSize - 1);
+                const hoistM1 = clamp(hoist - 1, 0, this.hoistGridSize - 1);
+                const hoistP1 = clamp(hoist + 1, 0, this.hoistGridSize - 1);
+
+                if (flyM1 !== fly) {
+                    vec3.sub(scratchVec3a, posArr[this.getIndex(flyM1, hoist)], pos);
+
+                    if (hoistM1 !== hoist) {
+                        vec3.sub(scratchVec3b, posArr[this.getIndex(fly, hoistM1)], pos);
+                        vec3.cross(scratchVec3c, scratchVec3a, scratchVec3b);
+                        vec3.normalize(scratchVec3c, scratchVec3c);
+                        vec3.add(dst, dst, scratchVec3c);
+                    }
+
+                    if (hoistP1 !== hoist) {
+                        vec3.sub(scratchVec3b, posArr[this.getIndex(fly, hoistP1)], pos);
+                        vec3.cross(scratchVec3c, scratchVec3a, scratchVec3b);
+                        vec3.normalize(scratchVec3c, scratchVec3c);
+                        vec3.add(dst, dst, scratchVec3c);
+                    }
+                }
+
+                if (flyP1 !== fly) {
+                    vec3.sub(scratchVec3a, posArr[this.getIndex(flyP1, hoist)], pos);
+
+                    if (hoistM1 !== hoist) {
+                        vec3.sub(scratchVec3b, posArr[this.getIndex(fly, hoistM1)], pos);
+                        vec3.cross(scratchVec3c, scratchVec3a, scratchVec3b);
+                        vec3.normalize(scratchVec3c, scratchVec3c);
+                        vec3.add(dst, dst, scratchVec3c);
+                    }
+
+                    if (hoistP1 !== hoist) {
+                        vec3.sub(scratchVec3b, posArr[this.getIndex(fly, hoistP1)], pos);
+                        vec3.cross(scratchVec3c, scratchVec3a, scratchVec3b);
+                        vec3.normalize(scratchVec3c, scratchVec3c);
+                        vec3.add(dst, dst, scratchVec3c);
+                    }
+                }
+
+                vec3.normalize(dst, dst);
+
+                const theta = this.normalRotateY + Math.sin((this.wave + this.normalRotateYWaveDiag * (fly + hoist)) * MathConstants.TAU);
+                computeModelMatrixR(scratchMat4a, 0, theta, 0);
+                transformVec3Mat4w0(dst, scratchMat4a, dst);
+            }
+        }
+    }
+
+    private get_cloth_anim_sub_factor(dst: vec3, pos: vec3, other: vec3, distIdeal: number, spring: number, scratch = scratchVec3b): void {
+        vec3.sub(scratch, other, pos);
+        const distActual = vec3.length(scratch);
+        const distTarget = (distActual - distIdeal) * spring;
+        vec3.scaleAndAdd(dst, dst, scratch, distTarget / distActual);
+    }
+
+    private getFactor(dst: vec3, posArr: vec3[], nrmArr: vec3[], speed: vec3, distFly: number, distHoist: number, distBoth: number, fly: number, hoist: number): void {
+        if (this.factorCheck(fly, hoist)) {
+            vec3.set(dst, 0, 0, 0);
+            return;
+        }
+
+        const idx = this.getIndex(fly, hoist);
+
+        const pos = posArr[idx];
+        vec3.scale(dst, nrmArr[idx], vec3.dot(speed, nrmArr[idx]));
+        dst[1] += this.gravity;
+
+        const flyM1 = clamp(fly - 1, 0, this.flyGridSize - 1);
+        const flyP1 = clamp(fly + 1, 0, this.flyGridSize - 1);
+        const hoistM1 = clamp(hoist - 1, 0, this.hoistGridSize - 1);
+        const hoistP1 = clamp(hoist + 1, 0, this.hoistGridSize - 1);
+
+        // Apply constraints.
+
+        if (flyM1 !== fly)
+            this.get_cloth_anim_sub_factor(dst, pos, posArr[this.getIndex(flyM1, hoist)], distFly, this.spring);
+        if (flyP1 !== fly)
+            this.get_cloth_anim_sub_factor(dst, pos, posArr[this.getIndex(flyP1, hoist)], distFly, this.spring);
+        if (hoistM1 !== hoist)
+            this.get_cloth_anim_sub_factor(dst, pos, posArr[this.getIndex(fly, hoistM1)], distHoist, this.spring);
+        if (hoistP1 !== hoist)
+            this.get_cloth_anim_sub_factor(dst, pos, posArr[this.getIndex(fly, hoistP1)], distHoist, this.spring);
+        if (flyM1 !== fly && hoistM1 !== hoist)
+            this.get_cloth_anim_sub_factor(dst, pos, posArr[this.getIndex(flyM1, hoistM1)], distBoth, this.spring);
+        if (flyM1 !== fly && hoistP1 !== hoist)
+            this.get_cloth_anim_sub_factor(dst, pos, posArr[this.getIndex(flyM1, hoistP1)], distBoth, this.spring);
+        if (flyP1 !== fly && hoistM1 !== hoist)
+            this.get_cloth_anim_sub_factor(dst, pos, posArr[this.getIndex(flyP1, hoistM1)], distBoth, this.spring);
+        if (flyP1 !== fly && hoistP1 !== hoist)
+            this.get_cloth_anim_sub_factor(dst, pos, posArr[this.getIndex(flyP1, hoistP1)], distBoth, this.spring);
+    }
+
+    public cloth_move(deltaTimeInFrames: number): void {
+        // Compute global wind vector.
+        vec3.scale(scratchVec3a, this.globalWind, this.windSpeed + this.windSpeedWave * Math.sin(this.wave * MathConstants.TAU));
+
+        const distFly = this.flyFlex * (this.flyLength / (this.flyGridSize - 1));
+        const distHoist = this.hoistFlex * (this.hoistLength / (this.hoistGridSize - 1));
+        const distBoth = Math.hypot(distFly, distHoist);
+
+        const posArrOld = this.posArr[this.curArr];
+        this.curArr ^= 1;
+        const posArrNew = this.posArr[this.curArr];
+
+        for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
+            for (let fly = 0; fly < this.flyGridSize; fly++) {
+                const idx = this.getIndex(fly, hoist);
+                this.getFactor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, distFly, distHoist, distBoth, fly, hoist);
+                vec3.scaleAndAdd(this.speedArr[idx], this.speedArr[idx], scratchVec3c, this.drag ** deltaTimeInFrames);
+                vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], deltaTimeInFrames);
+            }
+        }
+
+        this.wave += this.waveSpeed * deltaTimeInFrames;
+        this.setNrm();
+    }
+
+    public cloth_draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const ctx = getDebugOverlayCanvas2D();
+
+        for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
+            for (let fly = 0; fly < this.flyGridSize; fly++) {
+                transformVec3Mat4w1(scratchVec3a, this.mtx, this.posArr[this.curArr][this.getIndex(fly, hoist)]);
+                drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a);
+            }
+        }
+    }
+
+    public setGlobalWind(v: vec3): void {
+        computeMatrixWithoutTranslation(scratchMat4a, this.mtx);
+        mat4.invert(scratchMat4a, scratchMat4a);
+        transformVec3Mat4w0(this.globalWind, scratchMat4a, v);
+    }
+
+    public setScale(v: vec3): void {
+        vec3.copy(this.scale, v);
+    }
+
+    public setMtx(m: mat4): void {
+        mat4.copy(this.mtx, m);
+    }
+}
+
+class d_a_sie_flag extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_sie_flag;
+
+    private model: J3DModelInstance;
+    private cloth: dCloth_packet_c;
+    private windvec = vec3.create();
+    private flagOffset = vec3.fromValues(0, 900, 0);
+
+    public clothTevStr = new dKy_tevstr_c();
+
+    public subload(globals: dGlobals): cPhs__Status {
+        let status: cPhs__Status;
+
+        status = dComIfG_resLoad(globals, 'Eshata');
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = dComIfG_resLoad(globals, 'Cloth');
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        console.log(this);
+
+        const resCtrl = globals.resCtrl;
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, 'Eshata', 0x04));
+
+        dKy_tevstr_init(this.clothTevStr, this.roomNo);
+        const toonTex = resCtrl.getObjectRes(ResType.Bti, 'Cloth', 0x03);
+        const flagTex = resCtrl.getObjectRes(ResType.Bti, 'Eshata', 0x07);
+        this.cloth = new dCloth_packet_c(toonTex, flagTex, 5, 5, 700.0, 360.0, this.clothTevStr);
+    
+        vec3.copy(this.windvec, dKyw_get_wind_vec(globals.g_env_light));
+
+        this.set_mtx();
+
+        return cPhs__Status.Next;
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
+        settingTevStruct(globals, LightType.Actor, this.pos, this.clothTevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+        this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+
+        this.set_mtx();
+
+        // TODO(jstpierre): Update windvec
+
+        this.cloth.spring = 0.4;
+        this.cloth.gravity = -0.75;
+        this.cloth.drag = 0.899;
+        this.cloth.waveSpeed = 0x0400;
+        this.cloth.normalRotateY = 900;
+        this.cloth.normalRotateYWaveDiag = -800;
+        this.cloth.windSpeed = 13.0;
+        this.cloth.windSpeedWave = 7.0;
+        this.cloth.setGlobalWind(this.windvec);
+        this.cloth.cloth_move(deltaTimeInFrames);
+    }
+
+    private set_mtx(): void {
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+        MtxTrans(this.flagOffset, true);
+        this.cloth.setMtx(calc_mtx);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -1916,4 +2206,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_obj_zouK1);
     R(d_a_swhit0);
     R(d_a_mgameboard);
+    // R(d_a_sie_flag);
 }
