@@ -1922,8 +1922,8 @@ class dCloth_packet_c {
     public flyFlex = 1;
     public hoistFlex = 1;
     public drag = 1;
-    public normalRotateY = 0;
-    public normalRotateYWaveDiag = 0;
+    public rotateY = 0;
+    public ripple = 0;
 
     constructor(private toonTex: BTIData, private flagTex: BTIData, private flyGridSize: number, private hoistGridSize: number, private flyLength: number, private hoistLength: number, private tevstr: dKy_tevstr_c) {
         const gridSize = this.flyGridSize * this.hoistGridSize;
@@ -1934,7 +1934,7 @@ class dCloth_packet_c {
         for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
             for (let fly = 0; fly < this.flyGridSize; fly++) {
                 const idx = this.getIndex(fly, hoist);
-                vec3.set(this.posArr[0][idx], 0, this.hoistLength * (hoist / (this.hoistGridSize - 1)), this.flyLength * (fly / (this.flyGridSize - 1)));
+                vec3.set(this.posArr[0][idx], 0, -this.hoistLength * (hoist / (this.hoistGridSize - 1)), this.flyLength * (fly / (this.flyGridSize - 1)));
                 vec3.copy(this.posArr[1][idx], this.posArr[0][idx]);
             }
         }
@@ -1942,8 +1942,8 @@ class dCloth_packet_c {
         this.setNrm();
     }
 
-    protected factorCheck(f: number, h: number): boolean {
-        if (f === 0)
+    protected factorCheck(fly: number, hoist: number): boolean {
+        if (fly === 0 && (hoist === 0 || hoist === this.hoistGridSize - 1))
             return true;
 
         return false;
@@ -2007,7 +2007,7 @@ class dCloth_packet_c {
 
                 vec3.normalize(dst, dst);
 
-                const theta = this.normalRotateY + Math.sin((this.wave + this.normalRotateYWaveDiag * (fly + hoist)) * MathConstants.TAU);
+                const theta = this.rotateY + Math.sin((this.wave + this.ripple * (fly + hoist)) * kUshortTo2PI);
                 computeModelMatrixR(scratchMat4a, 0, theta, 0);
                 transformVec3Mat4w0(dst, scratchMat4a, dst);
             }
@@ -2021,7 +2021,7 @@ class dCloth_packet_c {
         vec3.scaleAndAdd(dst, dst, scratch, distTarget / distActual);
     }
 
-    private getFactor(dst: vec3, posArr: vec3[], nrmArr: vec3[], speed: vec3, distFly: number, distHoist: number, distBoth: number, fly: number, hoist: number): void {
+    private getFactor(dst: vec3, posArr: vec3[], nrmArr: vec3[], speed: vec3, distFly: number, distHoist: number, distBoth: number, fly: number, hoist: number, deltaTimeInFrames: number): void {
         if (this.factorCheck(fly, hoist)) {
             vec3.set(dst, 0, 0, 0);
             return;
@@ -2031,7 +2031,7 @@ class dCloth_packet_c {
 
         const pos = posArr[idx];
         vec3.scale(dst, nrmArr[idx], vec3.dot(speed, nrmArr[idx]));
-        dst[1] += this.gravity;
+        dst[1] += this.gravity * deltaTimeInFrames;
 
         const flyM1 = clamp(fly - 1, 0, this.flyGridSize - 1);
         const flyP1 = clamp(fly + 1, 0, this.flyGridSize - 1);
@@ -2060,10 +2060,10 @@ class dCloth_packet_c {
 
     public cloth_move(deltaTimeInFrames: number): void {
         // Compute global wind vector.
-        vec3.scale(scratchVec3a, this.globalWind, this.windSpeed + this.windSpeedWave * Math.sin(this.wave * MathConstants.TAU));
+        vec3.scale(scratchVec3a, this.globalWind, this.windSpeed + this.windSpeedWave * Math.sin(this.wave * kUshortTo2PI));
 
-        const distFly = this.flyFlex * (this.flyLength / (this.flyGridSize - 1));
-        const distHoist = this.hoistFlex * (this.hoistLength / (this.hoistGridSize - 1));
+        const distFly = (this.flyLength / (this.flyGridSize - 1)) * this.flyFlex;
+        const distHoist = (this.hoistLength / (this.hoistGridSize - 1)) * this.hoistFlex;
         const distBoth = Math.hypot(distFly, distHoist);
 
         const posArrOld = this.posArr[this.curArr];
@@ -2073,8 +2073,9 @@ class dCloth_packet_c {
         for (let hoist = 0; hoist < this.hoistGridSize; hoist++) {
             for (let fly = 0; fly < this.flyGridSize; fly++) {
                 const idx = this.getIndex(fly, hoist);
-                this.getFactor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, distFly, distHoist, distBoth, fly, hoist);
-                vec3.scaleAndAdd(this.speedArr[idx], this.speedArr[idx], scratchVec3c, this.drag ** deltaTimeInFrames);
+                this.getFactor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, distFly, distHoist, distBoth, fly, hoist, deltaTimeInFrames);
+                vec3.add(this.speedArr[idx], this.speedArr[idx], scratchVec3c);
+                vec3.scale(this.speedArr[idx], this.speedArr[idx], this.drag ** deltaTimeInFrames);
                 vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], deltaTimeInFrames);
             }
         }
@@ -2166,8 +2167,8 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth.gravity = -0.75;
         this.cloth.drag = 0.899;
         this.cloth.waveSpeed = 0x0400;
-        this.cloth.normalRotateY = 900;
-        this.cloth.normalRotateYWaveDiag = -800;
+        this.cloth.ripple = 900;
+        this.cloth.rotateY = -800;
         this.cloth.windSpeed = 13.0;
         this.cloth.windSpeedWave = 7.0;
         this.cloth.setGlobalWind(this.windvec);
@@ -2206,5 +2207,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_obj_zouK1);
     R(d_a_swhit0);
     R(d_a_mgameboard);
-    // R(d_a_sie_flag);
+    R(d_a_sie_flag);
 }
