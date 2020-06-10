@@ -125,169 +125,200 @@ interface SymbolData {
     Data: ArrayBufferSlice;
 }
 
-function pushSymbolEntry(datas: SymbolData[], entry: SymbolMapEntry, data: ArrayBufferSlice): ArrayBufferSlice {
-    console.log(entry.filename, entry.symbolName, hexzero(entry.addr, 8), entry.size);
-    datas.push({ Filename: entry.filename, SymbolName: entry.symbolName, Data: data });
-    return data;
+function basename(filename: string): string {
+    return filename.split('/').pop();
 }
 
-function getSymbolDataREL(relFile: RelFile, mapFile: SymbolMap, entry: SymbolMapEntry): ArrayBufferSlice {
-    const sectionIdx = mapFile.sectionNames.indexOf(entry.sectionName);
-    assert(sectionIdx >= 0);
-    const offs = relFile.offs[sectionIdx] + entry.addr;
-    const data = relFile.buffer.subarray(offs, entry.size);
-    return data;
-}
+class DOL {
+    public name: string;
+    public map: SymbolMap;
 
-function getSymbolDataDOL(dolFile: DolFile, mapFile: SymbolMap, entry: SymbolMapEntry): ArrayBufferSlice {
-    const sectionTypeIdx = sectionTypeStringToIdx(entry.sectionName);
-    const offs = dolFile.offs[sectionTypeIdx] + entry.addr;
-    const data = fetchDataFragmentSync(dolFile.filename, offs, entry.size);
-    return data;
-}
+    private filename: string;
+    private offs: Uint32Array;
+    private addr: Uint32Array;
+    private size: Uint32Array;
 
-function extractSymbol(datas: SymbolData[], dolHeader: DolFile, mapFile: SymbolMap, symFile: string, symName: string): void {
-    const entry = assertExists(mapFile.entries.find((e) => e.filename === symFile && e.symbolName === symName));
-    const data = getSymbolDataDOL(dolHeader, mapFile, entry);
-    pushSymbolEntry(datas, entry, data);
-}
+    constructor(dolFilename: string, mapFilename: string) {
+        this.map = parseMapFile(mapFilename);
+        this.name = basename(dolFilename);
 
-interface DolFile {
-    filename: string;
-    offs: Uint32Array;
-    addr: Uint32Array;
-    size: Uint32Array;
-}
+        const buffer = fetchDataFragmentSync(dolFilename, 0x00, 0xE4);
+        this.offs = buffer.createTypedArray(Uint32Array, 0x00, 18, Endianness.BIG_ENDIAN);
+        this.addr = buffer.createTypedArray(Uint32Array, 0x48, 18, Endianness.BIG_ENDIAN);
+        this.size = buffer.createTypedArray(Uint32Array, 0x90, 18, Endianness.BIG_ENDIAN);
+        this.filename = dolFilename;
+    }
 
-function parseDolFile(filename: string): DolFile {
-    const buffer = fetchDataFragmentSync(filename, 0x00, 0xE4);
-    const offs = buffer.createTypedArray(Uint32Array, 0x00, 18, Endianness.BIG_ENDIAN);
-    const addr = buffer.createTypedArray(Uint32Array, 0x48, 18, Endianness.BIG_ENDIAN);
-    const size = buffer.createTypedArray(Uint32Array, 0x90, 18, Endianness.BIG_ENDIAN);
-    return { filename, offs, addr, size };
+    public getSymbolData(entry: SymbolMapEntry): ArrayBufferSlice {
+        const sectionTypeIdx = sectionTypeStringToIdx(entry.sectionName);
+        const offs = this.offs[sectionTypeIdx] + entry.addr;
+        const data = fetchDataFragmentSync(this.filename, offs, entry.size);
+        return data;
+    }
 }
 
 // We don't do a full relocation, we just hardcode the pointer to the .data section.
-interface RelFile {
-    buffer: ArrayBufferSlice;
-    offs: number[];
-    size: number[];
-}
+class REL {
+    public name: string;
+    public map: SymbolMap;
 
-function parseRelFile(filename: string): RelFile {
-    let buffer = fetchDataSync(filename);
-    if (readString(buffer, 0x00, 0x04) === 'Yaz0')
-        buffer = Yaz0.decompress(buffer);
+    private buffer: ArrayBufferSlice;
+    private offs: number[] = [];
+    private size: number[] = [];
 
-    const view = buffer.createDataView();
-    const sectionTableCount = view.getUint32(0x0C);
-    let sectionTableOffs = view.getUint32(0x10);
+    constructor(relFilename: string, mapFilename: string) {
+        this.map = parseMapFile(mapFilename);
+        this.name = basename(relFilename);
 
-    const offs: number[] = [];
-    const size: number[] = [];
-    for (let i = 0; i < sectionTableCount; i++) {
-        // Skip section 0.
-        if (i !== 0) {
-            const sectionOffs = view.getUint32(sectionTableOffs + 0x00);
-            const sectionSize = view.getUint32(sectionTableOffs + 0x04);
-            offs.push(sectionOffs);
-            size.push(sectionSize);
+        let buffer = fetchDataSync(relFilename);
+        if (readString(buffer, 0x00, 0x04) === 'Yaz0')
+            buffer = Yaz0.decompress(buffer);
+
+        this.buffer = buffer;
+
+        const view = buffer.createDataView();
+        const sectionTableCount = view.getUint32(0x0C);
+        let sectionTableOffs = view.getUint32(0x10);
+
+        for (let i = 0; i < sectionTableCount; i++) {
+            // Skip section 0.
+            if (i !== 0) {
+                const sectionOffs = view.getUint32(sectionTableOffs + 0x00);
+                const sectionSize = view.getUint32(sectionTableOffs + 0x04);
+                this.offs.push(sectionOffs);
+                this.size.push(sectionSize);
+            }
+            sectionTableOffs += 0x08;
         }
-        sectionTableOffs += 0x08;
+
+        this.map = parseMapFile(mapFilename);
     }
 
-    return { buffer, offs, size };
+    public getSymbolData(entry: SymbolMapEntry): ArrayBufferSlice {
+        const sectionIdx = this.map.sectionNames.indexOf(entry.sectionName);
+        assert(sectionIdx >= 0);
+        const offs = this.offs[sectionIdx] + entry.addr;
+        const data = this.buffer.subarray(offs, entry.size);
+        return data;
+    }
 }
 
-function extractExtra() {
-    const dolHeader = parseDolFile(`${pathBaseIn}/main.dol`);
-    const framework = parseMapFile(`${pathBaseIn}/maps/framework.map`);
+type Binary = DOL | REL;
+
+function extractExtra(binaries: Binary[]) {
     const datas: SymbolData[] = [];
 
-    // d_flower.o
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_Txq_bessou_hanaTEX`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_pos3`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_color3`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_texCoord3`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_QbsafDL`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_QbsfwDL`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_Txo_ob_flower_white_64x64TEX`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_pos`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_color`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_texCoord`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_OhanaDL`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_Ohana_gutDL`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_Txo_ob_flower_pink_64x64TEX`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_pos2`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_color2`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_texCoord2`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_Ohana_highDL`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_Ohana_high_gutDL`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_matDL3`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_matDL`);
-    extractSymbol(datas, dolHeader, framework, `d_flower.o`, `l_matDL2`);
+    function pushSymbolEntry(datas: SymbolData[], entry: SymbolMapEntry, data: ArrayBufferSlice): ArrayBufferSlice {
+        console.log(entry.filename, entry.symbolName, hexzero(entry.addr, 8), entry.size);
+        datas.push({ Filename: entry.filename, SymbolName: entry.symbolName, Data: data });
+        return data;
+    }
 
-    // d_tree.o
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_color');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_vtxDescList$4669');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_pos');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_color');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_texCoord');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_matDL');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Oba_swood_noneDL');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Oba_swood_a_cuttDL');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Oba_swood_a_cutuDL');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Oba_swood_a_hapaDL');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Oba_swood_a_mikiDL');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Txa_kage_32TEX');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'g_dTree_Oba_kage_32DL');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'g_dTree_shadowMatDL');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'g_dTree_shadowPos');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'g_dTree_shadowTexCoord');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_shadowColor$4656');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_shadowVtxAttrFmtList$4655');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_shadowVtxDescList$4654');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
-    extractSymbol(datas, dolHeader, framework, 'd_tree.o', 'l_vtxAttrFmtList$4670');
-    
-    // d_grass.o
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_color');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_K_kusa_00TEX');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_matDL');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_Oba_kusa_a_cutDL');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_Oba_kusa_aDL');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_pos');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_texCoord');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_Txa_ob_kusa_aTEX');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_Vmori_00DL');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_Vmori_01DL');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_Vmori_color');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_Vmori_matDL');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_Vmori_pos');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_Vmori_texCoord');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_vtxAttrFmtList$4529');
-    extractSymbol(datas, dolHeader, framework, 'd_grass.o', 'l_vtxDescList$4528');
+    function extractSymbol(datas: SymbolData[], binary: Binary, symFile: string, symName: string): void {
+        const entry = assertExists(binary.map.entries.find((e) => e.filename === symFile && e.symbolName === symName), `${symFile} / ${symName}`);
+        const data = binary.getSymbolData(entry);
+        pushSymbolEntry(datas, entry, data);
+    }
 
-    // d_stage.o
-    extractSymbol(datas, dolHeader, framework, `d_stage.o`, `l_objectName`); // Maps actor names to ID and Subtype
+    function findBinary(name: string): Binary {
+        return assertExists(binaries.find((binary) => binary.name === name));
+    }
 
-    // d_dylink.o
-    extractSymbol(datas, dolHeader, framework, `c_dylink.o`, `DynamicNameTable`); // Maps IDs to pointers to REL names in the string table
-    extractSymbol(datas, dolHeader, framework, `c_dylink.o`, `@stringBase0`); // List of Null-terminated REL names. Indexed by DynamicNameTable
+    const framework = findBinary('main.dol');
 
-    // d_kankyo_data.o
-    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_time_attribute`);
-    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_time_attribute_boss`);
-    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_envr_default`);
-    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_field_data`);
-    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_pselect_default`);
-    extractSymbol(datas, dolHeader, framework, `d_kankyo_data.o`, `l_vr_box_data`);
+    // main.dol : d_flower.o
+    extractSymbol(datas, framework, `d_flower.o`, `l_Txq_bessou_hanaTEX`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_pos3`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_color3`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_texCoord3`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_QbsafDL`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_QbsfwDL`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_Txo_ob_flower_white_64x64TEX`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_pos`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_color`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_texCoord`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_OhanaDL`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_Ohana_gutDL`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_Txo_ob_flower_pink_64x64TEX`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_pos2`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_color2`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_texCoord2`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_Ohana_highDL`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_Ohana_high_gutDL`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_matDL3`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_matDL`);
+    extractSymbol(datas, framework, `d_flower.o`, `l_matDL2`);
 
-    // d_a_sea.o
-    extractSymbol(datas, dolHeader, framework, `d_a_sea.o`, `wi_prm_ocean`);
+    // main.dol : d_tree.o
+    extractSymbol(datas, framework, 'd_tree.o', 'l_color');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_vtxDescList$4669');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_pos');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_color');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_texCoord');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_matDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_noneDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_a_cuttDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_a_cutuDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_a_hapaDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Oba_swood_a_mikiDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_kage_32TEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_Oba_kage_32DL');
+    extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_shadowMatDL');
+    extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_shadowPos');
+    extractSymbol(datas, framework, 'd_tree.o', 'g_dTree_shadowTexCoord');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_shadowColor$4656');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_shadowVtxAttrFmtList$4655');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_shadowVtxDescList$4654');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_Txa_swood_aTEX');
+    extractSymbol(datas, framework, 'd_tree.o', 'l_vtxAttrFmtList$4670');
+
+    // main.dol : d_grass.o
+    extractSymbol(datas, framework, 'd_grass.o', 'l_color');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_K_kusa_00TEX');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_matDL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Oba_kusa_a_cutDL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Oba_kusa_aDL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_pos');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_texCoord');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Txa_ob_kusa_aTEX');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_00DL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_01DL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_color');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_matDL');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_pos');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_Vmori_texCoord');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_vtxAttrFmtList$4529');
+    extractSymbol(datas, framework, 'd_grass.o', 'l_vtxDescList$4528');
+
+    // main.dol : d_stage.o
+    extractSymbol(datas, framework, `d_stage.o`, `l_objectName`); // Maps actor names to ID and Subtype
+
+    // main.dol : d_dylink.o
+    extractSymbol(datas, framework, `c_dylink.o`, `DynamicNameTable`); // Maps IDs to pointers to REL names in the string table
+    extractSymbol(datas, framework, `c_dylink.o`, `@stringBase0`); // List of Null-terminated REL names. Indexed by DynamicNameTable
+
+    // main.dol : d_kankyo_data.o
+    extractSymbol(datas, framework, `d_kankyo_data.o`, `l_time_attribute`);
+    extractSymbol(datas, framework, `d_kankyo_data.o`, `l_time_attribute_boss`);
+    extractSymbol(datas, framework, `d_kankyo_data.o`, `l_envr_default`);
+    extractSymbol(datas, framework, `d_kankyo_data.o`, `l_field_data`);
+    extractSymbol(datas, framework, `d_kankyo_data.o`, `l_pselect_default`);
+    extractSymbol(datas, framework, `d_kankyo_data.o`, `l_vr_box_data`);
+
+    // main.dol : d_a_sea.o
+    extractSymbol(datas, framework, `d_a_sea.o`, `wi_prm_ocean`);
+
+    // d_a_majuu_flag.rel : d_a_majuu_flag.o
+    const d_a_majuu_flag = findBinary(`d_a_majuu_flag.rel`);
+    extractSymbol(datas, d_a_majuu_flag, `d_a_majuu_flag.o`, `l_majuu_flag_pos`);
+    extractSymbol(datas, d_a_majuu_flag, `d_a_majuu_flag.o`, `l_majuu_flagDL`);
+    extractSymbol(datas, d_a_majuu_flag, `d_a_majuu_flag.o`, `l_flag02TEX`);
+    extractSymbol(datas, d_a_majuu_flag, `d_a_majuu_flag.o`, `l_texCoord`);
+    extractSymbol(datas, d_a_majuu_flag, `d_a_majuu_flag.o`, `rel_pos_idx_tbl$4099`);
+    extractSymbol(datas, d_a_majuu_flag, `d_a_majuu_flag.o`, `rel_pos_idx_tbl$4282`);
 
     const crg1 = {
         SymbolData: datas,
@@ -297,15 +328,25 @@ function extractExtra() {
     writeFileSync(`${pathBaseOut}/extra.crg1_arc`, Buffer.from(data));
 }
 
-async function extractProfiles() {
-    const datas: ArrayBufferSlice[] = [];
+async function loadBinaries(): Promise<Binary[]> {
+    const binaries: Binary[] = [];
 
-    function iterProfileSymbols(m: SymbolMap, callback: (mapFile: SymbolMap, e: SymbolMapEntry) => void): void {
-        for (let i = 0; i < m.entries.length; i++) {
-            if (m.entries[i].symbolName.startsWith('g_profile_'))
-                callback(m, m.entries[i]);
-        }
+    // Parse DOL.
+    binaries.push(new DOL(`${pathBaseIn}/main.dol`, `${pathBaseIn}/maps/framework.map`));
+
+    // Parse RELs.
+    const rels = readdirSync(`${pathBaseIn}/rels`);
+    for (let i = 0; i < rels.length; i++) {
+        const relFilename = `${pathBaseIn}/rels/${rels[i]}`;
+        const mapFilename = `${pathBaseIn}/maps/${rels[i].replace('.rel', '.map')}`;
+        binaries.push(new REL(relFilename, mapFilename));
     }
+
+    return binaries;
+}
+
+function extractProfiles(binaries: Binary[]) {
+    const datas: ArrayBufferSlice[] = [];
 
     function processProfile(data: ArrayBufferSlice, rel: boolean): void {
         const view = data.createDataView();
@@ -320,23 +361,11 @@ async function extractProfiles() {
         datas[pcName] = data;
     }
 
-    // Grab DOL profiles.
-    const dolHeader = parseDolFile(`${pathBaseIn}/main.dol`);
-    const framework = parseMapFile(`${pathBaseIn}/maps/framework.map`);
-    iterProfileSymbols(framework, (mapFile, entry) => {
-        processProfile(getSymbolDataDOL(dolHeader, mapFile, entry), false);
-    });
-
-    // Grab REL profiles.
-    const rels = readdirSync(`${pathBaseIn}/rels`);
-    for (let i = 0; i < rels.length; i++) {
-        const relFilename = `${pathBaseIn}/rels/${rels[i]}`;
-        const mapFilename = `${pathBaseIn}/maps/${rels[i].replace('.rel', '.map')}`;
-        const rel = parseRelFile(relFilename);
-        const map = parseMapFile(mapFilename);
-        iterProfileSymbols(map, (mapFile, entry) => {
-            processProfile(getSymbolDataREL(rel, mapFile, entry), true);
-        });
+    for (const binary of binaries) {
+        const m = binary.map;
+        for (let i = 0; i < m.entries.length; i++)
+            if (m.entries[i].symbolName.startsWith('g_profile_'))
+                processProfile(binary.getSymbolData(m.entries[i]), binary instanceof REL);
     }
 
     const crg1 = {
@@ -347,9 +376,10 @@ async function extractProfiles() {
     writeFileSync(`${pathBaseOut}/f_pc_profiles.crg1_arc`, Buffer.from(data));
 }
 
-function main() {
-    extractExtra();
-    extractProfiles();
+async function main() {
+    const binaries = await loadBinaries();
+    extractExtra(binaries);
+    extractProfiles(binaries);
 }
 
 main();

@@ -141,7 +141,7 @@ function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
 
-function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width: number, height: number, format: GX.TexFormat, wrapS: GX.WrapMode, wrapT: GX.WrapMode, name: string = ''): BTIData {
+export function loadRawTexture(globals: dGlobals, data: ArrayBufferSlice, width: number, height: number, format: GX.TexFormat, wrapS: GX.WrapMode, wrapT: GX.WrapMode, name: string = ''): BTIData {
     const btiTexture: BTI_Texture = {
         name,
         width, height, format, wrapS, wrapT,

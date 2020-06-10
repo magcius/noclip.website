@@ -11,7 +11,7 @@ import { assertExists, hexzero, leftPad } from '../util';
 import { ResType, ResEntry, ResAssetType } from './d_resorce';
 import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
-import { computeModelMatrixSRT } from '../MathHelpers';
+import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers';
 import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType } from './d_kankyo';
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA';
 import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework';
@@ -1348,10 +1348,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             fetchArchive(`Sh`).then((rarc) => {
                 const mainModel = buildModel(rarc, `bmdm/shb.bmd`);
                 mainModel.bindANK1(parseBCK(rarc, 'bck/bfly.bck'));
-                mat4.scale(mainModel.modelMatrix, mainModel.modelMatrix, [9, 9, 9]);
+                scaleMatrix(mainModel.modelMatrix, mainModel.modelMatrix, 9);
                 const propellerModel = buildModel(rarc, `bmdm/shp.bmd`);
                 propellerModel.bindANK1(parseBCK(rarc, 'bck/pfly.bck'));
-                mat4.scale(propellerModel.modelMatrix, propellerModel.modelMatrix, [9, 9, 9]);
+                scaleMatrix(propellerModel.modelMatrix, propellerModel.modelMatrix, 9);
                 mat4.translate(propellerModel.modelMatrix, propellerModel.modelMatrix, [0, 50, 0]); // Estimated Y offset
             });
         } else {
@@ -1770,8 +1770,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         // Other tags?
     } else if (actorName === 'HyoiKam') {
         // Misc. gameplay data
-    } else if (actorName === 'MtFlag' || actorName === 'SieFlag' || actorName === 'Gflag' || actorName === 'MjFlag') {
-        // Flags (only contains textures)
     } else if (actorName === 'Akabe') {
         // Collision
     } else {

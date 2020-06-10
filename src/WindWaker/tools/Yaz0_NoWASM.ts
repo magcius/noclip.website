@@ -57,7 +57,7 @@ export function decompress(srcBuffer: ArrayBufferSlice): ArrayBufferSlice {
             }
 
             if (uncompressedSize <= 0)
-                return new ArrayBufferSlice(dstBuffer.buffer);
+                return new ArrayBufferSlice(dstBuffer.buffer as ArrayBuffer);
         }
     }
 }
