@@ -22,7 +22,7 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRen
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { MathConstants } from "../MathHelpers";
+import { MathConstants, scaleMatrix } from "../MathHelpers";
 import { CameraController } from '../Camera';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
@@ -752,7 +752,7 @@ class SceneDesc implements Viewer.SceneDesc {
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
-            mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
+            scaleMatrix(cmbRenderer.modelMatrix, actor.modelMatrix, scale);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
@@ -900,7 +900,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.shapeInstances[3].visible = chest === Chest.SMALL_WOODEN || chest === Chest.LARGE_WOODEN;
 
                 if (chest === Chest.BOSS || chest === Chest.LARGE_WOODEN)
-                    mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2]);
+                    scaleMatrix(b.modelMatrix, b.modelMatrix, 2);
             }
 
             const whichBox = ((actor.variable) >>> 12) & 0x0F;

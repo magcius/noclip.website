@@ -1,7 +1,7 @@
 import { GeometryRenderer, FlipbookRenderer, GeometryData, MovementController, AnimationMode, SpawnedObjects, BKLayer } from './render';
 import { vec3, mat4, vec2 } from 'gl-matrix';
 import { nArray, assertExists } from '../util';
-import { MathConstants, lerp, angleDist } from '../MathHelpers';
+import { MathConstants, lerp, angleDist, scaleMatrix } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
 import { brentildaWandConfig, ConfigurableEmitter, Emitter, farJumpPadConfig, JumpPadEmitter, lavaRockLaunchFlameConfig, nearJumpPadConfig, ParticleType, SparkleColor, Sparkler, lavaRockBigTrailConfig, lavaRockSmallTrailConfig, MultiEmitter, lavaRockExplosionConfig, fireballIndex, lavaSmokeIndex, emitAt, lavaRockShardsConfig, lavaRockSmokeConfig, LavaRockEmitter, StreamEmitter, fromBB, SceneEmitterHolder, SnowballChunkEmitter, randomRange } from './particles';
 import { ViewerRenderInput } from '../viewer';
@@ -1068,10 +1068,7 @@ class Bobber implements MovementController {
         mat4.fromYRotation(dst, this.baseYaw + Math.sin(phase) * this.amplitudes[0]);
         mat4.rotateX(dst, dst, Math.cos(phase) * this.amplitudes[1]);
         mat4.rotateZ(dst, dst, this.baseRoll);
-        if (this.baseScale !== 1) {
-            vec3.set(movementScratch, this.baseScale, this.baseScale, this.baseScale);
-            mat4.scale(dst, dst, movementScratch);
-        }
+        scaleMatrix(dst, dst, this.baseScale);
         dst[12] = this.basePos[0];
         dst[13] = this.basePos[1] + Math.sin(phase) * this.amplitudes[2];
         dst[14] = this.basePos[2];
@@ -1147,10 +1144,7 @@ export class Projectile implements MovementController {
         mat4.fromTranslation(dst, movementScratch);
         mat4.rotateY(dst, dst, this.angularVel[0] * currTime);
         mat4.rotateX(dst, dst, this.angularVel[1] * currTime);
-        if (this.scale !== 1) {
-            vec3.set(movementScratch, this.scale, this.scale, this.scale);
-            mat4.scale(dst, dst, movementScratch);
-        }
+        scaleMatrix(dst, dst, this.scale);
 
         this.reachedPeak = currTime * this.g >= this.startVel[1];
     }

@@ -10,10 +10,10 @@ import { assertExists } from "../util";
 import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { getRes, XanimePlayer } from "./Animation";
-import { vec3, vec2, mat4, quat } from "gl-matrix";
+import { vec3, vec2, mat4, quat, ReadonlyVec3, ReadonlyQuat } from "gl-matrix";
 import { HitSensor, HitSensorType } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ, setMatrixTranslation, getMatrixTranslation } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ, setMatrixTranslation, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
@@ -513,11 +513,11 @@ export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor
     actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
 }
 
-export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: vec3): void {
+export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3): void {
     actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
-export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: vec3): void {
+export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3): void {
     actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
@@ -532,8 +532,7 @@ export function sendArbitraryMsg(sceneObjHolder: SceneObjHolder, messageType: Me
 function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
     mat4.copy(dst, assertExists(actor.getBaseMtx()));
     const scaleX = actor.scale[0];
-    vec3.set(scratchVec3, scaleX, scaleX, scaleX);
-    mat4.scale(dst, dst, scratchVec3);
+    scaleMatrix(dst, dst, scaleX);
 }
 
 export function resetAllCollisionMtx(actor: LiveActor): void {
@@ -832,7 +831,7 @@ export function makeMtxTRFromQuatVec(dst: mat4, q: quat, translation: vec3): voi
     dst[14] = translation[2];
 }
 
-export function setMtxAxisXYZ(dst: mat4, x: vec3, y: vec3, z: vec3): void {
+export function setMtxAxisXYZ(dst: mat4, x: ReadonlyVec3, y: ReadonlyVec3, z: ReadonlyVec3): void {
     dst[0] = x[0];
     dst[1] = x[1];
     dst[2] = x[2];
@@ -847,7 +846,7 @@ export function setMtxAxisXYZ(dst: mat4, x: vec3, y: vec3, z: vec3): void {
     dst[11] = 0.0;
 }
 
-export function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): void {
+export function makeMtxFrontUpPos(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3, pos: ReadonlyVec3): void {
     const frontNorm = scratchVec3a;
     const upNorm = scratchVec3b;
     const right = scratchVec3c;
@@ -859,7 +858,7 @@ export function makeMtxFrontUpPos(dst: mat4, front: vec3, up: vec3, pos: vec3): 
     setMatrixTranslation(dst, pos);
 }
 
-export function makeMtxUpFront(dst: mat4, up: vec3, front: vec3): void {
+export function makeMtxUpFront(dst: mat4, up: ReadonlyVec3, front: ReadonlyVec3): void {
     const upNorm = scratchVec3b;
     const frontNorm = scratchVec3a;
     const right = scratchVec3c;
@@ -870,18 +869,18 @@ export function makeMtxUpFront(dst: mat4, up: vec3, front: vec3): void {
     setMtxAxisXYZ(dst, right, upNorm, frontNorm);
 }
 
-export function makeMtxUpFrontPos(dst: mat4, up: vec3, front: vec3, pos: vec3): void {
+export function makeMtxUpFrontPos(dst: mat4, up: ReadonlyVec3, front: ReadonlyVec3, pos: ReadonlyVec3): void {
     makeMtxUpFront(dst, up, front);
     setMatrixTranslation(dst, pos);
 }
 
-export function makeQuatUpFront(dst: quat, up: vec3, front: vec3): void {
+export function makeQuatUpFront(dst: quat, up: ReadonlyVec3, front: ReadonlyVec3): void {
     makeMtxUpFrontPos(scratchMatrix, up, front, Vec3Zero);
     mat4.getRotation(dst, scratchMatrix);
     quat.normalize(dst, dst);
 }
 
-export function quatSetRotate(q: quat, v0: vec3, v1: vec3, t: number = 1.0, scratch = scratchVec3): void {
+export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: number = 1.0, scratch = scratchVec3): void {
     // v0 and v1 are normalized.
 
     // TODO(jstpierre): There's probably a better way to do this that doesn't involve an atan2.
@@ -896,28 +895,28 @@ export function quatSetRotate(q: quat, v0: vec3, v1: vec3, t: number = 1.0, scra
     }
 }
 
-export function quatGetAxisX(dst: vec3, q: quat): void {
+export function quatGetAxisX(dst: vec3, q: ReadonlyQuat): void {
     const x = q[0], y = q[1], z = q[2], w = q[3];
     dst[0] = (1.0 - 2.0 * y * y) - 2.0 * z * z;
     dst[1] = 2.0 * x * y + 2.0 * w * z;
     dst[2] = 2.0 * x * z - 2.0 * w * y;
 }
 
-export function quatGetAxisY(dst: vec3, q: quat): void {
+export function quatGetAxisY(dst: vec3, q: ReadonlyQuat): void {
     const x = q[0], y = q[1], z = q[2], w = q[3];
     dst[0] = 2.0 * x * y - 2.0 * w * z;
     dst[1] = (1.0 - 2.0 * x * x) - 2.0 * z * z;
     dst[2] = 2.0 * y * z + 2.0 * w * x;
 }
 
-export function quatGetAxisZ(dst: vec3, q: quat): void {
+export function quatGetAxisZ(dst: vec3, q: ReadonlyQuat): void {
     const x = q[0], y = q[1], z = q[2], w = q[3];
     dst[0] = 2.0 * x * z + 2.0 * w * y;
     dst[1] = 2.0 * y * z - 2.0 * x * w;
     dst[2] = (1.0 - 2.0 * x * x) - 2.0 * y * y;
 }
 
-export function isSameDirection(v0: vec3, v1: vec3, ep: number): boolean {
+export function isSameDirection(v0: ReadonlyVec3, v1: ReadonlyVec3, ep: number): boolean {
     if (Math.abs(v0[1] * v1[2] - v0[2] * v1[1]) > ep)
         return false;
     if (Math.abs(v0[2] * v1[0] - v0[0] * v1[2]) > ep)
@@ -993,7 +992,7 @@ export function turnQuatYDirRad(dst: quat, q: quat, v: vec3, rad: number): void 
 }
 
 // Project pos onto the line created by p0...p1.
-export function calcPerpendicFootToLine(dst: vec3, pos: vec3, p0: vec3, p1: vec3, scratch = scratchVec3): number {
+export function calcPerpendicFootToLine(dst: vec3, pos: ReadonlyVec3, p0: ReadonlyVec3, p1: ReadonlyVec3, scratch = scratchVec3): number {
     vec3.sub(scratch, p1, p0);
     const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
     const coord = proj / vec3.squaredLength(scratch);
@@ -1002,7 +1001,7 @@ export function calcPerpendicFootToLine(dst: vec3, pos: vec3, p0: vec3, p1: vec3
 }
 
 // Project pos onto the line created by p0...p1, clamped to the inside of the line.
-export function calcPerpendicFootToLineInside(dst: vec3, pos: vec3, p0: vec3, p1: vec3, scratch = scratchVec3): number {
+export function calcPerpendicFootToLineInside(dst: vec3, pos: ReadonlyVec3, p0: ReadonlyVec3, p1: ReadonlyVec3, scratch = scratchVec3): number {
     vec3.sub(scratch, p1, p0);
     const proj = vec3.dot(scratch, pos) - vec3.dot(scratch, p0);
     const coord = saturate(proj / vec3.squaredLength(scratch));
@@ -1010,7 +1009,7 @@ export function calcPerpendicFootToLineInside(dst: vec3, pos: vec3, p0: vec3, p1
     return coord;
 }
 
-export function vecKillElement(dst: vec3, a: vec3, b: vec3): number {
+export function vecKillElement(dst: vec3, a: ReadonlyVec3, b: ReadonlyVec3): number {
     const m = vec3.dot(a, b);
     dst[0] = a[0] - b[0]*m;
     dst[1] = a[1] - b[1]*m;

@@ -8,11 +8,11 @@ export function assert(b: boolean, message: string = ""): asserts b {
     }
 }
 
-export function assertExists<T>(v: T | null | undefined): T {
+export function assertExists<T>(v: T | null | undefined, name: string = ''): T {
     if (v !== undefined && v !== null)
         return v;
     else
-        throw new Error("Missing object");
+        throw new Error(`Missing object ${name}`);
 }
 
 export function nullify<T>(v: T | undefined | null): T | null {
@@ -35,6 +35,8 @@ export function readString(buffer: ArrayBufferSlice, offs: number, length: numbe
 }
 
 export function decodeString(buffer: ArrayBufferSlice, encoding = 'utf8'): string {
+    // ts-ignore here is required for node / tool builds, which doesn't specify TextDecoder.
+    // @ts-ignore
     return new TextDecoder(encoding).decode(new Uint8Array(buffer.arrayBuffer, buffer.byteOffset, buffer.byteLength));
 }
 

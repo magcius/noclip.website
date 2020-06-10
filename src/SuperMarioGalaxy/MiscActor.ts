@@ -4,8 +4,8 @@
 import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, createSceneObj, SceneObj, SpecialTextureType } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
-import { mat4, vec3, vec2, quat } from 'gl-matrix';
-import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisX, setMatrixTranslation, computeModelMatrixSRT, transformVec3Mat4w1 } from '../MathHelpers';
+import { mat4, vec3, vec2, quat, ReadonlyVec3 } from 'gl-matrix';
+import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisX, setMatrixTranslation, computeModelMatrixSRT, transformVec3Mat4w1, scaleMatrix } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Green, Yellow, OpaqueBlack, Red } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { LoopMode } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -177,18 +177,6 @@ export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, r
 
 export function getJointNum(actor: LiveActor): number {
     return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray.length;
-}
-
-export function scaleMatrixScalar(m: mat4, s: number): void {
-    m[0] *= s;
-    m[4] *= s;
-    m[8] *= s;
-    m[1] *= s;
-    m[5] *= s;
-    m[9] *= s;
-    m[2] *= s;
-    m[6] *= s;
-    m[10] *= s;
 }
 
 function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number {
@@ -1191,7 +1179,7 @@ export class BlackHole extends LiveActor {
             vec3.sub(front, front, this.translation);
             getCamYdir(up, viewerInput.camera);
             makeMtxFrontUpPos(this.effectHostMtx, front, up, this.translation);
-            scaleMatrixScalar(this.effectHostMtx, this.scale[0]);
+            scaleMatrix(this.effectHostMtx, this.effectHostMtx, this.scale[0]);
         }
     }
 
@@ -5902,7 +5890,7 @@ export class OceanRing extends LiveActor {
             this.points[i].initAfterPlacement(sceneObjHolder);
     }
 
-    private calcNearestPos(dstPos: vec3, dstDir: vec3 | null, pos: vec3): number {
+    private calcNearestPos(dstPos: vec3, dstDir: vec3 | null, pos: ReadonlyVec3): number {
         let bestDistance: number = Infinity;
         let bestSegmentIdx = 0;
         let bestPoint: WaterPoint | null = null;
@@ -5961,7 +5949,7 @@ export class OceanRing extends LiveActor {
         return true;
     }
 
-    public calcWaterInfo(dst: WaterInfo, pos: vec3, gravity: vec3): void {
+    public calcWaterInfo(dst: WaterInfo, pos: ReadonlyVec3, gravity: ReadonlyVec3): void {
         this.calcNearestPos(scratchVec3a, scratchVec3b, pos);
         vec3.sub(scratchVec3a, pos, scratchVec3a);
         vec3.negate(scratchVec3b, gravity);
@@ -6988,7 +6976,7 @@ class FluffWindEffect extends LiveActor<FluffWindEffectNrv> {
         super(zoneAndLayer, sceneObjHolder, 'FluffWindEffect');
     }
 
-    public initEffectInfo(sceneObjHolder: SceneObjHolder, pos: vec3, front: vec3, up: vec3, effectName: string): void {
+    public initEffectInfo(sceneObjHolder: SceneObjHolder, pos: ReadonlyVec3, front: ReadonlyVec3, up: ReadonlyVec3, effectName: string): void {
         vec3.copy(this.translation, pos);
         connectToSceneMapObjMovement(sceneObjHolder, this);
         makeMtxFrontUpPos(this.effectHostMtx, front, up, pos);

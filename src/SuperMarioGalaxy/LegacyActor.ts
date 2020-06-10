@@ -8,6 +8,7 @@ import { ViewerRenderInput } from "../viewer";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, startBtk, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckFrameAtRandom, getCamPos } from "./ActorUtil";
 import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./MiscActor";
 import { isFirstStep } from "./Spine";
+import { scaleMatrix } from "../MathHelpers";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -69,7 +70,7 @@ export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
             connectToSceneBloom(sceneObjHolder, this);
 
         if (tag === SceneGraphTag.Skybox) {
-            mat4.scale(objinfo.modelMatrix, objinfo.modelMatrix, [.5, .5, .5]);
+            scaleMatrix(objinfo.modelMatrix, objinfo.modelMatrix, 0.5);
 
             // Kill translation. Need to figure out how the game does skyboxes.
             objinfo.modelMatrix[12] = 0;

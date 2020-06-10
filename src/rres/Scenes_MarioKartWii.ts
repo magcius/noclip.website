@@ -14,7 +14,7 @@ import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
 import AnimationController from '../AnimationController';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
-import { computeModelMatrixSRT, computeModelMatrixS, MathConstants } from '../MathHelpers';
+import { computeModelMatrixSRT, computeModelMatrixS, MathConstants, scaleMatrix } from '../MathHelpers';
 import { SceneContext, GraphObjBase } from '../SceneBase';
 import { EggLightManager, parseBLIGHT } from './Egg';
 import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
@@ -399,7 +399,7 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             spawnSimpleObject(`CarA3`);
         } else if (gobj.objectId === 0x00e9) { // Hwanwan
             const b = spawnSimpleObject(`wanwan`);
-            mat4.scale(b.modelMatrix, b.modelMatrix, [4, 4, 4])
+            scaleMatrix(b.modelMatrix, b.modelMatrix, 4);
             b.modelMatrix[13] += 125;
             // scales up and out of the ground to look closer to ingame
         } else if (gobj.objectId === 0x00eb) { // Twanwan

@@ -1,7 +1,7 @@
 import { ModelRenderer, buildTransform, EggDrawCall } from "./render";
 import { ObjectSpawn, ActorDef, findGroundHeight, SpawnType, InteractionType, WaitParams, EndCondition, StateEdge, findGroundPlane, computePlaneHeight, fakeAux, CollisionTree, ProjectileData, ObjectField, Level, GFXNode, AnimationData, FishEntry, isActor, fakeAuxFlag } from "./room";
 import { RenderData, AdjustableAnimationController } from "../BanjoKazooie/render";
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { assertExists, assert, nArray, hexzero } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { MotionData, followPath, MotionResult, Motion, projectile, BasicMotionKind, vertical, motionBlockInit, randomCircle, linear, walkToTarget, faceTarget, canHearSong, Target, approachPoint, attemptMove, MoveFlags, Direction, forward, staryuApproach, yawTowards, stepYawTowards } from "./motion";
@@ -487,7 +487,7 @@ class Splash extends ModelRenderer {
         this.visible = false;
     }
 
-    public tryStart(pos: vec3, scale: vec3, globals: LevelGlobals): boolean {
+    public tryStart(pos: ReadonlyVec3, scale: ReadonlyVec3, globals: LevelGlobals): boolean {
         if (this.visible)
             return false;
         this.visible = true;
@@ -507,7 +507,7 @@ class Splash extends ModelRenderer {
     }
 }
 
-function groundHeightAt(globals: LevelGlobals, pos: vec3): number {
+function groundHeightAt(globals: LevelGlobals, pos: ReadonlyVec3): number {
     return findGroundHeight(globals.collision, pos[0], pos[2]);
 }
 

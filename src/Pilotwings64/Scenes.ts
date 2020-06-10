@@ -18,7 +18,7 @@ import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { computeViewMatrix, CameraController } from "../Camera";
-import { MathConstants, clamp, computeMatrixWithoutTranslation } from "../MathHelpers";
+import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers";
 import { TextureState, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
 import { ImageFormat, ImageSize, getImageFormatName, decodeTex_RGBA16, getImageSizeName, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16 } from "../Common/N64/Image";
 import { TextureMapping } from "../TextureHolder";
@@ -2071,7 +2071,7 @@ class DynamicObjectRenderer extends ObjectRenderer {
     constructor(model: ModelData, texturePalette: TexturePalette) {
         super(model, texturePalette);
         const modelScale = 1/model.uvmd.inverseScale;
-        mat4.scale(this.modelMatrix, this.modelMatrix, [modelScale, modelScale, modelScale]);
+        scaleMatrix(this.modelMatrix, this.modelMatrix, modelScale);
         this.translationScale = model.uvmd.inverseScale;
     }
 }
@@ -2837,7 +2837,7 @@ const enum PW64Pass { SKYBOX, NORMAL, SNOW }
 
 const toNoclipSpace = mat4.create();
 mat4.fromXRotation(toNoclipSpace, -90 * MathConstants.DEG_TO_RAD);
-mat4.scale(toNoclipSpace, toNoclipSpace, [50, 50, 50]);
+scaleMatrix(toNoclipSpace, toNoclipSpace, 50);
 
 class Pilotwings64Renderer implements SceneGfx {
     private static scratchMatrix = mat4.create();

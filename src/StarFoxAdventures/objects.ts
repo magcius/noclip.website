@@ -11,6 +11,7 @@ import { dataSubarray, angle16ToRads, readVec3 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
+import { scaleMatrix } from '../MathHelpers';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
@@ -780,7 +781,7 @@ export class ObjectInstance {
     public getLocalSRT(): mat4 {
         if (this.srtDirty) {
             mat4.fromTranslation(this.srtMatrix, this.position);
-            mat4.scale(this.srtMatrix, this.srtMatrix, [this.scale, this.scale, this.scale]);
+            scaleMatrix(this.srtMatrix, this.srtMatrix, this.scale);
             mat4.rotateY(this.srtMatrix, this.srtMatrix, this.yaw);
             mat4.rotateX(this.srtMatrix, this.srtMatrix, this.pitch);
             mat4.rotateZ(this.srtMatrix, this.srtMatrix, this.roll);

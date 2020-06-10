@@ -9,7 +9,7 @@ import { mat4, vec3, vec2, vec4 } from "gl-matrix";
 import { computeViewMatrix, CameraController } from "../Camera";
 import { nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
-import { MathConstants } from "../MathHelpers";
+import { MathConstants, scaleMatrix } from "../MathHelpers";
 import { TrilesetData } from "./TrileData";
 import { ArtObjectData } from "./ArtObjectData";
 import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlaneData";
@@ -320,7 +320,7 @@ export class BackgroundPlaneRenderer {
         const scaleY = this.planeData.dimensions[1] / 16;
         mat4.mul(this.modelMatrix, this.modelMatrix, rotationMatrix);
         mat4.scale(this.modelMatrix, this.modelMatrix, backgroundPlane.scale);
-        mat4.scale(this.modelMatrix, this.modelMatrix, [scaleX, scaleY, 1]);
+        scaleMatrix(this.modelMatrix, this.modelMatrix, scaleX, scaleY, 1.0);
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 

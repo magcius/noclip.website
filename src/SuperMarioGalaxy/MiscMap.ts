@@ -5,7 +5,7 @@ import { SceneObjHolder, SpecialTextureType, getDeltaTimeFrames } from "./Main";
 import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { OceanRing, isEqualStageName } from "./MiscActor";
 import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
@@ -90,7 +90,7 @@ export class WaterAreaHolder extends NameObj {
         this.oceanSphere.push(oceanSphere);
     }
 
-    public getWaterAreaInfo(info: WaterInfo, pos: vec3, gravity: vec3): void {
+    public getWaterAreaInfo(info: WaterInfo, pos: ReadonlyVec3, gravity: ReadonlyVec3): void {
         if (info.oceanBowl !== null) {
             info.oceanBowl.calcWaterInfo(info, pos, gravity);
         } else if (info.oceanSphere !== null) {

@@ -1,7 +1,7 @@
 
 import * as GX from '../gx/gx_enum';
 import { LiveActor, ZoneAndLayer, isDead } from "./LiveActor";
-import { vec2, vec3, mat4 } from "gl-matrix";
+import { vec2, vec3, mat4, ReadonlyVec3, ReadonlyVec2 } from "gl-matrix";
 import { assert } from "../util";
 import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3NegX, Vec3NegY, Vec3NegZ, computeMatrixWithoutTranslation } from "../MathHelpers";
 import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
@@ -35,7 +35,7 @@ class OceanSpherePoint {
 
     public texCoord = vec2.create();
 
-    constructor(translation: vec3, normal: vec3, sphereWave1Pos: number, sphereWave2Pos: number, texCoord: vec2) {
+    constructor(translation: vec3, normal: ReadonlyVec3, sphereWave1Pos: number, sphereWave2Pos: number, texCoord: ReadonlyVec2) {
         this.translation = translation;
         vec3.copy(this.pos, translation);
         vec3.copy(this.normal, normal);
@@ -70,7 +70,7 @@ class OceanSpherePlane {
     private axisPointCount: number;
     private gridPointCount: number;
 
-    constructor(pointCount: number, translation: vec3, axis1: vec3, axis2: vec3, v1: vec2, v2: vec2, v3: vec2) {
+    constructor(pointCount: number, translation: vec3, axis1: ReadonlyVec3, axis2: ReadonlyVec3, v1: ReadonlyVec2, v2: ReadonlyVec2, v3: ReadonlyVec2) {
         this.axisPointCount = pointCount - 2;
         this.gridPointCount = this.axisPointCount * this.axisPointCount;
 
@@ -122,7 +122,7 @@ class OceanSpherePlane {
 class OceanSpherePlaneEdge {
     public points: OceanSpherePoint[] = [];
 
-    constructor(pointCount: number, translation: vec3, axis1: vec3, axis2: vec3, v1: vec2, v2: vec2) {
+    constructor(pointCount: number, translation: vec3, axis1: ReadonlyVec3, axis2: ReadonlyVec3, v1: ReadonlyVec2, v2: ReadonlyVec2) {
         const edgePointCount = pointCount - 2;
 
         vec3.cross(scratchVec3a, axis1, axis2);
@@ -304,7 +304,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         return vec3.distance(position, this.translation) <= this.radius;
     }
 
-    public calcWaterInfo(dst: WaterInfo, pos: vec3, gravity: vec3): void {
+    public calcWaterInfo(dst: WaterInfo, pos: ReadonlyVec3, gravity: ReadonlyVec3): void {
         vec3.sub(scratchVec3a, pos, this.translation);
         vec3.negate(scratchVec3b, gravity);
         const projected = vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);

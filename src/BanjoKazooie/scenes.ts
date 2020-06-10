@@ -18,7 +18,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
-import { MathConstants } from '../MathHelpers';
+import { MathConstants, scaleMatrix } from '../MathHelpers';
 import { ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter, LavaRockEmitter, SceneEmitterHolder } from './particles';
 import { CameraController } from '../Camera';
 
@@ -324,7 +324,7 @@ class ObjectData {
         const renderer = new FlipbookRenderer(flipbookData, phase, initialMirror);
         renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Opaque);
         mat4.fromTranslation(renderer.modelMatrix, pos);
-        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
+        scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, scale);
         return renderer;
     }
 
@@ -344,7 +344,7 @@ class ObjectData {
         mat4.fromTranslation(renderer.modelMatrix, pos);
         mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
         mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, roll * MathConstants.DEG_TO_RAD);
-        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
+        scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, scale);
         return renderer;
     }
 
@@ -681,7 +681,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const geo = Geo.parseBK(opaSkybox.Data, Geo.RenderZMode.OPA, true);
             const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             renderer.isSkybox = true;
-            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
+            scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, obj.OpaSkyboxScale);
         }
 
         const xluSkybox = findFileByID(obj, obj.XluSkyboxFileId);
@@ -689,7 +689,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const geo = Geo.parseBK(xluSkybox.Data, Geo.RenderZMode.XLU, false);
             const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
             renderer.isSkybox = true;
-            mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.XluSkyboxScale, obj.XluSkyboxScale, obj.XluSkyboxScale]);
+            scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, obj.XluSkyboxScale);
         }
 
         const setupFile = assertExists(findFileByID(obj, obj.SetupFileId));

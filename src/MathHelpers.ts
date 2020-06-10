@@ -1,8 +1,9 @@
 
-import { mat4, vec3, quat } from "gl-matrix";
+import { mat4, vec3, quat, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 
 // Misc bits of 3D math.
 
+// Basic scalar constants.
 export const enum MathConstants {
     DEG_TO_RAD = 0.01745, // Math.PI / 180,
     RAD_TO_DEG = 57.2947, // 180 / Math.PI,
@@ -10,12 +11,22 @@ export const enum MathConstants {
     EPSILON = 0.000001,
 }
 
+// Basis vectors.
+export const Vec3Zero: ReadonlyVec3  = vec3.fromValues(0, 0, 0);
+export const Vec3One: ReadonlyVec3   = vec3.fromValues(1, 1, 1);
+export const Vec3UnitX: ReadonlyVec3 = vec3.fromValues(1, 0, 0);
+export const Vec3UnitY: ReadonlyVec3 = vec3.fromValues(0, 1, 0);
+export const Vec3UnitZ: ReadonlyVec3 = vec3.fromValues(0, 0, 1);
+export const Vec3NegX: ReadonlyVec3  = vec3.fromValues(-1, 0, 0);
+export const Vec3NegY: ReadonlyVec3  = vec3.fromValues(0, -1, 0);
+export const Vec3NegZ: ReadonlyVec3  = vec3.fromValues(0, 0, -1);
+
 /**
  * Computes a model matrix {@param dst} from given SRT parameters. Rotation is assumed
  * to be in radians.
  * 
- * This is roughly equivalent to {@link mat4.fromTranslationRotationScale}, but the
- * math is done by hand to be a bit faster, and more trustworthy.
+ * This is roughly equivalent to {@link mat4.fromTranslationRotationScale}, but no intermediate
+ * to quaternions is necessary.
  */
 export function computeModelMatrixSRT(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number): void {
     const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
@@ -77,8 +88,7 @@ export function computeModelMatrixSRT_MayaSSC(dst: mat4, scaleX: number, scaleY:
 /**
  * Computes a model matrix {@param dst} from given scale parameters.
  * 
- * This is equivalent to {@link computeModelMatrixSRT} with the rotation parameters set to
- * 0 and the translation set to 0.
+ * This is equivalent to {@link computeModelMatrixSRT} with the rotation parameters set to 0 and the translation set to 0.
  */
 export function computeModelMatrixS(dst: mat4, scaleX: number, scaleY: number = scaleX, scaleZ: number = scaleX): void {
     dst[0] =  scaleX;
@@ -106,8 +116,7 @@ export function computeModelMatrixS(dst: mat4, scaleX: number, scaleY: number = 
  * Computes a model matrix {@param dst} from given rotation parameters. Rotation is assumed
  * to be in radians.
  * 
- * This is equivalent to {@link computeModelMatrixSRT} with the scale parameters set to
- * 1 and the translation set to 0, but it's slightly faster.
+ * This is equivalent to {@link computeModelMatrixSRT} with the scale parameters set to 1 and the translation set to 0.
  */
 export function computeModelMatrixR(dst: mat4, rotationX: number, rotationY: number, rotationZ: number): void {
     const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
@@ -133,6 +142,62 @@ export function computeModelMatrixR(dst: mat4, rotationX: number, rotationY: num
     dst[13] = 0.0;
     dst[14] = 0.0;
     dst[15] = 1.0;
+}
+
+/**
+ * Computes a model matrix {@param dst} from given translation parameters.
+ * 
+ * This is equivalent to {@link computeModelMatrixSRT} with the rotation parameters set to 0, and the scale set to 1.
+ */
+export function computeModelMatrixT(dst: mat4, translationX: number, translationY: number, translationZ: number): void {
+    dst[0] =  1.0;
+    dst[1] =  0.0;
+    dst[2] =  0.0;
+    dst[3] =  0.0;
+
+    dst[4] =  0.0;
+    dst[5] =  1.0;
+    dst[6] =  0.0;
+    dst[7] =  0.0;
+
+    dst[8] =  0.0;
+    dst[9] =  0.0;
+    dst[10] = 1.0;
+    dst[11] = 0.0;
+
+    dst[12] = translationX;
+    dst[13] = translationY;
+    dst[14] = translationZ;
+    dst[15] = 1.0;
+}
+
+/**
+ * Scale a given matrix {@param m} by the given scalar factors {@param scaleX}, {@param scaleY}, {@param scaleZ},
+ * placing the resulting matrix into {@param dst}.
+ *
+ * This is equivalent to mat4.scale(dst, m, [scaleX, scaleY, scaleZ]) but generates zero GC garbage.
+ */
+export function scaleMatrix(dst: mat4, m: mat4, scaleX: number, scaleY: number = scaleX, scaleZ: number = scaleX): void {
+    // Scale column vectors.
+    dst[0] = m[0] * scaleX;
+    dst[1] = m[1] * scaleX;
+    dst[2] = m[2] * scaleX;
+    dst[3] = m[3] * scaleX;
+
+    dst[4] = m[4] * scaleY;
+    dst[5] = m[5] * scaleY;
+    dst[6] = m[6] * scaleY;
+    dst[7] = m[7] * scaleY;
+
+    dst[8] = m[8] * scaleZ;
+    dst[9] = m[9] * scaleZ;
+    dst[10] = m[10] * scaleZ;
+    dst[11] = m[11] * scaleZ;
+
+    dst[12] = m[12];
+    dst[13] = m[13];
+    dst[14] = m[14];
+    dst[15] = m[15];
 }
 
 /**
@@ -170,7 +235,7 @@ export function computeNormalMatrix(dst: mat4, m: mat4, isUniformScale?: boolean
  * If you require projective coordinates, use {@see vec3.transformMat4}, which handles projective
  * matrices just fine, including the divide by W.
  */
-export function transformVec3Mat4w1(dst: vec3, m: mat4, v: vec3): void {
+export function transformVec3Mat4w1(dst: vec3, m: ReadonlyMat4, v: ReadonlyVec3): void {
     const x = v[0], y = v[1], z = v[2];
     dst[0] = m[0] * x + m[4] * y + m[8]  * z + m[12];
     dst[1] = m[1] * x + m[5] * y + m[9]  * z + m[13];
@@ -186,7 +251,7 @@ export function transformVec3Mat4w1(dst: vec3, m: mat4, v: vec3): void {
  * If you require projective coordinates, use {@see vec3.transformMat4}, which handles projective
  * matrices just fine, including the divide by W.
  */
-export function transformVec3Mat4w0(dst: vec3, m: mat4, v: vec3): void {
+export function transformVec3Mat4w0(dst: vec3, m: ReadonlyMat4, v: ReadonlyVec3): void {
     const x = v[0], y = v[1], z = v[2];
     dst[0] = m[0] * x + m[4] * y + m[8] * z;
     dst[1] = m[1] * x + m[5] * y + m[9] * z;
@@ -455,7 +520,7 @@ export function normToLength(dst: vec3, len: number): void {
     }
 }
 
-export function normToLengthAndAdd(dst: vec3, a: vec3, len: number): void {
+export function normToLengthAndAdd(dst: vec3, a: ReadonlyVec3, len: number): void {
     const vlen = vec3.length(a);
     if (vlen > 0) {
         const inv = len / vlen;
@@ -487,36 +552,27 @@ export function quatFromEulerRadians(dst: quat, x: number, y: number, z: number)
     dst[3] = cx * cy * cz + sx * sy * sz;
 }
 
-export function getMatrixAxisX(dst: vec3, m: mat4): void {
+export function getMatrixAxisX(dst: vec3, m: ReadonlyMat4): void {
     vec3.set(dst, m[0], m[1], m[2]);
 }
 
-export function getMatrixAxisY(dst: vec3, m: mat4): void {
+export function getMatrixAxisY(dst: vec3, m: ReadonlyMat4): void {
     vec3.set(dst, m[4], m[5], m[6]);
 }
 
-export function getMatrixAxisZ(dst: vec3, m: mat4): void {
+export function getMatrixAxisZ(dst: vec3, m: ReadonlyMat4): void {
     vec3.set(dst, m[8], m[9], m[10]);
 }
 
-export function getMatrixTranslation(dst: vec3, m: mat4): void {
+export function getMatrixTranslation(dst: vec3, m: ReadonlyMat4): void {
     vec3.set(dst, m[12], m[13], m[14]);
 }
 
-export function setMatrixTranslation(dst: mat4, v: vec3): void {
+export function setMatrixTranslation(dst: mat4, v: ReadonlyVec3): void {
     dst[12] = v[0];
     dst[13] = v[1];
     dst[14] = v[2];
 }
-
-export const Vec3Zero  = vec3.fromValues(0, 0, 0);
-export const Vec3One   = vec3.fromValues(1, 1, 1);
-export const Vec3UnitX = vec3.fromValues(1, 0, 0);
-export const Vec3UnitY = vec3.fromValues(0, 1, 0);
-export const Vec3UnitZ = vec3.fromValues(0, 0, 1);
-export const Vec3NegX = vec3.fromValues(-1, 0, 0);
-export const Vec3NegY = vec3.fromValues(0, -1, 0);
-export const Vec3NegZ = vec3.fromValues(0, 0, -1);
 
 const baseBuffer = new ArrayBuffer(4);
 const asFloat32 = new Float32Array(baseBuffer);
@@ -526,9 +582,11 @@ export function bitsAsFloat32(x: number): number {
     return asFloat32[0];
 }
 
-// assumes normal is normalized
+/**
+ * Reflects a given vector
+ */
 export function reflectVec3(dst: vec3, source: vec3, normal: vec3): void {
-    const dot = -2*vec3.dot(source, normal);
+    const dot = -2.0 * vec3.dot(source, normal);
     vec3.scaleAndAdd(dst, source, normal, dot);
 }
 

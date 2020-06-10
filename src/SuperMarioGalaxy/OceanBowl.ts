@@ -1,5 +1,5 @@
 
-import { vec3, mat4, vec2 } from "gl-matrix";
+import { vec3, mat4, vec2, ReadonlyVec3 } from "gl-matrix";
 import { SceneObjHolder, getObjectName, SceneObj, SpecialTextureType } from "./Main";
 import { GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputLayout, GfxInputState, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
@@ -115,7 +115,7 @@ export class OceanBowl extends LiveActor {
         this.bloomDrawer = new OceanBowlBloomDrawer(sceneObjHolder, this);
     }
 
-    public calcWaterInfo(dst: WaterInfo, pos: vec3, gravity: vec3): void {
+    public calcWaterInfo(dst: WaterInfo, pos: ReadonlyVec3, gravity: ReadonlyVec3): void {
         vec3.sub(scratchVec3, pos, this.translation);
         dst.depth = -vecKillElement(scratchVec3, scratchVec3, this.axisY);
     }

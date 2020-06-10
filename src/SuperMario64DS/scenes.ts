@@ -20,7 +20,7 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
-import { MathConstants, clamp } from '../MathHelpers';
+import { MathConstants, clamp, scaleMatrix } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 // https://github.com/Arisotura/SM64DSe/blob/master/obj_list.txt
@@ -752,7 +752,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         const modelCache = renderer.modelCache;
         const bmdData = await modelCache.fetchModel(device, filename);
         const bmdRenderer = new BMDModelInstance(bmdData, level);
-        mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
+        scaleMatrix(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, scale);
         bmdRenderer.isSkybox = isSkybox;
         renderer.bmdRenderers.push(bmdRenderer);
         return bmdRenderer;
@@ -778,7 +778,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
 
         // Don't ask, ugh.
         scale = scale * (GLOBAL_SCALE / 100);
-        mat4.scale(m, m, [scale, scale, scale]);
+        scaleMatrix(m, m, scale);
     }
 
     private async _createBMDRendererForStandardObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1StandardObject): Promise<void> {

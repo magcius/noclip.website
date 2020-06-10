@@ -14,7 +14,7 @@ import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gf
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
-import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY } from '../MathHelpers';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, scaleMatrix } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
@@ -773,15 +773,14 @@ export class BoneAnimator {
 
         mat4.identity(scratchMatrix);
         if (rotZ !== 0)
-            mat4.rotateZ(scratchMatrix, scratchMatrix, rotZ)
+            mat4.rotateZ(scratchMatrix, scratchMatrix, rotZ);
         if (rotY !== 0)
-            mat4.rotateY(scratchMatrix, scratchMatrix, rotY)
+            mat4.rotateY(scratchMatrix, scratchMatrix, rotY);
         if (rotX !== 0)
-            mat4.rotateX(scratchMatrix, scratchMatrix, rotX)
+            mat4.rotateX(scratchMatrix, scratchMatrix, rotX);
         mat4.mul(dst, dst, scratchMatrix);
 
-        vec3.set(scratchVec3, scaleX, scaleY, scaleZ);
-        mat4.scale(dst, dst, scratchVec3);
+        scaleMatrix(dst, dst, scaleX, scaleY, scaleZ);
 
         vec3.negate(scratchVec3, bone.offset);
         mat4.translate(dst, dst, scratchVec3);

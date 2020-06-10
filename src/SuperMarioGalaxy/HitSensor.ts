@@ -1,5 +1,5 @@
 
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { LiveActor, isDead } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
 import { connectToScene } from "./ActorUtil";
@@ -55,7 +55,7 @@ const scratchVec3 = vec3.create();
 export class HitSensorInfo {
     public offset = vec3.create();
 
-    constructor(public name: string, public sensor: HitSensor, private translation: vec3 | null, private baseMtx: mat4 | null, radius: number, offset: vec3, private useCallback: boolean) {
+    constructor(public name: string, public sensor: HitSensor, private translation: vec3 | null, private baseMtx: mat4 | null, radius: number, offset: ReadonlyVec3, private useCallback: boolean) {
         vec3.copy(this.offset, offset);
     }
 
@@ -93,7 +93,7 @@ export class HitSensorInfo {
 export class HitSensorKeeper {
     public sensorInfos: HitSensorInfo[] = [];
 
-    public add(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor, offset: vec3): void {
+    public add(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor, offset: ReadonlyVec3): void {
         const sensor = new HitSensor(sceneObjHolder, sensorType, pairwiseCapacity, radius, actor);
         const sensorInfo = new HitSensorInfo(name, sensor, null, null, radius, offset, false);
         this.sensorInfos.push(sensorInfo);

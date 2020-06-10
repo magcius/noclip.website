@@ -1,7 +1,7 @@
 import * as MIPS from "./mips";
 import { ObjectField, Path, findGroundHeight, findGroundPlane, CollisionTree, computePlaneHeight, DataMap, StateFuncs, EndCondition, GeneralFuncs } from "./room";
 import { bitsAsFloat32, angleDist, clampRange, clamp, Vec3Zero, Vec3One, normToLength } from "../MathHelpers";
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { getPathPoint, getPathTangent } from "./animation";
 import { hexzero, assert, nArray, assertExists } from "../util";
 import { ViewerRenderInput } from "../viewer";
@@ -201,7 +201,7 @@ export interface Splash {
     kind: "splash";
     onImpact: boolean;
     index: number;
-    scale: vec3;
+    scale: ReadonlyVec3;
 }
 
 export interface Forward {

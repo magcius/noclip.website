@@ -7,7 +7,7 @@ import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helper
 import { LoadedVertexData } from "../gx/gx_displaylist";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput, Texture } from "../viewer";
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { computeModelMatrixSRT, lerp, saturate, MathConstants, computeModelMatrixSRT_MayaSSC, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
@@ -1288,7 +1288,7 @@ class HSD_JObj_Instance {
             this.children[i].calcAnim(deltaTimeInFrames);
     }
 
-    public calcMtx(parentJointMtx: mat4 | null = null, parentScale: vec3 = Vec3One): void {
+    public calcMtx(parentJointMtx: mat4 | null = null, parentScale: ReadonlyVec3 = Vec3One): void {
         const useClassicScale = !!(this.data.jobj.flags & HSD_JObjFlags.CLASSICAL_SCALE);
 
         if (useClassicScale)
