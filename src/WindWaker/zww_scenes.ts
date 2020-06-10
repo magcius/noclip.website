@@ -885,7 +885,7 @@ class SceneDesc {
         modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`Stage`);
 
-        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 6);
+        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 7);
         modelCache.fetchFileData(`${pathBase}/f_pc_profiles.crg1_arc`);
 
         const particleArchives = [
