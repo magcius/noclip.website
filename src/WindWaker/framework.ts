@@ -14,6 +14,7 @@ export const enum fpc__ProcessName {
     d_a_mgameboard      = 0x0040,
     d_a_obj_lpalm       = 0x004B,
     d_a_obj_Ygush00     = 0x0099,
+    d_a_tori_flag       = 0x00B0,
     d_a_sie_flag        = 0x00B1,
     d_a_ep              = 0x00BA,
     d_a_tbox            = 0x0126,

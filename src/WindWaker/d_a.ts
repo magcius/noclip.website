@@ -2253,8 +2253,6 @@ class d_a_sie_flag extends fopAc_ac_c {
         if (status !== cPhs__Status.Complete)
             return status;
 
-        console.log(this);
-
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, 'Eshata', 0x04));
 
@@ -2311,6 +2309,85 @@ class d_a_sie_flag extends fopAc_ac_c {
     }
 }
 
+class d_a_tori_flag extends fopAc_ac_c {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_tori_flag;
+
+    private model: J3DModelInstance;
+    private cloth: dCloth_packet_c;
+    private windvec = vec3.create();
+    private flagOffset = vec3.fromValues(0, 350, 0);
+
+    public clothTevStr = new dKy_tevstr_c();
+
+    public subload(globals: dGlobals): cPhs__Status {
+        let status: cPhs__Status;
+
+        status = dComIfG_resLoad(globals, 'Trflag');
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = dComIfG_resLoad(globals, 'Cloth');
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, 'Trflag', 0x04));
+
+        dKy_tevstr_init(this.clothTevStr, this.roomNo);
+        const toonTex = resCtrl.getObjectRes(ResType.Bti, 'Cloth', 0x03);
+        const flagTex = resCtrl.getObjectRes(ResType.Bti, 'Trflag', 0x07);
+        this.cloth = new dCloth_packet_c(toonTex, flagTex, 5, 5, 210.0, 105.0, this.clothTevStr);
+    
+        vec3.copy(this.windvec, dKyw_get_wind_vec(globals.g_env_light));
+
+        this.set_mtx();
+
+        return cPhs__Status.Next;
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
+        settingTevStruct(globals, LightType.Actor, this.pos, this.clothTevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+        this.cloth.cloth_draw(globals, renderInstManager, viewerInput);
+    }
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+
+        this.set_mtx();
+
+        // TODO(jstpierre): Update windvec
+
+        this.cloth.spring = 0.4;
+        this.cloth.gravity = -1.5;
+        this.cloth.drag = 0.75;
+        this.cloth.flyFlex = 0.9;
+        this.cloth.hoistFlex = 0.9;
+        this.cloth.waveSpeed = 0x0400;
+        this.cloth.ripple = 900;
+        this.cloth.rotateY = -800;
+        this.cloth.windSpeed = 8.0;
+        this.cloth.windSpeedWave = 8.0;
+        this.cloth.setGlobalWind(this.windvec);
+        this.cloth.cloth_move(deltaTimeInFrames);
+    }
+
+    private set_mtx(): void {
+        vec3.copy(this.model.baseScale, this.scale);
+        MtxTrans(this.pos, false);
+        mDoMtx_ZXYrotM(calc_mtx, this.rot);
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+        MtxTrans(this.flagOffset, true);
+        this.cloth.setMtx(calc_mtx);
+    }
+
+    public delete(globals: dGlobals): void {
+        this.cloth.destroy(globals.modelCache.device);
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -2334,4 +2411,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_swhit0);
     R(d_a_mgameboard);
     R(d_a_sie_flag);
+    R(d_a_tori_flag);
 }
