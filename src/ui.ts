@@ -15,6 +15,7 @@ import "reflect-metadata";
 // @ts-ignore
 import logoURL from './assets/logo.png';
 import { DebugFloaterHolder } from './DebugFloaters';
+import { DraggingMode } from './InputManager';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -2661,9 +2662,12 @@ export class UI {
         return true;
     }
 
-    public setIsDragging(isDragging: boolean): void {
+    public setDraggingMode(draggingMode: DraggingMode): void {
+        const isDragging = draggingMode !== DraggingMode.None;
+        const isPointerLocked = draggingMode === DraggingMode.PointerLocked;
+
         this.isDragging = isDragging;
-        this.elem.style.pointerEvents = isDragging ? 'none' : '';
+        this.elem.style.pointerEvents = (isDragging && !isPointerLocked) ? 'none' : '';
         if (isDragging && this.shouldPanelsAutoClose())
             this.setPanelsAutoClosed(true);
         this.syncVisibilityState();

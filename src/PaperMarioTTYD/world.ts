@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists } from "../util";
 import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas, compileLoadedVertexLayout } from '../gx/gx_displaylist';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import AnimationController from '../AnimationController';
 import { GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
