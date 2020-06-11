@@ -431,7 +431,7 @@ export class MapData {
                 vBuffer[vBufferIndex++] = mesh.uvScroll[0];
                 vBuffer[vBufferIndex++] = mesh.uvScroll[1];
                 vBuffer[vBufferIndex++] = mesh.normal.length > 0 ? mesh.normal[i][0] : 0;
-                vBuffer[vBufferIndex++] = mesh.normal.length > 0 ? -mesh.normal[i][1] : 0;
+                vBuffer[vBufferIndex++] = mesh.normal.length > 0 ? mesh.normal[i][1] : 0;
                 vBuffer[vBufferIndex++] = mesh.normal.length > 0 ? mesh.normal[i][2] : 0;
             }
             for (let i = 0; i < mesh.ind.length; i++) {

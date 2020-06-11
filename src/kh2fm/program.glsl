@@ -50,7 +50,8 @@ void main() {
 
 #ifdef USE_TEXTURE
 #ifdef USE_NORMAL
-    vec2 tc = (mat3(u_View[0], u_View[1], u_View[2]) * v_Normal).xy;
+    vec2 tc = Mul(u_View, vec4(v_Normal, 0.0)).xy;
+    tc.y *= -1.0;
     tc = tc * v_TexScaleOffset.xy + v_TexScaleOffset.zw;
 #else
     vec2 tc = v_TexCoord;
