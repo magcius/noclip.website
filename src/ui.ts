@@ -154,6 +154,7 @@ export class TextField implements Widget {
 export class TextEntry implements Widget {
     public elem: HTMLElement;
     public ontext: ((string: string) => void) | null = null;
+    public onfocus: (() => void) | null = null;
 
     protected toplevel: HTMLElement;
     public textfield: TextField;
@@ -180,6 +181,11 @@ export class TextEntry implements Widget {
         };
         textarea.oninput = () => {
             this.textChanged();
+        };
+        textarea.onfocus = () => {
+            console.log('focus!');
+            if (this.onfocus !== null)
+                this.onfocus();
         };
         this.toplevel.appendChild(this.textfield.elem);
 
@@ -906,6 +912,12 @@ class SceneSelect extends Panel {
         this.searchEntry.setPlaceholder('Search...');
         this.searchEntry.ontext = (searchString: string) => {
             this._setSearchString(searchString);
+        };
+        this.searchEntry.onfocus = () => {
+            // If the search entry manages to get itself focused (which can happen if the user hits Tab),
+            // then expand the panel.
+            this.setExpanded(true);
+            this.setAutoClosed(false);
         };
         this.contents.appendChild(this.searchEntry.elem);
 
