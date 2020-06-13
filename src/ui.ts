@@ -842,10 +842,10 @@ export class Panel implements Widget {
         return true;
     }
 
-    public setExpanded(v: boolean) {
+    public setExpanded(v: boolean, focus: boolean = true) {
         this.manuallyExpanded = v;
         this.syncExpanded();
-        if (this.expanded)
+        if (this.expanded && focus)
             this.elem.focus();
     }
 
@@ -916,7 +916,7 @@ class SceneSelect extends Panel {
         this.searchEntry.onfocus = () => {
             // If the search entry manages to get itself focused (which can happen if the user hits Tab),
             // then expand the panel.
-            this.setExpanded(true);
+            this.setExpanded(true, false);
             this.setAutoClosed(false);
         };
         this.contents.appendChild(this.searchEntry.elem);
