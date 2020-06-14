@@ -1123,20 +1123,17 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateFogBase() {
-        const ropInfo = this.material.ropInfo;
-        const proj = !!(ropInfo.fogType >>> 3);
+        // We allow switching between orthographic & perspective at runtime for the benefit of camera controls.
+        // const ropInfo = this.material.ropInfo;
+        // const proj = !!(ropInfo.fogType >>> 3);
+        // const isProjection = (proj === 0);
+        const isProjection = `(u_FogBlock.Param.y != 0.0)`;
 
         const A = `u_FogBlock.Param.x`;
         const B = `u_FogBlock.Param.y`;
         const z = this.generateFogZCoord();
 
-        if (proj) {
-            // Orthographic
-            return `${A} * ${z}`;
-        } else {
-            // Perspective
-            return `${A} / (${B} - ${z})`;
-        }
+        return `(${isProjection}) ? (${A} / (${B} - ${z})) : (${A} * ${z})`;
     }
 
     private generateFogAdj(base: string) {
@@ -1887,8 +1884,9 @@ export function fogBlockSet(fog: FogBlock, type: GX.FogType, startZ: number, end
 
     if (proj) {
         // Orthographic
-        // TODO(jstpierre)
-        fog.A;
+        fog.A = (farZ - nearZ) / (endZ - startZ);
+        fog.B = 0.0;
+        fog.C = (startZ - nearZ) / (endZ - startZ);
     } else {
         fog.A = (farZ * nearZ) / ((farZ - nearZ) * (endZ - startZ));
         fog.B = (farZ) / (farZ - nearZ);
