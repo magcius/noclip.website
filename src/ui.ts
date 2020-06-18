@@ -10,7 +10,6 @@ import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
 import { clamp } from './MathHelpers';
-import "reflect-metadata";
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
@@ -183,7 +182,6 @@ export class TextEntry implements Widget {
             this.textChanged();
         };
         textarea.onfocus = () => {
-            console.log('focus!');
             if (this.onfocus !== null)
                 this.onfocus();
         };

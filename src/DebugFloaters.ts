@@ -7,6 +7,7 @@ import { GlobalGrabManager } from "./GrabManager";
 import { assert } from "./util";
 import { invlerp, lerp } from "./MathHelpers";
 import { IS_DEVELOPMENT } from "./BuildVersion";
+import "reflect-metadata";
 
 function getParentMetadata(target: any, key: string) {
     return {
