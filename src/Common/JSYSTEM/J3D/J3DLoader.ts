@@ -661,7 +661,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
     const fogInfoTableOffs = view.getUint32(0x68);
     const alphaTestTableOffs = view.getUint32(0x6C);
     const blendModeTableOffs = view.getUint32(0x70);
-    const depthModeTableOffs = view.getUint32(0x74);
+    const zModeTableOffs = view.getUint32(0x74);
 
     const materialEntries: MaterialEntry[] = [];
     const materialEntryTableOffs = view.getUint32(0x0C);
@@ -671,12 +671,12 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const materialEntryIdx = materialEntryTableOffs + (0x014C * remapTable[i]);
         const materialMode = view.getUint8(materialEntryIdx + 0x00);
         const cullModeIndex = view.getUint8(materialEntryIdx + 0x01);
-        const colorChanCountIndex = view.getUint8(materialEntryIdx + 0x02);
-        const texGenCountIndex = view.getUint8(materialEntryIdx + 0x03);
-        const tevCountIndex = view.getUint8(materialEntryIdx + 0x04);
-        // unk
-        const depthModeIndex = view.getUint8(materialEntryIdx + 0x06);
-        // unk
+        const colorChanNumIndex = view.getUint8(materialEntryIdx + 0x02);
+        // const texGenNumIndex = view.getUint8(materialEntryIdx + 0x03);
+        // const tevStageNumIndex = view.getUint8(materialEntryIdx + 0x04);
+        // const zCompLocIndex = view.getUint8(materialEntryIdx + 0x05);
+        const zModeIndex = view.getUint8(materialEntryIdx + 0x06);
+        // const ditherIndex = view.getUint8(materialEntryIdx + 0x05);
 
         const colorMatRegs: Color[] = [];
         for (let j = 0; j < 2; j++) {
@@ -694,7 +694,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             colorAmbRegs[j] = ambColorReg;
         }
 
-        const lightChannelCount = view.getUint8(colorChanCountTableOffs + colorChanCountIndex);
+        const lightChannelCount = view.getUint8(colorChanCountTableOffs + colorChanNumIndex);
         const lightChannels: GX_Material.LightChannelControl[] = [];
         for (let j = 0; j < lightChannelCount; j++) {
             const colorChannelIndex = view.getInt16(materialEntryIdx + 0x0C + ((j * 2 + 0) * 0x02));
@@ -741,10 +741,13 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             else
                 texMatrices[j] = null;
         }
-        // Since texture matrices are assigned in order, we should never actually have more than 8 of these.
+        // Since texture matrices are assigned to TEV stages in order, we
+        // should never actually have more than 8 of these.
         assert(texMatrices[8] === null);
         assert(texMatrices[9] === null);
 
+        // These are never read in actual J3D.
+        /*
         const postTexMatrices: (TexMtx | null)[] = [];
         for (let j = 0; j < 20; j++) {
             const postTexMtxIndex = view.getInt16(materialEntryIdx + 0x5C + j * 0x02);
@@ -753,6 +756,20 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             else
                 postTexMatrices[j] = null;
         }
+        */
+
+       let textureIndexTableIdx = materialEntryIdx + 0x84;
+       const textureIndexes = [];
+       for (let j = 0; j < 8; j++) {
+           const textureTableIndex = view.getInt16(textureIndexTableIdx);
+           if (textureTableIndex >= 0) {
+               const textureIndex = view.getUint16(textureTableOffs + textureTableIndex * 0x02);
+               textureIndexes.push(textureIndex);
+           } else {
+               textureIndexes.push(-1);
+           }
+           textureIndexTableIdx += 0x02;
+       }
 
         const colorConstants: Color[] = [];
         for (let j = 0; j < 4; j++) {
@@ -768,30 +785,19 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             colorRegisters.push(color);
         }
 
-        let textureIndexTableIdx = materialEntryIdx + 0x84;
-        const textureIndexes = [];
-        for (let j = 0; j < 8; j++) {
-            const textureTableIndex = view.getInt16(textureIndexTableIdx);
-            if (textureTableIndex >= 0) {
-                const textureIndex = view.getUint16(textureTableOffs + textureTableIndex * 0x02);
-                textureIndexes.push(textureIndex);
-            } else {
-                textureIndexes.push(-1);
-            }
-            textureIndexTableIdx += 0x02;
-        }
-
         const indTexStages: GX_Material.IndTexStage[] = [];
         const indTexMatrices: Float32Array[] = [];
 
         const indirectEntryOffs = indirectTableOffset + i * 0x138;
-        const hasIndirect = indirectTableOffset !== nameTableOffs;
-        if (hasIndirect) {
-            const indirectStageCount = view.getUint8(indirectEntryOffs + 0x00);
-            assert(indirectStageCount <= 4);
+        const hasIndirectTable = indirectTableOffset !== nameTableOffs;
+        if (hasIndirectTable) {
+            const hasIndirect = view.getUint8(indirectEntryOffs + 0x00);
+            assert(hasIndirect === 0 || hasIndirect === 1);
 
-            for (let j = 0; j < indirectStageCount; j++) {
-                const index = j;
+            const indTexStageNum = view.getUint8(indirectEntryOffs + 0x01);
+            assert(indTexStageNum <= 4);
+
+            for (let j = 0; j < indTexStageNum; j++) {
                 // SetIndTexOrder
                 const indTexOrderOffs = indirectEntryOffs + 0x04 + j * 0x04;
                 const texCoordId: GX.TexCoordID = view.getUint8(indTexOrderOffs + 0x00);
@@ -801,10 +807,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
                 const scaleS: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x00);
                 const scaleT: GX.IndTexScale = view.getUint8(indTexScaleOffs + 0x01);
                 indTexStages.push({ texCoordId, texture, scaleS, scaleT });
-            }
-
-            // SetIndTexMatrix
-            for (let j = 0; j < 3; j++) {
+                // SetIndTexMatrix
                 const indTexMatrixOffs = indirectEntryOffs + 0x04 + (0x04 * 4) + j * 0x1C;
                 const p00 = view.getFloat32(indTexMatrixOffs + 0x00);
                 const p01 = view.getFloat32(indTexMatrixOffs + 0x04);
@@ -893,7 +896,7 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
             let indTexAddPrev: boolean = false;
             let indTexUseOrigLOD: boolean = false;
 
-            if (hasIndirect) {
+            if (hasIndirectTable) {
                 indTexStage = view.getUint8(indTexStageOffs + 0x00);
                 indTexFormat = view.getUint8(indTexStageOffs + 0x01);
                 indTexBiasSel = view.getUint8(indTexStageOffs + 0x02);
@@ -944,10 +947,10 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         const blendLogicOp: GX.LogicOp = view.getUint8(blendModeOffs + 0x03);
 
         const cullMode: GX.CullMode = view.getUint32(cullModeTableOffs + cullModeIndex * 0x04);
-        const depthModeOffs = depthModeTableOffs + depthModeIndex * 4;
-        const depthTest: boolean = !!view.getUint8(depthModeOffs + 0x00);
-        const depthFunc: GX.CompareType = view.getUint8(depthModeOffs + 0x01);
-        const depthWrite: boolean = !!view.getUint8(depthModeOffs + 0x02);
+        const zModeOffs = zModeTableOffs + zModeIndex * 4;
+        const depthTest: boolean = !!view.getUint8(zModeOffs + 0x00);
+        const depthFunc: GX.CompareType = view.getUint8(zModeOffs + 0x01);
+        const depthWrite: boolean = !!view.getUint8(zModeOffs + 0x02);
 
         const fogInfoIndex = view.getUint16(materialEntryIdx + 0x144);
         const fogInfoOffs = fogInfoTableOffs + fogInfoIndex * 0x2C;

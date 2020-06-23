@@ -432,10 +432,18 @@ function downloadBuffer2(name: any, buffer: any) {
         downloadBuffer(name, buffer);
 }
 
+export function ghidraDecode(s: string, encoding = 'sjis'): string {
+    // @ts-ignore
+    const hex = new Uint8Array([...s.matchAll(/[0-9A-Fa-f]{2}h/g)].map((g) => parseInt(g[0].slice(0, 2), 16)));
+    console.log([...hex].map((g) => g.toString(16)));
+    return new TextDecoder(encoding).decode(hex);
+}
+
 // This goes on window.main and is meant as a global "helper utils" thing.
 export const debugJunk: any = {
     interactiveVizSliderSelect,
     hexdump,
     magicstr,
+    ghidraDecode,
     downloadBuffer: downloadBuffer2,
 };
