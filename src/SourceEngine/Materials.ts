@@ -56,11 +56,7 @@ vec3 CalcReflection(in vec3 t_NormalWorld, in vec3 t_PositionToEye) {
 }
 
 vec3 CalcNormalWorld(in vec3 t_MapNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
-    return vec3(
-        dot(vec3(t_Basis0.x, t_Basis1.x, t_Basis2.x), t_MapNormal),
-        dot(vec3(t_Basis0.y, t_Basis1.y, t_Basis2.y), t_MapNormal),
-        dot(vec3(t_Basis0.z, t_Basis1.z, t_Basis2.z), t_MapNormal)
-    );
+    return t_MapNormal.xxx * t_Basis0 + t_MapNormal.yyy * t_Basis1 * t_MapNormal.zzz * t_Basis2;
 }
 
 float CalcFresnelTerm(float t_DotProduct) {
