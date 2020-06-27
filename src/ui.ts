@@ -752,7 +752,6 @@ export class Panel implements Widget {
         this.header.style.width = '440px';
         this.header.style.margin = '0';
         this.header.style.fontSize = '100%';
-        this.header.style.textAlign = 'center';
         this.header.style.cursor = 'pointer';
         this.header.style.userSelect = 'none';
         this.header.style.display = 'grid';
@@ -860,7 +859,7 @@ export class Panel implements Widget {
             // If we're coming back from auto-closing, then start a timeout to ignore clicks during this time.
             this.ignoreAutoCloseTimeout = window.setTimeout(() => {
                 this.ignoreAutoCloseTimeout = 0;
-            }, 1000);
+            }, 250);
         }
     }
 }
