@@ -3260,7 +3260,7 @@ export class UI {
 
     private shouldPanelsAutoClose(): boolean {
         // TODO(jstpierre): Lock icon?
-        if (this.statisticsPanel.manuallyExpanded)
+        if (this.statisticsPanel.manuallyExpanded || this.studioModeEnabled)
             return false;
         return true;
     }
@@ -3286,7 +3286,7 @@ export class UI {
 
         this.isDragging = isDragging;
         this.elem.style.pointerEvents = (isDragging && !isPointerLocked) ? 'none' : '';
-        if (isDragging && this.shouldPanelsAutoClose() && !this.studioModeEnabled)
+        if (isDragging && this.shouldPanelsAutoClose())
             this.setPanelsAutoClosed(true);
         this.syncVisibilityState();
     }
