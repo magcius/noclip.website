@@ -291,8 +291,8 @@ class Main {
         this.viewer.oncamerachanged = (force: boolean) => {
             this._saveState(force);
         };
-        this.viewer.inputManager.onisdraggingchanged = () => {
-            this.ui.setIsDragging(this.viewer.inputManager.isDragging());
+        this.viewer.inputManager.ondraggingmodechanged = () => {
+            this.ui.setDraggingMode(this.viewer.inputManager.getDraggingMode());
         };
 
         this._makeUI();

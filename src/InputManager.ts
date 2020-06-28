@@ -32,6 +32,16 @@ const enum TouchGesture {
     Pinch, // 2-finger pinch in and out
 }
 
+export const enum DraggingMode {
+    // Not dragging.
+    None,
+    // "Normal" dragging. We need to set the UI to have pointer-events: none;
+    Dragging,
+    // Pointer locked dragging. Since the pointer is locked to the canvas, we
+    // don't need to touch the UI styles (a big perf improvement).
+    PointerLocked,
+}
+
 export default class InputManager {
     public invertY = false;
     public invertX = false;
@@ -45,7 +55,7 @@ export default class InputManager {
     public dy: number;
     public dz: number;
     public buttons: number = 0;
-    public onisdraggingchanged: (() => void) | null = null;
+    public ondraggingmodechanged: (() => void) | null = null;
     private scrollListeners: Listener[] = [];
     private usePointerLock: boolean = true;
     public isInteractive: boolean = true;
@@ -79,8 +89,8 @@ export default class InputManager {
                 return;
             this.buttons = e.buttons;
             GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: this.releaseOnMouseUp });
-            if (this.onisdraggingchanged !== null)
-                this.onisdraggingchanged();
+            if (this.ondraggingmodechanged !== null)
+                this.ondraggingmodechanged();
         });
         this.toplevel.addEventListener('mousemove', (e) => {
             this.mouseX = e.clientX;
@@ -140,8 +150,19 @@ export default class InputManager {
         return this.keysDown.has(key);
     }
 
+    public getDraggingMode(): DraggingMode {
+        if (this.touchGesture !== TouchGesture.None)
+            return DraggingMode.Dragging;
+
+        const grabOptions = GlobalGrabManager.getGrabListenerOptions(this);
+        if (grabOptions !== null)
+            return grabOptions.takePointerLock ? DraggingMode.PointerLocked : DraggingMode.Dragging;
+
+        return DraggingMode.None;
+    }
+
     public isDragging(): boolean {
-        return this.touchGesture != TouchGesture.None || GlobalGrabManager.hasGrabListener(this);
+        return this.getDraggingMode() !== DraggingMode.None;
     }
 
     public afterFrame() {
@@ -278,7 +299,7 @@ export default class InputManager {
 
     public onGrabReleased() {
         this.buttons = 0;
-        if (this.onisdraggingchanged !== null)
-            this.onisdraggingchanged();
+        if (this.ondraggingmodechanged !== null)
+            this.ondraggingmodechanged();
     }
 }

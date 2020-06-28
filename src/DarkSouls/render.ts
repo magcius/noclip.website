@@ -719,10 +719,6 @@ class BatchInstance {
 
         renderInstManager.popTemplateRenderInst();
     }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
-    }
 }
 
 const matrixScratch = mat4.create();
@@ -761,11 +757,6 @@ export class FLVERInstance {
 
         for (let i = 0; i < this.batchInstances.length; i++)
             this.batchInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].destroy(device);
     }
 }
 
@@ -840,8 +831,6 @@ export class MSBRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.flverInstances.length; i++)
-            this.flverInstances[i].destroy(device);
         this.modelHolder.destroy(device);
     }
 }

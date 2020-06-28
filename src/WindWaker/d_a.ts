@@ -783,7 +783,7 @@ class d_a_vrbox2 extends fopAc_ac_c {
     }
 }
 
-const enum KytagEffectMode {
+const enum Kytag00EffectMode {
     None = 0x00,
     Rain = 0x01,
     Moya2 = 0x02,
@@ -802,7 +802,7 @@ class d_a_kytag00 extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_kytag00;
 
     private pselIdx = 0;
-    private effectMode = KytagEffectMode.None;
+    private effectMode = Kytag00EffectMode.None;
     private invert = false;
     private alwaysCheckPlayerPos = false;
     private target = 0.0;
@@ -828,13 +828,13 @@ class d_a_kytag00 extends fopAc_ac_c {
 
         this.innerFadeY = ((this.parameters >> 24) & 0xFF) * 100.0;
 
-        const paramRadius = (this.parameters >>> 16) & 0xFF;
+        const innerFadeRadius = (this.parameters >>> 16) & 0xFF;
         if (this.alwaysCheckPlayerPos) {
             this.innerRadius = this.scale[0] * 500.0;
-            this.outerRadius = this.innerRadius + paramRadius * 10.0;
+            this.outerRadius = this.innerRadius + innerFadeRadius * 10.0;
         } else {
             this.innerRadius = this.scale[0] * 5000.0;
-            this.outerRadius = this.innerRadius + paramRadius * 100.0;
+            this.outerRadius = this.innerRadius + innerFadeRadius * 100.0;
         }
 
         this.wether_tag_efect_move(globals);
@@ -928,16 +928,16 @@ class d_a_kytag00 extends fopAc_ac_c {
             // wether_tag_efect_move
             this.effectSet = true;
 
-            if (this.effectMode === KytagEffectMode.Rain) {
+            if (this.effectMode === Kytag00EffectMode.Rain) {
                 this.raincnt_set(globals, target);
-            } else if (this.effectMode === KytagEffectMode.Thunder) {
+            } else if (this.effectMode === Kytag00EffectMode.Thunder) {
                 if (envLight.thunderMode === 0)
                     envLight.thunderMode = 2;
-            } else if (this.effectMode === KytagEffectMode.ThunderAndRain) {
+            } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
                 if (envLight.thunderMode === 0)
                     envLight.thunderMode = 2;
                 this.raincnt_set(globals, target);
-            } else if (this.effectMode === KytagEffectMode.Moya9) {
+            } else if (this.effectMode === Kytag00EffectMode.Moya9) {
                 // TODO(jstpierre): moya
                 if (envLight.thunderMode === 0)
                     envLight.thunderMode = 2;
@@ -957,16 +957,16 @@ class d_a_kytag00 extends fopAc_ac_c {
             if (this.effectSet) {
                 this.effectSet = false;
 
-                if (this.effectMode === KytagEffectMode.Rain) {
+                if (this.effectMode === Kytag00EffectMode.Rain) {
                     this.raincnt_cut(globals);
-                } else if (this.effectMode === KytagEffectMode.Thunder) {
+                } else if (this.effectMode === Kytag00EffectMode.Thunder) {
                     if (envLight.thunderMode === 2)
                         envLight.thunderMode = 0;
-                } else if (this.effectMode === KytagEffectMode.ThunderAndRain) {
+                } else if (this.effectMode === Kytag00EffectMode.ThunderAndRain) {
                     if (envLight.thunderMode === 2)
                         envLight.thunderMode = 0;
                     this.raincnt_cut(globals);
-                } else if (this.effectMode === KytagEffectMode.Moya9) {
+                } else if (this.effectMode === Kytag00EffectMode.Moya9) {
                     // TODO(jstpierre): moya
                     if (envLight.thunderMode === 2)
                         envLight.thunderMode = 0;

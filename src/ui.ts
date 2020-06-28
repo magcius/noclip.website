@@ -10,12 +10,12 @@ import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
 import { clamp } from './MathHelpers';
-import "reflect-metadata";
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
 import { DebugFloaterHolder } from './DebugFloaters';
 import { InterpolationType, Keyframe, CameraAnimationManager } from './CameraAnimationManager';
+import { DraggingMode } from './InputManager';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -155,6 +155,7 @@ export class TextField implements Widget {
 export class TextEntry implements Widget {
     public elem: HTMLElement;
     public ontext: ((string: string) => void) | null = null;
+    public onfocus: (() => void) | null = null;
 
     protected toplevel: HTMLElement;
     public textfield: TextField;
@@ -181,6 +182,10 @@ export class TextEntry implements Widget {
         };
         textarea.oninput = () => {
             this.textChanged();
+        };
+        textarea.onfocus = () => {
+            if (this.onfocus !== null)
+                this.onfocus();
         };
         this.toplevel.appendChild(this.textfield.elem);
 
@@ -750,7 +755,6 @@ export class Panel implements Widget {
         this.header.style.width = '440px';
         this.header.style.margin = '0';
         this.header.style.fontSize = '100%';
-        this.header.style.textAlign = 'center';
         this.header.style.cursor = 'pointer';
         this.header.style.userSelect = 'none';
         this.header.style.display = 'grid';
@@ -838,10 +842,10 @@ export class Panel implements Widget {
         return true;
     }
 
-    public setExpanded(v: boolean) {
+    public setExpanded(v: boolean, focus: boolean = true) {
         this.manuallyExpanded = v;
         this.syncExpanded();
-        if (this.expanded)
+        if (this.expanded && focus)
             this.elem.focus();
     }
 
@@ -858,7 +862,7 @@ export class Panel implements Widget {
             // If we're coming back from auto-closing, then start a timeout to ignore clicks during this time.
             this.ignoreAutoCloseTimeout = window.setTimeout(() => {
                 this.ignoreAutoCloseTimeout = 0;
-            }, 1000);
+            }, 250);
         }
     }
 }
@@ -908,6 +912,12 @@ class SceneSelect extends Panel {
         this.searchEntry.setPlaceholder('Search...');
         this.searchEntry.ontext = (searchString: string) => {
             this._setSearchString(searchString);
+        };
+        this.searchEntry.onfocus = () => {
+            // If the search entry manages to get itself focused (which can happen if the user hits Tab),
+            // then expand the panel.
+            this.setExpanded(true, false);
+            this.setAutoClosed(false);
         };
         this.contents.appendChild(this.searchEntry.elem);
 
@@ -3264,9 +3274,12 @@ export class UI {
         return true;
     }
 
-    public setIsDragging(isDragging: boolean): void {
+    public setDraggingMode(draggingMode: DraggingMode): void {
+        const isDragging = draggingMode !== DraggingMode.None;
+        const isPointerLocked = draggingMode === DraggingMode.PointerLocked;
+
         this.isDragging = isDragging;
-        this.elem.style.pointerEvents = isDragging ? 'none' : '';
+        this.elem.style.pointerEvents = (isDragging && !isPointerLocked) ? 'none' : '';
         if (isDragging && this.shouldPanelsAutoClose() && !this.studioModeEnabled)
             this.setPanelsAutoClosed(true);
         this.syncVisibilityState();

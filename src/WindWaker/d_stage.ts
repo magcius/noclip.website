@@ -2,7 +2,7 @@
 import { Color, White, colorNewCopy, colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
 import { DZS } from "./d_resorce";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray, assert, hexdump, readString } from "../util";
+import { nArray, assert, readString } from "../util";
 import { dKy_tevstr_c } from "./d_kankyo";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian";
@@ -21,6 +21,10 @@ export class stage_palet_info_class__DifAmb {
         this.C0 = colorNewCopy(baseColor);
         this.K0 = colorNewCopy(baseColor);
     }
+}
+
+function colorFromRGB8(dst: Color, n: number): void {
+    colorFromRGBA8(dst, (n & 0xFFFFFF00) | 0xFF);
 }
 
 export class stage_palet_info_class {
@@ -312,10 +316,6 @@ export class dStage_stageDt_c extends dStage_dt {
     public stag: stage_stag_info_class;
     public lght: stage_plight_info_class[] = [];
     public rtbl: roomRead_class[] = [];
-}
-
-function colorFromRGB8(dst: Color, n: number): void {
-    colorFromRGBA8(dst, (n & 0xFFFFFF00) | 0xFF);
 }
 
 function dStage_paletInfoInit(globals: dGlobals, dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
