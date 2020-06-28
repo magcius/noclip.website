@@ -8,10 +8,10 @@ const MIN_KEYFRAME_DURATION = 0;
 const MILLISECONDS_IN_SECOND = 1000.0;
 
 export const enum InterpolationType {
-    LINEAR = 'LINEAR',
-    EASE_IN = 'EASE_IN',
-    EASE_OUT = 'EASE_OUT',
-    EASE_BOTH = 'EASE_BOTH'
+    Linear = 'LINEAR',
+    EaseIn = 'EASE_IN',
+    EaseOut = 'EASE_OUT',
+    EaseBoth = 'EASE_BOTH'
 }
 
 export class Keyframe {
@@ -27,7 +27,7 @@ export class Keyframe {
     private _interpProgress: number = 0;
     private _holdProgress: number = 0;
 
-    private _interpType: InterpolationType = InterpolationType.LINEAR;
+    private _interpType: InterpolationType = InterpolationType.Linear;
     private bezier: BezierEasing.EasingFunction | null = null;
 
     constructor(public endPos: mat4) {
@@ -96,16 +96,16 @@ export class Keyframe {
 
     set interpType(type: InterpolationType) {
         switch (type) {
-            case InterpolationType.LINEAR:
+            case InterpolationType.Linear:
                 this.bezier = null;
                 break;
-            case InterpolationType.EASE_IN:
+            case InterpolationType.EaseIn:
                 this.bezier = BezierEasing(0.42, 0, 1, 1);
                 break;
-            case InterpolationType.EASE_OUT:
+            case InterpolationType.EaseOut:
                 this.bezier = BezierEasing(0, 0, 0.58, 1);
                 break;
-            case InterpolationType.EASE_BOTH:
+            case InterpolationType.EaseBoth:
                 this.bezier = BezierEasing(0.42, 0, 0.58, 1);
                 break;
         }

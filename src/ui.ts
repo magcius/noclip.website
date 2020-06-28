@@ -2255,16 +2255,16 @@ class StudioPanel extends Panel {
                 setElementHighlighted(this.selectedInterpBtn, false);
             }
             switch (interpType) {
-                case InterpolationType.LINEAR:
+                case InterpolationType.Linear:
                     this.selectedInterpBtn = this.linearInterpBtn;
                     break;
-                case InterpolationType.EASE_IN:
+                case InterpolationType.EaseIn:
                     this.selectedInterpBtn = this.easeInInterpBtn;
                     break;
-                case InterpolationType.EASE_OUT:
+                case InterpolationType.EaseOut:
                     this.selectedInterpBtn = this.easeOutInterpBtn;
                     break;
-                case InterpolationType.EASE_BOTH:
+                case InterpolationType.EaseBoth:
                     this.selectedInterpBtn = this.easeBothInterpBtn;
                     break;
             }
