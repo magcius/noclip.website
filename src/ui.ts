@@ -1447,17 +1447,23 @@ class ViewerSettings extends Panel {
 
         this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD') as HTMLInputElement;
         this.cameraControllerWASD.onclick = () => {
-            this.setCameraControllerClass(FPSCameraController);
+            if (!ui.studioModeEnabled) {
+                this.setCameraControllerClass(FPSCameraController);
+            }
         };
 
         this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit') as HTMLInputElement;
         this.cameraControllerOrbit.onclick = () => {
-            this.setCameraControllerClass(OrbitCameraController);
+            if (!ui.studioModeEnabled) {
+                this.setCameraControllerClass(OrbitCameraController);
+            }
         };
 
         this.cameraControllerOrtho = this.contents.querySelector('.CameraControllerOrtho') as HTMLInputElement;
         this.cameraControllerOrtho.onclick = () => {
-            this.setCameraControllerClass(OrthoCameraController);
+            if (!ui.studioModeEnabled) {
+                this.setCameraControllerClass(OrthoCameraController);
+            }
         };
 
         this.invertYCheckbox = new Checkbox('Invert Y Axis?');
@@ -2503,6 +2509,8 @@ export class UI {
     public isEmbedMode: boolean = false;
     public isVisible: boolean = true;
 
+    public studioModeEnabled: boolean = false;
+
     constructor(public viewer: Viewer.Viewer) {
         this.toplevel = document.createElement('div');
 
@@ -2678,7 +2686,7 @@ export class UI {
     public setIsDragging(isDragging: boolean): void {
         this.isDragging = isDragging;
         this.elem.style.pointerEvents = isDragging ? 'none' : '';
-        if (isDragging && this.shouldPanelsAutoClose())
+        if (isDragging && this.shouldPanelsAutoClose() && !this.studioModeEnabled)
             this.setPanelsAutoClosed(true);
         this.syncVisibilityState();
     }
