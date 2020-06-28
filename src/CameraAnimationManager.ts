@@ -135,11 +135,11 @@ export class CameraAnimation {
      * inserted at arbitrary places, we can't simply rely on the current keyframe count 
      * for this. The starting position keyframe is named differently, so we start at -1.
      */
-    private _totalKeyframesAdded: number = -1;
+    public totalKeyframesAdded: number = -1;
 
     insertKeyframe(after: number, keyframeEndPos: mat4) {
         this.keyframes.splice(after + 1, 0, new Keyframe(keyframeEndPos));
-        this._totalKeyframesAdded++;
+        this.totalKeyframesAdded++;
     }
 
     appendKeyframe(keyframeEndPos: mat4) {
@@ -150,9 +150,6 @@ export class CameraAnimation {
         this.keyframes.splice(index, 1);
     }
 
-    get totalKeyframesAdded(): number {
-        return this._totalKeyframesAdded;
-    }
 }
 
 export class CameraAnimationManager {
