@@ -1805,6 +1805,12 @@ class StudioPanel extends Panel {
         };
         setElementHighlighted(this.disableStudioBtn, true);
         setElementHighlighted(this.enableStudioBtn, false);
+
+        this.elem.style.display = 'none';
+    }
+
+    public s() : void {
+        this.elem.style.display = '';
     }
 
     private initStudio(): void {
