@@ -190,7 +190,7 @@ export class CameraAnimationManager {
 
     public addNextKeyframe(pos: mat4) {
         if (this.editingKeyframePosition) {
-            this.currentAnimation.keyframes[this.selectedKeyframeIndex] = new Keyframe(pos);
+            this.currentAnimation.keyframes[this.selectedKeyframeIndex].endPos = pos;
             this.uiKeyframeList.dispatchEvent(new Event('keyframePositionEdited'));
             this.editingKeyframePosition = false;
         } else if (this.selectedKeyframeIndex > -1) {
