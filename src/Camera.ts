@@ -9,6 +9,7 @@ import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { reverseDepthForPerspectiveProjectionMatrix, reverseDepthForOrthographicProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
+import { Keyframe, CameraAnimationManager } from './CameraAnimationManager';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -493,6 +494,140 @@ export class FPSCameraController implements CameraController {
         }
 
         return important ? CameraUpdateResult.ImportantChange : updated ? CameraUpdateResult.Changed : CameraUpdateResult.Unchanged;
+    }
+}
+
+export class StudioCameraController extends FPSCameraController {
+    private isAnimationPlaying: boolean = false;
+    private loopAnimation: boolean = false;
+    private animationKeyframes: Keyframe[];
+    private currentKeyframeIndex: number;
+    private interpolatingFrom: mat4;
+    private trsFrom: vec3;
+    private rotQFrom: quat;
+    private trsTo: vec3;
+    private rotQTo: quat;
+    private nextTrs: vec3;
+    private nextRotQ: quat;
+    /**
+     * Indicates if the camera is currently positioned on a keyframe's end position.
+     */
+    private isOnKeyframe: boolean = false;
+
+    constructor(private animationManager: CameraAnimationManager) {
+        super();
+        this.trsFrom = vec3.create();
+        this.rotQFrom = quat.create();
+        this.trsTo = vec3.create();
+        this.rotQTo = quat.create();
+        this.nextTrs = vec3.create();
+        this.nextRotQ = quat.create();
+    }
+
+    public update(inputManager: InputManager, dt: number): CameraUpdateResult {
+        let result;
+        if (this.isAnimationPlaying) {
+            result = this.updateAnimation(dt);
+            if (result === CameraUpdateResult.Changed) {
+                mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
+                this.camera.worldMatrixUpdated();
+            }
+            if (inputManager.isKeyDownEventTriggered('Escape')) {
+                this.stopAnimation();
+            }
+        } else {
+            if (!this.isOnKeyframe && inputManager.isKeyDownEventTriggered('Enter')) {
+                this.animationManager.addNextKeyframe(mat4.clone(this.camera.worldMatrix));
+                this.isOnKeyframe = true;
+            }
+            result = super.update(inputManager, dt);
+            if (this.isOnKeyframe && result !== CameraUpdateResult.Unchanged) {
+                this.isOnKeyframe = false;
+            }
+        }
+
+        return result;
+    }
+
+    updateAnimation(dt: number): CameraUpdateResult {
+        let currentKeyframe: Keyframe = this.animationKeyframes[this.currentKeyframeIndex];
+        if (currentKeyframe.isFinished()) {
+            // Move to next keyframe.
+            this.interpolatingFrom = currentKeyframe.endPos;
+            this.currentKeyframeIndex++;
+            if (this.currentKeyframeIndex === this.animationKeyframes.length) {
+                // We've reached the end of the animation.
+                if (this.loopAnimation) {
+                    this.resetKeyframes();
+                    this.currentKeyframeIndex = 0;
+                } else {
+                    this.stopAnimation();
+                    return CameraUpdateResult.Unchanged;
+                }
+            }
+            currentKeyframe = this.animationKeyframes[this.currentKeyframeIndex];
+            mat4.getTranslation(this.trsFrom, this.interpolatingFrom);
+            mat4.getRotation(this.rotQFrom, this.interpolatingFrom);
+            mat4.getTranslation(this.trsTo, currentKeyframe.endPos);
+            mat4.getRotation(this.rotQTo, currentKeyframe.endPos);
+            if (currentKeyframe.durationInSeconds === 0) {
+                mat4.copy(this.camera.worldMatrix, currentKeyframe.endPos);
+                return CameraUpdateResult.Changed;
+            }
+        }
+
+        if (currentKeyframe.interpFinished()) {
+            // The interpolation is finished, but this keyframe still has a hold duration to complete.
+            currentKeyframe.update(dt);
+            return CameraUpdateResult.Unchanged;
+        } else {
+            currentKeyframe.update(dt);
+            const interpAmount: number = currentKeyframe.interpAmount;
+            vec3.lerp(this.nextTrs, this.trsFrom, this.trsTo, interpAmount);
+            quat.slerp(this.nextRotQ, this.rotQFrom, this.rotQTo, interpAmount);
+            mat4.fromRotationTranslation(this.camera.worldMatrix, this.nextRotQ, this.nextTrs);
+            return CameraUpdateResult.Changed;
+        }
+    }
+
+    public setToPosition(pos: mat4): void {
+        mat4.copy(this.camera.worldMatrix, pos);
+        mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
+        this.camera.worldMatrixUpdated();
+        this.isOnKeyframe = true;
+    }
+
+    public playAnimation(keyframes: Keyframe[], startPos: mat4, loop: boolean) {
+        this.animationKeyframes = keyframes;
+        this.currentKeyframeIndex = 0;
+        this.isAnimationPlaying = true;
+        this.loopAnimation = loop;
+
+        this.setToPosition(startPos);
+        this.interpolatingFrom = startPos;
+        const firstKeyframe = this.animationKeyframes[0];
+        mat4.getTranslation(this.trsFrom, this.interpolatingFrom);
+        mat4.getRotation(this.rotQFrom, this.interpolatingFrom);
+        mat4.getTranslation(this.trsTo, firstKeyframe.endPos);
+        mat4.getRotation(this.rotQTo, firstKeyframe.endPos);
+
+        // If the starting position is the same as the first keyframe's
+        // end position, skip any interpolation for that keyframe.
+        if (mat4.exactEquals(startPos, keyframes[0].endPos)) {
+            this.animationKeyframes[0].skipInterpolation();
+        }
+    }
+
+    public stopAnimation() {
+        this.isAnimationPlaying = false;
+        this.resetKeyframes();
+        this.animationManager.fireStoppedEvent();
+    }
+
+    private resetKeyframes() {
+        for (let i = 0; i < this.animationKeyframes.length; i++) {
+            this.animationKeyframes[i].reset();
+        }
     }
 }
 
