@@ -15,6 +15,7 @@ import "reflect-metadata";
 // @ts-ignore
 import logoURL from './assets/logo.png';
 import { DebugFloaterHolder } from './DebugFloaters';
+import { InterpolationType, Keyframe, CameraAnimationManager } from './CameraAnimationManager';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1700,9 +1701,590 @@ class StatisticsPanel extends Panel {
 }
 
 class StudioPanel extends Panel {
-    constructor() {
+    private animationManager: CameraAnimationManager;
+    private enableStudioBtn: HTMLElement;
+    private disableStudioBtn: HTMLElement;
+
+    private studioPanelContents: HTMLElement;
+    private studioHelpText: HTMLElement;
+
+    private studioControlsContainer: HTMLElement;
+
+    private keyframeList: HTMLElement;
+    private selectedKeyframeListItem?: HTMLElement;
+
+    private editKeyframePositionBtn: HTMLElement;
+
+    private keyframeControls: HTMLElement;
+    private selectedKeyframe: Keyframe;
+    private keyframeNameInput: HTMLInputElement;
+    private keyframeDurationContainer: HTMLElement;
+    private keyframeDurationInput: HTMLInputElement;
+    private keyframeHoldDurationInput: HTMLInputElement;
+    private interpolationSettings: HTMLElement;
+    private linearInterpBtn: HTMLElement;
+    private easeInInterpBtn: HTMLElement;
+    private easeOutInterpBtn: HTMLElement;
+    private easeBothInterpBtn: HTMLElement;
+    private selectedInterpBtn?: HTMLElement;
+    private moveKeyframeUpBtn: HTMLElement;
+    private moveKeyframeDownBtn: HTMLElement;
+
+    private previewKeyframeBtn: HTMLElement;
+    private stopPreviewKeyframeBtn: HTMLElement;
+
+    private firstKeyframeBtn: HTMLElement;
+    private previousKeyframeBtn: HTMLElement;
+    private nextKeyframeBtn: HTMLElement;
+    private lastKeyframeBtn: HTMLElement;
+
+    private playbackControls: HTMLElement;
+    private hideUiCheckbox: Checkbox;
+    private delayStartCheckbox: Checkbox;
+    private loopAnimationCheckbox: Checkbox;
+    private playAnimationBtn: HTMLElement;
+    private stopAnimationBtn: HTMLElement;
+
+    constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
-        this.setTitle(VIDEO_ICON, 'Studio');
+        this.setTitle(CLAPBOARD_ICON, 'Studio');
+        this.contents.insertAdjacentHTML('beforeend', `
+        <div style="display: grid; grid-template-columns: 3fr 1fr 1fr; align-items: center;">
+            <div class="SettingsHeader">Studio Mode</div>
+            <div id="enableStudioBtn" class="SettingsButton EnableStudioMode">Enable</div><div id="disableStudioBtn" class="SettingsButton DisableStudioMode">Disable</div>
+        </div>
+        <div id="studioPanelContents" hidden></div>
+        `);
+        this.contents.style.lineHeight = '36px';
+        this.enableStudioBtn = this.contents.querySelector('#enableStudioBtn') as HTMLInputElement;
+        this.disableStudioBtn = this.contents.querySelector('#disableStudioBtn') as HTMLInputElement;
+        this.studioPanelContents = this.contents.querySelector('#studioPanelContents') as HTMLElement;
+        this.enableStudioBtn.onclick = () => {
+            if (!ui.studioModeEnabled) {
+                // Switch to the FPS Camera Controller ().
+                (ui.viewerSettings.elem.querySelector('.CameraControllerWASD') as HTMLElement).click();
+                ui.studioModeEnabled = true;
+                // Disable switching of camera controllers in studio mode.
+                ui.viewerSettings.contents.querySelectorAll('.SettingsButton').forEach(el => {
+                    el.classList.add('disabled');
+                });
+                // If this is the first time Studio Mode is being enabled, we need to initialize things.
+                if (!this.studioPanelContents.children.length) {
+                    this.initStudio();
+                }
+                this.animationManager.enableStudioController(this.viewer);
+                this.studioPanelContents.removeAttribute('hidden');
+                ui.setPanelsAutoClosed(false);
+                setElementHighlighted(this.enableStudioBtn, true);
+                setElementHighlighted(this.disableStudioBtn, false);
+            }
+        }
+        this.disableStudioBtn.onclick = () => {
+            if (ui.studioModeEnabled) {
+                ui.studioModeEnabled = false;
+                // Re-enable camera controller switching.
+                ui.viewerSettings.contents.querySelectorAll('.SettingsButton').forEach(el => {
+                    el.classList.remove('disabled');
+                });
+                // Switch back to the FPS Camera Controller.
+                (ui.viewerSettings.elem.querySelector('.CameraControllerWASD') as HTMLElement).click();
+                this.studioPanelContents.setAttribute('hidden', '');
+                setElementHighlighted(this.disableStudioBtn, true);
+                setElementHighlighted(this.enableStudioBtn, false);
+            }
+        };
+        setElementHighlighted(this.disableStudioBtn, true);
+        setElementHighlighted(this.enableStudioBtn, false);
+    }
+
+    private initStudio(): void {
+        // Add Studio Mode-specific CSS.
+        document.head.insertAdjacentHTML('beforeend', `
+        <style>
+            #studioHelpText {
+                line-height:1.5;
+                padding: 0 1rem 0.5rem 1rem;
+                min-height:3rem;
+            }
+            #keyframeList {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+                height: 22rem;
+                overflow-y: scroll;
+                border: 1px solid #555;
+            }
+            #keyframeList > li {
+                position: relative;
+                background-color: #441111;
+            }
+            #keyframeControls {
+                line-height: 1.2;
+            }
+            #keyframeControls input {
+                background: #000;
+                color: white;
+                font-weight: bold;
+                font: 16px monospace;
+                border: 1px solid #444444;
+            }
+            .KeyframeSettingsName {
+                margin-top: 0.5rem;
+                margin-bottom: 0.25rem;
+            }
+            .KeyframeNumericInput {
+                width: 3.25rem;
+            }
+            #studioControlsContainer .disabled { 
+                cursor: not-allowed!important;
+            }
+            #playbackControls {
+                padding: 0 5rem 1rem;
+                border-top: 1px solid #444;
+            }
+            button.SettingsButton {
+                font: 16px monospace;
+                font-weight: bold;
+                border: none;
+                width: 100%;
+                color: inherit;
+                padding: 0.15rem;
+            }
+        </style>
+        `);
+        this.studioPanelContents.insertAdjacentHTML('afterbegin', `
+        <div id="studioHelpText"></div>
+        <div id="studioControlsContainer" hidden>
+            <div style="display: grid; grid-template-columns: 3fr 2fr;">
+                <div style="margin: 0 0.5rem">
+                    <ol id="keyframeList" class="KeyframeList"></ol>
+                    <div id="keyframeNavControls" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.25rem;">
+                        <button type="button" id="firstKeyframeBtn" class="SettingsButton">&lt;&lt;-</button>
+                        <button type="button" id="previousKeyframeBtn" class="SettingsButton">&lt;-</button>
+                        <button type="button" id="nextKeyframeBtn" class="SettingsButton">-&gt;</button>
+                        <button type="button" id="lastKeyframeBtn" class="SettingsButton">-&gt;&gt;</button>
+                    </div>
+                </div>
+                <div id="keyframeControls" hidden>
+                    <button type="button" id="editKeyframePositionBtn" class="SettingsButton">Edit Position</button>
+                    <div>
+                        <div class="SettingsHeader KeyframeSettingsName">Name</div>
+                        <input id="keyframeName" type="text" minLength="1" maxLength="20" size="10"/>
+                    </div>
+                    <div id="keyframeDurationContainer">
+                        <div class="SettingsHeader KeyframeSettingsName">Duration</div>
+                        <input id="keyframeDuration" class="KeyframeNumericInput" type="number" min="0" max="100.0" step="0.1"/> <span>s</span>
+                    </div>
+                    <div id="interpolationSettings">
+                        <div class="SettingsHeader KeyframeSettingsName">Interpolation</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr;">
+                            <button type="button" id="linearInterpBtn" class="SettingsButton InterpButton" data-interp-type="LINEAR">Linear</button>
+                            <button type="button" id="easeInInterpBtn" class="SettingsButton InterpButton" data-interp-type="EASE_IN">Ease In</button>
+                            <button type="button" id="easeOutInterpBtn" class="SettingsButton InterpButton" data-interp-type="EASE_OUT">Ease Out</button>
+                            <button type="button" id="easeBothInterpBtn" class="SettingsButton InterpButton" data-interp-type="EASE_BOTH">Ease Both</button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="SettingsHeader KeyframeSettingsName">Hold Duration</div>
+                        <input id="keyframeHoldDuration" class="KeyframeNumericInput" type="number" min="0" max="100.0" step="0.1"/> <span>s</span>
+                    </div>
+                    <div style="margin: 1rem;">
+                        <button type="button" id="moveKeyframeUpBtn" style="margin-bottom:0.5rem;" class="SettingsButton">Move up</button>
+                        <button type="button" id="moveKeyframeDownBtn" class="SettingsButton">Move down</button>
+                    </div>
+                    <button type="button" id="previewKeyframeBtn" class="SettingsButton">Preview keyframe</button>
+                    <button type="button" id="stopPreviewKeyframeBtn" class="SettingsButton" hidden>Stop Preview</button>
+                </div>
+            </div>
+            <div id="playbackControls">
+                <button type="button" id="playAnimationBtn" class="SettingsButton">▶</button>
+                <button type="button" id="stopAnimationBtn" class="SettingsButton" hidden>■</button>
+            </div>
+        </div>`);
+        this.studioHelpText = this.contents.querySelector('#studioHelpText') as HTMLElement;
+        this.studioHelpText.dataset.startPosHelpText = 'Move the camera to the desired starting position and press Enter.';
+        this.studioHelpText.dataset.editPosHelpText = 'Move the camera to the desired position and press Enter.';
+        this.studioHelpText.innerText = this.studioHelpText.dataset.startPosHelpText;
+        this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
+        this.keyframeList = this.contents.querySelector('#keyframeList') as HTMLElement;
+
+        this.editKeyframePositionBtn = this.contents.querySelector('#editKeyframePositionBtn') as HTMLInputElement;
+        setElementHighlighted(this.editKeyframePositionBtn, false);
+
+        this.keyframeControls = this.contents.querySelector('#keyframeControls') as HTMLElement;
+        this.keyframeNameInput = this.contents.querySelector('#keyframeName') as HTMLInputElement;
+        this.keyframeDurationContainer = this.contents.querySelector('#keyframeDurationContainer') as HTMLElement;
+        this.keyframeDurationInput = this.contents.querySelector('#keyframeDuration') as HTMLInputElement;
+        this.keyframeHoldDurationInput = this.contents.querySelector('#keyframeHoldDuration') as HTMLInputElement;
+
+        this.interpolationSettings = this.contents.querySelector('#interpolationSettings') as HTMLElement;
+        this.interpolationSettings.dataset.helpText = 'The interpolation method used for animating this keyframe.';
+
+        this.linearInterpBtn = this.contents.querySelector('#linearInterpBtn') as HTMLInputElement;
+        this.easeInInterpBtn = this.contents.querySelector('#easeInInterpBtn') as HTMLInputElement;
+        this.easeOutInterpBtn = this.contents.querySelector('#easeOutInterpBtn') as HTMLInputElement;
+        this.easeBothInterpBtn = this.contents.querySelector('#easeBothInterpBtn') as HTMLInputElement;
+
+        this.moveKeyframeUpBtn = this.contents.querySelector('#moveKeyframeUpBtn') as HTMLInputElement;
+        this.moveKeyframeDownBtn = this.contents.querySelector('#moveKeyframeDownBtn') as HTMLInputElement;
+
+        this.previewKeyframeBtn = this.contents.querySelector('#previewKeyframeBtn') as HTMLInputElement;
+        this.stopPreviewKeyframeBtn = this.contents.querySelector('#stopPreviewKeyframeBtn') as HTMLInputElement;
+
+        this.firstKeyframeBtn = this.contents.querySelector('#firstKeyframeBtn') as HTMLInputElement;
+        this.previousKeyframeBtn = this.contents.querySelector('#previousKeyframeBtn') as HTMLInputElement;
+        this.nextKeyframeBtn = this.contents.querySelector('#nextKeyframeBtn') as HTMLInputElement;
+        this.lastKeyframeBtn = this.contents.querySelector('#lastKeyframeBtn') as HTMLInputElement;
+
+        this.playbackControls = this.contents.querySelector('#playbackControls') as HTMLElement;
+
+        this.delayStartCheckbox = new Checkbox('Delay animation playback');
+        this.loopAnimationCheckbox = new Checkbox('Loop animation');
+        this.hideUiCheckbox = new Checkbox('Hide UI during playback');
+        this.delayStartCheckbox.elem.dataset.helpText = 'Delay the start of the animation by 2s. Useful for avoiding capture of the mouse cursor.';
+        this.loopAnimationCheckbox.elem.dataset.helpText = 'Loop the animation until manually stopped.'
+        this.hideUiCheckbox.elem.dataset.helpText = 'Hide the noclip UI during playback. (Press Escape to stop playback.)';
+        this.playbackControls.insertAdjacentElement('afterbegin', this.delayStartCheckbox.elem);
+        this.playbackControls.insertAdjacentElement('afterbegin', this.loopAnimationCheckbox.elem);
+        this.playbackControls.insertAdjacentElement('afterbegin', this.hideUiCheckbox.elem);
+
+        this.playAnimationBtn = this.contents.querySelector('#playAnimationBtn') as HTMLInputElement;
+        this.stopAnimationBtn = this.contents.querySelector('#stopAnimationBtn') as HTMLInputElement;
+
+        this.animationManager = new CameraAnimationManager(this.keyframeList, this.studioControlsContainer);
+
+        this.keyframeList.dataset.helpText = 'Click on a keyframe to jump to its end position.';
+        // Event fired when start position for an animation is first set.
+        this.keyframeList.addEventListener('startPositionSet', () => {
+            this.studioHelpText.dataset.default = 'Move the camera and press Enter to place keyframes.';
+            this.studioHelpText.innerText = this.studioHelpText.dataset.default;
+            this.studioControlsContainer.removeAttribute('hidden');
+            const startPositionListItem: HTMLElement = document.createElement('li');
+            startPositionListItem.innerText = 'Starting Position';
+            startPositionListItem.dataset.name = startPositionListItem.innerText;
+            startPositionListItem.onclick = (e: MouseEvent) => {
+                this.selectKeyframeListItem(e);
+                this.keyframeNameInput.setAttribute('disabled', '');
+                this.moveKeyframeDownBtn.setAttribute('hidden', '');
+                this.moveKeyframeUpBtn.setAttribute('hidden', '');
+                if (!this.loopAnimationCheckbox.checked) {
+                    this.keyframeDurationContainer.setAttribute('hidden', '');
+                    this.previewKeyframeBtn.setAttribute('hidden', '');
+                }
+            };
+            startPositionListItem.dataset.index = '0';
+            this.keyframeList.insertAdjacentElement('afterbegin', startPositionListItem);
+            startPositionListItem.click();
+        });
+
+        // Event fired whenever a new keyframe is added.
+        this.keyframeList.addEventListener('newKeyframe', e => this.handleNewKeyframeEvent(e as CustomEvent));
+
+        this.editKeyframePositionBtn.onclick = () => {
+            this.disableKeyframeControls();
+            this.animationManager.enableEditKeyframePosition();
+            this.studioHelpText.innerText = this.studioHelpText.dataset.editPosHelpText as string;
+            setElementHighlighted(this.editKeyframePositionBtn, true);
+        };
+
+        // Event fired when a keyframe's position is edited.
+        this.keyframeList.addEventListener('keyframePositionEdited', () => {
+            this.resetHelpText();
+            this.enableKeyframeControls();
+            setElementHighlighted(this.editKeyframePositionBtn, false);
+        });
+
+        this.firstKeyframeBtn.onclick = () => this.navigateKeyframeList(-this.keyframeList.children.length);
+        this.previousKeyframeBtn.onclick = () => this.navigateKeyframeList(-1);
+        this.nextKeyframeBtn.onclick = () => this.navigateKeyframeList(1);
+        this.lastKeyframeBtn.onclick = () => this.navigateKeyframeList(this.keyframeList.children.length);
+
+        this.keyframeNameInput.onkeyup = () => {
+            if (this.selectedKeyframeListItem) {
+                this.selectedKeyframeListItem.dataset.name = this.keyframeNameInput.value;
+                this.selectedKeyframeListItem.childNodes[0].nodeValue = this.keyframeNameInput.value;
+            }
+        };
+
+        this.keyframeDurationInput.dataset.helpText = 'The length of time spent animating between the previous keyframe and this one.'
+        this.keyframeDurationInput.onchange = () => {
+            const durationVal: number = parseFloat(this.keyframeDurationInput.value);
+            this.selectedKeyframe.durationInSeconds = durationVal;
+            if (this.interpolationSettings.hasAttribute('hidden')) {
+                if (durationVal > 0) {
+                    this.interpolationSettings.removeAttribute('hidden');
+                }
+            } else if (durationVal === 0) {
+                this.interpolationSettings.setAttribute('hidden', '');
+            }
+        };
+
+        const interpBtns: NodeList = document.querySelectorAll('#interpolationSettings .InterpButton');
+        for (let i = 0; i < interpBtns.length; i++) {
+            const btn: HTMLElement = interpBtns[i] as HTMLElement;
+            btn.onclick = () => this.setInterpType(btn);
+            setElementHighlighted(btn, false);
+        }
+
+        this.keyframeHoldDurationInput.dataset.helpText = 'The length of time to hold on this keyframe\'s end position before moving to the next.';
+        this.keyframeHoldDurationInput.onchange = () => {
+            this.selectedKeyframe.holdDurationInSeconds = parseFloat(this.keyframeHoldDurationInput.value);
+        };
+
+        this.moveKeyframeUpBtn.onclick = () => {
+            if (this.animationManager.moveKeyframeUp() && this.selectedKeyframeListItem) {
+                const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
+                const listItems = this.keyframeList.children;
+                this.keyframeList.insertBefore(listItems[index], listItems[index - 1]);
+                this.updateKeyframeIndices(index - 1);
+                this.selectedKeyframeListItem.click();
+            }
+        }
+
+        this.moveKeyframeDownBtn.onclick = () => {
+            if (this.animationManager.moveKeyframeDown() && this.selectedKeyframeListItem) {
+                const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
+                const listItems = this.keyframeList.children;
+                this.keyframeList.insertBefore(listItems[index + 1], listItems[index]);
+                this.updateKeyframeIndices(index);
+                this.selectedKeyframeListItem.click();
+            }
+        }
+
+        this.previewKeyframeBtn.dataset.helpText = 'Preview the animation between the previous keyframe and this one.'
+        this.previewKeyframeBtn.onclick = () => {
+            if (this.keyframeList.children.length > 1) {
+                this.disableKeyframeControls();
+                this.playAnimationBtn.setAttribute('hidden', '');
+                this.previewKeyframeBtn.setAttribute('hidden', '');
+                this.stopPreviewKeyframeBtn.removeAttribute('hidden');
+                this.stopPreviewKeyframeBtn.removeAttribute('disabled');
+                this.stopPreviewKeyframeBtn.classList.remove('disabled');
+                this.stopAnimationBtn.removeAttribute('hidden');
+                this.stopAnimationBtn.removeAttribute('disabled');
+                this.animationManager.previewKeyframe();
+            }
+        };
+
+        this.stopPreviewKeyframeBtn.onclick = () => {
+            this.animationManager.stopAnimation();
+        };
+
+        this.loopAnimationCheckbox.onchanged = () => {
+            if (this.selectedKeyframeListItem === this.keyframeList.children[0] && this.keyframeList.children.length > 1) {
+                if (this.loopAnimationCheckbox.checked) {
+                    this.keyframeDurationContainer.removeAttribute('hidden');
+                    this.previewKeyframeBtn.removeAttribute('hidden');
+                } else {
+                    this.keyframeDurationContainer.setAttribute('hidden', '');
+                    this.previewKeyframeBtn.setAttribute('hidden', '');
+                }
+            }
+        };
+
+        this.playAnimationBtn.onclick = (e) => {
+            if (this.keyframeList.children.length > 1) {
+                e.stopPropagation();
+                this.disableKeyframeControls();
+                this.playAnimationBtn.setAttribute('hidden', '');
+                this.stopAnimationBtn.removeAttribute('disabled');
+                this.stopAnimationBtn.classList.remove('disabled');
+                this.stopAnimationBtn.removeAttribute('hidden');
+                if (this.hideUiCheckbox.checked) {
+                    this.ui.toggleUI(false);
+                }
+                if (this.delayStartCheckbox.checked) {
+                    setTimeout(() => {
+                        this.animationManager.playAnimation(this.loopAnimationCheckbox.checked);
+                    }, 2000);
+                } else {
+                    this.animationManager.playAnimation(this.loopAnimationCheckbox.checked);
+                }
+            }
+        };
+
+        this.stopAnimationBtn.onclick = () => {
+            this.animationManager.stopAnimation();
+            this.playAnimationBtn.removeAttribute('hidden');
+            this.stopAnimationBtn.setAttribute('hidden', '');
+        };
+
+        this.studioControlsContainer.addEventListener('animationStopped', () => {
+            this.enableKeyframeControls();
+
+            if (this.selectedKeyframeListItem) {
+                if (this.loopAnimationCheckbox.checked || this.selectedKeyframeListItem !== this.keyframeList.children[0]) {
+                    this.keyframeDurationContainer.removeAttribute('hidden');
+                    this.previewKeyframeBtn.removeAttribute('hidden');
+                }
+            }
+
+            this.playAnimationBtn.removeAttribute('hidden');
+            this.stopPreviewKeyframeBtn.setAttribute('hidden', '');
+            this.stopAnimationBtn.setAttribute('hidden', '');
+            this.ui.toggleUI(true);
+        });
+
+        // Set a mouseover event for any elements in the panel with defined help text.
+        const controls: NodeList = document.querySelectorAll('#studioPanelContents *');
+        for (let i = 0; i < controls.length; i++) {
+            const control: HTMLElement = controls[i] as HTMLElement;
+            if (control.dataset.helpText) {
+                control.onfocus = () => this.displayHelpText(control);
+                control.onmouseenter = () => this.displayHelpText(control);
+                control.onmouseleave = () => this.resetHelpText();
+            }
+        }
+    }
+
+    private navigateKeyframeList(amount: number): void {
+        if (this.selectedKeyframeListItem) {
+            let index = parseInt(this.selectedKeyframeListItem.dataset.index as string) + amount;
+            if (index < 0) {
+                index = 0;
+            } else if (index >= this.keyframeList.children.length) {
+                index = this.keyframeList.children.length - 1;
+            }
+            (this.keyframeList.children[index] as HTMLElement).click();
+        }
+    }
+
+    private setInterpType(btn: HTMLElement) {
+        this.selectedKeyframe.interpType = btn.dataset.interpType as InterpolationType;
+        if (this.selectedInterpBtn) {
+            setElementHighlighted(this.selectedInterpBtn, false);
+        }
+        this.selectedInterpBtn = btn;
+        setElementHighlighted(this.selectedInterpBtn, true);
+    }
+
+    private displayHelpText(elem: HTMLElement) {
+        this.studioHelpText.innerText = elem.dataset.helpText ? elem.dataset.helpText : this.studioHelpText.dataset.default as string;
+    }
+
+    private resetHelpText() {
+        this.studioHelpText.innerText = this.studioHelpText.dataset.default as string;
+    }
+
+    private handleNewKeyframeEvent(e: CustomEvent) {
+        const keyframeListItem: HTMLElement = document.createElement('li');
+        // The keyframe index is passed as the CustomEvent detail.
+        const keyframeIndex: number = e.detail;
+        keyframeListItem.innerText = 'Keyframe ' + (this.animationManager.totalKeyframesAdded());
+        keyframeListItem.dataset.index = keyframeIndex.toString();
+        keyframeListItem.dataset.name = keyframeListItem.innerText;
+        keyframeListItem.onclick = (e: MouseEvent) => this.selectKeyframeListItem(e);
+        const clearButton = document.createElement('button');
+        clearButton.textContent = '🗙';
+        clearButton.type = 'button';
+        clearButton.style.color = 'white';
+        clearButton.style.position = 'absolute';
+        clearButton.style.width = '24px';
+        clearButton.style.height = '24px';
+        clearButton.style.right = '8px';
+        clearButton.style.top = '6px';
+        clearButton.style.bottom = '6px';
+        clearButton.style.lineHeight = '20px';
+        clearButton.style.cursor = 'pointer';
+        clearButton.style.backgroundColor = 'transparent';
+        clearButton.style.border = '0';
+        clearButton.style.fontSize = '16px';
+        clearButton.style.padding = '0';
+        clearButton.style.fontWeight = 'bold';
+        clearButton.onclick = e => {
+            e.stopPropagation();
+            if (this.keyframeList.hasAttribute('disabled')) {
+                return;
+            }
+
+            if (this.selectedKeyframeListItem === keyframeListItem) {
+                this.selectedKeyframeListItem = undefined;
+                this.keyframeControls.setAttribute('hidden', '');
+                this.animationManager.deselectKeyframe();
+            }
+            const toRemove = parseInt(keyframeListItem.dataset.index as string);
+            keyframeListItem.remove();
+            this.updateKeyframeIndices(toRemove);
+            this.animationManager.removeKeyframe(toRemove);
+        };
+        keyframeListItem.insertAdjacentElement('beforeend', clearButton);
+
+        if (keyframeIndex === this.keyframeList.children.length) {
+            this.keyframeList.insertAdjacentElement('beforeend', keyframeListItem);
+        } else {
+            this.keyframeList.children[keyframeIndex].insertAdjacentElement('afterend', keyframeListItem);
+            this.updateKeyframeIndices(keyframeIndex);
+        }
+        keyframeListItem.click();
+    }
+
+    private selectKeyframeListItem(e: MouseEvent) {
+        if (this.keyframeList.hasAttribute('disabled')) {
+            return;
+        }
+
+        const liElem = e.target as HTMLElement;
+        const index: number = parseInt(liElem.dataset.index as string);
+        this.selectedKeyframe = this.animationManager.getKeyframeByIndex(index);
+        if (this.selectedKeyframeListItem) {
+            setElementHighlighted(this.selectedKeyframeListItem, false);
+        }
+        this.selectedKeyframeListItem = liElem;
+        this.keyframeNameInput.value = liElem.dataset.name as string;
+        this.keyframeDurationInput.value = this.selectedKeyframe.durationInSeconds.toString();
+        this.keyframeHoldDurationInput.value = this.selectedKeyframe.holdDurationInSeconds.toString();
+        const interpType: InterpolationType = this.selectedKeyframe.interpType;
+        if (this.selectedKeyframe.durationInSeconds > 0) {
+            if (this.selectedInterpBtn) {
+                setElementHighlighted(this.selectedInterpBtn, false);
+            }
+            switch (interpType) {
+                case InterpolationType.LINEAR:
+                    this.selectedInterpBtn = this.linearInterpBtn;
+                    break;
+                case InterpolationType.EASE_IN:
+                    this.selectedInterpBtn = this.easeInInterpBtn;
+                    break;
+                case InterpolationType.EASE_OUT:
+                    this.selectedInterpBtn = this.easeOutInterpBtn;
+                    break;
+                case InterpolationType.EASE_BOTH:
+                    this.selectedInterpBtn = this.easeBothInterpBtn;
+                    break;
+            }
+            setElementHighlighted(this.selectedInterpBtn, true);
+            this.interpolationSettings.removeAttribute('hidden');
+        } else {
+            this.interpolationSettings.setAttribute('hidden', '');
+        }
+        this.keyframeControls.removeAttribute('hidden');
+        this.keyframeNameInput.removeAttribute('hidden');
+        this.keyframeNameInput.removeAttribute('disabled');
+        this.keyframeDurationContainer.removeAttribute('hidden');
+        this.moveKeyframeDownBtn.removeAttribute('hidden');
+        this.moveKeyframeUpBtn.removeAttribute('hidden');
+        this.previewKeyframeBtn.removeAttribute('hidden');
+        setElementHighlighted(this.selectedKeyframeListItem, true);
+    }
+
+    private disableKeyframeControls(): void {
+        this.studioControlsContainer.querySelectorAll(`#keyframeList, #keyframeList li, button, input`).forEach((e) => {
+            e.setAttribute('disabled', '');
+            e.classList.add('disabled');
+        });
+    }
+
+    private enableKeyframeControls(): void {
+        this.studioControlsContainer.querySelectorAll(`#keyframeList, #keyframeList li, button, input`).forEach((e) => {
+            e.removeAttribute('disabled');
+            e.classList.remove('disabled');
+        });
+    }
+
+    private updateKeyframeIndices(updatedPos: number) {
+        for (let i = updatedPos; i < this.keyframeList.children.length; i++) {
+            (this.keyframeList.children[i] as HTMLElement).dataset.index = i.toString();
+        }
     }
 }
 
@@ -2577,7 +3159,7 @@ export class UI {
         this.faqPanel.elem.style.display = 'none';
         this.toplevel.appendChild(this.faqPanel.elem);
 
-        this.studioPanel = new StudioPanel();
+        this.studioPanel = new StudioPanel(this, viewer);
 
         this.playPauseButton.onplaypause = (shouldBePlaying) => {
             this.togglePlayPause(shouldBePlaying);
