@@ -128,7 +128,7 @@ export class CameraAnimation {
      * The list of keyframes that comprise this animation. Note that the `endPosition` 
      * of the keyframe at index 0 is the camera's starting position for the animation.
      */
-    keyframes: Keyframe[];
+    keyframes: Keyframe[] = [];
 
     /**
      * A counter used for default keyframe names. Because keyframes can be deleted and
@@ -136,10 +136,6 @@ export class CameraAnimation {
      * for this. The starting position keyframe is named differently, so we start at -1.
      */
     private _totalKeyframesAdded: number = -1;
-
-    constructor() {
-        this.keyframes = [];
-    }
 
     insertKeyframe(after: number, keyframeEndPos: mat4) {
         this.keyframes.splice(after + 1, 0, new Keyframe(keyframeEndPos));
