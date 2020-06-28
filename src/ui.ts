@@ -2557,7 +2557,6 @@ used under Creative Commons CC-BY:</p>
 <li> Save <span>by</span> Prime Icons
 <li> Overlap <span>by</span> Zach Bogart
 <li> VR <span>by</span> Fauzan Adaiima
-<li> Video <span>by</span> Phoenix Group
 <li> Play Clapboard <span>by</span> Yoyon Pujiyono
 </ul>
 `;
