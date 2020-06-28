@@ -10,7 +10,7 @@ import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { SFARenderer } from './render';
 import { BlockRenderer, BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
-import { MaterialFactory } from './shaders';
+import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';

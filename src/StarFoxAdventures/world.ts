@@ -22,7 +22,7 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
 import { ModelInstance, ModelViewState } from './models';
-import { MaterialFactory } from './shaders';
+import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
 import { colorNewFromRGBA } from '../Color';

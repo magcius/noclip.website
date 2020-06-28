@@ -12,7 +12,7 @@ import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureFetcher, FakeTextureFetcher } from './textures';
 import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
-import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './shaders';
+import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './materials';
 import { Shape, Model, ModelInstance, ModelViewState, ModelVersion } from './models';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';

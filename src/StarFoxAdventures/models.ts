@@ -2,27 +2,22 @@ import * as Viewer from '../viewer';
 import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
-import { PacketParams, GXMaterialHelperGfx, MaterialParams, createInputLayout, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
-import { GfxDevice, GfxSampler, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
-import { GXMaterial } from '../gx/gx_material';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
-import { Camera, computeViewMatrix } from '../Camera';
-import { colorNewFromRGBA } from '../Color';
 
 import { GameInfo } from './scenes';
-import { SFAMaterial, ShaderAttrFlags } from './shaders';
+import { SFAMaterial, ShaderAttrFlags } from './materials';
 import { SFAAnimationController } from './animation';
-import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './shaders';
+import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './materials';
 import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, getCamPos } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
-import { ViewState } from './util';
-import { Shape } from './shapes';
+import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
 
 interface Joint {
     parent: number;
@@ -100,163 +95,18 @@ function parseFineSkinningPiece(data: DataView): FineSkinningPiece {
     };
 }
 
-class ModelShape {
-    private material: SFAMaterial;
-    private gxMaterial: GXMaterial | undefined;
-    private materialHelper: GXMaterialHelperGfx;
-    private materialParams = new MaterialParams();
-    private sceneTextureSampler: GfxSampler | null = null;
-    private furLayer: number = 0;
-    private overrideIndMtx: (mat4 | undefined)[] = [];
-
-    private viewState: ViewState | undefined;
-
-    private scratchMtx = mat4.create();
-
-    public constructor(public shape: Shape, private animController: SFAAnimationController, public isDevGeometry: boolean) {
-    }
-
-    public reloadVertices() {
-        this.shape.reloadVertices();
-    }
-
-    // Caution: Material is referenced, not copied.
-    public setMaterial(material: SFAMaterial) {
-        this.material = material;
-        this.updateMaterialHelper();
-    }
-
-    private updateMaterialHelper() {
-        if (this.gxMaterial !== this.material.getGXMaterial()) {
-            this.gxMaterial = this.material.getGXMaterial();
-            this.materialHelper = new GXMaterialHelperGfx(this.gxMaterial);
-        }
-    }
-
-    private computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
-        computeViewMatrix(dst, camera);
-        mat4.mul(dst, dst, modelMatrix);
-    }
-
-    public setFurLayer(layer: number) {
-        this.furLayer = layer;
-    }
-
-    public setOverrideIndMtx(num: number, mtx?: mat4) {
-        if (mtx !== undefined) {
-            if (this.overrideIndMtx[num] !== undefined) {
-                mat4.copy(this.overrideIndMtx[num]!, mtx);
-            } else {
-                this.overrideIndMtx[num] = mat4.clone(mtx);
-            }
-        } else {
-            this.overrideIndMtx[num] = undefined;
-        }
-    }
-
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], modelViewState: ModelViewState) {
-        this.updateMaterialHelper();
-
-        const renderInst = renderInstManager.newRenderInst();
-        this.shape.setOnRenderInst(device, renderInstManager, renderInst, {
-            matrix: modelMatrix,
-            boneMatrices: boneMatrices,
-            camera: viewerInput.camera,
-        });
-
-        const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
-
-        for (let i = 0; i < 8; i++) {
-            const tex = this.material.getTexture(i);
-            
-            if (tex === undefined || tex === null) {
-                this.materialParams.m_TextureMapping[i].reset();
-            } else if (tex.kind === 'fb-color-downscaled-8x' || tex.kind === 'fb-color-downscaled-2x') {
-                // TODO: Downscale to 1/8th size and apply filtering
-                this.materialParams.m_TextureMapping[i].gfxTexture = sceneTexture.gfxTexture;
-                if (this.sceneTextureSampler === null) {
-                    this.sceneTextureSampler = device.createSampler({
-                        wrapS: GfxWrapMode.CLAMP,
-                        wrapT: GfxWrapMode.CLAMP,
-                        minFilter: GfxTexFilterMode.BILINEAR,
-                        magFilter: GfxTexFilterMode.BILINEAR,
-                        mipFilter: GfxMipFilterMode.NO_MIP,
-                        minLOD: 0,
-                        maxLOD: 100,
-                    });
-                }
-                this.materialParams.m_TextureMapping[i].gfxSampler = this.sceneTextureSampler;
-                this.materialParams.m_TextureMapping[i].width = sceneTexture.width;
-                this.materialParams.m_TextureMapping[i].height = sceneTexture.height;
-                this.materialParams.m_TextureMapping[i].lodBias = 0.0;
-            } else if (tex.kind === 'texture') {
-                this.materialParams.m_TextureMapping[i].gfxTexture = tex.texture.gfxTexture;
-                this.materialParams.m_TextureMapping[i].gfxSampler = tex.texture.gfxSampler;
-                this.materialParams.m_TextureMapping[i].width = tex.texture.width;
-                this.materialParams.m_TextureMapping[i].height = tex.texture.height;
-                this.materialParams.m_TextureMapping[i].lodBias = 0.0;
-            } else if (tex.kind === 'fur-map') {
-                const furMap = this.material.factory.getFurFactory().getLayer(this.furLayer);
-                this.materialParams.m_TextureMapping[i].gfxTexture = furMap.gfxTexture;
-                this.materialParams.m_TextureMapping[i].gfxSampler = furMap.gfxSampler;
-                this.materialParams.m_TextureMapping[i].width = furMap.width;
-                this.materialParams.m_TextureMapping[i].height = furMap.height;
-                this.materialParams.m_TextureMapping[i].lodBias = 0.0;
-            }
-        }
-        renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
-
-        if (this.viewState === undefined) {
-            this.viewState = {
-                viewerInput,
-                animController: this.animController,
-                modelViewMtx: mat4.create(),
-                invModelViewMtx: mat4.create(),
-                outdoorAmbientColor: colorNewFromRGBA(1.0, 1.0, 1.0, 1.0),
-            };
-        }
-
-        this.viewState.viewerInput = viewerInput;
-        this.viewState.outdoorAmbientColor = this.material.factory.getAmbientColor(modelViewState.ambienceNum);
-
-        mat4.mul(this.scratchMtx, boneMatrices[this.shape.pnMatrixMap[0]], modelMatrix);
-        this.computeModelView(this.viewState.modelViewMtx, viewerInput.camera, this.scratchMtx);
-        mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
-
-        this.material.setupMaterialParams(this.materialParams, this.viewState);
-
-        // XXX: test lighting
-        // colorCopy(this.materialParams.u_Color[ColorKind.MAT0], White);
-        // this.materialParams.u_Lights[0].Position = vec3.create(); // All light information is in view space. This centers the light on the camera.
-        // this.materialParams.u_Lights[0].Color = colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
-        // this.materialParams.u_Lights[0].CosAtten = vec3.fromValues(1.0, 0.0, 0.0);
-        // this.materialParams.u_Lights[0].DistAtten = vec3.fromValues(1.0, 1/800, 1/800000);
-
-        for (let i = 0; i < 3; i++) {
-            if (this.overrideIndMtx[i] !== undefined) {
-                mat4.copy(this.materialParams.u_IndTexMtx[i], this.overrideIndMtx[i]!);
-            }
-        }
-
-        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
-
-        renderInstManager.submitRenderInst(renderInst);
-    }
-}
-
 interface Fur {
-    shape: ModelShape;
+    shape: Shape;
     numLayers: number;
 }
 
 interface Water {
-    shape: ModelShape;
+    shape: Shape;
 }
 
 class ModelShapes {
     // There is a Shape array for each draw step (opaques, translucents 1, and translucents 2)
-    public shapes: ModelShape[][] = [];
+    public shapes: Shape[][] = [];
     public furs: Fur[] = [];
     public waters: Water[] = [];
 
@@ -318,7 +168,9 @@ class ModelShapes {
                 mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
                 mat4.translate(this.scratchMtx, this.scratchMtx, [0, 0.4 * (j + 1), 0]);
                 mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-                fur.shape.setFurLayer(j);
+
+                const mat = fur.shape.material as CommonShapeMaterial;
+                mat.setFurLayer(j);
                 const m00 = (j + 1) / 16 * 0.5;
                 const m11 = m00;
                 this.scratchMtx2 = mat4.fromValues(
@@ -327,9 +179,9 @@ class ModelShapes {
                     0.0, 0.0, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0
                 );
-                fur.shape.setOverrideIndMtx(0, this.scratchMtx2);
+                mat.setOverrideIndMtx(0, this.scratchMtx2);
                 fur.shape.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture, boneMatrices, modelViewState);
-                fur.shape.setOverrideIndMtx(0, undefined);
+                mat.setOverrideIndMtx(0, undefined);
             }
         }
     }
@@ -937,7 +789,7 @@ export class Model {
             return vcd;
         }
 
-        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView): ModelShape {
+        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView): Shape {
             // console.log(`running special bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
             const bits = new LowBitReader(blockDv, bitsOffset);
@@ -965,12 +817,13 @@ export class Model {
 
             const vtxArrays = getVtxArrays(posBuffer);
 
-            const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.hasFineSkinning);
+            const newShape = new ShapeGeometry(vtxArrays, vcd, vat, displayList, self.hasFineSkinning);
             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
 
-            const newModelShape = new ModelShape(newShape, self.animController, false)
-            newModelShape.setMaterial(material);
+            const newMat = new CommonShapeMaterial(self.animController);
+            newMat.setMaterial(material);
 
+            const newModelShape = new Shape(newShape, newMat, false);
             return newModelShape;
         }
 
@@ -1025,12 +878,13 @@ export class Model {
                         } else {
                             const vtxArrays = getVtxArrays(posBuffer);
 
-                            const newShape = new Shape(vtxArrays, vcd, vat, displayList, self.hasFineSkinning);
+                            const newShape = new ShapeGeometry(vtxArrays, vcd, vat, displayList, self.hasFineSkinning);
                             newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
 
-                            const newModelShape = new ModelShape(newShape, self.animController, !!(curShader.flags & ShaderFlags.DevGeometry));
-                            newModelShape.setMaterial(curMaterial!);
+                            const newMat = new CommonShapeMaterial(self.animController);
+                            newMat.setMaterial(curMaterial!);
 
+                            const newModelShape = new Shape(newShape, newMat, !!(curShader.flags & ShaderFlags.DevGeometry));
                             shapes.push(newModelShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
