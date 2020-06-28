@@ -7,7 +7,7 @@ const MAX_KEYFRAME_DURATION_SECONDS = 100.0;
 const MIN_KEYFRAME_DURATION = 0;
 const MILLISECONDS_IN_SECOND = 1000.0;
 
-export enum InterpolationType {
+export const enum InterpolationType {
     LINEAR = 'LINEAR',
     EASE_IN = 'EASE_IN',
     EASE_OUT = 'EASE_OUT',
