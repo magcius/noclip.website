@@ -1,6 +1,6 @@
 import * as Viewer from '../viewer';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { CameraController } from '../Camera';
@@ -8,6 +8,12 @@ import { standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, Bas
 import { mat4 } from 'gl-matrix';
 
 import { SFAAnimationController } from './animation';
+
+export interface SceneRenderContext {
+    getSceneTexture: () => ColorTexture;
+    getSceneTextureSampler: () => GfxSampler;
+    viewerInput: Viewer.ViewerRenderInput;
+}
 
 // Adapted from BasicGXRendererHelper
 export abstract class SFARendererHelper implements Viewer.SceneGfx {
@@ -34,6 +40,7 @@ export class SFARenderer extends SFARendererHelper {
     protected renderPass: GfxRenderPass;
     protected viewport: any;
     protected sceneTexture = new ColorTexture();
+    private sceneTextureSampler: GfxSampler | null = null;
     protected previousFrameTexture = new ColorTexture();
     protected renderInstManager: GfxRenderInstManager;
 
@@ -49,9 +56,9 @@ export class SFARenderer extends SFARendererHelper {
         this.animController.update(viewerInput);
     }
 
-    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {}
+    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
 
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {}
+    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
 
     protected beginPass(viewerInput: Viewer.ViewerRenderInput, clipSpace: boolean = false) {
         const template = this.renderHelper.pushTemplateRenderInst();
@@ -82,6 +89,22 @@ export class SFARenderer extends SFARendererHelper {
         this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
     }
 
+    private getSceneTextureSampler(device: GfxDevice) {
+        if (this.sceneTextureSampler === null) {
+            this.sceneTextureSampler = device.createSampler({
+                wrapS: GfxWrapMode.CLAMP,
+                wrapT: GfxWrapMode.CLAMP,
+                minFilter: GfxTexFilterMode.BILINEAR,
+                magFilter: GfxTexFilterMode.BILINEAR,
+                mipFilter: GfxMipFilterMode.NO_MIP,
+                minLOD: 0,
+                maxLOD: 100,
+            });
+        }
+
+        return this.sceneTextureSampler;
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         this.update(viewerInput);
 
@@ -91,8 +114,14 @@ export class SFARenderer extends SFARendererHelper {
         this.viewport = viewerInput.viewport;
         this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, standardFullClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
 
-        this.renderSky(device, this.renderInstManager, viewerInput);
-        this.renderWorld(device, this.renderInstManager, viewerInput);
+        const sceneCtx: SceneRenderContext = {
+            getSceneTexture: () => this.sceneTexture,
+            getSceneTextureSampler: () => this.getSceneTextureSampler(device),
+            viewerInput,
+        };
+
+        this.renderSky(device, this.renderInstManager, sceneCtx);
+        this.renderWorld(device, this.renderInstManager, sceneCtx);
 
         this.previousFrameTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.previousFrameTexture.gfxTexture);

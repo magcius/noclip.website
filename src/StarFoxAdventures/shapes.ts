@@ -18,6 +18,7 @@ import { SFAMaterial } from './materials';
 import { SFAAnimationController } from './animation';
 import { ModelViewState } from './models';
 import { ViewState } from './util';
+import { SceneRenderContext } from './render';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -185,7 +186,7 @@ export class ShapeGeometry {
 }
 
 export interface ShapeMaterial {
-    setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], modelViewState: ModelViewState) => void;
+    setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, sceneCtx: SceneRenderContext, boneMatrices: mat4[], modelViewState: ModelViewState) => void;
 }
 
 function computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
@@ -198,7 +199,6 @@ export class CommonShapeMaterial implements ShapeMaterial {
     private gxMaterial: GXMaterial | undefined;
     private materialHelper: GXMaterialHelperGfx;
     private materialParams = new MaterialParams();
-    private sceneTextureSampler: GfxSampler | null = null;
     private furLayer: number = 0;
     private overrideIndMtx: (mat4 | undefined)[] = [];
     private viewState: ViewState | undefined;
@@ -236,7 +236,7 @@ export class CommonShapeMaterial implements ShapeMaterial {
         }
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], modelViewState: ModelViewState) {
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, sceneCtx: SceneRenderContext, boneMatrices: mat4[], modelViewState: ModelViewState) {
         this.updateMaterialHelper();
         
         const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
@@ -248,21 +248,11 @@ export class CommonShapeMaterial implements ShapeMaterial {
                 this.materialParams.m_TextureMapping[i].reset();
             } else if (tex.kind === 'fb-color-downscaled-8x' || tex.kind === 'fb-color-downscaled-2x') {
                 // TODO: Downscale to 1/8th size and apply filtering
-                this.materialParams.m_TextureMapping[i].gfxTexture = sceneTexture.gfxTexture;
-                if (this.sceneTextureSampler === null) {
-                    this.sceneTextureSampler = device.createSampler({
-                        wrapS: GfxWrapMode.CLAMP,
-                        wrapT: GfxWrapMode.CLAMP,
-                        minFilter: GfxTexFilterMode.BILINEAR,
-                        magFilter: GfxTexFilterMode.BILINEAR,
-                        mipFilter: GfxMipFilterMode.NO_MIP,
-                        minLOD: 0,
-                        maxLOD: 100,
-                    });
-                }
-                this.materialParams.m_TextureMapping[i].gfxSampler = this.sceneTextureSampler;
-                this.materialParams.m_TextureMapping[i].width = sceneTexture.width;
-                this.materialParams.m_TextureMapping[i].height = sceneTexture.height;
+                const sceneTex = sceneCtx.getSceneTexture();
+                this.materialParams.m_TextureMapping[i].gfxTexture = sceneTex.gfxTexture;
+                this.materialParams.m_TextureMapping[i].gfxSampler = sceneCtx.getSceneTextureSampler();
+                this.materialParams.m_TextureMapping[i].width = sceneTex.width;
+                this.materialParams.m_TextureMapping[i].height = sceneTex.height;
                 this.materialParams.m_TextureMapping[i].lodBias = 0.0;
             } else if (tex.kind === 'texture') {
                 this.materialParams.m_TextureMapping[i].gfxTexture = tex.texture.gfxTexture;
@@ -284,7 +274,7 @@ export class CommonShapeMaterial implements ShapeMaterial {
 
         if (this.viewState === undefined) {
             this.viewState = {
-                viewerInput,
+                viewerInput: sceneCtx.viewerInput,
                 animController: this.animController,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
@@ -292,12 +282,12 @@ export class CommonShapeMaterial implements ShapeMaterial {
             };
         }
 
-        this.viewState.viewerInput = viewerInput;
+        this.viewState.viewerInput = sceneCtx.viewerInput;
         this.viewState.outdoorAmbientColor = this.material.factory.getAmbientColor(modelViewState.ambienceNum);
 
         // mat4.mul(this.scratchMtx, boneMatrices[this.geom.pnMatrixMap[0]], modelMatrix);
         mat4.copy(this.scratchMtx, modelMatrix);
-        computeModelView(this.viewState.modelViewMtx, viewerInput.camera, this.scratchMtx);
+        computeModelView(this.viewState.modelViewMtx, sceneCtx.viewerInput.camera, this.scratchMtx);
         mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
 
         this.material.setupMaterialParams(this.materialParams, this.viewState);
@@ -329,19 +319,19 @@ export class Shape {
         this.geom.reloadVertices();
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], modelViewState: ModelViewState) {
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, sceneCtx: SceneRenderContext, boneMatrices: mat4[], modelViewState: ModelViewState) {
         this.geom.setOnRenderInst(device, renderInstManager, renderInst, {
             matrix: modelMatrix,
             boneMatrices: boneMatrices,
-            camera: viewerInput.camera,
+            camera: sceneCtx.viewerInput.camera,
         });
 
-        this.material.setOnRenderInst(device, renderInstManager, renderInst, viewerInput, modelMatrix, sceneTexture, boneMatrices, modelViewState);
+        this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, sceneCtx, boneMatrices, modelViewState);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], modelViewState: ModelViewState) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, sceneCtx: SceneRenderContext, boneMatrices: mat4[], modelViewState: ModelViewState) {
         const renderInst = renderInstManager.newRenderInst();
-        this.setOnRenderInst(device, renderInstManager, renderInst, viewerInput, modelMatrix, sceneTexture, boneMatrices, modelViewState);
+        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, sceneCtx, boneMatrices, modelViewState);
         renderInstManager.submitRenderInst(renderInst);
     }
 }

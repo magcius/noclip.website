@@ -18,6 +18,7 @@ import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
+import { SceneRenderContext } from './render';
 
 interface Joint {
     parent: number;
@@ -130,7 +131,7 @@ class ModelShapes {
     private scratchMtx = mat4.create();
     private scratchMtx2 = mat4.create();
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], drawStep: number, modelViewState: ModelViewState) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number, modelViewState: ModelViewState) {
         if (drawStep < 0 || drawStep >= this.shapes.length) {
             return;
         }
@@ -144,22 +145,22 @@ class ModelShapes {
             mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
             mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            shapes[i].prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture, boneMatrices, modelViewState);
+            shapes[i].prepareToRender(device, renderInstManager, this.scratchMtx, sceneCtx, boneMatrices, modelViewState);
         }
     }
     
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], modelViewState: ModelViewState) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, boneMatrices: mat4[], modelViewState: ModelViewState) {
         for (let i = 0; i < this.waters.length; i++) {
             const water = this.waters[i];
 
             mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
             mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            water.shape.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture, boneMatrices, modelViewState);
+            water.shape.prepareToRender(device, renderInstManager, this.scratchMtx, sceneCtx, boneMatrices, modelViewState);
         }
     }
 
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, boneMatrices: mat4[], modelViewState: ModelViewState) {
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, boneMatrices: mat4[], modelViewState: ModelViewState) {
         for (let i = 0; i < this.furs.length; i++) {
             const fur = this.furs[i];
 
@@ -180,7 +181,7 @@ class ModelShapes {
                     0.0, 0.0, 0.0, 0.0
                 );
                 mat.setOverrideIndMtx(0, this.scratchMtx2);
-                fur.shape.prepareToRender(device, renderInstManager, viewerInput, this.scratchMtx, sceneTexture, boneMatrices, modelViewState);
+                fur.shape.prepareToRender(device, renderInstManager, this.scratchMtx, sceneCtx, boneMatrices, modelViewState);
                 mat.setOverrideIndMtx(0, undefined);
             }
         }
@@ -1030,19 +1031,19 @@ export class ModelInstance implements BlockRenderer {
         this.skeletonDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number, modelViewState: ModelViewState) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, drawStep: number, modelViewState: ModelViewState) {
         this.updateBoneMatrices();
-        this.modelShapes.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, this.boneMatrices, drawStep, modelViewState);
+        this.modelShapes.prepareToRender(device, renderInstManager, sceneCtx, matrix, this.boneMatrices, drawStep, modelViewState);
     }
     
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, modelViewState: ModelViewState) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelViewState: ModelViewState) {
         this.updateBoneMatrices();
-        this.modelShapes.prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture, this.boneMatrices, modelViewState);
+        this.modelShapes.prepareToRenderWaters(device, renderInstManager, sceneCtx, matrix, this.boneMatrices, modelViewState);
     }
     
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, modelViewState: ModelViewState) {
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelViewState: ModelViewState) {
         this.updateBoneMatrices();
-        this.modelShapes.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture, this.boneMatrices, modelViewState);
+        this.modelShapes.prepareToRenderFurs(device, renderInstManager, sceneCtx, matrix, this.boneMatrices, modelViewState);
     }
 
     private scratch0 = mat4.create();

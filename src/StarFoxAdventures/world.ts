@@ -17,7 +17,7 @@ import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
 import { ObjectManager, ObjectInstance } from './objects';
 import { EnvfxManager } from './envfx';
-import { SFARenderer } from './render';
+import { SFARenderer, SceneRenderContext } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
@@ -224,11 +224,11 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
-    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Draw atmosphere
         const tex = this.world.envfxMan.getAtmosphereTexture();
         if (tex !== null && tex !== undefined) {
-            this.beginPass(viewerInput, true);
+            this.beginPass(sceneCtx.viewerInput, true);
             materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
             materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
             materialParams.m_TextureMapping[0].width = tex.width;
@@ -238,7 +238,7 @@ class WorldRenderer extends SFARenderer {
 
             // Extract pitch
             const cameraFwd = vec3.create();
-            getMatrixAxisZ(cameraFwd, viewerInput.camera.worldMatrix);
+            getMatrixAxisZ(cameraFwd, sceneCtx.viewerInput.camera.worldMatrix);
             vec3.negate(cameraFwd, cameraFwd);
             const camPitch = vecPitch(cameraFwd);
             const camRoll = Math.PI / 2;
@@ -246,7 +246,7 @@ class WorldRenderer extends SFARenderer {
             // FIXME: This implementation is adapted from the game, but correctness is not verified.
             // We should probably use a different technique, since this one works poorly in VR.
             // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
-            const fovRollFactor = 3.0 * (tex.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
+            const fovRollFactor = 3.0 * (tex.height * 0.5 * sceneCtx.viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
             const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
             const t0 = (pitchFactor + fovRollFactor) / tex.height;
             const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
@@ -265,7 +265,7 @@ class WorldRenderer extends SFARenderer {
             this.ddraw.end();
 
             const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
-            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, viewerInput, true);
+            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true);
 
             this.ddraw.endAndUpload(device, renderInstManager);
             
@@ -273,25 +273,25 @@ class WorldRenderer extends SFARenderer {
         }
         
         // Draw skyscape
-        this.beginPass(viewerInput);
+        this.beginPass(sceneCtx.viewerInput);
 
         const eyePos = vec3.create();
-        getCamPos(eyePos, viewerInput.camera);
+        getCamPos(eyePos, sceneCtx.viewerInput.camera);
         for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
             const obj = this.world.envfxMan.skyscape.objects[i];
             obj.setPosition(eyePos);
-            obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0); // TODO: additional draw steps?
+            obj.render(device, renderInstManager, sceneCtx, 0); // TODO: additional draw steps?
         }
 
         this.endPass(device);
     }
 
-    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
+    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelInst: ModelInstance) {
         const modelViewState: ModelViewState = {
             showDevGeometry: true,
             ambienceNum: 0,
         };
-        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, modelViewState);
+        modelInst.prepareToRender(device, renderInstManager, sceneCtx, matrix, 0, modelViewState);
 
         // Draw bones
         const drawBones = false;
@@ -308,20 +308,20 @@ class WorldRenderer extends SFARenderer {
                     mat4.mul(parentMtx, parentMtx, matrix);
                     const parentPt = vec3.create();
                     mat4.getTranslation(parentPt, parentMtx);
-                    drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
+                    drawWorldSpaceLine(ctx, sceneCtx.viewerInput.camera, parentPt, jointPt);
                 } else {
-                    drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, jointPt);
+                    drawWorldSpacePoint(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
                 }
             }
         }
     }
 
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Render opaques
 
-        this.beginPass(viewerInput);
+        this.beginPass(sceneCtx.viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.previousFrameTexture, 0, this.showDevGeometry);
+            this.world.mapInstance.prepareToRender(device, renderInstManager, sceneCtx, 0, this.showDevGeometry);
         }
         
         const mtx = mat4.create();
@@ -335,12 +335,12 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+                    obj.render(device, renderInstManager, sceneCtx, 0);
                     // TODO: additional draw steps; object furs and translucents
         
                     const drawLabels = false;
                     if (drawLabels) {
-                        drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+                        drawWorldSpaceText(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
                     }
                 }
             }
@@ -352,7 +352,7 @@ class WorldRenderer extends SFARenderer {
         for (let i = 0; i < this.models.length; i++) {
             if (this.models[i] !== null) {
                 mat4.fromTranslation(mtx, [col * 60, row * 60, 0]);
-                this.renderTestModel(device, renderInstManager, viewerInput, mtx, this.models[i]!);
+                this.renderTestModel(device, renderInstManager, sceneCtx, mtx, this.models[i]!);
                 col++;
                 if (col >= testCols) {
                     col = 0;
@@ -364,18 +364,18 @@ class WorldRenderer extends SFARenderer {
         this.endPass(device);
 
         // Render waters, furs and translucents
-        this.beginPass(viewerInput);
+        this.beginPass(sceneCtx.viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
-            this.world.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
+            this.world.mapInstance.prepareToRenderWaters(device, renderInstManager, sceneCtx);
+            this.world.mapInstance.prepareToRenderFurs(device, renderInstManager, sceneCtx);
         }
         this.endPass(device);
 
         const NUM_DRAW_STEPS = 3;
         for (let drawStep = 1; drawStep < NUM_DRAW_STEPS; drawStep++) {
-            this.beginPass(viewerInput);
+            this.beginPass(sceneCtx.viewerInput);
             if (this.world.mapInstance !== null) {
-                this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep, this.showDevGeometry);
+                this.world.mapInstance.prepareToRender(device, renderInstManager, sceneCtx, drawStep, this.showDevGeometry);
             }
             this.endPass(device);
         }    

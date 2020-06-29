@@ -12,6 +12,7 @@ import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './an
 import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 import { scaleMatrix } from '../MathHelpers';
+import { SceneRenderContext } from './render';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
@@ -894,7 +895,7 @@ export class ObjectInstance {
         }
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number) {
+    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, drawStep: number) {
         if (drawStep !== 0) {
             return; // TODO: Implement additional draw steps
         }
@@ -908,7 +909,7 @@ export class ObjectInstance {
                 showDevGeometry: true,
                 ambienceNum: this.ambienceNum,
             };
-            this.modelInst.prepareToRender(device, renderInstManager, viewerInput, mtx, sceneTexture, drawStep, modelViewState);
+            this.modelInst.prepareToRender(device, renderInstManager, sceneCtx, mtx, drawStep, modelViewState);
 
             // Draw bones
             const drawBones = false;
@@ -926,9 +927,9 @@ export class ObjectInstance {
                         mat4.mul(parentMtx, parentMtx, mtx);
                         const parentPt = vec3.create();
                         mat4.getTranslation(parentPt, parentMtx);
-                        drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
+                        drawWorldSpaceLine(ctx, sceneCtx.viewerInput.camera, parentPt, jointPt);
                     } else {
-                        drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, jointPt);
+                        drawWorldSpacePoint(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
                     }
                 }
             }

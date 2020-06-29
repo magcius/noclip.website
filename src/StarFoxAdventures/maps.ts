@@ -7,7 +7,7 @@ import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
-import { SFARenderer } from './render';
+import { SFARenderer, SceneRenderContext } from './render';
 import { BlockRenderer, BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './materials';
@@ -141,9 +141,9 @@ export class MapInstance {
         return block;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number, showDevGeometry: boolean) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, drawStep: number, showDevGeometry: boolean) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
+        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
 
         const modelViewState: ModelViewState = {
             showDevGeometry,
@@ -154,15 +154,15 @@ export class MapInstance {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, drawStep, modelViewState);
+            b.block.prepareToRender(device, renderInstManager, sceneCtx, matrix, drawStep, modelViewState);
         }
 
         renderInstManager.popTemplateRenderInst();
     }
 
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
+        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
 
         const modelViewState: ModelViewState = {
             showDevGeometry: true,
@@ -173,15 +173,15 @@ export class MapInstance {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderWaters(device, renderInstManager, viewerInput, matrix, sceneTexture, modelViewState);
+            b.block.prepareToRenderWaters(device, renderInstManager, sceneCtx, matrix, modelViewState);
         }
 
         renderInstManager.popTemplateRenderInst();
     }
 
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture) {
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput, 0);
+        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
         
         const modelViewState: ModelViewState = {
             showDevGeometry: true,
@@ -192,7 +192,7 @@ export class MapInstance {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderFurs(device, renderInstManager, viewerInput, matrix, sceneTexture, modelViewState);
+            b.block.prepareToRenderFurs(device, renderInstManager, sceneCtx, matrix, modelViewState);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -268,19 +268,19 @@ class MapSceneRenderer extends SFARenderer {
         this.materialFactory.update(this.animController);
     }
     
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        this.beginPass(viewerInput);
-        this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0, false);
+    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+        this.beginPass(sceneCtx.viewerInput);
+        this.map.prepareToRender(device, renderInstManager, sceneCtx, 0, false);
         this.endPass(device);
 
-        this.beginPass(viewerInput);
-        this.map.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
-        this.map.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
+        this.beginPass(sceneCtx.viewerInput);
+        this.map.prepareToRenderWaters(device, renderInstManager, sceneCtx);
+        this.map.prepareToRenderFurs(device, renderInstManager, sceneCtx);
         this.endPass(device);
 
         for (let drawStep = 1; drawStep < this.map.getNumDrawSteps(); drawStep++) {
-            this.beginPass(viewerInput);
-            this.map.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep, false);
+            this.beginPass(sceneCtx.viewerInput);
+            this.map.prepareToRender(device, renderInstManager, sceneCtx, drawStep, false);
             this.endPass(device);
         }        
     }
