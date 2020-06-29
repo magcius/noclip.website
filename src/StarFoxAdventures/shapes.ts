@@ -241,54 +241,33 @@ export class CommonShapeMaterial implements ShapeMaterial {
         
         const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
 
-        for (let i = 0; i < 8; i++) {
-            const tex = this.material.getTexture(i);
-            
-            if (tex === undefined || tex === null) {
-                this.materialParams.m_TextureMapping[i].reset();
-            } else if (tex.kind === 'fb-color-downscaled-8x' || tex.kind === 'fb-color-downscaled-2x') {
-                // TODO: Downscale to 1/8th size and apply filtering
-                const sceneTex = sceneCtx.getSceneTexture();
-                this.materialParams.m_TextureMapping[i].gfxTexture = sceneTex.gfxTexture;
-                this.materialParams.m_TextureMapping[i].gfxSampler = sceneCtx.getSceneTextureSampler();
-                this.materialParams.m_TextureMapping[i].width = sceneTex.width;
-                this.materialParams.m_TextureMapping[i].height = sceneTex.height;
-                this.materialParams.m_TextureMapping[i].lodBias = 0.0;
-            } else if (tex.kind === 'texture') {
-                this.materialParams.m_TextureMapping[i].gfxTexture = tex.texture.gfxTexture;
-                this.materialParams.m_TextureMapping[i].gfxSampler = tex.texture.gfxSampler;
-                this.materialParams.m_TextureMapping[i].width = tex.texture.width;
-                this.materialParams.m_TextureMapping[i].height = tex.texture.height;
-                this.materialParams.m_TextureMapping[i].lodBias = 0.0;
-            } else if (tex.kind === 'fur-map') {
-                const furMap = this.material.factory.getFurFactory().getLayer(this.furLayer);
-                this.materialParams.m_TextureMapping[i].gfxTexture = furMap.gfxTexture;
-                this.materialParams.m_TextureMapping[i].gfxSampler = furMap.gfxSampler;
-                this.materialParams.m_TextureMapping[i].width = furMap.width;
-                this.materialParams.m_TextureMapping[i].height = furMap.height;
-                this.materialParams.m_TextureMapping[i].lodBias = 0.0;
-            }
-        }
-
-        renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
-
         if (this.viewState === undefined) {
             this.viewState = {
-                viewerInput: sceneCtx.viewerInput,
-                animController: this.animController,
+                sceneCtx,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
                 outdoorAmbientColor: colorNewFromRGBA(1.0, 1.0, 1.0, 1.0),
+                furLayer: this.furLayer,
             };
         }
 
-        this.viewState.viewerInput = sceneCtx.viewerInput;
         this.viewState.outdoorAmbientColor = this.material.factory.getAmbientColor(modelViewState.ambienceNum);
 
         // mat4.mul(this.scratchMtx, boneMatrices[this.geom.pnMatrixMap[0]], modelMatrix);
         mat4.copy(this.scratchMtx, modelMatrix);
         computeModelView(this.viewState.modelViewMtx, sceneCtx.viewerInput.camera, this.scratchMtx);
         mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
+
+        for (let i = 0; i < 8; i++) {
+            const tex = this.material.getTexture(i);
+            if (tex !== undefined) {
+                tex.setOnTextureMapping(this.materialParams.m_TextureMapping[i], this.viewState);
+            } else {
+                this.materialParams.m_TextureMapping[i].reset();
+            }
+        }
+
+        renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
 
         this.material.setupMaterialParams(this.materialParams, this.viewState);
 

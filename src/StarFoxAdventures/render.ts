@@ -12,7 +12,10 @@ import { SFAAnimationController } from './animation';
 export interface SceneRenderContext {
     getSceneTexture: () => ColorTexture;
     getSceneTextureSampler: () => GfxSampler;
+    getPreviousFrameTexture: () => ColorTexture;
+    getPreviousFrameTextureSampler: () => GfxSampler;
     viewerInput: Viewer.ViewerRenderInput;
+    animController: SFAAnimationController;
 }
 
 // Adapted from BasicGXRendererHelper
@@ -42,6 +45,7 @@ export class SFARenderer extends SFARendererHelper {
     protected sceneTexture = new ColorTexture();
     private sceneTextureSampler: GfxSampler | null = null;
     protected previousFrameTexture = new ColorTexture();
+    private previousFrameTextureSampler: GfxSampler | null = null;
     protected renderInstManager: GfxRenderInstManager;
 
     constructor(device: GfxDevice, protected animController: SFAAnimationController) {
@@ -105,6 +109,22 @@ export class SFARenderer extends SFARendererHelper {
         return this.sceneTextureSampler;
     }
 
+    private getPreviousFrameTextureSampler(device: GfxDevice) {
+        if (this.previousFrameTextureSampler === null) {
+            this.previousFrameTextureSampler = device.createSampler({
+                wrapS: GfxWrapMode.CLAMP,
+                wrapT: GfxWrapMode.CLAMP,
+                minFilter: GfxTexFilterMode.BILINEAR,
+                magFilter: GfxTexFilterMode.BILINEAR,
+                mipFilter: GfxMipFilterMode.NO_MIP,
+                minLOD: 0,
+                maxLOD: 100,
+            });
+        }
+
+        return this.previousFrameTextureSampler;
+    }
+
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         this.update(viewerInput);
 
@@ -117,7 +137,10 @@ export class SFARenderer extends SFARendererHelper {
         const sceneCtx: SceneRenderContext = {
             getSceneTexture: () => this.sceneTexture,
             getSceneTextureSampler: () => this.getSceneTextureSampler(device),
+            getPreviousFrameTexture: () => this.previousFrameTexture,
+            getPreviousFrameTextureSampler: () => this.getPreviousFrameTextureSampler(device),
             viewerInput,
+            animController: this.animController,
         };
 
         this.renderSky(device, this.renderInstManager, sceneCtx);

@@ -8,7 +8,7 @@ import { DataFetcher } from '../DataFetcher';
 import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation';
 import { ModelFetcher, ModelVersion } from './models';
 import { TextureFetcher, SFATextureFetcher } from './textures';
-import { MaterialFactory } from './shaders';
+import { MaterialFactory } from './materials';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 class ZLBHeader {

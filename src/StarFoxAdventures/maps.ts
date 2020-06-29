@@ -5,7 +5,6 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
-import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 
 import { SFARenderer, SceneRenderContext } from './render';
 import { BlockRenderer, BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
