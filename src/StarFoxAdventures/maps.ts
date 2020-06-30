@@ -13,7 +13,7 @@ import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
-import { ModelViewState, ModelRenderContext } from './models';
+import { ModelRenderContext } from './models';
 
 export interface BlockInfo {
     mod: number;
@@ -142,17 +142,13 @@ export class MapInstance {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, drawStep: number) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, modelCtx.sceneCtx.viewerInput, 0);
-
-        const modelViewState: ModelViewState = {
-            ambienceNum: 0,
-        };
+        fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
 
         const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRender(device, renderInstManager, modelCtx, matrix, drawStep, modelViewState);
+            b.block.prepareToRender(device, renderInstManager, modelCtx, matrix, drawStep);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -162,15 +158,11 @@ export class MapInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
 
-        const modelViewState: ModelViewState = {
-            ambienceNum: 0, // TODO
-        };
-
         const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderWaters(device, renderInstManager, sceneCtx, matrix, modelViewState);
+            b.block.prepareToRenderWaters(device, renderInstManager, sceneCtx, matrix);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -179,16 +171,12 @@ export class MapInstance {
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
-        
-        const modelViewState: ModelViewState = {
-            ambienceNum: 0,
-        };
 
         const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderFurs(device, renderInstManager, sceneCtx, matrix, modelViewState);
+            b.block.prepareToRenderFurs(device, renderInstManager, sceneCtx, matrix);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -266,8 +254,9 @@ class MapSceneRenderer extends SFARenderer {
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         const modelCtx: ModelRenderContext = {
-            sceneCtx,
+            ...sceneCtx,
             showDevGeometry: false,
+            ambienceNum: 0,
         };
 
         this.beginPass(sceneCtx.viewerInput);

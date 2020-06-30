@@ -13,7 +13,7 @@ import { TextureFetcher, FakeTextureFetcher } from './textures';
 import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
 import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './materials';
-import { Model, ModelInstance, ModelViewState, ModelVersion, ModelRenderContext } from './models';
+import { Model, ModelInstance, ModelVersion, ModelRenderContext } from './models';
 import { Shape } from './shapes';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
@@ -27,9 +27,9 @@ export abstract class BlockFetcher {
 export abstract class BlockRenderer {
     public abstract getMaterials(): (SFAMaterial | undefined)[];
     public abstract getNumDrawSteps(): number;
-    public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number, modelViewState: ModelViewState): void;
-    public abstract prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelViewState: ModelViewState): void;
-    public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelViewState: ModelViewState): void;
+    public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number): void;
+    public abstract prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4): void;
+    public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4): void;
 }
 
 export class BlockCollection {

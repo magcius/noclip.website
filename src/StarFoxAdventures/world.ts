@@ -15,13 +15,13 @@ import { getMatrixAxisZ } from '../MathHelpers';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
-import { ObjectManager, ObjectInstance } from './objects';
+import { ObjectManager, ObjectInstance, ObjectRenderContext } from './objects';
 import { EnvfxManager } from './envfx';
 import { SFARenderer, SceneRenderContext } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
-import { ModelInstance, ModelViewState, ModelRenderContext } from './models';
+import { ModelInstance, ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
@@ -275,8 +275,8 @@ class WorldRenderer extends SFARenderer {
         // Draw skyscape
         this.beginPass(sceneCtx.viewerInput);
 
-        const modelCtx: ModelRenderContext = {
-            sceneCtx,
+        const objectCtx: ObjectRenderContext = {
+            ...sceneCtx,
             showDevGeometry: this.showDevGeometry,
         }
 
@@ -285,7 +285,7 @@ class WorldRenderer extends SFARenderer {
         for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
             const obj = this.world.envfxMan.skyscape.objects[i];
             obj.setPosition(eyePos);
-            obj.render(device, renderInstManager, modelCtx, 0); // TODO: additional draw steps?
+            obj.render(device, renderInstManager, objectCtx, 0); // TODO: additional draw steps?
         }
 
         this.endPass(device);
@@ -293,15 +293,12 @@ class WorldRenderer extends SFARenderer {
 
     private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelInst: ModelInstance) {
         const modelCtx: ModelRenderContext = {
-            sceneCtx,
+            ...sceneCtx,
             showDevGeometry: true,
-        };
-
-        const modelViewState: ModelViewState = {
             ambienceNum: 0,
         };
 
-        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix, 0, modelViewState);
+        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix, 0);
 
         // Draw bones
         const drawBones = false;
@@ -330,8 +327,9 @@ class WorldRenderer extends SFARenderer {
         // Render opaques
 
         const modelCtx: ModelRenderContext = {
-            sceneCtx,
+            ...sceneCtx,
             showDevGeometry: this.showDevGeometry,
+            ambienceNum: 0, // Always use ambience 0 when rendering the map
         }
 
         this.beginPass(sceneCtx.viewerInput);
