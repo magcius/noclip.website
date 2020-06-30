@@ -13,7 +13,7 @@ import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
-import { ModelViewState } from './models';
+import { ModelViewState, ModelRenderContext } from './models';
 
 export interface BlockInfo {
     mod: number;
@@ -140,12 +140,11 @@ export class MapInstance {
         return block;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, drawStep: number, showDevGeometry: boolean) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, drawStep: number) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
+        fillSceneParamsDataOnTemplate(template, modelCtx.sceneCtx.viewerInput, 0);
 
         const modelViewState: ModelViewState = {
-            showDevGeometry,
             ambienceNum: 0,
         };
 
@@ -153,7 +152,7 @@ export class MapInstance {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRender(device, renderInstManager, sceneCtx, matrix, drawStep, modelViewState);
+            b.block.prepareToRender(device, renderInstManager, modelCtx, matrix, drawStep, modelViewState);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -164,7 +163,6 @@ export class MapInstance {
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
 
         const modelViewState: ModelViewState = {
-            showDevGeometry: true,
             ambienceNum: 0, // TODO
         };
 
@@ -183,7 +181,6 @@ export class MapInstance {
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
         
         const modelViewState: ModelViewState = {
-            showDevGeometry: true,
             ambienceNum: 0,
         };
 
@@ -268,8 +265,13 @@ class MapSceneRenderer extends SFARenderer {
     }
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+        const modelCtx: ModelRenderContext = {
+            sceneCtx,
+            showDevGeometry: false,
+        };
+
         this.beginPass(sceneCtx.viewerInput);
-        this.map.prepareToRender(device, renderInstManager, sceneCtx, 0, false);
+        this.map.prepareToRender(device, renderInstManager, modelCtx, 0);
         this.endPass(device);
 
         this.beginPass(sceneCtx.viewerInput);
@@ -279,7 +281,7 @@ class MapSceneRenderer extends SFARenderer {
 
         for (let drawStep = 1; drawStep < this.map.getNumDrawSteps(); drawStep++) {
             this.beginPass(sceneCtx.viewerInput);
-            this.map.prepareToRender(device, renderInstManager, sceneCtx, drawStep, false);
+            this.map.prepareToRender(device, renderInstManager, modelCtx, drawStep);
             this.endPass(device);
         }        
     }

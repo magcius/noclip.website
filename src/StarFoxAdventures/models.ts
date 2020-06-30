@@ -105,6 +105,11 @@ interface Water {
     shape: Shape;
 }
 
+export interface ModelRenderContext {
+    sceneCtx: SceneRenderContext;
+    showDevGeometry: boolean;
+}
+
 class ModelShapes {
     // There is a Shape array for each draw step (opaques, translucents 1, and translucents 2)
     public shapes: Shape[][] = [];
@@ -131,21 +136,21 @@ class ModelShapes {
     private scratchMtx = mat4.create();
     private scratchMtx2 = mat4.create();
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number, modelViewState: ModelViewState) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number, modelViewState: ModelViewState) {
         if (drawStep < 0 || drawStep >= this.shapes.length) {
             return;
         }
 
         const shapes = this.shapes[drawStep];
         for (let i = 0; i < shapes.length; i++) {
-            if (shapes[i].isDevGeometry && !modelViewState.showDevGeometry) {
+            if (shapes[i].isDevGeometry && !modelCtx.showDevGeometry) {
                 continue;
             }
 
             mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
             mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
             mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            shapes[i].prepareToRender(device, renderInstManager, this.scratchMtx, sceneCtx, boneMatrices, modelViewState);
+            shapes[i].prepareToRender(device, renderInstManager, this.scratchMtx, modelCtx.sceneCtx, boneMatrices, modelViewState);
         }
     }
     
@@ -973,7 +978,6 @@ export class Model {
 }
 
 export interface ModelViewState {
-    showDevGeometry: boolean;
     ambienceNum: number;
 }
 
@@ -1031,9 +1035,9 @@ export class ModelInstance implements BlockRenderer {
         this.skeletonDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, drawStep: number, modelViewState: ModelViewState) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number, modelViewState: ModelViewState) {
         this.updateBoneMatrices();
-        this.modelShapes.prepareToRender(device, renderInstManager, sceneCtx, matrix, this.boneMatrices, drawStep, modelViewState);
+        this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.boneMatrices, drawStep, modelViewState);
     }
     
     public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelViewState: ModelViewState) {

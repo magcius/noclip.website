@@ -6,7 +6,7 @@ import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
-import { ModelInstance, ModelViewState } from './models';
+import { ModelInstance, ModelViewState, ModelRenderContext } from './models';
 import { dataSubarray, angle16ToRads, readVec3 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
@@ -895,7 +895,7 @@ export class ObjectInstance {
         }
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, drawStep: number) {
+    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, drawStep: number) {
         if (drawStep !== 0) {
             return; // TODO: Implement additional draw steps
         }
@@ -906,10 +906,9 @@ export class ObjectInstance {
         if (this.modelInst !== null && this.modelInst !== undefined) {
             const mtx = this.getWorldSRT();
             const modelViewState: ModelViewState = {
-                showDevGeometry: true,
                 ambienceNum: this.ambienceNum,
             };
-            this.modelInst.prepareToRender(device, renderInstManager, sceneCtx, mtx, drawStep, modelViewState);
+            this.modelInst.prepareToRender(device, renderInstManager, modelCtx, mtx, drawStep, modelViewState);
 
             // Draw bones
             const drawBones = false;
@@ -927,9 +926,9 @@ export class ObjectInstance {
                         mat4.mul(parentMtx, parentMtx, mtx);
                         const parentPt = vec3.create();
                         mat4.getTranslation(parentPt, parentMtx);
-                        drawWorldSpaceLine(ctx, sceneCtx.viewerInput.camera, parentPt, jointPt);
+                        drawWorldSpaceLine(ctx, modelCtx.sceneCtx.viewerInput.camera, parentPt, jointPt);
                     } else {
-                        drawWorldSpacePoint(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
+                        drawWorldSpacePoint(ctx, modelCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
                     }
                 }
             }

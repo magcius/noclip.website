@@ -21,7 +21,7 @@ import { SFARenderer, SceneRenderContext } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
-import { ModelInstance, ModelViewState } from './models';
+import { ModelInstance, ModelViewState, ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
@@ -275,23 +275,33 @@ class WorldRenderer extends SFARenderer {
         // Draw skyscape
         this.beginPass(sceneCtx.viewerInput);
 
+        const modelCtx: ModelRenderContext = {
+            sceneCtx,
+            showDevGeometry: this.showDevGeometry,
+        }
+
         const eyePos = vec3.create();
         getCamPos(eyePos, sceneCtx.viewerInput.camera);
         for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
             const obj = this.world.envfxMan.skyscape.objects[i];
             obj.setPosition(eyePos);
-            obj.render(device, renderInstManager, sceneCtx, 0); // TODO: additional draw steps?
+            obj.render(device, renderInstManager, modelCtx, 0); // TODO: additional draw steps?
         }
 
         this.endPass(device);
     }
 
     private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelInst: ModelInstance) {
-        const modelViewState: ModelViewState = {
+        const modelCtx: ModelRenderContext = {
+            sceneCtx,
             showDevGeometry: true,
+        };
+
+        const modelViewState: ModelViewState = {
             ambienceNum: 0,
         };
-        modelInst.prepareToRender(device, renderInstManager, sceneCtx, matrix, 0, modelViewState);
+
+        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix, 0, modelViewState);
 
         // Draw bones
         const drawBones = false;
@@ -319,9 +329,14 @@ class WorldRenderer extends SFARenderer {
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Render opaques
 
+        const modelCtx: ModelRenderContext = {
+            sceneCtx,
+            showDevGeometry: this.showDevGeometry,
+        }
+
         this.beginPass(sceneCtx.viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRender(device, renderInstManager, sceneCtx, 0, this.showDevGeometry);
+            this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx, 0);
         }
         
         const mtx = mat4.create();
@@ -335,7 +350,7 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    obj.render(device, renderInstManager, sceneCtx, 0);
+                    obj.render(device, renderInstManager, modelCtx, 0);
                     // TODO: additional draw steps; object furs and translucents
         
                     const drawLabels = false;
@@ -375,7 +390,7 @@ class WorldRenderer extends SFARenderer {
         for (let drawStep = 1; drawStep < NUM_DRAW_STEPS; drawStep++) {
             this.beginPass(sceneCtx.viewerInput);
             if (this.world.mapInstance !== null) {
-                this.world.mapInstance.prepareToRender(device, renderInstManager, sceneCtx, drawStep, this.showDevGeometry);
+                this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx, drawStep);
             }
             this.endPass(device);
         }    
