@@ -13,7 +13,7 @@ import { clamp } from './MathHelpers';
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
-import { DebugFloaterHolder } from './DebugFloaters';
+import { DebugFloaterHolder, FloatingPanel } from './DebugFloaters';
 import { InterpolationType, Keyframe, CameraAnimationManager } from './CameraAnimationManager';
 import { DraggingMode } from './InputManager';
 
@@ -1710,7 +1710,7 @@ class StatisticsPanel extends Panel {
     }
 }
 
-class StudioPanel extends Panel {
+class StudioPanel extends FloatingPanel {
     private animationManager: CameraAnimationManager;
     private enableStudioBtn: HTMLElement;
     private disableStudioBtn: HTMLElement;
@@ -1757,6 +1757,13 @@ class StudioPanel extends Panel {
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
+        this.setWidth(500);
+        this.contents.style.maxHeight = '';
+        this.contents.style.overflow = '';
+        this.elem.onmouseout = () => {
+            this.elem.style.opacity = '0.8';
+        };
+        this.elem.style.opacity = '0.8';
         this.setTitle(CLAPBOARD_ICON, 'Studio');
         this.contents.insertAdjacentHTML('beforeend', `
         <div style="display: grid; grid-template-columns: 3fr 1fr 1fr; align-items: center;">
@@ -1769,6 +1776,13 @@ class StudioPanel extends Panel {
         this.enableStudioBtn = this.contents.querySelector('#enableStudioBtn') as HTMLInputElement;
         this.disableStudioBtn = this.contents.querySelector('#disableStudioBtn') as HTMLInputElement;
         this.studioPanelContents = this.contents.querySelector('#studioPanelContents') as HTMLElement;
+
+        // A listener to give focus to the canvas whenever it's clicked, even if the panel is still up.
+        const keepFocus = function (e: MouseEvent) {
+            if (e.target === viewer.canvas)
+                document.body.focus();
+        }
+
         this.enableStudioBtn.onclick = () => {
             if (!ui.studioModeEnabled) {
                 // Switch to the FPS Camera Controller ().
@@ -1784,7 +1798,7 @@ class StudioPanel extends Panel {
                 }
                 this.animationManager.enableStudioController(this.viewer);
                 this.studioPanelContents.removeAttribute('hidden');
-                ui.setPanelsAutoClosed(false);
+                document.addEventListener('mousedown', keepFocus);
                 setElementHighlighted(this.enableStudioBtn, true);
                 setElementHighlighted(this.disableStudioBtn, false);
             }
@@ -1799,6 +1813,7 @@ class StudioPanel extends Panel {
                 // Switch back to the FPS Camera Controller.
                 (ui.viewerSettings.elem.querySelector('.CameraControllerWASD') as HTMLElement).click();
                 this.studioPanelContents.setAttribute('hidden', '');
+                document.removeEventListener('mousedown', keepFocus);
                 setElementHighlighted(this.disableStudioBtn, true);
                 setElementHighlighted(this.enableStudioBtn, false);
             }
@@ -1849,9 +1864,10 @@ class StudioPanel extends Panel {
                 margin-bottom: 0.25rem;
             }
             .KeyframeNumericInput {
-                width: 3.25rem;
+                width: 4rem;
             }
-            #studioControlsContainer .disabled { 
+            #studioControlsContainer .disabled,
+            .SettingsButton.disabled {
                 cursor: not-allowed!important;
             }
             #playbackControls {
@@ -1885,7 +1901,7 @@ class StudioPanel extends Panel {
                     <button type="button" id="editKeyframePositionBtn" class="SettingsButton">Edit Position</button>
                     <div>
                         <div class="SettingsHeader KeyframeSettingsName">Name</div>
-                        <input id="keyframeName" type="text" minLength="1" maxLength="20" size="10"/>
+                        <input id="keyframeName" type="text" minLength="1" maxLength="20" size="18"/>
                     </div>
                     <div id="keyframeDurationContainer">
                         <div class="SettingsHeader KeyframeSettingsName">Duration</div>
@@ -3175,6 +3191,7 @@ export class UI {
         this.toplevel.appendChild(this.faqPanel.elem);
 
         this.studioPanel = new StudioPanel(this, viewer);
+        this.toplevel.appendChild(this.studioPanel.elem);
 
         this.playPauseButton.onplaypause = (shouldBePlaying) => {
             this.togglePlayPause(shouldBePlaying);
@@ -3247,7 +3264,7 @@ export class UI {
 
     public setScenePanels(scenePanels: Panel[] | null): void {
         if (scenePanels !== null) {
-            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about, this.studioPanel]);
+            this.setPanels([this.sceneSelect, ...scenePanels, this.textureViewer, this.viewerSettings, this.xrSettings, this.statisticsPanel, this.about]);
         } else {
             this.setPanels([this.sceneSelect, this.about]);
         }
@@ -3260,7 +3277,7 @@ export class UI {
 
     private shouldPanelsAutoClose(): boolean {
         // TODO(jstpierre): Lock icon?
-        if (this.statisticsPanel.manuallyExpanded || this.studioModeEnabled)
+        if (this.statisticsPanel.manuallyExpanded)
             return false;
         return true;
     }
