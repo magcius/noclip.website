@@ -1901,7 +1901,7 @@ class StudioPanel extends FloatingPanel {
                     <button type="button" id="editKeyframePositionBtn" class="SettingsButton">Edit Position</button>
                     <div>
                         <div class="SettingsHeader KeyframeSettingsName">Name</div>
-                        <input id="keyframeName" type="text" minLength="1" maxLength="20" size="18"/>
+                        <input id="keyframeName" type="text" minLength="1" maxLength="20" size="18" autocomplete="off"/>
                     </div>
                     <div id="keyframeDurationContainer">
                         <div class="SettingsHeader KeyframeSettingsName">Duration</div>
@@ -2035,6 +2035,15 @@ class StudioPanel extends FloatingPanel {
             if (this.selectedKeyframeListItem) {
                 this.selectedKeyframeListItem.dataset.name = this.keyframeNameInput.value;
                 this.selectedKeyframeListItem.childNodes[0].nodeValue = this.keyframeNameInput.value;
+            }
+        };
+
+        this.keyframeNameInput.onchange = () => {
+            if (this.selectedKeyframeListItem &&
+                (!this.keyframeNameInput.value || this.keyframeNameInput.value.trim() === '')) {
+                this.keyframeNameInput.value = 'Keyframe';
+                this.selectedKeyframeListItem.dataset.name = 'Keyframe';
+                this.selectedKeyframeListItem.childNodes[0].nodeValue = 'Keyframe';
             }
         };
 
@@ -2266,25 +2275,25 @@ class StudioPanel extends FloatingPanel {
         this.keyframeDurationInput.value = this.selectedKeyframe.durationInSeconds.toString();
         this.keyframeHoldDurationInput.value = this.selectedKeyframe.holdDurationInSeconds.toString();
         const interpType: InterpolationType = this.selectedKeyframe.interpType;
+        if (this.selectedInterpBtn) {
+            setElementHighlighted(this.selectedInterpBtn, false);
+        }
+        switch (interpType) {
+            case InterpolationType.Linear:
+                this.selectedInterpBtn = this.linearInterpBtn;
+                break;
+            case InterpolationType.EaseIn:
+                this.selectedInterpBtn = this.easeInInterpBtn;
+                break;
+            case InterpolationType.EaseOut:
+                this.selectedInterpBtn = this.easeOutInterpBtn;
+                break;
+            case InterpolationType.EaseBoth:
+                this.selectedInterpBtn = this.easeBothInterpBtn;
+                break;
+        }
+        setElementHighlighted(this.selectedInterpBtn, true);
         if (this.selectedKeyframe.durationInSeconds > 0) {
-            if (this.selectedInterpBtn) {
-                setElementHighlighted(this.selectedInterpBtn, false);
-            }
-            switch (interpType) {
-                case InterpolationType.Linear:
-                    this.selectedInterpBtn = this.linearInterpBtn;
-                    break;
-                case InterpolationType.EaseIn:
-                    this.selectedInterpBtn = this.easeInInterpBtn;
-                    break;
-                case InterpolationType.EaseOut:
-                    this.selectedInterpBtn = this.easeOutInterpBtn;
-                    break;
-                case InterpolationType.EaseBoth:
-                    this.selectedInterpBtn = this.easeBothInterpBtn;
-                    break;
-            }
-            setElementHighlighted(this.selectedInterpBtn, true);
             this.interpolationSettings.removeAttribute('hidden');
         } else {
             this.interpolationSettings.setAttribute('hidden', '');
