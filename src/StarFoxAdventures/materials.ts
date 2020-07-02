@@ -487,11 +487,17 @@ class StandardMaterial extends MaterialBase {
             if (this.shader.layers.length > 0 && this.shader.layers[0].texId !== null) {
                 const texMap = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
                 const texCoord = this.genScrollableTexCoord(texMap, this.shader.layers[0].scrollingTexMtx);
-                this.addTevStageForTextureWithWhiteKonst(0, texMap, texCoord, true);
+                this.addTevStageForTexture(0, texMap, texCoord, false);
             }
-            if (this.shader.attrFlags & ShaderAttrFlags.CLR) {
-                this.addTevStageForMultVtxColor();
-            }
+            // if (this.shader.attrFlags & ShaderAttrFlags.CLR) {
+                this.addTevStageForMultColor0A0();
+            // }
+
+            this.ambColors[0] = (dst: Color, viewState: ViewState) => {
+                colorCopy(dst, viewState.outdoorAmbientColor);
+            };
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+            // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
             this.texMtx[2] = (dst: mat4, viewState: ViewState) => {
                 // Flipped
@@ -529,22 +535,24 @@ class StandardMaterial extends MaterialBase {
             }
         }
 
-        if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
-            this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
-            this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        } else {
-            this.ambColors[0] = (dst: Color, viewState: ViewState) => {
-                colorCopy(dst, viewState.outdoorAmbientColor);
-            };
-            // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        }
-        // FIXME: Objects have different rules for color-channels than map blocks
         if (this.isMapBlock) {
-            this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
+                this.ambColors[0] = undefined; // AMB0 is solid white
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+                this.ambColors[0] = undefined; // AMB0 is solid white
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            } else if (this.isMapBlock) {
+                this.ambColors[0] = (dst: Color, viewState: ViewState) => {
+                    colorCopy(dst, viewState.outdoorAmbientColor);
+                };
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
+                // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            }
+            // FIXME: Objects have different rules for color-channels than map blocks
+            if (this.isMapBlock) {
+                this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            }
         }
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
@@ -630,10 +638,10 @@ class StandardMaterial extends MaterialBase {
         this.cprevIsValid = true;
     }
 
-    private addTevStageForTextureWithWhiteKonst(colorInMode: number, texMap: TexMap, texCoord: TexCoord, kcolor?: boolean) {
+    private addTevStageForTexture(colorInMode: number, texMap: TexMap, texCoord: TexCoord, multiplyOutdoorAmbient: boolean = false) {
         const stage = this.genTevStage();
 
-        if (kcolor) {
+        if (multiplyOutdoorAmbient) {
             const kcnum = this.genKonstColor((dst: Color, viewState: ViewState) => {
                 colorCopy(dst, viewState.outdoorAmbientColor);
             });
@@ -646,11 +654,11 @@ class StandardMaterial extends MaterialBase {
         let cc: GX.CC[];
         switch (colorInMode) {
         case 0:
-            cc = [GX.CC.ZERO, GX.CC.TEXC, kcolor ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
+            cc = [GX.CC.ZERO, GX.CC.TEXC, multiplyOutdoorAmbient ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
             break;
         default:
             console.warn(`Unhandled colorInMode ${colorInMode}`);
-            cc = [GX.CC.ZERO, GX.CC.TEXC, kcolor ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
+            cc = [GX.CC.ZERO, GX.CC.TEXC, multiplyOutdoorAmbient ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
             break;
         }
 
@@ -667,8 +675,9 @@ class StandardMaterial extends MaterialBase {
         this.cprevIsValid = true;
     }
 
-    private addTevStageForMultVtxColor() {
+    private addTevStageForMultColor0A0() {
         // TODO: handle konst alpha. map block renderer always passes opaque white to this function.
+        // object renderer might pass different values.
 
         const stage = this.genTevStage();
         this.mb.setTevDirect(stage.id);
@@ -914,12 +923,12 @@ class StandardMaterial extends MaterialBase {
             const texMap1 = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[1].texId!, true)));
             const texCoord1 = this.genScrollableTexCoord(texMap1, this.shader.layers[1].scrollingTexMtx);
 
-            this.addTevStageForTextureWithWhiteKonst(0, texMap0, texCoord0);
+            this.addTevStageForTexture(0, texMap0, texCoord0);
             if (this.shader.flags & ShaderFlags.Reflective) {
                 this.addTevStagesForReflectiveFloor();
             }
             this.addTevStagesForTextureWithMode(9, texMap1, texCoord1);
-            this.addTevStageForMultVtxColor();
+            this.addTevStageForMultColor0A0();
         } else {
             for (let i = 0; i < this.shader.layers.length; i++) {
                 const layer = this.shader.layers[i];
