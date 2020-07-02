@@ -3,7 +3,7 @@ import { ViewerRenderInput } from '../viewer';
 import { SFAAnimationController } from './animation';
 import { mat4, vec3 } from 'gl-matrix';
 import { Color } from '../Color';
-import { Camera } from '../Camera';
+import { Camera, computeViewMatrix } from '../Camera';
 import { getMatrixTranslation } from '../MathHelpers';
 import { SceneRenderContext } from './render';
 
@@ -177,6 +177,11 @@ export function createDownloadLink(data: DataView, filename: string, text?: stri
 
 export function getCamPos(v: vec3, camera: Camera): void {
     getMatrixTranslation(v, camera.worldMatrix);
+}
+
+export function computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
+    computeViewMatrix(dst, camera);
+    mat4.mul(dst, dst, modelMatrix);
 }
 
 export interface ViewState {

@@ -4,6 +4,7 @@ import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import * as GX_Material from '../gx/gx_material';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
 import { ModelInstance, ModelRenderContext } from './models';
@@ -19,6 +20,8 @@ import { SceneRenderContext } from './render';
 
 interface SFAClass {
     setup: (obj: ObjectInstance, data: DataView) => void;
+    mount?: (obj: ObjectInstance, world: World) => void;
+    unmount?: (obj: ObjectInstance, world: World) => void;
 }
 
 function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number) {
@@ -665,9 +668,24 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             obj.roll = angle16ToRads(getRandomInt(0, 0xffff));
         },
     },
-    [681]: commonClass(0x18, 0x19),
+    [681]: { // LGTPointLig
+        ...commonClass(0x18, 0x19),
+        mount: (obj: ObjectInstance, world: World) => {
+            world.lights.add({
+                position: obj.getPosition(),
+            })
+        },
+    },
     [682]: commonClass(0x18, 0x19),
-    [683]: commonClass(0x18, 0x19, 0x34), // LGTProjecte
+    [683]: { // LGTProjecte
+        ...commonClass(0x18, 0x19, 0x34),
+        mount: (obj: ObjectInstance, world: World) => {
+            // TODO: support this type of light. Used in Krazoa Palace glowing platforms.
+            // world.lights.add({
+            //     position: obj.getPosition(),
+            // })
+        },
+    },
     [685]: decorClass(),
     [686]: decorClass(),
     [687]: decorClass(),
@@ -726,6 +744,11 @@ export class ObjectType {
 
 export interface ObjectRenderContext extends SceneRenderContext {
     showDevGeometry: boolean;
+    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
+}
+
+export interface Light {
+    position: vec3;
 }
 
 export class ObjectInstance {
@@ -773,6 +796,20 @@ export class ObjectInstance {
             SFA_CLASSES[objClass].setup(this, objParams);
         } else {
             console.log(`Don't know how to setup object class ${objClass} objType ${typeNum}`);
+        }
+    }
+
+    public mount() {
+        const objClass = SFA_CLASSES[this.objType.objClass];
+        if (objClass !== undefined && objClass.mount !== undefined) {
+            objClass.mount(this, this.world);
+        }
+    }
+
+    public unmount() {
+        const objClass = SFA_CLASSES[this.objType.objClass];
+        if (objClass !== undefined && objClass.unmount !== undefined) {
+            objClass.unmount(this, this.world);
         }
     }
 
@@ -909,7 +946,10 @@ export class ObjectInstance {
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
             const mtx = this.getWorldSRT();
-            this.modelInst.prepareToRender(device, renderInstManager, {...objectCtx, ambienceNum: this.ambienceNum}, mtx, drawStep);
+            this.modelInst.prepareToRender(device, renderInstManager, {
+                ...objectCtx,
+                ambienceNum: this.ambienceNum,
+            }, mtx, drawStep);
 
             // Draw bones
             const drawBones = false;

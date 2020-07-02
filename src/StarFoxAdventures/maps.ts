@@ -154,29 +154,29 @@ export class MapInstance {
         renderInstManager.popTemplateRenderInst();
     }
 
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
+        fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
 
         const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderWaters(device, renderInstManager, sceneCtx, matrix);
+            b.block.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix);
         }
 
         renderInstManager.popTemplateRenderInst();
     }
 
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext) {
         const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput, 0);
+        fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
 
         const matrix = mat4.create();
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderFurs(device, renderInstManager, sceneCtx, matrix);
+            b.block.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -257,6 +257,7 @@ class MapSceneRenderer extends SFARenderer {
             ...sceneCtx,
             showDevGeometry: false,
             ambienceNum: 0,
+            setupLights: () => {},
         };
 
         this.beginPass(sceneCtx.viewerInput);
@@ -264,8 +265,8 @@ class MapSceneRenderer extends SFARenderer {
         this.endPass(device);
 
         this.beginPass(sceneCtx.viewerInput);
-        this.map.prepareToRenderWaters(device, renderInstManager, sceneCtx);
-        this.map.prepareToRenderFurs(device, renderInstManager, sceneCtx);
+        this.map.prepareToRenderWaters(device, renderInstManager, modelCtx);
+        this.map.prepareToRenderFurs(device, renderInstManager, modelCtx);
         this.endPass(device);
 
         for (let drawStep = 1; drawStep < this.map.getNumDrawSteps(); drawStep++) {

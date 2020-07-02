@@ -17,7 +17,7 @@ import { colorNewFromRGBA, colorCopy, White } from '../Color';
 import { SFAMaterial } from './materials';
 import { SFAAnimationController } from './animation';
 import { ModelRenderContext } from './models';
-import { ViewState } from './util';
+import { ViewState, computeModelView } from './util';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -188,11 +188,6 @@ export interface ShapeMaterial {
     setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) => void;
 }
 
-function computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
-    computeViewMatrix(dst, camera);
-    mat4.mul(dst, dst, modelMatrix);
-}
-
 export class CommonShapeMaterial implements ShapeMaterial {
     private material: SFAMaterial;
     private gxMaterial: GXMaterial | undefined;
@@ -271,11 +266,8 @@ export class CommonShapeMaterial implements ShapeMaterial {
         this.material.setupMaterialParams(this.materialParams, this.viewState);
 
         // XXX: test lighting
-        colorCopy(this.materialParams.u_Color[ColorKind.MAT0], White);
-        this.materialParams.u_Lights[0].Position = vec3.create(); // All light information is in view space. This centers the light on the camera.
-        this.materialParams.u_Lights[0].Color = colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
-        this.materialParams.u_Lights[0].CosAtten = vec3.fromValues(1.0, 0.0, 0.0);
-        this.materialParams.u_Lights[0].DistAtten = vec3.fromValues(1.0, 1/800, 1/800000);
+        colorCopy(this.materialParams.u_Color[ColorKind.MAT0], White); // TODO
+        modelCtx.setupLights(this.materialParams.u_Lights, modelCtx);
 
         for (let i = 0; i < 3; i++) {
             if (this.overrideIndMtx[i] !== undefined) {

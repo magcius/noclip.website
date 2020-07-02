@@ -12,6 +12,7 @@ import { ViewerRenderInput } from "../viewer";
 import { PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
+import * as GX_Material from '../gx/gx_material';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
@@ -27,6 +28,7 @@ import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
 import { colorNewFromRGBA } from '../Color';
 import { getCamPos } from './util';
+import { computeViewMatrix } from '../Camera';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -50,6 +52,11 @@ function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
 
+interface Light {
+    position: vec3;
+    // TODO: color, intensity, flags...
+}
+
 export class World {
     public animController: SFAAnimationController;
     public envfxMan: EnvfxManager;
@@ -59,6 +66,7 @@ export class World {
     public objectMan: ObjectManager;
     public resColl: ResourceCollection;
     public objectInstances: ObjectInstance[] = [];
+    public lights: Set<Light> = new Set();
 
     private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[]) {
     }
@@ -93,6 +101,22 @@ export class World {
         this.mapInstance = mapInstance;
     }
 
+    public spawnObject(objParams: DataView, parent: ObjectInstance | null = null, mapObjectOrigin: vec3): ObjectInstance {
+        const typeNum = objParams.getUint16(0x0);
+        const pos = readVec3(objParams, 0x8);
+
+        const posInMap = vec3.clone(pos);
+        vec3.add(posInMap, posInMap, mapObjectOrigin);
+
+        const obj = this.objectMan.createObjectInstance(typeNum, objParams, posInMap);
+        obj.setParent(parent);
+        this.objectInstances.push(obj);
+
+        obj.mount();
+
+        return obj;
+    }
+
     public spawnObjectsFromRomlist(romlist: DataView, parent: ObjectInstance | null = null) {
         const mapObjectOrigin = vec3.create();
         if (this.mapInstance !== null) {
@@ -105,16 +129,7 @@ export class World {
             const entrySize = 4 * romlist.getUint8(offs + 0x2);
             const objParams = dataSubarray(romlist, offs, entrySize);
 
-            const typeNum = objParams.getUint16(0x0);
-            const pos = readVec3(objParams, 0x8);
-
-            const posInMap = vec3.clone(pos);
-            vec3.add(posInMap, posInMap, mapObjectOrigin);
-
-            const obj = this.objectMan.createObjectInstance(typeNum, objParams, posInMap);
-            obj.setParent(parent);
-            this.objectInstances.push(obj);
-
+            const obj = this.spawnObject(objParams, parent, mapObjectOrigin);
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
 
             offs += entrySize;
@@ -278,6 +293,7 @@ class WorldRenderer extends SFARenderer {
         const objectCtx: ObjectRenderContext = {
             ...sceneCtx,
             showDevGeometry: this.showDevGeometry,
+            setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
         }
 
         const eyePos = vec3.create();
@@ -296,6 +312,7 @@ class WorldRenderer extends SFARenderer {
             ...sceneCtx,
             showDevGeometry: true,
             ambienceNum: 0,
+            setupLights: this.setupLights.bind(this),
         };
 
         modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix, 0);
@@ -323,13 +340,44 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
+    private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
+        const worldView = mat4.create();
+        computeViewMatrix(worldView, modelCtx.viewerInput.camera);
+
+        // const ctx = getDebugOverlayCanvas2D();
+        let i = 0;
+        for (let light of this.world.lights) {
+            // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
+
+            lights[i].reset();
+            lights[i].Position = vec3.create(); // All light information is in view space.
+            const viewPos = vec3.clone(light.position);
+            // drawWorldSpacePoint(ctx, modelCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
+            vec3.transformMat4(viewPos, viewPos, worldView);
+            vec3.copy(lights[i].Position, viewPos);
+            // TODO: use correct parameters
+            lights[i].Color = colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
+            lights[i].CosAtten = vec3.fromValues(1.0, 0.0, 0.0);
+            lights[i].DistAtten = vec3.fromValues(1.0, 1/800, 1/800000);
+
+            i++;
+            if (i >= 8)
+                break;
+        }
+
+        for (; i < 8; i++) {
+            lights[i].reset();
+        }
+    }
+
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Render opaques
 
         const modelCtx: ModelRenderContext = {
             ...sceneCtx,
             showDevGeometry: this.showDevGeometry,
-            ambienceNum: 0, // Always use ambience 0 when rendering the map
+            ambienceNum: 0, // Always use ambience 0 when rendering the map,
+            setupLights: this.setupLights.bind(this),
         }
 
         this.beginPass(sceneCtx.viewerInput);
@@ -379,8 +427,8 @@ class WorldRenderer extends SFARenderer {
         // Render waters, furs and translucents
         this.beginPass(sceneCtx.viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRenderWaters(device, renderInstManager, sceneCtx);
-            this.world.mapInstance.prepareToRenderFurs(device, renderInstManager, sceneCtx);
+            this.world.mapInstance.prepareToRenderWaters(device, renderInstManager, modelCtx);
+            this.world.mapInstance.prepareToRenderFurs(device, renderInstManager, modelCtx);
         }
         this.endPass(device);
 

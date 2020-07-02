@@ -8,6 +8,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
+import * as GX_Material from '../gx/gx_material';
 
 import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags } from './materials';
@@ -108,6 +109,7 @@ interface Water {
 export interface ModelRenderContext extends SceneRenderContext {
     showDevGeometry: boolean;
     ambienceNum: number;
+    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
 }
 
 class ModelShapes {

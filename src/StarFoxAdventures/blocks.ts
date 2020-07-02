@@ -28,8 +28,8 @@ export abstract class BlockRenderer {
     public abstract getMaterials(): (SFAMaterial | undefined)[];
     public abstract getNumDrawSteps(): number;
     public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number): void;
-    public abstract prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4): void;
-    public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4): void;
+    public abstract prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4): void;
+    public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, moelCtx: ModelRenderContext, matrix: mat4): void;
 }
 
 export class BlockCollection {
