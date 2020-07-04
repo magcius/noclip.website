@@ -121,21 +121,21 @@ class DrawBufferExecuter {
         });
 
         for (let i = 0; i < materialOrder.length; i++) {
-            if (modelData.modelMaterialData.materialData![materialOrder[i]].material.translucent)
-                this.materialOrderXlu.push(materialOrder[i]);
+            const materialIndex = materialOrder[i];
+            if (modelData.modelMaterialData.materialData![materialIndex].material.translucent)
+                this.materialOrderXlu.push(materialIndex);
             else
-                this.materialOrderOpa.push(materialOrder[i]);
+                this.materialOrderOpa.push(materialIndex);
         }
     }
 
-    private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, order: number[], depth: number): void {
+    private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, materialOrder: number[], depth: number): void {
         if (!this.modelInstance.visible || !this.modelInstance.isAnyShapeVisible())
             return;
 
-        for (let i = 0; i < order.length; i++) {
-            const materialInstance = this.modelInstance!.materialInstances[order[i]];
-            if (!materialInstance.visible)
-                continue;
+        for (let i = 0; i < materialOrder.length; i++) {
+            const materialIndex = materialOrder[i];
+            const materialInstance = this.modelInstance!.materialInstances[materialIndex];
             materialInstance.prepareToRenderShapes(device, renderInstManager, depth, camera, viewport, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
         }
     }
