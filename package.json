@@ -53,5 +53,6 @@
   },
   "browserslist": [
     "last 2 Chrome versions"
-  ]
+  ],
+  "version": "0.0.0"
 }
