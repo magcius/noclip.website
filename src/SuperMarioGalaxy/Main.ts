@@ -31,7 +31,7 @@ import { EffectSystem } from './EffectSystem';
 
 import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
-import { ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
+import { ZoneAndLayer, LayerId, LiveActorGroupArray, dynamicSpawnZoneAndLayer } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea } from './MiscMap';
@@ -48,6 +48,7 @@ import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
+import { GravityExplainer2 } from './Actors/GravityExplainer';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -1054,6 +1055,8 @@ export class SceneObjHolder {
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
 
+    public gravityExplainer: GravityExplainer2;
+
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
             this.newEachObj(sceneObj);
@@ -1273,8 +1276,7 @@ class SMGSpawner {
         this.placeStageData(stageDataHolder, true);
         this.placeStageData(stageDataHolder, false);
 
-        // const grav = new GravityExplainer(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
-        // console.log(grav);
+        this.sceneObjHolder.gravityExplainer = new GravityExplainer2(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
 
         // We trigger "after placement" here because legacy objects should not require it,
         // and nothing should depend on legacy objects being placed. Since legacy objects
@@ -1618,6 +1620,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             const zoneName = scenarioData.zoneNames[i];
             this.requestZoneArchives(modelCache, zoneName);
         }
+        GravityExplainer2.requestArchives(sceneObjHolder);
 
         sceneObjHolder.scenarioData = scenarioData;
 

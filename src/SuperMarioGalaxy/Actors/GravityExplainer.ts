@@ -2,21 +2,23 @@
 // Fun actor (not from orig. game) to visualize gravity areas.
 
 import * as GX from '../../gx/gx_enum';
-import { LiveActor, ZoneAndLayer } from "../LiveActor";
-import { TDDraw } from "../DDraw";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams } from "../../gx/gx_render";
+import { LiveActor, ZoneAndLayer, makeMtxTRSFromActor } from "../LiveActor";
+import { TDDraw, TSDraw } from "../DDraw";
+import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
 import { vec3, mat4 } from "gl-matrix";
-import { colorNewCopy, White, colorFromHSL } from "../../Color";
+import { colorNewCopy, White, colorFromHSL, colorNewFromRGBA, colorFromRGBA, colorCopy } from "../../Color";
 import { dfShow } from "../../DebugFloaters";
 import { SceneObjHolder, getDeltaTimeFrames } from "../Main";
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
-import { connectToScene, getRandomFloat, calcGravityVector } from '../ActorUtil';
+import { connectToScene, getRandomFloat, calcGravityVector, connectToSceneMapObjDecoration } from '../ActorUtil';
 import { DrawType, MovementType } from '../NameObj';
 import { ViewerRenderInput } from '../../viewer';
-import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1 } from '../../MathHelpers';
+import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants } from '../../MathHelpers';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { Camera } from '../../Camera';
+import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType } from '../Gravity';
+import { isFirstStep } from '../Spine';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -64,13 +66,14 @@ export class GravityExplainer extends LiveActor {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
 
         const mb = new GXMaterialBuilder('GravityExplainer');
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.RASA, GX.CC.RASC);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setUsePnMtxIdx(false);
@@ -241,5 +244,340 @@ export class GravityExplainer extends LiveActor {
 
     public destroy(device: GfxDevice): void {
         this.ddraw.destroy(device);
+    }
+}
+
+const enum GravityExplainerParticleNrv { Spawn, Fall }
+
+class GravityExplainerParticle extends LiveActor<GravityExplainerParticleNrv> {
+    public originalTranslation = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private parentGravity: PlanetGravity, pos: vec3) {
+        super(zoneAndLayer, sceneObjHolder, 'GravityExplainerParticle');
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'ElectricRailPoint');
+        connectToSceneMapObjDecoration(sceneObjHolder, this);
+
+        this.initNerve(GravityExplainerParticleNrv.Spawn);
+
+        vec3.copy(this.originalTranslation, pos);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNrv: GravityExplainerParticleNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNrv, deltaTimeFrames);
+
+        if (currentNrv === GravityExplainerParticleNrv.Spawn) {
+            if (isFirstStep(this)) {
+                vec3.copy(this.translation, this.originalTranslation);
+                const scale = 0;
+                vec3.set(this.scale, scale, scale, scale);
+                vec3.zero(this.velocity);
+            }
+
+            const maxScale = 5.0;
+            const scale = Math.min(this.scale[0] + 0.2, maxScale);
+            vec3.set(this.scale, scale, scale, scale);
+            if (scale >= maxScale)
+                this.setNerve(GravityExplainerParticleNrv.Fall);
+        } else if (currentNrv === GravityExplainerParticleNrv.Fall) {
+            if (this.parentGravity.calcGravity(this.gravityVector, this.translation)) {
+                vec3.add(this.velocity, this.velocity, this.gravityVector);
+                const drag = 0.999;
+                vec3.scale(this.velocity, this.velocity, Math.pow(drag, deltaTimeFrames));
+            } else {
+                const scale = Math.max(0.0, this.scale[0] - (0.1 * deltaTimeFrames));
+                vec3.set(this.scale, scale, scale, scale);
+
+                if (scale <= 0.0)
+                    this.setNerve(GravityExplainerParticleNrv.Spawn);
+            }
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('ElectricRailPoint');
+    }
+}
+
+const enum GravityExplainer2ColorScheme {
+    Blue, Red,
+}
+
+abstract class GravityExplainer2Base<T extends PlanetGravity> extends LiveActor {
+    private materialHelper: GXMaterialHelperGfx;
+    private sdraw = new TSDraw();
+    private particles: GravityExplainerParticle[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, protected gravity: T) {
+        super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2Base');
+
+        this.sdraw.setVtxDesc(GX.Attr.POS, true);
+        this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+
+        this.initPlacementAndArgs();
+
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+        this.drawAndUploadModel(sceneObjHolder, this.sdraw);
+    }
+
+
+    protected abstract initPlacementAndArgs(): void;
+    protected abstract drawAndUploadModel(sceneObjHolder: SceneObjHolder, ddraw: TSDraw): void;
+
+    @dfShow()
+    private c0 = colorNewFromRGBA(0.0, 0.0, 0.0, 1.0);
+    @dfShow()
+    private c1 = colorNewFromRGBA(0.8, 0.8, 0.8, 0.3);
+    @dfShow()
+    private amb0Alpha = -20.0;
+    @dfShow()
+    private light2Alpha = 120.0;
+
+    protected setUseNormal(v: boolean): void {
+        const mb = new GXMaterialBuilder('GravityExplainer');
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.RASA, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.A1, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setCullMode(GX.CullMode.BACK);
+        mb.setUsePnMtxIdx(false);
+
+        if (v) {
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 4, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+
+            this.sdraw.setVtxDesc(GX.Attr.NRM, true);
+            this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
+        } else {
+            mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+
+            this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
+            this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+        }
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    protected setColorScheme(scheme: GravityExplainer2ColorScheme): void {
+        return;
+
+        if (scheme === GravityExplainer2ColorScheme.Blue) {
+            colorFromRGBA(this.c0, 1.0, 0.69, 0.67, 1.0);
+            colorFromRGBA(this.c1, 0.38, 0.33, 0.31, 0.1);
+        }
+    }
+
+    protected spawnParticle(sceneObjHolder: SceneObjHolder, pos: vec3): void {
+        this.particles.push(new GravityExplainerParticle(this.zoneAndLayer, sceneObjHolder, this.gravity, pos));
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+        for (let i = 0; i < this.particles.length; i++)
+            this.particles[i].visibleAlive = this.gravity.alive;
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!this.gravity.alive)
+            return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+
+        // template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+        makeMtxTRSFromActor(scratchMatrix, this);
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMatrix);
+        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+
+        const device = sceneObjHolder.modelCache.device;
+
+        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+
+        const light2 = materialParams.u_Lights[2];
+        vec3.set(light2.Position, 0, 0, 0);
+        vec3.set(light2.Direction, 0, -1, 0);
+        vec3.set(light2.CosAtten, 1, 0, 0);
+        vec3.set(light2.DistAtten, 1, 0, 0);
+        colorFromRGBA(light2.Color, 0, 0, 0, this.light2Alpha);
+
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.c1);
+        colorFromRGBA(materialParams.u_Color[ColorKind.AMB0], 0, 0, 0, this.amb0Alpha);
+        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
+
+        const renderInst = renderInstManager.newRenderInst();
+        this.sdraw.setOnRenderInst(renderInst);
+        renderInstManager.submitRenderInst(renderInst);
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.sdraw.destroy(device);
+    }
+}
+
+function drawSphere(ddraw: TSDraw, numY: number = 200, numX: number = numY): void {
+    function spherePoint(dst: vec3, y: number, x: number): void {
+        const theta = MathConstants.TAU * (x / numX);
+        const phi = MathConstants.TAU * (((1.0 - y / numY)) - 0.5) / 2;
+        const cos = Math.cos(phi);
+        vec3.set(dst, cos * Math.cos(theta), Math.sin(phi), cos * Math.sin(theta));
+    }
+
+    function drawPoint(y: number, x: number): void {
+        spherePoint(scratchVec3, y, x);
+        ddraw.position3vec3(scratchVec3);
+        ddraw.normal3vec3(scratchVec3);
+    }
+
+    for (let y1 = 1; y1 < numY + 1; y1++) {
+        ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let x = 0; x < numX + 1; x++) {
+            const y0 = y1 - 1;
+            drawPoint(y0, x);
+            drawPoint(y1, x);
+        }
+        ddraw.end();
+    }
+}
+
+class GravityExplainer_PointGravity extends GravityExplainer2Base<PointGravity> {
+    protected initPlacementAndArgs(): void {
+        vec3.copy(this.translation, this.gravity.pos);
+        const scale = this.gravity.range;
+        vec3.set(this.scale, scale, scale, scale);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+        return;
+
+        for (let i = 0; i < 50; i++) {
+            this.gravity.generateRandomPoint(scratchVec3);
+            this.spawnParticle(sceneObjHolder, scratchVec3);
+        }
+    }
+
+    protected drawAndUploadModel(sceneObjHolder: SceneObjHolder, ddraw: TSDraw): void {
+        this.setColorScheme(GravityExplainer2ColorScheme.Blue);
+        this.setUseNormal(true);
+
+        ddraw.beginDraw();
+        drawSphere(ddraw);
+        ddraw.endDraw(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache);
+    }
+}
+
+class GravityExplainer_ParallelGravity extends GravityExplainer2Base<ParallelGravity> {
+    protected initPlacementAndArgs(): void {
+    }
+
+    private drawBoxPlane(ddraw: TSDraw, x: number, y: number, z: number): void {
+        vec3.set(scratchVec3a, x, y, z);
+        if (y === 0)
+            vec3.set(scratchVec3b, 0, 1, 0);
+        else
+            vec3.set(scratchVec3b, 0, 0, 1);
+        vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
+        vec3.cross(scratchVec3b, scratchVec3a, scratchVec3c);
+
+        const boxMtx = this.gravity.boxMtx!;
+        function drawBoxPoint(iu: number, iv: number): void {
+            vec3.copy(scratchVec3, scratchVec3a);
+            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3c, iu);
+            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3b, iv);
+            transformVec3Mat4w1(scratchVec3, boxMtx, scratchVec3);
+
+            ddraw.position3vec3(scratchVec3);
+
+            let alpha = 0xFF;
+            if (Math.max(Math.abs(iu), Math.abs(iv)) >= 1.0)
+                alpha = 0x80;
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
+        }
+
+        const margin = 1.0;
+        ddraw.begin(GX.Command.DRAW_QUADS);
+        // top
+        drawBoxPoint(-(1.0), -(1.0));
+        drawBoxPoint(-(1.0 - margin), -(1.0 - margin));
+        drawBoxPoint( (1.0 - margin), -(1.0 - margin));
+        drawBoxPoint( (1.0), -(1.0));
+
+        // bottom
+        drawBoxPoint(-(1.0), (1.0));
+        drawBoxPoint( (1.0), (1.0));
+        drawBoxPoint( (1.0 - margin), (1.0 - margin));
+        drawBoxPoint(-(1.0 - margin), (1.0 - margin));
+
+        // left
+        drawBoxPoint(-(1.0), -(1.0));
+        drawBoxPoint(-(1.0),  (1.0));
+        drawBoxPoint(-(1.0 - margin),  (1.0 - margin));
+        drawBoxPoint(-(1.0 - margin), -(1.0 - margin));
+
+        // right
+        drawBoxPoint( (1.0), -(1.0));
+        drawBoxPoint( (1.0 - margin), -(1.0 - margin));
+        drawBoxPoint( (1.0 - margin),  (1.0 - margin));
+        drawBoxPoint( (1.0),  (1.0));
+        ddraw.end();
+    }
+
+    private drawBox(ddraw: TSDraw): void {
+        this.drawBoxPlane(ddraw, -1, 0, 0);
+        this.drawBoxPlane(ddraw,  1, 0, 0);
+        this.drawBoxPlane(ddraw, 0, -1, 0);
+        this.drawBoxPlane(ddraw, 0,  1, 0);
+        this.drawBoxPlane(ddraw, 0, 0, -1);
+        this.drawBoxPlane(ddraw, 0, 0,  1);
+    }
+
+    protected drawAndUploadModel(sceneObjHolder: SceneObjHolder, ddraw: TSDraw): void {
+        this.setColorScheme(GravityExplainer2ColorScheme.Blue);
+        this.setUseNormal(false);
+
+        ddraw.beginDraw();
+
+        if (this.gravity.rangeType === ParallelGravityRangeType.Box) {
+            this.drawBox(ddraw);
+        }
+
+        ddraw.endDraw(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache);
+    }
+}
+
+export class GravityExplainer2 extends LiveActor {
+    private models: LiveActor[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
+        super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2');
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        const gravities = sceneObjHolder.planetGravityManager!.gravities;
+
+        for (let i = 0; i < gravities.length; i++) {
+            const grav = gravities[i];
+            if (grav instanceof PointGravity)
+                this.models.push(new GravityExplainer_PointGravity(this.zoneAndLayer, sceneObjHolder, grav));
+            else if (grav instanceof ParallelGravity)
+                this.models.push(new GravityExplainer_ParallelGravity(this.zoneAndLayer, sceneObjHolder, grav));
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        GravityExplainerParticle.requestArchives(sceneObjHolder);
     }
 }

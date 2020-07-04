@@ -49,10 +49,21 @@ function csv(bcsv: BCSV.Bcsv): string {
     return writer.finalize();
 }
 
+function json(bcsv: BCSV.Bcsv): string {
+    let buf = ``;
+    for (let i = 0; i < bcsv.records.length; i++) {
+        const o: { [k: string]: string } = {};
+        for (let j = 0; j < bcsv.fields.length; j++)
+            o[bcsv.fields[j].debugName] = '' + bcsv.records[i][j];
+        buf += `${JSON.stringify(o)}\n`;
+    }
+    return buf;
+}
+
 function main(inFilename: string, outFilename?: string): void {
     const data = fetchDataSync(inFilename);
     const bcsv = BCSV.parse(data);
-    const buf = csv(bcsv);
+    const buf = json(bcsv);
 
     if (outFilename) {
         console.log(inFilename);
@@ -62,9 +73,7 @@ function main(inFilename: string, outFilename?: string): void {
     }
 }
 
-/*
 for (let i = 2; i < process.argv.length; i++)
-    main(process.argv[i], `${process.argv[i]}.csv`);
-*/
+    main(process.argv[i], `${process.argv[i]}.json`);
 
-main(process.argv[2], process.argv[3]);
+// main(process.argv[2], process.argv[3]);

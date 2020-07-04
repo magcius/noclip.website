@@ -27,9 +27,8 @@ export function bcsvHashLM(str: string): number {
 // Super Mario Galaxy
 export function bcsvHashSMG(str: string): number {
     let hash = 0;
-    for (let i = 0; i < str.length; i++) {
+    for (let i = 0; i < str.length; i++)
         hash = (hash * 0x1F + str.charCodeAt(i)) >>> 0;
-    }
     return hash;
 }
 

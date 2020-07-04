@@ -105,7 +105,7 @@ export const enum GravityTypeMask {
 }
 const enum GravityPower { Light, Normal, Heavy }
 
-abstract class PlanetGravity {
+export abstract class PlanetGravity {
     public range = -1.0;
     public distant = 0.0;
     public priority = 0.0;
@@ -246,14 +246,14 @@ function generateRandomPointInCylinder(dst: vec3, pos: ReadonlyVec3, up: Readonl
     transformVec3Mat4w1(dst, scratchMatrix, dst);
 }
 
-const enum ParallelGravityRangeType { Sphere, Box, Cylinder }
+export const enum ParallelGravityRangeType { Sphere, Box, Cylinder }
 
-class ParallelGravity extends PlanetGravity {
-    private rangeType = ParallelGravityRangeType.Sphere;
-    private baseDistance: number = 2000.0;
-    private cylinderRadius: number = 500.0;
-    private cylinderHeight: number = 1000.0;
-    private boxMtx: mat4 | null = null;
+export class ParallelGravity extends PlanetGravity {
+    public rangeType = ParallelGravityRangeType.Sphere;
+    private baseDistance: number = 2000;
+    private cylinderRadius: number;
+    private cylinderHeight: number;
+    public boxMtx: mat4 | null = null;
     private boxExtentsSq: vec3 | null = null;
     private planeNormal = vec3.create();
     private pos = vec3.create();
@@ -767,7 +767,7 @@ class CubeGravity extends PlanetGravity {
     }
 }
 
-class PointGravity extends PlanetGravity {
+export class PointGravity extends PlanetGravity {
     public pos = vec3.create();
 
     protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
@@ -1284,7 +1284,6 @@ class WireGravity extends PlanetGravity {
 export class GlobalGravityObj extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, public gravity: PlanetGravity) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-        // 
 
         useStageSwitchWriteA(sceneObjHolder, this, infoIter);
         useStageSwitchWriteB(sceneObjHolder, this, infoIter);
@@ -1313,15 +1312,29 @@ export class GlobalGravityObj extends LiveActor {
         this.updateSwitch(sceneObjHolder);
     }
 
+    private calcAliveScenario(): void {
+        this.gravity.alive = this.visibleAlive && this.visibleScenario;
+    }
+
     public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
         super.makeActorAppeared(sceneObjHolder);
-        this.gravity.alive = true;
+        this.calcAliveScenario();
         this.updateSwitch(sceneObjHolder);
     }
 
     public makeActorDead(sceneObjHolder: SceneObjHolder): void {
         super.makeActorDead(sceneObjHolder);
-        this.gravity.alive = false;
+        this.calcAliveScenario();
+    }
+
+    public onScenario(sceneObjHolder: SceneObjHolder): void {
+        super.onScenario(sceneObjHolder);
+        this.calcAliveScenario();
+    }
+
+    public offScenario(sceneObjHolder: SceneObjHolder): void {
+        super.offScenario(sceneObjHolder);
+        this.calcAliveScenario();
     }
 }
 

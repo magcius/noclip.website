@@ -6,7 +6,7 @@ import * as GX from '../gx/gx_enum';
 import { GX_VtxDesc, GX_VtxAttrFmt, compileLoadedVertexLayout, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { assert, assertExists, align } from '../util';
 import { GfxRenderInstManager, GfxRenderInst } from '../gfx/render/GfxRenderer';
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferFrequency } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, GfxVertexBufferDescriptor, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxVertexBufferFrequency, GfxFormat } from '../gfx/platform/GfxPlatform';
 import { createInputLayout } from '../gx/gx_render';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers';
 import { getSystemEndianness, Endianness } from '../endian';
@@ -322,7 +322,7 @@ export class TSDraw extends TDDrawVtxSpec {
     // Global information
     private currentVertex: number;
     private currentIndex: number;
-    private indexData: Uint16Array;
+    private indexData: Uint32Array;
     private vertexData: DataView;
 
     // Current primitive information
@@ -332,7 +332,7 @@ export class TSDraw extends TDDrawVtxSpec {
     constructor() {
         super();
         this.vertexData = new DataView(new ArrayBuffer(0x400));
-        this.indexData = new Uint16Array(0x100);
+        this.indexData = new Uint32Array(0x100);
     }
 
     private ensureVertexBufferData(newByteSize: number): void {
@@ -347,7 +347,7 @@ export class TSDraw extends TDDrawVtxSpec {
     private ensureIndexBufferData(newSize: number): void {
         if (newSize > this.indexData.length) {
             const newSizeAligned = align(newSize, this.indexData.byteLength);
-            const newData = new Uint16Array(newSizeAligned);
+            const newData = new Uint32Array(newSizeAligned);
             newData.set(this.indexData);
             this.indexData = newData;
         }
@@ -371,6 +371,7 @@ export class TSDraw extends TDDrawVtxSpec {
         assert(this.vertexBuffer === null);
         assert(this.indexBuffer === null);
         this.createLoadedVertexLayout();
+        this.loadedVertexLayout!.indexFormat = GfxFormat.U32_R;
 
         this.currentVertex = -1;
         this.currentIndex = 0;
