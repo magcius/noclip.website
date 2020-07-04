@@ -1,14 +1,28 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString } from "../util";
+import { readString, hexdump } from "../util";
 
-const sjisDecoder = new TextDecoder('sjis')!;
+function decodeSJIS(buffer: Uint8Array): string {
+    // @ts-ignore
+    if (typeof TextDecoder !== 'undefined') {
+        // @ts-ignore
+        return new TextDecoder('sjis')!.decode(buffer);
+    // @ts-ignore
+    } else if (typeof require !== 'undefined') {
+        // @ts-ignore
+        const iconv = require('iconv-lite');
+        return iconv.decode(buffer, 'sjis');
+    } else {
+        throw "whoops";
+    }
+}
+
 function readStringSJIS(buffer: ArrayBufferSlice, offs: number): string {
     const view = buffer.createDataView(offs);
     let i = 0;
     while (view.getUint8(i) !== 0)
         i++;
-    return sjisDecoder.decode(buffer.createTypedArray(Uint8Array, offs, i));
+    return decodeSJIS(buffer.createTypedArray(Uint8Array, offs, i));
 }
 
 // Luigi's Mansion
@@ -45,18 +59,23 @@ const nameTable = [
     'room_no',
 
     // Super Mario Galaxy
-    'GalaxyName',
-    'ZoneName',
-    'ScenarioNo', 'ScenarioName', 'PowerStarId', 'AppearPowerStarObj', 'Comet', 'LuigiModeTimer', 'IsHidden', 'Hidden',
-    'WorldNo',
-    'SceneNo', 'MarioNo',
-    'PlanetName', 'LowFlag', 'MiddleFlag', 'BloomFlag', 'WaterFlag', 'WaterFlag', 'IndirectFlag',
-    'Obj_arg0', 'Obj_arg1', 'Obj_arg2', 'Obj_arg3', 'Obj_arg4', 'Obj_arg5', 'Obj_arg6', 'Obj_arg7',
-    'CommonPath_ID',
-    'RotateSpeed', 'RotateAngle', 'RotateAxis', 'RotateAccelType', 'RotateStopTime', 'RotateType',
-    'type', 'no', 'l_id', 'closed', 'path_arg0', 'parg_arg1',
-    'id', 'pnt0_x', 'pnt0_y', 'pnt0_z', 'pnt1_x', 'pnt1_y', 'pnt1_z', 'pnt2_x', 'pnt2_y', 'pnt2_z',
 
+    'type', 'no', 'l_id',
+    // ScenarioData
+    'GalaxyName', 'ZoneName', 'ScenarioNo', 'ScenarioName', 'PowerStarId', 'AppearPowerStarObj', 'Comet', 'LuigiModeTimer', 'IsHidden', 'Hidden', 'WorldNo', 'SceneNo', 'MarioNo',
+    // PlanetData
+    'PlanetName', 'LowFlag', 'MiddleFlag', 'BloomFlag', 'WaterFlag', 'WaterFlag', 'IndirectFlag',
+    // Placement
+    'Obj_arg0', 'Obj_arg1', 'Obj_arg2', 'Obj_arg3', 'Obj_arg4', 'Obj_arg5', 'Obj_arg6', 'Obj_arg7',
+    'SW_APPEAR', 'SW_A', 'SW_B', 'SW_SLEEP',
+    'CommonPath_ID', 'FollowId', 'ClippingGroupId', 'GroupId', 'DemoGroupId', 'MapParts_ID', 'Obj_ID', 'ChildObjId',
+    'RotateSpeed', 'RotateAngle', 'RotateAxis', 'RotateAccelType', 'RotateStopTime', 'RotateType',
+    // Gravity
+    'Range', 'Distant', 'Priority', 'Inverse', 'Power', 'Gravity_type',
+    // Path
+    'id', 'pnt0_x', 'pnt0_y', 'pnt0_z', 'pnt1_x', 'pnt1_y', 'pnt1_z', 'pnt2_x', 'pnt2_y', 'pnt2_z',
+    'attribute',
+    // LightData
     'LightID', 'AreaLightName', 'Interpolate', 'Fix',
     'PlayerLight0PosX', 'PlayerLight0PosY', 'PlayerLight0PosZ', 'PlayerLight0ColorR', 'PlayerLight0ColorG', 'PlayerLight0ColorB', 'PlayerLight0ColorA', 'PlayerLight0FollowCamera',
     'PlayerLight1PosX', 'PlayerLight1PosY', 'PlayerLight1PosZ', 'PlayerLight1ColorR', 'PlayerLight1ColorG', 'PlayerLight1ColorB', 'PlayerLight1ColorA', 'PlayerLight1FollowCamera',
@@ -70,8 +89,6 @@ const nameTable = [
     'PlanetLight0PosX', 'PlanetLight0PosY', 'PlanetLight0PosZ', 'PlanetLight0ColorR', 'PlanetLight0ColorG', 'PlanetLight0ColorB', 'PlanetLight0ColorA', 'PlanetLight0FollowCamera',
     'PlanetLight1PosX', 'PlanetLight1PosY', 'PlanetLight1PosZ', 'PlanetLight1ColorR', 'PlanetLight1ColorG', 'PlanetLight1ColorB', 'PlanetLight1ColorA', 'PlanetLight1FollowCamera',
     'PlanetAmbientR', 'PlanetAmbientG', 'PlanetAmbientB', 'PlanetAmbientA', 'PlanetAlpha2',
-
-    'attribute',
 ];
 
 const hashLookup = new Map<number, string>();
@@ -157,10 +174,10 @@ export function parse(buffer: ArrayBufferSlice, littleEndian: boolean = false): 
                 value = view.getFloat32(fieldOffs, littleEndian);
                 break;
             case BcsvFieldType.S16:
-                value = (view.getInt16(fieldOffs, littleEndian) & field.bitmask) >> field.shift;
+                value = ((view.getInt16(fieldOffs, littleEndian) & field.bitmask) >> field.shift) << 16 >> 16;
                 break;
             case BcsvFieldType.S8:
-                value = (view.getInt8(fieldOffs) & field.bitmask) >> field.shift;
+                value = ((view.getInt8(fieldOffs) & field.bitmask) >> field.shift) << 24 >> 24;
                 break;
             case BcsvFieldType.SJIS: {
                 const strOffs = strTableOffs + view.getUint32(fieldOffs, littleEndian);
