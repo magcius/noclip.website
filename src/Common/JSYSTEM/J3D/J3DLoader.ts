@@ -520,10 +520,10 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const bboxMaxZ = view.getFloat32(shapeIdx + 0x24);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
-        const materialIdx = -1;
+        const materialIndex = -1;
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ displayFlags, loadedVertexLayout, mtxGroups, bbox, boundingSphereRadius, materialIndex: materialIdx });
+        shapes.push({ displayFlags, loadedVertexLayout, mtxGroups, bbox, boundingSphereRadius, materialIndex });
 
         shapeIdx += 0x28;
     }
