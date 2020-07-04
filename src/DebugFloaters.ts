@@ -58,7 +58,6 @@ export class FloatingPanel implements Widget {
         this.header.style.lineHeight = '28px';
         this.header.style.margin = '0';
         this.header.style.fontSize = '100%';
-        this.header.style.textAlign = 'center';
         this.header.style.cursor = 'pointer';
         this.header.style.userSelect = 'none';
         this.header.style.display = 'grid';
@@ -321,7 +320,7 @@ export class DebugFloaterHolder {
         return this.debugFloater;
     }
 
-    private bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
+    private _bindSlidersRecurse(obj: { [k: string]: any }, panel: FloatingPanel, parentName: string, parentMetadata: any | null = null): void {
         // Children are by default invisible, unless we're in a color, or some sort of number array.
         const childDefaultVisible = objIsColor(obj) || (obj instanceof Array) || (obj instanceof Float32Array);
 
@@ -334,9 +333,9 @@ export class DebugFloaterHolder {
             const v = obj[keyName];
 
             if (typeof v === "number")
-                panel.bindSingleSlider(`${parentName}.${keyName}`, obj, keyName, parentMetadata);
+                panel.bindSingleSlider(`${parentName}.${keyName}`, obj, keyName, parentMetadata, this.midiControls);
 
-            this.bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
+            this._bindSlidersRecurse(v, panel, `${parentName}.${keyName}`, getParentMetadata(obj, keyName));
         }
     }
 
@@ -347,7 +346,7 @@ export class DebugFloaterHolder {
         while (panel.contents.firstChild)
             panel.contents.removeChild(panel.contents.firstChild);
 
-        this.bindSlidersRecurse(obj, panel, '');
+        this._bindSlidersRecurse(obj, panel, '');
     }
 }
 
