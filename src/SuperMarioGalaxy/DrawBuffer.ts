@@ -104,29 +104,27 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
 // contains multiple J3DShapePackets.
 
 class DrawBufferExecuter {
-    public shapeOrderOpa: number[] = [];
-    public shapeOrderXlu: number[] = [];
+    public materialOrderOpa: number[] = [];
+    public materialOrderXlu: number[] = [];
 
     constructor(public modelInstance: J3DModelInstance) {
         const modelData = this.modelInstance.modelData;
 
-        const shapeOrder = range(0, modelData.shapeData.length);
+        const materialOrder = range(0, modelData.modelMaterialData.materialData!.length);
 
         // Sort shapes by material name. Yes, this is what the actual game does.
         // ref. DrawBuffer::sortShapeDrawer.
-        shapeOrder.sort((a, b) => {
-            const mata = modelData.modelMaterialData.materialData![modelData.shapeData[a].shape.materialIndex].material;
-            const matb = modelData.modelMaterialData.materialData![modelData.shapeData[b].shape.materialIndex].material;
+        materialOrder.sort((a, b) => {
+            const mata = modelData.modelMaterialData.materialData![a].material;
+            const matb = modelData.modelMaterialData.materialData![b].material;
             return mata.name.localeCompare(matb.name);
         });
 
-        for (let i = 0; i < shapeOrder.length; i++) {
-            const shape = modelData.shapeData[shapeOrder[i]].shape;
-            const material = modelData.modelMaterialData.materialData![shape.materialIndex].material;
-            if (material.translucent)
-                this.shapeOrderXlu.push(shapeOrder[i]);
+        for (let i = 0; i < materialOrder.length; i++) {
+            if (modelData.modelMaterialData.materialData![materialOrder[i]].material.translucent)
+                this.materialOrderXlu.push(materialOrder[i]);
             else
-                this.shapeOrderOpa.push(shapeOrder[i]);
+                this.materialOrderOpa.push(materialOrder[i]);
         }
     }
 
@@ -135,22 +133,21 @@ class DrawBufferExecuter {
             return;
 
         for (let i = 0; i < order.length; i++) {
-            const shapeInstance = this.modelInstance!.shapeInstances[order[i]];
-            if (!shapeInstance.visible)
+            const materialInstance = this.modelInstance!.materialInstances[order[i]];
+            if (!materialInstance.visible)
                 continue;
-            const materialInstance = this.modelInstance!.materialInstances[shapeInstance.shapeData.shape.materialIndex];
-            shapeInstance.prepareToRender(device, renderInstManager, depth, camera, viewport, materialInstance, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
+            materialInstance.prepareToRenderShapes(device, renderInstManager, depth, camera, viewport, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
         }
     }
 
     public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
         const depth = -1;
-        this.draw(device, renderInstManager, camera, viewport, this.shapeOrderOpa, depth);
+        this.draw(device, renderInstManager, camera, viewport, this.materialOrderOpa, depth);
     }
 
     public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
         const depth = this.modelInstance.computeDepth(camera);
-        this.draw(device, renderInstManager, camera, viewport, this.shapeOrderXlu, depth);
+        this.draw(device, renderInstManager, camera, viewport, this.materialOrderXlu, depth);
     }
 }
 
