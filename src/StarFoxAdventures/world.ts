@@ -350,15 +350,22 @@ class WorldRenderer extends SFARenderer {
             // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
 
             lights[i].reset();
-            lights[i].Position = vec3.create(); // All light information is in view space.
-            const viewPos = vec3.clone(light.position);
+            // Light information is specified in view space.
+            vec3.transformMat4(lights[i].Position, light.position, worldView);
             // drawWorldSpacePoint(ctx, modelCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
-            vec3.transformMat4(viewPos, viewPos, worldView);
-            vec3.copy(lights[i].Position, viewPos);
             // TODO: use correct parameters
             lights[i].Color = colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
             lights[i].CosAtten = vec3.fromValues(1.0, 0.0, 0.0);
-            lights[i].DistAtten = vec3.fromValues(1.0, 1/800, 1/800000);
+
+            const refDistance = 50.0;
+            const refBrightness = 0.75;
+            const kfactor = 0.5 * (1.0 - refBrightness);
+            // Distance attenuation values are calculated by GXInitLightDistAttn with GX_DA_MEDIUM mode
+            lights[i].DistAtten = vec3.fromValues(
+                1.0,
+                kfactor / (refBrightness * refDistance),
+                kfactor / (refBrightness * refDistance * refDistance)
+                );
 
             i++;
             if (i >= 8)
