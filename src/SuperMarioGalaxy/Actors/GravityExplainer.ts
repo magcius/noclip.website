@@ -14,9 +14,9 @@ import { connectToScene, getRandomFloat, calcGravityVector, connectToSceneMapObj
 import { DrawType, MovementType } from '../NameObj';
 import { ViewerRenderInput } from '../../viewer';
 import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants } from '../../MathHelpers';
-import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyLayer, GfxRendererLayer, setSortKeyDepth } from '../../gfx/render/GfxRenderer';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
-import { Camera } from '../../Camera';
+import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../../Camera';
 import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType } from '../Gravity';
 import { isFirstStep } from '../Spine';
 
@@ -391,6 +391,10 @@ abstract class GravityExplainer2Base<T extends PlanetGravity> extends LiveActor 
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
+        template.sortKey = setSortKeyLayer(template.sortKey, GfxRendererLayer.TRANSLUCENT);
+
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera, this.translation);
+        template.sortKey = setSortKeyDepth(template.sortKey, depth);
 
         // template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         makeMtxTRSFromActor(scratchMatrix, this);
