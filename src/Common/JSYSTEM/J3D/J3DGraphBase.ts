@@ -139,15 +139,11 @@ const packetParams = new PacketParams();
 export class ShapeInstance {
     public visible: boolean = true;
 
-    constructor(public shapeData: ShapeData, private materialInstance: MaterialInstance) {
+    constructor(public shapeData: ShapeData) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, materialInstance: MaterialInstance, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
         if (!this.visible)
-            return;
-
-        const materialInstance = this.materialInstance;
-        if (!materialInstance.visible)
             return;
 
         const shape = this.shapeData.shape;
@@ -348,6 +344,7 @@ export class MaterialInstance {
     public sortKey: number = 0;
     public colorOverrides: (Color | null)[] = nArray(ColorKind.COUNT, () => null);
     public fogBlock = new GX_Material.FogBlock();
+    public shapeInstances: ShapeInstance[] = [];
 
     constructor(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks) {
         this.setMaterialData(materialData, materialHacks);
@@ -748,6 +745,14 @@ export class MaterialInstance {
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
+
+    public prepareToRenderShapes(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+        if (!this.visible)
+            return;
+
+        for (let i = 0; i < this.shapeInstances.length; i++)
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, viewport, this, modelData, materialInstanceState, shapeInstanceState);
+    }
 }
 
 // TODO(jstpierre): Unify with TEX1Data? Build a unified cache that can deduplicate
@@ -919,7 +924,7 @@ export class J3DModelData {
                 const shapeData = this.shapeData[value];
 
                 // Translucent draws happen in reverse order -- later shapes are drawn first.
-                // TODO(jstpierre): Verify these flags do not change upon changing BMT...
+                // TODO(jstpierre): This is a hack.
                 if (this.modelMaterialData.materialData![shapeData.shape.materialIndex].material.translucent)
                     shapeData.sortKeyBias = --translucentDrawIndex;
             }
@@ -1025,7 +1030,12 @@ export class J3DModelInstance {
         this.tex1Data = this.modelMaterialData.tex1Data!;
 
         this.shapeInstances = this.modelData.shapeData.map((shapeData) => {
-            return new ShapeInstance(shapeData, this.materialInstances[shapeData.shape.materialIndex]);
+            const shapeInstance = new ShapeInstance(shapeData);
+
+            const materialInstance = this.materialInstances[shapeData.shape.materialIndex];
+            materialInstance.shapeInstances.push(shapeInstance);
+
+            return shapeInstance;
         });
 
         this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
@@ -1298,13 +1308,11 @@ export class J3DModelInstance {
             return;
 
         const depth = translucent ? this.computeDepth(camera) : -1;
-        for (let i = 0; i < this.shapeInstances.length; i++) {
-            if (!this.shapeInstances[i].visible)
+        for (let i = 0; i < this.materialInstances.length; i++) {
+            const materialInstance = this.materialInstances[i];
+            if (materialInstance.materialData.material.translucent !== translucent)
                 continue;
-            const materialIndex = this.shapeInstances[i].shapeData.shape.materialIndex;
-            if (this.materialInstances[materialIndex].materialData.material.translucent !== translucent)
-                continue;
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
+            materialInstance.prepareToRenderShapes(device, renderInstManager, depth, camera, viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
         }
     }
 
@@ -1493,8 +1501,8 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         const depth = this.computeDepth(viewerInput.camera);
         const template = renderInstManager.pushTemplateRenderInst();
         template.filterKey = this.passMask;
-        for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
+        for (let i = 0; i < this.materialInstances.length; i++)
+            this.materialInstances[i].prepareToRenderShapes(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
         renderInstManager.popTemplateRenderInst();
     }
 

@@ -138,7 +138,8 @@ class DrawBufferExecuter {
             const shapeInstance = this.modelInstance!.shapeInstances[order[i]];
             if (!shapeInstance.visible)
                 continue;
-            shapeInstance.prepareToRender(device, renderInstManager, depth, camera, viewport, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
+            const materialInstance = this.modelInstance!.materialInstances[shapeInstance.shapeData.shape.materialIndex];
+            shapeInstance.prepareToRender(device, renderInstManager, depth, camera, viewport, materialInstance, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
         }
     }
 
