@@ -1,11 +1,11 @@
 
 // Animation support.
 
-import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, JointTransformInfo, ANK1, ANK1JointAnimationEntry } from './J3DLoader';
+import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, Joint, JointTransformInfo, ANK1, ANK1JointAnimationEntry, J3DLoadFlags } from './J3DLoader';
 import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
-import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData } from './J3DGraphBase';
-import { mat4 } from 'gl-matrix';
+import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase';
+import { mat4, ReadonlyVec3 } from 'gl-matrix';
 import { computeModelMatrixSRT } from '../../../MathHelpers';
 import { getPointHermite } from '../../../Spline';
 
@@ -295,11 +295,33 @@ export function removeTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1)
 
 const scratchTransform = new JointTransformInfo();
 
-export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransformInfo): void {
+export function calcJointMatrixMayaSSC(dst: mat4, parentScale: ReadonlyVec3): void {
+    const parentScaleX = 1.0 / parentScale[0];
+    dst[0] *= parentScaleX;
+    dst[4] *= parentScaleX;
+    dst[8] *= parentScaleX;
+
+    const parentScaleY = 1.0 / parentScale[1];
+    dst[1] *= parentScaleY;
+    dst[5] *= parentScaleY;
+    dst[9] *= parentScaleY;
+
+    const parentScaleZ = 1.0 / parentScale[2];
+    dst[2] *= parentScaleZ;
+    dst[6] *= parentScaleZ;
+    dst[10] *= parentScaleZ;
+}
+
+export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransformInfo, loadFlags: J3DLoadFlags, jnt1: Joint, shapeInstanceState: ShapeInstanceState): void {
     computeModelMatrixSRT(dst,
         transform.scaleX, transform.scaleY, transform.scaleZ,
         transform.rotationX, transform.rotationY, transform.rotationZ,
         transform.translationX, transform.translationY, transform.translationZ);
+
+    const matrixCalcFlag = (loadFlags & J3DLoadFlags.ScalingRule_Mask);
+    if (matrixCalcFlag === J3DLoadFlags.ScalingRule_Maya && !!(jnt1.calcFlags & 0x01)) {
+        calcJointMatrixMayaSSC(dst, shapeInstanceState.parentScale);
+    }
 }
 
 export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number): void {
@@ -321,17 +343,21 @@ export class J3DJointMatrixAnm {
         this.frameCtrl = frameCtrl;
     }
 
-    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
-        const animFrame = this.frameCtrl.currentTimeInFrames;
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number, shapeInstanceState: ShapeInstanceState): void {
         const entry = this.ank1.jointAnimationEntries[i];
         const jnt1 = modelData.bmd.jnt1.joints[i];
 
+        let transform: JointTransformInfo;
         if (entry !== undefined) {
+            const animFrame = this.frameCtrl.currentTimeInFrames;
             calcJointAnimationTransform(scratchTransform, entry, animFrame);
-            calcJointMatrixFromTransform(dst, scratchTransform);
+            transform = scratchTransform;
         } else {
-            calcJointMatrixFromTransform(dst, jnt1.transform);
+            transform = jnt1.transform;
         }
+
+        const loadFlags = modelData.bmd.inf1.loadFlags;
+        calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
     }
 }
 

@@ -1,5 +1,5 @@
 
-import { J3DModelInstance, BMDModelMaterialData, JointMatrixCalcNoAnm, J3DModelData, MaterialInstance } from "./J3DGraphBase";
+import { J3DModelInstance, BMDModelMaterialData, JointMatrixCalcNoAnm, J3DModelData, MaterialInstance, ShapeInstanceState } from "./J3DGraphBase";
 import AnimationController from "../../../AnimationController";
 import { assert } from "../../../util";
 import { Camera } from "../../../Camera";
@@ -42,18 +42,22 @@ class JointMatrixCalcANK1 {
     constructor(public animationController: AnimationController, public ank1: ANK1) {
     }
 
-    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.ank1, frame);
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number, shapeInstanceState: ShapeInstanceState): void {
         const entry = this.ank1.jointAnimationEntries[i];
+        const jnt1 = modelData.bmd.jnt1.joints[i];
 
+        let transform: JointTransformInfo;
         if (entry !== undefined) {
+            const frame = this.animationController.getTimeInFrames();
+            const animFrame = getAnimFrame(this.ank1, frame);
             calcJointAnimationTransform(scratchTransform, entry, animFrame);
-            calcJointMatrixFromTransform(dst, scratchTransform);
+            transform = scratchTransform;
         } else {
-            const jnt1 = modelData.bmd.jnt1.joints[i];
-            calcJointMatrixFromTransform(dst, jnt1.transform);
+            transform = jnt1.transform;
         }
+
+        const loadFlags = modelData.bmd.inf1.loadFlags;
+        calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
     }
 }
 

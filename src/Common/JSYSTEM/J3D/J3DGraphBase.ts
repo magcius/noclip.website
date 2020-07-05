@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, J3DLoadFlags } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
 import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
@@ -41,7 +41,7 @@ export class ShapeInstanceState {
     public worldToViewMatrix = mat4.create();
 
     // Used while calculating joint matrices.
-    public currentScale = vec3.create();
+    // public currentScale = vec3.create();
     public parentScale = vec3.create();
 }
 
@@ -925,15 +925,17 @@ export class J3DModelData {
 }
 
 export interface JointMatrixCalc {
-    calcJointMatrix(dst: mat4, modelData: J3DModelData, jointIndex: number): void;
+    calcJointMatrix(dst: mat4, modelData: J3DModelData, jointIndex: number, shapeInstanceState: ShapeInstanceState): void;
 }
 
 // TODO(jstpierre): Support better recursive calculation here, SoftImage modes, etc.
 
 export class JointMatrixCalcNoAnm {
-    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number, shapeInstanceState: ShapeInstanceState): void {
         const jnt1 = modelData.bmd.jnt1.joints[i];
-        calcJointMatrixFromTransform(dst, jnt1.transform);
+        const transform: JointTransformInfo = jnt1.transform;
+        const loadFlags = modelData.bmd.inf1.loadFlags;
+        calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
     }
 }
 
@@ -1246,32 +1248,46 @@ export class J3DModelInstance {
     }
 
     private calcJointAnimRecurse(node: JointTreeNode, parentNode: JointTreeNode | null): void {
+        const shapeInstanceState = this.shapeInstanceState;
+
         // Our root node is a dummy node that houses a special model matrix.
         if (parentNode !== null) {
             const jointIndex = node.jointIndex;
             assert(jointIndex >= 0);
 
-            const dstToParent = this.shapeInstanceState.jointToParentMatrixArray[jointIndex];
-            this.jointMatrixCalc.calcJointMatrix(dstToParent, this.modelData, jointIndex);
+            const dstToParent = shapeInstanceState.jointToParentMatrixArray[jointIndex];
+            this.jointMatrixCalc.calcJointMatrix(dstToParent, this.modelData, jointIndex, shapeInstanceState);
 
             if (this.jointMatrixCalcCallback !== null)
                 this.jointMatrixCalcCallback(dstToParent, this.modelData, jointIndex);
-            const dstToWorld = this.shapeInstanceState.jointToWorldMatrixArray[jointIndex];
+            const dstToWorld = shapeInstanceState.jointToWorldMatrixArray[jointIndex];
 
             const parentJointIndex = parentNode.jointIndex;
             if (parentJointIndex < 0) {
                 mat4.mul(dstToWorld, this.modelMatrix, dstToParent);
             } else {
-                const parentJointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrixArray[parentJointIndex];
+                const parentJointToWorldMatrix = shapeInstanceState.jointToWorldMatrixArray[parentJointIndex];
                 mat4.mul(dstToWorld, parentJointToWorldMatrix, dstToParent);
             }
         }
 
-        for (let i = 0; i < node.children.length; i++)
+        const parentScaleX = shapeInstanceState.parentScale[0];
+        const parentScaleY = shapeInstanceState.parentScale[1];
+        const parentScaleZ = shapeInstanceState.parentScale[2];
+
+        for (let i = 0; i < node.children.length; i++) {
+            shapeInstanceState.parentScale[0] = parentScaleX;
+            shapeInstanceState.parentScale[1] = parentScaleY;
+            shapeInstanceState.parentScale[2] = parentScaleZ;
+
             this.calcJointAnimRecurse(node.children[i], node);
+        }
     }
 
     public calcJointAnim(): void {
+        vec3.set(this.shapeInstanceState.parentScale, 1.0, 1.0, 1.0);
+        // vec3.set(this.shapeInstanceState.currentScale, 1.0, 1.0, 1.0);
+
         this.calcJointAnimRecurse(this.modelData.rootJointTreeNode, null);
     }
 
