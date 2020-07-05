@@ -106,6 +106,7 @@ export const enum GravityTypeMask {
 const enum GravityPower { Light, Normal, Heavy }
 
 export abstract class PlanetGravity {
+    public l_id = -1;
     public range = -1.0;
     public distant = 0.0;
     public priority = 0.0;
@@ -189,6 +190,8 @@ export abstract class PlanetGravity {
 }
 
 function settingGravityParamFromJMap(gravity: PlanetGravity, infoIter: JMapInfoIter): void {
+    gravity.l_id = fallback(infoIter.getValueNumber('l_id'), -1);
+
     const range = infoIter.getValueNumberNoInit('Range');
     if (range !== null)
         gravity.range = range;

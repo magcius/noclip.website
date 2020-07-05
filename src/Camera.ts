@@ -1,8 +1,8 @@
 
-import { mat4, vec3, vec4, quat } from 'gl-matrix';
+import { mat4, vec3, vec4, quat, ReadonlyVec3 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis, getMatrixAxisX } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
@@ -299,6 +299,21 @@ export interface CameraControllerClass {
     new(): CameraController;
 }
 
+function setMtxAxisXYZ(dst: mat4, x: ReadonlyVec3, y: ReadonlyVec3, z: ReadonlyVec3): void {
+    dst[0] = x[0];
+    dst[1] = x[1];
+    dst[2] = x[2];
+    dst[3] = 0.0;
+    dst[4] = y[0];
+    dst[5] = y[1];
+    dst[6] = y[2];
+    dst[7] = 0.0;
+    dst[8] = z[0];
+    dst[9] = z[1];
+    dst[10] = z[2];
+    dst[11] = 0.0;
+}
+
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
@@ -362,8 +377,21 @@ export class FPSCameraController implements CameraController {
                 this.worldForward = vec3.create();
                 getMatrixAxisZ(this.worldForward, camera.worldMatrix);
 
-                if (inputManager.isKeyDownEventTriggered('Numpad4'))
+                if (inputManager.isKeyDownEventTriggered('Numpad4')) {
                     vec3QuantizeMajorAxis(this.worldForward, this.worldForward);
+
+                    // Re-align camera view
+                    getMatrixAxisX(scratchVec3a, camera.worldMatrix);
+
+                    vec3.cross(scratchVec3b, this.worldForward, scratchVec3a);
+                    vec3.normalize(scratchVec3b, scratchVec3b);
+
+                    vec3.cross(scratchVec3a, scratchVec3b, this.worldForward);
+                    vec3.normalize(scratchVec3a, scratchVec3a);
+
+                    setMtxAxisXYZ(camera.worldMatrix, scratchVec3a, scratchVec3b, this.worldForward);
+                    updated = true;
+                }
             } else {
                 // Toggle.
                 this.worldForward = null;

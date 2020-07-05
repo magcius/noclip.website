@@ -13,13 +13,14 @@ import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { connectToScene, getRandomFloat, calcGravityVector, connectToSceneMapObjDecoration, makeMtxUpNoSupportPos } from '../ActorUtil';
 import { DrawType, MovementType } from '../NameObj';
 import { ViewerRenderInput } from '../../viewer';
-import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants, saturate, computeModelMatrixS } from '../../MathHelpers';
+import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants, saturate, computeModelMatrixS, computeModelMatrixSRT } from '../../MathHelpers';
 import { GfxRenderInstManager, setSortKeyLayer, GfxRendererLayer, setSortKeyDepth } from '../../gfx/render/GfxRenderer';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../../Camera';
 import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType } from '../Gravity';
 import { isFirstStep } from '../Spine';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
+import { assertExists } from '../../util';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -455,7 +456,7 @@ class GravityExplainer2_PointGravity extends LiveActor {
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
-        if (!this.gravity.alive)
+        if (!this.gravity.alive || !this.gravity.switchActive)
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
@@ -681,7 +682,7 @@ class GravityExplainer2_ParallelGravity extends LiveActor {
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
-        if (!this.gravity.alive)
+        if (!this.gravity.alive || !this.gravity.switchActive)
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
@@ -735,17 +736,31 @@ export class GravityExplainer2 extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2');
     }
 
+    private mangleGravitiesForVideoHacks(sceneObjHolder: SceneObjHolder): void {
+        const stageName = sceneObjHolder.scenarioData.getMasterZoneFilename();
+
+        if (stageName === 'IceVolcanoGalaxy') {
+            const g0 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 0 && gravity.pos[0] === 15400)) as ParallelGravity;
+            computeModelMatrixSRT(g0.boxMtx!, 9000, 5000, 3000, 0, 0, 0, 18400, 1700, -96100);
+
+            const g10 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 10 && gravity.pos[0] === 15100)) as ParallelGravity;
+            computeModelMatrixSRT(g10.boxMtx!, 1000, 3000, 1000, 0, 0, 0, 15300, 0, -99800);
+        }
+    }
+
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
-        const gravities = sceneObjHolder.planetGravityManager!.gravities;
+        this.mangleGravitiesForVideoHacks(sceneObjHolder);
 
+        const gravities = sceneObjHolder.planetGravityManager!.gravities;
         for (let i = 0; i < gravities.length; i++) {
-            const grav = gravities[i];
-            if (grav instanceof PointGravity)
-                this.models.push(new GravityExplainer2_PointGravity(this.zoneAndLayer, sceneObjHolder, grav));
-            else if (grav instanceof ParallelGravity)
-                this.models.push(new GravityExplainer2_ParallelGravity(this.zoneAndLayer, sceneObjHolder, grav));
+            const gravity = gravities[i];
+
+            if (gravity instanceof PointGravity)
+                this.models.push(new GravityExplainer2_PointGravity(this.zoneAndLayer, sceneObjHolder, gravity));
+            else if (gravity instanceof ParallelGravity)
+                this.models.push(new GravityExplainer2_ParallelGravity(this.zoneAndLayer, sceneObjHolder, gravity));
         }
     }
 
