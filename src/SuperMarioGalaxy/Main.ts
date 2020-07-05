@@ -1055,7 +1055,7 @@ export class SceneObjHolder {
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
 
-    public gravityExplainer: GravityExplainer2;
+    public gravityExplainer: any;
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)

@@ -6,19 +6,20 @@ import { LiveActor, ZoneAndLayer, makeMtxTRSFromActor } from "../LiveActor";
 import { TDDraw, TSDraw } from "../DDraw";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
 import { vec3, mat4 } from "gl-matrix";
-import { colorNewCopy, White, colorFromHSL, colorNewFromRGBA, colorFromRGBA, colorCopy } from "../../Color";
+import { colorNewCopy, White, colorFromHSL, colorNewFromRGBA, colorFromRGBA, colorCopy, colorFromRGBA8 } from "../../Color";
 import { dfShow } from "../../DebugFloaters";
 import { SceneObjHolder, getDeltaTimeFrames } from "../Main";
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { connectToScene, getRandomFloat, calcGravityVector, connectToSceneMapObjDecoration } from '../ActorUtil';
 import { DrawType, MovementType } from '../NameObj';
 import { ViewerRenderInput } from '../../viewer';
-import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants } from '../../MathHelpers';
+import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants, saturate, computeModelMatrixS } from '../../MathHelpers';
 import { GfxRenderInstManager, setSortKeyLayer, GfxRendererLayer, setSortKeyDepth } from '../../gfx/render/GfxRenderer';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../../Camera';
 import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType } from '../Gravity';
 import { isFirstStep } from '../Spine';
+import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -71,7 +72,7 @@ export class GravityExplainer extends LiveActor {
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
         mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.RASA, GX.CC.RASC);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
@@ -93,14 +94,13 @@ export class GravityExplainer extends LiveActor {
 
         for (let i = 0; i < gravities.length; i++) {
             const grav = gravities[i];
-            if (grav.constructor.name !== 'DiskGravity')
-                continue;
-
-            const count = 50;
+            let count = 50;
+            if (i === 1)
+                count = 1000;
 
             for (let j = 0; j < count; j++) {
                 const arrow = new GravityExplainerArrow();
-                arrow.scale = 0.1;
+                arrow.scale = 0.5;
 
                 grav.generateRandomPoint(arrow.coord);
                 vec3.copy(arrow.pos, arrow.coord);
@@ -116,10 +116,23 @@ export class GravityExplainer extends LiveActor {
         }
     }
 
+    public globalFade = 0.0;
+    public globalFadeStartTime = -1;
+
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
         const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+
+        if (window.main.viewer.inputManager.isKeyDownEventTriggered('KeyY')) {
+            this.globalFadeStartTime = viewerInput.time;
+        }
+
+        if (this.globalFadeStartTime >= 0.0) {
+            this.globalFade = saturate((viewerInput.time - this.globalFadeStartTime) / 2000.0);
+            if (this.globalFade >= 1.0)
+                this.globalFadeStartTime = -1;
+        }
 
         for (let i = 0; i < this.arrows.length; i++) {
             const arrow = this.arrows[i];
@@ -127,7 +140,7 @@ export class GravityExplainer extends LiveActor {
             calcGravityVector(sceneObjHolder, this, arrow.coord, arrow.gravityVec);
             vec3.normalize(arrow.gravityVec, arrow.gravityVec);
 
-            // vec3.scaleAndAdd(arrow.pos, arrow.pos, arrow.gravityVec, arrow.speed * deltaTimeFrames);
+            vec3.scaleAndAdd(arrow.pos, arrow.pos, arrow.gravityVec, arrow.speed * deltaTimeFrames);
             arrow.time += deltaTimeFrames;
 
             if (arrow.time >= arrow.lifetime) {
@@ -144,7 +157,7 @@ export class GravityExplainer extends LiveActor {
             else
                 arrow.color.a = 1.0;
 
-            arrow.color.a = 1.0;
+            arrow.color.a *= this.globalFade;
         }
     }
 
@@ -299,137 +312,7 @@ class GravityExplainerParticle extends LiveActor<GravityExplainerParticleNrv> {
     }
 }
 
-const enum GravityExplainer2ColorScheme {
-    Blue, Red,
-}
-
-abstract class GravityExplainer2Base<T extends PlanetGravity> extends LiveActor {
-    private materialHelper: GXMaterialHelperGfx;
-    private sdraw = new TSDraw();
-    private particles: GravityExplainerParticle[] = [];
-
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, protected gravity: T) {
-        super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2Base');
-
-        this.sdraw.setVtxDesc(GX.Attr.POS, true);
-        this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-
-        this.initPlacementAndArgs();
-
-        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
-    }
-
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
-        super.initAfterPlacement(sceneObjHolder);
-        this.drawAndUploadModel(sceneObjHolder, this.sdraw);
-    }
-
-
-    protected abstract initPlacementAndArgs(): void;
-    protected abstract drawAndUploadModel(sceneObjHolder: SceneObjHolder, ddraw: TSDraw): void;
-
-    @dfShow()
-    private c0 = colorNewFromRGBA(0.0, 0.0, 0.0, 1.0);
-    @dfShow()
-    private c1 = colorNewFromRGBA(0.8, 0.8, 0.8, 0.3);
-    @dfShow()
-    private amb0Alpha = -20.0;
-    @dfShow()
-    private light2Alpha = 120.0;
-
-    protected setUseNormal(v: boolean): void {
-        const mb = new GXMaterialBuilder('GravityExplainer');
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.RASA, GX.CC.ZERO);
-        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.A1, GX.CA.RASA, GX.CA.ZERO);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
-        mb.setZMode(true, GX.CompareType.LEQUAL, false);
-        mb.setCullMode(GX.CullMode.BACK);
-        mb.setUsePnMtxIdx(false);
-
-        if (v) {
-            mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 4, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
-
-            this.sdraw.setVtxDesc(GX.Attr.NRM, true);
-            this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
-        } else {
-            mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
-
-            this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
-            this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
-        }
-
-        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
-    }
-
-    protected setColorScheme(scheme: GravityExplainer2ColorScheme): void {
-        return;
-
-        if (scheme === GravityExplainer2ColorScheme.Blue) {
-            colorFromRGBA(this.c0, 1.0, 0.69, 0.67, 1.0);
-            colorFromRGBA(this.c1, 0.38, 0.33, 0.31, 0.1);
-        }
-    }
-
-    protected spawnParticle(sceneObjHolder: SceneObjHolder, pos: vec3): void {
-        this.particles.push(new GravityExplainerParticle(this.zoneAndLayer, sceneObjHolder, this.gravity, pos));
-    }
-
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        super.movement(sceneObjHolder, viewerInput);
-        for (let i = 0; i < this.particles.length; i++)
-            this.particles[i].visibleAlive = this.gravity.alive;
-    }
-
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        super.draw(sceneObjHolder, renderInstManager, viewerInput);
-
-        if (!this.gravity.alive)
-            return;
-
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.sortKey = setSortKeyLayer(template.sortKey, GfxRendererLayer.TRANSLUCENT);
-
-        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera, this.translation);
-        template.sortKey = setSortKeyDepth(template.sortKey, depth);
-
-        // template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
-        makeMtxTRSFromActor(scratchMatrix, this);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
-
-        const device = sceneObjHolder.modelCache.device;
-
-        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-
-        const light2 = materialParams.u_Lights[2];
-        vec3.set(light2.Position, 0, 0, 0);
-        vec3.set(light2.Direction, 0, -1, 0);
-        vec3.set(light2.CosAtten, 1, 0, 0);
-        vec3.set(light2.DistAtten, 1, 0, 0);
-        colorFromRGBA(light2.Color, 0, 0, 0, this.light2Alpha);
-
-        colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
-        colorCopy(materialParams.u_Color[ColorKind.C1], this.c1);
-        colorFromRGBA(materialParams.u_Color[ColorKind.AMB0], 0, 0, 0, this.amb0Alpha);
-        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
-
-        const renderInst = renderInstManager.newRenderInst();
-        this.sdraw.setOnRenderInst(renderInst);
-        renderInstManager.submitRenderInst(renderInst);
-
-        renderInstManager.popTemplateRenderInst();
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.sdraw.destroy(device);
-    }
-}
-
-function drawSphere(ddraw: TSDraw, numY: number = 200, numX: number = numY): void {
+function sphereModel(ddraw: TSDraw, numY: number = 50, numX: number = numY): void {
     function spherePoint(dst: vec3, y: number, x: number): void {
         const theta = MathConstants.TAU * (x / numX);
         const phi = MathConstants.TAU * (((1.0 - y / numY)) - 0.5) / 2;
@@ -454,62 +337,213 @@ function drawSphere(ddraw: TSDraw, numY: number = 200, numX: number = numY): voi
     }
 }
 
-class GravityExplainer_PointGravity extends GravityExplainer2Base<PointGravity> {
-    protected initPlacementAndArgs(): void {
-        vec3.copy(this.translation, this.gravity.pos);
-        const scale = this.gravity.range;
-        vec3.set(this.scale, scale, scale, scale);
+class SphereModel {
+    public sdraw = new TSDraw();
+
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, public numY: number = 50, public numX: number = numY) {
+        this.sdraw.setVtxDesc(GX.Attr.POS, true);
+        this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+
+        this.sdraw.setVtxDesc(GX.Attr.NRM, true);
+        this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
+
+        this.sdraw.beginDraw();
+        sphereModel(this.sdraw);
+        this.sdraw.endDraw(device, renderCache);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
-        super.initAfterPlacement(sceneObjHolder);
-        return;
-
-        for (let i = 0; i < 50; i++) {
-            this.gravity.generateRandomPoint(scratchVec3);
-            this.spawnParticle(sceneObjHolder, scratchVec3);
-        }
-    }
-
-    protected drawAndUploadModel(sceneObjHolder: SceneObjHolder, ddraw: TSDraw): void {
-        this.setColorScheme(GravityExplainer2ColorScheme.Blue);
-        this.setUseNormal(true);
-
-        ddraw.beginDraw();
-        drawSphere(ddraw);
-        ddraw.endDraw(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache);
+    public destroy(device: GfxDevice): void {
+        this.sdraw.destroy(device);
     }
 }
 
-class GravityExplainer_ParallelGravity extends GravityExplainer2Base<ParallelGravity> {
+class GravityExplainer2_PointGravity extends LiveActor {
+    private materialHelper: GXMaterialHelperGfx;
+    private sphereModel: SphereModel;
+
+    @dfShow()
+    private c0 = colorNewFromRGBA(0.0, 0.0, 0.0, 1.0);
+    @dfShow()
+    private c1 = colorNewFromRGBA(0.8, 0.8, 0.8, 0.3);
+    @dfShow()
+    private amb0Alpha = -20.0;
+    @dfShow()
+    private light2Alpha = 120.0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, protected gravity: PointGravity) {
+        super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2_PointGravity');
+
+        vec3.copy(this.translation, this.gravity.pos);
+        const scale = this.gravity.range;
+        vec3.set(this.scale, scale, scale, scale);
+
+        const mb = new GXMaterialBuilder('GravityExplainer');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 4, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.RASA, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.A1, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setCullMode(GX.CullMode.BACK);
+        mb.setUsePnMtxIdx(false);
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+        this.sphereModel = new SphereModel(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache);
+
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
+
+        colorFromRGBA(this.c0, 0.7, 0.8, 1.0, 1.0);
+        colorFromRGBA(this.c1, 0.38, 0.33, 0.31, 0.0);
+        this.amb0Alpha = 0.2;
+        this.light2Alpha = 0.9;
+    }
+
     protected initPlacementAndArgs(): void {
     }
 
-    private drawBoxPlane(ddraw: TSDraw, x: number, y: number, z: number): void {
-        vec3.set(scratchVec3a, x, y, z);
-        if (y === 0)
-            vec3.set(scratchVec3b, 0, 1, 0);
+    private getPulseAlpha(t: number): number {
+        if (t <= 0.1)
+            return invlerp(0.0, 0.1, t);
+        else if (t <= 0.6)
+            return 1.0;
         else
-            vec3.set(scratchVec3b, 0, 0, 1);
-        vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
-        vec3.cross(scratchVec3b, scratchVec3a, scratchVec3c);
+            return saturate(invlerp(0.8, 0.6, t));
+    }
 
+    private drawSphere(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, t: number): void {
+        return;
+
+        const renderInst = renderInstManager.newRenderInst();
+        this.sphereModel.sdraw.setOnRenderInst(renderInst);
+
+        const device = sceneObjHolder.modelCache.device;
+
+        if (this.gravity.inverse)
+            t = 1.0 - t;
+
+        const scale = 1.0 - t;
+        const alpha = this.getPulseAlpha(t);
+
+        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        const light2 = materialParams.u_Lights[2];
+        vec3.set(light2.Position, 0, 0, 0);
+        vec3.set(light2.Direction, 0, -1, 0);
+        vec3.set(light2.CosAtten, 1, 0, 0);
+        vec3.set(light2.DistAtten, 1, 0, 0);
+        colorFromRGBA(light2.Color, 0, 0, 0, this.light2Alpha);
+
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.c1);
+
+        materialParams.u_Color[ColorKind.C0].a *= alpha;
+        materialParams.u_Color[ColorKind.C1].a *= alpha;
+
+        colorFromRGBA(materialParams.u_Color[ColorKind.AMB0], 0, 0, 0, this.amb0Alpha);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+
+        makeMtxTRSFromActor(scratchMatrix, this);
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMatrix);
+        computeModelMatrixS(scratchMatrix, scale);
+        mat4.mul(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], scratchMatrix);
+        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!this.gravity.alive)
+            return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.sortKey = setSortKeyLayer(template.sortKey, GfxRendererLayer.TRANSLUCENT);
+
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera, this.translation);
+        template.sortKey = setSortKeyDepth(template.sortKey, depth);
+
+        const duration = 5000.0, numRings = 4;
+        for (let i = 0; i < numRings; i++) {
+            const t = ((viewerInput.time + (i * duration / numRings)) / duration) % 1.0;
+            this.drawSphere(sceneObjHolder, renderInstManager, viewerInput, t);
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.sphereModel.destroy(device);
+    }
+}
+
+class GravityExplainer_ParallelGravity extends LiveActor {
+    private materialHelper: GXMaterialHelperGfx;
+    private sdraw = new TSDraw();
+
+    @dfShow()
+    private c0 = colorNewFromRGBA(0.0, 0.0, 0.0, 1.0);
+    @dfShow()
+    private c1 = colorNewFromRGBA(0.8, 0.8, 0.8, 0.3);
+
+    private segmentSpacing = 1000.0;
+    private segmentHeight = 100.0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, protected gravity: ParallelGravity) {
+        super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2_PointGravity');
+
+        this.sdraw.setVtxDesc(GX.Attr.POS, true);
+        this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+
+        this.sdraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+
+        const mb = new GXMaterialBuilder('GravityExplainer');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.RASA, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.A1, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setCullMode(GX.CullMode.NONE);
+        mb.setUsePnMtxIdx(false);
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
+
+        /*
+        colorFromRGBA(this.c0, 0.7, 0.8, 1.0, 0.2);
+        colorFromRGBA(this.c1, 0.38, 0.33, 0.31, 0.0);
+        */
+
+        colorFromRGBA8(this.c0, 0x5A55FF00);
+        colorCopy(this.c0, this.c0, 1.0);
+        colorCopy(this.c1, this.c0, 0.0);
+
+        this.sdraw.beginDraw();
+        if (this.gravity.rangeType === ParallelGravityRangeType.Box)
+            this.drawBox(this.sdraw);
+        this.sdraw.endDraw(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache);
+    }
+
+    private drawBoxFloor(ddraw: TSDraw): void {
         const boxMtx = this.gravity.boxMtx!;
         function drawBoxPoint(iu: number, iv: number): void {
-            vec3.copy(scratchVec3, scratchVec3a);
-            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3c, iu);
-            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3b, iv);
-            transformVec3Mat4w1(scratchVec3, boxMtx, scratchVec3);
-
-            ddraw.position3vec3(scratchVec3);
-
+            ddraw.position3f32(iu, 0.0, iv);
             let alpha = 0xFF;
             if (Math.max(Math.abs(iu), Math.abs(iv)) >= 1.0)
-                alpha = 0x80;
+                alpha = 0xD0;
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
         }
 
-        const margin = 1.0;
+        const margin = 0.5;
         ddraw.begin(GX.Command.DRAW_QUADS);
         // top
         drawBoxPoint(-(1.0), -(1.0));
@@ -537,26 +571,120 @@ class GravityExplainer_ParallelGravity extends GravityExplainer2Base<ParallelGra
         ddraw.end();
     }
 
-    private drawBox(ddraw: TSDraw): void {
-        this.drawBoxPlane(ddraw, -1, 0, 0);
-        this.drawBoxPlane(ddraw,  1, 0, 0);
-        this.drawBoxPlane(ddraw, 0, -1, 0);
-        this.drawBoxPlane(ddraw, 0,  1, 0);
-        this.drawBoxPlane(ddraw, 0, 0, -1);
-        this.drawBoxPlane(ddraw, 0, 0,  1);
-    }
+    private drawBoxSide(ddraw: TSDraw, x: number, z: number): void {
+        vec3.set(scratchVec3a, x, 0, z);
+        vec3.set(scratchVec3b, 0, 1, 0);
+        vec3.set(scratchVec3c, -z, 0, x);
 
-    protected drawAndUploadModel(sceneObjHolder: SceneObjHolder, ddraw: TSDraw): void {
-        this.setColorScheme(GravityExplainer2ColorScheme.Blue);
-        this.setUseNormal(false);
+        function drawBoxPoint(iu: number, iv: number, alpha: number): void {
+            vec3.copy(scratchVec3, scratchVec3a);
+            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3c, iu);
+            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3b, iv);
 
-        ddraw.beginDraw();
-
-        if (this.gravity.rangeType === ParallelGravityRangeType.Box) {
-            this.drawBox(ddraw);
+            ddraw.position3vec3(scratchVec3);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
         }
 
-        ddraw.endDraw(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache);
+        ddraw.begin(GX.Command.DRAW_QUADS);
+        drawBoxPoint(-1.0, 0.0, 0x00);
+        drawBoxPoint(-1.0, 1.0, 0x00);
+        drawBoxPoint( 1.0, 1.0, 0x00);
+        drawBoxPoint( 1.0, 0.0, 0x00);
+        ddraw.end();
+    }
+
+    private drawBox(ddraw: TSDraw): void {
+        this.drawBoxFloor(ddraw);
+        this.drawBoxSide(ddraw, -1, 0);
+        this.drawBoxSide(ddraw,  1, 0);
+        this.drawBoxSide(ddraw, 0, -1);
+        this.drawBoxSide(ddraw, 0,  1);
+    }
+
+    private getPulseAlpha(t: number): number {
+        if (t <= 0.1)
+            return invlerp(0.0, 0.1, t);
+        else if (t <= 0.9)
+            return 1.0;
+        else
+            return saturate(invlerp(1.0, 0.9, t));
+    }
+
+    private drawSegment(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, t: number, scaleFactor: number): void {
+        const renderInst = renderInstManager.newRenderInst();
+        this.sdraw.setOnRenderInst(renderInst);
+
+        const device = sceneObjHolder.modelCache.device;
+
+        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        const alpha = this.getPulseAlpha(t);
+
+        colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
+        colorCopy(materialParams.u_Color[ColorKind.C1], this.c1);
+
+        materialParams.u_Color[ColorKind.C0].a *= alpha;
+        materialParams.u_Color[ColorKind.C1].a *= alpha;
+
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+
+        if (this.gravity.rangeType === ParallelGravityRangeType.Box) {
+            mat4.copy(scratchMatrix, this.gravity.boxMtx!);
+            const y = (t - 0.5) * 2.0;
+            vec3.set(scratchVec3, 0, -y, 0);
+            mat4.translate(scratchMatrix, scratchMatrix, scratchVec3);
+
+            vec3.set(scratchVec3, 1.0, this.segmentHeight * scaleFactor, 1.0);
+            mat4.scale(scratchMatrix, scratchMatrix, scratchVec3);
+
+            mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMatrix);
+        }
+
+        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!this.gravity.alive)
+            return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.sortKey = setSortKeyLayer(template.sortKey, GfxRendererLayer.TRANSLUCENT);
+
+        const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera, this.translation);
+        template.sortKey = setSortKeyDepth(template.sortKey, depth);
+
+        const duration = 10000.0;
+
+        let numSegments = 0, scaleFactor = 1.0;
+
+        let segmentSpacing = this.segmentSpacing;
+        if (this.gravity.rangeType === ParallelGravityRangeType.Box) {
+            const boxMtx = this.gravity.boxMtx!;
+            const scaleY = Math.hypot(boxMtx[4], boxMtx[5], boxMtx[6]);
+            scaleFactor = 1.0 / scaleY;
+
+            if (scaleY < segmentSpacing) {
+                segmentSpacing = scaleY / 5.0;
+                this.segmentHeight = 20;
+            }
+
+            numSegments = Math.min(scaleY / segmentSpacing, 10.0);
+        }
+
+        for (let i = 0; i < numSegments; i++) {
+            const t = ((viewerInput.time + (i * duration / numSegments)) / duration) % 1.0;
+            this.drawSegment(sceneObjHolder, renderInstManager, viewerInput, t, scaleFactor);
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.sdraw.destroy(device);
     }
 }
 
@@ -575,13 +703,13 @@ export class GravityExplainer2 extends LiveActor {
         for (let i = 0; i < gravities.length; i++) {
             const grav = gravities[i];
             if (grav instanceof PointGravity)
-                this.models.push(new GravityExplainer_PointGravity(this.zoneAndLayer, sceneObjHolder, grav));
+                this.models.push(new GravityExplainer2_PointGravity(this.zoneAndLayer, sceneObjHolder, grav));
             else if (grav instanceof ParallelGravity)
                 this.models.push(new GravityExplainer_ParallelGravity(this.zoneAndLayer, sceneObjHolder, grav));
         }
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
-        GravityExplainerParticle.requestArchives(sceneObjHolder);
+        // GravityExplainerParticle.requestArchives(sceneObjHolder);
     }
 }
