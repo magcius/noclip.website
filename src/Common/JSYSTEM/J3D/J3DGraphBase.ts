@@ -1,8 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, VAF1, TPT1, bindTPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, getAnimFrame, sampleAnimationData, JointTransformInfo } from './J3DLoader';
-import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, getAnimFrame, sampleAnimationData, JointTransformInfo } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
 import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
@@ -10,20 +9,19 @@ import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
 
 import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
 import { TextureMapping } from '../../../TextureHolder';
-import AnimationController from '../../../AnimationController';
 import { nArray, assert, assertExists } from '../../../util';
 import { AABB } from '../../../Geometry';
 import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
-import { ViewerRenderInput, Texture } from '../../../viewer';
+import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
 import { colorCopy, Color } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT } from '../../../MathHelpers';
+import { computeNormalMatrix, texEnvMtx } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
 import { translateSampler } from '../JUTTexture';
-import { calcJointMatrixFromTransform, calcJointAnimationTransform } from './J3DGraphAnimator';
+import { calcJointMatrixFromTransform } from './J3DGraphAnimator';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into world space.
@@ -384,33 +382,6 @@ export class MaterialInstance {
         if (this.materialData.material.translucent)
             layer |= GfxRendererLayer.TRANSLUCENT;
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
-    }
-
-    public bindTRK1(animationController: AnimationController, trk1: TRK1 | null): void {
-        for (let i: ColorKind = 0; i < ColorKind.COUNT; i++) {
-            // If the TRK1 exists, only bind new channels. This is necessary for BPK/BRK animations to coexist.
-            if (trk1 !== null) {
-                const trk1Animator = bindTRK1Animator(animationController, trk1, this.name, i);
-                if (trk1Animator !== null)
-                    this.colorCalc[i] = trk1Animator;
-            } else {
-                this.colorCalc[i] = null;
-            }
-        }
-    }
-
-    public bindTTK1(animationController: AnimationController, ttk1: TTK1 | null): void {
-        for (let i = 0; i < 8; i++) {
-            const ttk1Animator = ttk1 !== null ? bindTTK1Animator(animationController, ttk1, this.name, i) : null;
-            this.texMtxCalc[i] = ttk1Animator;
-        }
-    }
-
-    public bindTPT1(animationController: AnimationController, tpt1: TPT1 | null): void {
-        for (let i = 0; i < 8; i++) {
-            const tpt1Animator = tpt1 !== null ? bindTPT1Animator(animationController, tpt1, this.name, i) : null;
-            this.texNoCalc[i] = tpt1Animator;
-        }
     }
 
     private clampTo8Bit(color: Color): void {
@@ -959,26 +930,6 @@ export interface JointMatrixCalc {
 
 // TODO(jstpierre): Support better recursive calculation here, SoftImage modes, etc.
 
-const scratchTransform = new JointTransformInfo();
-export class JointMatrixCalcANK1 {
-    constructor(public animationController: AnimationController, public ank1: ANK1) {
-    }
-
-    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.ank1, frame);
-        const entry = this.ank1.jointAnimationEntries[i];
-
-        if (entry !== undefined) {
-            calcJointAnimationTransform(scratchTransform, entry, animFrame);
-            calcJointMatrixFromTransform(dst, scratchTransform);
-        } else {
-            const jnt1 = modelData.bmd.jnt1.joints[i];
-            calcJointMatrixFromTransform(dst, jnt1.transform);
-        }
-    }
-}
-
 export class JointMatrixCalcNoAnm {
     public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
         const jnt1 = modelData.bmd.jnt1.joints[i];
@@ -1361,102 +1312,5 @@ export class J3DModelInstance {
                 mat4.mul(dst, worldToViewMatrix, dst);
             }
         }
-    }
-}
-
-export class J3DModelInstanceSimple extends J3DModelInstance {
-    public animationController = new AnimationController();
-    public passMask: number = 0x01;
-    public ownedModelMaterialData: BMDModelMaterialData | null = null;
-    public isSkybox: boolean = false;
-
-    public setModelMaterialDataOwned(modelMaterialData: BMDModelMaterialData): void {
-        this.setModelMaterialData(modelMaterialData);
-        assert(this.ownedModelMaterialData === null);
-        this.ownedModelMaterialData = modelMaterialData;
-    }
-
-    public calcAnim(camera: Camera): void {
-        if (this.isSkybox) {
-            this.modelMatrix[12] = camera.worldMatrix[12];
-            this.modelMatrix[13] = camera.worldMatrix[13];
-            this.modelMatrix[14] = camera.worldMatrix[14];
-        }
-
-        super.calcAnim(camera);
-    }
-
-    /**
-     * Binds {@param ttk1} (texture animations) to this model instance.
-     * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindTTK1(ttk1: TTK1 | null, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTTK1(animationController, ttk1);
-    }
-
-    /**
-     * Binds {@param trk1} (color register animations) to this model instance.
-     * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindTRK1(trk1: TRK1 | null, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTRK1(animationController, trk1);
-    }
-
-    /**
-     * Binds {@param tpt1} (texture palette animations) to this model instance.
-     * TPT1 objects can be parsed from {@link BTP} files. See {@link BTP.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindTPT1(tpt1: TPT1 | null, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTPT1(animationController, tpt1);
-    }
-
-    /**
-     * Binds {@param ank1} (joint animations) to this model instance.
-     * ANK1 objects can be parsed from {@link BCK} files. See {@link BCK.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindANK1(ank1: ANK1 | null, animationController: AnimationController = this.animationController): void {
-        this.jointMatrixCalc = ank1 !== null ? new JointMatrixCalcANK1(animationController, ank1) : new JointMatrixCalcNoAnm();
-    }
-
-    // The classic public interface, for compatibility.
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.visible)
-            return;
-
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.calcAnim(viewerInput.camera);
-        this.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
-
-        // If entire model is culled away, then we don't need to render anything.
-        if (!this.isAnyShapeVisible())
-            return;
-
-        const depth = this.computeDepth(viewerInput.camera);
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.filterKey = this.passMask;
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].prepareToRenderShapes(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
-        renderInstManager.popTemplateRenderInst();
-    }
-
-    public destroy(device: GfxDevice): void {
-        super.destroy(device);
-        if (this.ownedModelMaterialData !== null)
-            this.ownedModelMaterialData.destroy(device);
     }
 }

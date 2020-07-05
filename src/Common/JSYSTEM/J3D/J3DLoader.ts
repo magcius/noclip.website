@@ -1492,38 +1492,6 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
 
     return { duration, loopMode, isMaya, uvAnimationEntries };
 }
-
-export class TTK1Animator {
-    constructor(public animationController: AnimationController, private ttk1: TTK1, private animationEntry: TTK1AnimationEntry) {}
-
-    public calcTexMtx(dst: mat4): void {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.ttk1, frame);
-
-        const scaleS = sampleAnimationData(this.animationEntry.scaleS, animFrame);
-        const scaleT = sampleAnimationData(this.animationEntry.scaleT, animFrame);
-        const rotation = sampleAnimationData(this.animationEntry.rotationQ, animFrame);
-        const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
-        const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
-
-        if (this.ttk1.isMaya) {
-            calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
-        } else {
-            const centerS = this.animationEntry.centerS;
-            const centerT = this.animationEntry.centerT;
-            const centerQ = this.animationEntry.centerQ;
-            calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-        }
-    }
-}
-
-export function bindTTK1Animator(animationController: AnimationController, ttk1: TTK1, materialName: string, texGenIndex: number): TTK1Animator | null {
-    const animationEntry = ttk1.uvAnimationEntries.find((entry) => entry.materialName === materialName && entry.texGenIndex === texGenIndex);
-    if (animationEntry === undefined)
-        return null;
-
-    return new TTK1Animator(animationController, ttk1, animationEntry);
-}
 //#endregion
 //#region BTK
 export class BTK {
@@ -1632,28 +1600,6 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     }
 
     return { duration, loopMode, animationEntries };
-}
-
-export class TRK1Animator {
-    constructor(public animationController: AnimationController, private trk1: TRK1, private animationEntry: TRK1AnimationEntry) {}
-
-    public calcColor(dst: Color): void {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.trk1, frame);
-
-        dst.r = sampleAnimationData(this.animationEntry.r, animFrame);
-        dst.g = sampleAnimationData(this.animationEntry.g, animFrame);
-        dst.b = sampleAnimationData(this.animationEntry.b, animFrame);
-        dst.a = sampleAnimationData(this.animationEntry.a, animFrame);
-    }
-}
-
-export function bindTRK1Animator(animationController: AnimationController, trk1: TRK1, materialName: string, colorKind: ColorKind): TRK1Animator | null {
-    const animationEntry = trk1.animationEntries.find((entry) => entry.materialName === materialName && entry.colorKind === colorKind);
-    if (animationEntry === undefined)
-        return null;
-
-    return new TRK1Animator(animationController, trk1, animationEntry);
 }
 //#endregion
 //#region BRK
@@ -1855,28 +1801,6 @@ function readTPT1Chunk(buffer: ArrayBufferSlice): TPT1 {
     }
 
     return { duration, loopMode, animationEntries };
-}
-
-export class TPT1Animator { 
-    constructor(public animationController: AnimationController, private tpt1: TPT1, private animationEntry: TPT1AnimationEntry) {}
-
-    public calcTextureIndex(): number {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.tpt1, frame);
-
-        // animFrame can return a partial keyframe, but visibility information is frame-specific.
-        // Resolve this by treating this as a stepped track, floored. e.g. 15.9 is keyframe 15.
-
-        return this.animationEntry.textureIndices[(animFrame | 0)];
-    }
-}
-
-export function bindTPT1Animator(animationController: AnimationController, tpt1: TPT1, materialName: string, texMap: GX.TexMapID): TPT1Animator | null {
-    const animationEntry = tpt1.animationEntries.find((entry) => entry.materialName === materialName && entry.texMapIndex === texMap);
-    if (animationEntry === undefined)
-        return null;
-
-    return new TPT1Animator(animationController, tpt1, animationEntry);
 }
 //#endregion
 //#region BTP

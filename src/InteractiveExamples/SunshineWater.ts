@@ -1,8 +1,6 @@
 
 import { mat4 } from 'gl-matrix';
 
-import ArrayBufferSlice from '../ArrayBufferSlice';
-
 import { SceneGfx, ViewerRenderInput } from '../viewer';
 
 import * as GX from '../gx/gx_enum';
@@ -25,6 +23,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, SceneDesc, SceneGroup } from '../SceneBase';
 import { assertExists } from '../util';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
+import { bindTTK1MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 
 const scale = 200;
 const posMtx = mat4.create();
@@ -146,7 +145,7 @@ class SunshineWaterModel {
         this.mangleMaterial(seaMaterial, configName);
         const seaMaterialData = new MaterialData(seaMaterial);
         this.seaMaterialInstance = new MaterialInstance(seaMaterialData, {});
-        this.seaMaterialInstance.bindTTK1(this.animationController, btk);
+        bindTTK1MaterialInstance(this.seaMaterialInstance, this.animationController, btk);
         this.plane = new PlaneShape(device, cache);
 
         this.shapeInstanceState.worldToViewMatrix = scratchViewMatrix;

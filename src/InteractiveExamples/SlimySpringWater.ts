@@ -7,7 +7,8 @@ import * as GX_Material from '../gx/gx_material';
 
 import { BMD, BTK, DRW1MatrixKind, JointTransformInfo } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { J3DModelData, MaterialInstance, J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import { ub_PacketParams, PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';

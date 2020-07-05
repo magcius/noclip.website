@@ -6,7 +6,8 @@ import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelData, J3DModelInstanceSimple, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
