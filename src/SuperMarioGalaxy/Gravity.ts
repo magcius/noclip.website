@@ -250,13 +250,14 @@ export const enum ParallelGravityRangeType { Sphere, Box, Cylinder }
 
 export class ParallelGravity extends PlanetGravity {
     public rangeType = ParallelGravityRangeType.Sphere;
-    private baseDistance: number = 2000;
-    private cylinderRadius: number;
-    private cylinderHeight: number;
+    public cylinderRadius: number;
+    public cylinderHeight: number;
     public boxMtx: mat4 | null = null;
+    public planeNormal = vec3.create();
+    public pos = vec3.create();
+
+    private baseDistance: number = 2000;
     private boxExtentsSq: vec3 | null = null;
-    private planeNormal = vec3.create();
-    private pos = vec3.create();
     private distanceCalcType: number = -1;
 
     public setPlane(normal: ReadonlyVec3, translation: ReadonlyVec3): void {

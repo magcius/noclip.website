@@ -10,7 +10,7 @@ import { colorNewCopy, White, colorFromHSL, colorNewFromRGBA, colorFromRGBA, col
 import { dfShow } from "../../DebugFloaters";
 import { SceneObjHolder, getDeltaTimeFrames } from "../Main";
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
-import { connectToScene, getRandomFloat, calcGravityVector, connectToSceneMapObjDecoration } from '../ActorUtil';
+import { connectToScene, getRandomFloat, calcGravityVector, connectToSceneMapObjDecoration, makeMtxUpNoSupportPos } from '../ActorUtil';
 import { DrawType, MovementType } from '../NameObj';
 import { ViewerRenderInput } from '../../viewer';
 import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants, saturate, computeModelMatrixS } from '../../MathHelpers';
@@ -395,7 +395,7 @@ class GravityExplainer2_PointGravity extends LiveActor {
 
         connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
 
-        colorFromRGBA(this.c0, 0.7, 0.8, 1.0, 1.0);
+        colorFromRGBA(this.c0, 0.7, 0.8, 1.0, 0.4);
         colorFromRGBA(this.c1, 0.38, 0.33, 0.31, 0.0);
         this.amb0Alpha = 0.2;
         this.light2Alpha = 0.9;
@@ -414,8 +414,6 @@ class GravityExplainer2_PointGravity extends LiveActor {
     }
 
     private drawSphere(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, t: number): void {
-        return;
-
         const renderInst = renderInstManager.newRenderInst();
         this.sphereModel.sdraw.setOnRenderInst(renderInst);
 
@@ -480,7 +478,7 @@ class GravityExplainer2_PointGravity extends LiveActor {
     }
 }
 
-class GravityExplainer_ParallelGravity extends LiveActor {
+class GravityExplainer2_ParallelGravity extends LiveActor {
     private materialHelper: GXMaterialHelperGfx;
     private sdraw = new TSDraw();
 
@@ -489,8 +487,8 @@ class GravityExplainer_ParallelGravity extends LiveActor {
     @dfShow()
     private c1 = colorNewFromRGBA(0.8, 0.8, 0.8, 0.3);
 
-    private segmentSpacing = 1000.0;
-    private segmentHeight = 100.0;
+    private segmentSpacing = 350.0;
+    private segmentHeight = 250.0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, protected gravity: ParallelGravity) {
         super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2_PointGravity');
@@ -509,7 +507,7 @@ class GravityExplainer_ParallelGravity extends LiveActor {
         mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.A1, GX.CA.RASA, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
@@ -518,28 +516,31 @@ class GravityExplainer_ParallelGravity extends LiveActor {
 
         connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
 
-        /*
-        colorFromRGBA(this.c0, 0.7, 0.8, 1.0, 0.2);
-        colorFromRGBA(this.c1, 0.38, 0.33, 0.31, 0.0);
-        */
+        colorFromRGBA(this.c0, 1.0, 1.0, 1.0, 0.2);
+        colorFromRGBA(this.c1, 1.0, 1.0, 1.0, 0.0);
 
+        /*
         colorFromRGBA8(this.c0, 0x5A55FF00);
         colorCopy(this.c0, this.c0, 1.0);
         colorCopy(this.c1, this.c0, 0.0);
+        */
 
         this.sdraw.beginDraw();
         if (this.gravity.rangeType === ParallelGravityRangeType.Box)
-            this.drawBox(this.sdraw);
+            this.drawBoxSegment(this.sdraw);
+        else if (this.gravity.rangeType === ParallelGravityRangeType.Cylinder)
+            this.drawCircleSegment(this.sdraw);
+        else if (this.gravity.rangeType === ParallelGravityRangeType.Sphere)
+            this.drawCircleSegment(this.sdraw);
         this.sdraw.endDraw(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache);
     }
 
     private drawBoxFloor(ddraw: TSDraw): void {
-        const boxMtx = this.gravity.boxMtx!;
         function drawBoxPoint(iu: number, iv: number): void {
             ddraw.position3f32(iu, 0.0, iv);
             let alpha = 0xFF;
             if (Math.max(Math.abs(iu), Math.abs(iv)) >= 1.0)
-                alpha = 0xD0;
+                alpha = 0x00;
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
         }
 
@@ -571,34 +572,32 @@ class GravityExplainer_ParallelGravity extends LiveActor {
         ddraw.end();
     }
 
-    private drawBoxSide(ddraw: TSDraw, x: number, z: number): void {
-        vec3.set(scratchVec3a, x, 0, z);
-        vec3.set(scratchVec3b, 0, 1, 0);
-        vec3.set(scratchVec3c, -z, 0, x);
+    private drawSegmentSidePoint(ddraw: TSDraw, x: number, z: number): void {
+        ddraw.position3f32(x, 0.0, z);
+        ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0x00);
+        ddraw.position3f32(x, 1.0, z);
+        ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
+    }
 
-        function drawBoxPoint(iu: number, iv: number, alpha: number): void {
-            vec3.copy(scratchVec3, scratchVec3a);
-            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3c, iu);
-            vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3b, iv);
-
-            ddraw.position3vec3(scratchVec3);
-            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha);
-        }
-
-        ddraw.begin(GX.Command.DRAW_QUADS);
-        drawBoxPoint(-1.0, 0.0, 0x00);
-        drawBoxPoint(-1.0, 1.0, 0x00);
-        drawBoxPoint( 1.0, 1.0, 0x00);
-        drawBoxPoint( 1.0, 0.0, 0x00);
+    private drawBoxSegment(ddraw: TSDraw): void {
+        ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        this.drawSegmentSidePoint(ddraw, -1.0, -1.0);
+        this.drawSegmentSidePoint(ddraw,  1.0, -1.0);
+        this.drawSegmentSidePoint(ddraw,  1.0,  1.0);
+        this.drawSegmentSidePoint(ddraw, -1.0,  1.0);
+        this.drawSegmentSidePoint(ddraw, -1.0, -1.0);
         ddraw.end();
     }
 
-    private drawBox(ddraw: TSDraw): void {
-        this.drawBoxFloor(ddraw);
-        this.drawBoxSide(ddraw, -1, 0);
-        this.drawBoxSide(ddraw,  1, 0);
-        this.drawBoxSide(ddraw, 0, -1);
-        this.drawBoxSide(ddraw, 0,  1);
+    private drawCircleSegment(ddraw: TSDraw): void {
+        const numPoints = 50;
+        ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let i = 0; i < numPoints; i++) {
+            const theta = (i / (numPoints - 1)) * MathConstants.TAU;
+            const x = Math.cos(theta), z = Math.sin(theta);
+            this.drawSegmentSidePoint(ddraw, x, z);
+        }
+        ddraw.end();
     }
 
     private getPulseAlpha(t: number): number {
@@ -629,12 +628,46 @@ class GravityExplainer_ParallelGravity extends LiveActor {
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
 
         if (this.gravity.rangeType === ParallelGravityRangeType.Box) {
+            // Range from -1.0 to 1.0
+            const animY = t * 2.0 - 1.0;
+    
             mat4.copy(scratchMatrix, this.gravity.boxMtx!);
-            const y = (t - 0.5) * 2.0;
-            vec3.set(scratchVec3, 0, -y, 0);
+            vec3.set(scratchVec3, 0, -animY, 0);
             mat4.translate(scratchMatrix, scratchMatrix, scratchVec3);
 
             vec3.set(scratchVec3, 1.0, this.segmentHeight * scaleFactor, 1.0);
+            mat4.scale(scratchMatrix, scratchMatrix, scratchVec3);
+
+            mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMatrix);
+        } else if (this.gravity.rangeType === ParallelGravityRangeType.Cylinder) {
+            vec3.negate(scratchVec3, this.gravity.planeNormal);
+            makeMtxUpNoSupportPos(scratchMatrix, scratchVec3, this.gravity.pos);
+            vec3.set(scratchVec3, this.gravity.cylinderRadius, this.gravity.cylinderHeight, this.gravity.cylinderRadius);
+            mat4.scale(scratchMatrix, scratchMatrix, scratchVec3);
+
+            // Range from -1.0 to 1.0
+            const animY = t * 2.0 - 1.0;
+
+            vec3.set(scratchVec3, 0, -animY, 0);
+            mat4.translate(scratchMatrix, scratchMatrix, scratchVec3);
+
+            vec3.set(scratchVec3, 1.0, this.segmentHeight * scaleFactor, 1.0);
+            mat4.scale(scratchMatrix, scratchMatrix, scratchVec3);
+
+            mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMatrix);
+        } else if (this.gravity.rangeType === ParallelGravityRangeType.Sphere) {
+            makeMtxUpNoSupportPos(scratchMatrix, this.gravity.planeNormal, this.gravity.pos);
+            vec3.set(scratchVec3, this.gravity.range, this.gravity.range, this.gravity.range);
+            mat4.scale(scratchMatrix, scratchMatrix, scratchVec3);
+
+            // Range from -1.0 to 1.0
+            const animY = t * 2.0 - 1.0;
+
+            vec3.set(scratchVec3, 0, -animY, 0);
+            mat4.translate(scratchMatrix, scratchMatrix, scratchVec3);
+
+            const scaleX = Math.sin(t * MathConstants.TAU / 2.0);
+            vec3.set(scratchVec3, scaleX, this.segmentHeight * scaleFactor, scaleX);
             mat4.scale(scratchMatrix, scratchMatrix, scratchVec3);
 
             mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMatrix);
@@ -659,24 +692,31 @@ class GravityExplainer_ParallelGravity extends LiveActor {
 
         const duration = 10000.0;
 
+        let height = 1.0;
+
         let numSegments = 0, scaleFactor = 1.0;
 
         let segmentSpacing = this.segmentSpacing;
         if (this.gravity.rangeType === ParallelGravityRangeType.Box) {
             const boxMtx = this.gravity.boxMtx!;
-            const scaleY = Math.hypot(boxMtx[4], boxMtx[5], boxMtx[6]);
-            scaleFactor = 1.0 / scaleY;
-
-            if (scaleY < segmentSpacing) {
-                segmentSpacing = scaleY / 5.0;
-                this.segmentHeight = 20;
-            }
-
-            numSegments = Math.min(scaleY / segmentSpacing, 10.0);
+            height = Math.hypot(boxMtx[4], boxMtx[5], boxMtx[6]);
+        } else if (this.gravity.rangeType === ParallelGravityRangeType.Cylinder) {
+            height = this.gravity.cylinderHeight;
+        } else if (this.gravity.rangeType === ParallelGravityRangeType.Sphere) {
+            height = this.gravity.range;
         }
 
+        scaleFactor = 1.0 / height;
+
+        if (height < segmentSpacing) {
+            segmentSpacing = height / 5.0;
+            this.segmentHeight = 20;
+        }
+
+        numSegments = Math.ceil(Math.min(height / segmentSpacing, 10.0));
+
         for (let i = 0; i < numSegments; i++) {
-            const t = ((viewerInput.time + (i * duration / numSegments)) / duration) % 1.0;
+            const t = ((viewerInput.time + (i * (duration / numSegments))) / duration) % 1.0;
             this.drawSegment(sceneObjHolder, renderInstManager, viewerInput, t, scaleFactor);
         }
 
@@ -705,7 +745,7 @@ export class GravityExplainer2 extends LiveActor {
             if (grav instanceof PointGravity)
                 this.models.push(new GravityExplainer2_PointGravity(this.zoneAndLayer, sceneObjHolder, grav));
             else if (grav instanceof ParallelGravity)
-                this.models.push(new GravityExplainer_ParallelGravity(this.zoneAndLayer, sceneObjHolder, grav));
+                this.models.push(new GravityExplainer2_ParallelGravity(this.zoneAndLayer, sceneObjHolder, grav));
         }
     }
 
