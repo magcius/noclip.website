@@ -2,7 +2,7 @@
 import { mat4, vec3, quat } from "gl-matrix";
 
 import { assertExists, nullify, assert, nArray } from "../util";
-import { quatFromEulerRadians, computeModelMatrixSRT, computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
+import { quatFromEulerRadians, setMatrixTranslation } from "../MathHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
 import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -11,7 +11,6 @@ import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnim
 
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ResTable } from "./Main";
-import { HitSensor } from "./HitSensor";
 
 export class BckCtrlData {
     public Name: string = '';
@@ -398,7 +397,8 @@ export class XanimePlayer {
     }
 
     public update(deltaTimeFrames: number): void {
-        if (this.currentRes !== null) {
+        if (!(this.frameCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped) && this.currentRes !== null) {
+            assert(!this.updatedFrameCtrl);
             this.oldTimeInFrames = this.frameCtrl.currentTimeInFrames;
             this.oldSpeedInFrames = this.frameCtrl.speedInFrames;
             this.frameCtrl.update(deltaTimeFrames);
@@ -423,7 +423,7 @@ export class XanimePlayer {
         } else {
             this.interpoleRatio = 0.0;
             this.core.interpoleRatio = 0.0;
-            this.updateInterpoleRatio(1.0);
+            this.updateInterpoleRatio(1);
         }
     }
 
