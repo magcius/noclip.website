@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight, getBrkFrameMax, connectToSceneNoShadowedMapObj, isValidSwitchAppear, isValidSwitchA, isOnSwitchA, connectToSceneIndirectEnemy, turnQuatYDirRad, setBtkFrameAtRandom } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight, getBrkFrameMax, connectToSceneNoShadowedMapObj, isValidSwitchAppear, isValidSwitchA, isOnSwitchA, connectToSceneIndirectEnemy, turnQuatYDirRad, setBtkFrameAtRandom, connectToSceneIndirectMapObj, getPlayerPos, getAreaObj } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -32,7 +32,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { isInWater, WaterAreaHolder, WaterInfo } from './MiscMap';
+import { isInWater, WaterAreaHolder, WaterInfo, HazeCube } from './MiscMap';
 import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
@@ -4196,7 +4196,7 @@ class WarpPodPathDrawer {
                 vec3.normalize(scratchVec3a, scratchVec3a);
                 vec3.cross(scratchVec3a, scratchVec3a, scratchVec3c);
             }
-    
+
             normToLength(scratchVec3a, 30);
 
             const texCoordY = Math.abs((2.0 * (i / this.points.length)) - 1.0);
@@ -9776,5 +9776,62 @@ export class LavaGeyser extends LiveActor<LavaGeyserNrv> {
                 this.setNerve(LavaGeyserNrv.Wait);
             }
         }
+    }
+}
+
+class HeatHazeEffect extends LiveActor {
+    public depth = 1500.0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
+        super(zoneAndLayer, sceneObjHolder, 'HeatHazeEffect');
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'ShimmerBoard');
+        startBtk(this, 'ShimmerBoard');
+        connectToSceneIndirectMapObj(sceneObjHolder, this);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        getMatrixAxisZ(scratchVec3, viewerInput.camera.worldMatrix);
+        getMatrixTranslation(this.translation, viewerInput.camera.worldMatrix);
+        vec3.scaleAndAdd(this.translation, this.translation, scratchVec3, -this.depth);
+
+        computeEulerAngleRotationFromSRTMatrix(this.rotation, viewerInput.camera.worldMatrix);
+
+        vec3.set(this.scale, this.depth, this.depth, this.depth);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('ShimmerBoard');
+    }
+}
+
+export class HeatHazeDirector extends NameObj {
+    private heatHazeEffect: HeatHazeEffect;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'HeatHazeDirector');
+
+        this.heatHazeEffect = new HeatHazeEffect(dynamicSpawnZoneAndLayer, sceneObjHolder);
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        getPlayerPos(scratchVec3, sceneObjHolder);
+        const hazeCube = getAreaObj<HazeCube>(sceneObjHolder, 'HazeCube', scratchVec3);
+        if (hazeCube !== null && isDead(this.heatHazeEffect)) {
+            this.heatHazeEffect.depth = hazeCube.depth;
+            this.heatHazeEffect.makeActorAppeared(sceneObjHolder);
+        } else if (hazeCube === null && !isDead(this.heatHazeEffect)) {
+            this.heatHazeEffect.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('ShimmerBoard');
     }
 }

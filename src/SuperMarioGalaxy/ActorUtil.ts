@@ -84,6 +84,10 @@ export function connectToSceneMapObjStrongLight(sceneObjHolder: SceneObjHolder, 
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
 }
 
+export function connectToSceneIndirectMapObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.INDIRECT_MAP_OBJ, -1);
+}
+
 export function connectToSceneIndirectMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT, -1);
 }

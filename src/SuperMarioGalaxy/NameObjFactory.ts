@@ -10,9 +10,9 @@ import { NameObj } from './NameObj';
 import { createLightCtrlCylinder, createLightCtrlCube } from './LightData';
 import { createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalSegmentGravityObj, createGlobalPointGravityObj, createGlobalConeGravityObj, createGlobalPlaneInCylinderGravityObj, createGlobalCubeGravityObj, createGlobalDiskGravityObj, createGlobalWireGravityObj } from './Gravity';
 import { SwitchSynchronizer } from './Switch';
-import { createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, createSwitchCube, createSwitchSphere, createSwitchCylinder, requestArchivesWaterArea } from './MiscMap';
+import { createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, createSwitchCube, createSwitchSphere, createSwitchCylinder, requestArchivesWaterArea, createHazeCube, requestArchivesHazeCube } from './MiscMap';
 import { createBloomCube, createBloomCylinder, createBloomSphere } from './ImageEffect';
-import { createLensFlareArea, requestLensFlareArchives } from './LensFlare';
+import { createLensFlareArea, requestArchivesLensFlareArea } from './LensFlare';
 import { OceanSphere } from './OceanSphere';
 
 export interface NameObjFactory {
@@ -722,7 +722,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("BloomCylinder",                createBloomCylinder),
     E("BloomSphere",                  createBloomSphere),
 
-    E("LensFlareArea",                createLensFlareArea,  requestLensFlareArchives),
+    E("LensFlareArea",                createLensFlareArea,  requestArchivesLensFlareArea),
 
     N("WaterArea"),
     N("SwitchArea"),
@@ -739,7 +739,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("DeathArea"),
     N("SimpleBloomCube"),
     N("PostFogArea"),
-    N("HazeCube"),
+    E("HazeCube",                     createHazeCube, requestArchivesHazeCube),
     N("MessageArea"),
     N("MessageAreaCube"),
     N("MessageAreaCylinder"),
