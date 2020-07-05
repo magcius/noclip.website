@@ -10,10 +10,8 @@ import { assert, readString } from '../../../util';
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist';
 import * as GX from '../../../gx/gx_enum';
 import * as GX_Material from '../../../gx/gx_material';
-import AnimationController from '../../../AnimationController';
 import { ColorKind } from '../../../gx/gx_render';
 import { AABB } from '../../../Geometry';
-import { getPointHermite } from '../../../Spline';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
 import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
@@ -1201,6 +1199,7 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
     return { textureDatas, samplers };
 }
 //#endregion
+
 //#region BMD
 function assocHierarchy(bmd: BMD): void {
     const view = bmd.inf1.hierarchyData.createDataView();
@@ -1266,6 +1265,7 @@ export class BMD {
 }
 //#endregion
 //#endregion
+
 //#region BMT
 export class BMT {
     public static parse(buffer: ArrayBufferSlice): BMT {
@@ -1286,6 +1286,7 @@ export class BMT {
     public tex1: TEX1 | null;
 }
 //#endregion
+
 //#region Animation Core
 export const enum LoopMode {
     ONCE = 0,
@@ -1295,19 +1296,14 @@ export const enum LoopMode {
     MIRRORED_REPEAT = 4,
 }
 
-const enum TangentType {
-    IN = 0,
-    IN_OUT = 1,
-}
-
-interface AnimationKeyframe {
+export interface AnimationKeyframe {
     time: number;
     value: number;
     tangentIn: number;
     tangentOut: number;
 }
 
-interface AnimationTrack {
+export interface AnimationTrack {
     frames: AnimationKeyframe[];
 }
 
@@ -1316,63 +1312,9 @@ export interface AnimationBase {
     loopMode: LoopMode;
 }
 
-function applyLoopMode(t: number, loopMode: LoopMode) {
-    switch (loopMode) {
-    case LoopMode.ONCE:
-        return Math.min(t, 1);
-    case LoopMode.ONCE_AND_RESET:
-        return Math.min(t, 1) % 1;
-    case LoopMode.REPEAT:
-        return t % 1;
-    case LoopMode.MIRRORED_ONCE:
-        return 1 - Math.abs((Math.min(t, 2) - 1));
-    case LoopMode.MIRRORED_REPEAT:
-        return 1 - Math.abs((t % 2) - 1);
-    }
-}
-
-export function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopMode = anim.loopMode): number {
-    const lastFrame = anim.duration;
-    const normTime = frame / lastFrame;
-    const animFrame = applyLoopMode(normTime, loopMode) * lastFrame;
-    return animFrame;
-}
-
-function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, frame: number): number {
-    const length = (k1.time - k0.time);
-    const t = (frame - k0.time) / length;
-    const p0 = k0.value;
-    const p1 = k1.value;
-    const s0 = k0.tangentOut * length;
-    const s1 = k1.tangentIn * length;
-    return getPointHermite(p0, p1, s0, s1, t);
-}
-
-function findKeyframe(frames: AnimationKeyframe[], time: number): number {
-    for (let i = 0; i < frames.length; i++)
-        if (time < frames[i].time)
-            return i;
-    return -1;
-}
-
-export function sampleAnimationData(track: AnimationTrack, frame: number): number {
-    const frames = track.frames;
-
-    if (frames.length === 1)
-        return frames[0].value;
-
-    // Find the first frame.
-    const idx1 = findKeyframe(frames, frame);
-    if (idx1 === 0)
-        return frames[0].value;
-    if (idx1 < 0)
-        return frames[frames.length - 1].value;
-    const idx0 = idx1 - 1;
-
-    const k0 = frames[idx0];
-    const k1 = frames[idx1];
-
-    return hermiteInterpolate(k0, k1, frame);
+const enum TangentType {
+    In = 0,
+    InOut = 1,
 }
 
 function translateAnimationTrack(data: Float32Array | Int16Array, duration: number, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
@@ -1384,12 +1326,12 @@ function translateAnimationTrack(data: Float32Array | Int16Array, duration: numb
     } else {
         const frames: AnimationKeyframe[] = [];
 
-        if (tangent === TangentType.IN) {
+        if (tangent === TangentType.In) {
             for (let i = index; i < index + 3 * count; i += 3) {
                 const time = data[i+0], value = data[i+1] * scale, tangentIn = data[i+2] * scale, tangentOut = tangentIn;
                 frames.push({ time, value, tangentIn, tangentOut });
             }
-        } else if (tangent === TangentType.IN_OUT) {
+        } else if (tangent === TangentType.InOut) {
             for (let i = index; i < index + 4 * count; i += 4) {
                 const time = data[i+0], value = data[i+1] * scale, tangentIn = data[i+2] * scale, tangentOut = data[i+3] * scale;
                 frames.push({ time, value, tangentIn, tangentOut });
@@ -1404,8 +1346,8 @@ function translateAnimationTrack(data: Float32Array | Int16Array, duration: numb
     }
 }
 //#endregion
+
 //#region J3DAnmTextureSRTKey
-//#region TTK1
 export interface TTK1AnimationEntry {
     materialName: string;
     texGenIndex: number;
@@ -1492,8 +1434,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
 
     return { duration, loopMode, isMaya, uvAnimationEntries };
 }
-//#endregion
-//#region BTK
+
 export class BTK {
     public static parse(buffer: ArrayBufferSlice): TTK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1504,9 +1445,8 @@ export class BTK {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmTevRegKey
-//#region TRK1
 export interface TRK1AnimationEntry {
     materialName: string;
     colorKind: ColorKind;
@@ -1601,8 +1541,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 
     return { duration, loopMode, animationEntries };
 }
-//#endregion
-//#region BRK
+
 export class BRK {
     public static parse(buffer: ArrayBufferSlice): TRK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1612,9 +1551,8 @@ export class BRK {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmColorKey
-//#region PAK1
 function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     const view = buffer.createDataView();
     const loopMode: LoopMode = view.getUint8(0x08);
@@ -1663,8 +1601,7 @@ function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 
     return { duration, loopMode, animationEntries };
 }
-//#endregion
-//#region BPK
+
 export class BPK {
     public static parse(buffer: ArrayBufferSlice): TRK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1674,9 +1611,8 @@ export class BPK {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmTransformKey
-//#region ANK1
 export interface ANK1JointAnimationEntry {
     scaleX: AnimationTrack;
     rotationX: AnimationTrack;
@@ -1742,8 +1678,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
 
     return { loopMode, duration, jointAnimationEntries };
 }
-//#endregion
-//#region BCK
+
 export class BCK {
     public static parse(buffer: ArrayBufferSlice): ANK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1753,9 +1688,8 @@ export class BCK {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmTexPattern
-//#region TPT1
 export interface TPT1AnimationEntry {
     materialName: string;
     texMapIndex: number;
@@ -1802,8 +1736,7 @@ function readTPT1Chunk(buffer: ArrayBufferSlice): TPT1 {
 
     return { duration, loopMode, animationEntries };
 }
-//#endregion
-//#region BTP
+
 export class BTP {
     public static parse(buffer: ArrayBufferSlice): TPT1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1813,9 +1746,8 @@ export class BTP {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmVisibilityFull
-//#region VAF1
 export interface ShapeVisibilityEntry {
     shapeVisibility: BitMap;
 }
@@ -1853,8 +1785,7 @@ function readVAF1Chunk(buffer: ArrayBufferSlice): VAF1 {
 
     return { loopMode, duration, visibilityAnimationTracks: shapeVisibilityEntries };
 }
-//#endregion
-//#region BVA
+
 export class BVA {
     public static parse(buffer: ArrayBufferSlice): VAF1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1865,5 +1796,4 @@ export class BVA {
 
     public vaf1: VAF1;
 }
-//#endregion
 //#endregion

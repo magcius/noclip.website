@@ -1,12 +1,50 @@
 
 // Animation support.
 
-import { LoopMode, VAF1, TRK1, sampleAnimationData, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, J3DLoadFlags, JointTransformInfo, ANK1, ANK1JointAnimationEntry } from './J3DLoader';
+import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, JointTransformInfo, ANK1, ANK1JointAnimationEntry } from './J3DLoader';
 import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
 import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData } from './J3DGraphBase';
 import { mat4 } from 'gl-matrix';
-import { computeModelMatrixSRT, computeModelMatrixSRT_MayaSSC } from '../../../MathHelpers';
+import { computeModelMatrixSRT } from '../../../MathHelpers';
+import { getPointHermite } from '../../../Spline';
+
+function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, frame: number): number {
+    const length = (k1.time - k0.time);
+    const t = (frame - k0.time) / length;
+    const p0 = k0.value;
+    const p1 = k1.value;
+    const s0 = k0.tangentOut * length;
+    const s1 = k1.tangentIn * length;
+    return getPointHermite(p0, p1, s0, s1, t);
+}
+
+function findKeyframe(frames: AnimationKeyframe[], time: number): number {
+    for (let i = 0; i < frames.length; i++)
+        if (time < frames[i].time)
+            return i;
+    return -1;
+}
+
+export function sampleAnimationData(track: AnimationTrack, frame: number): number {
+    const frames = track.frames;
+
+    if (frames.length === 1)
+        return frames[0].value;
+
+    // Find the first frame.
+    const idx1 = findKeyframe(frames, frame);
+    if (idx1 === 0)
+        return frames[0].value;
+    if (idx1 < 0)
+        return frames[frames.length - 1].value;
+    const idx0 = idx1 - 1;
+
+    const k0 = frames[idx0];
+    const k1 = frames[idx1];
+
+    return hermiteInterpolate(k0, k1, frame);
+}
 
 export const enum J3DFrameCtrl__UpdateFlags {
     HasStopped  = 0b0001,

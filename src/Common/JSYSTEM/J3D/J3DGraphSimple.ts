@@ -3,17 +3,39 @@ import { J3DModelInstance, BMDModelMaterialData, JointMatrixCalcNoAnm, J3DModelD
 import AnimationController from "../../../AnimationController";
 import { assert } from "../../../util";
 import { Camera } from "../../../Camera";
-import { TTK1, TRK1, TPT1, ANK1, JointTransformInfo, getAnimFrame, TRK1AnimationEntry, TTK1AnimationEntry, TPT1AnimationEntry, sampleAnimationData, calcTexMtx_Maya, calcTexMtx_Basic } from "./J3DLoader";
+import { TTK1, TRK1, TPT1, ANK1, JointTransformInfo, TRK1AnimationEntry, TTK1AnimationEntry, TPT1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, LoopMode, AnimationBase } from "./J3DLoader";
 import { GfxDevice } from "../../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../../viewer";
 import { mat4 } from "gl-matrix";
-import { calcJointAnimationTransform, calcJointMatrixFromTransform } from "./J3DGraphAnimator";
+import { calcJointAnimationTransform, calcJointMatrixFromTransform, sampleAnimationData } from "./J3DGraphAnimator";
 import { ColorKind } from "../../../gx/gx_render";
 import { Color } from "../../../Color";
 import * as GX from "../../../gx/gx_enum";
 
 // "Simple" API for when systems are not well-integrated enough to have custom main loops.
+
+function applyLoopMode(t: number, loopMode: LoopMode) {
+    switch (loopMode) {
+    case LoopMode.ONCE:
+        return Math.min(t, 1);
+    case LoopMode.ONCE_AND_RESET:
+        return Math.min(t, 1) % 1;
+    case LoopMode.REPEAT:
+        return t % 1;
+    case LoopMode.MIRRORED_ONCE:
+        return 1 - Math.abs((Math.min(t, 2) - 1));
+    case LoopMode.MIRRORED_REPEAT:
+        return 1 - Math.abs((t % 2) - 1);
+    }
+}
+
+function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopMode = anim.loopMode): number {
+    const lastFrame = anim.duration;
+    const normTime = frame / lastFrame;
+    const animFrame = applyLoopMode(normTime, loopMode) * lastFrame;
+    return animFrame;
+}
 
 const scratchTransform = new JointTransformInfo();
 class JointMatrixCalcANK1 {
