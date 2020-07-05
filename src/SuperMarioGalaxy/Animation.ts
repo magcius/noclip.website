@@ -203,7 +203,7 @@ export class XanimeCore implements JointMatrixCalc {
         const jnt1 = modelData.bmd.jnt1.joints;
 
         for (let i = 0; i < jnt1.length; i++) {
-            const src = jnt1[i];
+            const src = jnt1[i].transform;
             const dst = this.joints[i];
 
             vec3.set(dst.xformFrozen.translation, src.translationX, src.translationY, src.translationZ);

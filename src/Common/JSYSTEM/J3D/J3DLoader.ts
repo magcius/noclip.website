@@ -18,7 +18,6 @@ import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
 import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
 import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
-import { VAF1_getVisibility } from './J3DGraphAnimator';
 
 //#region Helpers
 // ResNTAB / JUTNameTab
@@ -312,17 +311,21 @@ function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
 }
 //#endregion
 //#region JNT1
+export class JointTransformInfo {
+    public scaleX: number = 1.0;
+    public scaleY: number = 1.0;
+    public scaleZ: number = 1.0;
+    public rotationX: number = 0.0;
+    public rotationY: number = 0.0;
+    public rotationZ: number = 0.0;
+    public translationX: number = 0.0;
+    public translationY: number = 0.0;
+    public translationZ: number = 0.0;
+}
+
 export interface Joint {
     name: string;
-    scaleX: number;
-    scaleY: number;
-    scaleZ: number;
-    rotationX: number;
-    rotationY: number;
-    rotationZ: number;
-    translationX: number;
-    translationY: number;
-    translationZ: number;
+    transform: JointTransformInfo;
     boundingSphereRadius: number;
     bbox: AABB;
     calcFlags: number;
@@ -372,12 +375,19 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const bboxMaxY = view.getFloat32(jointDataTableIdx + 0x38);
         const bboxMaxZ = view.getFloat32(jointDataTableIdx + 0x3C);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
-        joints.push({ name, calcFlags,
-            scaleX, scaleY, scaleZ,
-            rotationX, rotationY, rotationZ,
-            translationX, translationY, translationZ,
-            boundingSphereRadius, bbox,
-        });
+
+        const transform = new JointTransformInfo();
+        transform.scaleX = scaleX;
+        transform.scaleY = scaleY;
+        transform.scaleZ = scaleZ;
+        transform.rotationX = rotationX;
+        transform.rotationY = rotationY;
+        transform.rotationZ = rotationZ;
+        transform.translationX = translationX;
+        transform.translationY = translationY;
+        transform.translationZ = translationZ;
+
+        joints.push({ name, calcFlags, transform, boundingSphereRadius, bbox });
     }
 
     return { joints };
@@ -1721,7 +1731,7 @@ export class BPK {
 //#endregion
 //#region J3DAnmTransformKey
 //#region ANK1
-interface ANK1JointAnimationEntry {
+export interface ANK1JointAnimationEntry {
     scaleX: AnimationTrack;
     rotationX: AnimationTrack;
     translationX: AnimationTrack;
@@ -1918,20 +1928,6 @@ function readVAF1Chunk(buffer: ArrayBufferSlice): VAF1 {
     }
 
     return { loopMode, duration, visibilityAnimationTracks: shapeVisibilityEntries };
-}
-
-export class VAF1Animator { 
-    constructor(public animationController: AnimationController, public vaf1: VAF1) {}
-
-    public calcVisibility(shapeIndex: number): boolean {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.vaf1, frame);
-        return VAF1_getVisibility(this.vaf1, shapeIndex, animFrame);
-    }
-}
-
-export function bindVAF1Animator(animationController: AnimationController, vaf1: VAF1): VAF1Animator {
-    return new VAF1Animator(animationController, vaf1);
 }
 //#endregion
 //#region BVA

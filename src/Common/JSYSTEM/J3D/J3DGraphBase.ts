@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, VAF1, TPT1, bindTPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, getAnimFrame, sampleAnimationData, JointTransformInfo } from './J3DLoader';
 import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
@@ -18,11 +18,12 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/
 import { ViewerRenderInput, Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
 import { colorCopy, Color } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT, computeModelMatrixS } from '../../../MathHelpers';
+import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
 import { translateSampler } from '../JUTTexture';
+import { calcJointMatrixFromTransform, calcJointAnimationTransform } from './J3DGraphAnimator';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into world space.
@@ -40,6 +41,10 @@ export class ShapeInstanceState {
 
     // The camera's view matrix.
     public worldToViewMatrix = mat4.create();
+
+    // Used while calculating joint matrices.
+    public currentScale = vec3.create();
+    public parentScale = vec3.create();
 }
 
 class ShapeData {
@@ -949,23 +954,12 @@ export class J3DModelData {
 }
 
 export interface JointMatrixCalc {
-    calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void;
-}
-
-function calcJointMatrixBase(dst: mat4, jnt1: Joint): void {
-    const scaleX = jnt1.scaleX;
-    const scaleY = jnt1.scaleY;
-    const scaleZ = jnt1.scaleZ;
-    const rotationX = jnt1.rotationX;
-    const rotationY = jnt1.rotationY;
-    const rotationZ = jnt1.rotationZ;
-    const translationX = jnt1.translationX;
-    const translationY = jnt1.translationY;
-    const translationZ = jnt1.translationZ;
-    computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    calcJointMatrix(dst: mat4, modelData: J3DModelData, jointIndex: number): void;
 }
 
 // TODO(jstpierre): Support better recursive calculation here, SoftImage modes, etc.
+
+const scratchTransform = new JointTransformInfo();
 export class JointMatrixCalcANK1 {
     constructor(public animationController: AnimationController, public ank1: ANK1) {
     }
@@ -976,26 +970,19 @@ export class JointMatrixCalcANK1 {
         const entry = this.ank1.jointAnimationEntries[i];
 
         if (entry !== undefined) {
-            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-            const translationX = sampleAnimationData(entry.translationX, animFrame);
-            const translationY = sampleAnimationData(entry.translationY, animFrame);
-            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-            computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+            calcJointAnimationTransform(scratchTransform, entry, animFrame);
+            calcJointMatrixFromTransform(dst, scratchTransform);
         } else {
             const jnt1 = modelData.bmd.jnt1.joints[i];
-            calcJointMatrixBase(dst, jnt1);
+            calcJointMatrixFromTransform(dst, jnt1.transform);
         }
     }
 }
 
 export class JointMatrixCalcNoAnm {
     public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
-        calcJointMatrixBase(dst, modelData.bmd.jnt1.joints[i]);
+        const jnt1 = modelData.bmd.jnt1.joints[i];
+        calcJointMatrixFromTransform(dst, jnt1.transform);
     }
 }
 
@@ -1315,9 +1302,9 @@ export class J3DModelInstance {
 
             const dstToParent = this.shapeInstanceState.jointToParentMatrixArray[jointIndex];
             this.jointMatrixCalc.calcJointMatrix(dstToParent, this.modelData, jointIndex);
+
             if (this.jointMatrixCalcCallback !== null)
                 this.jointMatrixCalcCallback(dstToParent, this.modelData, jointIndex);
-
             const dstToWorld = this.shapeInstanceState.jointToWorldMatrixArray[jointIndex];
 
             const parentJointIndex = parentNode.jointIndex;
@@ -1379,7 +1366,6 @@ export class J3DModelInstance {
 
 export class J3DModelInstanceSimple extends J3DModelInstance {
     public animationController = new AnimationController();
-    public vaf1Animator: VAF1Animator | null = null;
     public passMask: number = 0x01;
     public ownedModelMaterialData: BMDModelMaterialData | null = null;
     public isSkybox: boolean = false;
@@ -1398,10 +1384,6 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         }
 
         super.calcAnim(camera);
-
-        if (this.vaf1Animator !== null)
-            for (let i = 0; i < this.shapeInstances.length; i++)
-                this.shapeInstances[i].visible = this.vaf1Animator.calcVisibility(i);
     }
 
     /**
@@ -1449,19 +1431,6 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
      */
     public bindANK1(ank1: ANK1 | null, animationController: AnimationController = this.animationController): void {
         this.jointMatrixCalc = ank1 !== null ? new JointMatrixCalcANK1(animationController, ank1) : new JointMatrixCalcNoAnm();
-    }
-
-    /**
-     * Binds {@param vaf1} (shape visibility animations) to this model instance.
-     * VAF1 objects can be parsed from {@link BVA} files. See {@link BVA.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindVAF1(vaf1: VAF1 | null, animationController: AnimationController = this.animationController): void {
-        if (vaf1 !== null)
-            assert(vaf1.visibilityAnimationTracks.length === this.shapeInstances.length);
-        this.vaf1Animator = vaf1 !== null ? bindVAF1Animator(animationController, vaf1) : null;
     }
 
     // The classic public interface, for compatibility.
