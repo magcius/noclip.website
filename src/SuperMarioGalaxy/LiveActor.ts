@@ -527,7 +527,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.calcAndSetBaseMtxBase();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
-        this.modelManager.modelInstance.calcJointToWorld();
+        this.modelManager.modelInstance.calcJointAnim();
 
         // TODO(jstpierre): Seems like it's possible to have a secondary file for BCK animations?
         this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);

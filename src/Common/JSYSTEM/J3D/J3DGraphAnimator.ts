@@ -1,12 +1,12 @@
 
 // Animation support.
 
-import { LoopMode, VAF1, TRK1, sampleAnimationData, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, ANK1, Joint } from './J3DLoader';
+import { LoopMode, VAF1, TRK1, sampleAnimationData, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, ANK1, Joint, J3DLoadFlags } from './J3DLoader';
 import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
-import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance } from './J3DGraphBase';
+import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase';
 import { mat4 } from 'gl-matrix';
-import { computeModelMatrixSRT } from '../../../MathHelpers';
+import { computeModelMatrixSRT, computeModelMatrixSRT_MayaSSC } from '../../../MathHelpers';
 
 export const enum J3DFrameCtrl__UpdateFlags {
     HasStopped  = 0b0001,
@@ -262,31 +262,43 @@ export class J3DJointMatrixAnm {
         this.frameCtrl = frameCtrl;
     }
 
-    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
         const animFrame = this.frameCtrl.currentTimeInFrames;
         const entry = this.ank1.jointAnimationEntries[i];
+        const jnt1 = modelData.bmd.jnt1.joints[i];
+
+        let scaleX, scaleY, scaleZ;
+        let rotationX, rotationY, rotationZ;
+        let translationX, translationY, translationZ;
 
         if (entry !== undefined) {
-            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-            const translationX = sampleAnimationData(entry.translationX, animFrame);
-            const translationY = sampleAnimationData(entry.translationY, animFrame);
-            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-            computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+            scaleX = sampleAnimationData(entry.scaleX, animFrame);
+            scaleY = sampleAnimationData(entry.scaleY, animFrame);
+            scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+            rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+            rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+            rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
+            translationX = sampleAnimationData(entry.translationX, animFrame);
+            translationY = sampleAnimationData(entry.translationY, animFrame);
+            translationZ = sampleAnimationData(entry.translationZ, animFrame);
         } else {
-            const scaleX = jnt1.scaleX;
-            const scaleY = jnt1.scaleY;
-            const scaleZ = jnt1.scaleZ;
-            const rotationX = jnt1.rotationX;
-            const rotationY = jnt1.rotationY;
-            const rotationZ = jnt1.rotationZ;
-            const translationX = jnt1.translationX;
-            const translationY = jnt1.translationY;
-            const translationZ = jnt1.translationZ;
+            scaleX = jnt1.scaleX;
+            scaleY = jnt1.scaleY;
+            scaleZ = jnt1.scaleZ;
+            rotationX = jnt1.rotationX;
+            rotationY = jnt1.rotationY;
+            rotationZ = jnt1.rotationZ;
+            translationX = jnt1.translationX;
+            translationY = jnt1.translationY;
+            translationZ = jnt1.translationZ;
+        }
+
+        if (!!(modelData.bmd.inf1.loadFlags & J3DLoadFlags.ScalingRule_Maya) && !!(jnt1.calcFlags & 0x01)) {
+            const parentScaleX = 1.0;
+            const parentScaleY = 1.0;
+            const parentScaleZ = 1.0;
+            computeModelMatrixSRT_MayaSSC(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ, parentScaleX, parentScaleY, parentScaleZ);
+        } else {
             computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         }
     }

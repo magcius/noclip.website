@@ -267,7 +267,7 @@ export class XanimeCore implements JointMatrixCalc {
         }
     }
 
-    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
         this.calcSingle(i);
 
         const xj = this.joints[i];

@@ -106,7 +106,7 @@ export interface INF1 {
 
 function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     const view = buffer.createDataView();
-    const loadFlags = view.getUint32(0x08);
+    const loadFlags = view.getUint16(0x08);
     const mtxGroupCount = view.getUint32(0x0C);
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
@@ -325,6 +325,7 @@ export interface Joint {
     translationZ: number;
     boundingSphereRadius: number;
     bbox: AABB;
+    calcFlags: number;
 }
 
 export interface JNT1 {
@@ -351,10 +352,9 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
     for (let i = 0; i < jointDataCount; i++) {
         const name = nameTable[i];
         const jointDataTableIdx = jointDataTableOffs + (remapTable[i] * 0x40);
-        const matrixTypeFlags = view.getUint16(jointDataTableIdx + 0x00);
-        // Used in J3DMtxCalcCalcTransformMaya::calcTransform.
-        // Doesn't appear to be used in basic transforms...
-        const ignoreParentScale = view.getUint8(jointDataTableIdx + 0x02);
+        const flags = view.getUint16(jointDataTableIdx + 0x00) & 0x00FF;
+        // Maya / SoftImage special flags.
+        const calcFlags = view.getUint8(jointDataTableIdx + 0x02);
         const scaleX = view.getFloat32(jointDataTableIdx + 0x04);
         const scaleY = view.getFloat32(jointDataTableIdx + 0x08);
         const scaleZ = view.getFloat32(jointDataTableIdx + 0x0C);
@@ -372,7 +372,12 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const bboxMaxY = view.getFloat32(jointDataTableIdx + 0x38);
         const bboxMaxZ = view.getFloat32(jointDataTableIdx + 0x3C);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
-        joints.push({ name, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ, boundingSphereRadius, bbox });
+        joints.push({ name, calcFlags,
+            scaleX, scaleY, scaleZ,
+            rotationX, rotationY, rotationZ,
+            translationX, translationY, translationZ,
+            boundingSphereRadius, bbox,
+        });
     }
 
     return { joints };

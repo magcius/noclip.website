@@ -386,6 +386,11 @@ export function setBtkFrameAndStop(actor: LiveActor, frame: number): void {
     ctrl.speedInFrames = 0.0;
 }
 
+export function setBtkFrameAtRandom(actor: LiveActor): void {
+    const ctrl = actor.modelManager!.getBtkCtrl();
+    ctrl.currentTimeInFrames = getRandomFloat(0, ctrl.endFrame);
+}
+
 export function setBrkRate(actor: LiveActor, rate: number): void {
     const ctrl = actor.modelManager!.getBrkCtrl();
     ctrl.speedInFrames = rate;

@@ -346,7 +346,7 @@ export class SlimySpringWaterDesc implements SceneDesc {
             const bmd = BMD.parse(rarc.findFileData('SkyIslandStepPartsA.bdl')!);
 
             // Append a fake joint for the grass. This is disgusting.
-            bmd.jnt1.joints.push({ name: 'yikes',
+            bmd.jnt1.joints.push({ name: 'yikes', calcFlags: 0,
                 bbox: new AABB(), boundingSphereRadius: 1000,
                 scaleX: 1, scaleY: 0.2, scaleZ: 1,
                 rotationX: 0, rotationY: 0, rotationZ: 0,

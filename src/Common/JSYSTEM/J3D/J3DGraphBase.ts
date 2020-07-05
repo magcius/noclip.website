@@ -18,13 +18,13 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/
 import { ViewerRenderInput, Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
 import { colorCopy, Color } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT } from '../../../MathHelpers';
+import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT, computeModelMatrixS } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
 import { translateSampler } from '../JUTTexture';
 
-export class ShapeInstanceState {
+export class ShapeInstanceState implements JointMatrixCalcState {
     // One matrix for each joint, which transform into their parent's space.
     public jointToParentMatrixArray: mat4[] = [];
 
@@ -40,6 +40,9 @@ export class ShapeInstanceState {
 
     // The camera's view matrix.
     public worldToViewMatrix = mat4.create();
+
+    // JointMatrixCalcState
+    public jointScales: vec3[] = [];
 }
 
 class ShapeData {
@@ -948,8 +951,12 @@ export class J3DModelData {
     }
 }
 
+interface JointMatrixCalcState {
+    jointScales: vec3[];
+}
+
 export interface JointMatrixCalc {
-    calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void;
+    calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number, jointMatrixCalcState: JointMatrixCalcState): void;
 }
 
 function calcJointMatrixBase(dst: mat4, jnt1: Joint): void {
@@ -970,7 +977,7 @@ export class JointMatrixCalcANK1 {
     constructor(public animationController: AnimationController, public ank1: ANK1) {
     }
 
-    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
         const frame = this.animationController.getTimeInFrames();
         const animFrame = getAnimFrame(this.ank1, frame);
         const entry = this.ank1.jointAnimationEntries[i];
@@ -987,18 +994,19 @@ export class JointMatrixCalcANK1 {
             const translationZ = sampleAnimationData(entry.translationZ, animFrame);
             computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
         } else {
+            const jnt1 = modelData.bmd.jnt1.joints[i];
             calcJointMatrixBase(dst, jnt1);
         }
     }
 }
 
 export class JointMatrixCalcNoAnm {
-    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
-        calcJointMatrixBase(dst, jnt1);
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void {
+        calcJointMatrixBase(dst, modelData.bmd.jnt1.joints[i]);
     }
 }
 
-export type JointMatrixCalcCallback = (dst: mat4, i: number, jnt1: Joint) => void;
+export type JointMatrixCalcCallback = (dst: mat4, modelData: J3DModelData, i: number) => void;
 
 const bboxScratch = new AABB();
 export class J3DModelInstance {
@@ -1045,6 +1053,7 @@ export class J3DModelInstance {
         const numJoints = bmd.jnt1.joints.length;
         this.shapeInstanceState.jointToParentMatrixArray = nArray(numJoints, () => mat4.create());
         this.shapeInstanceState.jointToWorldMatrixArray = nArray(numJoints, () => mat4.create());
+        this.shapeInstanceState.jointScales = nArray(numJoints, () => vec3.fromValues(1, 1, 1));
         this.jointVisibility = nArray(numJoints, () => true);
         this.jointMatrixCalc = new JointMatrixCalcNoAnm();
         this.calcJointAnim();
@@ -1325,17 +1334,20 @@ export class J3DModelInstance {
     }
 
     public calcJointAnim(): void {
+        vec3.copy(this.shapeInstanceState.jointScales[0], this.baseScale);
+
         for (let i = 0; i < this.modelData.jointData.length; i++) {
             const joint = this.modelData.jointData[i];
             const jointIndex = joint.jointIndex;
-            const jointEntry = this.modelData.bmd.jnt1.joints[jointIndex];
-            this.jointMatrixCalc.calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
+            this.jointMatrixCalc.calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], this.modelData, jointIndex, this.shapeInstanceState);
             if (this.jointMatrixCalcCallback !== null)
-                this.jointMatrixCalcCallback(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
+                this.jointMatrixCalcCallback(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], this.modelData, jointIndex);
         }
+
+        this.calcJointToWorld();
     }
 
-    public calcJointToWorld(): void {
+    private calcJointToWorld(): void {
         for (let i = 0; i < this.modelData.jointData.length; i++) {
             const joint = this.modelData.jointData[i];
 
@@ -1344,13 +1356,7 @@ export class J3DModelInstance {
             const dst = this.shapeInstanceState.jointToWorldMatrixArray[jointIndex];
 
             if (joint.parentJointIndex < 0) {
-                // Special: construct model matrix.
-                mat4.identity(matrixScratch);
-                matrixScratch[0] *= this.baseScale[0];
-                matrixScratch[5] *= this.baseScale[1];
-                matrixScratch[10] *= this.baseScale[2];
-                mat4.mul(matrixScratch, this.modelMatrix, matrixScratch);
-                mat4.mul(dst, matrixScratch, jointToParentMatrix);
+                mat4.mul(dst, this.modelMatrix, jointToParentMatrix);
             } else {
                 const parentJointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrixArray[joint.parentJointIndex];
                 mat4.mul(dst, parentJointToWorldMatrix, jointToParentMatrix);

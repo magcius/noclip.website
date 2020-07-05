@@ -1108,7 +1108,7 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         return cPhs__Status.Next;
     }
 
-    private nodeCallBack = (dst: mat4, i: number): void => {
+    private nodeCallBack = (dst: mat4, modelData: J3DModelData, i: number): void => {
         if (i === 2 || i === 3) {
             mDoMtx_ZrotM(dst, -0x4000);
             quatM(this.baseQuat, dst);
