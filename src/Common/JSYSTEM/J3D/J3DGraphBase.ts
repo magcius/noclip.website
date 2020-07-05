@@ -24,8 +24,8 @@ import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
 import { translateSampler } from '../JUTTexture';
 
-export class ShapeInstanceState implements JointMatrixCalcState {
-    // One matrix for each joint, which transform into their parent's space.
+export class ShapeInstanceState {
+    // One matrix for each joint, which transform into world space.
     public jointToParentMatrixArray: mat4[] = [];
 
     // One matrix for each joint, which transform into world space.
@@ -40,9 +40,6 @@ export class ShapeInstanceState implements JointMatrixCalcState {
 
     // The camera's view matrix.
     public worldToViewMatrix = mat4.create();
-
-    // JointMatrixCalcState
-    public jointScales: vec3[] = [];
 }
 
 class ShapeData {
@@ -71,8 +68,8 @@ export class MaterialData {
     }
 }
 
-class JointData {
-    constructor(public jointIndex: number = 0, public parentJointIndex: number = 0) {
+class JointTreeNode {
+    constructor(public jointIndex: number = 0, public children: JointTreeNode[] = []) {
     }
 }
 
@@ -858,7 +855,7 @@ export class J3DModelData {
 
     public modelMaterialData: BMDModelMaterialData;
     public shapeData: ShapeData[] = [];
-    public jointData: JointData[] = [];
+    public rootJointTreeNode: JointTreeNode;
     // Reference joint indices for all materials.
     public materialJointIndices: number[] = [];
 
@@ -902,8 +899,9 @@ export class J3DModelData {
 
         let translucentDrawIndex: number = 0;
         // Dummy joint to be the parent of our root node.
-        let lastJoint: JointData = new JointData(-1);
-        let jointStack: JointData[] = [lastJoint];
+        this.rootJointTreeNode = new JointTreeNode(-1);
+        let jointStack: JointTreeNode[] = [this.rootJointTreeNode];
+        let lastJoint = jointStack[0];
         while (true) {
             const type: HierarchyNodeType = view.getUint16(offs + 0x00);
             const value = view.getUint16(offs + 0x02);
@@ -915,11 +913,11 @@ export class J3DModelData {
             } else if (type === HierarchyNodeType.Close) {
                 jointStack.shift();
             } else if (type === HierarchyNodeType.Joint) {
-                const jointIndex = value, parentJointIndex = jointStack[0].jointIndex;
-                assert(jointIndex > parentJointIndex);
-                const joint = new JointData(jointIndex, parentJointIndex);
-                this.jointData.push(joint);
-                lastJoint = joint;
+                const jointIndex = value, parentJointTreeNode = jointStack[0];
+                assert(jointIndex > parentJointTreeNode.jointIndex);
+                const jointTreeNode = new JointTreeNode(jointIndex);
+                parentJointTreeNode.children.push(jointTreeNode);
+                lastJoint = jointTreeNode;
             } else if (type === HierarchyNodeType.Material) {
                 assert(this.materialJointIndices[value] === undefined);
                 this.materialJointIndices[value] = jointStack[0].jointIndex;
@@ -936,7 +934,6 @@ export class J3DModelData {
         }
 
         assert(jointStack.length === 1);
-        assert(this.jointData[0].jointIndex === 0 && this.jointData[0].parentJointIndex === -1);
     }
 
     public destroy(device: GfxDevice): void {
@@ -951,12 +948,8 @@ export class J3DModelData {
     }
 }
 
-interface JointMatrixCalcState {
-    jointScales: vec3[];
-}
-
 export interface JointMatrixCalc {
-    calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number, jointMatrixCalcState: JointMatrixCalcState): void;
+    calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number): void;
 }
 
 function calcJointMatrixBase(dst: mat4, jnt1: Joint): void {
@@ -1053,7 +1046,6 @@ export class J3DModelInstance {
         const numJoints = bmd.jnt1.joints.length;
         this.shapeInstanceState.jointToParentMatrixArray = nArray(numJoints, () => mat4.create());
         this.shapeInstanceState.jointToWorldMatrixArray = nArray(numJoints, () => mat4.create());
-        this.shapeInstanceState.jointScales = nArray(numJoints, () => vec3.fromValues(1, 1, 1));
         this.jointVisibility = nArray(numJoints, () => true);
         this.jointMatrixCalc = new JointMatrixCalcNoAnm();
         this.calcJointAnim();
@@ -1231,23 +1223,6 @@ export class J3DModelInstance {
     }
 
     /**
-     * Returns the joint-to-parent matrix for the joint with name {@param jointName}.
-     *
-     * This object is not a copy; if an animation updates the joint, the values in this object will be
-     * updated as well. You can also modify this matrix in order to transform the joints. Note that
-     * this is the same internal joint data as ANK1 animation, and that will be calculated in
-     * {@method calcAnim} or {@method prepareToRender} if an ANK1 animation is bound, so modifiying
-     * this matrix will have no effect in that case.
-     */
-    public getJointToParentMatrixReference(jointName: string): mat4 {
-        const joints = this.modelData.bmd.jnt1.joints;
-        for (let i = 0; i < joints.length; i++)
-            if (joints[i].name === jointName)
-                return this.shapeInstanceState.jointToParentMatrixArray[i];
-        throw "could not find joint";
-    }
-
-    /**
      * Returns the joint-to-world matrix for the joint with name {@param jointName}.
      *
      * This object is not a copy; if an animation updates the joint, the values in this object will be
@@ -1271,7 +1246,6 @@ export class J3DModelInstance {
     public calcAnim(camera: Camera): void {
         // Update joints from our matrix calculator.
         this.calcJointAnim();
-        this.calcJointToWorld();
     }
 
     public calcView(camera: Camera | null, viewMatrix: mat4 | null): void {
@@ -1333,35 +1307,34 @@ export class J3DModelInstance {
         this.draw(device, renderInstManager, camera, viewport, true);
     }
 
-    public calcJointAnim(): void {
-        vec3.copy(this.shapeInstanceState.jointScales[0], this.baseScale);
+    private calcJointAnimRecurse(node: JointTreeNode, parentNode: JointTreeNode | null): void {
+        // Our root node is a dummy node that houses a special model matrix.
+        if (parentNode !== null) {
+            const jointIndex = node.jointIndex;
+            assert(jointIndex >= 0);
 
-        for (let i = 0; i < this.modelData.jointData.length; i++) {
-            const joint = this.modelData.jointData[i];
-            const jointIndex = joint.jointIndex;
-            this.jointMatrixCalc.calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], this.modelData, jointIndex, this.shapeInstanceState);
+            const dstToParent = this.shapeInstanceState.jointToParentMatrixArray[jointIndex];
+            this.jointMatrixCalc.calcJointMatrix(dstToParent, this.modelData, jointIndex);
             if (this.jointMatrixCalcCallback !== null)
-                this.jointMatrixCalcCallback(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], this.modelData, jointIndex);
-        }
+                this.jointMatrixCalcCallback(dstToParent, this.modelData, jointIndex);
 
-        this.calcJointToWorld();
-    }
+            const dstToWorld = this.shapeInstanceState.jointToWorldMatrixArray[jointIndex];
 
-    private calcJointToWorld(): void {
-        for (let i = 0; i < this.modelData.jointData.length; i++) {
-            const joint = this.modelData.jointData[i];
-
-            const jointIndex = joint.jointIndex;
-            const jointToParentMatrix = this.shapeInstanceState.jointToParentMatrixArray[jointIndex];
-            const dst = this.shapeInstanceState.jointToWorldMatrixArray[jointIndex];
-
-            if (joint.parentJointIndex < 0) {
-                mat4.mul(dst, this.modelMatrix, jointToParentMatrix);
+            const parentJointIndex = parentNode.jointIndex;
+            if (parentJointIndex < 0) {
+                mat4.mul(dstToWorld, this.modelMatrix, dstToParent);
             } else {
-                const parentJointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrixArray[joint.parentJointIndex];
-                mat4.mul(dst, parentJointToWorldMatrix, jointToParentMatrix);
+                const parentJointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrixArray[parentJointIndex];
+                mat4.mul(dstToWorld, parentJointToWorldMatrix, dstToParent);
             }
         }
+
+        for (let i = 0; i < node.children.length; i++)
+            this.calcJointAnimRecurse(node.children[i], node);
+    }
+
+    public calcJointAnim(): void {
+        this.calcJointAnimRecurse(this.modelData.rootJointTreeNode, null);
     }
 
     private calcDrawMatrixArray(worldToViewMatrix: mat4): void {

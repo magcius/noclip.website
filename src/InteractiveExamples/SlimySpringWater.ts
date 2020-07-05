@@ -356,7 +356,7 @@ export class SlimySpringWaterDesc implements SceneDesc {
             bmd.shp1.shapes[4].mtxGroups[0].useMtxTable[0] = 1;
 
             const modelData = new J3DModelData(device, cache, bmd);
-            modelData.jointData.push({ jointIndex: 1, parentJointIndex: 0 });
+            modelData.rootJointTreeNode.children[0].children.push({ jointIndex: 1, children: [] });
 
             const flowerBox = new J3DModelInstanceSimple(modelData);
             computeModelMatrixS(flowerBox.modelMatrix, 1.675);
