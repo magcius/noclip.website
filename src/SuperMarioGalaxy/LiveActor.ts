@@ -548,7 +548,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         invalidateCollisionPartsForActor(sceneObjHolder, this);
     }
-    
+
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
         this.actorLightCtrl = new ActorLightCtrl(this);
         this.actorLightCtrl.init(sceneObjHolder);

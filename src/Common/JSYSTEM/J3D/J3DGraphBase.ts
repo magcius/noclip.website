@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, J3DLoadFlags } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
 import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
@@ -46,7 +46,7 @@ export class ShapeInstanceState {
     public parentScale = vec3.create();
 }
 
-class ShapeData {
+export class ShapeData {
     public shapeHelper: GXShapeHelperGfx;
     public packets: LoadedVertexPacket[] = [];
     public sortKeyBias: number = 0;
@@ -155,6 +155,33 @@ export function J3DCalcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): vo
     m[15] = 9999.0;
 }
 
+export function prepareShapeMtxGroup(packetParams: PacketParams, shapeInstanceState: ShapeInstanceState, shape: Shape, mtxGroup: MtxGroup): boolean {
+    let instVisible = false;
+
+    for (let i = 0; i < mtxGroup.useMtxTable.length; i++) {
+        const matrixIndex = mtxGroup.useMtxTable[i];
+
+        // Leave existing matrix.
+        if (matrixIndex === 0xFFFF)
+            continue;
+
+        const drw = shapeInstanceState.drawViewMatrixArray[matrixIndex];
+        const dst = packetParams.u_PosMtx[i];
+
+        if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
+            J3DCalcBBoardMtx(dst, drw);
+        else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
+            J3DCalcYBBoardMtx(dst, drw);
+        else
+            mat4.copy(dst, drw);
+
+        if (shapeInstanceState.drawViewMatrixVisibility[matrixIndex])
+            instVisible = true;
+    }
+
+    return instVisible;
+}
+
 const scratchModelViewMatrix = mat4.create();
 const packetParams = new PacketParams();
 export class ShapeInstance {
@@ -185,41 +212,17 @@ export class ShapeInstance {
         if (!multi)
             materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
 
-        for (let p = 0; p < shape.mtxGroups.length; p++) {
-            const mtxGroup = shape.mtxGroups[p];
-
-            let instVisible = false;
-            for (let i = 0; i < mtxGroup.useMtxTable.length; i++) {
-                const matrixIndex = mtxGroup.useMtxTable[i];
-
-                // Leave existing matrix.
-                if (matrixIndex === 0xFFFF)
-                    continue;
-
-                const drw = shapeInstanceState.drawViewMatrixArray[matrixIndex];
-                const dst = packetParams.u_PosMtx[i];
-
-                if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
-                    J3DCalcBBoardMtx(dst, drw);
-                else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
-                    J3DCalcYBBoardMtx(dst, drw);
-                else
-                    mat4.copy(dst, drw);
-
-                if (shapeInstanceState.drawViewMatrixVisibility[matrixIndex])
-                    instVisible = true;
-            }
-
-            if (!instVisible)
+        for (let i = 0; i < shape.mtxGroups.length; i++) {
+            if (!prepareShapeMtxGroup(packetParams, shapeInstanceState, shape, shape.mtxGroups[i]))
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
-            this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.packets[p]);
+            this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.packets[i]);
             this.shapeData.shapeHelper.fillPacketParams(packetParams, renderInst);
 
             if (multi)
                 materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
-
+    
             renderInstManager.submitRenderInst(renderInst);
         }
 

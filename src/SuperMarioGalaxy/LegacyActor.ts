@@ -208,7 +208,8 @@ export class NoclipLegacyActorSpawner {
         switch (name) {
             case 'HoneyQueen': {
                 const actor = await spawnGraph('HoneyQueen');
-                initMultiFur(this.sceneObjHolder, actor, LightType.None);
+                actor.initLightCtrl(this.sceneObjHolder);
+                initMultiFur(this.sceneObjHolder, actor, LightType.Strong);
             } break;
 
             case 'MeteorCannon':

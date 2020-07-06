@@ -393,7 +393,7 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
 //#endregion
 //#region SHP1
 // A Matrix Group is a series of draw calls that use the same matrix table.
-interface MtxGroup {
+export interface MtxGroup {
     useMtxTable: Uint16Array;
     indexOffset: number;
     indexCount: number;

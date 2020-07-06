@@ -11,7 +11,7 @@ import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxSamplerBinding } from '../gfx/platform/GfxPlatform';
-import { executeOnPass, GfxRenderInstList } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
 
@@ -418,6 +418,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.execute(passRenderer, DrawType.WARP_POD_PATH);
         this.execute(passRenderer, DrawType.WATER_PLANT);
         this.execute(passRenderer, DrawType.ASTRO_DOME_ORBIT);
+        this.execute(passRenderer, DrawType.FUR);
         this.execute(passRenderer, DrawType.OCEAN_SPHERE);
         this.execute(passRenderer, DrawType.FLAG);
 
@@ -1145,10 +1146,6 @@ export class SceneObjHolder {
 
         this.drawSyncManager.destroy(device);
     }
-}
-
-export function createSceneObj(sceneObjHolder: SceneObjHolder, sceneObj: SceneObj): void {
-    sceneObjHolder.create(sceneObj);
 }
 
 export function getObjectName(infoIter: JMapInfoIter): string {

@@ -281,6 +281,17 @@ export class ActorLightCtrl {
             }
         }
     }
+
+    public loadLightOnMaterialParams(materialParams: MaterialParams, camera: Camera): void {
+        if (this.currentAreaLight !== null) {
+            if (this.blendOutActorLight !== null) {
+                this.blendAnimActorLight.setOnMaterialParams(materialParams, camera, true);
+            } else {
+                const targetLight = this.getTargetActorLight(this.currentAreaLight);
+                targetLight.setOnMaterialParams(materialParams, camera, true);
+            }
+        }
+    }
 }
 
 class LightZoneInfo {
