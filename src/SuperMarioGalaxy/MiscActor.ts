@@ -246,24 +246,25 @@ function createSubModelObjName(parentActor: LiveActor, suffix: string): string {
     return `${parentActor.name}${suffix}`;
 }
 
-function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, suffix: string, drawBufferType: DrawBufferType): PartsModel | null {
+function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, suffix: string, transformMatrix: mat4 | null = null, drawBufferType: DrawBufferType): PartsModel | null {
     const subModelObjName = createSubModelObjName(parentActor, suffix);
     if (!sceneObjHolder.modelCache.isObjectDataExist(subModelObjName))
         return null;
-    const model = new PartsModel(sceneObjHolder, subModelObjName, subModelObjName, parentActor, drawBufferType);
+    const model = new PartsModel(sceneObjHolder, subModelObjName, subModelObjName, parentActor, drawBufferType, transformMatrix);
     model.initFixedPositionRelative(null);
     tryStartAllAnim(model, subModelObjName);
     return model;
 }
-
 function createWaterModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
-    const model = createSubModel(sceneObjHolder, parentActor, 'Water', DrawBufferType.MAP_OBJ);
-    return model;
+    return createSubModel(sceneObjHolder, parentActor, 'Water', null, DrawBufferType.MAP_OBJ);
 }
 
 function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
-    const model = createSubModel(sceneObjHolder, parentActor, 'Indirect', DrawBufferType.INDIRECT_PLANET);
-    return model;
+    return createSubModel(sceneObjHolder, parentActor, 'Indirect', null, DrawBufferType.INDIRECT_PLANET);
+}
+
+function createBloomModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, transformMatrix: mat4) {
+    return createSubModel(sceneObjHolder, parentActor, 'Bloom', transformMatrix, DrawBufferType.BLOOM_MODEL);
 }
 
 function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
@@ -1137,6 +1138,10 @@ function setEffectHostMtx(actor: LiveActor, effectName: string, hostMtx: mat4): 
 function setEffectHostSRT(actor: LiveActor, effectName: string, translation: vec3 | null, rotation: vec3 | null, scale: vec3 | null): void {
     const emitter = assertExists(actor.effectKeeper!.getEmitter(effectName));
     emitter.setHostSRT(translation, rotation, scale);
+}
+
+function setEffectName(actor: LiveActor, origName: string, newName: string): void {
+    actor.effectKeeper!.changeEffectName(origName, newName);
 }
 
 export class BlackHole extends LiveActor {
@@ -9837,5 +9842,195 @@ export class HeatHazeDirector extends NameObj {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('ShimmerBoard');
+    }
+}
+
+const enum LavaProminenceNrv { Wait, WaitSwitch, Sign, MoveStartExtra, MoveLoop, MoveEndExtra, }
+
+function calcUpVecFromGravity(dst: vec3, sceneObjHolder: SceneObjHolder, actor: LiveActor, pos: vec3): void {
+    calcGravityVector(sceneObjHolder, actor, pos, dst);
+    if (isNearZeroVec3(dst, 0.001))
+        calcUpVec(dst, actor);
+    else
+        vec3.negate(dst, dst);
+}
+
+export class LavaProminence extends LiveActor<LavaProminenceNrv> {
+    private signDelay: number;
+    private railSpeed: number;
+    private railEndCoordMargin: number;
+    private curRailCoord = 0.0;
+
+    private curRailDirection = vec3.create();
+    private railStartPos = vec3.create();
+    private railStartDir = vec3.create();
+    private railEndPos = vec3.create();
+    private railEndDir = vec3.create();
+
+    private signStartEffectMtx = mat4.create();
+    private endEffectMtx = mat4.create();
+
+    private bloomModel: PartsModel;
+    private bloomModelMtx = mat4.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.signDelay = fallback(getJMapInfoArg0(infoIter), 180);
+        this.railSpeed = fallback(getJMapInfoArg1(infoIter), 20.0);
+        this.railEndCoordMargin = fallback(getJMapInfoArg3(infoIter), 0.0);
+
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'LavaProminence');
+        startBtk(this, 'LavaProminence');
+
+        connectToSceneMapObj(sceneObjHolder, this);
+
+        this.initRailRider(sceneObjHolder, infoIter);
+        calcRailPosAtCoord(this.railStartPos, this, 0.0);
+        calcRailDirectionAtCoord(this.railStartDir, this, 0.0);
+
+        const railEndCoord = getRailTotalLength(this);
+        calcRailPosAtCoord(this.railEndPos, this, railEndCoord);
+        calcRailDirectionAtCoord(this.railEndDir, this, railEndCoord);
+
+        // initSound
+        // setGroupClipping
+        // initAndSetRailClipping
+
+        if (isValidSwitchA(this))
+            this.initNerve(LavaProminenceNrv.WaitSwitch);
+        else
+            this.initNerve(LavaProminenceNrv.Wait);
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        setEffectHostMtx(this, 'Sign', this.signStartEffectMtx);
+        setEffectHostMtx(this, 'Start', this.signStartEffectMtx);
+        setEffectHostMtx(this, 'End', this.endEffectMtx);
+        setEffectName(this, 'Drop', 'DropEffect');
+
+        this.bloomModel = createBloomModel(sceneObjHolder, this, this.bloomModelMtx)!;
+        startBtk(this.bloomModel, 'LavaProminenceBloom');
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        calcUpVecFromGravity(scratchVec3, sceneObjHolder, this, this.railStartPos);
+        makeMtxUpNoSupportPos(this.signStartEffectMtx, scratchVec3, this.railStartPos);
+
+        calcUpVecFromGravity(scratchVec3, sceneObjHolder, this, this.railEndPos);
+        makeMtxUpNoSupportPos(this.endEffectMtx, scratchVec3, this.railEndPos);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        // TODO(jstpierre)
+        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+
+        mat4.copy(this.bloomModelMtx, this.modelInstance!.modelMatrix);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LavaProminenceNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === LavaProminenceNrv.Wait) {
+            if (isFirstStep(this)) {
+                hideModel(this);
+                deleteEffect(sceneObjHolder, this, 'DropEffect');
+
+                this.curRailCoord = 0.0;
+                setRailCoord(this, 0.0);
+                moveTransToCurrentRailPos(this);
+            }
+
+            if (isValidSwitchA(this) && !isOnSwitchA(sceneObjHolder, this)) {
+                this.setNerve(LavaProminenceNrv.WaitSwitch);
+            } else {
+                if (isGreaterEqualStep(this, this.signDelay))
+                    this.setNerve(LavaProminenceNrv.Sign);
+            }
+        } else if (currentNerve === LavaProminenceNrv.WaitSwitch) {
+            if (isFirstStep(this)) {
+                hideModel(this);
+                deleteEffect(sceneObjHolder, this, 'DropEffect');
+            }
+
+            if (isOnSwitchA(sceneObjHolder, this))
+                this.setNerve(LavaProminenceNrv.Wait);
+        } else if (currentNerve === LavaProminenceNrv.Sign) {
+            if (isFirstStep(this)) {
+                emitEffect(sceneObjHolder, this, 'Sign');
+                hideModel(this);
+                deleteEffect(sceneObjHolder, this, 'DropEffect');
+            }
+
+            if (isGreaterEqualStep(this, 90)) {
+                deleteEffect(sceneObjHolder, this, 'Sign');
+                this.setNerve(LavaProminenceNrv.MoveStartExtra);
+            }
+        } else if (currentNerve === LavaProminenceNrv.MoveStartExtra) {
+            const extraLength = 300.0;
+
+            if (isFirstStep(this)) {
+                emitEffect(sceneObjHolder, this, 'Start');
+                // startSound
+                this.curRailCoord = 0.0;
+                setRailCoord(this, 0.0);
+
+                vec3.scaleAndAdd(this.translation, this.railStartPos, this.railStartDir, -extraLength);
+                showModel(this);
+                emitEffect(sceneObjHolder, this, 'DropEffect');
+            }
+
+            vec3.scaleAndAdd(this.translation, this.translation, this.railStartDir, this.railSpeed);
+            calcGravity(sceneObjHolder, this);
+            this.setGravityAndMakeMtx(sceneObjHolder);
+
+            const extraStopStep = (extraLength / this.railSpeed) - 1;
+            if (isGreaterStep(this, extraStopStep)) {
+                deleteEffect(sceneObjHolder, this, 'Start');
+                this.setNerve(LavaProminenceNrv.MoveLoop);
+            }
+        } else if (currentNerve === LavaProminenceNrv.MoveLoop) {
+            // startLevelSound
+            this.moveOnRail(sceneObjHolder);
+
+            const railLength = getRailTotalLength(this);
+            if (this.curRailCoord >= (railLength - this.railEndCoordMargin))
+                this.setNerve(LavaProminenceNrv.MoveEndExtra);
+        } else if (currentNerve === LavaProminenceNrv.MoveEndExtra) {
+            if (isFirstStep(this))
+                emitEffect(sceneObjHolder, this, 'End');
+
+            // startLevelSound
+            vec3.scaleAndAdd(this.translation, this.translation, this.railEndDir, this.railSpeed);
+            if (vec3.sqrDist(this.railEndPos, this.translation) >= 300.0**2) {
+                hideModel(this);
+                deleteEffect(sceneObjHolder, this, 'DropEffect');
+                deleteEffect(sceneObjHolder, this, 'End');
+                this.setNerve(LavaProminenceNrv.Wait);
+            }
+        }
+    }
+
+    private moveOnRail(sceneObjHolder: SceneObjHolder): void {
+        this.curRailCoord += this.railSpeed;
+        setRailCoord(this, clamp(this.curRailCoord, 0.0, getRailTotalLength(this)));
+        getRailDirection(this.curRailDirection, this);
+        moveTransToCurrentRailPos(this);
+        calcGravity(sceneObjHolder, this);
+        this.setGravityAndMakeMtx(sceneObjHolder);
+    }
+
+    private setGravityAndMakeMtx(sceneObjHolder: SceneObjHolder): void {
+        // TODO(jstpierre): What is this mtx used for?
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('LavaProminence');
+        sceneObjHolder.modelCache.requestObjectData('LavaProminenceBloom');
     }
 }
