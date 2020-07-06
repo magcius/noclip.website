@@ -2299,11 +2299,10 @@ export class GCaptureTarget extends LiveActor {
     }
 }
 
-const enum FountainBigNrv { WaitPhase, Wait, Sign, SignStop, Spout, SpoutEnd }
+const enum FountainBigNrv { Wait, Sign, SignStop, Spout, SpoutEnd }
 
 export class FountainBig extends LiveActor<FountainBigNrv> {
     private upVec = vec3.create();
-    private randomPhase: number = 0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -2318,21 +2317,15 @@ export class FountainBig extends LiveActor<FountainBigNrv> {
         hideModel(this);
         startBtk(this, "FountainBig");
 
-        // TODO(jstpierre): Figure out what causes this phase for realsies. Might just be culling...
-        this.randomPhase = (Math.random() * 300) | 0;
+        this.initWaitPhase = getRandomInt(0, 300);
 
-        this.initNerve(FountainBigNrv.WaitPhase);
+        this.initNerve(FountainBigNrv.Wait);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FountainBigNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        if (currentNerve === FountainBigNrv.WaitPhase) {
-            if (isGreaterStep(this, this.randomPhase)) {
-                this.setNerve(FountainBigNrv.Wait);
-                return;
-            }
-        } else if (currentNerve === FountainBigNrv.Wait) {
+        if (currentNerve === FountainBigNrv.Wait) {
             if (isGreaterStep(this, 120)) {
                 this.setNerve(FountainBigNrv.Sign);
                 return;
@@ -2884,6 +2877,8 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
         setEffectHostSRT(this, 'Sign', this.translation, this.rotation, this.effectScale);
 
         this.initNerve(LavaSteamNrv.Wait);
+
+        this.initWaitPhase = getRandomInt(0, 50);
 
         connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
     }
@@ -9735,6 +9730,9 @@ export class LavaGeyser extends LiveActor<LavaGeyserNrv> {
             this.initNerve(LavaGeyserNrv.WaitSwitch);
         else
             this.initNerve(LavaGeyserNrv.Wait);
+
+        this.initWaitPhase = getRandomInt(0, this.waitTime);
+
         this.makeActorAppeared(sceneObjHolder);
     }
 
@@ -9912,6 +9910,8 @@ export class LavaProminence extends LiveActor<LavaProminenceNrv> {
 
         this.bloomModel = createBloomModel(sceneObjHolder, this, this.bloomModelMtx)!;
         startBtk(this.bloomModel, 'LavaProminenceBloom');
+
+        this.initWaitPhase = getRandomInt(0, 100);
 
         this.makeActorAppeared(sceneObjHolder);
     }

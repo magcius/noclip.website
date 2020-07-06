@@ -411,6 +411,9 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public velocity = vec3.create();
     public gravityVector = vec3.fromValues(0, -1, 0);
 
+    // HACK(jstpierre): For not having proper culling that stops movement
+    public initWaitPhase: number = 0;
+
     constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
         super(sceneObjHolder, name);
     }
@@ -706,10 +709,14 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             this.modelManager.update(deltaTimeFrames);
 
         if (this.spine !== null) {
-            this.spine.changeNerve();
-            this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
-            this.spine.updateTick(deltaTimeFrames);
-            this.spine.changeNerve();
+            if (this.initWaitPhase > 0) {
+                this.initWaitPhase -= deltaTimeFrames;
+            } else {
+                this.spine.changeNerve();
+                this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
+                this.spine.updateTick(deltaTimeFrames);
+                this.spine.changeNerve();
+            }
         }
 
         if (!this.visibleAlive)
