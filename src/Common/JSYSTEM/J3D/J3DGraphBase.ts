@@ -11,7 +11,7 @@ import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex 
 import { TextureMapping } from '../../../TextureHolder';
 import { nArray, assert, assertExists } from '../../../util';
 import { AABB } from '../../../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask } from '../../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask, GfxFormat } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
@@ -22,6 +22,7 @@ import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
 import { translateSampler } from '../JUTTexture';
 import { calcJointMatrixFromTransform } from './J3DGraphAnimator';
+import { LoadedVertexPacket } from '../../../gx/gx_displaylist';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into world space.
@@ -46,21 +47,38 @@ export class ShapeInstanceState {
 }
 
 class ShapeData {
-    public shapeHelpers: GXShapeHelperGfx[] = [];
+    public shapeHelper: GXShapeHelperGfx;
+    public packets: LoadedVertexPacket[] = [];
     public sortKeyBias: number = 0;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public shape: Shape, coalescedBuffers: GfxCoalescedBuffersCombo[]) {
+        assert(this.shape.loadedVertexLayout.indexFormat === GfxFormat.U16_R);
+        const firstCoalescedBuffer = coalescedBuffers.shift()!;
+
+        // Combine all coalesced buffers into the first coalesced buffer. We can do this because coalesced
+        // buffers i...i+N are guaranteed to be immediately contiguous, though it's possible we should better
+        // support this in the generic buffer coalescement system....
+        for (let i = 1; i < this.shape.mtxGroups.length; i++) {
+            const coalescedBuffer = coalescedBuffers.shift()!;
+            firstCoalescedBuffer.vertexBuffers[0].wordCount += coalescedBuffer.vertexBuffers[0].wordCount;
+        }
+
+        this.shapeHelper = new GXShapeHelperGfx(device, cache, firstCoalescedBuffer, this.shape.loadedVertexLayout);
+
+        let totalIndexCount = 0;
         for (let i = 0; i < this.shape.mtxGroups.length; i++) {
             const mtxGroup = this.shape.mtxGroups[i];
-            // TODO(jstpierre): Use only one ShapeHelper.
-            const shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.shift()!, this.shape.loadedVertexLayout, mtxGroup.loadedVertexData);
-            this.shapeHelpers.push(shapeHelper);
+
+            assert(mtxGroup.loadedVertexData.packets.length === 1);
+            const packet = mtxGroup.loadedVertexData.packets[0];
+            packet.indexOffset = totalIndexCount;
+            totalIndexCount += packet.indexCount;
+            this.packets.push(packet);
         }
     }
 
     public destroy(device: GfxDevice) {
-        for (let i = 0; i < this.shapeHelpers.length; i++)
-            this.shapeHelpers[i].destroy(device);
+        this.shapeHelper.destroy(device);
     }
 }
 
@@ -196,8 +214,8 @@ export class ShapeInstance {
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
-            this.shapeData.shapeHelpers[p].setOnRenderInst(renderInst);
-            this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst);
+            this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.packets[p]);
+            this.shapeData.shapeHelper.fillPacketParams(packetParams, renderInst);
 
             if (multi)
                 materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);

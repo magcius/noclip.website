@@ -905,7 +905,7 @@ class VtxLoaderImpl implements VtxLoader {
                 const memoryElemSize = 3*4;
                 const memoryBaseAddr = 0x0000;
                 const table = currentPacketXfmem.posNrmMatrixTable;
-        
+
                 const arrayIndex = dlView.getUint16(drawCallIdx + 0x01);
                 const addrLen = dlView.getUint16(drawCallIdx + 0x03);
                 const len = (addrLen >>> 12) + 1;

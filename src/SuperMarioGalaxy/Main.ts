@@ -45,6 +45,7 @@ import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr, BloomPostFXRe
 import { LensFlareDirector, DrawSyncManager } from './LensFlare';
 import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
+import { FurDrawManager } from './Fur';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -964,6 +965,7 @@ export const enum SceneObj {
     ImageEffectSystemHolder = 0x1D,
     BloomEffect             = 0x1E,
     LensFlareDirector       = 0x25,
+    FurDrawManager          = 0x26,
     PlanetGravityManager    = 0x32,
     CoinRotater             = 0x38,
     AirBubbleHolder         = 0x39,
@@ -1001,6 +1003,7 @@ export class SceneObjHolder {
     public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
     public bloomEffect: BloomEffect | null = null;
     public lensFlareDirector: LensFlareDirector | null = null;
+    public furDrawManager: FurDrawManager | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
@@ -1052,6 +1055,8 @@ export class SceneObjHolder {
             return this.bloomEffect;
         else if (sceneObj === SceneObj.LensFlareDirector)
             return this.lensFlareDirector;
+        else if (sceneObj === SceneObj.FurDrawManager)
+            return this.furDrawManager;
         else if (sceneObj === SceneObj.AreaObjContainer)
             return this.areaObjContainer;
         else if (sceneObj === SceneObj.LiveActorGroupArray)
@@ -1100,6 +1105,8 @@ export class SceneObjHolder {
             this.bloomEffect = new BloomEffect(this);
         else if (sceneObj === SceneObj.LensFlareDirector)
             this.lensFlareDirector = new LensFlareDirector(this);
+        else if (sceneObj === SceneObj.FurDrawManager)
+            this.furDrawManager = new FurDrawManager(this);
         else if (sceneObj === SceneObj.AreaObjContainer)
             this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.LiveActorGroupArray)

@@ -6474,7 +6474,7 @@ export class ElectricRailHolder extends NameObj {
             const modelInstance = modelObj.modelInstance!;
             mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
             template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
-            modelInstance.shapeInstances[0].shapeData.shapeHelpers[0].fillPacketParams(packetParams, template);
+            modelInstance.shapeInstances[0].shapeData.shapeHelper.fillPacketParams(packetParams, template);
 
             const materialInstance = modelInstance.materialInstances[0];
             materialInstance.setOnRenderInst(device, cache, template);

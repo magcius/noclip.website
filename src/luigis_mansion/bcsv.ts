@@ -1,28 +1,13 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { readString, hexdump } from "../util";
-
-function decodeSJIS(buffer: Uint8Array): string {
-    // @ts-ignore
-    if (typeof TextDecoder !== 'undefined') {
-        // @ts-ignore
-        return new TextDecoder('sjis')!.decode(buffer);
-    // @ts-ignore
-    } else if (typeof require !== 'undefined') {
-        // @ts-ignore
-        const iconv = require('iconv-lite');
-        return iconv.decode(buffer, 'sjis');
-    } else {
-        throw "whoops";
-    }
-}
+import { readString, decodeString } from "../util";
 
 function readStringSJIS(buffer: ArrayBufferSlice, offs: number): string {
     const view = buffer.createDataView(offs);
     let i = 0;
     while (view.getUint8(i) !== 0)
         i++;
-    return decodeSJIS(buffer.createTypedArray(Uint8Array, offs, i));
+    return decodeString(buffer.subarray(offs, i), 'sjis');
 }
 
 // Luigi's Mansion

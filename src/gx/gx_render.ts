@@ -450,7 +450,7 @@ export class GXShapeHelperGfx {
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData | null = null) {
         let usesZeroBuffer = false;
         for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
             const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
@@ -461,7 +461,7 @@ export class GXShapeHelperGfx {
         }
 
         const buffers: GfxVertexBufferDescriptor[] = [];
-        for (let i = 0; i < loadedVertexData.vertexBuffers.length; i++) {
+        for (let i = 0; i < coalescedBuffers.vertexBuffers.length; i++) {
             buffers.push({
                 buffer: coalescedBuffers.vertexBuffers[i].buffer,
                 byteOffset: coalescedBuffers.vertexBuffers[i].wordOffset * 4,
@@ -486,13 +486,10 @@ export class GXShapeHelperGfx {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket = this.loadedVertexData!.packets[0]): void {
         renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
-        if (packet !== null)
-            renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
-        else
-            renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
+        renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
     }
 
     public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst): void {

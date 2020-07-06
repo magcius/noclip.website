@@ -494,6 +494,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const mtxGroups: MtxGroup[] = [];
 
         let totalIndexCount = 0;
+        let totalVertexCount = 0;
         for (let j = 0; j < mtxGroupCount; j++) {
             const primSize = view.getUint32(mtxGroupIdx + 0x00);
             const primStart = primDataOffs + view.getUint32(mtxGroupIdx + 0x04);
@@ -514,11 +515,12 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 
             const srcOffs = primStart;
             const subBuffer = buffer.subarray(srcOffs, primSize);
-            const loadedVertexData = vtxLoader.runVertices(vtxArrays, subBuffer);
+            const loadedVertexData = vtxLoader.runVertices(vtxArrays, subBuffer, { firstVertexId: totalVertexCount });
 
             const indexOffset = totalIndexCount;
             const indexCount = loadedVertexData.totalIndexCount;
             totalIndexCount += indexCount;
+            totalVertexCount += loadedVertexData.totalVertexCount;
 
             mtxGroups.push({ useMtxTable, indexOffset, indexCount, loadedVertexData });
             mtxGroupIdx += 0x08;

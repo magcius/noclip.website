@@ -5,7 +5,7 @@
 import * as GX from '../gx/gx_enum';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists, nArray, hexdump } from "../util";
+import { assert, readString, assertExists, nArray } from "../util";
 import * as GX_Material from '../gx/gx_material';
 import { DisplayListRegisters, displayListRegistersRun } from '../gx/gx_displaylist';
 import { parseTexGens, parseTevStages, parseIndirectStages, parseRopInfo, parseAlphaTest, parseColorChannelControlRegister } from '../gx/gx_material';

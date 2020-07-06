@@ -1,27 +1,21 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { readFileSync, writeFileSync } from "fs";
-import { assert, hexzero, hexdump, readString, assertExists } from "../../util";
-import { decode } from 'iconv-lite';
+import { assert, readString, decodeString } from "../../util";
 import * as Yay0 from "../../Common/compression/Yay0";
 import * as BYML from "../../byml";
-
-function nulTerminate(S: string) {
-    const firstNul = S.indexOf('\0');
-    if (firstNul >= 0)
-        return S.slice(0, firstNul);
-    else
-        return S;
-}
-
-function decodeSJIS(data: ArrayBufferSlice): string {
-    const buf = Buffer.from(data.copyToBuffer());
-    return nulTerminate(decode(buf, 'sjis'));
-}
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
     return new ArrayBufferSlice(b.buffer as ArrayBuffer);
+}
+
+function readStringSJIS(buffer: ArrayBufferSlice, offs: number = 0): string {
+    const view = buffer.createDataView(offs);
+    let i = 0;
+    while (view.getUint8(i) !== 0)
+        i++;
+    return decodeString(buffer.subarray(offs, i), 'sjis');
 }
 
 const pathBaseIn  = `../../../data/pm64_raw`;
@@ -82,7 +76,7 @@ function main() {
         const areaName = readString(buffer, areaNameOffs + 0x00, 0x10, true);
         const areaNameSJISAddr = view.getUint32(areaTableIdx + 0x0C);
         const areaNameSJISOffs = translateMapTableAddr(areaNameSJISAddr);
-        const areaNameSJIS = decodeSJIS(buffer.subarray(areaNameSJISOffs, 0x20));
+        const areaNameSJIS = readStringSJIS(buffer.subarray(areaNameSJISOffs, 0x20));
         areaTableIdx += 0x10;
 
         let mapTableIdx = translateMapTableAddr(mapTableAddr);
