@@ -33,7 +33,7 @@ import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater, WaterAreaHolder, WaterInfo, HazeCube } from './MiscMap';
-import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts } from './Collision';
+import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
@@ -423,7 +423,8 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
 
             const bodySensor = this.getSensor('body')!;
             initCollisionParts(sceneObjHolder, this, this.objName, bodySensor, hostMtx);
-            // TODO(jstpierre): MoveLimit
+
+            tryCreateCollisionMoveLimit(sceneObjHolder, this, bodySensor);
         }
 
         const connectedWithRail = isConnectedWithRail(infoIter);
@@ -748,6 +749,9 @@ export class PlanetMap extends LiveActor {
             // TODO(jstpierre): FollowJoint
             initCollisionParts(sceneObjHolder, this, this.name, bodySensor, hostMtx);
         }
+        tryCreateCollisionMoveLimit(sceneObjHolder, this, bodySensor);
+        tryCreateCollisionWaterSurface(sceneObjHolder, this, bodySensor);
+
         tryStartAllAnim(this, this.name);
         this.tryStartMyEffect(sceneObjHolder);
 

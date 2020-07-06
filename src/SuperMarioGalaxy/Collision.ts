@@ -64,6 +64,9 @@ export class HitInfo extends Triangle {
 
 export const enum Category {
     Map = 0,
+    Sunshade = 1,
+    WaterSurface = 2,
+    MoveLimit = 3,
 }
 
 export class TriangleFilterBase {
@@ -477,4 +480,25 @@ export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder
         parts.hostMtx = hostMtx;
 
     return parts;
+}
+
+function tryCreateCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor, category: Category, filenameBase: string): CollisionParts | null {
+    const res = actor.resourceHolder.arc.findFileData(`${filenameBase}.kcl`);
+    if (res === null)
+        return null;
+
+    makeMtxTRSFromActor(scratchMatrix, actor);
+    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, filenameBase, hitSensor, scratchMatrix, CollisionScaleType.AutoScale, category);
+    if (parts !== null)
+        validateCollisionParts(sceneObjHolder, parts);
+
+    return parts;
+}
+
+export function tryCreateCollisionMoveLimit(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor): CollisionParts | null {
+    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, Category.MoveLimit, 'MoveLimit');
+}
+
+export function tryCreateCollisionWaterSurface(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor): CollisionParts | null {
+    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, Category.WaterSurface, 'WaterSurface');
 }
