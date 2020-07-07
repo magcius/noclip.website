@@ -549,7 +549,7 @@ export class KCollisionServer {
 
                         if (!this.KCHitSphere(prismHitScratch, prism, pos, radius, invAvgScale))
                             continue;
-        
+
                         dst.prisms[dstPrismCount] = prism;
                         dst.distances[dstPrismCount] = prismHitScratch.distance;
                         dst.classifications[dstPrismCount] = prismHitScratch.classification;

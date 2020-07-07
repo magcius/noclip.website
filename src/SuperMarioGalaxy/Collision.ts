@@ -12,7 +12,6 @@ import { connectToScene, vecKillElement } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 import { AABB } from "../Geometry";
-import { requestArchivesLensFlareArea } from "./LensFlare";
 
 export class Triangle {
     public collisionParts: CollisionParts | null = null;
@@ -62,6 +61,12 @@ export class Triangle {
 export class HitInfo extends Triangle {
     public strikeLoc = vec3.create();
     public distance: number = -1;
+
+    public copy(other: HitInfo): void {
+        super.copy(other);
+        vec3.copy(this.strikeLoc, other.strikeLoc);
+        this.distance = other.distance;
+    }
 }
 
 export const enum Category {
@@ -672,6 +677,123 @@ export class CollisionDirector extends NameObj {
     }
 }
 
+export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: vec3 | null, dstTriangle: Triangle | null, p0: vec3, dir: vec3, triFilter: TriangleFilterBase | null, partsFilter: CollisionPartsFilterBase | null, category: Category): boolean {
+    const director = sceneObjHolder.collisionDirector;
+    if (director === null)
+        return false;
+
+    const keeper = director.keepers[category];
+    const count = keeper.checkStrikeLine(p0, dir, partsFilter, null);
+    if (count === 0)
+        return false;
+
+    let bestDist = Infinity, bestIdx = -1;
+    for (let i = 0; i < count; i++) {
+        const strikeInfo = keeper.strikeInfo[i];
+        if (triFilter !== null && triFilter.isInvalidTriangle(strikeInfo))
+            continue;
+        if (strikeInfo.distance < bestDist) {
+            bestDist = strikeInfo.distance;
+            bestIdx = i;
+        }
+    }
+
+    assert(bestIdx >= 0);
+    const bestStrike = keeper.strikeInfo[bestIdx];
+
+    if (dst !== null)
+        vec3.copy(dst, bestStrike.strikeLoc);
+    if (dstTriangle !== null)
+        dstTriangle.copy(bestStrike);
+
+    return true;
+}
+
+export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3): boolean {
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, Category.Map);
+}
+
+class CollisionPartsFilterActor extends CollisionPartsFilterBase {
+    public actor: LiveActor | null = null;
+
+    public isInvalidParts(parts: CollisionParts): boolean {
+        return parts.hitSensor.actor === this.actor;
+    }
+}
+
+export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3, actor: LiveActor): boolean {
+    const partsFilter = new CollisionPartsFilterActor();
+    partsFilter.actor = actor;
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, Category.Map);
+}
+
+export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: vec3, height: number): boolean {
+    vec3.set(scratchVec3c, 0.0, -height, 0.0);
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3c, null, null, Category.Map);
+}
+
+export const enum CollisionScaleType {
+    AutoEqualScale,
+    NotUsingScale,
+    AutoScale,
+}
+
+function createCollisionParts(sceneObjHolder: SceneObjHolder, zoneAndLayer: ZoneAndLayer, resourceHolder: ResourceHolder, name: string, hitSensor: HitSensor, initialHostMtx: mat4, scaleType: CollisionScaleType, category: Category): CollisionParts {
+    const kclData = assertExists(resourceHolder.arc.findFileData(`${name}.kcl`));
+    const paData = resourceHolder.arc.findFileData(`${name}.pa`);
+    return new CollisionParts(sceneObjHolder, zoneAndLayer, initialHostMtx, hitSensor, kclData, paData, category, scaleType);
+}
+
+export function validateCollisionParts(sceneObjHolder: SceneObjHolder, parts: CollisionParts): void {
+    parts.addToBelongZone(sceneObjHolder);
+    parts.validated = true;
+}
+
+export function invalidateCollisionParts(sceneObjHolder: SceneObjHolder, parts: CollisionParts): void {
+    parts.removeFromBelongZone(sceneObjHolder);
+    parts.validated = false;
+}
+
+const scratchMatrix = mat4.create();
+export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null, scaleType: CollisionScaleType): CollisionParts {
+    let initialHostMtx: mat4;
+    if (hostMtx !== null) {
+        initialHostMtx = hostMtx;
+    } else {
+        makeMtxTRSFromActor(scratchMatrix, actor);
+        initialHostMtx = scratchMatrix;
+    }
+
+    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, name, hitSensor, initialHostMtx, scaleType, Category.Map);
+
+    if (hostMtx !== null)
+        parts.hostMtx = hostMtx;
+
+    return parts;
+}
+
+function tryCreateCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor, category: Category, filenameBase: string): CollisionParts | null {
+    const res = actor.resourceHolder.arc.findFileData(`${filenameBase}.kcl`);
+    if (res === null)
+        return null;
+
+    makeMtxTRSFromActor(scratchMatrix, actor);
+    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, filenameBase, hitSensor, scratchMatrix, CollisionScaleType.AutoScale, category);
+    if (parts !== null)
+        validateCollisionParts(sceneObjHolder, parts);
+
+    return parts;
+}
+
+export function tryCreateCollisionMoveLimit(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor): CollisionParts | null {
+    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, Category.MoveLimit, 'MoveLimit');
+}
+
+export function tryCreateCollisionWaterSurface(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor): CollisionParts | null {
+    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, Category.WaterSurface, 'WaterSurface');
+}
+
+//#region Binder
 function isFloorPolygonAngle(v: number): boolean {
     // 70 degrees -- Math.cos(70*Math.PI/180)
     return v < -0.3420201433256688;
@@ -698,16 +820,15 @@ function isHostMoved(hitInfo: HitInfo): boolean {
     return hitInfo.collisionParts!.notMovedCounter === 0;
 }
 
+const scratchHitInfo = nArray(32, () => new HitInfo());
 export class Binder {
     public partsFilter: CollisionPartsFilterBase | null = null;
     public triangleFilter: TriangleFilterBase | null = null;
+
     private exCollisionParts: CollisionParts | null = null;
     private exCollisionPartsValid: boolean = false;
     private hitInfos: HitInfo[];
     private hitInfoCount: number;
-    private floorHitInfo = new HitInfo();
-    private wallHitInfo = new HitInfo();
-    private ceilingHitInfo = new HitInfo();
 
     private useHostBaseMtx: boolean = false;
 
@@ -718,12 +839,24 @@ export class Binder {
     public hostOffsetVec: vec3 | null = null;
     public fixReactionVec = vec3.create();
 
+    public floorHitInfo = new HitInfo();
+    public wallHitInfo = new HitInfo();
+    public ceilingHitInfo = new HitInfo();
+
     constructor(private hostBaseMtx: mat4 | null, private hostTranslation: vec3, private hostGravity: vec3, private hostCenterY: number, private radius: number, hitInfoCapacity: number) {
-        this.hitInfos = nArray(hitInfoCapacity, () => new HitInfo());
+        if (hitInfoCapacity === 0) {
+            // Use global scratch space.
+            this.hitInfos = scratchHitInfo;
+        } else {
+            this.hitInfos = nArray(hitInfoCapacity, () => new HitInfo());
+        }
+
         this.clear();
     }
 
-    public bind(sceneObjHolder: SceneObjHolder, dst: vec3, vel: vec3): void {
+    public bind(sceneObjHolder: SceneObjHolder, dst: vec3, vel: ReadonlyVec3): void {
+        this.clear();
+
         if (this.exCollisionPartsValid)
             sceneObjHolder.collisionDirector!.keepers[Category.Map].addToGlobal(assertExists(this.exCollisionParts));
 
@@ -756,7 +889,7 @@ export class Binder {
             this.storeContactPlane();
 
             if (this.moveWithCollision)
-                this.moveWithCollisionParts(scratchVec3c, vel);
+                this.moveWithCollisionParts(scratchVec3c, dst);
 
             dst[0] = scratchVec3c[0] - origPosX;
             dst[1] = scratchVec3c[1] - origPosY;
@@ -767,7 +900,7 @@ export class Binder {
             sceneObjHolder.collisionDirector!.keepers[Category.Map].removeFromGlobal(assertExists(this.exCollisionParts));
     }
 
-    private findBindedPos(sceneObjHolder: SceneObjHolder, pos: vec3, vel: vec3, skipInitialPosition: boolean, expandDistance: boolean): BinderFindBindedPositionRet {
+    private findBindedPos(sceneObjHolder: SceneObjHolder, pos: vec3, vel: ReadonlyVec3, skipInitialPosition: boolean, expandDistance: boolean): BinderFindBindedPositionRet {
         const keeper = sceneObjHolder.collisionDirector!.keepers[Category.Map];
 
         const speed = vec3.length(vel);
@@ -783,8 +916,6 @@ export class Binder {
             const hitCount = keeper.checkStrikeBall(pos, this.radius, this.useMovingReaction, this.partsFilter, this.triangleFilter);
             if (hitCount !== 0) {
                 // Hit something. We can stop searching.
-
-                vec3.scale(vel, vel, i / numSteps);
                 this.storeCurrentHitInfo(keeper, expandDistance);
 
                 if (i < numSteps)
@@ -906,118 +1037,19 @@ export class Binder {
     }
 }
 
-export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: vec3 | null, dstTriangle: Triangle | null, p0: vec3, dir: vec3, triFilter: TriangleFilterBase | null, partsFilter: CollisionPartsFilterBase | null, category: Category): boolean {
-    const director = sceneObjHolder.collisionDirector;
-    if (director === null)
-        return false;
-
-    const keeper = director.keepers[category];
-    const count = keeper.checkStrikeLine(p0, dir, partsFilter, null);
-    if (count === 0)
-        return false;
-
-    let bestDist = Infinity, bestIdx = -1;
-    for (let i = 0; i < count; i++) {
-        const strikeInfo = keeper.strikeInfo[i];
-        if (triFilter !== null && triFilter.isInvalidTriangle(strikeInfo))
-            continue;
-        if (strikeInfo.distance < bestDist) {
-            bestDist = strikeInfo.distance;
-            bestIdx = i;
-        }
-    }
-
-    assert(bestIdx >= 0);
-    const bestStrike = keeper.strikeInfo[bestIdx];
-
-    if (dst !== null)
-        vec3.copy(dst, bestStrike.strikeLoc);
-    if (dstTriangle !== null)
-        dstTriangle.copy(bestStrike);
-
-    return true;
+export function isBindedGround(actor: LiveActor): boolean {
+    return actor.binder!.floorHitInfo.distance >= 0.0;
 }
 
-export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3): boolean {
-    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, Category.Map);
+export function isBindedRoof(actor: LiveActor): boolean {
+    return actor.binder!.ceilingHitInfo.distance >= 0.0;
 }
 
-class CollisionPartsFilterActor extends CollisionPartsFilterBase {
-    public actor: LiveActor | null = null;
-
-    public isInvalidParts(parts: CollisionParts): boolean {
-        return parts.hitSensor.actor === this.actor;
-    }
+export function isBindedWall(actor: LiveActor): boolean {
+    return actor.binder!.wallHitInfo.distance >= 0.0;
 }
 
-export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3, actor: LiveActor): boolean {
-    const partsFilter = new CollisionPartsFilterActor();
-    partsFilter.actor = actor;
-    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, Category.Map);
+export function isBinded(actor: LiveActor): boolean {
+    return isBindedGround(actor) || isBindedRoof(actor) || isBindedWall(actor);
 }
-
-export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: vec3, height: number): boolean {
-    vec3.set(scratchVec3c, 0.0, -height, 0.0);
-    return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3c, null, null, Category.Map);
-}
-
-export const enum CollisionScaleType {
-    AutoEqualScale,
-    NotUsingScale,
-    AutoScale,
-}
-
-function createCollisionParts(sceneObjHolder: SceneObjHolder, zoneAndLayer: ZoneAndLayer, resourceHolder: ResourceHolder, name: string, hitSensor: HitSensor, initialHostMtx: mat4, scaleType: CollisionScaleType, category: Category): CollisionParts {
-    const kclData = assertExists(resourceHolder.arc.findFileData(`${name}.kcl`));
-    const paData = resourceHolder.arc.findFileData(`${name}.pa`);
-    return new CollisionParts(sceneObjHolder, zoneAndLayer, initialHostMtx, hitSensor, kclData, paData, category, scaleType);
-}
-
-export function validateCollisionParts(sceneObjHolder: SceneObjHolder, parts: CollisionParts): void {
-    parts.addToBelongZone(sceneObjHolder);
-    parts.validated = true;
-}
-
-export function invalidateCollisionParts(sceneObjHolder: SceneObjHolder, parts: CollisionParts): void {
-    parts.removeFromBelongZone(sceneObjHolder);
-    parts.validated = false;
-}
-
-const scratchMatrix = mat4.create();
-export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null, scaleType: CollisionScaleType): CollisionParts {
-    let initialHostMtx: mat4;
-    if (hostMtx !== null) {
-        initialHostMtx = hostMtx;
-    } else {
-        makeMtxTRSFromActor(scratchMatrix, actor);
-        initialHostMtx = scratchMatrix;
-    }
-
-    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, name, hitSensor, initialHostMtx, scaleType, Category.Map);
-
-    if (hostMtx !== null)
-        parts.hostMtx = hostMtx;
-
-    return parts;
-}
-
-function tryCreateCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor, category: Category, filenameBase: string): CollisionParts | null {
-    const res = actor.resourceHolder.arc.findFileData(`${filenameBase}.kcl`);
-    if (res === null)
-        return null;
-
-    makeMtxTRSFromActor(scratchMatrix, actor);
-    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, filenameBase, hitSensor, scratchMatrix, CollisionScaleType.AutoScale, category);
-    if (parts !== null)
-        validateCollisionParts(sceneObjHolder, parts);
-
-    return parts;
-}
-
-export function tryCreateCollisionMoveLimit(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor): CollisionParts | null {
-    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, Category.MoveLimit, 'MoveLimit');
-}
-
-export function tryCreateCollisionWaterSurface(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor): CollisionParts | null {
-    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, Category.WaterSurface, 'WaterSurface');
-}
+//#endregion

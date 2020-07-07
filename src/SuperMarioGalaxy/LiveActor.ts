@@ -574,6 +574,14 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.stageSwitchCtrl = createStageSwitchCtrl(sceneObjHolder, infoIter);
     }
 
+    public initBinder(radius: number, centerY: number, hitInfoCapacity: number): void {
+        this.binder = new Binder(this.getBaseMtx()!, this.translation, this.gravityVector, centerY, radius, hitInfoCapacity);
+        this.calcBinderFlag = true;
+
+        // if (this.effectKeeper !== null)
+        //     this.effectKeeper.setBinder(this.binder);
+    }
+
     public initNerve(nerve: TNerve): void {
         this.spine = new Spine<TNerve>();
         this.spine.setNerve(nerve);

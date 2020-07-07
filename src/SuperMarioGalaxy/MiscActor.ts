@@ -33,7 +33,7 @@ import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater, WaterAreaHolder, WaterInfo, HazeCube } from './MiscMap';
-import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from './Collision';
+import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isBinded } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
@@ -2629,7 +2629,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         const numStarBits = fallback(getJMapInfoArg0(infoIter), 5);
         this.delay = fallback(getJMapInfoArg1(infoIter), 240);
         this.distance = fallback(getJMapInfoArg2(infoIter), 2000);
-
+        this.initBinder(100.0, 0.0, 0);
         this.initNerve(ShootingStarNrv.PreShooting);
         this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
 
@@ -2668,6 +2668,10 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
 
             if (isGreaterStep(this, 360)) {
                 this.setNerve(ShootingStarNrv.WaitForNextShoot);
+                deleteEffect(sceneObjHolder, this, 'ShootingStarBlur');
+            } else if (isBinded(this)) {
+                this.setNerve(ShootingStarNrv.WaitForNextShoot);
+                // appearStarPiece
                 deleteEffect(sceneObjHolder, this, 'ShootingStarBlur');
             }
         } else if (currentNerve === ShootingStarNrv.WaitForNextShoot) {
@@ -10080,6 +10084,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
         connectToSceneMapObj(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
         this.initHitSensor();
+        // this.initBinder(126.36 * this.size, 126.36 * this.size, 8);
         // initShadowVolumeSphere
         this.initEffectKeeper(sceneObjHolder, null);
 
