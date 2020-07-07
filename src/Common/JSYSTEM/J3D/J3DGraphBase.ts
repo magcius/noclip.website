@@ -1009,7 +1009,7 @@ export class J3DModelInstance {
         this.shapeInstanceState.jointToWorldMatrixArray = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
         this.jointMatrixCalc = new JointMatrixCalcNoAnm();
-        this.calcJointAnim();
+        this.calcAnim();
 
         // DRW1 seems to specify each envelope twice. J3D runtime actually corrects for this in J3DModelLoader::readDraw().
         // This appears to be a runtime fix for a toolchain bug.
@@ -1204,11 +1204,6 @@ export class J3DModelInstance {
         return false;
     }
 
-    public calcAnim(camera: Camera): void {
-        // Update joints from our matrix calculator.
-        this.calcJointAnim();
-    }
-
     public calcView(camera: Camera | null, viewMatrix: mat4 | null): void {
         // Billboards have their model matrix modified to face the camera, so their world space position doesn't
         // quite match what they kind of do.
@@ -1305,7 +1300,7 @@ export class J3DModelInstance {
         }
     }
 
-    public calcJointAnim(): void {
+    public calcAnim(): void {
         vec3.set(this.shapeInstanceState.parentScale, 1.0, 1.0, 1.0);
         // vec3.set(this.shapeInstanceState.currentScale, 1.0, 1.0, 1.0);
 

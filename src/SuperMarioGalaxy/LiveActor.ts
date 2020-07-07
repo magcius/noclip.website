@@ -180,7 +180,7 @@ export class ModelManager {
         if (this.bvaPlayer !== null)
             this.bvaPlayer.calc();
 
-        this.modelInstance.calcAnim(viewerInput.camera);
+        this.modelInstance.calcAnim();
     }
 
     public update(deltaTimeFrames: number): void {
@@ -530,7 +530,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.calcAndSetBaseMtxBase();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
-        this.modelManager.modelInstance.calcJointAnim();
+        this.modelManager.modelInstance.calcAnim();
 
         // TODO(jstpierre): Seems like it's possible to have a secondary file for BCK animations?
         this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);

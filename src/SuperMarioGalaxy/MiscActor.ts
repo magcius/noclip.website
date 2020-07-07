@@ -38,6 +38,7 @@ import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis } from '../DebugJunk';
+import { initFur } from './Fur';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -10032,5 +10033,98 @@ export class LavaProminence extends LiveActor<LavaProminenceNrv> {
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('LavaProminence');
         sceneObjHolder.modelCache.requestObjectData('LavaProminenceBloom');
+    }
+}
+
+function addVelocityToGravity(actor: LiveActor, speed: number): void {
+    vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
+}
+
+const enum UnizoNrv { Wait }
+
+export class Unizo extends LiveActor<UnizoNrv> {
+    private jumpHeight = 0.0;
+    private size = 1.0;
+    private baseMtx = mat4.create();
+    private effectHostMtx = mat4.create();
+    private rollRotation = quat.create();
+    private blinkTime = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        if (this.name === 'Unizo') {
+            this.initModelManagerWithAnm(sceneObjHolder, 'Unizo');
+        } else if (this.name === 'UnizoLand') {
+            this.jumpHeight = 0.8;
+            this.initModelManagerWithAnm(sceneObjHolder, 'UnizoLand');
+            initFur(sceneObjHolder, this);
+        } else if (this.name === 'UnizoShoal') {
+            this.initModelManagerWithAnm(sceneObjHolder, 'UnizoShoal');
+        } else {
+            throw "whoops";
+        }
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        makeMtxTRFromActor(this.baseMtx, this);
+
+        this.size = 1.0;
+        vec3.set(this.scale, 1.0, 1.0, 1.0);
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initLightCtrl(sceneObjHolder);
+        this.initHitSensor();
+        // initShadowVolumeSphere
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        if (this.name === 'UnizoShoal')
+            setEffectHostMtx(this, 'Ripple', this.effectHostMtx);
+
+        this.initNerve(UnizoNrv.Wait);
+        this.calcGravityFlag = true;
+        startBtp(this, 'Blink');
+        this.blinkTime = getRandomInt(100, 200);
+        // addToAttributeGroupSearchTurtle
+        // declareStarPiece
+        // AnimScaleController
+        // WalkerStateBindStarPointer
+        // setGroupClipping
+        this.makeActorAppeared(sceneObjHolder);
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+        // trySetMoveLimitCollision
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        showModel(this);
+        setMatrixTranslation(this.baseMtx, this.translation);
+        super.makeActorAppeared(sceneObjHolder);
+
+        quatFromEulerRadians(this.rollRotation, this.rotation[0], this.rotation[1], this.rotation[2]);
+        quat.normalize(this.rollRotation, this.rollRotation);
+        vec3.set(this.rotation, 0, 0, 0);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UnizoNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === UnizoNrv.Wait) {
+            if (isFirstStep(this))
+                startBtp(this, 'Normal');
+
+            this.updateBlink();
+            this.updateInfluence();
+        }
+    }
+
+    private updateBlink(): void {
+        if (this.getNerveStep() % 200 === this.blinkTime)
+            startBtp(this, 'Blink');
+    }
+
+    private updateInfluence(): void {
+        addVelocityToGravity(this, 0.8);
     }
 }

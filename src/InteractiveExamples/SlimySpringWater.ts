@@ -237,7 +237,7 @@ class FakeWaterModelInstance {
             return;
 
         this.modelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.modelInstance.calcAnim(viewerInput.camera);
+        this.modelInstance.calcAnim();
         this.modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
         // Calc our packet params.

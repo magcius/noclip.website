@@ -178,16 +178,6 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         this.ownedModelMaterialData = modelMaterialData;
     }
 
-    public calcAnim(camera: Camera): void {
-        if (this.isSkybox) {
-            this.modelMatrix[12] = camera.worldMatrix[12];
-            this.modelMatrix[13] = camera.worldMatrix[13];
-            this.modelMatrix[14] = camera.worldMatrix[14];
-        }
-
-        super.calcAnim(camera);
-    }
-
     /**
      * Binds {@param ttk1} (texture animations) to this model instance.
      * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
@@ -235,13 +225,22 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
         this.jointMatrixCalc = ank1 !== null ? new JointMatrixCalcANK1(animationController, ank1) : new JointMatrixCalcNoAnm();
     }
 
+    private calcSkybox(camera: Camera): void {
+        if (this.isSkybox) {
+            this.modelMatrix[12] = camera.worldMatrix[12];
+            this.modelMatrix[13] = camera.worldMatrix[13];
+            this.modelMatrix[14] = camera.worldMatrix[14];
+        }
+    }
+
     // The classic public interface, for compatibility.
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         if (!this.visible)
             return;
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.calcAnim(viewerInput.camera);
+        this.calcSkybox(viewerInput.camera);
+        this.calcAnim();
         this.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
         // If entire model is culled away, then we don't need to render anything.
