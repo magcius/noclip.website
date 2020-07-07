@@ -76,17 +76,8 @@ export const enum Category {
     MoveLimit = 3,
 }
 
-export class TriangleFilterBase {
-    public isInvalidTriangle(triangle: Triangle): boolean {
-        return false;
-    }
-}
-
-export class CollisionPartsFilterBase {
-    public isInvalidParts(parts: CollisionParts): boolean {
-        return false;
-    }
-}
+export type TriangleFilterFunc = (sceneObjHolder: SceneObjHolder, triangle: Triangle) => boolean;
+export type CollisionPartsFilterFunc = (sceneObjHolder: SceneObjHolder, parts: CollisionParts) => boolean;
 
 function getAvgScale(v: vec3): number {
     return (v[0] + v[1] + v[2]) / 3.0;
@@ -246,7 +237,7 @@ export class CollisionParts {
         this.resetAllMtxPrivate(scratchMatrix);
     }
 
-    public checkStrikeLine(hitInfo: HitInfo[], dstIdx: number, p0: vec3, pDir: vec3, triFilter: TriangleFilterBase | null): number {
+    public checkStrikeLine(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, p0: vec3, pDir: vec3, triFilter: TriangleFilterFunc | null): number {
         transformVec3Mat4w1(scratchVec3a, this.invWorldMtx, p0);
         transformVec3Mat4w0(scratchVec3b, this.invWorldMtx, pDir);
         this.checkCollisionResult.reset();
@@ -260,7 +251,7 @@ export class CollisionParts {
 
             const prismIdx = this.collisionServer.toIndex(prism);
             hitInfo[dstIdx].fillData(this, prismIdx, this.hitSensor);
-            if (triFilter !== null && triFilter.isInvalidTriangle(hitInfo[dstIdx]))
+            if (triFilter !== null && triFilter(sceneObjHolder, hitInfo[dstIdx]))
                 continue;
 
             const dist = this.checkCollisionResult.distances[i]!;
@@ -320,7 +311,7 @@ export class CollisionParts {
         }
     }
 
-    private checkStrikeBallCore(hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, p1: ReadonlyVec3, radius: number, invAvgScale: number, avgScale: number, triFilter: TriangleFilterBase | null, normalFilter: vec3 | null): number {
+    private checkStrikeBallCore(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, p1: ReadonlyVec3, radius: number, invAvgScale: number, avgScale: number, triFilter: TriangleFilterFunc | null, normalFilter: vec3 | null): number {
         // Copy the positions before we run checkSphere, as pos is scratchVec3a, and we're going to stomp on it below.
         for (let i = dstIdx; i < hitInfo.length; i++)
             vec3.copy(hitInfo[i].strikeLoc, pos);
@@ -338,7 +329,7 @@ export class CollisionParts {
 
             const prismIdx = this.collisionServer.toIndex(prism);
             hitInfo[dstIdx].fillData(this, prismIdx, this.hitSensor);
-            if (triFilter !== null && triFilter.isInvalidTriangle(hitInfo[dstIdx]))
+            if (triFilter !== null && triFilter(sceneObjHolder, hitInfo[dstIdx]))
                 continue;
             if (normalFilter !== null && vec3.dot(normalFilter, hitInfo[dstIdx].faceNormal) > 0.0)
                 continue;
@@ -350,7 +341,7 @@ export class CollisionParts {
         return dstIdx - dstIdxStart;
     }
 
-    public checkStrikeBall(hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, radius: number, movingReaction: boolean, triFilter: TriangleFilterBase | null): number {
+    public checkStrikeBall(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, radius: number, movingReaction: boolean, triFilter: TriangleFilterFunc | null): number {
         transformVec3Mat4w1(scratchVec3a, this.invWorldMtx, pos);
         mat4.getScaling(scratchVec3b, this.invWorldMtx);
         const invAvgScale = getAvgScale(scratchVec3b);
@@ -358,7 +349,7 @@ export class CollisionParts {
         const scaledRadius = invAvgScale * radius;
 
         if (!movingReaction || this.notMovedCounter === 0) {
-            return this.checkStrikeBallCore(hitInfo, dstIdx, scratchVec3a, Vec3Zero, scaledRadius, invAvgScale, avgScale, triFilter, null);
+            return this.checkStrikeBallCore(sceneObjHolder, hitInfo, dstIdx, scratchVec3a, Vec3Zero, scaledRadius, invAvgScale, avgScale, triFilter, null);
         } else {
             throw "whoops";
         }
@@ -553,7 +544,7 @@ class CollisionCategorizedKeeper {
         this.removeFromZone(parts, 0);
     }
 
-    public checkStrikeLine(p0: vec3, dir: vec3, partsFilter: CollisionPartsFilterBase | null, triFilter: TriangleFilterBase | null): number {
+    public checkStrikeLine(sceneObjHolder: SceneObjHolder, p0: vec3, dir: vec3, partsFilter: CollisionPartsFilterFunc | null, triFilter: TriangleFilterFunc | null): number {
         let idx = 0;
 
         scratchAABB.reset();
@@ -579,7 +570,7 @@ class CollisionCategorizedKeeper {
                 const parts = zone.parts[j];
                 if (!parts.validated)
                     continue;
-                if (partsFilter !== null && partsFilter.isInvalidParts(parts))
+                if (partsFilter !== null && partsFilter(sceneObjHolder, parts))
                     continue;
 
                 parts.getTrans(scratchVec3a);
@@ -589,7 +580,7 @@ class CollisionCategorizedKeeper {
                 if (!checkHitSegmentSphere(null, p0, dir, scratchVec3a, parts.boundingSphereRadius))
                     continue;
 
-                idx += parts.checkStrikeLine(this.strikeInfo, idx, p0, dir, triFilter);
+                idx += parts.checkStrikeLine(sceneObjHolder, this.strikeInfo, idx, p0, dir, triFilter);
                 if (idx >= this.strikeInfo.length)
                     break outer;
             }
@@ -599,7 +590,7 @@ class CollisionCategorizedKeeper {
         return idx;
     }
 
-    public checkStrikeBall(pos: vec3, radius: number, movingReaction: boolean, partsFilter: CollisionPartsFilterBase | null, triFilter: TriangleFilterBase | null): number {
+    public checkStrikeBall(sceneObjHolder: SceneObjHolder, pos: vec3, radius: number, movingReaction: boolean, partsFilter: CollisionPartsFilterFunc | null, triFilter: TriangleFilterFunc | null): number {
         let idx = 0;
 
         outer:
@@ -622,7 +613,7 @@ class CollisionCategorizedKeeper {
                 const parts = zone.parts[j];
                 if (!parts.validated)
                     continue;
-                if (partsFilter !== null && partsFilter.isInvalidParts(parts))
+                if (partsFilter !== null && partsFilter(sceneObjHolder, parts))
                     continue;
 
                 // Crude Sphere/Box intersection.
@@ -639,7 +630,7 @@ class CollisionCategorizedKeeper {
                 if (vec3.squaredDistance(scratchVec3a, pos) > combinedRadius ** 2)
                     continue;
 
-                idx += parts.checkStrikeBall(this.strikeInfo, idx, pos, radius, movingReaction, triFilter);
+                idx += parts.checkStrikeBall(sceneObjHolder, this.strikeInfo, idx, pos, radius, movingReaction, triFilter);
                 if (idx >= this.strikeInfo.length)
                     break outer;
             }
@@ -657,8 +648,31 @@ class CollisionCategorizedKeeper {
     }
 }
 
+enum WallCode {
+    Normal           = 0,
+    NotWallJump      = 1,
+    NotWallSlip      = 2,
+    NotGrab          = 3,
+    GhostThroughCode = 4,
+    NotSideStep      = 5,
+    Rebound          = 6,
+    Fur              = 7,
+    NoAction         = 8,
+};
+
+class CollisionCode {
+    public getWallCodeString(string: string): WallCode {
+        return assertExists((WallCode as any)[string]);
+    }
+
+    public getWallCode(attr: JMapInfoIter): WallCode {
+        return assertExists(attr.getValueNumber('Wall_code'));
+    }
+}
+
 export class CollisionDirector extends NameObj {
     public keepers: CollisionCategorizedKeeper[] = [];
+    public collisionCode = new CollisionCode();
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'CollisionDirector');
@@ -677,20 +691,20 @@ export class CollisionDirector extends NameObj {
     }
 }
 
-export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: vec3 | null, dstTriangle: Triangle | null, p0: vec3, dir: vec3, triFilter: TriangleFilterBase | null, partsFilter: CollisionPartsFilterBase | null, category: Category): boolean {
+export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: vec3 | null, dstTriangle: Triangle | null, p0: vec3, dir: vec3, triFilter: TriangleFilterFunc | null, partsFilter: CollisionPartsFilterFunc | null, category: Category): boolean {
     const director = sceneObjHolder.collisionDirector;
     if (director === null)
         return false;
 
     const keeper = director.keepers[category];
-    const count = keeper.checkStrikeLine(p0, dir, partsFilter, null);
+    const count = keeper.checkStrikeLine(sceneObjHolder, p0, dir, partsFilter, null);
     if (count === 0)
         return false;
 
     let bestDist = Infinity, bestIdx = -1;
     for (let i = 0; i < count; i++) {
         const strikeInfo = keeper.strikeInfo[i];
-        if (triFilter !== null && triFilter.isInvalidTriangle(strikeInfo))
+        if (triFilter !== null && triFilter(sceneObjHolder, strikeInfo))
             continue;
         if (strikeInfo.distance < bestDist) {
             bestDist = strikeInfo.distance;
@@ -713,17 +727,14 @@ export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, Category.Map);
 }
 
-class CollisionPartsFilterActor extends CollisionPartsFilterBase {
-    public actor: LiveActor | null = null;
-
-    public isInvalidParts(parts: CollisionParts): boolean {
-        return parts.hitSensor.actor === this.actor;
-    }
+export function createCollisionPartsFilterActor(actor: LiveActor): CollisionPartsFilterFunc {
+    return (sceneObjHolder: SceneObjHolder, parts: CollisionParts): boolean => {
+        return parts.hitSensor.actor === actor;
+    };
 }
 
 export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3, actor: LiveActor): boolean {
-    const partsFilter = new CollisionPartsFilterActor();
-    partsFilter.actor = actor;
+    const partsFilter = createCollisionPartsFilterActor(actor);
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, Category.Map);
 }
 
@@ -822,8 +833,8 @@ function isHostMoved(hitInfo: HitInfo): boolean {
 
 const scratchHitInfo = nArray(32, () => new HitInfo());
 export class Binder {
-    public partsFilter: CollisionPartsFilterBase | null = null;
-    public triangleFilter: TriangleFilterBase | null = null;
+    public partsFilter: CollisionPartsFilterFunc | null = null;
+    public triangleFilter: TriangleFilterFunc | null = null;
 
     private exCollisionParts: CollisionParts | null = null;
     private exCollisionPartsValid: boolean = false;
@@ -913,7 +924,7 @@ export class Binder {
                     continue;
             }
 
-            const hitCount = keeper.checkStrikeBall(pos, this.radius, this.useMovingReaction, this.partsFilter, this.triangleFilter);
+            const hitCount = keeper.checkStrikeBall(sceneObjHolder, pos, this.radius, this.useMovingReaction, this.partsFilter, this.triangleFilter);
             if (hitCount !== 0) {
                 // Hit something. We can stop searching.
                 this.storeCurrentHitInfo(keeper, expandDistance);
@@ -1027,7 +1038,7 @@ export class Binder {
         this.ceilingHitInfo.distance = -99999.0;
     }
 
-    public setTriangleFilter(filter: TriangleFilterBase): void {
+    public setTriangleFilter(filter: TriangleFilterFunc): void {
         this.triangleFilter = filter;
     }
 
@@ -1051,5 +1062,14 @@ export function isBindedWall(actor: LiveActor): boolean {
 
 export function isBinded(actor: LiveActor): boolean {
     return isBindedGround(actor) || isBindedRoof(actor) || isBindedWall(actor);
+}
+
+export function isWallCodeNoAction(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
+    const attr = triangle.getAttributes()!;
+    return sceneObjHolder.collisionDirector!.collisionCode.getWallCode(attr) === WallCode.NoAction;
+}
+
+export function setBindTriangleFilter(actor: LiveActor, triFilter: TriangleFilterFunc): void {
+    actor.binder!.setTriangleFilter(triFilter);
 }
 //#endregion

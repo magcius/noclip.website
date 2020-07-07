@@ -33,7 +33,7 @@ import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater, WaterAreaHolder, WaterInfo, HazeCube } from './MiscMap';
-import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isBinded } from './Collision';
+import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isBinded, isWallCodeNoAction, setBindTriangleFilter } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
@@ -2630,6 +2630,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         this.delay = fallback(getJMapInfoArg1(infoIter), 240);
         this.distance = fallback(getJMapInfoArg2(infoIter), 2000);
         this.initBinder(100.0, 0.0, 0);
+        setBindTriangleFilter(this, isWallCodeNoAction);
         this.initNerve(ShootingStarNrv.PreShooting);
         this.initEffectKeeper(sceneObjHolder, 'ShootingStar');
 
