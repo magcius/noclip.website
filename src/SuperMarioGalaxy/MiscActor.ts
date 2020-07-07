@@ -38,7 +38,7 @@ import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis } from '../DebugJunk';
-import { initFur } from './Fur';
+import { initFur, initFurPlanet } from './Fur';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -786,6 +786,13 @@ export class PlanetMap extends LiveActor {
         // In SMG2, this hasn't been confirmed in source, but it seems to try to start numbered emitters.
         for (let i = 0; i < this.effectKeeper.multiEmitters.length; i++)
             emitEffect(sceneObjHolder, this, `${this.name}${leftPad(''+i, 2, '0')}`);
+    }
+}
+
+export class FurPlanetMap extends PlanetMap {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, infoIter);
+        initFurPlanet(sceneObjHolder, this);
     }
 }
 

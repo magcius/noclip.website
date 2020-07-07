@@ -256,6 +256,14 @@ class CollisionCategorizedKeeper {
         zone.eraseParts(parts);
     }
 
+    public addToGlobal(parts: CollisionParts): void {
+        this.addToZone(parts, 0);
+    }
+
+    public removeFromGlobal(parts: CollisionParts): void {
+        this.removeFromZone(parts, 0);
+    }
+
     public getStrikeInfo(idx: number): HitInfo {
         return this.strikeInfo[idx];
     }
@@ -344,35 +352,40 @@ const scratchVec3c = vec3.create();
 const hitInfoScratch = nArray(0x20, () => new HitInfo());
 export class Binder {
     public triangleFilter: TriangleFilterBase | null = null;
+    private exCollisionParts: CollisionParts | null = null;
+    private exCollisionPartsValid: boolean = false;
     private hitInfos: HitInfo[];
     private hitInfoCount: number;
     private floorHitDist: number;
     private wallHitDist: number;
     private roofHitDist: number;
+    private useHostBaseMtx: boolean = false;
 
-    public offsetVec: vec3 | null = null;
+    public hostOffsetVec: vec3 | null = null;
 
-    constructor(private baseMtxRef: mat4 | null, private translationRef: vec3, private gravityRef: vec3, private centerY: number, private radius: number, private hitInfoCapacity: number) {
+    constructor(private hostBaseMtx: mat4 | null, private hostTranslation: vec3, private hostGravity: vec3, private hostCenterY: number, private radius: number, private hitInfoCapacity: number) {
         this.hitInfos = nArray(hitInfoCapacity, () => new HitInfo());
         this.clear();
     }
 
-    public bind(dst: vec3, velocity: vec3): void {
-        vec3.copy(scratchVec3c, this.translationRef);
+    public bind(dst: vec3, sceneObjHolder: SceneObjHolder, velocity: vec3): void {
+        if (this.exCollisionPartsValid)
+            sceneObjHolder.collisionDirector!.keepers[Category.Map].addToGlobal(assertExists(this.exCollisionParts));
 
-        if (this.offsetVec === null) {
-            if (this.baseMtxRef !== null) {
-                scratchVec3c[0] += this.baseMtxRef[4] * this.centerY;
-                scratchVec3c[1] += this.baseMtxRef[5] * this.centerY;
-                scratchVec3c[2] += this.baseMtxRef[6] * this.centerY;
-            } else {
-                scratchVec3c[1] += this.centerY;
-            }
-        } else {
-            throw "whoops";
-        }
+        if (this.hostOffsetVec)
+            vec3.copy(scratchVec3c, this.hostOffsetVec);
+        else
+            vec3.set(scratchVec3c, 0.0, this.hostCenterY, 0.0);
 
-        // this.findBindedPos()
+        if (this.useHostBaseMtx)
+            transformVec3Mat4w0(scratchVec3c, this.hostBaseMtx!, scratchVec3c);
+
+        vec3.add(scratchVec3c, this.hostTranslation, scratchVec3c);
+
+        // this.findBindedPos(scratchVec3c, velocity, )
+
+        if (this.exCollisionPartsValid)
+            sceneObjHolder.collisionDirector!.keepers[Category.Map].removeFromGlobal(assertExists(this.exCollisionParts));
     }
 
     public clear(): void {
@@ -384,6 +397,11 @@ export class Binder {
 
     public setTriangleFilter(filter: TriangleFilterBase): void {
         this.triangleFilter = filter;
+    }
+
+    public setExCollisionParts(parts: CollisionParts | null): void {
+        this.exCollisionParts = parts;
+        this.exCollisionPartsValid = this.exCollisionParts !== null;
     }
 }
 

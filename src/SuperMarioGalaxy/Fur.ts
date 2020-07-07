@@ -693,3 +693,7 @@ export function initMultiFur(sceneObjHolder: SceneObjHolder, actor: LiveActor, l
 export function initFur(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     initMultiFur(sceneObjHolder, actor, LightType.None);
 }
+
+export function initFurPlanet(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    initMultiFur(sceneObjHolder, actor, LightType.Planet);
+}
