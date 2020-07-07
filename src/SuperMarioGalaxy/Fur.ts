@@ -498,13 +498,7 @@ class FurCtrl {
         this.ownCoalescedBufferData = coalescedBuffers[0].buffer;
 
         for (let i = 0; i < numLayers; i++) {
-            const origBuffer = shapeData.shapeHelper.coalescedBuffers;
-            const combo: GfxCoalescedBuffersCombo = {
-                indexBuffer: origBuffer.indexBuffer,
-                vertexBuffers: [coalescedBuffers[i]],
-            };
-
-            const shapeHelper = new GXShapeHelperGfx(device, cache, combo, shapeData.shapeHelper.loadedVertexLayout);
+            const shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers, shapeData.shapeHelper.indexBuffer, shapeData.shapeHelper.loadedVertexLayout);
             this.ownShapeHelpers.push(shapeHelper);
             this.shapeHelpers.push(shapeHelper);
         }

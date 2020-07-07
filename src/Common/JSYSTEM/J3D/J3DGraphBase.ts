@@ -60,10 +60,11 @@ export class ShapeData {
         // support this in the generic buffer coalescement system....
         for (let i = 1; i < this.shape.mtxGroups.length; i++) {
             const coalescedBuffer = coalescedBuffers.shift()!;
-            firstCoalescedBuffer.vertexBuffers[0].wordCount += coalescedBuffer.vertexBuffers[0].wordCount;
+            for (let i = 0; i < coalescedBuffer.vertexBuffers.length; i++)
+                firstCoalescedBuffer.vertexBuffers[i].byteCount += coalescedBuffer.vertexBuffers[i].byteCount;
         }
 
-        this.shapeHelper = new GXShapeHelperGfx(device, cache, firstCoalescedBuffer, this.shape.loadedVertexLayout);
+        this.shapeHelper = new GXShapeHelperGfx(device, cache, firstCoalescedBuffer.vertexBuffers, firstCoalescedBuffer.indexBuffer, this.shape.loadedVertexLayout);
 
         let totalIndexCount = 0;
         for (let i = 0; i < this.shape.mtxGroups.length; i++) {

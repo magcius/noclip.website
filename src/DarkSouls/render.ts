@@ -106,7 +106,7 @@ class BatchData {
     constructor(device: GfxDevice, cache: GfxRenderCache, flverData: FLVERData, public batch: Batch, vertexBuffer: GfxCoalescedBuffer, indexBuffers: GfxCoalescedBuffer[]) {
         const flverInputState = flverData.flver.inputStates[batch.inputStateIndex];
         const flverInputLayout = flverData.flver.inputLayouts[flverInputState.inputLayoutIndex];
-        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: vertexBuffer.buffer, byteOffset: vertexBuffer.wordOffset * 0x04 }];
+        const buffers: GfxVertexBufferDescriptor[] = [vertexBuffer];
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
@@ -136,7 +136,7 @@ class BatchData {
 
         for (let j = 0; j < batch.primitiveIndexes.length; j++) {
             const coaIndexBuffer = assertExists(indexBuffers.shift());
-            const indexBuffer: GfxIndexBufferDescriptor = { buffer: coaIndexBuffer.buffer, byteOffset: coaIndexBuffer.wordOffset * 0x04 };
+            const indexBuffer: GfxIndexBufferDescriptor = coaIndexBuffer;
             const inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
             this.inputStates.push(inputState);
         }

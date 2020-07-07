@@ -13,7 +13,7 @@ import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout, VertexAttribu
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
-import { GfxBufferCoalescerCombo, makeStaticDataBuffer, GfxCoalescedBuffersCombo } from '../gfx/helpers/BufferHelpers';
+import { GfxBufferCoalescerCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
@@ -450,7 +450,7 @@ export class GXShapeHelperGfx {
     public inputLayout: GfxInputLayout;
     private zeroBuffer: GfxBuffer | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public coalescedBuffers: GfxCoalescedBuffersCombo, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData | null = null) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public vertexBuffers: GfxVertexBufferDescriptor[], public indexBuffer: GfxIndexBufferDescriptor, public loadedVertexLayout: LoadedVertexLayout, public loadedVertexData: LoadedVertexData | null = null) {
         let usesZeroBuffer = false;
         for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
             const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
@@ -460,13 +460,7 @@ export class GXShapeHelperGfx {
             }
         }
 
-        const buffers: GfxVertexBufferDescriptor[] = [];
-        for (let i = 0; i < coalescedBuffers.vertexBuffers.length; i++) {
-            buffers.push({
-                buffer: coalescedBuffers.vertexBuffers[i].buffer,
-                byteOffset: coalescedBuffers.vertexBuffers[i].wordOffset * 4,
-            });
-        }
+        const buffers: GfxVertexBufferDescriptor[] = vertexBuffers.slice();
 
         if (usesZeroBuffer) {
             // TODO(jstpierre): Move this to a global somewhere?
@@ -478,11 +472,6 @@ export class GXShapeHelperGfx {
         }
 
         this.inputLayout = createInputLayout(device, cache, loadedVertexLayout);
-
-        const indexBuffer: GfxIndexBufferDescriptor = {
-            buffer: coalescedBuffers.indexBuffer.buffer,
-            byteOffset: coalescedBuffers.indexBuffer.wordOffset * 4,
-        };
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
