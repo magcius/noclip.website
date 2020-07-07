@@ -260,29 +260,40 @@ export class SceneNameObjListExecutor {
                 this.nameObjExecuteInfos[i].nameObj.calcAnim(sceneObjHolder, viewerInput);
     }
 
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, drawCameraType: DrawCameraType, viewerInput: ViewerRenderInput): void {
+        for (let i = 0; i < this.nameObjExecuteInfos.length; i++) {
+            const executeInfo = this.nameObjExecuteInfos[i];
+            const nameObj = executeInfo.nameObj;
+
+            const drawBufferType = this.nameObjExecuteInfos[i].drawBufferType;
+            if (drawBufferType === -1)
+                continue;
+
+            const group = this.drawBufferHolder.groups[drawBufferType];
+            if (group.tableEntry.DrawCameraType !== drawCameraType)
+                continue;
+
+            // HACK: Supply an ortho view matrix for 2D camera types.
+            // Need to find a better place to specify this.
+            if (drawCameraType === DrawCameraType.DrawCameraType_3D)
+                nameObj.calcViewAndEntry(sceneObjHolder, viewerInput.camera, viewerInput.camera.viewMatrix);
+            else if (drawCameraType === DrawCameraType.DrawCameraType_2D)
+                nameObj.calcViewAndEntry(sceneObjHolder, null, null);
+            else
+                throw "whoops";
+        }
+    }
+
     public executeDrawAll(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         for (let i = 0; i < this.nameObjExecuteInfos.length; i++) {
             const executeInfo = this.nameObjExecuteInfos[i];
             const nameObj = executeInfo.nameObj;
 
-            if (this.nameObjExecuteInfos[i].drawBufferType !== -1) {
-                // HACK: Supply an ortho view matrix for 2D camera types.
-                // Need to find a better place to put this... executeDrawAll is a hack...
-
-                const group = this.drawBufferHolder.groups[this.nameObjExecuteInfos[i].drawBufferType];
-                if (group.tableEntry.DrawCameraType === DrawCameraType.DrawCameraType_3D)
-                    nameObj.calcViewAndEntry(sceneObjHolder, viewerInput.camera, viewerInput.camera.viewMatrix);
-                else if (group.tableEntry.DrawCameraType === DrawCameraType.DrawCameraType_2D)
-                    nameObj.calcViewAndEntry(sceneObjHolder, null, null);
-                else
-                    throw "whoops";
-            }
-
             if (this.nameObjExecuteInfos[i].drawType !== -1) {
                 // If this is an execute draw, then set up our filter key correctly...
                 const template = renderInstManager.pushTemplateRenderInst();
                 template.filterKey = createFilterKeyForDrawType(executeInfo.drawType);
-                // By default, the scene params are 3D.
+                // HACK(jstpierre): By default, the execute scene params are 3D. We should replace executeDrawAll with GfxRenderInstList eventually...
                 template.setUniformBufferOffset(ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
                 nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
                 renderInstManager.popTemplateRenderInst();

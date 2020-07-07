@@ -168,7 +168,6 @@ export class DrawBufferGroup {
     }
 
     public registerDrawBuffer(actor: LiveActor): number {
-        // TODO(jstpierre): Do we need the DrawBuffer / DrawBufferExecuter split?
         this.drawBufferExecuters.push(new DrawBufferExecuter(actor.modelInstance!));
         return this.drawBufferExecuters.length - 1;
     }

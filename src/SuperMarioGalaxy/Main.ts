@@ -10,7 +10,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxSamplerBinding } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
@@ -309,6 +309,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
 
         // Prepare all of our NameObjs.
+        executor.calcViewAndEntry(this.sceneObjHolder, DrawCameraType.DrawCameraType_3D, viewerInput);
+        executor.calcViewAndEntry(this.sceneObjHolder, DrawCameraType.DrawCameraType_2D, viewerInput);
+
         executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
 
         // Draw our render insts.
