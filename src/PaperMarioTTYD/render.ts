@@ -220,7 +220,7 @@ class BatchInstance {
     private packetParams = new PacketParams();
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public materialInstance: MaterialInstance, private nodeInstance: NodeInstance, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffersCombo) {
-        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {

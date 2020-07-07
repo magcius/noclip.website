@@ -1268,6 +1268,7 @@ export class J3DModelInstance {
         const shapeInstanceState = this.shapeInstanceState;
 
         // Our root node is a dummy node that houses a special model matrix.
+        // TODO(jstpierre): Remove this.
         if (parentNode !== null) {
             const jointIndex = node.jointIndex;
             assert(jointIndex >= 0);
@@ -1281,7 +1282,13 @@ export class J3DModelInstance {
 
             const parentJointIndex = parentNode.jointIndex;
             if (parentJointIndex < 0) {
-                mat4.mul(dstToWorld, this.modelMatrix, dstToParent);
+                // Special: construct model matrix.
+                mat4.identity(matrixScratch);
+                matrixScratch[0] *= this.baseScale[0];
+                matrixScratch[5] *= this.baseScale[1];
+                matrixScratch[10] *= this.baseScale[2];
+                mat4.mul(matrixScratch, this.modelMatrix, matrixScratch);
+                mat4.mul(dstToWorld, matrixScratch, dstToParent);
             } else {
                 const parentJointToWorldMatrix = shapeInstanceState.jointToWorldMatrixArray[parentJointIndex];
                 mat4.mul(dstToWorld, parentJointToWorldMatrix, dstToParent);

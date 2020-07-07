@@ -49,13 +49,14 @@ class HSD_DObj_Data {
     public shapeHelpers: GXShapeHelperGfx[] = [];
     public mobj: HSD_MObj_Data | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo[], public dobj: HSD_DObj) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBufferss: GfxCoalescedBuffersCombo[], public dobj: HSD_DObj) {
         if (this.dobj.mobj !== null)
             this.mobj = new HSD_MObj_Data(device, cache, this.dobj.mobj);
 
         for (let i = 0; i < this.dobj.pobj.length; i++) {
             const pobj = this.dobj.pobj[i];
-            this.shapeHelpers.push(new GXShapeHelperGfx(device, cache, coalescedBuffers.shift()!, pobj.loadedVertexLayout, pobj.loadedVertexData));
+            const coalescedBuffers = coalescedBufferss.shift()!;
+            this.shapeHelpers.push(new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, pobj.loadedVertexLayout, pobj.loadedVertexData));
         }
     }
 
