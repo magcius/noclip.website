@@ -149,6 +149,7 @@ class WorldRenderer extends SFARenderer {
     private showObjects: boolean = true;
     private showDevGeometry: boolean = false;
     private showDevObjects: boolean = false;
+    private enableLights: boolean = true;
 
     constructor(private world: World, private models: (ModelInstance | null)[]) {
         super(world.device, world.animController);
@@ -217,6 +218,12 @@ class WorldRenderer extends SFARenderer {
             this.showDevGeometry = showDevGeometry.checked;
         };
         layerPanel.contents.append(showDevGeometry.elem);
+
+        const enableLights = new UI.Checkbox("Enable lights", true);
+        enableLights.onchanged = () => {
+            this.enableLights = enableLights.checked;
+        }
+        layerPanel.contents.append(enableLights.elem);
 
         return [timePanel, layerPanel];
     }
@@ -343,26 +350,29 @@ class WorldRenderer extends SFARenderer {
     }
 
     private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
-        const worldView = mat4.create();
-        computeViewMatrix(worldView, modelCtx.viewerInput.camera);
-
-        // const ctx = getDebugOverlayCanvas2D();
         let i = 0;
-        for (let light of this.world.lights) {
-            // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
 
-            lights[i].reset();
-            // Light information is specified in view space.
-            vec3.transformMat4(lights[i].Position, light.position, worldView);
-            // drawWorldSpacePoint(ctx, modelCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
-            // TODO: use correct parameters
-            colorCopy(lights[i].Color, light.color);
-            lights[i].CosAtten = vec3.fromValues(1.0, 0.0, 0.0); // TODO
-            vec3.copy(lights[i].DistAtten, light.distAtten);
-
-            i++;
-            if (i >= 8)
-                break;
+        if (this.enableLights) {
+            const worldView = mat4.create();
+            computeViewMatrix(worldView, modelCtx.viewerInput.camera);
+    
+            // const ctx = getDebugOverlayCanvas2D();
+            for (let light of this.world.lights) {
+                // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
+    
+                lights[i].reset();
+                // Light information is specified in view space.
+                vec3.transformMat4(lights[i].Position, light.position, worldView);
+                // drawWorldSpacePoint(ctx, modelCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
+                // TODO: use correct parameters
+                colorCopy(lights[i].Color, light.color);
+                lights[i].CosAtten = vec3.fromValues(1.0, 0.0, 0.0); // TODO
+                vec3.copy(lights[i].DistAtten, light.distAtten);
+    
+                i++;
+                if (i >= 8)
+                    break;
+            }
         }
 
         for (; i < 8; i++) {
