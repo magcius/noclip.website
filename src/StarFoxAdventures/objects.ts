@@ -4,20 +4,25 @@ import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import * as GX_Material from '../gx/gx_material';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
-import { ModelInstance, ModelViewState } from './models';
+import { ModelInstance, ModelRenderContext } from './models';
 import { dataSubarray, angle16ToRads, readVec3 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 import { scaleMatrix } from '../MathHelpers';
+import { SceneRenderContext } from './render';
+import { colorFromRGBA8, colorNewFromRGBA8, colorNewFromRGBA } from '../Color';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
 
 interface SFAClass {
     setup: (obj: ObjectInstance, data: DataView) => void;
+    mount?: (obj: ObjectInstance, world: World) => void;
+    unmount?: (obj: ObjectInstance, world: World) => void;
 }
 
 function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number) {
@@ -664,9 +669,56 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             obj.roll = angle16ToRads(getRandomInt(0, 0xffff));
         },
     },
-    [681]: commonClass(0x18, 0x19),
+    [681]: { // LGTPointLig
+        setup: (obj: ObjectInstance, data: DataView) => {
+            commonSetup(obj, data, 0x18, 0x19);
+
+            const spotFunc = data.getUint8(0x21); // TODO: this value is passed to GXInitSpotLight
+            if (spotFunc === 0) {
+                obj.setModelNum(0);
+            } else {
+                obj.setModelNum(1);
+            }
+
+            // Distance attenuation values are calculated by GXInitLightDistAttn with GX_DA_MEDIUM mode
+            // TODO: Some types of light use other formulae
+            const refDistance = data.getUint16(0x22);
+            const refBrightness = 0.75;
+            const kfactor = 0.5 * (1.0 - refBrightness);
+            const distAtten = vec3.fromValues(
+                1.0,
+                kfactor / (refBrightness * refDistance),
+                kfactor / (refBrightness * refDistance * refDistance)
+                );
+
+            obj.instanceData = {
+                color: colorNewFromRGBA(
+                    data.getUint8(0x1a) / 0xff,
+                    data.getUint8(0x1b) / 0xff,
+                    data.getUint8(0x1c) / 0xff,
+                    1.0
+                ),
+                distAtten,
+            };
+        },
+        mount: (obj: ObjectInstance, world: World) => {
+            world.lights.add({
+                position: obj.getPosition(),
+                color: obj.instanceData.color,
+                distAtten: obj.instanceData.distAtten,
+            })
+        },
+    },
     [682]: commonClass(0x18, 0x19),
-    [683]: commonClass(0x18, 0x19, 0x34), // LGTProjecte
+    [683]: { // LGTProjecte
+        ...commonClass(0x18, 0x19, 0x34),
+        mount: (obj: ObjectInstance, world: World) => {
+            // TODO: support this type of light. Used in Krazoa Palace glowing platforms.
+            // world.lights.add({
+            //     position: obj.getPosition(),
+            // })
+        },
+    },
     [685]: decorClass(),
     [686]: decorClass(),
     [687]: decorClass(),
@@ -723,6 +775,15 @@ export class ObjectType {
     }
 }
 
+export interface ObjectRenderContext extends SceneRenderContext {
+    showDevGeometry: boolean;
+    setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
+}
+
+export interface Light {
+    position: vec3;
+}
+
 export class ObjectInstance {
     private modelInst: ModelInstance | null = null;
 
@@ -743,6 +804,8 @@ export class ObjectInstance {
     private layerVals0x5: number;
 
     private ambienceNum: number = 0;
+
+    public instanceData: any;
 
     constructor(public world: World, public objType: ObjectType, private objParams: DataView, public posInMap: vec3) {
         this.scale = objType.scale;
@@ -768,6 +831,20 @@ export class ObjectInstance {
             SFA_CLASSES[objClass].setup(this, objParams);
         } else {
             console.log(`Don't know how to setup object class ${objClass} objType ${typeNum}`);
+        }
+    }
+
+    public mount() {
+        const objClass = SFA_CLASSES[this.objType.objClass];
+        if (objClass !== undefined && objClass.mount !== undefined) {
+            objClass.mount(this, this.world);
+        }
+    }
+
+    public unmount() {
+        const objClass = SFA_CLASSES[this.objType.objClass];
+        if (objClass !== undefined && objClass.unmount !== undefined) {
+            objClass.unmount(this, this.world);
         }
     }
 
@@ -894,7 +971,7 @@ export class ObjectInstance {
         }
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, sceneTexture: ColorTexture, drawStep: number) {
+    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, objectCtx: ObjectRenderContext, drawStep: number) {
         if (drawStep !== 0) {
             return; // TODO: Implement additional draw steps
         }
@@ -904,11 +981,10 @@ export class ObjectInstance {
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
             const mtx = this.getWorldSRT();
-            const modelViewState: ModelViewState = {
-                showDevGeometry: true,
+            this.modelInst.prepareToRender(device, renderInstManager, {
+                ...objectCtx,
                 ambienceNum: this.ambienceNum,
-            };
-            this.modelInst.prepareToRender(device, renderInstManager, viewerInput, mtx, sceneTexture, drawStep, modelViewState);
+            }, mtx, drawStep);
 
             // Draw bones
             const drawBones = false;
@@ -926,9 +1002,9 @@ export class ObjectInstance {
                         mat4.mul(parentMtx, parentMtx, mtx);
                         const parentPt = vec3.create();
                         mat4.getTranslation(parentPt, parentMtx);
-                        drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
+                        drawWorldSpaceLine(ctx, objectCtx.viewerInput.camera, parentPt, jointPt);
                     } else {
-                        drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, jointPt);
+                        drawWorldSpacePoint(ctx, objectCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
                     }
                 }
             }

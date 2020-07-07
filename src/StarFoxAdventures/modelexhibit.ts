@@ -6,10 +6,10 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 
 import { GameInfo, SFA_GAME_INFO } from './scenes';
-import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, getLocalTransformForPose, applyKeyframeToModel } from './animation';
-import { SFARenderer } from './render';
-import { ModelFetcher, ModelInstance, ModelVersion, ModelViewState } from './models';
-import { MaterialFactory } from './shaders';
+import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, applyKeyframeToModel } from './animation';
+import { SFARenderer, SceneRenderContext } from './render';
+import { ModelFetcher, ModelInstance, ModelVersion, ModelRenderContext } from './models';
+import { MaterialFactory } from './materials';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { dataSubarray, createDownloadLink } from './util';
 import { TextureFetcher, SFATextureFetcher } from './textures';
@@ -164,7 +164,7 @@ class ModelExhibitRenderer extends SFARenderer {
         this.materialFactory.update(this.animController);
     }
     
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
+    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         if (this.modelInst === undefined) {
             try {
                 this.modelAnimNum = 0;
@@ -227,23 +227,26 @@ class ModelExhibitRenderer extends SFARenderer {
 
         // Render opaques
 
-        this.beginPass(viewerInput);
+        this.beginPass(sceneCtx.viewerInput);
 
         if (this.modelInst !== null) {
             const mtx = mat4.create();
-            this.renderModel(device, renderInstManager, viewerInput, mtx, this.modelInst);
+            this.renderModel(device, renderInstManager, sceneCtx, mtx, this.modelInst);
         }
 
         this.endPass(device);
         // TODO: render furs and translucents
     }
 
-    private renderModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
-        const modelViewState: ModelViewState = {
+    private renderModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelInst: ModelInstance) {
+        const modelCtx: ModelRenderContext = {
+            ...sceneCtx,
             showDevGeometry: true,
             ambienceNum: 0,
+            setupLights: () => {},
         };
-        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, modelViewState);
+
+        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix, 0);
 
         if (this.displayBones) {
             // TODO: display bones as cones instead of lines
@@ -259,9 +262,9 @@ class ModelExhibitRenderer extends SFARenderer {
                     mat4.mul(parentMtx, parentMtx, matrix);
                     const parentPt = vec3.create();
                     mat4.getTranslation(parentPt, parentMtx);
-                    drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
+                    drawWorldSpaceLine(ctx, sceneCtx.viewerInput.camera, parentPt, jointPt);
                 } else {
-                    drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, jointPt);
+                    drawWorldSpacePoint(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
                 }
             }
         }

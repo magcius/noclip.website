@@ -13,6 +13,7 @@ import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy, colorNewFromRGBA } from '../Color';
 import { EnvfxManager } from './envfx';
+import { TextureMapping } from '../TextureHolder';
 
 interface ShaderLayer {
     texId: number | null;
@@ -145,36 +146,73 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
     return shader;
 }
 
-export interface SFAMaterialTexture_Texture {
-    kind: 'texture';
-    texture: SFATexture;
+export interface MaterialTexture {
+    setOnTextureMapping: (mapping: TextureMapping, viewState: ViewState) => void;
 }
 
-export interface SFAMaterialTexture_FbColorDownscaled8x {
-    kind: 'fb-color-downscaled-8x'; // FIXME: In addition to downscaling, some filtering is applied (I think)
-}
-
-export interface SFAMaterialTexture_FbColorDownscaled2x {
-    kind: 'fb-color-downscaled-2x';
-}
-
-export interface SFAMaterialTexture_FurMap {
-    kind: 'fur-map';
-}
-
-export type SFAMaterialTexture =
-    SFAMaterialTexture_Texture |
-    SFAMaterialTexture_FbColorDownscaled8x |
-    SFAMaterialTexture_FbColorDownscaled2x |
-    SFAMaterialTexture_FurMap |
-    null;
-
-export function makeMaterialTexture(texture: SFATexture | null): SFAMaterialTexture {
+export function makeMaterialTexture(texture: SFATexture | null): MaterialTexture {
     if (texture) {
-        return { kind: 'texture', texture };
+        return {
+            setOnTextureMapping: (mapping: TextureMapping, viewState: ViewState) => {
+                mapping.reset();
+                mapping.gfxTexture = texture.gfxTexture;
+                mapping.gfxSampler = texture.gfxSampler;
+                mapping.width = texture.width;
+                mapping.height = texture.height;
+                mapping.lodBias = 0.0;
+            }
+        };
     } else {
-        return null;
+        return {
+            setOnTextureMapping: (mapping: TextureMapping, viewState: ViewState) => {
+                mapping.reset();
+            }
+        };
     }
+}
+
+function makeSceneMaterialTexture(): MaterialTexture {
+    return {
+        setOnTextureMapping: (mapping: TextureMapping, viewState: ViewState) => {
+            mapping.reset();
+            // TODO: Downscale to 1/8th scale and apply filtering (?)
+            const sceneTex = viewState.sceneCtx.getSceneTexture();
+            mapping.gfxTexture = sceneTex.gfxTexture;
+            mapping.gfxSampler = viewState.sceneCtx.getSceneTextureSampler();
+            mapping.width = sceneTex.width;
+            mapping.height = sceneTex.height;
+            mapping.lodBias = 0.0;
+        }
+    };
+}
+
+function makePreviousFrameMaterialTexture(): MaterialTexture {
+    return {
+        setOnTextureMapping: (mapping: TextureMapping, viewState: ViewState) => {
+            mapping.reset();
+            // TODO: Downscale to 1/8th scale and apply filtering (?)
+            const sceneTex = viewState.sceneCtx.getPreviousFrameTexture();
+            mapping.gfxTexture = sceneTex.gfxTexture;
+            mapping.gfxSampler = viewState.sceneCtx.getPreviousFrameTextureSampler();
+            mapping.width = sceneTex.width;
+            mapping.height = sceneTex.height;
+            mapping.lodBias = 0.0;
+        }
+    };
+}
+
+function makeFurMapMaterialTexture(factory: MaterialFactory): MaterialTexture {
+    return {
+        setOnTextureMapping: (mapping: TextureMapping, viewState: ViewState) => {
+            mapping.reset();
+            const furMap = factory.getFurFactory().getLayer(viewState.furLayer);
+            mapping.gfxTexture = furMap.gfxTexture;
+            mapping.gfxSampler = furMap.gfxSampler;
+            mapping.width = furMap.width;
+            mapping.height = furMap.height;
+            mapping.lodBias = 0.0;
+        }
+    };
 }
 
 export interface SFAMaterial {
@@ -183,7 +221,7 @@ export interface SFAMaterial {
     getGXMaterial: () => GXMaterial;
     setupMaterialParams: (params: MaterialParams, viewState: ViewState) => void;
     rebuild: () => void;
-    getTexture: (num: number) => SFAMaterialTexture;
+    getTexture: (num: number) => MaterialTexture | undefined;
 }
 
 type TexMtxFunc = ((dst: mat4, viewState: ViewState) => void) | undefined;
@@ -268,7 +306,7 @@ abstract class MaterialBase implements SFAMaterial {
 
     private tevStageNum: number;
     private indTexStageNum: number;
-    private texMaps: SFAMaterialTexture[];
+    private texMaps: MaterialTexture[];
     private texCoordNum: number;
     private postTexMtxs: TexMtxFunc[];
     private indTexMtxs: TexMtxFunc[];
@@ -318,7 +356,7 @@ abstract class MaterialBase implements SFAMaterial {
         return { kind: 'IndTexStage', id };
     }
 
-    protected genTexMap(texture: SFAMaterialTexture): TexMap {
+    protected genTexMap(texture: MaterialTexture): TexMap {
         const id = this.texMaps.length;
         if (id >= 8) {
             throw Error(`Too many texture maps`);
@@ -426,7 +464,7 @@ abstract class MaterialBase implements SFAMaterial {
         }
     }
     
-    public getTexture(num: number): SFAMaterialTexture {
+    public getTexture(num: number): MaterialTexture {
         return this.texMaps[num];
     }
 }
@@ -449,15 +487,21 @@ class StandardMaterial extends MaterialBase {
             if (this.shader.layers.length > 0 && this.shader.layers[0].texId !== null) {
                 const texMap = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[0].texId!, true)));
                 const texCoord = this.genScrollableTexCoord(texMap, this.shader.layers[0].scrollingTexMtx);
-                this.addTevStageForTextureWithWhiteKonst(0, texMap, texCoord, true);
+                this.addTevStageForTexture(0, texMap, texCoord, false);
             }
-            if (this.shader.attrFlags & ShaderAttrFlags.CLR) {
-                this.addTevStageForMultVtxColor();
-            }
+            // if (this.shader.attrFlags & ShaderAttrFlags.CLR) {
+                this.addTevStageForMultColor0A0();
+            // }
+
+            this.ambColors[0] = (dst: Color, viewState: ViewState) => {
+                colorCopy(dst, viewState.outdoorAmbientColor);
+            };
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.SPOT);
+            // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
             this.texMtx[2] = (dst: mat4, viewState: ViewState) => {
                 // Flipped
-                texProjCameraSceneTex(dst, viewState.viewerInput.camera, viewState.viewerInput.viewport, 1);
+                texProjCameraSceneTex(dst, viewState.sceneCtx.viewerInput.camera, viewState.sceneCtx.viewerInput.viewport, 1);
                 mat4.mul(dst, dst, viewState.modelViewMtx);
                 return dst;
             }
@@ -491,22 +535,24 @@ class StandardMaterial extends MaterialBase {
             }
         }
 
-        if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
-            this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
-            this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        } else {
-            this.ambColors[0] = (dst: Color, viewState: ViewState) => {
-                colorCopy(dst, viewState.outdoorAmbientColor);
-            };
-            // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        }
-        // FIXME: Objects have different rules for color-channels than map blocks
         if (this.isMapBlock) {
-            this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
+                this.ambColors[0] = undefined; // AMB0 is solid white
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+                this.ambColors[0] = undefined; // AMB0 is solid white
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            } else if (this.isMapBlock) {
+                this.ambColors[0] = (dst: Color, viewState: ViewState) => {
+                    colorCopy(dst, viewState.outdoorAmbientColor);
+                };
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
+                // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            }
+            // FIXME: Objects have different rules for color-channels than map blocks
+            if (this.isMapBlock) {
+                this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            }
         }
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
@@ -592,10 +638,10 @@ class StandardMaterial extends MaterialBase {
         this.cprevIsValid = true;
     }
 
-    private addTevStageForTextureWithWhiteKonst(colorInMode: number, texMap: TexMap, texCoord: TexCoord, kcolor?: boolean) {
+    private addTevStageForTexture(colorInMode: number, texMap: TexMap, texCoord: TexCoord, multiplyOutdoorAmbient: boolean = false) {
         const stage = this.genTevStage();
 
-        if (kcolor) {
+        if (multiplyOutdoorAmbient) {
             const kcnum = this.genKonstColor((dst: Color, viewState: ViewState) => {
                 colorCopy(dst, viewState.outdoorAmbientColor);
             });
@@ -608,11 +654,11 @@ class StandardMaterial extends MaterialBase {
         let cc: GX.CC[];
         switch (colorInMode) {
         case 0:
-            cc = [GX.CC.ZERO, GX.CC.TEXC, kcolor ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
+            cc = [GX.CC.ZERO, GX.CC.TEXC, multiplyOutdoorAmbient ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
             break;
         default:
             console.warn(`Unhandled colorInMode ${colorInMode}`);
-            cc = [GX.CC.ZERO, GX.CC.TEXC, kcolor ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
+            cc = [GX.CC.ZERO, GX.CC.TEXC, multiplyOutdoorAmbient ? GX.CC.KONST : GX.CC.ONE, GX.CC.ZERO];
             break;
         }
 
@@ -629,8 +675,9 @@ class StandardMaterial extends MaterialBase {
         this.cprevIsValid = true;
     }
 
-    private addTevStageForMultVtxColor() {
+    private addTevStageForMultColor0A0() {
         // TODO: handle konst alpha. map block renderer always passes opaque white to this function.
+        // object renderer might pass different values.
 
         const stage = this.genTevStage();
         this.mb.setTevDirect(stage.id);
@@ -655,10 +702,10 @@ class StandardMaterial extends MaterialBase {
         const warpParam = 1.0; // TODO: is this animated?
 
         const indTexMtx0 = this.genIndTexMtx((dst: mat4, viewState: ViewState) => {
-            const animSin = Math.sin(3.142 * viewState.animController.envAnimValue1);
+            const animSin = Math.sin(3.142 * viewState.sceneCtx.animController.envAnimValue1);
             const scale = (0.125 * animSin + 0.75) * warpParam;
-            const cs = scale * Math.cos(3.142 * viewState.animController.envAnimValue0);
-            const sn = scale * Math.sin(3.142 * viewState.animController.envAnimValue0);
+            const cs = scale * Math.cos(3.142 * viewState.sceneCtx.animController.envAnimValue0);
+            const sn = scale * Math.sin(3.142 * viewState.sceneCtx.animController.envAnimValue0);
             const itm0 = mat4FromRowMajor(
                 cs,  sn,  0.0, 0.0,
                 -sn, cs,  0.0, 0.0,
@@ -669,10 +716,10 @@ class StandardMaterial extends MaterialBase {
         });
 
         const indTexMtx1 = this.genIndTexMtx((dst: mat4, viewState: ViewState) => {
-            const animSin = Math.sin(3.142 * viewState.animController.envAnimValue0);
+            const animSin = Math.sin(3.142 * viewState.sceneCtx.animController.envAnimValue0);
             const scale = (0.125 * animSin + 0.75) * warpParam;
-            const cs = scale * Math.cos(3.142 * -viewState.animController.envAnimValue1);
-            const sn = scale * Math.sin(3.142 * -viewState.animController.envAnimValue1);
+            const cs = scale * Math.cos(3.142 * -viewState.sceneCtx.animController.envAnimValue1);
+            const sn = scale * Math.sin(3.142 * -viewState.sceneCtx.animController.envAnimValue1);
             const itm1 = mat4FromRowMajor(
                 cs,  sn,  0.0, 0.0,
                 -sn, cs,  0.0, 0.0,
@@ -692,7 +739,7 @@ class StandardMaterial extends MaterialBase {
         mat4.fromScaling(pttexmtx0, [0.9, 0.9, 1.0]);
         const postTexMtx0 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
             mat4.copy(dst, pttexmtx0);
-            mat4SetValue(dst, 1, 3, 0.125 * viewState.animController.envAnimValue1);
+            mat4SetValue(dst, 1, 3, 0.125 * viewState.sceneCtx.animController.envAnimValue1);
         });
 
         const pttexmtx1 = mat4.create();
@@ -702,7 +749,7 @@ class StandardMaterial extends MaterialBase {
         mat4.mul(pttexmtx1, rot45deg, pttexmtx1);
         const postTexMtx1 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
             mat4.copy(dst, pttexmtx1);
-            const v = 0.0625 * viewState.animController.envAnimValue0;
+            const v = 0.0625 * viewState.sceneCtx.animController.envAnimValue0;
             mat4SetValue(dst, 0, 3, v);
             mat4SetValue(dst, 1, 3, v);
         });
@@ -795,7 +842,7 @@ class StandardMaterial extends MaterialBase {
         mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
         const postTexMtx2 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
             const pttexmtx2 = mat4FromRowMajor(
-                0.01, 0.0,  0.0,  0.01 * mapOriginX + viewState.animController.envAnimValue0,
+                0.01, 0.0,  0.0,  0.01 * mapOriginX + viewState.sceneCtx.animController.envAnimValue0,
                 0.0,  0.01, 0.0,  0.0,
                 0.0,  0.0,  0.01, 0.01 * mapOriginZ,
                 0.0,  0.0,  0.0,  1.0
@@ -827,7 +874,7 @@ class StandardMaterial extends MaterialBase {
             const pttexmtx3 = mat4FromRowMajor(
                 0.01, 0.0,  0.0,  0.01 * mapOriginX,
                 0.0,  0.01, 0.0,  0.0,
-                0.0,  0.0,  0.01, 0.01 * mapOriginZ + viewState.animController.envAnimValue1,
+                0.0,  0.0,  0.01, 0.01 * mapOriginZ + viewState.sceneCtx.animController.envAnimValue1,
                 0.0,  0.0,  0.0,  1.0
             );
             mat4.mul(dst, pttexmtx3, viewState.invModelViewMtx);
@@ -857,7 +904,7 @@ class StandardMaterial extends MaterialBase {
     }
 
     private addTevStagesForReflectiveFloor() {
-        const texMap0 = this.genTexMap({ kind: 'fb-color-downscaled-8x' });
+        const texMap0 = this.genTexMap(makePreviousFrameMaterialTexture());
         const texCoord = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
 
         const stage = this.genTevStage();
@@ -876,12 +923,12 @@ class StandardMaterial extends MaterialBase {
             const texMap1 = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[1].texId!, true)));
             const texCoord1 = this.genScrollableTexCoord(texMap1, this.shader.layers[1].scrollingTexMtx);
 
-            this.addTevStageForTextureWithWhiteKonst(0, texMap0, texCoord0);
+            this.addTevStageForTexture(0, texMap0, texCoord0);
             if (this.shader.flags & ShaderFlags.Reflective) {
                 this.addTevStagesForReflectiveFloor();
             }
             this.addTevStagesForTextureWithMode(9, texMap1, texCoord1);
-            this.addTevStageForMultVtxColor();
+            this.addTevStageForMultColor0A0();
         } else {
             for (let i = 0; i < this.shader.layers.length; i++) {
                 const layer = this.shader.layers[i];
@@ -907,23 +954,23 @@ class WaterMaterial extends MaterialBase {
     protected rebuildInternal() {
         this.texMtx[0] = (dst: mat4, viewState: ViewState) => {
             // Flipped
-            texProjCameraSceneTex(dst, viewState.viewerInput.camera, viewState.viewerInput.viewport, 1);
+            texProjCameraSceneTex(dst, viewState.sceneCtx.viewerInput.camera, viewState.sceneCtx.viewerInput.viewport, 1);
             mat4.mul(dst, dst, viewState.modelViewMtx);
         };
 
         this.texMtx[1] = (dst: mat4, viewState: ViewState) => {
             // Unflipped
-            texProjCameraSceneTex(dst, viewState.viewerInput.camera, viewState.viewerInput.viewport, -1);
+            texProjCameraSceneTex(dst, viewState.sceneCtx.viewerInput.camera, viewState.sceneCtx.viewerInput.viewport, -1);
             mat4.mul(dst, dst, viewState.modelViewMtx);
         };
 
         const texmtx3 = mat4.create();
         this.texMtx[3] = (dst: mat4, viewState: ViewState) => {
             mat4.copy(dst, texmtx3);
-            mat4SetValue(dst, 1, 3, viewState.animController.envAnimValue0);
+            mat4SetValue(dst, 1, 3, viewState.sceneCtx.animController.envAnimValue0);
         }
 
-        const texMap0 = this.genTexMap({ kind: 'fb-color-downscaled-2x' });
+        const texMap0 = this.genTexMap(makeSceneMaterialTexture()); // FIXME: should be previous frame?
         const texCoord0 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
         const texMap1 = this.genTexMap(this.factory.getWavyTexture());
         const texCoord1 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX3);
@@ -951,8 +998,8 @@ class WaterMaterial extends MaterialBase {
         mat4.mul(texmtx4, rot45deg, texmtx4);
         this.texMtx[4] = (dst: mat4, viewState: ViewState) => {
             mat4.copy(dst, texmtx4);
-            mat4SetValue(dst, 0, 3, viewState.animController.envAnimValue1);
-            mat4SetValue(dst, 1, 3, viewState.animController.envAnimValue1);
+            mat4SetValue(dst, 0, 3, viewState.sceneCtx.animController.envAnimValue1);
+            mat4SetValue(dst, 1, 3, viewState.sceneCtx.animController.envAnimValue1);
         };
 
         const texCoord2 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX4);
@@ -1040,7 +1087,7 @@ class FurMaterial extends MaterialBase {
         // Ind Stage 0: Waviness
         const texMap2 = this.genTexMap(this.factory.getWavyTexture());
         this.texMtx[1] = (dst: mat4, viewState: ViewState) => {
-            mat4.fromTranslation(dst, [0.25 * viewState.animController.envAnimValue0, 0.25 * viewState.animController.envAnimValue1, 0.0]);
+            mat4.fromTranslation(dst, [0.25 * viewState.sceneCtx.animController.envAnimValue0, 0.25 * viewState.sceneCtx.animController.envAnimValue1, 0.0]);
             mat4SetValue(dst, 0, 0, 0.0125);
             mat4SetValue(dst, 1, 1, 0.0125);
         };
@@ -1051,7 +1098,7 @@ class FurMaterial extends MaterialBase {
         this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
     
         // Stage 1: Fur map
-        const texMap1 = this.genTexMap({ kind: 'fur-map' });
+        const texMap1 = this.genTexMap(makeFurMapMaterialTexture(this.factory));
 
         // This texture matrix, when combined with a POS tex-gen, creates
         // texture coordinates that increase linearly on the model's XZ plane.
@@ -1116,10 +1163,10 @@ class FurMaterial extends MaterialBase {
 }
 
 export class MaterialFactory {
-    private rampTexture: SFAMaterialTexture = null;
-    private causticTexture: SFAMaterialTexture = null;
-    private wavyTexture: SFAMaterialTexture = null;
-    private halfGrayTexture: SFAMaterialTexture = null;
+    private rampTexture: MaterialTexture | null = null;
+    private causticTexture: MaterialTexture | null = null;
+    private wavyTexture: MaterialTexture | null = null;
+    private halfGrayTexture: MaterialTexture | null = null;
     private furFactory: FurFactory | null = null;
     public scrollingTexMtxs: ScrollingTexMtx[] = [];
 
@@ -1170,7 +1217,7 @@ export class MaterialFactory {
         return this.furFactory;
     }
 
-    public getHalfGrayTexture(): SFAMaterialTexture {
+    public getHalfGrayTexture(): MaterialTexture {
         // Used to test indirect texturing
         if (this.halfGrayTexture !== null) {
             return this.halfGrayTexture;
@@ -1209,7 +1256,7 @@ export class MaterialFactory {
         return this.rampTexture;
     }
     
-    public getRampTexture(): SFAMaterialTexture {
+    public getRampTexture(): MaterialTexture {
         if (this.rampTexture !== null) {
             return this.rampTexture;
         }
@@ -1252,7 +1299,7 @@ export class MaterialFactory {
         return this.rampTexture;
     }
     
-    public getCausticTexture(): SFAMaterialTexture {
+    public getCausticTexture(): MaterialTexture {
         // This function generates a texture with a circular pattern used for caustics.
         // The original function to generate this texture is not customizable and
         // generates the same texture every time it is called. (?)
@@ -1316,7 +1363,7 @@ export class MaterialFactory {
         return this.causticTexture;
     }
     
-    public getWavyTexture(): SFAMaterialTexture {
+    public getWavyTexture(): MaterialTexture {
         // This function generates a texture with a wavy pattern used for water, lava and other materials.
         // The original function used to generate this texture is not customizable and
         // always generates the same texture every time it is called. (?)

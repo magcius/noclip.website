@@ -12,21 +12,23 @@ import { ViewerRenderInput } from "../viewer";
 import { PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
+import * as GX_Material from '../gx/gx_material';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
-import { ObjectManager, ObjectInstance } from './objects';
+import { ObjectManager, ObjectInstance, ObjectRenderContext } from './objects';
 import { EnvfxManager } from './envfx';
-import { SFARenderer } from './render';
+import { SFARenderer, SceneRenderContext } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
-import { ModelInstance, ModelViewState } from './models';
-import { MaterialFactory } from './shaders';
+import { ModelInstance, ModelRenderContext } from './models';
+import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
-import { colorNewFromRGBA } from '../Color';
+import { colorNewFromRGBA, Color, colorCopy } from '../Color';
 import { getCamPos } from './util';
+import { computeViewMatrix } from '../Camera';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -50,6 +52,13 @@ function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
 
+interface Light {
+    position: vec3;
+    color: Color;
+    distAtten: vec3;
+    // TODO: flags and other parameters...
+}
+
 export class World {
     public animController: SFAAnimationController;
     public envfxMan: EnvfxManager;
@@ -59,6 +68,7 @@ export class World {
     public objectMan: ObjectManager;
     public resColl: ResourceCollection;
     public objectInstances: ObjectInstance[] = [];
+    public lights: Set<Light> = new Set();
 
     private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[]) {
     }
@@ -93,6 +103,22 @@ export class World {
         this.mapInstance = mapInstance;
     }
 
+    public spawnObject(objParams: DataView, parent: ObjectInstance | null = null, mapObjectOrigin: vec3): ObjectInstance {
+        const typeNum = objParams.getUint16(0x0);
+        const pos = readVec3(objParams, 0x8);
+
+        const posInMap = vec3.clone(pos);
+        vec3.add(posInMap, posInMap, mapObjectOrigin);
+
+        const obj = this.objectMan.createObjectInstance(typeNum, objParams, posInMap);
+        obj.setParent(parent);
+        this.objectInstances.push(obj);
+
+        obj.mount();
+
+        return obj;
+    }
+
     public spawnObjectsFromRomlist(romlist: DataView, parent: ObjectInstance | null = null) {
         const mapObjectOrigin = vec3.create();
         if (this.mapInstance !== null) {
@@ -105,16 +131,7 @@ export class World {
             const entrySize = 4 * romlist.getUint8(offs + 0x2);
             const objParams = dataSubarray(romlist, offs, entrySize);
 
-            const typeNum = objParams.getUint16(0x0);
-            const pos = readVec3(objParams, 0x8);
-
-            const posInMap = vec3.clone(pos);
-            vec3.add(posInMap, posInMap, mapObjectOrigin);
-
-            const obj = this.objectMan.createObjectInstance(typeNum, objParams, posInMap);
-            obj.setParent(parent);
-            this.objectInstances.push(obj);
-
+            const obj = this.spawnObject(objParams, parent, mapObjectOrigin);
             console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
 
             offs += entrySize;
@@ -132,6 +149,7 @@ class WorldRenderer extends SFARenderer {
     private showObjects: boolean = true;
     private showDevGeometry: boolean = false;
     private showDevObjects: boolean = false;
+    private enableLights: boolean = true;
 
     constructor(private world: World, private models: (ModelInstance | null)[]) {
         super(world.device, world.animController);
@@ -201,6 +219,12 @@ class WorldRenderer extends SFARenderer {
         };
         layerPanel.contents.append(showDevGeometry.elem);
 
+        const enableLights = new UI.Checkbox("Enable lights", true);
+        enableLights.onchanged = () => {
+            this.enableLights = enableLights.checked;
+        }
+        layerPanel.contents.append(enableLights.elem);
+
         return [timePanel, layerPanel];
     }
 
@@ -224,11 +248,11 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
-    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Draw atmosphere
         const tex = this.world.envfxMan.getAtmosphereTexture();
         if (tex !== null && tex !== undefined) {
-            this.beginPass(viewerInput, true);
+            this.beginPass(sceneCtx.viewerInput, true);
             materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
             materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
             materialParams.m_TextureMapping[0].width = tex.width;
@@ -238,7 +262,7 @@ class WorldRenderer extends SFARenderer {
 
             // Extract pitch
             const cameraFwd = vec3.create();
-            getMatrixAxisZ(cameraFwd, viewerInput.camera.worldMatrix);
+            getMatrixAxisZ(cameraFwd, sceneCtx.viewerInput.camera.worldMatrix);
             vec3.negate(cameraFwd, cameraFwd);
             const camPitch = vecPitch(cameraFwd);
             const camRoll = Math.PI / 2;
@@ -246,7 +270,7 @@ class WorldRenderer extends SFARenderer {
             // FIXME: This implementation is adapted from the game, but correctness is not verified.
             // We should probably use a different technique, since this one works poorly in VR.
             // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
-            const fovRollFactor = 3.0 * (tex.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
+            const fovRollFactor = 3.0 * (tex.height * 0.5 * sceneCtx.viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
             const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
             const t0 = (pitchFactor + fovRollFactor) / tex.height;
             const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
@@ -265,7 +289,7 @@ class WorldRenderer extends SFARenderer {
             this.ddraw.end();
 
             const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
-            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, viewerInput, true);
+            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true);
 
             this.ddraw.endAndUpload(device, renderInstManager);
             
@@ -273,25 +297,34 @@ class WorldRenderer extends SFARenderer {
         }
         
         // Draw skyscape
-        this.beginPass(viewerInput);
+        this.beginPass(sceneCtx.viewerInput);
+
+        const objectCtx: ObjectRenderContext = {
+            ...sceneCtx,
+            showDevGeometry: this.showDevGeometry,
+            setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
+        }
 
         const eyePos = vec3.create();
-        getCamPos(eyePos, viewerInput.camera);
+        getCamPos(eyePos, sceneCtx.viewerInput.camera);
         for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
             const obj = this.world.envfxMan.skyscape.objects[i];
             obj.setPosition(eyePos);
-            obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0); // TODO: additional draw steps?
+            obj.render(device, renderInstManager, objectCtx, 0); // TODO: additional draw steps?
         }
 
         this.endPass(device);
     }
 
-    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, modelInst: ModelInstance) {
-        const modelViewState: ModelViewState = {
+    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelInst: ModelInstance) {
+        const modelCtx: ModelRenderContext = {
+            ...sceneCtx,
             showDevGeometry: true,
             ambienceNum: 0,
+            setupLights: this.setupLights.bind(this),
         };
-        modelInst.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0, modelViewState);
+
+        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix, 0);
 
         // Draw bones
         const drawBones = false;
@@ -308,20 +341,58 @@ class WorldRenderer extends SFARenderer {
                     mat4.mul(parentMtx, parentMtx, matrix);
                     const parentPt = vec3.create();
                     mat4.getTranslation(parentPt, parentMtx);
-                    drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
+                    drawWorldSpaceLine(ctx, sceneCtx.viewerInput.camera, parentPt, jointPt);
                 } else {
-                    drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, jointPt);
+                    drawWorldSpacePoint(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
                 }
             }
         }
     }
 
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+    private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
+        let i = 0;
+
+        if (this.enableLights) {
+            const worldView = mat4.create();
+            computeViewMatrix(worldView, modelCtx.viewerInput.camera);
+    
+            // const ctx = getDebugOverlayCanvas2D();
+            for (let light of this.world.lights) {
+                // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
+    
+                lights[i].reset();
+                // Light information is specified in view space.
+                vec3.transformMat4(lights[i].Position, light.position, worldView);
+                // drawWorldSpacePoint(ctx, modelCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
+                // TODO: use correct parameters
+                colorCopy(lights[i].Color, light.color);
+                lights[i].CosAtten = vec3.fromValues(1.0, 0.0, 0.0); // TODO
+                vec3.copy(lights[i].DistAtten, light.distAtten);
+    
+                i++;
+                if (i >= 8)
+                    break;
+            }
+        }
+
+        for (; i < 8; i++) {
+            lights[i].reset();
+        }
+    }
+
+    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Render opaques
 
-        this.beginPass(viewerInput);
+        const modelCtx: ModelRenderContext = {
+            ...sceneCtx,
+            showDevGeometry: this.showDevGeometry,
+            ambienceNum: 0, // Always use ambience 0 when rendering the map,
+            setupLights: this.setupLights.bind(this),
+        }
+
+        this.beginPass(sceneCtx.viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.previousFrameTexture, 0, this.showDevGeometry);
+            this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx, 0);
         }
         
         const mtx = mat4.create();
@@ -335,12 +406,12 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    obj.render(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+                    obj.render(device, renderInstManager, modelCtx, 0);
                     // TODO: additional draw steps; object furs and translucents
         
                     const drawLabels = false;
                     if (drawLabels) {
-                        drawWorldSpaceText(ctx, viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+                        drawWorldSpaceText(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
                     }
                 }
             }
@@ -352,7 +423,7 @@ class WorldRenderer extends SFARenderer {
         for (let i = 0; i < this.models.length; i++) {
             if (this.models[i] !== null) {
                 mat4.fromTranslation(mtx, [col * 60, row * 60, 0]);
-                this.renderTestModel(device, renderInstManager, viewerInput, mtx, this.models[i]!);
+                this.renderTestModel(device, renderInstManager, sceneCtx, mtx, this.models[i]!);
                 col++;
                 if (col >= testCols) {
                     col = 0;
@@ -364,18 +435,18 @@ class WorldRenderer extends SFARenderer {
         this.endPass(device);
 
         // Render waters, furs and translucents
-        this.beginPass(viewerInput);
+        this.beginPass(sceneCtx.viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
-            this.world.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
+            this.world.mapInstance.prepareToRenderWaters(device, renderInstManager, modelCtx);
+            this.world.mapInstance.prepareToRenderFurs(device, renderInstManager, modelCtx);
         }
         this.endPass(device);
 
         const NUM_DRAW_STEPS = 3;
         for (let drawStep = 1; drawStep < NUM_DRAW_STEPS; drawStep++) {
-            this.beginPass(viewerInput);
+            this.beginPass(sceneCtx.viewerInput);
             if (this.world.mapInstance !== null) {
-                this.world.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep, this.showDevGeometry);
+                this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx, drawStep);
             }
             this.endPass(device);
         }    
