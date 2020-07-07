@@ -1414,7 +1414,17 @@ export function displayListRegistersInitGX(r: DisplayListRegisters): void {
 //#endregion
 
 //#region Utilities
-export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, loadedDatas: LoadedVertexData[]): LoadedVertexData {
+function canMergePackets(a: LoadedVertexPacket, b: LoadedVertexPacket): boolean {
+    if (a.indexOffset !== b.indexOffset)
+        return false;
+    if (!arrayEqual(a.posNrmMatrixTable, b.posNrmMatrixTable, (i, j) => i === j))
+        return false;
+    if (!arrayEqual(a.texMatrixTable, b.texMatrixTable, (i, j) => i === j))
+        return false;
+    return true;
+}
+
+export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVertexData {
     let totalIndexCount = 0;
     let totalVertexCount = 0;
     let indexDataSize = 0;
@@ -1427,11 +1437,17 @@ export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, load
 
         for (let j = 0; j < loadedData.packets.length; j++) {
             const packet = loadedData.packets[j];
-            const indexOffset = totalIndexCount + packet.indexOffset;
-            const indexCount = packet.indexCount;
-            const posNrmMatrixTable = packet.posNrmMatrixTable;
-            const texMatrixTable = packet.texMatrixTable;
-            packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+            const existingPacket = packets.length > 0 ? packets[packets.length - 1] : null;
+
+            if (existingPacket !== null && canMergePackets(packet, existingPacket)) {
+                existingPacket.indexCount += packet.indexCount;
+            } else {
+                const indexOffset = totalIndexCount + packet.indexOffset;
+                const indexCount = packet.indexCount;
+                const posNrmMatrixTable = packet.posNrmMatrixTable;
+                const texMatrixTable = packet.texMatrixTable;
+                packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+            }
         }
 
         totalIndexCount += loadedData.totalIndexCount;

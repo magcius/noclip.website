@@ -219,7 +219,7 @@ class BatchInstance {
     private shapeHelper: GXShapeHelperGfx;
     private packetParams = new PacketParams();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public materialInstance: MaterialInstance, private nodeInstance: NodeInstance, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffersCombo) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public materialInstance: MaterialInstance, private nodeInstance: NodeInstance, batch: Batch, coalescedBuffers: GfxCoalescedBuffersCombo) {
         this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
