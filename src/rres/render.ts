@@ -45,7 +45,8 @@ export class MDL0Model {
  
         for (let i = 0; i < this.mdl0.shapes.length; i++) {
             const shape = this.mdl0.shapes[i];
-            this.shapeData[i] = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[i], shape.loadedVertexLayout, shape.loadedVertexData);
+            const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[i];
+            this.shapeData[i] = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, shape.loadedVertexLayout, shape.loadedVertexData);
         }
 
         for (let i = 0; i < this.mdl0.materials.length; i++) {

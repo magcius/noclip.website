@@ -5,9 +5,10 @@ import { SceneGfx, ViewerRenderInput } from '../viewer';
 
 import * as GX_Material from '../gx/gx_material';
 
-import { BMD, BTK, DRW1MatrixKind } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { BMD, BTK, DRW1MatrixKind, JointTransformInfo } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { J3DModelData, MaterialInstance, J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import { ub_PacketParams, PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
@@ -16,7 +17,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { makeSortKey, GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { OrbitCameraController } from '../Camera';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { SceneContext, SceneDesc, GraphObjBase } from '../SceneBase';
+import { SceneContext, SceneDesc } from '../SceneBase';
 import { assert } from '../util';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
@@ -26,7 +27,7 @@ import { AABB } from '../Geometry';
 import * as GX from '../gx/gx_enum';
 import { colorNewCopy, White } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { dfUsePercent, dfRange } from '../DebugFloaters';
+import { dfUsePercent } from '../DebugFloaters';
 
 class PlaneShape {
     private vtxBuffer: GfxBuffer;
@@ -236,7 +237,7 @@ class FakeWaterModelInstance {
             return;
 
         this.modelInstance.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.modelInstance.calcAnim(viewerInput.camera);
+        this.modelInstance.calcAnim();
         this.modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
         // Calc our packet params.
@@ -346,17 +347,22 @@ export class SlimySpringWaterDesc implements SceneDesc {
             const bmd = BMD.parse(rarc.findFileData('SkyIslandStepPartsA.bdl')!);
 
             // Append a fake joint for the grass. This is disgusting.
-            bmd.jnt1.joints.push({ name: 'yikes',
-                bbox: new AABB(), boundingSphereRadius: 1000,
-                scaleX: 1, scaleY: 0.2, scaleZ: 1,
-                rotationX: 0, rotationY: 0, rotationZ: 0,
-                translationX: 0, translationY: 238, translationZ: 0,
-            });
+            const transform = new JointTransformInfo();
+            transform.scaleX = 1.0;
+            transform.scaleY = 0.2;
+            transform.scaleZ = 1.0;
+            transform.rotationX = 0.0;
+            transform.rotationY = 0.0;
+            transform.rotationZ = 0.0;
+            transform.translationX = 0.0;
+            transform.translationY = 238.0;
+            transform.translationZ = 0.0;
+            bmd.jnt1.joints.push({ name: 'yikes', calcFlags: 0, transform, bbox: new AABB(), boundingSphereRadius: 1000 });
             bmd.drw1.matrixDefinitions.push({ kind: DRW1MatrixKind.Joint, jointIndex: 1 });
             bmd.shp1.shapes[4].mtxGroups[0].useMtxTable[0] = 1;
 
             const modelData = new J3DModelData(device, cache, bmd);
-            modelData.jointData.push({ jointIndex: 1, parentJointIndex: 0 });
+            modelData.rootJointTreeNode.children[0].children.push({ jointIndex: 1, children: [] });
 
             const flowerBox = new J3DModelInstanceSimple(modelData);
             computeModelMatrixS(flowerBox.modelMatrix, 1.675);

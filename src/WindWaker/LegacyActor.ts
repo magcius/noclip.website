@@ -4,7 +4,8 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./zww_scenes";
 import { mat4, vec3 } from "gl-matrix";
-import { J3DModelInstanceSimple, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { LoopMode, ANK1, TTK1, TRK1, TPT1 } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { assertExists, hexzero, leftPad } from '../util';

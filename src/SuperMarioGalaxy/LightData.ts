@@ -16,10 +16,10 @@ import { lerp } from "../MathHelpers";
 import { isHiddenModel } from "./ActorUtil";
 
 function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
-    const colorR = fallback(infoIter.getValueNumber(`${prefix}R`), 0) / 0xFF;
-    const colorG = fallback(infoIter.getValueNumber(`${prefix}G`), 0) / 0xFF;
-    const colorB = fallback(infoIter.getValueNumber(`${prefix}B`), 0) / 0xFF;
-    const colorA = fallback(infoIter.getValueNumber(`${prefix}A`), 0) / 0xFF;
+    const colorR = (fallback(infoIter.getValueNumber(`${prefix}R`), 0) & 0xFF) / 0xFF;
+    const colorG = (fallback(infoIter.getValueNumber(`${prefix}G`), 0) & 0xFF) / 0xFF;
+    const colorB = (fallback(infoIter.getValueNumber(`${prefix}B`), 0) & 0xFF) / 0xFF;
+    const colorA = (fallback(infoIter.getValueNumber(`${prefix}A`), 0) & 0xFF) / 0xFF;
     colorFromRGBA(color, colorR, colorG, colorB, colorA);
 }
 
@@ -75,7 +75,7 @@ class ActorLightInfo {
         this.Light0.setFromLightInfo(infoIter, `${prefix}Light0`);
         this.Light1.setFromLightInfo(infoIter, `${prefix}Light1`);
         getValueColor(this.Ambient, infoIter, `${prefix}Ambient`);
-        this.Alpha2 = fallback(infoIter.getValueNumber(`${prefix}Alpha2`), 0) / 0xFF;
+        this.Alpha2 = (fallback(infoIter.getValueNumber(`${prefix}Alpha2`), 0) & 0xFF) / 0xFF;
     }
 
     public setOnMaterialParams(mp: MaterialParams, camera: Camera, setAmbient: boolean): void {
@@ -278,6 +278,17 @@ export class ActorLightCtrl {
             } else {
                 const targetLight = this.getTargetActorLight(this.currentAreaLight);
                 targetLight.setOnModelInstance(modelInstance, camera, true);
+            }
+        }
+    }
+
+    public loadLightOnMaterialParams(materialParams: MaterialParams, camera: Camera): void {
+        if (this.currentAreaLight !== null) {
+            if (this.blendOutActorLight !== null) {
+                this.blendAnimActorLight.setOnMaterialParams(materialParams, camera, true);
+            } else {
+                const targetLight = this.getTargetActorLight(this.currentAreaLight);
+                targetLight.setOnMaterialParams(materialParams, camera, true);
             }
         }
     }

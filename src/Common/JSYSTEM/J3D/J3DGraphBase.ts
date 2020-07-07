@@ -1,8 +1,7 @@
 
 import { mat4, vec3 } from 'gl-matrix';
 
-import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, bindVAF1Animator, VAF1, VAF1Animator, TPT1, bindTPT1Animator, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, Joint, getAnimFrame, sampleAnimationData } from './J3DLoader';
-import { TTK1, bindTTK1Animator, TRK1, bindTRK1Animator, ANK1 } from './J3DLoader';
+import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
 import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
@@ -10,22 +9,23 @@ import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
 
 import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
 import { TextureMapping } from '../../../TextureHolder';
-import AnimationController from '../../../AnimationController';
 import { nArray, assert, assertExists } from '../../../util';
 import { AABB } from '../../../Geometry';
-import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask } from '../../../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask, GfxFormat } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
-import { ViewerRenderInput, Texture } from '../../../viewer';
+import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
 import { colorCopy, Color } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx, computeModelMatrixSRT } from '../../../MathHelpers';
+import { computeNormalMatrix, texEnvMtx } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
 import { translateSampler } from '../JUTTexture';
+import { calcJointMatrixFromTransform } from './J3DGraphAnimator';
+import { LoadedVertexPacket } from '../../../gx/gx_displaylist';
 
 export class ShapeInstanceState {
-    // One matrix for each joint, which transform into their parent's space.
+    // One matrix for each joint, which transform into world space.
     public jointToParentMatrixArray: mat4[] = [];
 
     // One matrix for each joint, which transform into world space.
@@ -40,24 +40,46 @@ export class ShapeInstanceState {
 
     // The camera's view matrix.
     public worldToViewMatrix = mat4.create();
+
+    // Used while calculating joint matrices.
+    // public currentScale = vec3.create();
+    public parentScale = vec3.create();
 }
 
-class ShapeData {
-    public shapeHelpers: GXShapeHelperGfx[] = [];
+export class ShapeData {
+    public shapeHelper: GXShapeHelperGfx;
+    public packets: LoadedVertexPacket[] = [];
     public sortKeyBias: number = 0;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public shape: Shape, coalescedBuffers: GfxCoalescedBuffersCombo[]) {
+        assert(this.shape.loadedVertexLayout.indexFormat === GfxFormat.U16_R);
+        const firstCoalescedBuffer = coalescedBuffers.shift()!;
+
+        // Combine all coalesced buffers into the first coalesced buffer. We can do this because coalesced
+        // buffers i...i+N are guaranteed to be immediately contiguous, though it's possible we should better
+        // support this in the generic buffer coalescement system....
+        for (let i = 1; i < this.shape.mtxGroups.length; i++) {
+            const coalescedBuffer = coalescedBuffers.shift()!;
+            for (let i = 0; i < coalescedBuffer.vertexBuffers.length; i++)
+                firstCoalescedBuffer.vertexBuffers[i].byteCount += coalescedBuffer.vertexBuffers[i].byteCount;
+        }
+
+        this.shapeHelper = new GXShapeHelperGfx(device, cache, firstCoalescedBuffer.vertexBuffers, firstCoalescedBuffer.indexBuffer, this.shape.loadedVertexLayout);
+
+        let totalIndexCount = 0;
         for (let i = 0; i < this.shape.mtxGroups.length; i++) {
             const mtxGroup = this.shape.mtxGroups[i];
-            // TODO(jstpierre): Use only one ShapeHelper.
-            const shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.shift()!, this.shape.loadedVertexLayout, mtxGroup.loadedVertexData);
-            this.shapeHelpers.push(shapeHelper);
+
+            assert(mtxGroup.loadedVertexData.packets.length === 1);
+            const packet = mtxGroup.loadedVertexData.packets[0];
+            packet.indexOffset = totalIndexCount;
+            totalIndexCount += packet.indexCount;
+            this.packets.push(packet);
         }
     }
 
     public destroy(device: GfxDevice) {
-        for (let i = 0; i < this.shapeHelpers.length; i++)
-            this.shapeHelpers[i].destroy(device);
+        this.shapeHelper.destroy(device);
     }
 }
 
@@ -68,8 +90,8 @@ export class MaterialData {
     }
 }
 
-class JointData {
-    constructor(public jointIndex: number = 0, public parentJointIndex: number = 0) {
+class JointTreeNode {
+    constructor(public jointIndex: number = 0, public children: JointTreeNode[] = []) {
     }
 }
 
@@ -134,20 +156,43 @@ export function J3DCalcYBBoardMtx(dst: mat4, m: mat4, v: vec3 = scratchVec3): vo
     m[15] = 9999.0;
 }
 
+export function prepareShapeMtxGroup(packetParams: PacketParams, shapeInstanceState: ShapeInstanceState, shape: Shape, mtxGroup: MtxGroup): boolean {
+    let instVisible = false;
+
+    for (let i = 0; i < mtxGroup.useMtxTable.length; i++) {
+        const matrixIndex = mtxGroup.useMtxTable[i];
+
+        // Leave existing matrix.
+        if (matrixIndex === 0xFFFF)
+            continue;
+
+        const drw = shapeInstanceState.drawViewMatrixArray[matrixIndex];
+        const dst = packetParams.u_PosMtx[i];
+
+        if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
+            J3DCalcBBoardMtx(dst, drw);
+        else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
+            J3DCalcYBBoardMtx(dst, drw);
+        else
+            mat4.copy(dst, drw);
+
+        if (shapeInstanceState.drawViewMatrixVisibility[matrixIndex])
+            instVisible = true;
+    }
+
+    return instVisible;
+}
+
 const scratchModelViewMatrix = mat4.create();
 const packetParams = new PacketParams();
 export class ShapeInstance {
     public visible: boolean = true;
 
-    constructor(public shapeData: ShapeData, private materialInstance: MaterialInstance) {
+    constructor(public shapeData: ShapeData) {
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, materialInstance: MaterialInstance, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
         if (!this.visible)
-            return;
-
-        const materialInstance = this.materialInstance;
-        if (!materialInstance.visible)
             return;
 
         const shape = this.shapeData.shape;
@@ -168,41 +213,17 @@ export class ShapeInstance {
         if (!multi)
             materialInstance.fillMaterialParams(template, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
 
-        for (let p = 0; p < shape.mtxGroups.length; p++) {
-            const mtxGroup = shape.mtxGroups[p];
-
-            let instVisible = false;
-            for (let i = 0; i < mtxGroup.useMtxTable.length; i++) {
-                const matrixIndex = mtxGroup.useMtxTable[i];
-
-                // Leave existing matrix.
-                if (matrixIndex === 0xFFFF)
-                    continue;
-
-                const drw = shapeInstanceState.drawViewMatrixArray[matrixIndex];
-                const dst = packetParams.u_PosMtx[i];
-
-                if (shape.displayFlags === ShapeDisplayFlags.BILLBOARD)
-                    J3DCalcBBoardMtx(dst, drw);
-                else if (shape.displayFlags === ShapeDisplayFlags.Y_BILLBOARD)
-                    J3DCalcYBBoardMtx(dst, drw);
-                else
-                    mat4.copy(dst, drw);
-
-                if (shapeInstanceState.drawViewMatrixVisibility[matrixIndex])
-                    instVisible = true;
-            }
-
-            if (!instVisible)
+        for (let i = 0; i < shape.mtxGroups.length; i++) {
+            if (!prepareShapeMtxGroup(packetParams, shapeInstanceState, shape, shape.mtxGroups[i]))
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
-            this.shapeData.shapeHelpers[p].setOnRenderInst(renderInst);
-            this.shapeData.shapeHelpers[p].fillPacketParams(packetParams, renderInst);
+            this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.packets[i]);
+            this.shapeData.shapeHelper.fillPacketParams(packetParams, renderInst);
 
             if (multi)
                 materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
-
+    
             renderInstManager.submitRenderInst(renderInst);
         }
 
@@ -348,6 +369,7 @@ export class MaterialInstance {
     public sortKey: number = 0;
     public colorOverrides: (Color | null)[] = nArray(ColorKind.COUNT, () => null);
     public fogBlock = new GX_Material.FogBlock();
+    public shapeInstances: ShapeInstance[] = [];
 
     constructor(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks) {
         this.setMaterialData(materialData, materialHacks);
@@ -382,33 +404,6 @@ export class MaterialInstance {
         if (this.materialData.material.translucent)
             layer |= GfxRendererLayer.TRANSLUCENT;
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
-    }
-
-    public bindTRK1(animationController: AnimationController, trk1: TRK1 | null): void {
-        for (let i: ColorKind = 0; i < ColorKind.COUNT; i++) {
-            // If the TRK1 exists, only bind new channels. This is necessary for BPK/BRK animations to coexist.
-            if (trk1 !== null) {
-                const trk1Animator = bindTRK1Animator(animationController, trk1, this.name, i);
-                if (trk1Animator !== null)
-                    this.colorCalc[i] = trk1Animator;
-            } else {
-                this.colorCalc[i] = null;
-            }
-        }
-    }
-
-    public bindTTK1(animationController: AnimationController, ttk1: TTK1 | null): void {
-        for (let i = 0; i < 8; i++) {
-            const ttk1Animator = ttk1 !== null ? bindTTK1Animator(animationController, ttk1, this.name, i) : null;
-            this.texMtxCalc[i] = ttk1Animator;
-        }
-    }
-
-    public bindTPT1(animationController: AnimationController, tpt1: TPT1 | null): void {
-        for (let i = 0; i < 8; i++) {
-            const tpt1Animator = tpt1 !== null ? bindTPT1Animator(animationController, tpt1, this.name, i) : null;
-            this.texNoCalc[i] = tpt1Animator;
-        }
     }
 
     private clampTo8Bit(color: Color): void {
@@ -748,6 +743,14 @@ export class MaterialInstance {
         this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
+
+    public prepareToRenderShapes(device: GfxDevice, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: NormalizedViewportCoords, modelData: J3DModelData, materialInstanceState: MaterialInstanceState, shapeInstanceState: ShapeInstanceState): void {
+        if (!this.visible)
+            return;
+
+        for (let i = 0; i < this.shapeInstances.length; i++)
+            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, viewport, this, modelData, materialInstanceState, shapeInstanceState);
+    }
 }
 
 // TODO(jstpierre): Unify with TEX1Data? Build a unified cache that can deduplicate
@@ -850,7 +853,7 @@ export class J3DModelData {
 
     public modelMaterialData: BMDModelMaterialData;
     public shapeData: ShapeData[] = [];
-    public jointData: JointData[] = [];
+    public rootJointTreeNode: JointTreeNode;
     // Reference joint indices for all materials.
     public materialJointIndices: number[] = [];
 
@@ -894,8 +897,9 @@ export class J3DModelData {
 
         let translucentDrawIndex: number = 0;
         // Dummy joint to be the parent of our root node.
-        let lastJoint: JointData = new JointData(-1);
-        let jointStack: JointData[] = [lastJoint];
+        this.rootJointTreeNode = new JointTreeNode(-1);
+        let jointStack: JointTreeNode[] = [this.rootJointTreeNode];
+        let lastJoint = jointStack[0];
         while (true) {
             const type: HierarchyNodeType = view.getUint16(offs + 0x00);
             const value = view.getUint16(offs + 0x02);
@@ -907,11 +911,11 @@ export class J3DModelData {
             } else if (type === HierarchyNodeType.Close) {
                 jointStack.shift();
             } else if (type === HierarchyNodeType.Joint) {
-                const jointIndex = value, parentJointIndex = jointStack[0].jointIndex;
-                assert(jointIndex > parentJointIndex);
-                const joint = new JointData(jointIndex, parentJointIndex);
-                this.jointData.push(joint);
-                lastJoint = joint;
+                const jointIndex = value, parentJointTreeNode = jointStack[0];
+                assert(jointIndex > parentJointTreeNode.jointIndex);
+                const jointTreeNode = new JointTreeNode(jointIndex);
+                parentJointTreeNode.children.push(jointTreeNode);
+                lastJoint = jointTreeNode;
             } else if (type === HierarchyNodeType.Material) {
                 assert(this.materialJointIndices[value] === undefined);
                 this.materialJointIndices[value] = jointStack[0].jointIndex;
@@ -919,7 +923,7 @@ export class J3DModelData {
                 const shapeData = this.shapeData[value];
 
                 // Translucent draws happen in reverse order -- later shapes are drawn first.
-                // TODO(jstpierre): Verify these flags do not change upon changing BMT...
+                // TODO(jstpierre): This is a hack.
                 if (this.modelMaterialData.materialData![shapeData.shape.materialIndex].material.translucent)
                     shapeData.sortKeyBias = --translucentDrawIndex;
             }
@@ -928,7 +932,6 @@ export class J3DModelData {
         }
 
         assert(jointStack.length === 1);
-        assert(this.jointData[0].jointIndex === 0 && this.jointData[0].parentJointIndex === -1);
     }
 
     public destroy(device: GfxDevice): void {
@@ -944,56 +947,21 @@ export class J3DModelData {
 }
 
 export interface JointMatrixCalc {
-    calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void;
-}
-
-function calcJointMatrixBase(dst: mat4, jnt1: Joint): void {
-    const scaleX = jnt1.scaleX;
-    const scaleY = jnt1.scaleY;
-    const scaleZ = jnt1.scaleZ;
-    const rotationX = jnt1.rotationX;
-    const rotationY = jnt1.rotationY;
-    const rotationZ = jnt1.rotationZ;
-    const translationX = jnt1.translationX;
-    const translationY = jnt1.translationY;
-    const translationZ = jnt1.translationZ;
-    computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    calcJointMatrix(dst: mat4, modelData: J3DModelData, jointIndex: number, shapeInstanceState: ShapeInstanceState): void;
 }
 
 // TODO(jstpierre): Support better recursive calculation here, SoftImage modes, etc.
-export class JointMatrixCalcANK1 {
-    constructor(public animationController: AnimationController, public ank1: ANK1) {
-    }
-
-    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.ank1, frame);
-        const entry = this.ank1.jointAnimationEntries[i];
-
-        if (entry !== undefined) {
-            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-            const translationX = sampleAnimationData(entry.translationX, animFrame);
-            const translationY = sampleAnimationData(entry.translationY, animFrame);
-            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-            computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
-        } else {
-            calcJointMatrixBase(dst, jnt1);
-        }
-    }
-}
 
 export class JointMatrixCalcNoAnm {
-    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
-        calcJointMatrixBase(dst, jnt1);
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number, shapeInstanceState: ShapeInstanceState): void {
+        const jnt1 = modelData.bmd.jnt1.joints[i];
+        const transform: JointTransformInfo = jnt1.transform;
+        const loadFlags = modelData.bmd.inf1.loadFlags;
+        calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
     }
 }
 
-export type JointMatrixCalcCallback = (dst: mat4, i: number, jnt1: Joint) => void;
+export type JointMatrixCalcCallback = (dst: mat4, modelData: J3DModelData, i: number) => void;
 
 const bboxScratch = new AABB();
 export class J3DModelInstance {
@@ -1025,7 +993,12 @@ export class J3DModelInstance {
         this.tex1Data = this.modelMaterialData.tex1Data!;
 
         this.shapeInstances = this.modelData.shapeData.map((shapeData) => {
-            return new ShapeInstance(shapeData, this.materialInstances[shapeData.shape.materialIndex]);
+            const shapeInstance = new ShapeInstance(shapeData);
+
+            const materialInstance = this.materialInstances[shapeData.shape.materialIndex];
+            materialInstance.shapeInstances.push(shapeInstance);
+
+            return shapeInstance;
         });
 
         this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
@@ -1037,7 +1010,7 @@ export class J3DModelInstance {
         this.shapeInstanceState.jointToWorldMatrixArray = nArray(numJoints, () => mat4.create());
         this.jointVisibility = nArray(numJoints, () => true);
         this.jointMatrixCalc = new JointMatrixCalcNoAnm();
-        this.calcJointAnim();
+        this.calcAnim();
 
         // DRW1 seems to specify each envelope twice. J3D runtime actually corrects for this in J3DModelLoader::readDraw().
         // This appears to be a runtime fix for a toolchain bug.
@@ -1212,23 +1185,6 @@ export class J3DModelInstance {
     }
 
     /**
-     * Returns the joint-to-parent matrix for the joint with name {@param jointName}.
-     *
-     * This object is not a copy; if an animation updates the joint, the values in this object will be
-     * updated as well. You can also modify this matrix in order to transform the joints. Note that
-     * this is the same internal joint data as ANK1 animation, and that will be calculated in
-     * {@method calcAnim} or {@method prepareToRender} if an ANK1 animation is bound, so modifiying
-     * this matrix will have no effect in that case.
-     */
-    public getJointToParentMatrixReference(jointName: string): mat4 {
-        const joints = this.modelData.bmd.jnt1.joints;
-        for (let i = 0; i < joints.length; i++)
-            if (joints[i].name === jointName)
-                return this.shapeInstanceState.jointToParentMatrixArray[i];
-        throw "could not find joint";
-    }
-
-    /**
      * Returns the joint-to-world matrix for the joint with name {@param jointName}.
      *
      * This object is not a copy; if an animation updates the joint, the values in this object will be
@@ -1247,12 +1203,6 @@ export class J3DModelInstance {
             if (this.shapeInstanceState.drawViewMatrixVisibility[i])
                 return true;
         return false;
-    }
-
-    public calcAnim(camera: Camera): void {
-        // Update joints from our matrix calculator.
-        this.calcJointAnim();
-        this.calcJointToWorld();
     }
 
     public calcView(camera: Camera | null, viewMatrix: mat4 | null): void {
@@ -1298,13 +1248,11 @@ export class J3DModelInstance {
             return;
 
         const depth = translucent ? this.computeDepth(camera) : -1;
-        for (let i = 0; i < this.shapeInstances.length; i++) {
-            if (!this.shapeInstances[i].visible)
+        for (let i = 0; i < this.materialInstances.length; i++) {
+            const materialInstance = this.materialInstances[i];
+            if (materialInstance.materialData.material.translucent !== translucent)
                 continue;
-            const materialIndex = this.shapeInstances[i].shapeData.shape.materialIndex;
-            if (this.materialInstances[materialIndex].materialData.material.translucent !== translucent)
-                continue;
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, camera, viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
+            materialInstance.prepareToRenderShapes(device, renderInstManager, depth, camera, viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
         }
     }
 
@@ -1316,38 +1264,55 @@ export class J3DModelInstance {
         this.draw(device, renderInstManager, camera, viewport, true);
     }
 
-    public calcJointAnim(): void {
-        for (let i = 0; i < this.modelData.jointData.length; i++) {
-            const joint = this.modelData.jointData[i];
-            const jointIndex = joint.jointIndex;
-            const jointEntry = this.modelData.bmd.jnt1.joints[jointIndex];
-            this.jointMatrixCalc.calcJointMatrix(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
+    private calcJointAnimRecurse(node: JointTreeNode, parentNode: JointTreeNode | null): void {
+        const shapeInstanceState = this.shapeInstanceState;
+
+        // Our root node is a dummy node that houses a special model matrix.
+        // TODO(jstpierre): Remove this.
+        if (parentNode !== null) {
+            const jointIndex = node.jointIndex;
+            assert(jointIndex >= 0);
+
+            const dstToParent = shapeInstanceState.jointToParentMatrixArray[jointIndex];
+            this.jointMatrixCalc.calcJointMatrix(dstToParent, this.modelData, jointIndex, shapeInstanceState);
+
             if (this.jointMatrixCalcCallback !== null)
-                this.jointMatrixCalcCallback(this.shapeInstanceState.jointToParentMatrixArray[jointIndex], jointIndex, jointEntry);
-        }
-    }
+                this.jointMatrixCalcCallback(dstToParent, this.modelData, jointIndex);
+            const dstToWorld = shapeInstanceState.jointToWorldMatrixArray[jointIndex];
 
-    public calcJointToWorld(): void {
-        for (let i = 0; i < this.modelData.jointData.length; i++) {
-            const joint = this.modelData.jointData[i];
-
-            const jointIndex = joint.jointIndex;
-            const jointToParentMatrix = this.shapeInstanceState.jointToParentMatrixArray[jointIndex];
-            const dst = this.shapeInstanceState.jointToWorldMatrixArray[jointIndex];
-
-            if (joint.parentJointIndex < 0) {
+            const parentJointIndex = parentNode.jointIndex;
+            if (parentJointIndex < 0) {
                 // Special: construct model matrix.
                 mat4.identity(matrixScratch);
                 matrixScratch[0] *= this.baseScale[0];
                 matrixScratch[5] *= this.baseScale[1];
                 matrixScratch[10] *= this.baseScale[2];
                 mat4.mul(matrixScratch, this.modelMatrix, matrixScratch);
-                mat4.mul(dst, matrixScratch, jointToParentMatrix);
+                mat4.mul(dstToWorld, matrixScratch, dstToParent);
             } else {
-                const parentJointToWorldMatrix = this.shapeInstanceState.jointToWorldMatrixArray[joint.parentJointIndex];
-                mat4.mul(dst, parentJointToWorldMatrix, jointToParentMatrix);
+                const parentJointToWorldMatrix = shapeInstanceState.jointToWorldMatrixArray[parentJointIndex];
+                mat4.mul(dstToWorld, parentJointToWorldMatrix, dstToParent);
             }
         }
+
+        const parentScaleX = shapeInstanceState.parentScale[0];
+        const parentScaleY = shapeInstanceState.parentScale[1];
+        const parentScaleZ = shapeInstanceState.parentScale[2];
+
+        for (let i = 0; i < node.children.length; i++) {
+            shapeInstanceState.parentScale[0] = parentScaleX;
+            shapeInstanceState.parentScale[1] = parentScaleY;
+            shapeInstanceState.parentScale[2] = parentScaleZ;
+
+            this.calcJointAnimRecurse(node.children[i], node);
+        }
+    }
+
+    public calcAnim(): void {
+        vec3.set(this.shapeInstanceState.parentScale, 1.0, 1.0, 1.0);
+        // vec3.set(this.shapeInstanceState.currentScale, 1.0, 1.0, 1.0);
+
+        this.calcJointAnimRecurse(this.modelData.rootJointTreeNode, null);
     }
 
     private calcDrawMatrixArray(worldToViewMatrix: mat4): void {
@@ -1387,120 +1352,5 @@ export class J3DModelInstance {
                 mat4.mul(dst, worldToViewMatrix, dst);
             }
         }
-    }
-}
-
-export class J3DModelInstanceSimple extends J3DModelInstance {
-    public animationController = new AnimationController();
-    public vaf1Animator: VAF1Animator | null = null;
-    public passMask: number = 0x01;
-    public ownedModelMaterialData: BMDModelMaterialData | null = null;
-    public isSkybox: boolean = false;
-
-    public setModelMaterialDataOwned(modelMaterialData: BMDModelMaterialData): void {
-        this.setModelMaterialData(modelMaterialData);
-        assert(this.ownedModelMaterialData === null);
-        this.ownedModelMaterialData = modelMaterialData;
-    }
-
-    public calcAnim(camera: Camera): void {
-        if (this.isSkybox) {
-            this.modelMatrix[12] = camera.worldMatrix[12];
-            this.modelMatrix[13] = camera.worldMatrix[13];
-            this.modelMatrix[14] = camera.worldMatrix[14];
-        }
-
-        super.calcAnim(camera);
-
-        if (this.vaf1Animator !== null)
-            for (let i = 0; i < this.shapeInstances.length; i++)
-                this.shapeInstances[i].visible = this.vaf1Animator.calcVisibility(i);
-    }
-
-    /**
-     * Binds {@param ttk1} (texture animations) to this model instance.
-     * TTK1 objects can be parsed from {@link BTK} files. See {@link BTK.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindTTK1(ttk1: TTK1 | null, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTTK1(animationController, ttk1);
-    }
-
-    /**
-     * Binds {@param trk1} (color register animations) to this model instance.
-     * TRK1 objects can be parsed from {@link BRK} files. See {@link BRK.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindTRK1(trk1: TRK1 | null, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTRK1(animationController, trk1);
-    }
-
-    /**
-     * Binds {@param tpt1} (texture palette animations) to this model instance.
-     * TPT1 objects can be parsed from {@link BTP} files. See {@link BTP.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindTPT1(tpt1: TPT1 | null, animationController: AnimationController = this.animationController): void {
-        for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].bindTPT1(animationController, tpt1);
-    }
-
-    /**
-     * Binds {@param ank1} (joint animations) to this model instance.
-     * ANK1 objects can be parsed from {@link BCK} files. See {@link BCK.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindANK1(ank1: ANK1 | null, animationController: AnimationController = this.animationController): void {
-        this.jointMatrixCalc = ank1 !== null ? new JointMatrixCalcANK1(animationController, ank1) : new JointMatrixCalcNoAnm();
-    }
-
-    /**
-     * Binds {@param vaf1} (shape visibility animations) to this model instance.
-     * VAF1 objects can be parsed from {@link BVA} files. See {@link BVA.parse}.
-     *
-     * @param animationController An {@link AnimationController} to control the progress of this animation to.
-     * By default, this will default to this instance's own {@member animationController}.
-     */
-    public bindVAF1(vaf1: VAF1 | null, animationController: AnimationController = this.animationController): void {
-        if (vaf1 !== null)
-            assert(vaf1.visibilityAnimationTracks.length === this.shapeInstances.length);
-        this.vaf1Animator = vaf1 !== null ? bindVAF1Animator(animationController, vaf1) : null;
-    }
-
-    // The classic public interface, for compatibility.
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        if (!this.visible)
-            return;
-
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
-        this.calcAnim(viewerInput.camera);
-        this.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
-
-        // If entire model is culled away, then we don't need to render anything.
-        if (!this.isAnyShapeVisible())
-            return;
-
-        const depth = this.computeDepth(viewerInput.camera);
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.filterKey = this.passMask;
-        for (let i = 0; i < this.shapeInstances.length; i++)
-            this.shapeInstances[i].prepareToRender(device, renderInstManager, depth, viewerInput.camera, viewerInput.viewport, this.modelData, this.materialInstanceState, this.shapeInstanceState);
-        renderInstManager.popTemplateRenderInst();
-    }
-
-    public destroy(device: GfxDevice): void {
-        super.destroy(device);
-        if (this.ownedModelMaterialData !== null)
-            this.ownedModelMaterialData.destroy(device);
     }
 }

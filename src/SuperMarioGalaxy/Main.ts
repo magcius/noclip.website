@@ -10,8 +10,8 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxSamplerBinding } from '../gfx/platform/GfxPlatform';
-import { executeOnPass, GfxRenderInstList } from '../gfx/render/GfxRenderer';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
 
@@ -29,12 +29,12 @@ import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder } from './MiscActor';
+import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
 import { BckCtrl } from './Animation';
-import { WaterAreaHolder, WaterAreaMgr } from './MiscMap';
+import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
 import { AreaObjMgr, AreaObj } from './AreaObj';
@@ -45,6 +45,7 @@ import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr, BloomPostFXRe
 import { LensFlareDirector, DrawSyncManager } from './LensFlare';
 import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
+import { FurDrawManager } from './Fur';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -308,6 +309,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
 
         // Prepare all of our NameObjs.
+        executor.calcViewAndEntry(this.sceneObjHolder, DrawCameraType.DrawCameraType_3D, viewerInput);
+        executor.calcViewAndEntry(this.sceneObjHolder, DrawCameraType.DrawCameraType_2D, viewerInput);
+
         executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
 
         // Draw our render insts.
@@ -417,6 +421,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.execute(passRenderer, DrawType.WARP_POD_PATH);
         this.execute(passRenderer, DrawType.WATER_PLANT);
         this.execute(passRenderer, DrawType.ASTRO_DOME_ORBIT);
+        this.execute(passRenderer, DrawType.FUR);
         this.execute(passRenderer, DrawType.OCEAN_SPHERE);
         this.execute(passRenderer, DrawType.FLAG);
 
@@ -935,7 +940,8 @@ class AreaObjContainer extends NameObj {
         this.managers.push(new WaterAreaMgr(sceneObjHolder));
         this.managers.push(new ImageEffectAreaMgr(sceneObjHolder));
         this.managers.push(new AreaObjMgr(sceneObjHolder, 'LensFlareArea'));
-        this.managers.push(new AreaObjMgr(sceneObjHolder, 'SwitchArea'));
+        this.managers.push(new AreaObjMgr<SwitchArea>(sceneObjHolder, 'SwitchArea'));
+        this.managers.push(new AreaObjMgr<HazeCube>(sceneObjHolder, 'HazeCube'));
     }
 
     public getManager(managerName: string): AreaObjMgr<AreaObj> {
@@ -963,6 +969,7 @@ export const enum SceneObj {
     ImageEffectSystemHolder = 0x1D,
     BloomEffect             = 0x1E,
     LensFlareDirector       = 0x25,
+    FurDrawManager          = 0x26,
     PlanetGravityManager    = 0x32,
     CoinRotater             = 0x38,
     AirBubbleHolder         = 0x39,
@@ -970,6 +977,7 @@ export const enum SceneObj {
     TrapezeRopeDrawInit     = 0x4A,
     MapPartsRailGuideHolder = 0x56,
     ElectricRailHolder      = 0x59,
+    HeatHazeDirector        = 0x5D,
     WaterAreaHolder         = 0x62,
     WaterPlantDrawInit      = 0x63,
     MiniatureGalaxyHolder   = 0x73,
@@ -999,6 +1007,7 @@ export class SceneObjHolder {
     public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
     public bloomEffect: BloomEffect | null = null;
     public lensFlareDirector: LensFlareDirector | null = null;
+    public furDrawManager: FurDrawManager | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
@@ -1006,6 +1015,7 @@ export class SceneObjHolder {
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
     public mapPartsRailGuideHolder: MapPartsRailGuideHolder | null = null;
     public electricRailHolder: ElectricRailHolder | null = null;
+    public heatHazeDirector: HeatHazeDirector | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
     public miniatureGalaxyHolder: MiniatureGalaxyHolder | null = null;
@@ -1049,6 +1059,8 @@ export class SceneObjHolder {
             return this.bloomEffect;
         else if (sceneObj === SceneObj.LensFlareDirector)
             return this.lensFlareDirector;
+        else if (sceneObj === SceneObj.FurDrawManager)
+            return this.furDrawManager;
         else if (sceneObj === SceneObj.AreaObjContainer)
             return this.areaObjContainer;
         else if (sceneObj === SceneObj.LiveActorGroupArray)
@@ -1067,6 +1079,8 @@ export class SceneObjHolder {
             return this.mapPartsRailGuideHolder;
         else if (sceneObj === SceneObj.ElectricRailHolder)
             return this.electricRailHolder;
+        else if (sceneObj === SceneObj.HeatHazeDirector)
+            return this.heatHazeDirector;
         else if (sceneObj === SceneObj.WaterAreaHolder)
             return this.waterAreaHolder;
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
@@ -1095,6 +1109,8 @@ export class SceneObjHolder {
             this.bloomEffect = new BloomEffect(this);
         else if (sceneObj === SceneObj.LensFlareDirector)
             this.lensFlareDirector = new LensFlareDirector(this);
+        else if (sceneObj === SceneObj.FurDrawManager)
+            this.furDrawManager = new FurDrawManager(this);
         else if (sceneObj === SceneObj.AreaObjContainer)
             this.areaObjContainer = new AreaObjContainer(this);
         else if (sceneObj === SceneObj.LiveActorGroupArray)
@@ -1113,6 +1129,8 @@ export class SceneObjHolder {
             this.mapPartsRailGuideHolder = new MapPartsRailGuideHolder(this);
         else if (sceneObj === SceneObj.ElectricRailHolder)
             this.electricRailHolder = new ElectricRailHolder(this);
+        else if (sceneObj === SceneObj.HeatHazeDirector)
+            this.heatHazeDirector = new HeatHazeDirector(this);
         else if (sceneObj === SceneObj.WaterAreaHolder)
             this.waterAreaHolder = new WaterAreaHolder(this);
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
@@ -1131,10 +1149,6 @@ export class SceneObjHolder {
 
         this.drawSyncManager.destroy(device);
     }
-}
-
-export function createSceneObj(sceneObjHolder: SceneObjHolder, sceneObj: SceneObj): void {
-    sceneObjHolder.create(sceneObj);
 }
 
 export function getObjectName(infoIter: JMapInfoIter): string {

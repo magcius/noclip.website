@@ -272,13 +272,14 @@ class FlowerModel {
         // Coalesce all VBs and IBs into single buffers and upload to the GPU
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ lWhiteUncut, lWhiteCut, lPinkUncut, lPinkCut, lBessouUncut, lBessouCut ]);
 
+        const b = this.bufferCoalescer.coalescedBuffers;
         // Build an input layout and input state from the vertex layout and data
-        this.shapeWhiteUncut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, lWhiteUncut);
-        this.shapeWhiteCut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, lWhiteCut);
-        this.shapePinkUncut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[2], vtxLoader.loadedVertexLayout, lPinkUncut);
-        this.shapePinkCut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[3], vtxLoader.loadedVertexLayout, lPinkCut);
-        this.shapeBessouUncut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[4], vtxLoader.loadedVertexLayout, lBessouUncut);
-        this.shapeBessouCut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[5], vtxLoader.loadedVertexLayout, lBessouCut);
+        this.shapeWhiteUncut = new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, lWhiteUncut);
+        this.shapeWhiteCut = new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, lWhiteCut);
+        this.shapePinkUncut = new GXShapeHelperGfx(device, cache, b[2].vertexBuffers, b[2].indexBuffer, vtxLoader.loadedVertexLayout, lPinkUncut);
+        this.shapePinkCut = new GXShapeHelperGfx(device, cache, b[3].vertexBuffers, b[3].indexBuffer, vtxLoader.loadedVertexLayout, lPinkCut);
+        this.shapeBessouUncut = new GXShapeHelperGfx(device, cache, b[4].vertexBuffers, b[4].indexBuffer, vtxLoader.loadedVertexLayout, lBessouUncut);
+        this.shapeBessouCut = new GXShapeHelperGfx(device, cache, b[5].vertexBuffers, b[5].indexBuffer, vtxLoader.loadedVertexLayout, lBessouCut);
     }
 
     public destroy(device: GfxDevice): void {
@@ -626,12 +627,13 @@ class TreeModel {
         // // const vtx_l_Oba_swood_a_cutuDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_cutuDL);
 
         // Coalesce all VBs and IBs into single buffers and upload to the GPU
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_shadowDL, vtx_l_Oba_swood_a_hapaDL, vtx_l_Oba_swood_a_mikiDL ]);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_swood_a_hapaDL, vtx_l_Oba_swood_a_mikiDL, vtx_l_shadowDL ]);
 
         // Build an input layout and input state from the vertex layout and data
-        this.shapeTop = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_hapaDL);
-        this.shapeMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[2], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_mikiDL);
-        this.shapeShadow = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL);
+        const b = this.bufferCoalescer.coalescedBuffers;
+        this.shapeTop = new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_hapaDL);
+        this.shapeMain = new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_mikiDL);
+        this.shapeShadow = new GXShapeHelperGfx(device, cache, b[2].vertexBuffers, b[2].indexBuffer, shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL);
     }
 
     public destroy(device: GfxDevice): void {
@@ -995,8 +997,9 @@ class GrassModel {
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_kusa_aDL, vtx_l_Vmori_00DL ]);
 
         // Build an input layout and input state from the vertex layout and data
-        this.shapeMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL);
-        this.shapeVmori = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL);
+        const b = this.bufferCoalescer.coalescedBuffers;
+        this.shapeMain = new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL);
+        this.shapeVmori = new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL);
     }
 
     public destroy(device: GfxDevice): void {

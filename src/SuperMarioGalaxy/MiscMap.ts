@@ -1,16 +1,16 @@
 
 import { NameObj, MovementType, DrawType } from "./NameObj";
 import { OceanBowl } from "./OceanBowl";
-import { SceneObjHolder, SpecialTextureType, getDeltaTimeFrames } from "./Main";
+import { SceneObjHolder, SpecialTextureType, getDeltaTimeFrames, SceneObj } from "./Main";
 import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { OceanRing, isEqualStageName } from "./MiscActor";
+import { OceanRing, isEqualStageName, HeatHazeDirector } from "./MiscActor";
 import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";
-import { fallback, nArray } from "../util";
+import { fallback } from "../util";
 import { OceanSphere } from "./OceanSphere";
 import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
@@ -440,5 +440,31 @@ export function createSwitchSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: S
 
 export function createSwitchCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SwitchArea {
     return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+}
+//#endregion
+
+//#region HazeCube
+export class HazeCube extends AreaObj {
+    public depth: number;
+
+    protected parseArgs(infoIter: JMapInfoIter): void {
+        this.depth = fallback(getJMapInfoArg0(infoIter), 1000);
+    }
+
+    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.create(SceneObj.HeatHazeDirector);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        HeatHazeDirector.requestArchives(sceneObjHolder);
+    }
+}
+
+export function createHazeCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): HazeCube {
+    return new HazeCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
+}
+
+export function requestArchivesHazeCube(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    HazeCube.requestArchives(sceneObjHolder);
 }
 //#endregion

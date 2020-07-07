@@ -2,12 +2,12 @@
 import { mat4, vec3, quat } from "gl-matrix";
 
 import { assertExists, nullify, assert, nArray } from "../util";
-import { quatFromEulerRadians } from "../MathHelpers";
+import { quatFromEulerRadians, setMatrixTranslation } from "../MathHelpers";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 
-import { J3DModelInstance, J3DModelData, JointMatrixCalc } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, Joint, sampleAnimationData, LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, LoopMode, Joint, JointTransformInfo, J3DLoadFlags } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags, sampleAnimationData, calcJointAnimationTransform, calcJointMatrixFromTransform, calcJointMatrixMayaSSC } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ResTable } from "./Main";
@@ -187,6 +187,7 @@ export class XanimeFrameCtrl extends J3DFrameCtrl {
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchQuat = quat.create();
+const scratchTransform = new JointTransformInfo();
 export class XanimeCore implements JointMatrixCalc {
     public curAnmTime = 0.0;
     public interpoleRatio = 0.0;
@@ -195,7 +196,7 @@ export class XanimeCore implements JointMatrixCalc {
     private ank1: ANK1 | null = null;
     private joints: XjointInfo[];
 
-    constructor(jointCount: number) {
+    constructor(jointCount: number, public matrixCalcFlag: J3DLoadFlags) {
         this.joints = nArray(jointCount, () => new XjointInfo());
     }
 
@@ -203,7 +204,7 @@ export class XanimeCore implements JointMatrixCalc {
         const jnt1 = modelData.bmd.jnt1.joints;
 
         for (let i = 0; i < jnt1.length; i++) {
-            const src = jnt1[i];
+            const src = jnt1[i].transform;
             const dst = this.joints[i];
 
             vec3.set(dst.xformFrozen.translation, src.translationX, src.translationY, src.translationZ);
@@ -235,22 +236,15 @@ export class XanimeCore implements JointMatrixCalc {
         if (this.ank1 !== null) {
             const entry = this.ank1.jointAnimationEntries[i];
             const animFrame = this.curAnmTime * this.ank1.duration;
-            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-            const translationX = sampleAnimationData(entry.translationX, animFrame);
-            const translationY = sampleAnimationData(entry.translationY, animFrame);
-            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
+
+            calcJointAnimationTransform(scratchTransform, entry, animFrame);
 
             const anmScale = scratchVec3a;
             const anmTrans = scratchVec3b;
             const anmRot = scratchQuat;
-            vec3.set(anmScale, scaleX, scaleY, scaleZ);
-            vec3.set(anmTrans, translationX, translationY, translationZ);
-            quatFromEulerRadians(anmRot, rotationX, rotationY, rotationZ);
+            vec3.set(anmScale, scratchTransform.scaleX, scratchTransform.scaleY, scratchTransform.scaleZ);
+            vec3.set(anmTrans, scratchTransform.translationX, scratchTransform.translationY, scratchTransform.translationZ);
+            quatFromEulerRadians(anmRot, scratchTransform.rotationX, scratchTransform.rotationY, scratchTransform.rotationZ);
 
             if (this.updateFrozenJoints)
                 xj.xformFrozen.copy(xj.xformAnm);
@@ -267,11 +261,43 @@ export class XanimeCore implements JointMatrixCalc {
         }
     }
 
-    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
+    private calcScaleBlendBasic(dst: mat4, xj: XjointInfo, jnt1: Joint, shapeInstanceState: ShapeInstanceState): void {
+        const transform = xj.xformAnm;
+
+        mat4.fromQuat(dst, transform.rotation);
+        setMatrixTranslation(dst, transform.translation);
+        mat4.scale(dst, dst, transform.scale);
+
+        // vec3.mul(shapeInstanceState.currentScale, shapeInstanceState.currentScale, transform.scale);
+    }
+
+    private calcScaleBlendMayaNoTransform(dst: mat4, xj: XjointInfo, jnt1: Joint, shapeInstanceState: ShapeInstanceState): void {
+        const transform = xj.xformAnm;
+
+        mat4.fromQuat(dst, transform.rotation);
+        setMatrixTranslation(dst, transform.translation);
+        mat4.scale(dst, dst, transform.scale);
+
+        if (!!(jnt1.calcFlags & 0x01)) {
+            calcJointMatrixMayaSSC(dst, shapeInstanceState.parentScale);
+        }
+
+        vec3.copy(shapeInstanceState.parentScale, transform.scale);
+    }
+
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number, shapeInstanceState: ShapeInstanceState): void {
         this.calcSingle(i);
 
+        const jnt1 = modelData.bmd.jnt1.joints[i];
         const xj = this.joints[i];
-        mat4.fromRotationTranslationScale(dst, xj.xformAnm.rotation, xj.xformAnm.translation, xj.xformAnm.scale);
+
+        if (this.matrixCalcFlag === J3DLoadFlags.ScalingRule_Basic) {
+            this.calcScaleBlendBasic(dst, xj, jnt1, shapeInstanceState);
+        } else if (this.matrixCalcFlag === J3DLoadFlags.ScalingRule_Maya) {
+            this.calcScaleBlendMayaNoTransform(dst, xj, jnt1, shapeInstanceState);
+        } else {
+            debugger;
+        }
     }
 }
 
@@ -287,7 +313,8 @@ export class XanimePlayer {
     private oldSpeedInFrames: number = 0.0;
 
     constructor(public resTable: ResTable<ANK1>, private modelInstance: J3DModelInstance) {
-        this.core = new XanimeCore(this.modelInstance.modelData.bmd.jnt1.joints.length);
+        const bmd = this.modelInstance.modelData.bmd;
+        this.core = new XanimeCore(bmd.jnt1.joints.length, (bmd.inf1.loadFlags & J3DLoadFlags.ScalingRule_Mask));
         this.core.initT(this.modelInstance.modelData);
     }
 
@@ -370,7 +397,8 @@ export class XanimePlayer {
     }
 
     public update(deltaTimeFrames: number): void {
-        if (this.currentRes !== null) {
+        if (!(this.frameCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped) && this.currentRes !== null) {
+            assert(!this.updatedFrameCtrl);
             this.oldTimeInFrames = this.frameCtrl.currentTimeInFrames;
             this.oldSpeedInFrames = this.frameCtrl.speedInFrames;
             this.frameCtrl.update(deltaTimeFrames);
@@ -395,7 +423,7 @@ export class XanimePlayer {
         } else {
             this.interpoleRatio = 0.0;
             this.core.interpoleRatio = 0.0;
-            this.updateInterpoleRatio(1.0);
+            this.updateInterpoleRatio(1);
         }
     }
 

@@ -180,7 +180,7 @@ export class ModelManager {
         if (this.bvaPlayer !== null)
             this.bvaPlayer.calc();
 
-        this.modelInstance.calcAnim(viewerInput.camera);
+        this.modelInstance.calcAnim();
     }
 
     public update(deltaTimeFrames: number): void {
@@ -411,6 +411,9 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public velocity = vec3.create();
     public gravityVector = vec3.fromValues(0, -1, 0);
 
+    // HACK(jstpierre): For not having proper culling that stops movement
+    public initWaitPhase: number = 0;
+
     constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
         super(sceneObjHolder, name);
     }
@@ -527,7 +530,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.calcAndSetBaseMtxBase();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
-        this.modelManager.modelInstance.calcJointToWorld();
+        this.modelManager.modelInstance.calcAnim();
 
         // TODO(jstpierre): Seems like it's possible to have a secondary file for BCK animations?
         this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);
@@ -545,7 +548,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         invalidateCollisionPartsForActor(sceneObjHolder, this);
     }
-    
+
     public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
         this.actorLightCtrl = new ActorLightCtrl(this);
         this.actorLightCtrl.init(sceneObjHolder);
@@ -675,7 +678,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     private updateBinder(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
         if (this.binder !== null) {
             if (this.calcBinderFlag) {
-                this.binder.bind(scratchVec3a, this.velocity);
+                this.binder.bind(scratchVec3a, sceneObjHolder, this.velocity);
                 vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, deltaTimeFrames);
             } else {
                 vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
@@ -706,10 +709,14 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             this.modelManager.update(deltaTimeFrames);
 
         if (this.spine !== null) {
-            this.spine.changeNerve();
-            this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
-            this.spine.updateTick(deltaTimeFrames);
-            this.spine.changeNerve();
+            if (this.initWaitPhase > 0) {
+                this.initWaitPhase -= deltaTimeFrames;
+            } else {
+                this.spine.changeNerve();
+                this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
+                this.spine.updateTick(deltaTimeFrames);
+                this.spine.changeNerve();
+            }
         }
 
         if (!this.visibleAlive)

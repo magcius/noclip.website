@@ -724,6 +724,11 @@ export class EffectKeeper {
         return null;
     }
 
+    public changeEffectName(origName: string, newName: string): void {
+        const emitter = assertExists(this.getEmitter(origName));
+        emitter.name = newName;
+    }
+
     public isRegisteredEmitter(name: string): boolean {
         return this.getEmitter(name) !== null;
     }

@@ -1,12 +1,50 @@
 
 // Animation support.
 
-import { LoopMode, VAF1, TRK1, sampleAnimationData, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, ANK1, Joint } from './J3DLoader';
+import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, Joint, JointTransformInfo, ANK1, ANK1JointAnimationEntry, J3DLoadFlags } from './J3DLoader';
 import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
-import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance } from './J3DGraphBase';
-import { mat4 } from 'gl-matrix';
+import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase';
+import { mat4, ReadonlyVec3 } from 'gl-matrix';
 import { computeModelMatrixSRT } from '../../../MathHelpers';
+import { getPointHermite } from '../../../Spline';
+
+function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, frame: number): number {
+    const length = (k1.time - k0.time);
+    const t = (frame - k0.time) / length;
+    const p0 = k0.value;
+    const p1 = k1.value;
+    const s0 = k0.tangentOut * length;
+    const s1 = k1.tangentIn * length;
+    return getPointHermite(p0, p1, s0, s1, t);
+}
+
+function findKeyframe(frames: AnimationKeyframe[], time: number): number {
+    for (let i = 0; i < frames.length; i++)
+        if (time < frames[i].time)
+            return i;
+    return -1;
+}
+
+export function sampleAnimationData(track: AnimationTrack, frame: number): number {
+    const frames = track.frames;
+
+    if (frames.length === 1)
+        return frames[0].value;
+
+    // Find the first frame.
+    const idx1 = findKeyframe(frames, frame);
+    if (idx1 === 0)
+        return frames[0].value;
+    if (idx1 < 0)
+        return frames[frames.length - 1].value;
+    const idx0 = idx1 - 1;
+
+    const k0 = frames[idx0];
+    const k1 = frames[idx1];
+
+    return hermiteInterpolate(k0, k1, frame);
+}
 
 export const enum J3DFrameCtrl__UpdateFlags {
     HasStopped  = 0b0001,
@@ -255,6 +293,49 @@ export function removeTexNoAnimator(modelInstance: J3DModelInstance, tpt1: TPT1)
     }
 }
 
+const scratchTransform = new JointTransformInfo();
+
+export function calcJointMatrixMayaSSC(dst: mat4, parentScale: ReadonlyVec3): void {
+    const parentScaleX = 1.0 / parentScale[0];
+    dst[0] *= parentScaleX;
+    dst[4] *= parentScaleX;
+    dst[8] *= parentScaleX;
+
+    const parentScaleY = 1.0 / parentScale[1];
+    dst[1] *= parentScaleY;
+    dst[5] *= parentScaleY;
+    dst[9] *= parentScaleY;
+
+    const parentScaleZ = 1.0 / parentScale[2];
+    dst[2] *= parentScaleZ;
+    dst[6] *= parentScaleZ;
+    dst[10] *= parentScaleZ;
+}
+
+export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransformInfo, loadFlags: J3DLoadFlags, jnt1: Joint, shapeInstanceState: ShapeInstanceState): void {
+    computeModelMatrixSRT(dst,
+        transform.scaleX, transform.scaleY, transform.scaleZ,
+        transform.rotationX, transform.rotationY, transform.rotationZ,
+        transform.translationX, transform.translationY, transform.translationZ);
+
+    const matrixCalcFlag = (loadFlags & J3DLoadFlags.ScalingRule_Mask);
+    if (matrixCalcFlag === J3DLoadFlags.ScalingRule_Maya && !!(jnt1.calcFlags & 0x01)) {
+        calcJointMatrixMayaSSC(dst, shapeInstanceState.parentScale);
+    }
+}
+
+export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number): void {
+    dst.scaleX = sampleAnimationData(entry.scaleX, animFrame);
+    dst.scaleY = sampleAnimationData(entry.scaleY, animFrame);
+    dst.scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
+    dst.rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
+    dst.rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
+    dst.rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
+    dst.translationX = sampleAnimationData(entry.translationX, animFrame);
+    dst.translationY = sampleAnimationData(entry.translationY, animFrame);
+    dst.translationZ = sampleAnimationData(entry.translationZ, animFrame);
+}
+
 export class J3DJointMatrixAnm {
     constructor(private frameCtrl: J3DFrameCtrl, private ank1: ANK1) {}
 
@@ -262,33 +343,21 @@ export class J3DJointMatrixAnm {
         this.frameCtrl = frameCtrl;
     }
 
-    public calcJointMatrix(dst: mat4, i: number, jnt1: Joint): void {
-        const animFrame = this.frameCtrl.currentTimeInFrames;
+    public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number, shapeInstanceState: ShapeInstanceState): void {
         const entry = this.ank1.jointAnimationEntries[i];
+        const jnt1 = modelData.bmd.jnt1.joints[i];
 
+        let transform: JointTransformInfo;
         if (entry !== undefined) {
-            const scaleX = sampleAnimationData(entry.scaleX, animFrame);
-            const scaleY = sampleAnimationData(entry.scaleY, animFrame);
-            const scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-            const rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-            const rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-            const rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-            const translationX = sampleAnimationData(entry.translationX, animFrame);
-            const translationY = sampleAnimationData(entry.translationY, animFrame);
-            const translationZ = sampleAnimationData(entry.translationZ, animFrame);
-            computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+            const animFrame = this.frameCtrl.currentTimeInFrames;
+            calcJointAnimationTransform(scratchTransform, entry, animFrame);
+            transform = scratchTransform;
         } else {
-            const scaleX = jnt1.scaleX;
-            const scaleY = jnt1.scaleY;
-            const scaleZ = jnt1.scaleZ;
-            const rotationX = jnt1.rotationX;
-            const rotationY = jnt1.rotationY;
-            const rotationZ = jnt1.rotationZ;
-            const translationX = jnt1.translationX;
-            const translationY = jnt1.translationY;
-            const translationZ = jnt1.translationZ;
-            computeModelMatrixSRT(dst, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+            transform = jnt1.transform;
         }
+
+        const loadFlags = modelData.bmd.inf1.loadFlags;
+        calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
     }
 }
 

@@ -84,6 +84,10 @@ export function connectToSceneMapObjStrongLight(sceneObjHolder: SceneObjHolder, 
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
 }
 
+export function connectToSceneIndirectMapObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.INDIRECT_MAP_OBJ, -1);
+}
+
 export function connectToSceneIndirectMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT, -1);
 }
@@ -384,6 +388,11 @@ export function setBtkFrameAndStop(actor: LiveActor, frame: number): void {
     const ctrl = actor.modelManager!.getBtkCtrl();
     ctrl.currentTimeInFrames = frame;
     ctrl.speedInFrames = 0.0;
+}
+
+export function setBtkFrameAtRandom(actor: LiveActor): void {
+    const ctrl = actor.modelManager!.getBtkCtrl();
+    ctrl.currentTimeInFrames = getRandomFloat(0, ctrl.endFrame);
 }
 
 export function setBrkRate(actor: LiveActor, rate: number): void {

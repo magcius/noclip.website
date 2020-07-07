@@ -500,7 +500,7 @@ export function createLensFlareArea(zoneAndLayer: ZoneAndLayer, sceneObjHolder: 
     return new LensFlareArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
 }
 
-export function requestLensFlareArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+export function requestArchivesLensFlareArea(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     LensFlareDirector.requestArchives(sceneObjHolder);
 }
 

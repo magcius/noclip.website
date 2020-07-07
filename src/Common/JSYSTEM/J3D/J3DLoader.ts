@@ -10,15 +10,12 @@ import { assert, readString } from '../../../util';
 import { compileVtxLoader, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, getAttributeByteSize, compileLoadedVertexLayout } from '../../../gx/gx_displaylist';
 import * as GX from '../../../gx/gx_enum';
 import * as GX_Material from '../../../gx/gx_material';
-import AnimationController from '../../../AnimationController';
 import { ColorKind } from '../../../gx/gx_render';
 import { AABB } from '../../../Geometry';
-import { getPointHermite } from '../../../Spline';
 import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
 import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
 import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
-import { VAF1_getVisibility } from './J3DGraphAnimator';
 
 //#region Helpers
 // ResNTAB / JUTNameTab
@@ -106,7 +103,7 @@ export interface INF1 {
 
 function readINF1Chunk(buffer: ArrayBufferSlice): INF1 {
     const view = buffer.createDataView();
-    const loadFlags = view.getUint32(0x08);
+    const loadFlags = view.getUint16(0x08);
     const mtxGroupCount = view.getUint32(0x0C);
     const vertexCount = view.getUint32(0x10);
     const hierarchyOffs = view.getUint32(0x14);
@@ -312,19 +309,24 @@ function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
 }
 //#endregion
 //#region JNT1
+export class JointTransformInfo {
+    public scaleX: number = 1.0;
+    public scaleY: number = 1.0;
+    public scaleZ: number = 1.0;
+    public rotationX: number = 0.0;
+    public rotationY: number = 0.0;
+    public rotationZ: number = 0.0;
+    public translationX: number = 0.0;
+    public translationY: number = 0.0;
+    public translationZ: number = 0.0;
+}
+
 export interface Joint {
     name: string;
-    scaleX: number;
-    scaleY: number;
-    scaleZ: number;
-    rotationX: number;
-    rotationY: number;
-    rotationZ: number;
-    translationX: number;
-    translationY: number;
-    translationZ: number;
+    transform: JointTransformInfo;
     boundingSphereRadius: number;
     bbox: AABB;
+    calcFlags: number;
 }
 
 export interface JNT1 {
@@ -351,10 +353,9 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
     for (let i = 0; i < jointDataCount; i++) {
         const name = nameTable[i];
         const jointDataTableIdx = jointDataTableOffs + (remapTable[i] * 0x40);
-        const matrixTypeFlags = view.getUint16(jointDataTableIdx + 0x00);
-        // Used in J3DMtxCalcCalcTransformMaya::calcTransform.
-        // Doesn't appear to be used in basic transforms...
-        const ignoreParentScale = view.getUint8(jointDataTableIdx + 0x02);
+        const flags = view.getUint16(jointDataTableIdx + 0x00) & 0x00FF;
+        // Maya / SoftImage special flags.
+        const calcFlags = view.getUint8(jointDataTableIdx + 0x02);
         const scaleX = view.getFloat32(jointDataTableIdx + 0x04);
         const scaleY = view.getFloat32(jointDataTableIdx + 0x08);
         const scaleZ = view.getFloat32(jointDataTableIdx + 0x0C);
@@ -372,7 +373,19 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const bboxMaxY = view.getFloat32(jointDataTableIdx + 0x38);
         const bboxMaxZ = view.getFloat32(jointDataTableIdx + 0x3C);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
-        joints.push({ name, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ, boundingSphereRadius, bbox });
+
+        const transform = new JointTransformInfo();
+        transform.scaleX = scaleX;
+        transform.scaleY = scaleY;
+        transform.scaleZ = scaleZ;
+        transform.rotationX = rotationX;
+        transform.rotationY = rotationY;
+        transform.rotationZ = rotationZ;
+        transform.translationX = translationX;
+        transform.translationY = translationY;
+        transform.translationZ = translationZ;
+
+        joints.push({ name, calcFlags, transform, boundingSphereRadius, bbox });
     }
 
     return { joints };
@@ -380,7 +393,7 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
 //#endregion
 //#region SHP1
 // A Matrix Group is a series of draw calls that use the same matrix table.
-interface MtxGroup {
+export interface MtxGroup {
     useMtxTable: Uint16Array;
     indexOffset: number;
     indexCount: number;
@@ -481,6 +494,7 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const mtxGroups: MtxGroup[] = [];
 
         let totalIndexCount = 0;
+        let totalVertexCount = 0;
         for (let j = 0; j < mtxGroupCount; j++) {
             const primSize = view.getUint32(mtxGroupIdx + 0x00);
             const primStart = primDataOffs + view.getUint32(mtxGroupIdx + 0x04);
@@ -501,11 +515,12 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
 
             const srcOffs = primStart;
             const subBuffer = buffer.subarray(srcOffs, primSize);
-            const loadedVertexData = vtxLoader.runVertices(vtxArrays, subBuffer);
+            const loadedVertexData = vtxLoader.runVertices(vtxArrays, subBuffer, { firstVertexId: totalVertexCount });
 
             const indexOffset = totalIndexCount;
             const indexCount = loadedVertexData.totalIndexCount;
             totalIndexCount += indexCount;
+            totalVertexCount += loadedVertexData.totalVertexCount;
 
             mtxGroups.push({ useMtxTable, indexOffset, indexCount, loadedVertexData });
             mtxGroupIdx += 0x08;
@@ -520,10 +535,10 @@ function readSHP1Chunk(buffer: ArrayBufferSlice, bmd: BMD): SHP1 {
         const bboxMaxZ = view.getFloat32(shapeIdx + 0x24);
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
-        const materialIdx = -1;
+        const materialIndex = -1;
 
         // Now we should have a complete shape. Onto the next!
-        shapes.push({ displayFlags, loadedVertexLayout, mtxGroups, bbox, boundingSphereRadius, materialIndex: materialIdx });
+        shapes.push({ displayFlags, loadedVertexLayout, mtxGroups, bbox, boundingSphereRadius, materialIndex });
 
         shapeIdx += 0x28;
     }
@@ -1186,6 +1201,7 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
     return { textureDatas, samplers };
 }
 //#endregion
+
 //#region BMD
 function assocHierarchy(bmd: BMD): void {
     const view = bmd.inf1.hierarchyData.createDataView();
@@ -1251,6 +1267,7 @@ export class BMD {
 }
 //#endregion
 //#endregion
+
 //#region BMT
 export class BMT {
     public static parse(buffer: ArrayBufferSlice): BMT {
@@ -1271,6 +1288,7 @@ export class BMT {
     public tex1: TEX1 | null;
 }
 //#endregion
+
 //#region Animation Core
 export const enum LoopMode {
     ONCE = 0,
@@ -1280,19 +1298,14 @@ export const enum LoopMode {
     MIRRORED_REPEAT = 4,
 }
 
-const enum TangentType {
-    IN = 0,
-    IN_OUT = 1,
-}
-
-interface AnimationKeyframe {
+export interface AnimationKeyframe {
     time: number;
     value: number;
     tangentIn: number;
     tangentOut: number;
 }
 
-interface AnimationTrack {
+export interface AnimationTrack {
     frames: AnimationKeyframe[];
 }
 
@@ -1301,63 +1314,9 @@ export interface AnimationBase {
     loopMode: LoopMode;
 }
 
-function applyLoopMode(t: number, loopMode: LoopMode) {
-    switch (loopMode) {
-    case LoopMode.ONCE:
-        return Math.min(t, 1);
-    case LoopMode.ONCE_AND_RESET:
-        return Math.min(t, 1) % 1;
-    case LoopMode.REPEAT:
-        return t % 1;
-    case LoopMode.MIRRORED_ONCE:
-        return 1 - Math.abs((Math.min(t, 2) - 1));
-    case LoopMode.MIRRORED_REPEAT:
-        return 1 - Math.abs((t % 2) - 1);
-    }
-}
-
-export function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopMode = anim.loopMode): number {
-    const lastFrame = anim.duration;
-    const normTime = frame / lastFrame;
-    const animFrame = applyLoopMode(normTime, loopMode) * lastFrame;
-    return animFrame;
-}
-
-function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, frame: number): number {
-    const length = (k1.time - k0.time);
-    const t = (frame - k0.time) / length;
-    const p0 = k0.value;
-    const p1 = k1.value;
-    const s0 = k0.tangentOut * length;
-    const s1 = k1.tangentIn * length;
-    return getPointHermite(p0, p1, s0, s1, t);
-}
-
-function findKeyframe(frames: AnimationKeyframe[], time: number): number {
-    for (let i = 0; i < frames.length; i++)
-        if (time < frames[i].time)
-            return i;
-    return -1;
-}
-
-export function sampleAnimationData(track: AnimationTrack, frame: number): number {
-    const frames = track.frames;
-
-    if (frames.length === 1)
-        return frames[0].value;
-
-    // Find the first frame.
-    const idx1 = findKeyframe(frames, frame);
-    if (idx1 === 0)
-        return frames[0].value;
-    if (idx1 < 0)
-        return frames[frames.length - 1].value;
-    const idx0 = idx1 - 1;
-
-    const k0 = frames[idx0];
-    const k1 = frames[idx1];
-
-    return hermiteInterpolate(k0, k1, frame);
+const enum TangentType {
+    In = 0,
+    InOut = 1,
 }
 
 function translateAnimationTrack(data: Float32Array | Int16Array, duration: number, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
@@ -1369,12 +1328,12 @@ function translateAnimationTrack(data: Float32Array | Int16Array, duration: numb
     } else {
         const frames: AnimationKeyframe[] = [];
 
-        if (tangent === TangentType.IN) {
+        if (tangent === TangentType.In) {
             for (let i = index; i < index + 3 * count; i += 3) {
                 const time = data[i+0], value = data[i+1] * scale, tangentIn = data[i+2] * scale, tangentOut = tangentIn;
                 frames.push({ time, value, tangentIn, tangentOut });
             }
-        } else if (tangent === TangentType.IN_OUT) {
+        } else if (tangent === TangentType.InOut) {
             for (let i = index; i < index + 4 * count; i += 4) {
                 const time = data[i+0], value = data[i+1] * scale, tangentIn = data[i+2] * scale, tangentOut = data[i+3] * scale;
                 frames.push({ time, value, tangentIn, tangentOut });
@@ -1389,8 +1348,8 @@ function translateAnimationTrack(data: Float32Array | Int16Array, duration: numb
     }
 }
 //#endregion
+
 //#region J3DAnmTextureSRTKey
-//#region TTK1
 export interface TTK1AnimationEntry {
     materialName: string;
     texGenIndex: number;
@@ -1478,39 +1437,6 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
     return { duration, loopMode, isMaya, uvAnimationEntries };
 }
 
-export class TTK1Animator {
-    constructor(public animationController: AnimationController, private ttk1: TTK1, private animationEntry: TTK1AnimationEntry) {}
-
-    public calcTexMtx(dst: mat4): void {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.ttk1, frame);
-
-        const scaleS = sampleAnimationData(this.animationEntry.scaleS, animFrame);
-        const scaleT = sampleAnimationData(this.animationEntry.scaleT, animFrame);
-        const rotation = sampleAnimationData(this.animationEntry.rotationQ, animFrame);
-        const translationS = sampleAnimationData(this.animationEntry.translationS, animFrame);
-        const translationT = sampleAnimationData(this.animationEntry.translationT, animFrame);
-
-        if (this.ttk1.isMaya) {
-            calcTexMtx_Maya(dst, scaleS, scaleT, rotation, translationS, translationT);
-        } else {
-            const centerS = this.animationEntry.centerS;
-            const centerT = this.animationEntry.centerT;
-            const centerQ = this.animationEntry.centerQ;
-            calcTexMtx_Basic(dst, scaleS, scaleT, rotation, translationS, translationT, centerS, centerT, centerQ);
-        }
-    }
-}
-
-export function bindTTK1Animator(animationController: AnimationController, ttk1: TTK1, materialName: string, texGenIndex: number): TTK1Animator | null {
-    const animationEntry = ttk1.uvAnimationEntries.find((entry) => entry.materialName === materialName && entry.texGenIndex === texGenIndex);
-    if (animationEntry === undefined)
-        return null;
-
-    return new TTK1Animator(animationController, ttk1, animationEntry);
-}
-//#endregion
-//#region BTK
 export class BTK {
     public static parse(buffer: ArrayBufferSlice): TTK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1521,9 +1447,8 @@ export class BTK {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmTevRegKey
-//#region TRK1
 export interface TRK1AnimationEntry {
     materialName: string;
     colorKind: ColorKind;
@@ -1619,29 +1544,6 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     return { duration, loopMode, animationEntries };
 }
 
-export class TRK1Animator {
-    constructor(public animationController: AnimationController, private trk1: TRK1, private animationEntry: TRK1AnimationEntry) {}
-
-    public calcColor(dst: Color): void {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.trk1, frame);
-
-        dst.r = sampleAnimationData(this.animationEntry.r, animFrame);
-        dst.g = sampleAnimationData(this.animationEntry.g, animFrame);
-        dst.b = sampleAnimationData(this.animationEntry.b, animFrame);
-        dst.a = sampleAnimationData(this.animationEntry.a, animFrame);
-    }
-}
-
-export function bindTRK1Animator(animationController: AnimationController, trk1: TRK1, materialName: string, colorKind: ColorKind): TRK1Animator | null {
-    const animationEntry = trk1.animationEntries.find((entry) => entry.materialName === materialName && entry.colorKind === colorKind);
-    if (animationEntry === undefined)
-        return null;
-
-    return new TRK1Animator(animationController, trk1, animationEntry);
-}
-//#endregion
-//#region BRK
 export class BRK {
     public static parse(buffer: ArrayBufferSlice): TRK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1651,9 +1553,8 @@ export class BRK {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmColorKey
-//#region PAK1
 function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
     const view = buffer.createDataView();
     const loopMode: LoopMode = view.getUint8(0x08);
@@ -1702,8 +1603,7 @@ function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
 
     return { duration, loopMode, animationEntries };
 }
-//#endregion
-//#region BPK
+
 export class BPK {
     public static parse(buffer: ArrayBufferSlice): TRK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1713,10 +1613,9 @@ export class BPK {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmTransformKey
-//#region ANK1
-interface ANK1JointAnimationEntry {
+export interface ANK1JointAnimationEntry {
     scaleX: AnimationTrack;
     rotationX: AnimationTrack;
     translationX: AnimationTrack;
@@ -1781,8 +1680,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
 
     return { loopMode, duration, jointAnimationEntries };
 }
-//#endregion
-//#region BCK
+
 export class BCK {
     public static parse(buffer: ArrayBufferSlice): ANK1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1792,9 +1690,8 @@ export class BCK {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmTexPattern
-//#region TPT1
 export interface TPT1AnimationEntry {
     materialName: string;
     texMapIndex: number;
@@ -1842,29 +1739,6 @@ function readTPT1Chunk(buffer: ArrayBufferSlice): TPT1 {
     return { duration, loopMode, animationEntries };
 }
 
-export class TPT1Animator { 
-    constructor(public animationController: AnimationController, private tpt1: TPT1, private animationEntry: TPT1AnimationEntry) {}
-
-    public calcTextureIndex(): number {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.tpt1, frame);
-
-        // animFrame can return a partial keyframe, but visibility information is frame-specific.
-        // Resolve this by treating this as a stepped track, floored. e.g. 15.9 is keyframe 15.
-
-        return this.animationEntry.textureIndices[(animFrame | 0)];
-    }
-}
-
-export function bindTPT1Animator(animationController: AnimationController, tpt1: TPT1, materialName: string, texMap: GX.TexMapID): TPT1Animator | null {
-    const animationEntry = tpt1.animationEntries.find((entry) => entry.materialName === materialName && entry.texMapIndex === texMap);
-    if (animationEntry === undefined)
-        return null;
-
-    return new TPT1Animator(animationController, tpt1, animationEntry);
-}
-//#endregion
-//#region BTP
 export class BTP {
     public static parse(buffer: ArrayBufferSlice): TPT1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1874,9 +1748,8 @@ export class BTP {
     }
 }
 //#endregion
-//#endregion
+
 //#region J3DAnmVisibilityFull
-//#region VAF1
 export interface ShapeVisibilityEntry {
     shapeVisibility: BitMap;
 }
@@ -1915,21 +1788,6 @@ function readVAF1Chunk(buffer: ArrayBufferSlice): VAF1 {
     return { loopMode, duration, visibilityAnimationTracks: shapeVisibilityEntries };
 }
 
-export class VAF1Animator { 
-    constructor(public animationController: AnimationController, public vaf1: VAF1) {}
-
-    public calcVisibility(shapeIndex: number): boolean {
-        const frame = this.animationController.getTimeInFrames();
-        const animFrame = getAnimFrame(this.vaf1, frame);
-        return VAF1_getVisibility(this.vaf1, shapeIndex, animFrame);
-    }
-}
-
-export function bindVAF1Animator(animationController: AnimationController, vaf1: VAF1): VAF1Animator {
-    return new VAF1Animator(animationController, vaf1);
-}
-//#endregion
-//#region BVA
 export class BVA {
     public static parse(buffer: ArrayBufferSlice): VAF1 {
         const j3d = new JSystemFileReaderHelper(buffer);
@@ -1940,5 +1798,4 @@ export class BVA {
 
     public vaf1: VAF1;
 }
-//#endregion
 //#endregion

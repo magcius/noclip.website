@@ -104,52 +104,50 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
 // contains multiple J3DShapePackets.
 
 class DrawBufferExecuter {
-    public shapeOrderOpa: number[] = [];
-    public shapeOrderXlu: number[] = [];
+    public materialOrderOpa: number[] = [];
+    public materialOrderXlu: number[] = [];
 
     constructor(public modelInstance: J3DModelInstance) {
         const modelData = this.modelInstance.modelData;
 
-        const shapeOrder = range(0, modelData.shapeData.length);
+        const materialOrder = range(0, modelData.modelMaterialData.materialData!.length);
 
         // Sort shapes by material name. Yes, this is what the actual game does.
         // ref. DrawBuffer::sortShapeDrawer.
-        shapeOrder.sort((a, b) => {
-            const mata = modelData.modelMaterialData.materialData![modelData.shapeData[a].shape.materialIndex].material;
-            const matb = modelData.modelMaterialData.materialData![modelData.shapeData[b].shape.materialIndex].material;
+        materialOrder.sort((a, b) => {
+            const mata = modelData.modelMaterialData.materialData![a].material;
+            const matb = modelData.modelMaterialData.materialData![b].material;
             return mata.name.localeCompare(matb.name);
         });
 
-        for (let i = 0; i < shapeOrder.length; i++) {
-            const shape = modelData.shapeData[shapeOrder[i]].shape;
-            const material = modelData.modelMaterialData.materialData![shape.materialIndex].material;
-            if (material.translucent)
-                this.shapeOrderXlu.push(shapeOrder[i]);
+        for (let i = 0; i < materialOrder.length; i++) {
+            const materialIndex = materialOrder[i];
+            if (modelData.modelMaterialData.materialData![materialIndex].material.translucent)
+                this.materialOrderXlu.push(materialIndex);
             else
-                this.shapeOrderOpa.push(shapeOrder[i]);
+                this.materialOrderOpa.push(materialIndex);
         }
     }
 
-    private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, order: number[], depth: number): void {
+    private draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, materialOrder: number[], depth: number): void {
         if (!this.modelInstance.visible || !this.modelInstance.isAnyShapeVisible())
             return;
 
-        for (let i = 0; i < order.length; i++) {
-            const shapeInstance = this.modelInstance!.shapeInstances[order[i]];
-            if (!shapeInstance.visible)
-                continue;
-            shapeInstance.prepareToRender(device, renderInstManager, depth, camera, viewport, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
+        for (let i = 0; i < materialOrder.length; i++) {
+            const materialIndex = materialOrder[i];
+            const materialInstance = this.modelInstance!.materialInstances[materialIndex];
+            materialInstance.prepareToRenderShapes(device, renderInstManager, depth, camera, viewport, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
         }
     }
 
     public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
         const depth = -1;
-        this.draw(device, renderInstManager, camera, viewport, this.shapeOrderOpa, depth);
+        this.draw(device, renderInstManager, camera, viewport, this.materialOrderOpa, depth);
     }
 
     public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords): void {
         const depth = this.modelInstance.computeDepth(camera);
-        this.draw(device, renderInstManager, camera, viewport, this.shapeOrderXlu, depth);
+        this.draw(device, renderInstManager, camera, viewport, this.materialOrderXlu, depth);
     }
 }
 
@@ -170,7 +168,6 @@ export class DrawBufferGroup {
     }
 
     public registerDrawBuffer(actor: LiveActor): number {
-        // TODO(jstpierre): Do we need the DrawBuffer / DrawBufferExecuter split?
         this.drawBufferExecuters.push(new DrawBufferExecuter(actor.modelInstance!));
         return this.drawBufferExecuters.length - 1;
     }

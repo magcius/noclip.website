@@ -9,6 +9,8 @@ import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight
 import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./MiscActor";
 import { isFirstStep } from "./Spine";
 import { scaleMatrix } from "../MathHelpers";
+import { initMultiFur } from "./Fur";
+import { LightType } from "./DrawBuffer";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -204,6 +206,12 @@ export class NoclipLegacyActorSpawner {
 
         const name = objinfo.objName;
         switch (name) {
+            case 'HoneyQueen': {
+                const actor = await spawnGraph('HoneyQueen');
+                actor.initLightCtrl(this.sceneObjHolder);
+                initMultiFur(this.sceneObjHolder, actor, LightType.None);
+            } break;
+
             case 'MeteorCannon':
             case 'Plant':
             case 'Creeper':

@@ -150,7 +150,8 @@ export class ScriptExecutor {
                     thread.state = ScriptThreadState.ALIVE;
         }
 
-        while (true) {
+        let maxExec = 0;
+        while (maxExec++ < 100) {
             for (let i = 0; i < this.threads.length; i++) {
                 const thread = this.threads[i];
 
