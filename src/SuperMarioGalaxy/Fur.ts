@@ -12,7 +12,7 @@ import { NameObj, DrawType } from "./NameObj";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { lerp, saturate, computeModelMatrixS } from "../MathHelpers";
 import * as GX from "../gx/gx_enum";
-import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { getRandomFloat, connectToScene, isHiddenModel, isValidDraw } from "./ActorUtil";
 import { TextureMapping } from "../TextureHolder";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader";
@@ -215,6 +215,7 @@ function calcFurVertexData(shape: Shape, lengthMap: BTI_Texture | null, maxLengt
     for (let i = 0; i < shape.mtxGroups.length; i++)
         totalVertexCount += shape.mtxGroups[i].loadedVertexData.totalVertexCount;
 
+    assert(loadedVertexLayout.vertexBufferStrides.length === 1);
     const vtxData = new Uint8Array(loadedVertexLayout.vertexBufferStrides[0] * totalVertexCount);
 
     let dstOffs = 0;
@@ -498,7 +499,8 @@ class FurCtrl {
         this.ownCoalescedBufferData = coalescedBuffers[0].buffer;
 
         for (let i = 0; i < numLayers; i++) {
-            const shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers, shapeData.shapeHelper.indexBuffer, shapeData.shapeHelper.loadedVertexLayout);
+            const vertexBuffers: GfxVertexBufferDescriptor[] = [coalescedBuffers[i]];
+            const shapeHelper = new GXShapeHelperGfx(device, cache, vertexBuffers, shapeData.shapeHelper.indexBuffer, shapeData.shapeHelper.loadedVertexLayout);
             this.ownShapeHelpers.push(shapeHelper);
             this.shapeHelpers.push(shapeHelper);
         }
