@@ -14,7 +14,7 @@ import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
 import { Shader, SFAMaterial, makeMaterialTexture, MaterialFactory, ShaderAttrFlags, ShaderFlags } from './materials';
 import { Model, ModelInstance, ModelVersion, ModelRenderContext } from './models';
-import { Shape } from './shapes';
+import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
 import { LowBitReader } from './util';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
@@ -367,7 +367,6 @@ export class AncientBlockRenderer implements BlockRenderer {
 
                 try {
                     const shader = shaders[curShader];
-                    const newShape = new Shape(device, vtxArrays, vcd, vat, displayList, this.animController, false, false);
 
                     const mb = new GXMaterialBuilder('Basic');
                     mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO);
@@ -420,7 +419,12 @@ export class AncientBlockRenderer implements BlockRenderer {
                         setupMaterialParams: () => {},
                         rebuild: () => {},
                     }
-                    newShape.setMaterial(material);
+
+                    const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, false);
+                    const newMat = new CommonShapeMaterial(this.animController);
+                    newMat.setMaterial(material);
+
+                    const newShape = new Shape(newGeom, newMat, false);
 
                     this.shapes.push(newShape);
                 } catch (e) {
@@ -469,20 +473,20 @@ export class AncientBlockRenderer implements BlockRenderer {
         return 1;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture, drawStep: number, modelViewState: ModelViewState) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number) {
         if (drawStep !== 0) {
             return;
         }
 
         for (let i = 0; i < this.shapes.length; i++) {
-            this.shapes[i].prepareToRender(device, renderInstManager, viewerInput, matrix, sceneTexture, [mat4.create()], modelViewState);
+            this.shapes[i].prepareToRender(device, renderInstManager, matrix, modelCtx, [mat4.create()]);
         }
     }
     
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
     }
 
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, sceneTexture: ColorTexture) {
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
     }
 }
 
