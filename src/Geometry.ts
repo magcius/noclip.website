@@ -159,6 +159,13 @@ export class AABB {
         v[2] = Math.max((this.maxZ - this.minZ) / 2, 0);
     }
 
+    public diagonalLengthSquared(): number {
+        const dx = this.maxX - this.minX;
+        const dy = this.maxY - this.minY;
+        const dz = this.maxZ - this.minZ;
+        return dx*dx + dy*dy + dz*dz;
+    }
+
     public centerPoint(v: vec3): void {
         v[0] = (this.minX + this.maxX) / 2;
         v[1] = (this.minY + this.maxY) / 2;

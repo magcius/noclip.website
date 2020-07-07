@@ -4,6 +4,7 @@ import { vec3 } from "gl-matrix";
 import { assertExists, nArray } from "../util";
 import { isNearZero } from "../MathHelpers";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
+import { isSameDirection } from "./ActorUtil";
 
 export class KC_PrismData {
     public length: number = 0.0;
@@ -71,6 +72,8 @@ export class KCollisionServer {
 
     private params: JMapInfoIter | null = null;
 
+    public farthestVertexDistance: number = 0;
+
     constructor(buffer: ArrayBufferSlice, paramsData: ArrayBufferSlice | null) {
         this.view = buffer.createDataView();
 
@@ -108,6 +111,35 @@ export class KCollisionServer {
 
         if (paramsData !== null)
             this.params = createCsvParser(paramsData);
+    }
+
+    private isNearParallelNormal(prism: KC_PrismData): boolean {
+        this.getEdgeNormal1(scratchVec3a, prism);
+        this.getEdgeNormal2(scratchVec3b, prism);
+        this.getEdgeNormal3(scratchVec3c, prism);
+        return isSameDirection(scratchVec3a, scratchVec3b, 0.01) || isSameDirection(scratchVec3a, scratchVec3c, 0.01) || isSameDirection(scratchVec3b, scratchVec3c, 0.01);
+    }
+
+    public calcFarthestVertexDistance(): void {
+        let bestDistSqr = 0.0;
+
+        for (let i = 0; i < this.prisms.length; i++) {
+            const prism = this.prisms[i];
+
+            // Camera collision code is also calculated here (likely for performance)
+
+            if (this.isNearParallelNormal(prism)) {
+                // TODO(jstpierre): Flip length? Likely to just kill the plane. Not sure how much this hits in practice.
+                continue;
+            }
+
+            for (let j = 0; j < 3; j++) {
+                this.getPos(scratchVec3a, prism, j);
+                bestDistSqr = Math.max(bestDistSqr, vec3.squaredLength(scratchVec3a));
+            }
+        }
+
+        this.farthestVertexDistance = Math.sqrt(bestDistSqr);
     }
 
     public getAttributes(idx: number): JMapInfoIter | null {

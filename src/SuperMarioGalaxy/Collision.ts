@@ -7,10 +7,12 @@ import { HitSensor } from "./HitSensor";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { ZoneAndLayer, LiveActor, makeMtxTRSFromActor } from "./LiveActor";
 import { assertExists, nArray, assert, arrayRemoveIfExist } from "../util";
-import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3 } from "../MathHelpers";
+import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3, getMatrixTranslation } from "../MathHelpers";
 import { connectToScene } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
+import { AABB } from "../Geometry";
+import { getDebugOverlayCanvas2D, drawWorldSpaceAABB } from "../DebugJunk";
 
 export class Triangle {
     public collisionParts: CollisionParts | null = null;
@@ -81,6 +83,10 @@ export class CollisionPartsFilterBase {
     }
 }
 
+function getAvgScale(v: vec3): number {
+    return (v[0] + v[1] + v[2]) / 3.0;
+}
+
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 export class CollisionParts {
@@ -88,11 +94,20 @@ export class CollisionParts {
     public hostMtx: mat4 | null = null;
 
     public collisionServer: KCollisionServer;
+    public newWorldMtx = mat4.create();
     public invWorldMtx = mat4.create();
     public worldMtx = mat4.create();
+    public oldWorldMtx = mat4.create();
+    public notMovedCounter = 0;
 
     private collisionZone: CollisionZone;
     private checkArrowResult = new CheckArrowResult();
+
+    private scale = 0.0;
+    public boundingSphereRadius: number = 0.0;
+
+    private setUpdateMtx = true;
+    private setUpdateMtxOneTime = false;
 
     constructor(sceneObjHolder: SceneObjHolder, zoneAndLayer: ZoneAndLayer, initialHostMtx: mat4, public hitSensor: HitSensor, kclData: ArrayBufferSlice, paData: ArrayBufferSlice | null, public keeperIdx: number, private scaleType: CollisionScaleType) {
         this.collisionServer = new KCollisionServer(kclData, paData);
@@ -102,12 +117,59 @@ export class CollisionParts {
         this.collisionZone = director.keepers[keeperIdx].getZone(zoneAndLayer.zoneId);
 
         this.resetAllMtx(initialHostMtx);
-        // calcFarthestVertexDistance
-        // updateBoundingSphereRange
+        this.collisionServer.calcFarthestVertexDistance();
+
+        mat4.getScaling(scratchVec3a, initialHostMtx);
+        this.updateBoundingSphereRangeFromScaleVector(scratchVec3a);
+    }
+
+    public getTrans(dst: vec3): void {
+        getMatrixTranslation(dst, this.worldMtx);
+    }
+
+    public setMtxFromHost(): void {
+        mat4.copy(this.newWorldMtx, this.hostMtx!);
+    }
+
+    public setMtx(m: mat4): void {
+        mat4.copy(this.newWorldMtx, m);
     }
 
     public updateMtx(): void {
-        // TODO(jstpierre)
+        const notMoved = !mat4.equals(this.newWorldMtx, this.worldMtx);
+
+        if (this.setUpdateMtx || this.setUpdateMtxOneTime) {
+            if (notMoved) {
+                this.notMovedCounter++;
+            } else {
+                // Matrices are different, update the notMovedCounter.
+                this.notMovedCounter = 0;
+                if (this.setUpdateMtxOneTime)
+                    this.notMovedCounter = 1;
+
+                const scale = this.makeEqualScale(this.newWorldMtx);
+                if (isNearZero(scale - this.scale, 0.001))
+                    this.updateBoundingSphereRangePrivate(scale);
+            }
+
+            this.setUpdateMtxOneTime = false;
+
+            if (this.notMovedCounter < 2) {
+                mat4.copy(this.oldWorldMtx, this.worldMtx);
+                mat4.copy(this.worldMtx, this.newWorldMtx);
+                mat4.invert(this.invWorldMtx, this.worldMtx);
+            }
+        } else {
+            if (notMoved)
+                this.notMovedCounter++;
+        }
+    }
+
+    public forceResetAllMtxAndSetUpdateMtxOneTime(): void {
+        mat4.copy(scratchMatrix, this.hostMtx!);
+        this.makeEqualScale(scratchMatrix);
+        this.resetAllMtxPrivate(scratchMatrix);
+        this.setUpdateMtxOneTime = true;
     }
 
     public addToBelongZone(sceneObjHolder: SceneObjHolder): void {
@@ -118,10 +180,10 @@ export class CollisionParts {
         sceneObjHolder.collisionDirector!.keepers[this.keeperIdx].removeFromZone(this, this.collisionZone.zoneId);
     }
 
-    private makeEqualScale(mtx: mat4): void {
+    private makeEqualScale(mtx: mat4): number {
         if (this.scaleType === CollisionScaleType.AutoScale) {
             // Nothing to do; leave alone.
-            return;
+            return 1.0;
         }
 
         mat4.getScaling(scratchVec3a, mtx);
@@ -130,7 +192,7 @@ export class CollisionParts {
         const scaleYZ = scratchVec3a[1] - scratchVec3a[2];
 
         if (isNearZero(scaleXY, 0.001) && isNearZero(scaleZX, 0.001) && isNearZero(scaleYZ, 0.001))
-            return;
+            return scratchVec3a[0];
 
         let scale: number;
         if (this.scaleType === CollisionScaleType.NotUsingScale) {
@@ -138,16 +200,32 @@ export class CollisionParts {
             scale = 1.0;
         } else if (this.scaleType === CollisionScaleType.AutoEqualScale) {
             // Equalize the scale.
-            scale = (scratchVec3a[0] + scratchVec3a[1] + scratchVec3a[2]) / 3.0;
+            scale = getAvgScale(scratchVec3a);
         } else {
             throw "whoops";
         }
 
         vec3.set(scratchVec3a, scale / scratchVec3a[0], scale / scratchVec3a[1], scale / scratchVec3a[2]);
         mat4.scale(mtx, mtx, scratchVec3a);
+        return scale;
+    }
+
+    private updateBoundingSphereRangePrivate(scale: number): void {
+        this.scale = scale;
+        this.boundingSphereRadius = this.collisionServer.farthestVertexDistance;
+    }
+
+    public updateBoundingSphereRangeFromScaleVector(scaleVec: vec3): void {
+        this.updateBoundingSphereRangePrivate(getAvgScale(scaleVec));
+    }
+
+    public updateBoundingSphereRangeFromHostMtx(): void {
+        this.updateBoundingSphereRangePrivate(this.makeEqualScale(this.hostMtx!));
     }
 
     private resetAllMtxPrivate(hostMtx: mat4): void {
+        mat4.copy(this.newWorldMtx, hostMtx);
+        mat4.copy(this.oldWorldMtx, hostMtx);
         mat4.copy(this.worldMtx, hostMtx);
         mat4.invert(this.invWorldMtx, hostMtx);
     }
@@ -189,30 +267,65 @@ export class CollisionParts {
     }
 }
 
+function isInRange(v: number, v0: number, v1: number): boolean {
+    const min = Math.min(v0, v1), max = Math.max(v0, v1);
+    return v >= min && v <= max;
+}
+
 class CollisionZone {
     public boundingSphereCenter: vec3 | null = null;
     public boundingSphereRadius: number | null = null;
+    public boundingAABB: AABB | null = null;
     public parts: CollisionParts[] = [];
 
     constructor(public zoneId: number) {
-        if (false && this.zoneId > 0) {
+        if (this.zoneId > 0) {
             this.boundingSphereCenter = vec3.create();
             this.boundingSphereRadius = -1;
+            this.boundingAABB = new AABB();
         }
     }
 
     public addParts(parts: CollisionParts): void {
         this.parts.push(parts);
-        if (this.boundingSphereCenter !== null)
-            this.calcMinAndMaxRadius();
+        this.calcMinMaxAndRadius();
     }
 
     public eraseParts(parts: CollisionParts): void {
         arrayRemoveIfExist(this.parts, parts);
     }
 
-    private calcMinAndMaxRadius(): void {
-        // TODO(jstpierre)
+    public calcMinMaxAndRadiusIfMoveOuter(parts: CollisionParts): void {
+        if (this.boundingSphereCenter === null || this.boundingSphereRadius === null || this.boundingAABB === null)
+            return;
+
+        parts.getTrans(scratchVec3a);
+        const r = parts.boundingSphereRadius;
+        if (!isInRange(scratchVec3a[0], this.boundingAABB.minX + r, this.boundingAABB.maxX - r) ||
+            !isInRange(scratchVec3a[1], this.boundingAABB.minY + r, this.boundingAABB.maxY - r) ||
+            !isInRange(scratchVec3a[2], this.boundingAABB.minZ + r, this.boundingAABB.maxZ - r))
+            this.calcMinMaxAndRadius();
+    }
+
+    public calcMinMaxAndRadius(): void {
+        if (this.boundingSphereCenter === null || this.boundingSphereRadius === null || this.boundingAABB === null)
+            return;
+
+        for (let i = 0; i < this.parts.length; i++) {
+            const parts = this.parts[i];
+            vec3.set(scratchVec3b, parts.boundingSphereRadius, parts.boundingSphereRadius, parts.boundingSphereRadius);
+
+            parts.getTrans(scratchVec3a);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+            this.boundingAABB.unionPoint(scratchVec3a);
+
+            parts.getTrans(scratchVec3a);
+            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            this.boundingAABB.unionPoint(scratchVec3a);
+        }
+
+        this.boundingAABB.centerPoint(this.boundingSphereCenter);
+        this.boundingSphereRadius = Math.sqrt(this.boundingAABB.diagonalLengthSquared());
     }
 }
 
@@ -222,6 +335,7 @@ class CollisionCategorizedKeeper {
     public strikeInfo: HitInfo[] = nArray(32, () => new HitInfo());
 
     private zones: CollisionZone[] = [];
+    private forceCalcMinMaxAndRadius = false;
 
     constructor(public keeperIdx: number) {
     }
@@ -240,9 +354,15 @@ class CollisionCategorizedKeeper {
                 if (this.keeperIdx === parts.keeperIdx)
                     parts.updateMtx();
 
-                // TODO(jstpierre): calcMinMaxAndRadius
+                if (!this.forceCalcMinMaxAndRadius && parts.notMovedCounter === 0)
+                    zone.calcMinMaxAndRadiusIfMoveOuter(parts);
             }
+
+            if (this.forceCalcMinMaxAndRadius)
+                zone.calcMinMaxAndRadius();
         }
+
+        this.forceCalcMinMaxAndRadius = false;
     }
 
     public addToZone(parts: CollisionParts, zoneId: number): void {
