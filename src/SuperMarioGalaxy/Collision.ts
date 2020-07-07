@@ -329,7 +329,54 @@ class CollisionZone {
     }
 }
 
-// const scratchAABB = new AABB();
+function checkHitSegmentSphere(dstDirection: vec3 | null, p0: vec3, dir: vec3, sphereCenter: vec3, sphereRadius: number): boolean {
+    // Put in space of P0
+    vec3.sub(scratchVec3c, sphereCenter, p0);
+
+    const dot = vec3.dot(scratchVec3c, dir);
+    const sqSphereRadius = sphereRadius*sphereRadius;
+    if (dot >= 0.0) {
+        const sqSegLength = vec3.squaredLength(dir);
+        if (sqSegLength >= dot) {
+            // Arrow goes through sphere. Find the intersection point.
+            vec3.scale(scratchVec3b, dir, dot / sqSegLength);
+            if (vec3.squaredDistance(scratchVec3b, scratchVec3c) <= sqSphereRadius) {
+                if (dstDirection !== null) {
+                    vec3.negate(dstDirection, scratchVec3b);
+                    vec3.normalize(dstDirection, dstDirection);
+                }
+
+                return true;
+            }
+        } else {
+            // Arrow does not go through sphere; might or might not go inside. Check P1
+            const sqDist = vec3.squaredDistance(dir, scratchVec3c);
+            if (sqDist < sqSphereRadius) {
+                if (dstDirection !== null) {
+                    vec3.sub(dstDirection, scratchVec3c, dir);
+                    vec3.normalize(dstDirection, dstDirection);
+                }
+
+                return true;
+            }
+        }
+    } else {
+        // Arrow is pointed away from the sphere. The only way that this could hit is if P0 is inside the sphere.
+        const sqDist = vec3.squaredLength(scratchVec3c);
+        if (sqDist < sqSphereRadius) {
+            if (dstDirection !== null) {
+                vec3.sub(dstDirection, sphereCenter, p0);
+                vec3.normalize(dstDirection, dstDirection);
+            }
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+const scratchAABB = new AABB();
 class CollisionCategorizedKeeper {
     public strikeInfoCount: number = 0;
     public strikeInfo: HitInfo[] = nArray(32, () => new HitInfo());
@@ -391,12 +438,10 @@ class CollisionCategorizedKeeper {
     public checkStrikeLine(p0: vec3, dir: vec3, partsFilter: CollisionPartsFilterBase | null, triFilter: TriangleFilterBase | null, maxStrikeInfos: number = this.strikeInfo.length): number {
         let idx = 0;
 
-        /*
-        scratchAABB.setInf();
+        scratchAABB.reset();
         scratchAABB.unionPoint(p0);
         vec3.add(scratchVec3a, p0, dir);
         scratchAABB.unionPoint(scratchVec3a);
-        */
 
         outer:
         for (let i = 0; i < this.zones.length; i++) {
@@ -405,9 +450,11 @@ class CollisionCategorizedKeeper {
                 continue;
 
             if (zone.boundingSphereCenter !== null) {
-                // TODO(jstpierre): Bounding sphere test for non-primary zones.
-                // scratchAABB.containsSphere(zone.boundingSphereCenter, zone.boundingSphereRadius);
-                // checkHitSegmentSphere
+                if (!scratchAABB.containsSphere(zone.boundingSphereCenter, zone.boundingSphereRadius!))
+                    continue;
+
+                if (!checkHitSegmentSphere(null, p0, dir, zone.boundingSphereCenter, zone.boundingSphereRadius!))
+                    continue;
             }
 
             for (let j = 0; j < zone.parts.length; j++) {
@@ -417,9 +464,12 @@ class CollisionCategorizedKeeper {
                 if (partsFilter !== null && partsFilter.isInvalidParts(parts))
                     continue;
 
-                // TODO(jstpierre): Bounding sphere tests.
-                // scratchAABB.containsSphere(parts.trans, parts.radius);
-                // checkHitSegmentSphere
+                parts.getTrans(scratchVec3a);
+                if (!scratchAABB.containsSphere(scratchVec3a, parts.boundingSphereRadius))
+                    continue;
+
+                if (!checkHitSegmentSphere(null, p0, dir, scratchVec3a, parts.boundingSphereRadius))
+                    continue;
 
                 idx += parts.checkStrikeLine(this.strikeInfo, idx, p0, dir, triFilter);
                 if (idx >= this.strikeInfo.length)

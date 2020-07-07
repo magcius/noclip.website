@@ -433,7 +433,7 @@ class cBgW {
         if (this.vtx !== null) {
             // Reset AABBs.
             for (let i = 0; i < this.grp.length; i++)
-                this.grp[i].aabb.setInf();
+                this.grp[i].aabb.reset();
 
             // Look for root group.
             for (let i = 0; i < this.dt.grpTbl.length; i++) {
@@ -475,7 +475,7 @@ class cBgW {
                 this.MakeBlckBnd(blkIdx, tre.aabb);
         } else {
             // Child.
-            tre.aabb.setInf();
+            tre.aabb.reset();
             for (let i = 0; i < 8; i++) {
                 const childIdx = this.dt.treTbl[treIdx].childBlk[i];
                 if (childIdx >= 0) {
@@ -491,7 +491,7 @@ class cBgW {
         const triEnd = blkIdx < this.dt.blkTbl.length - 1 ? this.dt.blkTbl[blkIdx + 1] : this.dt.triTbl.length;
 
         if (this.needsFullTransform) {
-            dst.setInf();
+            dst.reset();
 
             for (let i = triStart; i < triEnd; i++) {
                 const tri = this.dt.triTbl[i];

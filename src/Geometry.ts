@@ -93,7 +93,7 @@ export class AABB {
         this.maxX = maxZ;
     }
 
-    public setInf(): void {
+    public reset(): void {
         this.set(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
     }
 
