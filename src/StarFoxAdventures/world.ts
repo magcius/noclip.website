@@ -26,7 +26,7 @@ import { ModelInstance, ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
-import { colorNewFromRGBA } from '../Color';
+import { colorNewFromRGBA, Color, colorCopy } from '../Color';
 import { getCamPos } from './util';
 import { computeViewMatrix } from '../Camera';
 
@@ -54,7 +54,9 @@ function vecPitch(v: vec3): number {
 
 interface Light {
     position: vec3;
-    // TODO: color, intensity, flags...
+    color: Color;
+    distAtten: vec3;
+    // TODO: flags and other parameters...
 }
 
 export class World {
@@ -354,18 +356,9 @@ class WorldRenderer extends SFARenderer {
             vec3.transformMat4(lights[i].Position, light.position, worldView);
             // drawWorldSpacePoint(ctx, modelCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
             // TODO: use correct parameters
-            lights[i].Color = colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
-            lights[i].CosAtten = vec3.fromValues(1.0, 0.0, 0.0);
-
-            const refDistance = 50.0;
-            const refBrightness = 0.75;
-            const kfactor = 0.5 * (1.0 - refBrightness);
-            // Distance attenuation values are calculated by GXInitLightDistAttn with GX_DA_MEDIUM mode
-            lights[i].DistAtten = vec3.fromValues(
-                1.0,
-                kfactor / (refBrightness * refDistance),
-                kfactor / (refBrightness * refDistance * refDistance)
-                );
+            colorCopy(lights[i].Color, light.color);
+            lights[i].CosAtten = vec3.fromValues(1.0, 0.0, 0.0); // TODO
+            vec3.copy(lights[i].DistAtten, light.distAtten);
 
             i++;
             if (i >= 8)

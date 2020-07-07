@@ -14,6 +14,7 @@ import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 import { scaleMatrix } from '../MathHelpers';
 import { SceneRenderContext } from './render';
+import { colorFromRGBA8, colorNewFromRGBA8, colorNewFromRGBA } from '../Color';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
@@ -669,10 +670,42 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         },
     },
     [681]: { // LGTPointLig
-        ...commonClass(0x18, 0x19),
+        setup: (obj: ObjectInstance, data: DataView) => {
+            commonSetup(obj, data, 0x18, 0x19);
+
+            const spotFunc = data.getUint8(0x21); // TODO: this value is passed to GXInitSpotLight
+            if (spotFunc === 0) {
+                obj.setModelNum(0);
+            } else {
+                obj.setModelNum(1);
+            }
+
+            // Distance attenuation values are calculated by GXInitLightDistAttn with GX_DA_MEDIUM mode
+            // TODO: Some types of light use other formulae
+            const refDistance = data.getUint16(0x22);
+            const refBrightness = 0.75;
+            const kfactor = 0.5 * (1.0 - refBrightness);
+            const distAtten = vec3.fromValues(
+                1.0,
+                kfactor / (refBrightness * refDistance),
+                kfactor / (refBrightness * refDistance * refDistance)
+                );
+
+            obj.instanceData = {
+                color: colorNewFromRGBA(
+                    data.getUint8(0x1a) / 0xff,
+                    data.getUint8(0x1b) / 0xff,
+                    data.getUint8(0x1c) / 0xff,
+                    1.0
+                ),
+                distAtten,
+            };
+        },
         mount: (obj: ObjectInstance, world: World) => {
             world.lights.add({
                 position: obj.getPosition(),
+                color: obj.instanceData.color,
+                distAtten: obj.instanceData.distAtten,
             })
         },
     },
@@ -771,6 +804,8 @@ export class ObjectInstance {
     private layerVals0x5: number;
 
     private ambienceNum: number = 0;
+
+    public instanceData: any;
 
     constructor(public world: World, public objType: ObjectType, private objParams: DataView, public posInMap: vec3) {
         this.scale = objType.scale;
