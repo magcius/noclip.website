@@ -288,7 +288,9 @@ class CollisionZone {
 
     public addParts(parts: CollisionParts): void {
         this.parts.push(parts);
-        this.calcMinMaxAndRadius();
+
+        if (this.calcMinMaxAddParts(parts))
+            this.calcCenterAndRadius();
     }
 
     public eraseParts(parts: CollisionParts): void {
@@ -307,25 +309,40 @@ class CollisionZone {
             this.calcMinMaxAndRadius();
     }
 
+    private calcCenterAndRadius(): void {
+        this.boundingAABB!.centerPoint(this.boundingSphereCenter!);
+        this.boundingSphereRadius = Math.sqrt(this.boundingAABB!.diagonalLengthSquared());
+    }
+
+    private calcMinMaxAddParts(parts: CollisionParts): boolean {
+        if (this.boundingAABB === null)
+            return false;
+
+        let changed = false;
+
+        vec3.set(scratchVec3b, parts.boundingSphereRadius, parts.boundingSphereRadius, parts.boundingSphereRadius);
+
+        parts.getTrans(scratchVec3a);
+        vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
+        if (this.boundingAABB.unionPoint(scratchVec3a))
+            changed = true;
+
+        parts.getTrans(scratchVec3a);
+        vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+        if (this.boundingAABB.unionPoint(scratchVec3a))
+            changed = true;
+
+        return changed;
+    }
+
     public calcMinMaxAndRadius(): void {
         if (this.boundingSphereCenter === null || this.boundingSphereRadius === null || this.boundingAABB === null)
             return;
 
-        for (let i = 0; i < this.parts.length; i++) {
-            const parts = this.parts[i];
-            vec3.set(scratchVec3b, parts.boundingSphereRadius, parts.boundingSphereRadius, parts.boundingSphereRadius);
-
-            parts.getTrans(scratchVec3a);
-            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
-            this.boundingAABB.unionPoint(scratchVec3a);
-
-            parts.getTrans(scratchVec3a);
-            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
-            this.boundingAABB.unionPoint(scratchVec3a);
-        }
-
-        this.boundingAABB.centerPoint(this.boundingSphereCenter);
-        this.boundingSphereRadius = Math.sqrt(this.boundingAABB.diagonalLengthSquared());
+        this.boundingAABB.reset();
+        for (let i = 0; i < this.parts.length; i++)
+            this.calcMinMaxAddParts(this.parts[i]);
+        this.calcCenterAndRadius();
     }
 }
 
@@ -556,6 +573,9 @@ export class Binder {
 
         if (this.exCollisionPartsValid)
             sceneObjHolder.collisionDirector!.keepers[Category.Map].removeFromGlobal(assertExists(this.exCollisionParts));
+    }
+
+    public findBindedPos(pos: vec3, vel: vec3): void {
     }
 
     public clear(): void {
