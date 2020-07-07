@@ -17,7 +17,7 @@ import { getRandomFloat, connectToScene, isHiddenModel, isValidDraw } from "./Ac
 import { TextureMapping } from "../TextureHolder";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../gx/gx_render";
-import { GfxCoalescedBuffersCombo, coalesceBuffer } from "../gfx/helpers/BufferHelpers";
+import { coalesceBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { ViewerRenderInput } from "../viewer";
@@ -253,6 +253,7 @@ function calcFurVertexData(shape: Shape, lengthMap: BTI_Texture | null, maxLengt
         nrm[0] = vtxView.getFloat32(nrmOffs + 0x00, true);
         nrm[1] = vtxView.getFloat32(nrmOffs + 0x04, true);
         nrm[2] = vtxView.getFloat32(nrmOffs + 0x08, true);
+        vec3.normalize(nrm, nrm);
 
         vec3.scaleAndAdd(pos, pos, nrm, length);
 
@@ -452,8 +453,13 @@ class FurCtrl {
         if (!isValidDraw(this.actor) || isHiddenModel(this.actor))
             return;
 
-        if (this.actor!.actorLightCtrl !== null)
-            this.actor!.actorLightCtrl.loadLightOnMaterialParams(materialParams, viewerInput.camera);
+        if (this.dynamicFurParam.lightType !== LightType.None) {
+            const areaLightInfo = sceneObjHolder.lightDirector.findDefaultAreaLight(sceneObjHolder);
+            const lightInfo = areaLightInfo.getActorLightInfo(this.dynamicFurParam.lightType);
+            lightInfo.setOnMaterialParams(materialParams, viewerInput.camera, false);
+        } else if (this.actor.actorLightCtrl !== null) {
+            this.actor.actorLightCtrl.loadLightOnMaterialParams(materialParams, viewerInput.camera);
+        }
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
         const shape = this.shapeData.shape;
