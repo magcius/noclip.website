@@ -125,7 +125,10 @@ function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayB
 }
 
 function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
-    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 2, 2, 1));
+    const DIM = 128;
+    const CHECKER = 32;
+
+    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, DIM, DIM, 1));
     const gfxSampler = device.createSampler({
         wrapS: GfxWrapMode.REPEAT,
         wrapT: GfxWrapMode.REPEAT,
@@ -137,23 +140,32 @@ function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
     });
 
     // Thanks, StackOverflow.
-    let seed = num;
-    console.log(`Creating fake texture from seed ${seed}`);
-    function random() {
-        let x = Math.sin(seed++) * 10000;
-        return x - Math.floor(x);
-    }
+    // let seed = num;
+    // console.log(`Creating fake texture from seed ${seed}`);
+    // function random() {
+    //     let x = Math.sin(seed++) * 10000;
+    //     return x - Math.floor(x);
+    // }
 
-    const baseColor = [127 + random() * 127, 127 + random() * 127, 127 + random() * 127];
-    const darkBase = [baseColor[0] * 0.7, baseColor[1] * 0.7, baseColor[2] * 0.7];
+    const baseColor = [255, 255, 255];
+    //const baseColor = [127 + random() * 127, 127 + random() * 127, 127 + random() * 127];
+    const darkBase = [baseColor[0] * 0.9, baseColor[1] * 0.9, baseColor[2] * 0.9];
     const light = [baseColor[0], baseColor[1], baseColor[2], 0xff];
     const dark = [darkBase[0], darkBase[1], darkBase[2], 0xff];
 
-    const pixels = new Uint8Array(4 * 4);
-    pixels.set(dark, 0);
-    pixels.set(light, 4);
-    pixels.set(light, 8);
-    pixels.set(dark, 12);
+    // Draw checkerboard
+    const pixels = new Uint8Array(DIM * DIM * 4);
+    for (let y = 0; y < DIM; y++) {
+        for (let x = 0; x < DIM; x++) {
+            const cx = (x / CHECKER)|0;
+            const cy = (y / CHECKER)|0;
+            let color = !!(cx & 1);
+            if (cy & 1)
+                color = !color;
+            const pixel = color ? light : dark;
+            pixels.set(pixel, (y * DIM + x) * 4);
+        }
+    }
 
     const hostAccessPass = device.createHostAccessPass();
     hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
