@@ -1,18 +1,18 @@
 
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { SceneObjHolder, ResourceHolder, SceneObj } from "./Main";
 import { NameObj } from "./NameObj";
-import { KCollisionServer, CheckArrowResult } from "./KCollisionServer";
+import { KCollisionServer, CheckCollideResult, KC_PrismData } from "./KCollisionServer";
 import { HitSensor } from "./HitSensor";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { ZoneAndLayer, LiveActor, makeMtxTRSFromActor } from "./LiveActor";
 import { assertExists, nArray, assert, arrayRemoveIfExist } from "../util";
-import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3, getMatrixTranslation } from "../MathHelpers";
-import { connectToScene } from "./ActorUtil";
+import { transformVec3Mat4w1, transformVec3Mat4w0, isNearZero, isNearZeroVec3, getMatrixTranslation, Vec3Zero } from "../MathHelpers";
+import { connectToScene, vecKillElement } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 import { AABB } from "../Geometry";
-import { getDebugOverlayCanvas2D, drawWorldSpaceAABB } from "../DebugJunk";
+import { requestArchivesLensFlareArea } from "./LensFlare";
 
 export class Triangle {
     public collisionParts: CollisionParts | null = null;
@@ -89,6 +89,7 @@ function getAvgScale(v: vec3): number {
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 export class CollisionParts {
     public validated: boolean = false;
     public hostMtx: mat4 | null = null;
@@ -101,7 +102,7 @@ export class CollisionParts {
     public notMovedCounter = 0;
 
     private collisionZone: CollisionZone;
-    private checkArrowResult = new CheckArrowResult();
+    private checkCollisionResult = new CheckCollideResult();
 
     private scale = 0.0;
     public boundingSphereRadius: number = 0.0;
@@ -243,12 +244,12 @@ export class CollisionParts {
     public checkStrikeLine(hitInfo: HitInfo[], dstIdx: number, p0: vec3, pDir: vec3, triFilter: TriangleFilterBase | null): number {
         transformVec3Mat4w1(scratchVec3a, this.invWorldMtx, p0);
         transformVec3Mat4w0(scratchVec3b, this.invWorldMtx, pDir);
-        this.checkArrowResult.reset();
-        this.collisionServer.checkArrow(this.checkArrowResult, hitInfo.length, scratchVec3a, scratchVec3b);
+        this.checkCollisionResult.reset();
+        this.collisionServer.checkArrow(this.checkCollisionResult, hitInfo.length, scratchVec3a, scratchVec3b);
 
-        const dstIdxStart: number = dstIdx;
+        const dstIdxStart = dstIdx;
         for (let i = 0; i < hitInfo.length; i++) {
-            const prism = this.checkArrowResult.prisms[i];
+            const prism = this.checkCollisionResult.prisms[i];
             if (prism === null)
                 break;
 
@@ -257,13 +258,112 @@ export class CollisionParts {
             if (triFilter !== null && triFilter.isInvalidTriangle(hitInfo[dstIdx]))
                 continue;
 
-            const dist = this.checkArrowResult.distances[i]!;
+            const dist = this.checkCollisionResult.distances[i]!;
             vec3.scaleAndAdd(hitInfo[dstIdx].strikeLoc, scratchVec3a, scratchVec3b, dist);
             transformVec3Mat4w1(hitInfo[dstIdx].strikeLoc, this.worldMtx, hitInfo[dstIdx].strikeLoc);
             hitInfo[dstIdx].distance = dist;
             dstIdx++;
         }
         return dstIdx - dstIdxStart;
+    }
+
+    private projectToPlane(dst: vec3, pos: vec3, planePos: vec3, normal: vec3): void {
+        // Put in plane space.
+        vec3.sub(dst, pos, planePos);
+        vec3.scaleAndAdd(dst, pos, normal, vec3.dot(dst, normal));
+    }
+
+    private calcCollidePosition(dst: vec3, prism: KC_PrismData, classification: number): void {
+        assert(classification > 0);
+
+        if (classification === 1) {
+            this.collisionServer.getFaceNormal(scratchVec3a, prism);
+            this.collisionServer.getPos(scratchVec3b, prism, 0);
+            this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
+        } else if (classification === 2) {
+            this.collisionServer.getFaceNormal(scratchVec3a, prism);
+            this.collisionServer.getPos(scratchVec3b, prism, 0);
+            this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
+
+            this.collisionServer.getEdgeNormal1(scratchVec3a, prism);
+            // this.collisionServer.getPos(scratchVec3b, prism, 0);
+            this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
+        } else if (classification === 3) {
+            this.collisionServer.getFaceNormal(scratchVec3a, prism);
+            this.collisionServer.getPos(scratchVec3b, prism, 0);
+            this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
+
+            this.collisionServer.getEdgeNormal2(scratchVec3a, prism);
+            // this.collisionServer.getPos(scratchVec3b, prism, 0);
+            this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
+        } else if (classification === 4) {
+            this.collisionServer.getFaceNormal(scratchVec3a, prism);
+            this.collisionServer.getPos(scratchVec3b, prism, 0);
+            this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
+
+            this.collisionServer.getEdgeNormal2(scratchVec3a, prism);
+            this.collisionServer.getPos(scratchVec3b, prism, 1);
+            this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
+        } else if (classification === 5) {
+            this.collisionServer.getPos(dst, prism, 0);
+        } else if (classification === 6) {
+            this.collisionServer.getPos(dst, prism, 1);
+        } else if (classification === 7) {
+            this.collisionServer.getPos(dst, prism, 2);
+        } else {
+            throw "whoops";
+        }
+    }
+
+    private checkStrikeBallCore(hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, p1: ReadonlyVec3, radius: number, invAvgScale: number, avgScale: number, triFilter: TriangleFilterBase | null, normalFilter: vec3 | null): number {
+        // Copy the positions before we run checkSphere, as pos is scratchVec3a, and we're going to stomp on it below.
+        for (let i = dstIdx; i < hitInfo.length; i++)
+            vec3.copy(hitInfo[i].strikeLoc, pos);
+        this.checkCollisionResult.reset();
+        this.collisionServer.checkSphere(this.checkCollisionResult, hitInfo.length, pos, radius, invAvgScale);
+
+        const dstIdxStart = dstIdx;
+        for (let i = 0; i < hitInfo.length; i++) {
+            const prism = this.checkCollisionResult.prisms[i];
+            if (prism === null)
+                break;
+
+            this.calcCollidePosition(hitInfo[dstIdx].strikeLoc, prism, this.checkCollisionResult.classifications[i]);
+            transformVec3Mat4w1(hitInfo[dstIdx].strikeLoc, this.worldMtx, hitInfo[dstIdx].strikeLoc);
+
+            const prismIdx = this.collisionServer.toIndex(prism);
+            hitInfo[dstIdx].fillData(this, prismIdx, this.hitSensor);
+            if (triFilter !== null && triFilter.isInvalidTriangle(hitInfo[dstIdx]))
+                continue;
+            if (normalFilter !== null && vec3.dot(normalFilter, hitInfo[dstIdx].faceNormal) > 0.0)
+                continue;
+
+            const dist = this.checkCollisionResult.distances[i]!;
+            hitInfo[dstIdx].distance = dist;
+            dstIdx++;
+        }
+        return dstIdx - dstIdxStart;
+    }
+
+    public checkStrikeBall(hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, radius: number, movingReaction: boolean, triFilter: TriangleFilterBase | null): number {
+        transformVec3Mat4w1(scratchVec3a, this.invWorldMtx, pos);
+        mat4.getScaling(scratchVec3b, this.invWorldMtx);
+        const invAvgScale = getAvgScale(scratchVec3b);
+        const avgScale = 1.0 / invAvgScale;
+        const scaledRadius = invAvgScale * radius;
+
+        if (!movingReaction || this.notMovedCounter === 0) {
+            return this.checkStrikeBallCore(hitInfo, dstIdx, scratchVec3a, Vec3Zero, scaledRadius, invAvgScale, avgScale, triFilter, null);
+        } else {
+            throw "whoops";
+        }
+    }
+
+    public calcForceMovePower(dst: vec3, pos: ReadonlyVec3): void {
+        mat4.invert(scratchMatrix, this.oldWorldMtx);
+        transformVec3Mat4w1(dst, scratchMatrix, pos);
+        transformVec3Mat4w1(dst, this.worldMtx, pos);
+        vec3.sub(dst, dst, pos);
     }
 }
 
@@ -448,11 +548,7 @@ class CollisionCategorizedKeeper {
         this.removeFromZone(parts, 0);
     }
 
-    public getStrikeInfo(idx: number): HitInfo {
-        return this.strikeInfo[idx];
-    }
-
-    public checkStrikeLine(p0: vec3, dir: vec3, partsFilter: CollisionPartsFilterBase | null, triFilter: TriangleFilterBase | null, maxStrikeInfos: number = this.strikeInfo.length): number {
+    public checkStrikeLine(p0: vec3, dir: vec3, partsFilter: CollisionPartsFilterBase | null, triFilter: TriangleFilterBase | null): number {
         let idx = 0;
 
         scratchAABB.reset();
@@ -498,6 +594,56 @@ class CollisionCategorizedKeeper {
         return idx;
     }
 
+    public checkStrikeBall(pos: vec3, radius: number, movingReaction: boolean, partsFilter: CollisionPartsFilterBase | null, triFilter: TriangleFilterBase | null): number {
+        let idx = 0;
+
+        outer:
+        for (let i = 0; i < this.zones.length; i++) {
+            const zone = this.zones[i];
+            if (zone === undefined)
+                continue;
+
+            if (zone.boundingAABB !== null) {
+                // Sphere/AABB intersection.
+                if (!zone.boundingAABB.containsSphere(pos, radius))
+                    continue;
+
+                // Sphere/Sphere intersection.
+                if (vec3.squaredDistance(pos, zone.boundingSphereCenter!) > ((radius + zone.boundingSphereRadius!) ** 2))
+                    continue;
+            }
+
+            for (let j = 0; j < zone.parts.length; j++) {
+                const parts = zone.parts[j];
+                if (!parts.validated)
+                    continue;
+                if (partsFilter !== null && partsFilter.isInvalidParts(parts))
+                    continue;
+
+                // Crude Sphere/Box intersection.
+                const combinedRadius = radius + parts.boundingSphereRadius;
+                parts.getTrans(scratchVec3a);
+                if (Math.abs(scratchVec3a[0] - pos[0]) > combinedRadius)
+                    continue;
+                if (Math.abs(scratchVec3a[1] - pos[1]) > combinedRadius)
+                    continue;
+                if (Math.abs(scratchVec3a[2] - pos[2]) > combinedRadius)
+                    continue;
+
+                // Sphere/Sphere intersection.
+                if (vec3.squaredDistance(scratchVec3a, pos) > combinedRadius ** 2)
+                    continue;
+
+                idx += parts.checkStrikeBall(this.strikeInfo, idx, pos, radius, movingReaction, triFilter);
+                if (idx >= this.strikeInfo.length)
+                    break outer;
+            }
+        }
+
+        this.strikeInfoCount = idx;
+        return idx;
+    }
+
     public getZone(zoneId: number): CollisionZone {
         if (this.zones[zoneId] === undefined)
             this.zones[zoneId] = new CollisionZone(zoneId);
@@ -528,6 +674,11 @@ export class CollisionDirector extends NameObj {
 
 function isFloorPolygonAngle(v: number): boolean {
     // 70 degrees -- Math.cos(70*Math.PI/180)
+    return v < -0.3420201433256688;
+}
+
+function isWallPolygonAngle(v: number): boolean {
+    // 70 degrees -- Math.cos(70*Math.PI/180)
     return Math.abs(v) < 0.3420201433256688;
 }
 
@@ -535,27 +686,44 @@ function isFloorPolygon(normal: vec3, gravityVector: vec3): boolean {
     return isNearZeroVec3(normal, 0.001) && isFloorPolygonAngle(vec3.dot(normal, gravityVector));
 }
 
-const scratchVec3c = vec3.create();
-const hitInfoScratch = nArray(0x20, () => new HitInfo());
+function isWallPolygon(normal: vec3, gravityVector: vec3): boolean {
+    return isNearZeroVec3(normal, 0.001) && isWallPolygonAngle(vec3.dot(normal, gravityVector));
+}
+
+const enum BinderFindBindedPositionRet {
+    NoCollide, Collide, MoveAlongHittedPlanes,
+}
+
+function isHostMoved(hitInfo: HitInfo): boolean {
+    return hitInfo.collisionParts!.notMovedCounter === 0;
+}
+
 export class Binder {
+    public partsFilter: CollisionPartsFilterBase | null = null;
     public triangleFilter: TriangleFilterBase | null = null;
     private exCollisionParts: CollisionParts | null = null;
     private exCollisionPartsValid: boolean = false;
     private hitInfos: HitInfo[];
     private hitInfoCount: number;
-    private floorHitDist: number;
-    private wallHitDist: number;
-    private roofHitDist: number;
+    private floorHitInfo = new HitInfo();
+    private wallHitInfo = new HitInfo();
+    private ceilingHitInfo = new HitInfo();
+
     private useHostBaseMtx: boolean = false;
 
-    public hostOffsetVec: vec3 | null = null;
+    public expandDistance: boolean = false;
+    public useMovingReaction: boolean = false;
+    public moveWithCollision: boolean = false;
 
-    constructor(private hostBaseMtx: mat4 | null, private hostTranslation: vec3, private hostGravity: vec3, private hostCenterY: number, private radius: number, private hitInfoCapacity: number) {
+    public hostOffsetVec: vec3 | null = null;
+    public fixReactionVec = vec3.create();
+
+    constructor(private hostBaseMtx: mat4 | null, private hostTranslation: vec3, private hostGravity: vec3, private hostCenterY: number, private radius: number, hitInfoCapacity: number) {
         this.hitInfos = nArray(hitInfoCapacity, () => new HitInfo());
         this.clear();
     }
 
-    public bind(dst: vec3, sceneObjHolder: SceneObjHolder, velocity: vec3): void {
+    public bind(sceneObjHolder: SceneObjHolder, dst: vec3, vel: vec3): void {
         if (this.exCollisionPartsValid)
             sceneObjHolder.collisionDirector!.keepers[Category.Map].addToGlobal(assertExists(this.exCollisionParts));
 
@@ -569,20 +737,163 @@ export class Binder {
 
         vec3.add(scratchVec3c, this.hostTranslation, scratchVec3c);
 
-        // this.findBindedPos(scratchVec3c, velocity, )
+        const origPosX = scratchVec3c[0];
+        const origPosY = scratchVec3c[1];
+        const origPosZ = scratchVec3c[2];
+
+        let ret = this.findBindedPos(sceneObjHolder, scratchVec3c, vel, this.expandDistance, false);
+        if (ret === BinderFindBindedPositionRet.NoCollide) {
+            vec3.copy(dst, vel);
+        } else {
+            this.obtainMomentFixReaction(this.fixReactionVec);
+            vec3.add(scratchVec3c, scratchVec3c, this.fixReactionVec);
+
+            while (!this.expandDistance && ret === BinderFindBindedPositionRet.MoveAlongHittedPlanes) {
+                // TODO(jstpierre): moveAlongHittedPlanes
+                break;
+            }
+
+            this.storeContactPlane();
+
+            if (this.moveWithCollision)
+                this.moveWithCollisionParts(scratchVec3c, vel);
+
+            dst[0] = scratchVec3c[0] - origPosX;
+            dst[1] = scratchVec3c[1] - origPosY;
+            dst[2] = scratchVec3c[2] - origPosZ;
+        }
 
         if (this.exCollisionPartsValid)
             sceneObjHolder.collisionDirector!.keepers[Category.Map].removeFromGlobal(assertExists(this.exCollisionParts));
     }
 
-    public findBindedPos(pos: vec3, vel: vec3): void {
+    private findBindedPos(sceneObjHolder: SceneObjHolder, pos: vec3, vel: vec3, skipInitialPosition: boolean, expandDistance: boolean): BinderFindBindedPositionRet {
+        const keeper = sceneObjHolder.collisionDirector!.keepers[Category.Map];
+
+        const speed = vec3.length(vel);
+        const numSteps = ((speed / 35.0) | 0) + 1;
+
+        for (let i = 0; i <= numSteps; i++) {
+            if (i === 0) {
+                // TODO(jstpierre): 0x10 flag
+                if (skipInitialPosition)
+                    continue;
+            }
+
+            const hitCount = keeper.checkStrikeBall(pos, this.radius, this.useMovingReaction, this.partsFilter, this.triangleFilter);
+            if (hitCount !== 0) {
+                // Hit something. We can stop searching.
+
+                vec3.scale(vel, vel, i / numSteps);
+                this.storeCurrentHitInfo(keeper, expandDistance);
+
+                if (i < numSteps)
+                    return BinderFindBindedPositionRet.MoveAlongHittedPlanes;
+                else
+                    return BinderFindBindedPositionRet.Collide;
+            }
+
+            vec3.scaleAndAdd(pos, pos, vel, 1.0 / numSteps);
+        }
+
+        // Never hit anything.
+        return BinderFindBindedPositionRet.NoCollide;
+    }
+
+    private storeCurrentHitInfo(keeper: CollisionCategorizedKeeper, expandDistance: boolean): void {
+        for (let i = 0; i < keeper.strikeInfoCount; i++) {
+            if (this.hitInfoCount + i >= this.hitInfos.length) {
+                this.hitInfoCount = this.hitInfos.length;
+                return;
+            }
+
+            const dstHitInfo = this.hitInfos[this.hitInfoCount + i];
+            dstHitInfo.copy(keeper.strikeInfo[i]);
+
+            if (expandDistance)
+                dstHitInfo.distance += 1.2;
+        }
+
+        this.hitInfoCount += keeper.strikeInfoCount;
+    }
+
+    private obtainMomentFixReaction(dst: vec3, start: number = 0): void {
+        let minX = 0, minY = 0, minZ = 0;
+        let maxX = 0, maxY = 0, maxZ = 0;
+
+        for (let i = start; i < this.hitInfoCount; i++) {
+            const hitInfo = this.hitInfos[i];
+
+            const x = hitInfo.faceNormal[0] * hitInfo.distance;
+            const y = hitInfo.faceNormal[1] * hitInfo.distance;
+            const z = hitInfo.faceNormal[2] * hitInfo.distance;
+
+            minX = Math.max(x, minX);
+            minY = Math.max(y, minY);
+            minZ = Math.max(z, minZ);
+
+            maxX = Math.min(x, maxX);
+            maxY = Math.min(y, maxY);
+            maxZ = Math.min(z, maxZ);
+
+            if (this.useMovingReaction) {
+                // add on "asdf2" field.
+                throw "whoops";
+            }
+        }
+
+        dst[0] = minX + maxX;
+        dst[1] = minY + maxY;
+        dst[2] = minZ + maxZ;
+    }
+
+    private moveAlongHittedPlanes(sceneObjHolder: SceneObjHolder, dstVel: vec3, pos: vec3, moveVel: vec3, origVel: vec3, fixReactionVector: vec3): BinderFindBindedPositionRet {
+        vec3.normalize(scratchVec3a, fixReactionVector);
+        if (vec3.dot(moveVel, scratchVec3a) > 0.0)
+            vecKillElement(moveVel, moveVel, scratchVec3a);
+
+        if (vec3.dot(moveVel, origVel) >= 0.0) {
+            const ret = this.findBindedPos(sceneObjHolder, pos, moveVel, true, false);
+            vec3.add(dstVel, dstVel, moveVel);
+            return ret;
+        } else {
+            return BinderFindBindedPositionRet.Collide;
+        }
+    }
+
+    private moveWithCollisionParts(dstPos: vec3, dstVel: vec3): void {
+        if (this.floorHitInfo.distance <= 0.0)
+            return;
+        if (!isHostMoved(this.floorHitInfo))
+            return;
+
+        this.floorHitInfo.collisionParts!.calcForceMovePower(scratchVec3a, dstPos);
+        vec3.add(dstPos, dstPos, scratchVec3a);
+        vec3.add(dstVel, dstVel, scratchVec3a);
+    }
+
+    private storeContactPlane(): void {
+        for (let i = 0; i < this.hitInfoCount; i++) {
+            const hitInfo = this.hitInfos[i];
+
+            if (isFloorPolygon(hitInfo.faceNormal, this.hostGravity)) {
+                if (hitInfo.distance > this.floorHitInfo.distance)
+                    this.floorHitInfo.copy(hitInfo);
+            } else if (isWallPolygon(hitInfo.faceNormal, this.hostGravity)) {
+                if (hitInfo.distance > this.wallHitInfo.distance)
+                    this.wallHitInfo.copy(hitInfo);
+            } else {
+                if (hitInfo.distance > this.ceilingHitInfo.distance)
+                    this.ceilingHitInfo.copy(hitInfo);
+            }
+        }
     }
 
     public clear(): void {
         this.hitInfoCount = 0;
-        this.floorHitDist = -99999.0;
-        this.wallHitDist = -99999.0;
-        this.roofHitDist = -99999.0;
+        this.floorHitInfo.distance = -99999.0;
+        this.wallHitInfo.distance = -99999.0;
+        this.ceilingHitInfo.distance = -99999.0;
     }
 
     public setTriangleFilter(filter: TriangleFilterBase): void {
@@ -607,7 +918,7 @@ export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: 
 
     let bestDist = Infinity, bestIdx = -1;
     for (let i = 0; i < count; i++) {
-        const strikeInfo = keeper.getStrikeInfo(i);
+        const strikeInfo = keeper.strikeInfo[i];
         if (triFilter !== null && triFilter.isInvalidTriangle(strikeInfo))
             continue;
         if (strikeInfo.distance < bestDist) {
@@ -617,7 +928,7 @@ export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: 
     }
 
     assert(bestIdx >= 0);
-    const bestStrike = keeper.getStrikeInfo(bestIdx);
+    const bestStrike = keeper.strikeInfo[bestIdx];
 
     if (dst !== null)
         vec3.copy(dst, bestStrike.strikeLoc);
@@ -682,7 +993,7 @@ export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder
         initialHostMtx = scratchMatrix;
     }
 
-    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, name, hitSensor, scratchMatrix, scaleType, Category.Map);
+    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, name, hitSensor, initialHostMtx, scaleType, Category.Map);
 
     if (hostMtx !== null)
         parts.hostMtx = hostMtx;

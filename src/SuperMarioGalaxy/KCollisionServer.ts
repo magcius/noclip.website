@@ -1,26 +1,24 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { vec3 } from "gl-matrix";
+import { vec3, ReadonlyVec3 } from "gl-matrix";
 import { assertExists, nArray } from "../util";
-import { isNearZero } from "../MathHelpers";
+import { isNearZero, Vec3One } from "../MathHelpers";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { isSameDirection } from "./ActorUtil";
 
 export class KC_PrismData {
     public length: number = 0.0;
-    public posIdx: number = 0;
-    public faceNrmIdx: number = 0;
-    public edge0NrmIdx: number = 0;
-    public edge1NrmIdx: number = 0;
-    public edge2NrmIdx: number = 0;
+    public positionIdx: number = 0;
+    public faceNormalIdx: number = 0;
+    public edgeNormal1Idx: number = 0;
+    public edgeNormal2Idx: number = 0;
+    public edgeNormal3Idx: number = 0;
     public attrib: number = 0;
 }
 
 class KC_PrismHit {
-    // Galaxy effectively never uses this.
-    // public classification: number = -1;
-
-    public dist: number = -1;
+    public distance: number = -1;
+    public classification: number = 0;
 }
 
 const scratchVec3a = vec3.create();
@@ -33,18 +31,21 @@ class SearchBlockResult {
     public shiftR: number = -1;
 }
 
-export class CheckArrowResult {
+export class CheckCollideResult {
     // Galaxy effectively never uses this.
     // public bestPrism: KC_PrismData | null = null;
 
     public prisms: (KC_PrismData | null)[] = nArray(32, () => null);
     public distances: number[] = nArray(32, () => -1);
+    public classifications: number[] = nArray(32, () => 0);
 
     public reset(): void {
         for (let i = 0; i < this.prisms.length; i++)
             this.prisms[i] = null;
         for (let i = 0; i < this.distances.length; i++)
             this.distances[i] = -1;
+        for (let i = 0; i < this.classifications.length; i++)
+            this.classifications[i] = 0;
     }
 }
 
@@ -87,11 +88,11 @@ export class KCollisionServer {
         for (let offs = prismsOffs + 0x10; offs < this.blocksOffs; offs += 0x10) {
             const prism = new KC_PrismData();
             prism.length = this.view.getFloat32(offs + 0x00);
-            prism.posIdx = this.view.getUint16(offs + 0x04);
-            prism.faceNrmIdx = this.view.getUint16(offs + 0x06);
-            prism.edge0NrmIdx = this.view.getUint16(offs + 0x08);
-            prism.edge1NrmIdx = this.view.getUint16(offs + 0x0A);
-            prism.edge2NrmIdx = this.view.getUint16(offs + 0x0C);
+            prism.positionIdx = this.view.getUint16(offs + 0x04);
+            prism.faceNormalIdx = this.view.getUint16(offs + 0x06);
+            prism.edgeNormal1Idx = this.view.getUint16(offs + 0x08);
+            prism.edgeNormal2Idx = this.view.getUint16(offs + 0x0A);
+            prism.edgeNormal3Idx = this.view.getUint16(offs + 0x0C);
             prism.attrib = this.view.getUint16(offs + 0x0E);
             this.prisms.push(prism);
         }
@@ -160,38 +161,38 @@ export class KCollisionServer {
     }
 
     public getFaceNormal(dst: vec3, prism: KC_PrismData): void {
-        this.loadNormal(dst, prism.faceNrmIdx);
+        this.loadNormal(dst, prism.faceNormalIdx);
     }
 
     public getEdgeNormal1(dst: vec3, prism: KC_PrismData): void {
-        this.loadNormal(dst, prism.edge0NrmIdx);
+        this.loadNormal(dst, prism.edgeNormal1Idx);
     }
 
     public getEdgeNormal2(dst: vec3, prism: KC_PrismData): void {
-        this.loadNormal(dst, prism.edge1NrmIdx);
+        this.loadNormal(dst, prism.edgeNormal2Idx);
     }
 
     public getEdgeNormal3(dst: vec3, prism: KC_PrismData): void {
-        this.loadNormal(dst, prism.edge2NrmIdx);
+        this.loadNormal(dst, prism.edgeNormal3Idx);
     }
 
     public getPos(dst: vec3, prism: KC_PrismData, which: number): void {
         if (which === 0) {
-            this.loadPosition(dst, prism.posIdx);
+            this.loadPosition(dst, prism.positionIdx);
         } else {
             if (which === 1) {
-                this.loadNormal(scratchVec3a, prism.edge1NrmIdx);
-                this.loadNormal(scratchVec3b, prism.faceNrmIdx);
+                this.loadNormal(scratchVec3a, prism.edgeNormal2Idx);
+                this.loadNormal(scratchVec3b, prism.faceNormalIdx);
             } else if (which === 2) {
-                this.loadNormal(scratchVec3a, prism.faceNrmIdx);
-                this.loadNormal(scratchVec3b, prism.edge0NrmIdx);
+                this.loadNormal(scratchVec3a, prism.faceNormalIdx);
+                this.loadNormal(scratchVec3b, prism.edgeNormal1Idx);
             }
             vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
 
-            this.loadNormal(scratchVec3b, prism.edge2NrmIdx);
+            this.loadNormal(scratchVec3b, prism.edgeNormal3Idx);
             const dist = prism.length / vec3.dot(scratchVec3a, scratchVec3b);
 
-            this.loadPosition(scratchVec3b, prism.posIdx);
+            this.loadPosition(scratchVec3b, prism.positionIdx);
             vec3.scaleAndAdd(dst, scratchVec3b, scratchVec3a, dist);
         }
     }
@@ -218,7 +219,7 @@ export class KCollisionServer {
             return null;
     }
 
-    public checkPoint(dst: KC_PrismHit, v: vec3, maxDist: number): boolean {
+    public checkPoint(dst: KC_PrismHit, v: ReadonlyVec3, maxDist: number): boolean {
         maxDist *= this.maxDistMul;
 
         const x = (v[0] - this.blocksTrans[0]) | 0;
@@ -243,44 +244,59 @@ export class KCollisionServer {
                 continue;
             }
 
-            this.loadPosition(scratchVec3a, prism.posIdx);
+            this.loadPosition(scratchVec3a, prism.positionIdx);
 
             // Local position.
             vec3.sub(scratchVec3a, v, scratchVec3a);
 
-            this.loadNormal(scratchVec3b, prism.edge0NrmIdx);
+            this.loadNormal(scratchVec3b, prism.edgeNormal1Idx);
             if (vec3.dot(scratchVec3a, scratchVec3b) < 0)
                 continue;
 
-            this.loadNormal(scratchVec3b, prism.edge1NrmIdx);
+            this.loadNormal(scratchVec3b, prism.edgeNormal2Idx);
             if (vec3.dot(scratchVec3a, scratchVec3b) < 0)
                 continue;
 
-            this.loadNormal(scratchVec3b, prism.edge2NrmIdx);
+            this.loadNormal(scratchVec3b, prism.edgeNormal3Idx);
             if (vec3.dot(scratchVec3a, scratchVec3b) < prism.length)
                 continue;
 
-            this.loadNormal(scratchVec3b, prism.faceNrmIdx);
+            this.loadNormal(scratchVec3b, prism.faceNormalIdx);
             const dist = -vec3.dot(scratchVec3b, v);
             if (dist < 0.0 || dist > maxDist)
                 continue;
 
             // Passed all the checks.
-            dst.dist = dist;
+            dst.distance = dist;
             return true;
         }
     }
 
-    private isInsideMinMaxInLocalSpace(v: vec3): boolean {
+    private isInsideMinMaxInLocalSpace(v: ReadonlyVec3): boolean {
         const x = (v[0] | 0), y = (v[1] | 0), z = (v[2] | 0);
         return (x & this.maskX) === 0 && (y & this.maskY) === 0 && (z & this.maskZ) === 0;
     }
 
-    private KCHitArrow(dst: KC_PrismHit, prism: KC_PrismData, origin: vec3, arrowDir: vec3): boolean {
-        this.loadNormal(scratchVec3c, prism.faceNrmIdx);
+    private outCheck(min: vec3, max: vec3): boolean {
+        min[0] = Math.max(min[0], 0);
+        min[1] = Math.max(min[1], 0);
+        min[2] = Math.max(min[2], 0);
+        max[0] = Math.min(max[0], (~this.maskX) >>> 0);
+        max[1] = Math.min(max[1], (~this.maskY) >>> 0);
+        max[2] = Math.min(max[2], (~this.maskZ) >>> 0);
+
+        // Make sure the box is not empty.
+        if (min[0] > max[0] || min[1] > max[1] || min[2] > max[2])
+            return false;
+
+        return true;
+    }
+
+    private KCHitArrow(dst: KC_PrismHit, prism: KC_PrismData, origin: ReadonlyVec3, arrowDir: ReadonlyVec3): boolean {
+        this.loadNormal(scratchVec3c, prism.faceNormalIdx);
 
         // Local space.
-        this.loadPosition(scratchVec3d, prism.posIdx);
+        this.loadPosition(scratchVec3d, prism.positionIdx);
         vec3.sub(scratchVec3d, origin, scratchVec3d);
 
         const proj = vec3.dot(scratchVec3c, scratchVec3d);
@@ -294,36 +310,70 @@ export class KCollisionServer {
         const dist = proj / -projDir;
         vec3.scaleAndAdd(scratchVec3c, scratchVec3d, arrowDir, dist);
 
-        this.loadNormal(scratchVec3d, prism.edge0NrmIdx);
-        const dotNrm0 = vec3.dot(scratchVec3c, scratchVec3d);
-        if (dotNrm0 >= 0.01)
-            return false;
-
-        this.loadNormal(scratchVec3d, prism.edge1NrmIdx);
+        this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
         const dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
         if (dotNrm1 >= 0.01)
             return false;
 
-        this.loadNormal(scratchVec3d, prism.edge2NrmIdx);
+        this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
         const dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
-        if (dotNrm2 >= 0.01 + prism.length)
+        if (dotNrm2 >= 0.01)
             return false;
 
-        // TODO(jstpierre): Classification.
+        this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
+        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d);
+        if (dotNrm3 >= 0.01 + prism.length)
+            return false;
 
-        dst.dist = dist;
+        dst.distance = dist;
+        // TODO(jstpierre): Classification. I think this is unused in Arrow collision, though.
+
         return true;
     }
 
-    public checkArrow(dst: CheckArrowResult, maxResults: number, origin: vec3, arrowDir: vec3): boolean {
+    private KCHitSphere(dst: KC_PrismHit, prism: KC_PrismData, pos: ReadonlyVec3, radius: number, invAvgScale: number): boolean {
+        const sqRadius = radius**2;
+
+        // Local space.
+        this.loadPosition(scratchVec3d, prism.positionIdx);
+        vec3.sub(scratchVec3d, pos, scratchVec3d);
+
+        this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
+        const dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
+        if (dotNrm1 >= radius)
+            return false;
+
+        this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
+        const dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
+        if (dotNrm2 >= radius)
+            return false;
+
+        this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
+        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.length;
+        if (dotNrm3 >= radius)
+            return false;
+
+        this.loadNormal(scratchVec3c, prism.faceNormalIdx);
+        const dist = radius - vec3.dot(scratchVec3c, scratchVec3d);
+        if (dist < 0.0)
+            return false;
+
+        const maxDist = this.maxDistMul * invAvgScale;
+        if (dist > maxDist)
+            return false;
+
+        // TODO(jstpierre): Classification.
+        dst.classification = 1;
+        dst.distance = dist;
+        return true;
+    }
+
+    public checkArrow(dst: CheckCollideResult, maxResults: number, origin: ReadonlyVec3, arrowDir: ReadonlyVec3): boolean {
         const blkArrowDir = vec3.copy(scratchVec3a, arrowDir);
-        const blkOrigin = vec3.copy(scratchVec3b, origin);
+        const blkOrigin = vec3.sub(scratchVec3b, origin, this.blocksTrans);
 
         let arrowLength = vec3.length(blkArrowDir);
         vec3.normalize(blkArrowDir, blkArrowDir);
-
-        // Put in local space.
-        vec3.sub(blkOrigin, blkOrigin, this.blocksTrans);
 
         // Origin is outside, test if the arrow goes inside...
         if (!this.isInsideMinMaxInLocalSpace(blkOrigin) && blkArrowDir[0] !== 0.0) {
@@ -368,12 +418,11 @@ export class KCollisionServer {
             if (!this.isInsideMinMaxInLocalSpace(blkOrigin))
                 return false;
 
-            let x = (blkOrigin[0] | 0), y = (blkOrigin[1] | 0), z = (blkOrigin[2] | 0);
-
+            const x = (blkOrigin[0] | 0), y = (blkOrigin[1] | 0), z = (blkOrigin[2] | 0);
             this.searchBlock(searchBlockScratch, x, y, z);
             let prismListIdx = searchBlockScratch.prismListOffs;
 
-            let bestDist = 1.0;
+            // let bestDist = 1.0;
             while (true) {
                 prismListIdx += 0x02;
 
@@ -381,23 +430,27 @@ export class KCollisionServer {
                 if (prism === null)
                     break;
 
-                if (this.KCHitArrow(prismHitScratch, prism, origin, arrowDir)) {
-                    if (prismHitScratch.dist < bestDist) {
-                        bestDist = prismHitScratch.dist;
-                        // dst.bestPrism = prism;
-                        // dst.classification = prismHitScratch.classification;
-                    }
+                if (dst.prisms.indexOf(prism) >= 0)
+                    continue;
 
-                    if (dst.prisms !== null) {
-                        dst.distances[dstPrismCount] = prismHitScratch.dist;
-                        dst.prisms[dstPrismCount] = prism;
-                        dstPrismCount++;
+                if (!this.KCHitArrow(prismHitScratch, prism, origin, arrowDir))
+                    continue;
 
-                        if (dstPrismCount >= maxResults) {
-                            // We've filled in all the prisms. We're done.
-                            return true;
-                        }
-                    }
+                /*
+                if (prismHitScratch.dist < bestDist) {
+                    bestDist = prismHitScratch.dist;
+                    dst.bestPrism = prism;
+                    dst.classification = prismHitScratch.classification;
+                }
+                */
+
+                dst.prisms[dstPrismCount] = prism;
+                dst.distances[dstPrismCount] = prismHitScratch.distance;
+                dstPrismCount++;
+
+                if (dstPrismCount >= maxResults) {
+                    // We've filled in all the prisms. We're done.
+                    return true;
                 }
             }
 
@@ -453,6 +506,69 @@ export class KCollisionServer {
                 arrowLength -= minLength;
             }
         }
+    }
+
+    public checkSphere(dst: CheckCollideResult, maxResults: number, pos: ReadonlyVec3, radius: number, invAvgScale: number): boolean {
+        // Put in local space.
+        vec3.sub(scratchVec3a, pos, this.blocksTrans);
+
+        // Compute local AABB coordinates of our required search.
+        const blkMin = vec3.scaleAndAdd(scratchVec3b, scratchVec3a, Vec3One, -radius);
+        const blkMax = vec3.scaleAndAdd(scratchVec3a, scratchVec3a, Vec3One, +radius);
+
+        // Clip to AABB coordinates.
+        if (!this.outCheck(blkMin, blkMax))
+            return false;
+
+        let dstPrismCount = 0;
+
+        let advanceZ = 1000000, advanceY = 1000000;
+        while (blkMin[2] < blkMax[2]) {
+            while (blkMin[1] < blkMax[1]) {
+                while (blkMin[0] < blkMax[0]) {
+                    const x = (blkMin[0] | 0), y = (blkMin[1] | 0), z = (blkMin[2] | 0);
+                    this.searchBlock(searchBlockScratch, x, y, z);
+
+                    const bit = (1 << searchBlockScratch.shiftR);
+                    const mask = bit - 1;
+
+                    const advanceX = bit - (x & mask);
+                    advanceY = Math.min(advanceY, bit - (y & mask));
+                    advanceZ = Math.min(advanceZ, bit - (z & mask));
+
+                    let prismListIdx = searchBlockScratch.prismListOffs;
+                    while (true) {
+                        prismListIdx += 0x02;
+        
+                        const prism = this.loadPrismListIdx(prismListIdx);
+                        if (prism === null)
+                            break;
+
+                        if (prism.length < 0.0 || dst.prisms.indexOf(prism) >= 0)
+                            continue;
+
+                        if (!this.KCHitSphere(prismHitScratch, prism, pos, radius, invAvgScale))
+                            continue;
+        
+                        dst.prisms[dstPrismCount] = prism;
+                        dst.distances[dstPrismCount] = prismHitScratch.distance;
+                        dst.classifications[dstPrismCount] = prismHitScratch.classification;
+                        dstPrismCount++;
+
+                        if (dstPrismCount >= maxResults) {
+                            // We've filled in all the prisms. We're done.
+                            return true;
+                        }
+                    }
+
+                    blkMin[0] += advanceX;
+                }
+                blkMin[1] += advanceY;
+            }
+            blkMin[2] += advanceZ;
+        }
+
+        return dstPrismCount > 0;
     }
 
     private searchBlock(dst: SearchBlockResult, x: number, y: number, z: number): void {
