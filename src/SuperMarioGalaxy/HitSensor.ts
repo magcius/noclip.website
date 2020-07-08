@@ -25,7 +25,7 @@ export class HitSensor {
     public pairwiseSensors: HitSensor[] = [];
     public group: SensorGroup;
     public sensorValidBySystem: boolean = false;
-    public sensorValidByHost: boolean = false;
+    public sensorValidByHost: boolean = true;
 
     constructor(sceneObjHolder: SceneObjHolder, public sensorType: HitSensorType, pairwiseCapacity: number, public radius: number, public actor: LiveActor) {
         initHitSensorGroup(sceneObjHolder, this);
