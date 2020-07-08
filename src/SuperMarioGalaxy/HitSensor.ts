@@ -24,7 +24,8 @@ export class HitSensor {
     public center = vec3.create();
     public pairwiseSensors: HitSensor[] = [];
     public group: SensorGroup;
-    public sensorValid: boolean = false;
+    public sensorValidBySystem: boolean = false;
+    public sensorValidByHost: boolean = false;
 
     constructor(sceneObjHolder: SceneObjHolder, public sensorType: HitSensorType, pairwiseCapacity: number, public radius: number, public actor: LiveActor) {
         initHitSensorGroup(sceneObjHolder, this);
@@ -38,17 +39,37 @@ export class HitSensor {
         this.pairwiseSensors.push(other);
     }
 
-    public invalidateBySystem(): void {
-        if (this.sensorValid) {
-            arrayRemove(this.group, this);
-            this.sensorValid = false;
+    public validate(): void {
+        if (!this.sensorValidBySystem) {
+            if (this.sensorValidByHost)
+                this.group.push(this);
+            this.sensorValidBySystem = true;
+        }
+    }
+
+    public invalidate(): void {
+        if (this.sensorValidByHost) {
+            if (this.sensorValidBySystem)
+                arrayRemove(this.group, this);
+            this.sensorValidByHost = false;
+            this.pairwiseSensors.length = 0;
         }
     }
 
     public validateBySystem(): void {
-        if (!this.sensorValid) {
-            this.group.push(this);
-            this.sensorValid = true;
+        if (!this.sensorValidBySystem) {
+            if (this.sensorValidByHost)
+                this.group.push(this);
+            this.sensorValidBySystem = true;
+        }
+    }
+
+    public invalidateBySystem(): void {
+        if (this.sensorValidBySystem) {
+            if (this.sensorValidByHost)
+                arrayRemove(this.group, this);
+            this.sensorValidBySystem = false;
+            this.pairwiseSensors.length = 0;
         }
     }
 
@@ -111,6 +132,16 @@ export class HitSensorKeeper {
             if (this.sensorInfos[i].name === name)
                 return this.sensorInfos[i].sensor;
         return null;
+    }
+
+    public invalidate(): void {
+        for (let i = 0; i < this.sensorInfos.length; i++)
+            this.sensorInfos[i].sensor.invalidate();
+    }
+
+    public validate(): void {
+        for (let i = 0; i < this.sensorInfos.length; i++)
+            this.sensorInfos[i].sensor.validate();
     }
 
     public invalidateBySystem(): void {

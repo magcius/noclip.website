@@ -208,6 +208,10 @@ export function getBckFrameMax(actor: LiveActor): number {
     return bckCtrl.endFrame;
 }
 
+export function isBrkStopped(actor: LiveActor): boolean {
+    return actor.modelManager!.isBckStopped();
+}
+
 export function getBrkFrameMax(actor: LiveActor): number {
     const brkCtrl = actor.modelManager!.getBrkCtrl();
     return brkCtrl.endFrame;
@@ -538,6 +542,14 @@ export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor
     actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
+export function invalidateHitSensors(actor: LiveActor): void {
+    actor.hitSensorKeeper!.invalidate();
+}
+
+export function validateHitSensors(actor: LiveActor): void {
+    actor.hitSensorKeeper!.validate();
+}
+
 function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
     mat4.copy(dst, assertExists(actor.getBaseMtx()));
     const scaleX = actor.scale[0];
@@ -855,7 +867,7 @@ export function setMtxAxisXYZ(dst: mat4, x: ReadonlyVec3, y: ReadonlyVec3, z: Re
     dst[11] = 0.0;
 }
 
-export function makeMtxFrontUpPos(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3, pos: ReadonlyVec3): void {
+export function makeMtxFrontUp(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3): void {
     const frontNorm = scratchVec3a;
     const upNorm = scratchVec3b;
     const right = scratchVec3c;
@@ -864,6 +876,10 @@ export function makeMtxFrontUpPos(dst: mat4, front: ReadonlyVec3, up: ReadonlyVe
     vec3.normalize(right, right);
     vec3.cross(upNorm, frontNorm, right);
     setMtxAxisXYZ(dst, right, upNorm, frontNorm);
+}
+
+export function makeMtxFrontUpPos(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3, pos: ReadonlyVec3): void {
+    makeMtxFrontUp(dst, front, up);
     setMatrixTranslation(dst, pos);
 }
 

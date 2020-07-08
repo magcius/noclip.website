@@ -667,15 +667,53 @@ class CollisionCategorizedKeeper {
 }
 
 enum WallCode {
-    Normal           = 0,
-    NotWallJump      = 1,
-    NotWallSlip      = 2,
-    NotGrab          = 3,
-    GhostThroughCode = 4,
-    NotSideStep      = 5,
-    Rebound          = 6,
-    Fur              = 7,
-    NoAction         = 8,
+    Normal           = 0x00,
+    NotWallJump      = 0x01,
+    NotWallSlip      = 0x02,
+    NotGrab          = 0x03,
+    GhostThroughCode = 0x04,
+    NotSideStep      = 0x05,
+    Rebound          = 0x06,
+    Fur              = 0x07,
+    NoAction         = 0x08,
+};
+
+enum FloorCode {                               
+    Normal         = 0x00,
+    Death          = 0x01,
+    Slip           = 0x02,
+    NoSlip         = 0x03,
+    DamageNormal   = 0x04,
+    Ice            = 0x05,
+    JumpLow        = 0x06,
+    JumpMiddle     = 0x07,
+    JumpHigh       = 0x08,
+    Slider         = 0x09,
+    DamageFire     = 0x0A,
+    JumpNormal     = 0x0B,
+    FireDance      = 0x0C,
+    Sand           = 0x0D,
+    Glass          = 0x0E,
+    DamageElectric = 0x0F,
+    PullBack       = 0x10,
+    Sink           = 0x11,
+    SinkPoison     = 0x12,
+    Slide          = 0x13,
+    WaterBottomH   = 0x14,
+    WaterBottomM   = 0x15,
+    WaterBottomL   = 0x16,
+    Wet            = 0x17,
+    Needle         = 0x18,
+    SinkDeath      = 0x19,
+    Snow           = 0x1A,
+    RailMove       = 0x1B,
+    AreaMove       = 0x1C,
+    Press          = 0x1D,
+    NoStampSand    = 0x1E,
+    SinkDeathMud   = 0x1F,
+    Brake          = 0x20,
+    GlassIce       = 0x21,
+    JumpParasol    = 0x22,
 };
 
 class CollisionCode {
@@ -685,6 +723,10 @@ class CollisionCode {
 
     public getWallCode(attr: JMapInfoIter): WallCode {
         return assertExists(attr.getValueNumber('Wall_code'));
+    }
+
+    public getFloorCode(attr: JMapInfoIter): FloorCode {
+        return assertExists(attr.getValueNumber('Floor_code'));
     }
 }
 
@@ -856,8 +898,9 @@ export class Binder {
 
     private exCollisionParts: CollisionParts | null = null;
     private exCollisionPartsValid: boolean = false;
-    private hitInfos: HitInfo[];
-    private hitInfoCount: number;
+
+    public hitInfos: HitInfo[];
+    public hitInfoCount: number;
 
     private useHostBaseMtx: boolean = false;
 
@@ -1100,16 +1143,33 @@ export function isBinded(actor: LiveActor): boolean {
     return isBindedGround(actor) || isBindedRoof(actor) || isBindedWall(actor);
 }
 
-export function isWallCodeNoAction(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
-    const attr = triangle.getAttributes()!;
-    return sceneObjHolder.collisionDirector!.collisionCode.getWallCode(attr) === WallCode.NoAction;
-}
-
 export function setBindTriangleFilter(actor: LiveActor, triFilter: TriangleFilterFunc): void {
     actor.binder!.setTriangleFilter(triFilter);
 }
 
 export function getBindedFixReactionVector(actor: LiveActor): vec3 {
     return actor.binder!.fixReactionVec;
+}
+
+function getWallCode(sceneObjHolder: SceneObjHolder, triangle: Triangle): WallCode {
+    const attr = triangle.getAttributes()!;
+    return sceneObjHolder.collisionDirector!.collisionCode.getWallCode(attr);
+}
+
+function getGroundCode(sceneObjHolder: SceneObjHolder, triangle: Triangle): FloorCode {
+    const attr = triangle.getAttributes()!;
+    return sceneObjHolder.collisionDirector!.collisionCode.getFloorCode(attr);
+}
+
+export function isWallCodeNoAction(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
+    return getWallCode(sceneObjHolder, triangle) === WallCode.NoAction;
+}
+
+export function isGroundCodeDamage(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
+    return getGroundCode(sceneObjHolder, triangle) === FloorCode.DamageNormal;
+}
+
+export function isGroundCodeDamageFire(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
+    return getGroundCode(sceneObjHolder, triangle) === FloorCode.DamageFire;
 }
 //#endregion
