@@ -13,9 +13,10 @@ function initHitSensorGroup(sceneObjHolder: SceneObjHolder, sensor: HitSensor): 
 }
 
 export const enum HitSensorType {
-    Player = 0x01,
-    Npc    = 0x05,
-    MapObj = 0x46,
+    Player  = 0x01,
+    Npc     = 0x05,
+    MapObj  = 0x46,
+    WoodBox = 0x55,
 }
 
 export class HitSensor {

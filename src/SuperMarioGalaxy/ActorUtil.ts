@@ -518,6 +518,10 @@ export function getRandomInt(min: number, max: number): number {
     return getRandomFloat(min, max) | 0;
 }
 
+export function addHitSensor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensorType: HitSensorType, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3): void {
+    actor.hitSensorKeeper!.add(sceneObjHolder, name, hitSensorType, pairwiseCapacity, radius, actor, offset);
+}
+
 export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
 }
@@ -566,7 +570,7 @@ export function invalidateCollisionPartsForActor(sceneObjHolder: SceneObjHolder,
     invalidateCollisionParts(sceneObjHolder, parts);
 }
 
-export function initCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null) {
+export function initCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null = null) {
     actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, null, hostMtx, CollisionScaleType.AutoScale);
 }
 
