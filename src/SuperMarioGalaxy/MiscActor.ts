@@ -19,8 +19,8 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight, getBrkFrameMax, connectToSceneNoShadowedMapObj, isValidSwitchAppear, isValidSwitchA, isOnSwitchA, connectToSceneIndirectEnemy, turnQuatYDirRad, setBtkFrameAtRandom, connectToSceneIndirectMapObj, getPlayerPos, getAreaObj, addVelocityMoveToDirection, rotateQuatRollBall, addHitSensor } from './ActorUtil';
-import { isSensorNpc, HitSensor, isSensorPlayer, HitSensorType } from './HitSensor';
+import { isBckStopped, isBtpStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight, getBrkFrameMax, connectToSceneNoShadowedMapObj, isValidSwitchAppear, isValidSwitchA, isOnSwitchA, connectToSceneIndirectEnemy, turnQuatYDirRad, setBtkFrameAtRandom, connectToSceneIndirectMapObj, getPlayerPos, getAreaObj, addVelocityMoveToDirection, rotateQuatRollBall, addHitSensor } from './ActorUtil';
+import { isSensorNpc, HitSensor, isSensorPlayer, HitSensorType, isSensorPlayerOrRide, isSensorEnemy, sendArbitraryMsg, sendMsgEnemyAttack } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
 import * as GX from '../gx/gx_enum';
@@ -685,13 +685,13 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
             startBck(this, `Move`);
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, msgType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+    public receiveMessage(sceneObjHolder: SceneObjHolder, msgType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (msgType === MessageType.MapPartsRailMover_Vanish && this.getCurrentNerve() === RailMoveObjNrv.Move) {
             this.makeActorDead(sceneObjHolder);
             return true;
         }
 
-        return super.receiveMessage(sceneObjHolder, msgType, thisSensor, otherSensor);
+        return super.receiveMessage(sceneObjHolder, msgType, otherSensor, thisSensor);
     }
 
     protected move(): void {
@@ -3926,12 +3926,14 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         return vec3.equals(getRailPointPosStart(this), getRailPointPosStart(other)) && vec3.equals(getRailPointPosEnd(this), getRailPointPosEnd(other));
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.TicoRail_StartTalk) {
             const currentNerve = this.getCurrentNerve();
 
             if (currentNerve !== TicoRailNrv.TalkStart && currentNerve !== TicoRailNrv.Talk && currentNerve !== TicoRailNrv.TalkCancel && currentNerve !== TicoRailNrv.GoodBye) {
-                if (this.isSameRailActor(otherSensor!.actor)) {
+                // Original game seems to have a bug where it checks the this sensor, rather than the other actor's sensor.
+                // So the isSameRailActor check will always pass.
+                if (this.isSameRailActor(thisSensor!.actor)) {
                     const rnd = getRandomInt(0, 2);
                     if (rnd !== 0) {
                         const dist = calcDistanceVertical(this, otherSensor!.actor.translation);
@@ -3946,7 +3948,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
 
             return false;
         } else {
-            return super.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
+            return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
         }
     }
 
@@ -8289,7 +8291,7 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
             this.makeActorAppeared(sceneObjHolder);
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.FirePressureRadiate_StartSyncWait) {
             this.setNerve(FirePressureRadiateNrv.Wait);
             return true;
@@ -8298,7 +8300,7 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
             return true;
         }
 
-        return super.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
@@ -9437,12 +9439,12 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
         this.button.move(sceneObjHolder);
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.NoclipButton_Click) {
             this.setNerve(ScrewSwitchReverseNrv.Screw);
             return true;
         } else {
-            return super.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
+            return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
         }
     }
 
@@ -10110,10 +10112,11 @@ function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveAct
     }
 }
 
-const enum UnizoNrv { Wait, Jump, Chase, CollidePlayer }
+const enum UnizoNrv { Wait, Jump, Chase, CollidePlayer, CollideEnemy, Break, JumpDown, FireDown }
 
 export class Unizo extends LiveActor<UnizoNrv> {
-    private jumpHeight = 0.0;
+    private jumpHeight = 0.15;
+    private wobbleY = 30.0;
     private size = 1.0;
     private baseMtx = mat4.create();
     private effectHostMtx = mat4.create();
@@ -10129,6 +10132,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
             this.initModelManagerWithAnm(sceneObjHolder, 'Unizo');
         } else if (this.name === 'UnizoLand') {
             this.jumpHeight = 0.8;
+            this.wobbleY = 0.0;
             this.initModelManagerWithAnm(sceneObjHolder, 'UnizoLand');
             initFur(sceneObjHolder, this);
         } else if (this.name === 'UnizoShoal') {
@@ -10145,6 +10149,9 @@ export class Unizo extends LiveActor<UnizoNrv> {
         connectToSceneMapObj(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
         this.initHitSensor();
+        vec3.set(scratchVec3, 0.0, 126.36 * this.size, 0.0);
+        addHitSensor(sceneObjHolder, this, 'Body', HitSensorType.Unizo, 8, 115.2 * this.size, scratchVec3);
+        // initStarPointerTarget
         this.initBinder(126.36 * this.size, 126.36 * this.size, 8);
         // initShadowVolumeSphere
         this.initEffectKeeper(sceneObjHolder, null);
@@ -10163,6 +10170,28 @@ export class Unizo extends LiveActor<UnizoNrv> {
         // setGroupClipping
         this.makeActorAppeared(sceneObjHolder);
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
+    }
+
+    public getBaseMtx(): mat4 {
+        return this.baseMtx;
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        mat4.fromQuat(scratchMatrix, this.rollRotation);
+        getMatrixAxisY(scratchVec3a, scratchMatrix);
+        vec3.scaleAndAdd(scratchVec3, this.translation, scratchVec3a, -126.36 * this.size);
+
+        getMatrixAxisY(scratchVec3a, this.baseMtx);
+        vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3a, 126.36 * this.size /* * this.animScaleController.scale[1] */);
+
+        const wobbleY = this.size * Math.sin(this.chaseSinTimer) / 60 * this.wobbleY;
+
+        vecKillElement(scratchVec3a, this.velocity, this.gravityVector);
+        const gravityWobbleY = Math.min(vec3.length(scratchVec3) * 0.25, 1.0);
+
+        vec3.scaleAndAdd(scratchVec3, scratchVec3, this.gravityVector, gravityWobbleY * wobbleY);
+        setMatrixTranslation(scratchMatrix, scratchVec3);
+        mat4.copy(this.modelInstance!.modelMatrix, scratchMatrix);
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
@@ -10193,6 +10222,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
 
         vec3.negate(scratchVec3, this.gravityVector);
         // turnMtxToYDir(this.baseMtx, scratchVec3, 1.0);
+        setMatrixTranslation(this.baseMtx, this.translation);
         this.updateSurfaceEffect(sceneObjHolder);
     }
 
@@ -10234,7 +10264,57 @@ export class Unizo extends LiveActor<UnizoNrv> {
                 deleteEffectAll(this);
                 this.setNerve(UnizoNrv.Wait);
             }
+        } else if (currentNerve === UnizoNrv.CollideEnemy) {
+            if (isFirstStep(this)) {
+                if (isBtpStopped(this)) {
+                }
+            }
+
+            this.updateInfluence();
+
+            if (isGreaterStep(this, 60)) {
+                startBtp(this, 'Angry');
+                this.setNerve(UnizoNrv.Chase);
+            }
         }
+    }
+
+    private isBreakNow(): boolean {
+        return this.getCurrentNerve() === UnizoNrv.Break || this.getCurrentNerve() === UnizoNrv.FireDown || this.getCurrentNerve() === UnizoNrv.JumpDown;
+    }
+
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        super.attackSensor(sceneObjHolder, thisSensor, otherSensor);
+
+        if (this.isBreakNow())
+            return;
+
+        if (isSensorPlayerOrRide(otherSensor)) {
+            // TODO(jstpierre)
+        } else if (isSensorEnemy(otherSensor)) {
+            if (sendMsgEnemyAttack(sceneObjHolder, otherSensor, thisSensor) && this.getCurrentNerve() !== UnizoNrv.CollideEnemy) {
+                this.setNerve(UnizoNrv.CollideEnemy);
+            }
+        }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.EnemyAttack) {
+            if (otherSensor!.isType(HitSensorType.Unizo)) {
+                vec3.sub(scratchVec3, thisSensor!.center, otherSensor!.center);
+                const dist = vec3.length(scratchVec3);
+                vec3.normalize(scratchVec3, scratchVec3);
+                addVelocityMoveToDirection(this, scratchVec3, dist * 0.2);
+                if (!isBckPlaying(this, 'Shock'))
+                    startBck(this, 'Shock');
+            } else {
+                this.doBreak();
+            }
+
+            return true;
+        }
+
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
 
     private doJump(): void {
@@ -10242,6 +10322,9 @@ export class Unizo extends LiveActor<UnizoNrv> {
 
         const jumpHeight = Math.sqrt(2.0 * this.size * (70.0 * this.jumpHeight * vec3.length(this.gravityVector)));
         vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, -jumpHeight);
+    }
+
+    private doBreak(): void {
     }
 
     private updateBlink(): void {
@@ -10263,7 +10346,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
         transformVec3Mat4w0(scratchVec3, scratchMatrix, scratchVec3);
         if (vec3.dot(scratchVec3, this.velocity) <= 0.0) {
             addVelocityMoveToDirection(this, scratchVec3, 0.1);
-        } else if (vec3.squaredLength(this.velocity) < 16.0**2) {
+        } else if (vec3.squaredLength(this.velocity) < 4.0**2) {
             addVelocityMoveToDirection(this, scratchVec3, 0.1);
         }
     }

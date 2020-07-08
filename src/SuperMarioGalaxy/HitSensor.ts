@@ -1,6 +1,6 @@
 
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { LiveActor, isDead } from "./LiveActor";
+import { LiveActor, isDead, MessageType } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
 import { connectToScene } from "./ActorUtil";
 import { NameObj } from "./NameObj";
@@ -15,6 +15,7 @@ function initHitSensorGroup(sceneObjHolder: SceneObjHolder, sensor: HitSensor): 
 export const enum HitSensorType {
     Player  = 0x01,
     Npc     = 0x05,
+    Unizo   = 0x24,
     MapObj  = 0x46,
     WoodBox = 0x55,
 }
@@ -49,6 +50,10 @@ export class HitSensor {
             this.group.push(this);
             this.sensorValid = true;
         }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor): boolean {
+        return this.actor.receiveMessage(sceneObjHolder, messageType, otherSensor, this);
     }
 }
 
@@ -135,30 +140,6 @@ export class HitSensorKeeper {
 }
 
 type SensorGroup = HitSensor[];
-
-export function isSensorPlayer(sensor: HitSensor): boolean {
-    return sensor.isType(HitSensorType.Player);
-}
-
-export function isSensorRide(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x08 && sensor.sensorType < 0x12;
-}
-
-export function isSensorRush(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x6F && sensor.sensorType < 0x74;
-}
-
-export function isSensorAutoRush(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x60 && sensor.sensorType < 0x6E;
-}
-
-export function isSensorMapObj(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x45 && sensor.sensorType < 0x5F;
-}
-
-export function isSensorNpc(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x04 && sensor.sensorType < 0x06;
-}
 
 export class SensorHitChecker extends NameObj {
     private playerGroup: SensorGroup = [];
@@ -257,4 +238,44 @@ export class SensorHitChecker extends NameObj {
             }
         }
     }
+}
+
+export function isSensorPlayer(sensor: HitSensor): boolean {
+    return sensor.isType(HitSensorType.Player);
+}
+
+export function isSensorNpc(sensor: HitSensor): boolean {
+    return sensor.sensorType > 0x04 && sensor.sensorType < 0x06;
+}
+
+export function isSensorRide(sensor: HitSensor): boolean {
+    return sensor.sensorType > 0x08 && sensor.sensorType < 0x12;
+}
+
+export function isSensorEnemy(sensor: HitSensor): boolean {
+    return sensor.sensorType > 0x13 && sensor.sensorType < 0x44;
+}
+
+export function isSensorMapObj(sensor: HitSensor): boolean {
+    return sensor.sensorType > 0x45 && sensor.sensorType < 0x5F;
+}
+
+export function isSensorAutoRush(sensor: HitSensor): boolean {
+    return sensor.sensorType > 0x60 && sensor.sensorType < 0x6E;
+}
+
+export function isSensorRush(sensor: HitSensor): boolean {
+    return sensor.sensorType > 0x6F && sensor.sensorType < 0x74;
+}
+
+export function isSensorPlayerOrRide(sensor: HitSensor): boolean {
+    return isSensorPlayer(sensor) || isSensorRide(sensor);
+}
+
+export function sendMsgEnemyAttack(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttack, sendSensor);
+}
+
+export function sendArbitraryMsg(sceneObjHolder: SceneObjHolder, messageType: MessageType, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, messageType, sendSensor);
 }

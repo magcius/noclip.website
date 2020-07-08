@@ -213,6 +213,10 @@ export function getBrkFrameMax(actor: LiveActor): number {
     return brkCtrl.endFrame;
 }
 
+export function isBtpStopped(actor: LiveActor): boolean {
+    return actor.modelManager!.isBtpStopped();
+}
+
 // TODO(jstpierre): Remove.
 export function setLoopMode(actor: LiveActor, loopMode: LoopMode): void {
     const bckCtrl = actor.modelManager!.getBckCtrl();
@@ -532,14 +536,6 @@ export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveAc
 
 export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3): void {
     actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
-}
-
-export function receiveMessage(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, messageType: MessageType, otherSensor: HitSensor): boolean {
-    return thisSensor.actor.receiveMessage(sceneObjHolder, messageType, thisSensor, otherSensor);
-}
-
-export function sendArbitraryMsg(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
-    return receiveMessage(sceneObjHolder, otherSensor, messageType, thisSensor);
 }
 
 function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
@@ -1223,14 +1219,14 @@ export function addVelocityMoveToDirection(actor: LiveActor, direction: vec3, sp
     vec3.add(actor.velocity, actor.velocity, scratchVec3);
 }
 
-function calcMomentRollBall(dst: vec3, fwd: vec3, up: vec3, amount: number): void {
+function calcMomentRollBall(dst: vec3, fwd: vec3, up: vec3, radius: number): void {
     vec3.normalize(dst, up);
     vec3.cross(dst, dst, fwd);
-    vec3.scale(dst, dst, amount);
+    vec3.scale(dst, dst, 1.0 / radius);
 }
 
-export function rotateQuatRollBall(dst: quat, fwd: vec3, up: vec3, amount: number): void {
-    calcMomentRollBall(scratchVec3, fwd, up, amount);
+export function rotateQuatRollBall(dst: quat, fwd: vec3, up: vec3, radius: number): void {
+    calcMomentRollBall(scratchVec3, fwd, up, radius);
     const rollAmount = vec3.length(scratchVec3);
     vec3.normalize(scratchVec3, scratchVec3);
     quat.setAxisAngle(scratchQuat, scratchVec3, rollAmount);

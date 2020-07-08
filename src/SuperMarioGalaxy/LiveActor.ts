@@ -372,6 +372,7 @@ export interface ZoneAndLayer {
 export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.COMMON };
 
 export const enum MessageType {
+    EnemyAttack                              = 0x53,
     FirePressureRadiate_StartWait            = 0x68,
     FirePressureRadiate_StartSyncWait        = 0x69,
     TicoRail_StartTalk                       = 0xCE,
@@ -438,7 +439,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             return null;
     }
 
-    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         return false;
     }
 
@@ -809,8 +810,8 @@ export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
         if (this.pendingMessageType !== null) {
             for (let i = 0; i < this.objArray.length; i++) {
                 const actor = this.objArray[i];
-                const sensor = actor.getSensor(this.pendingSensorName!);
-                actor.receiveMessage(sceneObjHolder, this.pendingMessageType, sensor, this.pendingHitSensor!);
+                const sensor = actor.getSensor(this.pendingSensorName!)!;
+                sensor.receiveMessage(sceneObjHolder, this.pendingMessageType, this.pendingHitSensor!);
             }
 
             this.pendingMessageType = null;
