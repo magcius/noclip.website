@@ -74,11 +74,18 @@ export class GfxRenderCache {
         return inputLayout;
     }
 
-    public createProgramSimple(device: GfxDevice, gfxProgramDescriptor: GfxProgramDescriptorSimple): GfxProgram {
-        let program = this.gfxProgramCache.get(gfxProgramDescriptor);
+    public createProgramSimple(device: GfxDevice, gfxProgramDescriptorSimple: GfxProgramDescriptorSimple): GfxProgram {
+        let program = this.gfxProgramCache.get(gfxProgramDescriptorSimple);
         if (program === null) {
-            const descriptorCopy = gfxProgramDescriptorSimpleCopy(gfxProgramDescriptor);
+            const descriptorCopy = gfxProgramDescriptorSimpleCopy(gfxProgramDescriptorSimple);
             program = device.createProgramSimple(descriptorCopy);
+
+            // TODO(jstpierre): Ugliness
+            if ('associate' in (gfxProgramDescriptorSimple as any)) {
+                const gfxProgramDescriptor = gfxProgramDescriptorSimple as GfxProgramDescriptor;
+                gfxProgramDescriptor.associate(device, descriptorCopy, program);
+            }
+
             this.gfxProgramCache.add(descriptorCopy, program);
         }
         return program;
@@ -87,7 +94,7 @@ export class GfxRenderCache {
     public createProgram(device: GfxDevice, gfxProgramDescriptor: GfxProgramDescriptor): GfxProgram {
         // TODO(jstpierre): Remove the ensurePreprocessed here... this should be done by higher-level code.
         gfxProgramDescriptor.ensurePreprocessed(device.queryVendorInfo());
-        return this.createProgramSimple(device, gfxProgramDescriptor);
+        return this.createProgramSimple(device, gfxProgramDescriptor)
     }
 
     public createSampler(device: GfxDevice, descriptor: GfxSamplerDescriptor): GfxSampler {

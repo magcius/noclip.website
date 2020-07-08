@@ -157,6 +157,7 @@ export interface GfxProgramDescriptorSimple {
 
 export interface GfxProgramDescriptor extends GfxProgramDescriptorSimple {
     ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
+    associate(device: GfxDevice, descriptor: GfxProgramDescriptorSimple, program: GfxProgram): void;
 }
 
 export interface GfxInputLayoutDescriptor {
@@ -368,6 +369,7 @@ export interface GfxDevice {
     setResourceName(o: GfxResource, s: string): void;
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;
+    programPatched(o: GfxProgram): void;
     pushDebugGroup(debugGroup: GfxDebugGroup): void;
     popDebugGroup(): void;
 }

@@ -1,7 +1,7 @@
 
 import CodeEditor from "./CodeEditor";
 import { assertExists } from "./util";
-import { GfxVendorInfo } from "./gfx/platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform";
 import { preprocessShader_GLSL } from "./gfx/shaderc/GfxShaderCompiler";
 
 type DefineMap = Map<string, string>;
@@ -62,6 +62,15 @@ export class DeviceProgram {
         }
     }
 
+    private _gfxDevice: GfxDevice | null = null;
+    private _gfxDescriptor: GfxProgramDescriptorSimple | null = null;
+    private _gfxProgram: GfxProgram | null = null;
+    public associate(device: GfxDevice, descriptor: GfxProgramDescriptorSimple, program: GfxProgram): void {
+        this._gfxDevice = device;
+        this._gfxDescriptor = descriptor;
+        this._gfxProgram = program;
+    }
+
     private _editShader(n: 'vert' | 'frag' | 'both') {
         const win = assertExists(window.open('about:blank', undefined, `location=off, resizable, alwaysRaised, left=20, top=20, width=1200, height=900`));
         const init = () => {
@@ -78,7 +87,14 @@ export class DeviceProgram {
             const tryCompile = () => {
                 timeout = 0;
                 this[n] = editor.getValue();
-                this.preprocessedVert = '';
+
+                if (this._gfxDevice !== null && this._gfxDescriptor !== null && this._gfxProgram !== null) {
+                    this.preprocessedVert = '';
+                    this.ensurePreprocessed(this._gfxDevice.queryVendorInfo());
+                    this._gfxDescriptor.preprocessedVert = this.preprocessedVert;
+                    this._gfxDescriptor.preprocessedFrag = this.preprocessedFrag;
+                    this._gfxDevice.programPatched(this._gfxProgram);
+                }
             };
 
             editor.onvaluechanged = function(immediate: boolean) {

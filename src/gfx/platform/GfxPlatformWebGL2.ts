@@ -1446,6 +1446,9 @@ void main() {
         const pass = o as GfxRenderPassP_GL;
         return pass.descriptor;
     }
+    //#endregion
+
+    //#region Debugging
 
     public setResourceName(o: GfxResource, name: string): void {
         o.ResourceName = name;
@@ -1472,6 +1475,11 @@ void main() {
             this._resourceCreationTracker.setResourceLeakCheck(o, v);
     }
 
+    public checkForLeaks(): void {
+        if (this._resourceCreationTracker !== null)
+            this._resourceCreationTracker.checkForLeaks();
+    }
+
     public pushDebugGroup(debugGroup: GfxDebugGroup): void {
         this._debugGroupStack.push(debugGroup);
     }
@@ -1479,18 +1487,17 @@ void main() {
     public popDebugGroup(): void {
         this._debugGroupStack.pop();
     }
-    //#endregion
 
-    //#region Debugging
+    public programPatched(o: GfxProgram): void {
+        const program = o as GfxProgramP_GL;
+        program.compileDirty = true;
+        this._tryCompileProgram(program);
+    }
+
     public getBufferData(buffer: GfxBuffer, dstBuffer: ArrayBufferView, wordOffset: number = 0): void {
         const gl = this.gl;
         gl.bindBuffer(gl.COPY_READ_BUFFER, getPlatformBuffer(buffer, wordOffset * 4));
         gl.getBufferSubData(gl.COPY_READ_BUFFER, wordOffset * 4, dstBuffer);
-    }
-
-    public checkForLeaks(): void {
-        if (this._resourceCreationTracker !== null)
-            this._resourceCreationTracker.checkForLeaks();
     }
     //#endregion
 
