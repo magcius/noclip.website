@@ -816,11 +816,11 @@ function isWallPolygonAngle(v: number): boolean {
 }
 
 function isFloorPolygon(normal: vec3, gravityVector: vec3): boolean {
-    return isNearZeroVec3(normal, 0.001) && isFloorPolygonAngle(vec3.dot(normal, gravityVector));
+    return !isNearZeroVec3(normal, 0.001) && isFloorPolygonAngle(vec3.dot(normal, gravityVector));
 }
 
 function isWallPolygon(normal: vec3, gravityVector: vec3): boolean {
-    return isNearZeroVec3(normal, 0.001) && isWallPolygonAngle(vec3.dot(normal, gravityVector));
+    return !isNearZeroVec3(normal, 0.001) && isWallPolygonAngle(vec3.dot(normal, gravityVector));
 }
 
 const enum BinderFindBindedPositionRet {

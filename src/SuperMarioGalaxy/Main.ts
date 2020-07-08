@@ -973,6 +973,7 @@ export const enum SceneObj {
     PlanetGravityManager    = 0x32,
     CoinRotater             = 0x38,
     AirBubbleHolder         = 0x39,
+    StarPieceDirector       = 0x3C,
     SwingRopeGroup          = 0x47,
     TrapezeRopeDrawInit     = 0x4A,
     MapPartsRailGuideHolder = 0x56,
