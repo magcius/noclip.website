@@ -94,7 +94,7 @@ function initFurParamFromDVD(dstParam: FurParam, dstDynParam: DynamicFurParam, f
     dstParam.baseMapScale            = parseFloat(scanForLine(S, `ベースマップスケール`));
     parseColor(dstParam.color,                    scanForLine(S, `混合カラー`));
     parseVec4(dstParam.mapDensity,                scanForLine(S, `植毛密度`));
-    parseVec4(dstParam.mapThickness,              scanForLine(S, `植毛密度`));
+    parseVec4(dstParam.mapThickness,              scanForLine(S, `植毛太さ`));
     parseVec4(dstParam.mapMixingRatio,            scanForLine(S, `混合比`));
 
     dstDynParam.lightChan0Mask       = parseInt  (scanForLine(S, `ライト0スイッチ`), 10);
@@ -177,6 +177,10 @@ function createFurDensityMap(mapDensity: vec4, mapThickness: vec4, mapMixingRati
     const wrapT = GX.WrapMode.REPEAT;
 
     const data = new Uint8Array(2 * width * height);
+    for (let j = 0; j < width * height; j++) {
+        data[j * 2 + 0] = 0x00;
+        data[j * 2 + 1] = 0xFF;
+    }
 
     for (let i = 0; i < 4; i++) {
         const layerDensity = mapDensity[i];
@@ -188,7 +192,7 @@ function createFurDensityMap(mapDensity: vec4, mapThickness: vec4, mapMixingRati
             const x = getRandomFloat(0.0, width) | 0;
             const y = getRandomFloat(0.0, height) | 0;
 
-            data[(y * width + x) * 2 + 0] = 255.0 * layerThickness;
+            data[(y * width + x) * 2 + 0] = 0xFF * layerThickness;
             data[(y * width + x) * 2 + 1] = 0xFF - layerMixingRatio;
         }
     }
