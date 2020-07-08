@@ -250,6 +250,8 @@ function calcFurVertexData(shape: Shape, lengthMap: BTI_Texture | null, maxLengt
         pos[1] = vtxView.getFloat32(posOffs + 0x04, true);
         pos[2] = vtxView.getFloat32(posOffs + 0x08, true);
 
+        // TODO(jstpierre): BorderVtx
+
         nrm[0] = vtxView.getFloat32(nrmOffs + 0x00, true);
         nrm[1] = vtxView.getFloat32(nrmOffs + 0x04, true);
         nrm[2] = vtxView.getFloat32(nrmOffs + 0x08, true);

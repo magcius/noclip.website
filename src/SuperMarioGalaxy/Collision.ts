@@ -69,7 +69,7 @@ export class HitInfo extends Triangle {
     }
 }
 
-export const enum Category {
+export const enum CollisionKeeperCategory {
     Map = 0,
     Sunshade = 1,
     WaterSurface = 2,
@@ -86,6 +86,10 @@ function getAvgScale(v: vec3): number {
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
+const scratchVec3e = vec3.create();
+const scratchVec3g = vec3.create();
+const scratchVec3h = vec3.create();
 export class CollisionParts {
     public validated: boolean = false;
     public hostMtx: mat4 | null = null;
@@ -263,7 +267,7 @@ export class CollisionParts {
         return dstIdx - dstIdxStart;
     }
 
-    private projectToPlane(dst: vec3, pos: vec3, planePos: vec3, normal: vec3): void {
+    private projectToPlane(dst: vec3, pos: ReadonlyVec3, planePos: ReadonlyVec3, normal: ReadonlyVec3): void {
         // Put in plane space.
         vec3.sub(dst, pos, planePos);
         vec3.scaleAndAdd(dst, pos, normal, vec3.dot(dst, normal));
@@ -544,7 +548,21 @@ class CollisionCategorizedKeeper {
         this.removeFromZone(parts, 0);
     }
 
-    public checkStrikeLine(sceneObjHolder: SceneObjHolder, p0: vec3, dir: vec3, partsFilter: CollisionPartsFilterFunc | null, triFilter: TriangleFilterFunc | null): number {
+    public searchSameHostParts(parts: CollisionParts): CollisionParts | null {
+        for (let i = 0; i < this.zones.length; i++) {
+            const zone = this.zones[i];
+            if (zone === undefined)
+                continue;
+
+            for (let j = 0; j < zone.parts.length; j++)
+                if (zone.parts[j].hitSensor.actor === parts.hitSensor.actor)
+                    return zone.parts[j];
+        }
+
+        return null;
+    }
+
+    public checkStrikeLine(sceneObjHolder: SceneObjHolder, p0: vec3, dir: vec3, partsFilter: CollisionPartsFilterFunc | null = null, triFilter: TriangleFilterFunc | null = null): number {
         let idx = 0;
 
         scratchAABB.reset();
@@ -590,7 +608,7 @@ class CollisionCategorizedKeeper {
         return idx;
     }
 
-    public checkStrikeBall(sceneObjHolder: SceneObjHolder, pos: vec3, radius: number, movingReaction: boolean, partsFilter: CollisionPartsFilterFunc | null, triFilter: TriangleFilterFunc | null): number {
+    public checkStrikeBall(sceneObjHolder: SceneObjHolder, pos: ReadonlyVec3, radius: number, movingReaction: boolean, partsFilter: CollisionPartsFilterFunc | null, triFilter: TriangleFilterFunc | null): number {
         let idx = 0;
 
         outer:
@@ -691,7 +709,7 @@ export class CollisionDirector extends NameObj {
     }
 }
 
-export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: vec3 | null, dstTriangle: Triangle | null, p0: vec3, dir: vec3, triFilter: TriangleFilterFunc | null, partsFilter: CollisionPartsFilterFunc | null, category: Category): boolean {
+export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: vec3 | null, dstTriangle: Triangle | null, p0: vec3, dir: vec3, triFilter: TriangleFilterFunc | null, partsFilter: CollisionPartsFilterFunc | null, category: CollisionKeeperCategory): boolean {
     const director = sceneObjHolder.collisionDirector;
     if (director === null)
         return false;
@@ -724,7 +742,7 @@ export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: 
 }
 
 export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3): boolean {
-    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, Category.Map);
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, CollisionKeeperCategory.Map);
 }
 
 export function createCollisionPartsFilterActor(actor: LiveActor): CollisionPartsFilterFunc {
@@ -735,12 +753,12 @@ export function createCollisionPartsFilterActor(actor: LiveActor): CollisionPart
 
 export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3, actor: LiveActor): boolean {
     const partsFilter = createCollisionPartsFilterActor(actor);
-    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, Category.Map);
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, CollisionKeeperCategory.Map);
 }
 
 export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: vec3, height: number): boolean {
     vec3.set(scratchVec3c, 0.0, -height, 0.0);
-    return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3c, null, null, Category.Map);
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3c, null, null, CollisionKeeperCategory.Map);
 }
 
 export const enum CollisionScaleType {
@@ -749,7 +767,7 @@ export const enum CollisionScaleType {
     AutoScale,
 }
 
-function createCollisionParts(sceneObjHolder: SceneObjHolder, zoneAndLayer: ZoneAndLayer, resourceHolder: ResourceHolder, name: string, hitSensor: HitSensor, initialHostMtx: mat4, scaleType: CollisionScaleType, category: Category): CollisionParts {
+function createCollisionParts(sceneObjHolder: SceneObjHolder, zoneAndLayer: ZoneAndLayer, resourceHolder: ResourceHolder, name: string, hitSensor: HitSensor, initialHostMtx: mat4, scaleType: CollisionScaleType, category: CollisionKeeperCategory): CollisionParts {
     const kclData = assertExists(resourceHolder.arc.findFileData(`${name}.kcl`));
     const paData = resourceHolder.arc.findFileData(`${name}.pa`);
     return new CollisionParts(sceneObjHolder, zoneAndLayer, initialHostMtx, hitSensor, kclData, paData, category, scaleType);
@@ -775,7 +793,7 @@ export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder
         initialHostMtx = scratchMatrix;
     }
 
-    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, name, hitSensor, initialHostMtx, scaleType, Category.Map);
+    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, name, hitSensor, initialHostMtx, scaleType, CollisionKeeperCategory.Map);
 
     if (hostMtx !== null)
         parts.hostMtx = hostMtx;
@@ -783,7 +801,7 @@ export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder
     return parts;
 }
 
-function tryCreateCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor, category: Category, filenameBase: string): CollisionParts | null {
+function tryCreateCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor, category: CollisionKeeperCategory, filenameBase: string): CollisionParts | null {
     const res = actor.resourceHolder.arc.findFileData(`${filenameBase}.kcl`);
     if (res === null)
         return null;
@@ -797,11 +815,11 @@ function tryCreateCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActo
 }
 
 export function tryCreateCollisionMoveLimit(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor): CollisionParts | null {
-    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, Category.MoveLimit, 'MoveLimit');
+    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, CollisionKeeperCategory.MoveLimit, 'MoveLimit');
 }
 
 export function tryCreateCollisionWaterSurface(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor): CollisionParts | null {
-    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, Category.WaterSurface, 'WaterSurface');
+    return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, CollisionKeeperCategory.WaterSurface, 'WaterSurface');
 }
 
 //#region Binder
@@ -865,11 +883,11 @@ export class Binder {
         this.clear();
     }
 
-    public bind(sceneObjHolder: SceneObjHolder, dst: vec3, vel: ReadonlyVec3): void {
+    public bind(sceneObjHolder: SceneObjHolder, dstVel: vec3, actorVelocity: ReadonlyVec3): void {
         this.clear();
 
         if (this.exCollisionPartsValid)
-            sceneObjHolder.collisionDirector!.keepers[Category.Map].addToGlobal(assertExists(this.exCollisionParts));
+            sceneObjHolder.collisionDirector!.keepers[CollisionKeeperCategory.Map].addToGlobal(assertExists(this.exCollisionParts));
 
         if (this.hostOffsetVec)
             vec3.copy(scratchVec3c, this.hostOffsetVec);
@@ -879,63 +897,80 @@ export class Binder {
         if (this.useHostBaseMtx)
             transformVec3Mat4w0(scratchVec3c, this.hostBaseMtx!, scratchVec3c);
 
-        vec3.add(scratchVec3c, this.hostTranslation, scratchVec3c);
+        const pos = vec3.add(scratchVec3c, this.hostTranslation, scratchVec3c);
+        const origPos = vec3.copy(scratchVec3d, scratchVec3c);
+        const vel = vec3.copy(scratchVec3g, actorVelocity);
 
-        const origPosX = scratchVec3c[0];
-        const origPosY = scratchVec3c[1];
-        const origPosZ = scratchVec3c[2];
-
-        let ret = this.findBindedPos(sceneObjHolder, scratchVec3c, vel, this.expandDistance, false);
+        let ret = this.findBindedPos(sceneObjHolder, pos, vel, this.expandDistance, false);
         if (ret === BinderFindBindedPositionRet.NoCollide) {
-            vec3.copy(dst, vel);
+            vec3.copy(dstVel, actorVelocity);
         } else {
-            this.obtainMomentFixReaction(this.fixReactionVec);
-            vec3.add(scratchVec3c, scratchVec3c, this.fixReactionVec);
+            const fixReact = scratchVec3e;
+
+            this.obtainMomentFixReaction(fixReact);
+            vec3.add(pos, pos, fixReact);
+            vec3.copy(this.fixReactionVec, fixReact);
 
             while (!this.expandDistance && ret === BinderFindBindedPositionRet.MoveAlongHittedPlanes) {
-                // TODO(jstpierre): moveAlongHittedPlanes
-                break;
+                // Put the remainder of the velocity energy along the planes.
+
+                const moveVel = scratchVec3h;
+                vec3.sub(moveVel, actorVelocity, vel);
+
+                const hitInfoStart = this.hitInfoCount;
+                ret = this.moveAlongHittedPlanes(sceneObjHolder, vel, pos, moveVel, actorVelocity, fixReact);
+
+                // Now obtain a new fix reaction from the new hits.
+                this.obtainMomentFixReaction(fixReact, hitInfoStart);
+                vec3.add(this.fixReactionVec, this.fixReactionVec, fixReact);
+                vec3.add(pos, pos, fixReact);
+
+                // Original developers only made this loop go once. I'm guessing more
+                // loops lead to instability, or performance problems.
+                ret = BinderFindBindedPositionRet.Collide;
             }
 
             this.storeContactPlane();
 
             if (this.moveWithCollision)
-                this.moveWithCollisionParts(scratchVec3c, dst);
+                this.moveWithCollisionParts(pos, vel);
 
-            dst[0] = scratchVec3c[0] - origPosX;
-            dst[1] = scratchVec3c[1] - origPosY;
-            dst[2] = scratchVec3c[2] - origPosZ;
+            vec3.sub(dstVel, pos, origPos);
         }
 
         if (this.exCollisionPartsValid)
-            sceneObjHolder.collisionDirector!.keepers[Category.Map].removeFromGlobal(assertExists(this.exCollisionParts));
+            sceneObjHolder.collisionDirector!.keepers[CollisionKeeperCategory.Map].removeFromGlobal(assertExists(this.exCollisionParts));
     }
 
-    private findBindedPos(sceneObjHolder: SceneObjHolder, pos: vec3, vel: ReadonlyVec3, skipInitialPosition: boolean, expandDistance: boolean): BinderFindBindedPositionRet {
-        const keeper = sceneObjHolder.collisionDirector!.keepers[Category.Map];
+    private findBindedPos(sceneObjHolder: SceneObjHolder, pos: vec3, vel: vec3, skipInitialPosition: boolean, expandDistance: boolean): BinderFindBindedPositionRet {
+        const keeper = sceneObjHolder.collisionDirector!.keepers[CollisionKeeperCategory.Map];
 
         const speed = vec3.length(vel);
         const numSteps = ((speed / 35.0) | 0) + 1;
 
+        const origPosX = pos[0];
+        const origPosY = pos[1];
+        const origPosZ = pos[2];
+
         for (let i = 0; i <= numSteps; i++) {
-            if (i === 0) {
-                // TODO(jstpierre): 0x10 flag
-                if (skipInitialPosition)
-                    continue;
-            }
+            if (i > 0 || !skipInitialPosition)
+                vec3.scaleAndAdd(pos, pos, vel, 1.0 / numSteps);
 
             const hitCount = keeper.checkStrikeBall(sceneObjHolder, pos, this.radius, this.useMovingReaction, this.partsFilter, this.triangleFilter);
             if (hitCount !== 0) {
                 // Hit something. We can stop searching.
                 this.storeCurrentHitInfo(keeper, expandDistance);
 
+                // Output velocity is how far we traveled.
+                vel[0] = pos[0] - origPosX;
+                vel[1] = pos[1] - origPosY;
+                vel[2] = pos[2] - origPosZ;
+
                 if (i < numSteps)
                     return BinderFindBindedPositionRet.MoveAlongHittedPlanes;
                 else
                     return BinderFindBindedPositionRet.Collide;
             }
-
-            vec3.scaleAndAdd(pos, pos, vel, 1.0 / numSteps);
         }
 
         // Never hit anything.
@@ -989,9 +1024,10 @@ export class Binder {
         dst[2] = minZ + maxZ;
     }
 
-    private moveAlongHittedPlanes(sceneObjHolder: SceneObjHolder, dstVel: vec3, pos: vec3, moveVel: vec3, origVel: vec3, fixReactionVector: vec3): BinderFindBindedPositionRet {
+    private moveAlongHittedPlanes(sceneObjHolder: SceneObjHolder, dstVel: vec3, pos: vec3, moveVel: vec3, origVel: ReadonlyVec3, fixReactionVector: vec3): BinderFindBindedPositionRet {
         vec3.normalize(scratchVec3a, fixReactionVector);
-        if (vec3.dot(moveVel, scratchVec3a) > 0.0)
+
+        if (vec3.dot(moveVel, scratchVec3a) < 0.0)
             vecKillElement(moveVel, moveVel, scratchVec3a);
 
         if (vec3.dot(moveVel, origVel) >= 0.0) {
@@ -1071,5 +1107,9 @@ export function isWallCodeNoAction(sceneObjHolder: SceneObjHolder, triangle: Tri
 
 export function setBindTriangleFilter(actor: LiveActor, triFilter: TriangleFilterFunc): void {
     actor.binder!.setTriangleFilter(triFilter);
+}
+
+export function getBindedFixReactionVector(actor: LiveActor): vec3 {
+    return actor.binder!.fixReactionVec;
 }
 //#endregion

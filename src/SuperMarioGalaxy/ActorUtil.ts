@@ -1188,3 +1188,47 @@ export function joinToGroupArray<T extends LiveActor>(sceneObjHolder: SceneObjHo
     sceneObjHolder.create(SceneObj.LiveActorGroupArray);
     return sceneObjHolder.liveActorGroupArray!.entry(sceneObjHolder, actor, infoIter, groupName, maxCount);
 }
+
+function getGroundNormal(actor: LiveActor): vec3 {
+    return actor.binder!.floorHitInfo.faceNormal;
+}
+
+function isOnGround(actor: LiveActor): boolean {
+    if (actor.binder === null)
+        return false;
+
+    if (actor.binder.floorHitInfo.distance < 0.0)
+        return false;
+
+    return vec3.dot(actor.binder.floorHitInfo.faceNormal, actor.velocity) < 0.0;
+}
+
+function calcVelocityMoveToDirectionHorizon(dst: vec3, actor: LiveActor, direction: vec3, speed: number): void {
+    vecKillElement(dst, direction, actor.gravityVector);
+    normToLength(dst, speed);
+}
+
+export function calcVelocityMoveToDirection(dst: vec3, actor: LiveActor, direction: vec3, speed: number): void {
+    calcVelocityMoveToDirectionHorizon(dst, actor, direction, speed);
+    if (isOnGround(actor))
+        vecKillElement(dst, dst, getGroundNormal(actor));
+}
+
+export function addVelocityMoveToDirection(actor: LiveActor, direction: vec3, speed: number): void {
+    calcVelocityMoveToDirection(scratchVec3, actor, direction, speed);
+    vec3.add(actor.velocity, actor.velocity, scratchVec3);
+}
+
+function calcMomentRollBall(dst: vec3, fwd: vec3, up: vec3, amount: number): void {
+    vec3.normalize(dst, up);
+    vec3.cross(dst, dst, fwd);
+    vec3.scale(dst, dst, amount);
+}
+
+export function rotateQuatRollBall(dst: quat, fwd: vec3, up: vec3, amount: number): void {
+    calcMomentRollBall(scratchVec3, fwd, up, amount);
+    const rollAmount = vec3.length(scratchVec3);
+    vec3.normalize(scratchVec3, scratchVec3);
+    quat.setAxisAngle(scratchQuat, scratchVec3, rollAmount);
+    quat.mul(dst, scratchQuat, dst);
+}

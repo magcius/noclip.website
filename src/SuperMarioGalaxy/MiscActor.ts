@@ -19,7 +19,7 @@ import { LiveActor, makeMtxTRFromActor, LiveActorGroup, ZoneAndLayer, dynamicSpa
 import { MapPartsRotator, MapPartsRailMover, getMapPartsArgMoveConditionType, MoveConditionType, MapPartsRailGuideDrawer, getMapPartsArgRailGuideType, RailGuideType } from './MapParts';
 import { isConnectedWithRail } from './RailRider';
 import { WorldmapPointInfo } from './LegacyActor';
-import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight, getBrkFrameMax, connectToSceneNoShadowedMapObj, isValidSwitchAppear, isValidSwitchA, isOnSwitchA, connectToSceneIndirectEnemy, turnQuatYDirRad, setBtkFrameAtRandom, connectToSceneIndirectMapObj, getPlayerPos, getAreaObj } from './ActorUtil';
+import { isBckStopped, getBckFrameMax, setLoopMode, initDefaultPos, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneCollisionMapObj, connectToSceneEnvironmentStrongLight, connectToSceneEnvironment, connectToSceneMapObjNoCalcAnim, connectToSceneEnemyMovement, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneMapObj, connectToSceneMapObjStrongLight, connectToSceneNpc, connectToSceneCrystal, connectToSceneSky, connectToSceneIndirectNpc, connectToSceneMapObjMovement, connectToSceneAir, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, connectToScene, connectToSceneItem, connectToSceneItemStrongLight, startBrk, setBrkFrameAndStop, startBtk, startBva, isBtkExist, isBtpExist, startBtp, setBtpFrameAndStop, setBtkFrameAndStop, startBpk, startAction, tryStartAllAnim, startBck, setBckFrameAtRandom, setBckRate, getRandomFloat, getRandomInt, isBckExist, tryStartBck, addHitSensorNpc, sendArbitraryMsg, isExistRail, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, loadBTIData, isValidDraw, getRailPointNum, moveCoordAndTransToNearestRailPos, getRailTotalLength, isLoopRail, moveCoordToStartPos, setRailCoordSpeed, getRailPos, moveRailRider, getRailDirection, moveCoordAndFollowTrans, calcRailPosAtCoord, isRailGoingToEnd, reverseRailDirection, getRailCoord, moveCoord, moveTransToOtherActorRailPos, setRailCoord, calcRailPointPos, startBrkIfExist, calcDistanceToCurrentAndNextRailPoint, setTextureMatrixST, loadTexProjectionMtx, calcGravityVector, calcMtxAxis, makeMtxTRFromQuatVec, getRailCoordSpeed, adjustmentRailCoordSpeed, isRailReachedGoal, tryStartAction, makeMtxUpFrontPos, makeMtxFrontUpPos, setMtxAxisXYZ, blendQuatUpFront, makeQuatUpFront, connectToSceneMapObjDecoration, isSameDirection, moveCoordToEndPos, calcRailStartPointPos, calcRailEndPointPos, calcRailDirectionAtCoord, isAnyAnimStopped, vecKillElement, calcGravity, makeMtxUpNoSupportPos, moveTransToCurrentRailPos, connectToSceneCollisionEnemyStrongLight, setBvaRate, moveCoordToNearestPos, setBckFrameAndStop, getNextRailPointNo, startBckNoInterpole, addBodyMessageSensorMapObj, isExistCollisionResource, initCollisionParts, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, addHitSensorMapObj, useStageSwitchSleep, useStageSwitchReadAppear, syncStageSwitchAppear, useStageSwitchWriteA, useStageSwitchWriteB, listenStageSwitchOnOffA, useStageSwitchWriteDead, listenStageSwitchOnOffAppear, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, moveCoordAndTransToRailStartPoint, setRailDirectionToEnd, getCurrentRailPointArg0, moveCoordToRailPoint, isValidSwitchDead, isValidSwitchB, isOnSwitchB, listenStageSwitchOnOffB, getJointMtx, getJointMtxByName, calcPerpendicFootToLine, connectToSceneSun, quatSetRotate, getCamPos, hideModel, showModel, isHiddenModel, connectToSceneNoShadowedMapObjStrongLight, joinToGroupArray, connectToSceneEnemy, makeMtxUpFront, connectToSceneMapObjDecorationStrongLight, getBrkFrameMax, connectToSceneNoShadowedMapObj, isValidSwitchAppear, isValidSwitchA, isOnSwitchA, connectToSceneIndirectEnemy, turnQuatYDirRad, setBtkFrameAtRandom, connectToSceneIndirectMapObj, getPlayerPos, getAreaObj, addVelocityMoveToDirection, rotateQuatRollBall } from './ActorUtil';
 import { isSensorNpc, HitSensor, isSensorPlayer } from './HitSensor';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { TDDraw, TSDraw } from './DDraw';
@@ -33,7 +33,7 @@ import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater, WaterAreaHolder, WaterInfo, HazeCube } from './MiscMap';
-import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isBinded, isWallCodeNoAction, setBindTriangleFilter } from './Collision';
+import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isBinded, isWallCodeNoAction, setBindTriangleFilter, getBindedFixReactionVector, isBindedGround, CollisionKeeperCategory } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
@@ -10053,7 +10053,54 @@ function addVelocityToGravity(actor: LiveActor, speed: number): void {
     vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
 }
 
-const enum UnizoNrv { Wait }
+function reboundVelocityFromCollision(actor: LiveActor, p2: number, p3: number, reboundDrag: number): boolean {
+    if (!isBinded(actor))
+        return false;
+
+    const fixReaction = getBindedFixReactionVector(actor);
+    if (isNearZeroVec3(fixReaction, 0.001))
+        return false;
+
+    vec3.normalize(scratchVec3, fixReaction);
+    const dot = vec3.dot(scratchVec3, actor.velocity);
+    if (dot >= -p3) {
+        if (dot < 0.0)
+            vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
+        return false;
+    } else {
+        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
+        vec3.scale(actor.velocity, actor.velocity, reboundDrag);
+        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot * p2);
+        return true;
+    }
+}
+
+function restrictVelocity(actor: LiveActor, maxSpeed: number): void {
+    if (vec3.squaredLength(actor.velocity) >= maxSpeed ** 2)
+        normToLength(actor.velocity, maxSpeed);
+}
+
+function attenuateVelocity(actor: LiveActor, drag: number): void {
+    vec3.scale(actor.velocity, actor.velocity, drag);
+}
+
+function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    const collisionDirector = sceneObjHolder.collisionDirector!;
+    vec3.scaleAndAdd(scratchVec3a, actor.translation, actor.gravityVector, -150.0);
+    vec3.scaleAndAdd(scratchVec3b, actor.translation, actor.gravityVector, 1000.0);
+
+    const moveLimitKeeper = collisionDirector.keepers[CollisionKeeperCategory.MoveLimit];
+    const mapKeeper = collisionDirector.keepers[CollisionKeeperCategory.Map];
+    if (moveLimitKeeper.checkStrikeLine(sceneObjHolder, scratchVec3a, scratchVec3b)) {
+        actor.binder!.setExCollisionParts(moveLimitKeeper.strikeInfo[0].collisionParts!);
+    } else if (mapKeeper.checkStrikeLine(sceneObjHolder, scratchVec3a, scratchVec3b)) {
+        const mapCollisionParts = mapKeeper.strikeInfo[0].collisionParts!;
+        const exParts = moveLimitKeeper.searchSameHostParts(mapCollisionParts);
+        actor.binder!.setExCollisionParts(exParts);
+    }
+}
+
+const enum UnizoNrv { Wait, Jump, Chase, CollidePlayer }
 
 export class Unizo extends LiveActor<UnizoNrv> {
     private jumpHeight = 0.0;
@@ -10062,6 +10109,8 @@ export class Unizo extends LiveActor<UnizoNrv> {
     private effectHostMtx = mat4.create();
     private rollRotation = quat.create();
     private blinkTime = 0;
+    private isInAir = false;
+    private chaseSinTimer = 0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -10086,7 +10135,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
         connectToSceneMapObj(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
         this.initHitSensor();
-        // this.initBinder(126.36 * this.size, 126.36 * this.size, 8);
+        this.initBinder(126.36 * this.size, 126.36 * this.size, 8);
         // initShadowVolumeSphere
         this.initEffectKeeper(sceneObjHolder, null);
 
@@ -10108,7 +10157,8 @@ export class Unizo extends LiveActor<UnizoNrv> {
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
-        // trySetMoveLimitCollision
+
+        trySetMoveLimitCollision(sceneObjHolder, this);
     }
 
     public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
@@ -10119,6 +10169,21 @@ export class Unizo extends LiveActor<UnizoNrv> {
         quatFromEulerRadians(this.rollRotation, this.rotation[0], this.rotation[1], this.rotation[2]);
         quat.normalize(this.rollRotation, this.rollRotation);
         vec3.set(this.rotation, 0, 0, 0);
+
+        this.isInAir = true;
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        this.chaseSinTimer += getDeltaTimeFrames(viewerInput);
+
+        if (!isNearZeroVec3(this.velocity, 0.001))
+            this.updateRotate();
+
+        vec3.negate(scratchVec3, this.gravityVector);
+        // turnMtxToYDir(this.baseMtx, scratchVec3, 1.0);
+        this.updateSurfaceEffect(sceneObjHolder);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UnizoNrv, deltaTimeFrames: number): void {
@@ -10130,7 +10195,43 @@ export class Unizo extends LiveActor<UnizoNrv> {
 
             this.updateBlink();
             this.updateInfluence();
+
+            if (!this.isInAir && isBindedGround(this) && isNearPlayer(sceneObjHolder, this, 1500.0) /* && isPlayerDamaging() */) {
+                this.doJump();
+                this.setNerve(UnizoNrv.Jump);
+            }
+        } else if (currentNerve === UnizoNrv.Jump) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Search');
+                startBtp(this, 'Angry');
+            }
+
+            if (isGreaterEqualStep(this, 20))
+                this.updateVelocity(sceneObjHolder);
+
+            this.updateInfluence();
+
+            if (isBckStopped(this))
+                this.setNerve(UnizoNrv.Chase);
+        } else if (currentNerve === UnizoNrv.Chase) {
+            this.updateVelocity(sceneObjHolder);
+            this.updateInfluence();
+
+            if (this.name === 'UnizoLand')
+                emitEffect(sceneObjHolder, this, 'SearchSmoke');
+
+            if (!isNearPlayer(sceneObjHolder, this, 1500.0)) {
+                deleteEffectAll(this);
+                this.setNerve(UnizoNrv.Wait);
+            }
         }
+    }
+
+    private doJump(): void {
+        this.isInAir = true;
+
+        const jumpHeight = Math.sqrt(2.0 * this.size * (70.0 * this.jumpHeight * vec3.length(this.gravityVector)));
+        vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, -jumpHeight);
     }
 
     private updateBlink(): void {
@@ -10138,7 +10239,73 @@ export class Unizo extends LiveActor<UnizoNrv> {
             startBtp(this, 'Blink');
     }
 
+    private updateVelocity(sceneObjHolder: SceneObjHolder): void {
+        getPlayerPos(scratchVec3, sceneObjHolder);
+        vec3.sub(scratchVec3, scratchVec3, this.translation);
+        vecKillElement(scratchVec3, scratchVec3, this.gravityVector);
+        vec3.normalize(scratchVec3, scratchVec3);
+        
+        vec3.normalize(scratchVec3a, this.gravityVector);
+        const chaseSin = Math.sin(this.chaseSinTimer / 20.0);
+        const chaseSpeed = 0.25 * MathConstants.TAU * chaseSin * Math.min(vec3.length(this.velocity) * 0.25, 1.0);
+        mat4.fromRotation(scratchMatrix, chaseSpeed, scratchVec3a);
+
+        transformVec3Mat4w0(scratchVec3, scratchMatrix, scratchVec3);
+        if (vec3.dot(scratchVec3, this.velocity) <= 0.0) {
+            addVelocityMoveToDirection(this, scratchVec3, 0.1);
+        } else if (vec3.squaredLength(this.velocity) < 16.0**2) {
+            addVelocityMoveToDirection(this, scratchVec3, 0.1);
+        }
+    }
+
     private updateInfluence(): void {
-        addVelocityToGravity(this, 0.8);
+        let didRebound = false;
+        if (!this.isInAir) {
+            didRebound = reboundVelocityFromCollision(this, 0.0, 0.0, 1.0);
+
+            if (isBindedGround(this))
+                addVelocityToGravity(this, 0.2);
+            else
+                addVelocityToGravity(this, 0.8);
+        } else {
+            addVelocityToGravity(this, this.jumpHeight);
+            didRebound = reboundVelocityFromCollision(this, 0.6, 0.0, 1.0);
+        }
+
+        restrictVelocity(this, 12.0);
+
+        if (this.isBreakGround()) {
+            // this.doJumpDown();
+        } else {
+            // play sounds
+
+            if (isBindedGround(this)) {
+                if (this.getCurrentNerve() !== UnizoNrv.CollidePlayer && this.getCurrentNerve() !== UnizoNrv.Wait) {
+                    attenuateVelocity(this, 0.96);
+                } else {
+                    attenuateVelocity(this, 0.9);
+
+                    if (vec3.length(this.velocity) < 0.5)
+                        vec3.zero(this.velocity);
+                }
+
+                this.isInAir = false;
+            }
+        }
+    }
+
+    private isBreakGround(): boolean {
+        return false;
+    }
+
+    private updateRotate(): void {
+        vec3.negate(scratchVec3, this.gravityVector);
+        rotateQuatRollBall(this.rollRotation, this.velocity, scratchVec3, 126.26 * this.size);
+    }
+
+    private updateSurfaceEffect(sceneObjHolder: SceneObjHolder): void {
+        // spawn water ripples
+        if (this.name !== 'UnizoShoal')
+            return;
     }
 }

@@ -1,5 +1,5 @@
 
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { nArray } from "./util";
 import { transformVec3Mat4w1 } from "./MathHelpers";
 
@@ -164,7 +164,7 @@ export class AABB {
             a.minZ > b.maxZ || b.minZ > a.maxZ);
     }
 
-    public containsPoint(v: vec3): boolean {
+    public containsPoint(v: ReadonlyVec3): boolean {
         const pX = v[0], pY = v[1], pZ = v[2];
         return !(
             pX < this.minX || pX > this.maxX ||
@@ -172,7 +172,7 @@ export class AABB {
             pZ < this.minZ || pZ > this.maxZ);
     }
 
-    public containsSphere(v: vec3, rad: number): boolean {
+    public containsSphere(v: ReadonlyVec3, rad: number): boolean {
         const pX = v[0], pY = v[1], pZ = v[2];
         return !(
             pX < this.minX - rad || pX > this.maxX + rad ||
