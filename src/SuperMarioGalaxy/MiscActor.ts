@@ -9820,7 +9820,8 @@ class HeatHazeEffect extends LiveActor {
 
         computeEulerAngleRotationFromSRTMatrix(this.rotation, viewerInput.camera.worldMatrix);
 
-        vec3.set(this.scale, this.depth, this.depth, this.depth);
+        const scale = this.depth / 1000.0;
+        vec3.set(this.scale, scale, scale, scale);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {

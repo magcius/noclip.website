@@ -16,7 +16,7 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
 import { colorCopy, Color } from '../../../Color';
-import { computeNormalMatrix, texEnvMtx } from '../../../MathHelpers';
+import { computeNormalMatrix, texEnvMtx, computeModelMatrixS } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
@@ -1283,10 +1283,7 @@ export class J3DModelInstance {
             const parentJointIndex = parentNode.jointIndex;
             if (parentJointIndex < 0) {
                 // Special: construct model matrix.
-                mat4.identity(matrixScratch);
-                matrixScratch[0] *= this.baseScale[0];
-                matrixScratch[5] *= this.baseScale[1];
-                matrixScratch[10] *= this.baseScale[2];
+                computeModelMatrixS(matrixScratch, this.baseScale[0], this.baseScale[1], this.baseScale[2]);
                 mat4.mul(matrixScratch, this.modelMatrix, matrixScratch);
                 mat4.mul(dstToWorld, matrixScratch, dstToParent);
             } else {
