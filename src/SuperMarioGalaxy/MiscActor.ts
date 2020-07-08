@@ -155,7 +155,7 @@ export function getCamYdir(v: vec3, camera: Camera): void {
 
 export function getCamZdir(v: vec3, camera: Camera): void {
     getMatrixAxisZ(v, camera.worldMatrix);
-    v[2] *= -1;
+    vec3.negate(v, v);
 }
 
 export function calcDistToCamera(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
@@ -4216,6 +4216,9 @@ class WarpPodPathDrawer {
         for (let i = 0; i < this.points.length - 1; i++) {
             vec3.sub(scratchVec3a, this.points[i + 1], this.points[i]);
             getCamZdir(scratchVec3b, camera);
+            // TODO(jstpierre): Not sure why this is necessary.
+            scratchVec3b[0] *= -1;
+            scratchVec3b[1] *= -1;
             vecKillElement(scratchVec3c, scratchVec3a, scratchVec3b);
             vec3.normalize(scratchVec3c, scratchVec3c);
 
@@ -9826,9 +9829,9 @@ class HeatHazeEffect extends LiveActor {
     public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
-        getMatrixAxisZ(scratchVec3, viewerInput.camera.worldMatrix);
+        getCamZdir(scratchVec3, viewerInput.camera);
         getMatrixTranslation(this.translation, viewerInput.camera.worldMatrix);
-        vec3.scaleAndAdd(this.translation, this.translation, scratchVec3, -this.depth);
+        vec3.scaleAndAdd(this.translation, this.translation, scratchVec3, this.depth);
 
         computeEulerAngleRotationFromSRTMatrix(this.rotation, viewerInput.camera.worldMatrix);
 
