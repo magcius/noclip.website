@@ -1,4 +1,4 @@
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { Viewer } from './viewer';
 import { StudioCameraController } from './Camera';
 import BezierEasing from 'bezier-easing';
@@ -7,12 +7,17 @@ const MAX_KEYFRAME_DURATION_SECONDS = 100.0;
 const MIN_KEYFRAME_DURATION = 0;
 const MILLISECONDS_IN_SECOND = 1000.0;
 
-export const enum InterpolationType {
-    Linear = 'LINEAR',
-    EaseIn = 'EASE_IN',
-    EaseOut = 'EASE_OUT',
-    EaseBoth = 'EASE_BOTH'
+export const enum LinearEaseType {
+    NoEase = 'NoEase',
+    EaseIn = 'EaseIn',
+    EaseOut = 'EaseOut',
+    EaseBoth = 'EaseBoth'
 }
+
+/** Premade constant Bezier easing functions. */
+const easeBothFunc: BezierEasing.EasingFunction = BezierEasing(0.42, 0, 0.58, 1);
+const easeInFunc: BezierEasing.EasingFunction = BezierEasing(0.42, 0, 1, 1);
+const easeOutFunc: BezierEasing.EasingFunction = BezierEasing(0, 0, 0.58, 1);
 
 export class Keyframe {
     /**
@@ -27,10 +32,15 @@ export class Keyframe {
     private _interpProgress: number = 0;
     private _holdProgress: number = 0;
 
-    private _interpType: InterpolationType = InterpolationType.Linear;
-    private bezier: BezierEasing.EasingFunction | null = null;
+    public usesLinearInterp: boolean = false;
+    private _linearEaseType: LinearEaseType = LinearEaseType.EaseBoth;
+    private easingFunction: BezierEasing.EasingFunction | null = easeBothFunc;
+    public trsTangentIn: vec3;
+    public trsTangentOut: vec3;
 
     constructor(public endPos: mat4) {
+        this.trsTangentIn = vec3.create();
+        this.trsTangentOut = vec3.create();
     }
 
     /**
@@ -54,12 +64,23 @@ export class Keyframe {
         return this._interpProgress === this._interpDuration && this._holdProgress === this._holdDuration;
     }
 
+    /**
+     * Returns a bezier-eased time interpolation value. The easeBoth function is used by default.
+     * If this keyframe uses linear interpolation, the currently-selected easing function is used
+     * instead, if any.
+     */
+    public bezierInterpAmount(): number {
+        if (this.usesLinearInterp) {
+            return this.interpAmount;
+        } else
+            return easeBothFunc(this._interpProgress / this._interpDuration);
+    }
+
     get interpAmount(): number {
-        if (this.bezier) {
-            return this.bezier(this._interpProgress / this._interpDuration);
-        } else {
+        if (this.usesLinearInterp && this.easingFunction)
+            return this.easingFunction(this._interpProgress / this._interpDuration);
+        else
             return this._interpProgress / this._interpDuration;
-        }
     }
 
     get durationInSeconds(): number {
@@ -90,26 +111,26 @@ export class Keyframe {
         }
     }
 
-    get interpType(): InterpolationType {
-        return this._interpType;
+    get linearEaseType(): LinearEaseType {
+        return this._linearEaseType;
     }
 
-    set interpType(type: InterpolationType) {
+    set linearEaseType(type: LinearEaseType) {
         switch (type) {
-            case InterpolationType.Linear:
-                this.bezier = null;
+            case LinearEaseType.NoEase:
+                this.easingFunction = null;
                 break;
-            case InterpolationType.EaseIn:
-                this.bezier = BezierEasing(0.42, 0, 1, 1);
+            case LinearEaseType.EaseIn:
+                this.easingFunction = easeInFunc;
                 break;
-            case InterpolationType.EaseOut:
-                this.bezier = BezierEasing(0, 0, 0.58, 1);
+            case LinearEaseType.EaseOut:
+                this.easingFunction = easeOutFunc;
                 break;
-            case InterpolationType.EaseBoth:
-                this.bezier = BezierEasing(0.42, 0, 0.58, 1);
+            case LinearEaseType.EaseBoth:
+                this.easingFunction = easeBothFunc;
                 break;
         }
-        this._interpType = type;
+        this._linearEaseType = type;
     }
 
     public reset() {
@@ -157,10 +178,25 @@ export class CameraAnimationManager {
     private studioCameraController: StudioCameraController;
     private selectedKeyframeIndex: number = -1;
     private editingKeyframePosition: boolean = false;
+    /**
+     * The translation vector components of the keyframes following the current keyframe. Used for calculating tangents.
+     */
+    private prevTrs: vec3;
+    private curTrs: vec3;
+    private curPlus1Trs: vec3;
+    private curPlus2Trs: vec3;
+    private trsTangentInScratch: vec3;
+    private trsTangentOutScratch: vec3;
 
     constructor(private uiKeyframeList: HTMLElement, private uiStudioControls: HTMLElement) {
         this.studioCameraController = new StudioCameraController(this);
         this.currentAnimation = new CameraAnimation();
+        this.prevTrs = vec3.create();
+        this.curTrs = vec3.create();
+        this.curPlus1Trs = vec3.create();
+        this.curPlus2Trs = vec3.create();
+        this.trsTangentInScratch = vec3.create();
+        this.trsTangentOutScratch = vec3.create();
     }
 
     public enableStudioController(viewer: Viewer): void {
@@ -216,6 +252,7 @@ export class CameraAnimationManager {
 
     public playAnimation(loop: boolean) {
         if (this.currentAnimation.keyframes.length > 1) {
+            this.calculateTangents();
             const startPos: mat4 = this.currentAnimation.keyframes[0].endPos;
             this.studioCameraController.playAnimation(this.currentAnimation.keyframes, startPos, loop);
         }
@@ -231,6 +268,7 @@ export class CameraAnimationManager {
         } else {
             return;
         }
+        this.calculateTangents();
         this.studioCameraController.playAnimation(new Array(this.currentAnimation.keyframes[index]), startPos, false);
     }
 
@@ -246,7 +284,7 @@ export class CameraAnimationManager {
         const kf: Keyframe[] = this.currentAnimation.keyframes;
         const index: number = this.selectedKeyframeIndex;
         if (index > 1) {
-            [kf[index-1], kf[index]] = [kf[index], kf[index-1]];
+            [kf[index - 1], kf[index]] = [kf[index], kf[index - 1]];
             return true;
         }
         return false;
@@ -256,9 +294,78 @@ export class CameraAnimationManager {
         const kf: Keyframe[] = this.currentAnimation.keyframes;
         const index: number = this.selectedKeyframeIndex;
         if (index > 0 && index < kf.length - 1) {
-            [kf[index], kf[index+1]] = [kf[index+1], kf[index]];
+            [kf[index], kf[index + 1]] = [kf[index + 1], kf[index]];
             return true;
         }
         return false;
+    }
+
+    /**
+     * Called before playing or previewing an animation, calculates and assigns tangent values for hermite interpolation.
+     */
+    private calculateTangents(): void {
+        const keyframes = this.currentAnimation.keyframes;
+
+        if (keyframes.length < 4) {
+            mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 1].endPos);
+            mat4.getTranslation(this.curTrs, keyframes[0].endPos);
+            mat4.getTranslation(this.curPlus1Trs, keyframes[1].endPos);
+            mat4.getTranslation(this.curPlus2Trs, keyframes[keyframes.length - 1].endPos);
+
+            vec3.sub(this.trsTangentInScratch, this.curPlus1Trs, this.prevTrs);
+            vec3.scale(this.trsTangentInScratch, this.trsTangentInScratch, 0.5);
+            vec3.sub(this.trsTangentOutScratch, this.curPlus2Trs, this.curTrs);
+            vec3.scale(this.trsTangentOutScratch, this.trsTangentOutScratch, 0.5);
+
+            vec3.copy(keyframes[0].trsTangentIn, this.trsTangentInScratch);
+            vec3.copy(keyframes[0].trsTangentOut, this.trsTangentOutScratch);
+            vec3.copy(keyframes[1].trsTangentIn, this.trsTangentOutScratch);
+            if (keyframes.length === 2) {
+                vec3.copy(keyframes[1].trsTangentOut, this.trsTangentInScratch);
+                return;
+            }
+            vec3.copy(this.prevTrs, this.curPlus1Trs);
+            vec3.copy(this.curPlus1Trs, this.curTrs);
+            vec3.copy(this.curTrs, this.curPlus2Trs);
+            vec3.copy(this.curPlus2Trs, this.prevTrs);
+
+            vec3.sub(this.trsTangentInScratch, this.curPlus1Trs, this.prevTrs);
+            vec3.scale(this.trsTangentInScratch, this.trsTangentInScratch, 0.5);
+            vec3.sub(this.trsTangentOutScratch, this.curPlus2Trs, this.curTrs);
+            vec3.scale(this.trsTangentOutScratch, this.trsTangentOutScratch, 0.5);
+
+            vec3.copy(keyframes[1].trsTangentOut, this.trsTangentInScratch);
+            vec3.copy(keyframes[2].trsTangentIn, this.trsTangentInScratch);
+            vec3.copy(keyframes[2].trsTangentOut, this.trsTangentOutScratch);
+            return;
+        }
+
+        mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 1].endPos);
+        mat4.getTranslation(this.curTrs, keyframes[0].endPos);
+        mat4.getTranslation(this.curPlus1Trs, keyframes[1].endPos);
+        mat4.getTranslation(this.curPlus2Trs, keyframes[2].endPos);
+
+        vec3.sub(this.trsTangentInScratch, this.curPlus1Trs, this.prevTrs);
+        vec3.scale(this.trsTangentInScratch, this.trsTangentInScratch, 0.5);
+        vec3.sub(this.trsTangentOutScratch, this.curPlus2Trs, this.curTrs);
+        vec3.scale(this.trsTangentOutScratch, this.trsTangentOutScratch, 0.5);
+
+        vec3.copy(keyframes[0].trsTangentIn, this.trsTangentInScratch);
+        vec3.copy(keyframes[0].trsTangentOut, this.trsTangentOutScratch);
+
+        for (let i = 1; i < keyframes.length; i++) {
+            vec3.copy(this.prevTrs, this.curTrs);
+            vec3.copy(this.curTrs, this.curPlus1Trs);
+            vec3.copy(this.curPlus1Trs, this.curPlus2Trs);
+            mat4.getTranslation(this.curPlus2Trs, keyframes[(i + 2) % keyframes.length].endPos);
+
+            vec3.sub(this.trsTangentInScratch, this.curPlus1Trs, this.prevTrs);
+            vec3.scale(this.trsTangentInScratch, this.trsTangentInScratch, 0.5);
+            vec3.sub(this.trsTangentOutScratch, this.curPlus2Trs, this.curTrs);
+            vec3.scale(this.trsTangentOutScratch, this.trsTangentOutScratch, 0.5);
+
+            vec3.copy(keyframes[i].trsTangentIn, this.trsTangentInScratch);
+            vec3.copy(keyframes[i].trsTangentOut, this.trsTangentOutScratch);
+        }
     }
 }
