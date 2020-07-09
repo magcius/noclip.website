@@ -42,12 +42,17 @@ interface GfxSamplerP_GL extends GfxSampler {
     gl_sampler: WebGLSampler;
 }
 
+const enum GfxProgramCompileStateP_GL {
+    NeedsCompile,
+    NeedsBind,
+    Ready,
+}
+
 interface GfxProgramP_GL extends GfxProgram {
-    gl_program: WebGLProgram | null;
+    gl_program: WebGLProgram;
     gl_shader_vert: WebGLShader | null;
     gl_shader_frag: WebGLShader | null;
-    compileDirty: boolean;
-    bindDirty: boolean;
+    compileState: GfxProgramCompileStateP_GL;
     descriptor: GfxProgramDescriptorSimple;
 }
 
@@ -1098,12 +1103,12 @@ void main() {
     }
 
     private _createProgram(descriptor: GfxProgramDescriptorSimple): GfxProgramP_GL {
-        const gl_program: WebGLProgram | null = null;
+        const gl = this.gl;
+        const gl_program: WebGLProgram = this.ensureResourceExists(gl.createProgram());
         const gl_shader_vert: WebGLShader | null = null;
         const gl_shader_frag: WebGLShader | null = null;
-        const compileDirty = true;
-        const bindDirty = true;
-        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, compileDirty, bindDirty, gl_program, gl_shader_vert, gl_shader_frag };
+        const compileState = GfxProgramCompileStateP_GL.NeedsCompile;
+        const program: GfxProgramP_GL = { _T: _T.Program, ResourceUniqueId: this.getNextUniqueId(), descriptor, compileState, gl_program, gl_shader_vert, gl_shader_frag };
         this._tryCompileProgram(program);
         return program;
     }
@@ -1490,7 +1495,7 @@ void main() {
 
     public programPatched(o: GfxProgram): void {
         const program = o as GfxProgramP_GL;
-        program.compileDirty = true;
+        program.compileState = GfxProgramCompileStateP_GL.NeedsCompile;
         this._tryCompileProgram(program);
     }
 
@@ -1678,21 +1683,22 @@ void main() {
     }
 
     private _tryCompileProgram(program: GfxProgramP_GL): void {
-        assert(program.compileDirty);
+        assert(program.compileState === GfxProgramCompileStateP_GL.NeedsCompile);
 
         const descriptor = program.descriptor;
 
         const gl = this.gl;
+        if (program.gl_shader_vert !== null)
+            gl.deleteShader(program.gl_shader_vert);
+        if (program.gl_shader_frag !== null)
+            gl.deleteShader(program.gl_shader_frag);
         program.gl_shader_vert = this._compileShader(descriptor.preprocessedVert, gl.VERTEX_SHADER);
         program.gl_shader_frag = this._compileShader(descriptor.preprocessedFrag, gl.FRAGMENT_SHADER);
-        const prog = this.ensureResourceExists(gl.createProgram());
-        gl.attachShader(prog, program.gl_shader_vert);
-        gl.attachShader(prog, program.gl_shader_frag);
-        gl.linkProgram(prog);
-        program.gl_program = prog;
+        gl.attachShader(program.gl_program, program.gl_shader_vert);
+        gl.attachShader(program.gl_program, program.gl_shader_frag);
+        gl.linkProgram(program.gl_program);
 
-        program.compileDirty = false;
-        program.bindDirty = true;
+        program.compileState = GfxProgramCompileStateP_GL.NeedsBind;
     }
 
     private _bindFramebufferAttachment(binding: GLenum, attachment: GfxAttachmentP_GL | null): void {
@@ -1850,7 +1856,7 @@ void main() {
         const program = this._currentPipeline.program;
         this._useProgram(program);
 
-        if (program.bindDirty) {
+        if (program.compileState === GfxProgramCompileStateP_GL.NeedsBind) {
             const gl = this.gl, prog = program.gl_program!;
             const deviceProgram = program.descriptor;
 
@@ -1872,7 +1878,7 @@ void main() {
                 samplerIndex += arraySize;
             }
 
-            program.bindDirty = false;
+            program.compileState = GfxProgramCompileStateP_GL.Ready;
         }
     }
 
