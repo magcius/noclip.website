@@ -14,7 +14,7 @@ import { clamp } from './MathHelpers';
 // @ts-ignore
 import logoURL from './assets/logo.png';
 import { DebugFloaterHolder, FloatingPanel } from './DebugFloaters';
-import { InterpolationType, Keyframe, CameraAnimationManager } from './CameraAnimationManager';
+import { LinearEaseType, Keyframe, CameraAnimationManager } from './CameraAnimationManager';
 import { DraggingMode } from './InputManager';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
@@ -1730,12 +1730,16 @@ class StudioPanel extends FloatingPanel {
     private keyframeDurationContainer: HTMLElement;
     private keyframeDurationInput: HTMLInputElement;
     private keyframeHoldDurationInput: HTMLInputElement;
+
     private interpolationSettings: HTMLElement;
-    private linearInterpBtn: HTMLElement;
-    private easeInInterpBtn: HTMLElement;
-    private easeOutInterpBtn: HTMLElement;
-    private easeBothInterpBtn: HTMLElement;
-    private selectedInterpBtn?: HTMLElement;
+    private hermiteBtn: HTMLElement;
+    private linearBtn: HTMLElement;
+    private linearEaseSettingsDiv: HTMLElement;
+    private noEaseBtn: HTMLElement;
+    private easeInBtn: HTMLElement;
+    private easeOutBtn: HTMLElement;
+    private easeBothBtn: HTMLElement;
+    private selectedEaseBtn?: HTMLElement;
     private moveKeyframeUpBtn: HTMLElement;
     private moveKeyframeDownBtn: HTMLElement;
 
@@ -1840,7 +1844,7 @@ class StudioPanel extends FloatingPanel {
                 list-style: none;
                 padding: 0;
                 margin: 0;
-                height: 22rem;
+                height: 27rem;
                 overflow-y: scroll;
                 border: 1px solid #555;
             }
@@ -1886,8 +1890,8 @@ class StudioPanel extends FloatingPanel {
         this.studioPanelContents.insertAdjacentHTML('afterbegin', `
         <div id="studioHelpText"></div>
         <div id="studioControlsContainer" hidden>
-            <div style="display: grid; grid-template-columns: 3fr 2fr;">
-                <div style="margin: 0 0.5rem">
+            <div style="display: grid; grid-template-columns: 1fr 1fr;">
+                <div style="margin: 0 0.5rem 0 0.25rem">
                     <ol id="keyframeList" class="KeyframeList"></ol>
                     <div id="keyframeNavControls" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.25rem;">
                         <button type="button" id="firstKeyframeBtn" class="SettingsButton">&lt;&lt;-</button>
@@ -1900,19 +1904,29 @@ class StudioPanel extends FloatingPanel {
                     <button type="button" id="editKeyframePositionBtn" class="SettingsButton">Edit Position</button>
                     <div>
                         <div class="SettingsHeader KeyframeSettingsName">Name</div>
-                        <input id="keyframeName" type="text" minLength="1" maxLength="20" size="18" autocomplete="off"/>
+                        <input id="keyframeName" type="text" minLength="1" maxLength="20" size="20" autocomplete="off"/>
                     </div>
                     <div id="keyframeDurationContainer">
                         <div class="SettingsHeader KeyframeSettingsName">Duration</div>
                         <input id="keyframeDuration" class="KeyframeNumericInput" type="number" min="0" max="100.0" step="0.1"/> <span>s</span>
                     </div>
                     <div id="interpolationSettings">
-                        <div class="SettingsHeader KeyframeSettingsName">Interpolation</div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr;">
-                            <button type="button" id="linearInterpBtn" class="SettingsButton InterpButton" data-interp-type="LINEAR">Linear</button>
-                            <button type="button" id="easeInInterpBtn" class="SettingsButton InterpButton" data-interp-type="EASE_IN">Ease In</button>
-                            <button type="button" id="easeOutInterpBtn" class="SettingsButton InterpButton" data-interp-type="EASE_OUT">Ease Out</button>
-                            <button type="button" id="easeBothInterpBtn" class="SettingsButton InterpButton" data-interp-type="EASE_BOTH">Ease Both</button>
+                        <div class="SettingsHeader KeyframeSettingsName">Motion Interpolation</div>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr;">
+                                <div class="SettingsSubHeader KeyframeSettingsName">Type:</div>
+                                <div>
+                                    <button type="button" id="hermiteBtn" class="SettingsButton">Hermite</button>
+                                    <button type="button" id="linearBtn" class="SettingsButton">Linear</button>
+                                </div>
+                            </div>
+                        <div id="linearEaseSettingsDiv" hidden>
+                            <div class="SettingsHeader KeyframeSettingsName">Linear Easing Method</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr;">
+                                <button type="button" id="noEaseBtn" class="SettingsButton EaseButton" data-ease-type="NoEase">No Ease</button>
+                                <button type="button" id="easeInBtn" class="SettingsButton EaseButton" data-ease-type="EaseIn">Ease In</button>
+                                <button type="button" id="easeOutBtn" class="SettingsButton EaseButton" data-ease-type="EaseOut">Ease Out</button>
+                                <button type="button" id="easeBothBtn" class="SettingsButton EaseButton" data-ease-type="EaseBoth">Ease Both</button>
+                            </div>
                         </div>
                     </div>
                     <div>
@@ -1949,12 +1963,18 @@ class StudioPanel extends FloatingPanel {
         this.keyframeHoldDurationInput = this.contents.querySelector('#keyframeHoldDuration') as HTMLInputElement;
 
         this.interpolationSettings = this.contents.querySelector('#interpolationSettings') as HTMLElement;
-        this.interpolationSettings.dataset.helpText = 'The interpolation method used for animating this keyframe.';
 
-        this.linearInterpBtn = this.contents.querySelector('#linearInterpBtn') as HTMLInputElement;
-        this.easeInInterpBtn = this.contents.querySelector('#easeInInterpBtn') as HTMLInputElement;
-        this.easeOutInterpBtn = this.contents.querySelector('#easeOutInterpBtn') as HTMLInputElement;
-        this.easeBothInterpBtn = this.contents.querySelector('#easeBothInterpBtn') as HTMLInputElement;
+        this.hermiteBtn = this.contents.querySelector('#hermiteBtn') as HTMLInputElement;
+        this.hermiteBtn.dataset.helpText = 'Hermite interpolation. Use for smooth motion between and through keyframes.';
+        this.linearBtn = this.contents.querySelector('#linearBtn') as HTMLInputElement;
+        this.linearBtn.dataset.helpText = 'Linear interpolation. Use if Hermite produces excessive undesired motion.';
+
+        this.linearEaseSettingsDiv = this.contents.querySelector('#linearEaseSettingsDiv') as HTMLElement;
+        this.linearEaseSettingsDiv.dataset.helpText = 'Motion easing method for linear interpolation.';
+        this.noEaseBtn = this.contents.querySelector('#noEaseBtn') as HTMLInputElement;
+        this.easeInBtn = this.contents.querySelector('#easeInBtn') as HTMLInputElement;
+        this.easeOutBtn = this.contents.querySelector('#easeOutBtn') as HTMLInputElement;
+        this.easeBothBtn = this.contents.querySelector('#easeBothBtn') as HTMLInputElement;
 
         this.moveKeyframeUpBtn = this.contents.querySelector('#moveKeyframeUpBtn') as HTMLInputElement;
         this.moveKeyframeDownBtn = this.contents.querySelector('#moveKeyframeDownBtn') as HTMLInputElement;
@@ -2016,7 +2036,7 @@ class StudioPanel extends FloatingPanel {
             this.animationManager.enableEditKeyframePosition();
             this.studioHelpText.innerText = this.studioHelpText.dataset.editPosHelpText as string;
             setElementHighlighted(this.editKeyframePositionBtn, true);
-        };
+        }
 
         // Event fired when a keyframe's position is edited.
         this.keyframeList.addEventListener('keyframePositionEdited', () => {
@@ -2035,7 +2055,7 @@ class StudioPanel extends FloatingPanel {
                 this.selectedKeyframeListItem.dataset.name = this.keyframeNameInput.value;
                 this.selectedKeyframeListItem.childNodes[0].nodeValue = this.keyframeNameInput.value;
             }
-        };
+        }
 
         this.keyframeNameInput.onchange = () => {
             if (this.selectedKeyframeListItem &&
@@ -2044,9 +2064,9 @@ class StudioPanel extends FloatingPanel {
                 this.selectedKeyframeListItem.dataset.name = 'Keyframe';
                 this.selectedKeyframeListItem.childNodes[0].nodeValue = 'Keyframe';
             }
-        };
+        }
 
-        this.keyframeDurationInput.dataset.helpText = 'The length of time spent animating between the previous keyframe and this one.'
+        this.keyframeDurationInput.dataset.helpText = 'The length of time spent animating between the previous keyframe and this one.';
         this.keyframeDurationInput.onchange = () => {
             const durationVal: number = parseFloat(this.keyframeDurationInput.value);
             this.selectedKeyframe.durationInSeconds = durationVal;
@@ -2057,19 +2077,34 @@ class StudioPanel extends FloatingPanel {
             } else if (durationVal === 0) {
                 this.interpolationSettings.setAttribute('hidden', '');
             }
-        };
+        }
 
-        const interpBtns: NodeList = document.querySelectorAll('#interpolationSettings .InterpButton');
-        for (let i = 0; i < interpBtns.length; i++) {
-            const btn: HTMLElement = interpBtns[i] as HTMLElement;
-            btn.onclick = () => this.setInterpType(btn);
+        this.hermiteBtn.onclick = () => {
+            this.linearEaseSettingsDiv.setAttribute('hidden', '');
+            this.selectedKeyframe.usesLinearInterp = false;
+            setElementHighlighted(this.hermiteBtn, true);
+            setElementHighlighted(this.linearBtn, false);
+        }
+        this.linearBtn.onclick = () => {
+            this.linearEaseSettingsDiv.removeAttribute('hidden');
+            this.selectedKeyframe.usesLinearInterp = true;
+            setElementHighlighted(this.hermiteBtn, false);
+            setElementHighlighted(this.linearBtn, true);
+        }
+        setElementHighlighted(this.hermiteBtn, false);
+        setElementHighlighted(this.linearBtn, false);
+
+        const easeBtns: NodeList = document.querySelectorAll('#interpolationSettings .EaseButton');
+        for (let i = 0; i < easeBtns.length; i++) {
+            const btn: HTMLElement = easeBtns[i] as HTMLElement;
+            btn.onclick = () => this.setEaseType(btn);
             setElementHighlighted(btn, false);
         }
 
         this.keyframeHoldDurationInput.dataset.helpText = 'The length of time to hold on this keyframe\'s end position before moving to the next.';
         this.keyframeHoldDurationInput.onchange = () => {
             this.selectedKeyframe.holdDurationInSeconds = parseFloat(this.keyframeHoldDurationInput.value);
-        };
+        }
 
         this.moveKeyframeUpBtn.onclick = () => {
             if (this.animationManager.moveKeyframeUp() && this.selectedKeyframeListItem) {
@@ -2104,11 +2139,11 @@ class StudioPanel extends FloatingPanel {
                 this.stopAnimationBtn.removeAttribute('disabled');
                 this.animationManager.previewKeyframe();
             }
-        };
+        }
 
         this.stopPreviewKeyframeBtn.onclick = () => {
             this.animationManager.stopAnimation();
-        };
+        }
 
         this.loopAnimationCheckbox.onchanged = () => {
             if (this.selectedKeyframeListItem === this.keyframeList.children[0] && this.keyframeList.children.length > 1) {
@@ -2120,7 +2155,7 @@ class StudioPanel extends FloatingPanel {
                     this.previewKeyframeBtn.setAttribute('hidden', '');
                 }
             }
-        };
+        }
 
         this.playAnimationBtn.onclick = (e) => {
             if (this.keyframeList.children.length > 1) {
@@ -2132,6 +2167,7 @@ class StudioPanel extends FloatingPanel {
                 this.stopAnimationBtn.removeAttribute('hidden');
                 if (this.hideUiCheckbox.checked) {
                     this.ui.toggleUI(false);
+                    this.elem.style.display = 'none';
                 }
                 if (this.delayStartCheckbox.checked) {
                     setTimeout(() => {
@@ -2141,13 +2177,13 @@ class StudioPanel extends FloatingPanel {
                     this.animationManager.playAnimation(this.loopAnimationCheckbox.checked);
                 }
             }
-        };
+        }
 
         this.stopAnimationBtn.onclick = () => {
             this.animationManager.stopAnimation();
             this.playAnimationBtn.removeAttribute('hidden');
             this.stopAnimationBtn.setAttribute('hidden', '');
-        };
+        }
 
         this.studioControlsContainer.addEventListener('animationStopped', () => {
             this.enableKeyframeControls();
@@ -2163,6 +2199,7 @@ class StudioPanel extends FloatingPanel {
             this.stopPreviewKeyframeBtn.setAttribute('hidden', '');
             this.stopAnimationBtn.setAttribute('hidden', '');
             this.ui.toggleUI(true);
+            this.elem.style.display = '';
         });
 
         // Set a mouseover event for any elements in the panel with defined help text.
@@ -2189,13 +2226,13 @@ class StudioPanel extends FloatingPanel {
         }
     }
 
-    private setInterpType(btn: HTMLElement) {
-        this.selectedKeyframe.interpType = btn.dataset.interpType as InterpolationType;
-        if (this.selectedInterpBtn) {
-            setElementHighlighted(this.selectedInterpBtn, false);
+    private setEaseType(btn: HTMLElement) {
+        this.selectedKeyframe.linearEaseType = btn.dataset.easeType as LinearEaseType;
+        if (this.selectedEaseBtn) {
+            setElementHighlighted(this.selectedEaseBtn, false);
         }
-        this.selectedInterpBtn = btn;
-        setElementHighlighted(this.selectedInterpBtn, true);
+        this.selectedEaseBtn = btn;
+        setElementHighlighted(this.selectedEaseBtn, true);
     }
 
     private displayHelpText(elem: HTMLElement) {
@@ -2258,6 +2295,9 @@ class StudioPanel extends FloatingPanel {
         keyframeListItem.click();
     }
 
+    /**
+     * Called when a keyframe in the keyframe list is clicked.
+     */
     private selectKeyframeListItem(e: MouseEvent) {
         if (this.keyframeList.hasAttribute('disabled')) {
             return;
@@ -2273,25 +2313,34 @@ class StudioPanel extends FloatingPanel {
         this.keyframeNameInput.value = liElem.dataset.name as string;
         this.keyframeDurationInput.value = this.selectedKeyframe.durationInSeconds.toString();
         this.keyframeHoldDurationInput.value = this.selectedKeyframe.holdDurationInSeconds.toString();
-        const interpType: InterpolationType = this.selectedKeyframe.interpType;
-        if (this.selectedInterpBtn) {
-            setElementHighlighted(this.selectedInterpBtn, false);
+        if (this.selectedKeyframe.usesLinearInterp) {
+            this.linearEaseSettingsDiv.removeAttribute('hidden');
+            setElementHighlighted(this.hermiteBtn, false);
+            setElementHighlighted(this.linearBtn, true);
+        } else {
+            this.linearEaseSettingsDiv.setAttribute('hidden','');
+            setElementHighlighted(this.hermiteBtn, true);
+            setElementHighlighted(this.linearBtn, false);
         }
-        switch (interpType) {
-            case InterpolationType.Linear:
-                this.selectedInterpBtn = this.linearInterpBtn;
+        const easeType: LinearEaseType = this.selectedKeyframe.linearEaseType;
+        if (this.selectedEaseBtn) {
+            setElementHighlighted(this.selectedEaseBtn, false);
+        }
+        switch (easeType) {
+            case LinearEaseType.NoEase:
+                this.selectedEaseBtn = this.noEaseBtn;
                 break;
-            case InterpolationType.EaseIn:
-                this.selectedInterpBtn = this.easeInInterpBtn;
+            case LinearEaseType.EaseIn:
+                this.selectedEaseBtn = this.easeInBtn;
                 break;
-            case InterpolationType.EaseOut:
-                this.selectedInterpBtn = this.easeOutInterpBtn;
+            case LinearEaseType.EaseOut:
+                this.selectedEaseBtn = this.easeOutBtn;
                 break;
-            case InterpolationType.EaseBoth:
-                this.selectedInterpBtn = this.easeBothInterpBtn;
+            case LinearEaseType.EaseBoth:
+                this.selectedEaseBtn = this.easeBothBtn;
                 break;
         }
-        setElementHighlighted(this.selectedInterpBtn, true);
+        setElementHighlighted(this.selectedEaseBtn, true);
         if (this.selectedKeyframe.durationInSeconds > 0) {
             this.interpolationSettings.removeAttribute('hidden');
         } else {
