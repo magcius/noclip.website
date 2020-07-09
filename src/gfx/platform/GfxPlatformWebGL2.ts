@@ -1847,17 +1847,7 @@ void main() {
         assert(this.queryPipelineReady(this._currentPipeline));
         this._setMegaState(this._currentPipeline.megaState);
 
-        // Hotpatch support.
-        // TODO(jstpierre): Make this a bit less hacky in the future.
         const program = this._currentPipeline.program;
-        if (program.descriptor.preprocessedVert === '') {
-            const descriptor = program.descriptor as GfxProgramDescriptor;
-            descriptor.ensurePreprocessed(this.queryVendorInfo());
-            program.compileDirty = true;
-            this._tryCompileProgram(program);
-            this._checkProgramCompilationForErrors(program);
-        }
-
         this._useProgram(program);
 
         if (program.bindDirty) {
