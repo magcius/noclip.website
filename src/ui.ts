@@ -732,7 +732,6 @@ export class Panel implements Widget {
         this.toplevel.onkeydown = this.onKeyDown.bind(this);
         this.toplevel.onmouseover = this.syncSize.bind(this);
         this.toplevel.onmouseout = this.syncSize.bind(this);
-        this.toplevel.onclick = this.syncSize.bind(this);
         this.toplevel.tabIndex = -1;
 
         this.mainPanel = document.createElement('div');
