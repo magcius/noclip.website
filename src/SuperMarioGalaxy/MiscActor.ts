@@ -37,9 +37,8 @@ import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToM
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis, drawWorldSpaceText, drawWorldSpaceLine } from '../DebugJunk';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis } from '../DebugJunk';
 import { initFur, initFurPlanet } from './Fur';
-import { KCHitSphereClassification } from './KCollisionServer';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -10130,12 +10129,8 @@ export class Unizo extends LiveActor<UnizoNrv> {
     private isInAir = false;
     private chaseSinTimer = 0;
 
-    private l_id = 0;
-
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-
-        this.l_id = assertExists(infoIter.getValueNumber('l_id'));
 
         if (this.name === 'Unizo') {
             this.initModelManagerWithAnm(sceneObjHolder, 'Unizo');
@@ -10189,9 +10184,6 @@ export class Unizo extends LiveActor<UnizoNrv> {
         // setGroupClipping
         this.makeActorAppeared(sceneObjHolder);
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
-
-        if (this.l_id !== 37)
-            this.makeActorDead(sceneObjHolder);
     }
 
     public getBaseMtx(): mat4 {
@@ -10242,17 +10234,13 @@ export class Unizo extends LiveActor<UnizoNrv> {
         if (!isNearZeroVec3(this.velocity, 0.001))
             this.updateRotate();
 
-        if (window.main.viewer.inputManager.isKeyDownEventTriggered('KeyG')) {
-            getCamPos(this.translation, viewerInput.camera);
-        }
-
         vec3.negate(scratchVec3, this.gravityVector);
         // turnMtxToYDir(this.baseMtx, scratchVec3, 1.0);
         setMatrixTranslation(this.baseMtx, this.translation);
         this.updateSurfaceEffect(sceneObjHolder);
 
-        if (isBindedGround(this))
-            this.binder!.debugDrawAllFloorHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix);
+        // if (isBindedGround(this))
+        //     this.binder!.debugDrawAllFloorHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UnizoNrv, deltaTimeFrames: number): void {
