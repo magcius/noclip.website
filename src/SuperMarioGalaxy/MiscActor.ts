@@ -3364,7 +3364,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
 
         this.seaGullGroup.railRider!.debugDrawRailLine(viewerInput.camera, 50);
 
-        drawWorldSpaceBasis(ctx, viewerInput.camera, this.getBaseMtx()!);
+        drawWorldSpaceBasis(ctx, viewerInput.camera.clipFromWorldMatrix, this.getBaseMtx()!);
 
         for (let i = 0; i < this.seaGullGroup.points.length; i++) {
             const p = this.seaGullGroup.points[i];
@@ -10184,6 +10184,9 @@ export class Unizo extends LiveActor<UnizoNrv> {
         // setGroupClipping
         this.makeActorAppeared(sceneObjHolder);
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
+
+        if (infoIter.getValueNumber('l_id') !== 72)
+            this.makeActorDead(sceneObjHolder);
     }
 
     public getBaseMtx(): mat4 {
@@ -10239,8 +10242,8 @@ export class Unizo extends LiveActor<UnizoNrv> {
         setMatrixTranslation(this.baseMtx, this.translation);
         this.updateSurfaceEffect(sceneObjHolder);
 
-        // if (isBindedGround(this))
-        //     this.binder!.debugDrawAllFloorHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix);
+        if (isBindedGround(this))
+            this.binder!.debugDrawAllFloorHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UnizoNrv, deltaTimeFrames: number): void {

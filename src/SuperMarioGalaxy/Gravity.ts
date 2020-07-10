@@ -989,8 +989,8 @@ class DiskGravity extends PlanetGravity {
 
     public drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         const ctx = getDebugOverlayCanvas2D();
-        drawWorldSpaceVector(ctx, viewerInput.camera, this.worldPosition, this.worldSideDirection, this.worldRadius, Red);
-        drawWorldSpaceVector(ctx, viewerInput.camera, this.worldPosition, this.worldDirection, 100, Green);
+        drawWorldSpaceVector(ctx, viewerInput.camera.clipFromWorldMatrix, this.worldPosition, this.worldSideDirection, this.worldRadius, Red);
+        drawWorldSpaceVector(ctx, viewerInput.camera.clipFromWorldMatrix, this.worldPosition, this.worldDirection, 100, Green);
     }
 }
 

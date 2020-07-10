@@ -324,7 +324,6 @@ export class CollisionParts {
             vec3.copy(hitInfo[i].strikeLoc, pos);
 
         this.checkCollisionResult.reset();
-        window.debug = this.worldMtx;
         this.collisionServer.checkSphere(this.checkCollisionResult, hitInfo.length, pos, radius, invAvgScale);
 
         const dstIdxStart = dstIdx;
@@ -938,7 +937,7 @@ export class Binder {
     public hitInfos: HitInfo[];
     public hitInfoCount: number;
 
-    private useHostBaseMtx: boolean = false;
+    private useHostBaseMtxWithOffsetVec: boolean = false;
 
     public expandDistance: boolean = false;
     public useMovingReaction: boolean = false;
@@ -968,13 +967,17 @@ export class Binder {
         if (this.exCollisionPartsValid)
             sceneObjHolder.collisionDirector!.keepers[CollisionKeeperCategory.Map].addToGlobal(assertExists(this.exCollisionParts));
 
-        if (this.hostOffsetVec)
+        if (this.hostOffsetVec) {
             vec3.copy(scratchVec3c, this.hostOffsetVec);
-        else
+
+            if (this.hostBaseMtx !== null && this.useHostBaseMtxWithOffsetVec)
+                transformVec3Mat4w0(scratchVec3c, this.hostBaseMtx, scratchVec3c);
+        } else {
             vec3.set(scratchVec3c, 0.0, this.hostCenterY, 0.0);
 
-        if (this.useHostBaseMtx)
-            transformVec3Mat4w0(scratchVec3c, this.hostBaseMtx!, scratchVec3c);
+            if (this.hostBaseMtx !== null)
+                transformVec3Mat4w0(scratchVec3c, this.hostBaseMtx, scratchVec3c);
+        }
 
         const pos = vec3.add(scratchVec3c, this.hostTranslation, scratchVec3c);
         const origPos = vec3.copy(scratchVec3d, scratchVec3c);

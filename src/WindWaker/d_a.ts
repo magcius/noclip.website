@@ -2190,7 +2190,7 @@ class dCloth_packet_c {
             for (let fly = 0; fly < this.flyGridSize; fly++) {
                 transformVec3Mat4w1(scratchVec3a, this.mtx, this.posArr[this.curArr][this.getIndex(fly, hoist)]);
                 transformVec3Mat4w0(scratchVec3b, this.mtx, this.nrmArr[this.getIndex(fly, hoist)]);
-                drawWorldSpaceVector(ctx, viewerInput.camera, scratchVec3a, scratchVec3b, 50);
+                drawWorldSpaceVector(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b, 50);
             }
         }
         */
