@@ -256,22 +256,22 @@ export class KCollisionServer {
         vec3.sub(scratchVec3d, pos, scratchVec3d);
 
         this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
-        let dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
+        const dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
         if (dotNrm1 >= radius)
             return false;
 
         this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
-        let dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
+        const dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
         if (dotNrm2 >= radius)
             return false;
 
         this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
-        let dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.length;
+        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.length;
         if (dotNrm3 >= radius)
             return false;
 
         this.loadNormal(scratchVec3c, prism.faceNormalIdx);
-        let dotFaceNrm = vec3.dot(scratchVec3c, scratchVec3d);
+        const dotFaceNrm = vec3.dot(scratchVec3c, scratchVec3d);
         dst.distance = radius - dotFaceNrm;
         if (dst.distance < 0.0)
             return false;
@@ -286,8 +286,8 @@ export class KCollisionServer {
                 // Prevent infinite loops.
                 label = 'AAA';
 
-                if (dotNrm1 <= dotNrm2) {
-                    if (dotNrm2 <= dotNrm3) {
+                if (dotNrm2 >= dotNrm1) {
+                    if (dotNrm3 >= dotNrm2) {
                         // goto LAB_80184968;
                         label = 'LAB_80184968';
                         continue;
@@ -301,22 +301,22 @@ export class KCollisionServer {
                         return true;
                     }
 
-                    if (dotNrm3 <= dotNrm1) {
+                    if (dotNrm1 >= dotNrm3) {
                         this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
                         this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
                         t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if ((t1 * dotNrm2) <= dotNrm1) {
-                            // goto LAB_80184ab4;
-                            label = 'LAB_80184ab4';
+                        if (t1 * dotNrm2 <= dotNrm1) {
+                            // goto n_class5;
+                            label = 'n_class5';
                             continue;
                         }
                     } else {
                         this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
                         this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
                         t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if ((t1 * dotNrm2) <= dotNrm3) {
-                            // goto LAB_80184b30;
-                            label = 'LAB_80184b30';
+                        if (t1 * dotNrm2 <= dotNrm3) {
+                            // goto n_class6;
+                            label = 'n_class6';
                             continue;
                         }
                     }
@@ -327,37 +327,37 @@ export class KCollisionServer {
                     dst.distance = sqRadius - dotNrm2 ** 2.0;
                     dst.classification = 3;
 
-                    // LAB_80184c7c:
+                    // n_ret:
                     break;
-                } else if (dotNrm1 <= dotNrm3) {
+                } else if (dotNrm3 >= dotNrm1) {
                     // LAB_80184968:
                     label = 'LAB_80184968';
                     continue;
                 } else if (dotNrm1 > 0.0) {
-                    if (dotNrm2 <= dotNrm3) {
+                    if (dotNrm3 >= dotNrm2) {
                         this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
                         this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
                         t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if (dotNrm3 < t1 * dotNrm1) {
-                            // goto LAB_80184a24;
-                            label = 'LAB_80184a24';
+                        if (t1 * dotNrm1 > dotNrm3) {
+                            // goto n_class2;
+                            label = 'n_class2';
                             continue;
                         } else {
-                            // LAB_80184bac:
-                            label = 'LAB_80184bac';
+                            // n_class7:
+                            label = 'n_class7';
                             continue;
                         }
                     } else {
                         this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
                         this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
                         t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if (dotNrm2 < t1 * dotNrm1) {
-                            // LAB_80184a24:
-                            label = 'LAB_80184a24';
+                        if (t1 * dotNrm1 > dotNrm2) {
+                            // n_class2:
+                            label = 'n_class2';
                             continue;
                         } else {
-                            // LAB_80184ab4:
-                            label = 'LAB_80184ab4';
+                            // n_class5:
+                            label = 'n_class5';
                             continue;
                         }
                     }
@@ -368,15 +368,33 @@ export class KCollisionServer {
                     dst.classification = 1;
                     return true;
                 }
+            } else if (label === 'n_class2') {
+                if (dotNrm1 > dotFaceNrm)
+                    return false;
+
+                dst.distance = sqRadius - dotNrm1 ** 2.0;
+                dst.classification = 2;
+
+                // goto n_ret;
+                break;
             } else if (label === 'LAB_80184968') {
-                if (dotNrm2 > 0.0) {
-                    if (dotNrm1 <= dotNrm2) {
+                if (dotNrm3 > 0.0) {
+                    if (dotNrm2 >= dotNrm1) {
                         this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
                         this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
                         t1 = vec3.dot(scratchVec3c, scratchVec3d);
                         if (t1 * dotNrm3 <= dotNrm2) {
-                            // LAB_80184b30:
-                            label = 'LAB_80184b30';
+                            // n_class6:
+                            label = 'n_class6';
+                            continue;
+                        }
+                    } else {
+                        this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
+                        this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
+                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                        if (t1 * dotNrm3 <= dotNrm1) {
+                            // goto n_class7;
+                            label = 'n_class7';
                             continue;
                         }
                     }
@@ -386,7 +404,7 @@ export class KCollisionServer {
 
                     dst.classification = 4;
                     dst.distance = sqRadius - dotNrm3 ** 2.0;
-                    // goto LAB_80184c7c;
+                    // goto n_ret;
                     break;
                 } else {
                     if (dst.distance > maxDist)
@@ -395,7 +413,7 @@ export class KCollisionServer {
                     dst.classification = 1;
                     return true;
                 }
-            } else if (label === 'LAB_80184ab4') {
+            } else if (label === 'n_class5') {
                 dst.classification = 5;
 
                 assert(!Number.isNaN(t1));
@@ -408,10 +426,11 @@ export class KCollisionServer {
                 scratchVec3c[0] = (c0 * scratchVec3c[0]) + (c1 * scratchVec3d[0]);
                 scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
                 scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
-                // LAB_80184c24:
-                label = 'LAB_80184c24';
+
+                // n_pret567:
+                label = 'n_pret567';
                 continue;
-            } else if (label === 'LAB_80184b30') {
+            } else if (label === 'n_class6') {
                 dst.classification = 6;
 
                 assert(!Number.isNaN(t1));
@@ -424,10 +443,11 @@ export class KCollisionServer {
                 scratchVec3c[0] = (c0 * scratchVec3c[0]) + (c1 * scratchVec3d[0]);
                 scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
                 scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
-                // goto LAB_80184c24;
-                label = 'LAB_80184c24';
+
+                // goto n_pret567;
+                label = 'n_pret567';
                 continue;
-            } else if (label === 'LAB_80184bac') {
+            } else if (label === 'n_class7') {
                 dst.classification = 7;
 
                 assert(!Number.isNaN(t1));
@@ -440,26 +460,18 @@ export class KCollisionServer {
                 scratchVec3c[0] = (c0 * scratchVec3c[0]) + (c1 * scratchVec3d[0]);
                 scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
                 scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
-                // goto LAB_80184c24;
-                label = 'LAB_80184c24';
+
+                // goto n_pret567;
+                label = 'n_pret567';
                 continue;
-            } else if (label === 'LAB_80184c24') {
+            } else if (label === 'n_pret567') {
                 const sq = vec3.dot(scratchVec3c, scratchVec3c);
                 if (sq > dotFaceNrm ** 2.0 || sq >= sqRadius)
                     return false;
 
                 dst.distance = sqRadius - sq;
 
-                // goto LAB_80184c7c;
-                break;
-            } else if (label === 'LAB_80184a24') {
-                if (dotNrm1 > dotFaceNrm)
-                    return false;
-
-                dst.distance = sqRadius - dotNrm1 ** 2.0;
-                dst.classification = 2;
-
-                // goto LAB_80184c7c;
+                // goto n_ret;
                 break;
             }
 
@@ -467,9 +479,10 @@ export class KCollisionServer {
             throw "whoops";
         }
 
+        // n_ret
         // Final checks.
         dst.distance = Math.sqrt(dst.distance) - dotFaceNrm;
-        if (dst.distance < 0 || dst.distance > maxDist)
+        if (dst.distance < 0.0 || dst.distance > maxDist)
             return false;
 
         return true;
