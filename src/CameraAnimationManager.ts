@@ -122,20 +122,14 @@ export class Keyframe {
     }
 
     set linearEaseType(type: LinearEaseType) {
-        switch (type) {
-            case LinearEaseType.NoEase:
-                this.easingFunction = null;
-                break;
-            case LinearEaseType.EaseIn:
-                this.easingFunction = easeInFunc;
-                break;
-            case LinearEaseType.EaseOut:
-                this.easingFunction = easeOutFunc;
-                break;
-            case LinearEaseType.EaseBoth:
-                this.easingFunction = easeBothFunc;
-                break;
-        }
+        if (type === LinearEaseType.NoEase)
+            this.easingFunction = null;
+        else if (type === LinearEaseType.EaseIn)
+            this.easingFunction = easeInFunc;
+        else if (type === LinearEaseType.EaseOut)
+            this.easingFunction = easeOutFunc;
+        else if (type === LinearEaseType.EaseBoth)
+            this.easingFunction = easeBothFunc;
         this._linearEaseType = type;
     }
 
