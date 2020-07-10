@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec3, ReadonlyVec3 } from "gl-matrix";
-import { assertExists, nArray } from "../util";
+import { assertExists, nArray, assert } from "../util";
 import { isNearZero, Vec3One } from "../MathHelpers";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { isSameDirection } from "./ActorUtil";
@@ -211,6 +211,270 @@ export class KCollisionServer {
         dst[2] = this.view.getFloat32(offs + 0x08);
     }
 
+    private KCHitArrow(dst: KC_PrismHit, prism: KC_PrismData, origin: ReadonlyVec3, arrowDir: ReadonlyVec3): boolean {
+        this.loadNormal(scratchVec3c, prism.faceNormalIdx);
+
+        // Local space.
+        this.loadPosition(scratchVec3d, prism.positionIdx);
+        vec3.sub(scratchVec3d, origin, scratchVec3d);
+
+        const proj = vec3.dot(scratchVec3c, scratchVec3d);
+        if (proj < 0.0)
+            return false;
+
+        const projDir = vec3.dot(scratchVec3c, arrowDir);
+        if (proj + projDir >= 0.0)
+            return false;
+
+        const dist = proj / -projDir;
+        vec3.scaleAndAdd(scratchVec3c, scratchVec3d, arrowDir, dist);
+
+        this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
+        const dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
+        if (dotNrm1 >= 0.01)
+            return false;
+
+        this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
+        const dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
+        if (dotNrm2 >= 0.01)
+            return false;
+
+        this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
+        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d);
+        if (dotNrm3 >= 0.01 + prism.length)
+            return false;
+
+        dst.distance = dist;
+        // TODO(jstpierre): Classification. I think this is unused in Arrow collision, though.
+
+        return true;
+    }
+
+    private KCHitSphere(dst: KC_PrismHit, prism: KC_PrismData, pos: ReadonlyVec3, radius: number, invAvgScale: number): boolean {
+        // Local space.
+        this.loadPosition(scratchVec3d, prism.positionIdx);
+        vec3.sub(scratchVec3d, pos, scratchVec3d);
+
+        this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
+        let dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
+        if (dotNrm1 >= radius)
+            return false;
+
+        this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
+        let dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
+        if (dotNrm2 >= radius)
+            return false;
+
+        this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
+        let dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.length;
+        if (dotNrm3 >= radius)
+            return false;
+
+        this.loadNormal(scratchVec3c, prism.faceNormalIdx);
+        let dotFaceNrm = vec3.dot(scratchVec3c, scratchVec3d);
+        dst.distance = radius - dotFaceNrm;
+        if (dst.distance < 0.0)
+            return false;
+
+        const sqRadius = radius ** 2.0;
+        const maxDist = this.maxDistMul * invAvgScale;
+
+        let label = '';
+        let t1 = NaN;
+        while (true) {
+            if (label === '') {
+                // Prevent infinite loops.
+                label = 'AAA';
+
+                if (dotNrm1 <= dotNrm2) {
+                    if (dotNrm2 <= dotNrm3) {
+                        // goto LAB_80184968;
+                        label = 'LAB_80184968';
+                        continue;
+                    }
+
+                    if (dotNrm2 <= 0.0) {
+                        if (dst.distance > maxDist)
+                            return false;
+
+                        dst.classification = 1;
+                        return true;
+                    }
+
+                    if (dotNrm3 <= dotNrm1) {
+                        this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
+                        this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
+                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                        if ((t1 * dotNrm2) <= dotNrm1) {
+                            // goto LAB_80184ab4;
+                            label = 'LAB_80184ab4';
+                            continue;
+                        }
+                    } else {
+                        this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
+                        this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
+                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                        if ((t1 * dotNrm2) <= dotNrm3) {
+                            // goto LAB_80184b30;
+                            label = 'LAB_80184b30';
+                            continue;
+                        }
+                    }
+
+                    if (dotNrm2 > dotFaceNrm)
+                        return false;
+
+                    dst.distance = sqRadius - dotNrm2 ** 2.0;
+                    dst.classification = 3;
+
+                    // LAB_80184c7c:
+                    break;
+                } else if (dotNrm1 <= dotNrm3) {
+                    // LAB_80184968:
+                    label = 'LAB_80184968';
+                    continue;
+                } else if (dotNrm1 > 0.0) {
+                    if (dotNrm2 <= dotNrm3) {
+                        this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
+                        this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
+                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                        if (dotNrm3 < t1 * dotNrm1) {
+                            // goto LAB_80184a24;
+                            label = 'LAB_80184a24';
+                            continue;
+                        } else {
+                            // LAB_80184bac:
+                            label = 'LAB_80184bac';
+                            continue;
+                        }
+                    } else {
+                        this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
+                        this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
+                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                        if (dotNrm2 < t1 * dotNrm1) {
+                            // LAB_80184a24:
+                            label = 'LAB_80184a24';
+                            continue;
+                        } else {
+                            // LAB_80184ab4:
+                            label = 'LAB_80184ab4';
+                            continue;
+                        }
+                    }
+                } else {
+                    if (dst.distance > maxDist)
+                        return false;
+
+                    dst.classification = 1;
+                    return true;
+                }
+            } else if (label === 'LAB_80184968') {
+                if (dotNrm2 > 0.0) {
+                    if (dotNrm1 <= dotNrm2) {
+                        this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
+                        this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
+                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                        if (t1 * dotNrm3 <= dotNrm2) {
+                            // LAB_80184b30:
+                            label = 'LAB_80184b30';
+                            continue;
+                        }
+                    }
+
+                    if (dotNrm3 > dotFaceNrm)
+                        return false;
+
+                    dst.classification = 4;
+                    dst.distance = sqRadius - dotNrm3 ** 2.0;
+                    // goto LAB_80184c7c;
+                    break;
+                } else {
+                    if (dst.distance > maxDist)
+                        return false;
+
+                    dst.classification = 1;
+                    return true;
+                }
+            } else if (label === 'LAB_80184ab4') {
+                dst.classification = 5;
+
+                assert(!Number.isNaN(t1));
+                const c0 = (((t1 * dotNrm2) - dotNrm1)) / (t1 ** 2.0) - 1.0;
+                const c1 = dotNrm2 - (c0 * t1);
+
+                // Should be loaded already.
+                // this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
+                // this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
+                scratchVec3c[0] = (c0 * scratchVec3c[0]) + (c1 * scratchVec3d[0]);
+                scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
+                scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
+                // LAB_80184c24:
+                label = 'LAB_80184c24';
+                continue;
+            } else if (label === 'LAB_80184b30') {
+                dst.classification = 6;
+
+                assert(!Number.isNaN(t1));
+                const c0 = (((t1 * dotNrm3) - dotNrm2)) / (t1 ** 2.0) - 1.0;
+                const c1 = dotNrm3 - (c0 * t1);
+
+                // Should be loaded already.
+                // this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
+                // this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
+                scratchVec3c[0] = (c0 * scratchVec3c[0]) + (c1 * scratchVec3d[0]);
+                scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
+                scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
+                // goto LAB_80184c24;
+                label = 'LAB_80184c24';
+                continue;
+            } else if (label === 'LAB_80184bac') {
+                dst.classification = 7;
+
+                assert(!Number.isNaN(t1));
+                const c0 = (((t1 * dotNrm1) - dotNrm3)) / (t1 ** 2.0) - 1.0;
+                const c1 = dotNrm1 - (c0 * t1);
+
+                // Should be loaded already.
+                // this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
+                // this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
+                scratchVec3c[0] = (c0 * scratchVec3c[0]) + (c1 * scratchVec3d[0]);
+                scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
+                scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
+                // goto LAB_80184c24;
+                label = 'LAB_80184c24';
+                continue;
+            } else if (label === 'LAB_80184c24') {
+                const sq = vec3.dot(scratchVec3c, scratchVec3c);
+                if (sq > dotFaceNrm ** 2.0 || sq >= sqRadius)
+                    return false;
+
+                dst.distance = sqRadius - sq;
+
+                // goto LAB_80184c7c;
+                break;
+            } else if (label === 'LAB_80184a24') {
+                if (dotNrm1 > dotFaceNrm)
+                    return false;
+
+                dst.distance = sqRadius - dotNrm1 ** 2.0;
+                dst.classification = 2;
+
+                // goto LAB_80184c7c;
+                break;
+            }
+
+            // Shouldn't make it here.
+            throw "whoops";
+        }
+
+        // Final checks.
+        dst.distance = Math.sqrt(dst.distance) - dotFaceNrm;
+        if (dst.distance < 0 || dst.distance > maxDist)
+            return false;
+
+        return true;
+    }
+
     private loadPrismListIdx(offs: number): KC_PrismData | null {
         const prismIdx = this.view.getUint16(offs);
         if (prismIdx > 0)
@@ -289,82 +553,6 @@ export class KCollisionServer {
         if (min[0] > max[0] || min[1] > max[1] || min[2] > max[2])
             return false;
 
-        return true;
-    }
-
-    private KCHitArrow(dst: KC_PrismHit, prism: KC_PrismData, origin: ReadonlyVec3, arrowDir: ReadonlyVec3): boolean {
-        this.loadNormal(scratchVec3c, prism.faceNormalIdx);
-
-        // Local space.
-        this.loadPosition(scratchVec3d, prism.positionIdx);
-        vec3.sub(scratchVec3d, origin, scratchVec3d);
-
-        const proj = vec3.dot(scratchVec3c, scratchVec3d);
-        if (proj < 0.0)
-            return false;
-
-        const projDir = vec3.dot(scratchVec3c, arrowDir);
-        if (proj + projDir >= 0.0)
-            return false;
-
-        const dist = proj / -projDir;
-        vec3.scaleAndAdd(scratchVec3c, scratchVec3d, arrowDir, dist);
-
-        this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
-        const dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
-        if (dotNrm1 >= 0.01)
-            return false;
-
-        this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
-        const dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
-        if (dotNrm2 >= 0.01)
-            return false;
-
-        this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
-        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d);
-        if (dotNrm3 >= 0.01 + prism.length)
-            return false;
-
-        dst.distance = dist;
-        // TODO(jstpierre): Classification. I think this is unused in Arrow collision, though.
-
-        return true;
-    }
-
-    private KCHitSphere(dst: KC_PrismHit, prism: KC_PrismData, pos: ReadonlyVec3, radius: number, invAvgScale: number): boolean {
-        const sqRadius = radius**2;
-
-        // Local space.
-        this.loadPosition(scratchVec3d, prism.positionIdx);
-        vec3.sub(scratchVec3d, pos, scratchVec3d);
-
-        this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
-        const dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
-        if (dotNrm1 >= radius)
-            return false;
-
-        this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
-        const dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
-        if (dotNrm2 >= radius)
-            return false;
-
-        this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
-        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.length;
-        if (dotNrm3 >= radius)
-            return false;
-
-        this.loadNormal(scratchVec3c, prism.faceNormalIdx);
-        const dist = radius - vec3.dot(scratchVec3c, scratchVec3d);
-        if (dist < 0.0)
-            return false;
-
-        const maxDist = this.maxDistMul * invAvgScale;
-        if (dist > maxDist)
-            return false;
-
-        // TODO(jstpierre): Classification.
-        dst.classification = 1;
-        dst.distance = dist;
         return true;
     }
 
