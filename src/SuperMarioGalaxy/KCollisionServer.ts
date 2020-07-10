@@ -1,10 +1,12 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { vec3, ReadonlyVec3 } from "gl-matrix";
-import { assertExists, nArray, assert } from "../util";
-import { isNearZero, Vec3One } from "../MathHelpers";
+import { assertExists, nArray, assert, hexzero } from "../util";
+import { isNearZero, Vec3One, transformVec3Mat4w1 } from "../MathHelpers";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { isSameDirection } from "./ActorUtil";
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D, drawScreenSpaceText, drawWorldSpacePoint } from "../DebugJunk";
+import { Magenta, Yellow, Green, Red, Blue } from "../Color";
 
 export class KC_PrismData {
     public length: number = 0.0;
@@ -191,6 +193,8 @@ export class KCollisionServer {
         if (which === 0) {
             this.loadPosition(dst, prism.positionIdx);
         } else {
+            const scratchVec3a = vec3.create();
+            const scratchVec3b = vec3.create();
             if (which === 1) {
                 this.loadNormal(scratchVec3a, prism.edgeNormal2Idx);
                 this.loadNormal(scratchVec3b, prism.faceNormalIdx);
@@ -665,10 +669,21 @@ export class KCollisionServer {
         const blkMin = vec3.scaleAndAdd(scratchVec3b, scratchVec3a, Vec3One, -radius);
         const blkMax = vec3.scaleAndAdd(scratchVec3a, scratchVec3a, Vec3One, +radius);
 
+        const ctx = getDebugOverlayCanvas2D();
+        const clipFromWorldMatrix = window.main.viewer.camera.clipFromWorldMatrix;
+
         // Clip to AABB coordinates.
         if (!this.outCheck(blkMin, blkMax))
             return false;
 
+        const p0 = vec3.create();
+        vec3.add(p0, blkMin, this.blocksTrans);
+        transformVec3Mat4w1(p0, window.debug, p0);
+        drawWorldSpacePoint(ctx, clipFromWorldMatrix, p0, Red, 10);
+        vec3.add(p0, blkMax, this.blocksTrans);
+        transformVec3Mat4w1(p0, window.debug, p0);
+        drawWorldSpacePoint(ctx, clipFromWorldMatrix, p0, Green, 10);
+    
         let dstPrismCount = 0;
 
         for (let zf = blkMin[2]; zf <= blkMax[2];) {
@@ -689,19 +704,26 @@ export class KCollisionServer {
                     let prismListIdx = searchBlockScratch.prismListOffs;
                     while (true) {
                         prismListIdx += 0x02;
-        
+
                         const prism = this.loadPrismListIdx(prismListIdx);
                         if (prism === null)
                             break;
+
+                        const p0 = vec3.create(); this.getPos(p0, prism, 0);
+                        const p1 = vec3.create(); this.getPos(p1, prism, 1);
+                        const p2 = vec3.create(); this.getPos(p2, prism, 2);
+                        transformVec3Mat4w1(p0, window.debug, p0);
+                        transformVec3Mat4w1(p1, window.debug, p1);
+                        transformVec3Mat4w1(p2, window.debug, p2);
+                        drawWorldSpaceLine(ctx, clipFromWorldMatrix, p0, p1);
+                        drawWorldSpaceLine(ctx, clipFromWorldMatrix, p1, p2);
+                        drawWorldSpaceLine(ctx, clipFromWorldMatrix, p2, p0);
 
                         if (prism.length < 0.0 || dst.prisms.indexOf(prism) >= 0)
                             continue;
 
                         if (!this.KCHitSphere(prismHitScratch, prism, pos, radius, invAvgScale))
                             continue;
-
-                        if (Number.isNaN(prismHitScratch.distance))
-                            debugger;
 
                         dst.prisms[dstPrismCount] = prism;
                         dst.distances[dstPrismCount] = prismHitScratch.distance;

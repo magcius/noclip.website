@@ -1,5 +1,5 @@
 
-import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { SceneObjHolder, ResourceHolder, SceneObj } from "./Main";
 import { NameObj } from "./NameObj";
 import { KCollisionServer, CheckCollideResult, KC_PrismData, KCHitSphereClassification } from "./KCollisionServer";
@@ -12,6 +12,8 @@ import { connectToScene, vecKillElement } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 import { AABB } from "../Geometry";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText } from "../DebugJunk";
+import { Yellow, colorNewCopy, Magenta } from "../Color";
 
 export class Triangle {
     public collisionParts: CollisionParts | null = null;
@@ -322,6 +324,7 @@ export class CollisionParts {
             vec3.copy(hitInfo[i].strikeLoc, pos);
 
         this.checkCollisionResult.reset();
+        window.debug = this.worldMtx;
         this.collisionServer.checkSphere(this.checkCollisionResult, hitInfo.length, pos, radius, invAvgScale);
 
         const dstIdxStart = dstIdx;
@@ -894,6 +897,36 @@ function isHostMoved(hitInfo: HitInfo): boolean {
     return hitInfo.collisionParts!.notMovedCounter === 0;
 }
 
+function debugDrawHitInfo(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, hitInfo: HitInfo, alpha = 1.0): void {
+    const colorNormal = colorNewCopy(Magenta, alpha);
+    const colorHighlight = colorNewCopy(Yellow, alpha);
+
+    if (hitInfo.classification === KCHitSphereClassification.Edge1) {
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1, colorNormal);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2, colorNormal);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0, colorHighlight);
+    } else if (hitInfo.classification === KCHitSphereClassification.Edge2) {
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1, colorHighlight);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2, colorNormal);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0, colorNormal);
+    } else if (hitInfo.classification === KCHitSphereClassification.Edge3) {
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1, colorNormal);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2, colorHighlight);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0, colorNormal);
+    } else {
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1, colorNormal);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2, colorNormal);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0, colorNormal);
+    }
+
+    if (hitInfo.classification === KCHitSphereClassification.Vertex1 || hitInfo.classification === KCHitSphereClassification.Vertex2 || hitInfo.classification === KCHitSphereClassification.Vertex3)
+        drawWorldSpacePoint(ctx, clipFromWorldMatrix, hitInfo.strikeLoc, colorHighlight, 10);
+    else
+        drawWorldSpacePoint(ctx, clipFromWorldMatrix, hitInfo.strikeLoc, colorNormal);
+
+    drawWorldSpaceText(ctx, clipFromWorldMatrix, hitInfo.strikeLoc, '' + hitInfo.classification, 10, colorNormal);
+}
+
 const scratchHitInfo = nArray(32, () => new HitInfo());
 export class Binder {
     public partsFilter: CollisionPartsFilterFunc | null = null;
@@ -1127,6 +1160,19 @@ export class Binder {
     public setExCollisionParts(parts: CollisionParts | null): void {
         this.exCollisionParts = parts;
         this.exCollisionPartsValid = this.exCollisionParts !== null;
+    }
+
+    public debugDrawHitInfo(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, hitInfo: HitInfo): void {
+        debugDrawHitInfo(ctx, clipFromWorldMatrix, hitInfo);
+    }
+
+    public debugDrawAllFloorHitInfo(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4): void {
+        for (let i = 0; i < this.hitInfoCount; i++) {
+            const hitInfo = this.hitInfos[i];
+            if (!isFloorPolygon(hitInfo.faceNormal, this.hostGravity))
+                continue;
+            debugDrawHitInfo(ctx, clipFromWorldMatrix, hitInfo);
+        }
     }
 }
 

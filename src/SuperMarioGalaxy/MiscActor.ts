@@ -10118,33 +10118,6 @@ function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveAct
 
 const enum UnizoNrv { Wait, Jump, Chase, CollidePlayer, CollideEnemy, Break, JumpDown, FireDown }
 
-function debugDrawHitInfo(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, hitInfo: HitInfo): void {
-    if (hitInfo.classification === KCHitSphereClassification.Edge1) {
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1);
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2);
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0, Yellow);
-    } else if (hitInfo.classification === KCHitSphereClassification.Edge2) {
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1, Yellow);
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2);
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0);
-    } else if (hitInfo.classification === KCHitSphereClassification.Edge3) {
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1);
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2, Yellow);
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0);
-    } else {
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1);
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2);
-        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0);
-    }
-
-    if (hitInfo.classification === KCHitSphereClassification.Vertex1 || hitInfo.classification === KCHitSphereClassification.Vertex2 || hitInfo.classification === KCHitSphereClassification.Vertex3)
-        drawWorldSpacePoint(ctx, clipFromWorldMatrix, hitInfo.strikeLoc, Yellow, 10);
-    else
-        drawWorldSpacePoint(ctx, clipFromWorldMatrix, hitInfo.strikeLoc);
-
-    drawWorldSpaceText(ctx, clipFromWorldMatrix, hitInfo.strikeLoc, '' + hitInfo.classification, 10);
-}
-
 export class Unizo extends LiveActor<UnizoNrv> {
     private breakModel: ModelObj;
     private jumpHeight = 0.15;
@@ -10157,8 +10130,12 @@ export class Unizo extends LiveActor<UnizoNrv> {
     private isInAir = false;
     private chaseSinTimer = 0;
 
+    private l_id = 0;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        this.l_id = assertExists(infoIter.getValueNumber('l_id'));
 
         if (this.name === 'Unizo') {
             this.initModelManagerWithAnm(sceneObjHolder, 'Unizo');
@@ -10212,6 +10189,9 @@ export class Unizo extends LiveActor<UnizoNrv> {
         // setGroupClipping
         this.makeActorAppeared(sceneObjHolder);
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
+
+        if (this.l_id !== 37)
+            this.makeActorDead(sceneObjHolder);
     }
 
     public getBaseMtx(): mat4 {
@@ -10262,14 +10242,17 @@ export class Unizo extends LiveActor<UnizoNrv> {
         if (!isNearZeroVec3(this.velocity, 0.001))
             this.updateRotate();
 
+        if (window.main.viewer.inputManager.isKeyDownEventTriggered('KeyG')) {
+            getCamPos(this.translation, viewerInput.camera);
+        }
+
         vec3.negate(scratchVec3, this.gravityVector);
         // turnMtxToYDir(this.baseMtx, scratchVec3, 1.0);
         setMatrixTranslation(this.baseMtx, this.translation);
         this.updateSurfaceEffect(sceneObjHolder);
 
-        if (isBindedGround(this)) {
-            debugDrawHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.binder!.floorHitInfo);
-        }
+        if (isBindedGround(this))
+            this.binder!.debugDrawAllFloorHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UnizoNrv, deltaTimeFrames: number): void {

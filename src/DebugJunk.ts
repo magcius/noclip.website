@@ -277,16 +277,7 @@ interface TextOptions {
     outline?: number;
 }
 
-export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v: vec3, text: string, offsY: number = 0, color: Color = Magenta, options: TextOptions = {}): void {
-    const cw = ctx.canvas.width;
-    const ch = ctx.canvas.height;
-    vec4.set(p[0], v[0], v[1], v[2], 1.0);
-    transformToClipSpace(ctx, clipFromWorldMatrix, 1);
-    if (shouldCull(p[0])) return;
-
-    const x = ( p[0][0] + 1) * cw / 2;
-    const y = (-p[0][1] + 1) * ch / 2;
-
+export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: Color = Magenta, options: TextOptions = {}): void {
     ctx.fillStyle = colorToCSS(color);
     ctx.textBaseline = 'bottom';
     ctx.textAlign = 'start';
@@ -295,15 +286,28 @@ export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, clipFromWorldM
     if (options.outline) {
         const oldLineWidth = ctx.lineWidth;
         ctx.lineWidth = options.outline;
-        ctx.strokeText(text, x, y + offsY);
+        ctx.strokeText(text, x, y);
         ctx.lineWidth = oldLineWidth;
     }
 
     ctx.shadowColor = options.shadowColor ?? 'black';
     ctx.shadowBlur = options.shadowBlur ?? 0;
-    ctx.fillText(text, x, y + offsY);
+    ctx.fillText(text, x, y);
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 0;
+}
+
+export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v: vec3, text: string, offsY: number = 0, color: Color = Magenta, options: TextOptions = {}): void {
+    const cw = ctx.canvas.width;
+    const ch = ctx.canvas.height;
+    vec4.set(p[0], v[0], v[1], v[2], 1.0);
+    transformToClipSpace(ctx, clipFromWorldMatrix, 1);
+    if (shouldCull(p[0])) return;
+
+    const x = ( p[0][0] + 1) * cw / 2;
+    const y = (-p[0][1] + 1) * ch / 2 + offsY;
+
+    drawScreenSpaceText(ctx, x, y, text, color, options);
 }
 
 export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: ScreenSpaceProjection, color: Color = Magenta): void {
