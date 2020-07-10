@@ -1,7 +1,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 import { Viewer } from './viewer';
 import { StudioCameraController } from './Camera';
-import BezierEasing from 'bezier-easing';
+import { getPointBezier } from './Spline';
 
 const MAX_KEYFRAME_DURATION_SECONDS = 100.0;
 const MIN_KEYFRAME_DURATION = 0;
@@ -15,9 +15,15 @@ export const enum LinearEaseType {
 }
 
 /** Premade constant Bezier easing functions. */
-const easeBothFunc: BezierEasing.EasingFunction = BezierEasing(0.42, 0, 0.58, 1);
-const easeInFunc: BezierEasing.EasingFunction = BezierEasing(0.42, 0, 1, 1);
-const easeOutFunc: BezierEasing.EasingFunction = BezierEasing(0, 0, 0.58, 1);
+const easeBothFunc: Function = (t: number) => {
+    return getPointBezier(0, 0, 1, 1, t);
+}
+const easeInFunc: Function = (t: number) => {
+    return getPointBezier(0, 0, 0.53, 1, t);
+}
+const easeOutFunc: Function = (t: number) => {
+    return getPointBezier(0, 0.47, 1, 1, t);
+}
 
 export class Keyframe {
     /**
@@ -34,7 +40,7 @@ export class Keyframe {
 
     public usesLinearInterp: boolean = false;
     private _linearEaseType: LinearEaseType = LinearEaseType.EaseBoth;
-    private easingFunction: BezierEasing.EasingFunction | null = easeBothFunc;
+    private easingFunction: Function | null = easeBothFunc;
     public trsTangentIn: vec3;
     public trsTangentOut: vec3;
 
