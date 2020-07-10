@@ -15,14 +15,14 @@ export const enum LinearEaseType {
 }
 
 /** Premade constant Bezier easing functions. */
-const easeBothFunc: Function = (t: number) => {
-    return getPointBezier(0, 0, 1, 1, t);
-}
 const easeInFunc: Function = (t: number) => {
     return getPointBezier(0, 0, 0.53, 1, t);
 }
 const easeOutFunc: Function = (t: number) => {
     return getPointBezier(0, 0.47, 1, 1, t);
+}
+const easeBothFunc: Function = (t: number) => {
+    return getPointBezier(0, 0, 1, 1, t);
 }
 
 export class Keyframe {
@@ -41,12 +41,10 @@ export class Keyframe {
     public usesLinearInterp: boolean = false;
     private _linearEaseType: LinearEaseType = LinearEaseType.EaseBoth;
     private easingFunction: Function | null = easeBothFunc;
-    public trsTangentIn: vec3;
-    public trsTangentOut: vec3;
+    public trsTangentIn: vec3 = vec3.create();
+    public trsTangentOut: vec3 = vec3.create();
 
     constructor(public endPos: mat4) {
-        this.trsTangentIn = vec3.create();
-        this.trsTangentOut = vec3.create();
     }
 
     /**
@@ -149,7 +147,7 @@ export class CameraAnimation {
      * The list of keyframes that comprise this animation. Note that the `endPosition` 
      * of the keyframe at index 0 is the camera's starting position for the animation.
      */
-    keyframes: Keyframe[] = [];
+    public keyframes: Keyframe[] = [];
 
     /**
      * A counter used for default keyframe names. Because keyframes can be deleted and
@@ -158,16 +156,16 @@ export class CameraAnimation {
      */
     public totalKeyframesAdded: number = -1;
 
-    insertKeyframe(after: number, keyframeEndPos: mat4) {
+    public insertKeyframe(after: number, keyframeEndPos: mat4) {
         this.keyframes.splice(after + 1, 0, new Keyframe(keyframeEndPos));
         this.totalKeyframesAdded++;
     }
 
-    appendKeyframe(keyframeEndPos: mat4) {
+    public appendKeyframe(keyframeEndPos: mat4) {
         this.insertKeyframe(this.keyframes.length - 1, keyframeEndPos);
     }
 
-    removeKeyframe(index: number) {
+    public removeKeyframe(index: number) {
         this.keyframes.splice(index, 1);
     }
 
@@ -269,7 +267,7 @@ export class CameraAnimationManager {
             return;
         }
         this.calculateTangents();
-        this.studioCameraController.playAnimation(new Array(this.currentAnimation.keyframes[index]), startPos, false);
+        this.studioCameraController.playAnimation([this.currentAnimation.keyframes[index]], startPos, false);
     }
 
     public stopAnimation() {

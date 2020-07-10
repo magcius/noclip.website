@@ -504,13 +504,13 @@ export class StudioCameraController extends FPSCameraController {
     private animationKeyframes: Keyframe[];
     private currentKeyframeIndex: number;
     private currentKeyframe: Keyframe;
-    private interpolatingFrom: mat4;
-    private trsFrom: vec3;
-    private rotQFrom: quat;
-    private trsTo: vec3;
-    private rotQTo: quat;
-    private stepTrs: vec3;
-    private stepRotQ: quat;
+    private interpolatingFrom: mat4 = mat4.create();
+    private trsFrom: vec3 = vec3.create();
+    private rotQFrom: quat = quat.create();
+    private trsTo: vec3 = vec3.create();
+    private rotQTo: quat = quat.create();
+    private stepTrs: vec3 = vec3.create();
+    private stepRotQ: quat = quat.create();
     /**
      * Indicates if the camera is currently positioned on a keyframe's end position.
      */
@@ -518,13 +518,6 @@ export class StudioCameraController extends FPSCameraController {
 
     constructor(private animationManager: CameraAnimationManager) {
         super();
-        this.interpolatingFrom = mat4.create();
-        this.trsFrom = vec3.create();
-        this.trsTo = vec3.create();
-        this.stepTrs = vec3.create();
-        this.stepRotQ = quat.create();
-        this.rotQTo = quat.create();
-        this.rotQFrom = quat.create();
     }
 
     public update(inputManager: InputManager, dt: number): CameraUpdateResult {
@@ -552,7 +545,7 @@ export class StudioCameraController extends FPSCameraController {
         return result;
     }
 
-    updateAnimation(dt: number): CameraUpdateResult {
+    public updateAnimation(dt: number): CameraUpdateResult {
         if (this.currentKeyframe.isFinished()) {
             if (this.currentKeyframeIndex + 1 === this.animationKeyframes.length) {
                 // We've reached the end of the animation.
