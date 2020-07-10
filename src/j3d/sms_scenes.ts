@@ -15,7 +15,7 @@ import { LoopMode, BMD, BMT, BCK, BTK, BRK } from '../Common/JSYSTEM/J3D/J3DLoad
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { BasicRenderTarget, ColorTexture, makeClearRenderPassDescriptor, depthClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { colorNewFromRGBA } from '../Color';
+import { colorNewCopy, OpaqueBlack } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, Destroyable } from '../SceneBase';
 import { createModelInstance } from './scenes';
@@ -269,8 +269,6 @@ export const enum SMSPass {
     TRANSPARENT = 1 << 3,
 }
 
-const sunshineClearDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(0, 0, 0, 1));
-
 export class SunshineRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
     public mainRenderTarget = new BasicRenderTarget();
@@ -278,6 +276,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     public modelInstances: J3DModelInstanceSimple[] = [];
     public destroyables: Destroyable[] = [];
     public modelCache = new Map<RARC.RARCFile, J3DModelData>();
+    private clearDescriptor = makeClearRenderPassDescriptor(true, colorNewCopy(OpaqueBlack));
 
     constructor(device: GfxDevice, public rarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -341,7 +340,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, sunshineClearDescriptor);
+        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, this.clearDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(SMSPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         device.submitPass(skyboxPassRenderer);
