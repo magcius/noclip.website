@@ -580,7 +580,7 @@ export class RailRider {
             this.bezierRail.calcDirection(scratchVec3b, coord);
             vec3.scale(scratchVec3b, scratchVec3b, 100);
             vec3.add(scratchVec3b, scratchVec3b, scratchVec3c);
-            drawWorldSpaceLine(ctx, camera, scratchVec3c, scratchVec3b, Yellow);
+            drawWorldSpaceLine(ctx, camera.clipFromWorldMatrix, scratchVec3c, scratchVec3b, Yellow);
 
             /*
             const partIdx = this.bezierRail.getIncludedSectionIdx(coord, 1);
@@ -601,7 +601,7 @@ export class RailRider {
             const coord1 = this.bezierRail.normalizePos(i * speed, 1);
             this.bezierRail.calcPos(scratchVec3b, coord0);
             this.bezierRail.calcPos(scratchVec3c, coord1);
-            drawWorldSpaceLine(ctx, camera, scratchVec3b, scratchVec3c, Magenta, 1);
+            drawWorldSpaceLine(ctx, camera.clipFromWorldMatrix, scratchVec3b, scratchVec3c, Magenta, 1);
         }
     }
 }

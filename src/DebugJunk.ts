@@ -3,7 +3,7 @@
 import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS, Red, Green, Blue } from "./Color";
 import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
-import { vec4, vec3, mat4 } from "gl-matrix";
+import { vec4, vec3, mat4, ReadonlyMat4 } from "gl-matrix";
 import { nArray, assert, assertExists, hexdump, magicstr } from "./util";
 import { UI, Slider } from "./ui";
 import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ } from "./MathHelpers";
@@ -159,7 +159,7 @@ export function prepareFrameDebugOverlayCanvas2D(): void {
 
 const p = nArray(8, () => vec4.create());
 
-function transformToClipSpace(ctx: CanvasRenderingContext2D, m: mat4, nPoints: number): void {
+function transformToClipSpace(ctx: CanvasRenderingContext2D, m: ReadonlyMat4, nPoints: number): void {
     for (let i = 0; i < nPoints; i++) {
         vec4.transformMat4(p[i], p[i], m);
         divideByW(p[i], p[i]);
@@ -178,10 +178,10 @@ function drawLine(ctx: CanvasRenderingContext2D, p0: vec4, p1: vec4): void {
     ctx.lineTo((p1[0] + 1) * cw / 2, ((-p1[1] + 1) * ch / 2));
 }
 
-export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, camera: Camera, v0: vec3, v1: vec3, color: Color = Magenta, thickness = 2): void {
+export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v0: vec3, v1: vec3, color: Color = Magenta, thickness = 2): void {
     vec4.set(p[0], v0[0], v0[1], v0[2], 1.0);
     vec4.set(p[1], v1[0], v1[1], v1[2], 1.0);
-    transformToClipSpace(ctx, camera.clipFromWorldMatrix, 2);
+    transformToClipSpace(ctx, clipFromWorldMatrix, 2);
 
     ctx.beginPath();
     drawLine(ctx, p[0], p[1]);
@@ -193,7 +193,7 @@ export function drawWorldSpaceLine(ctx: CanvasRenderingContext2D, camera: Camera
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
-export function drawWorldSpaceBasis(ctx: CanvasRenderingContext2D, camera: Camera, m: mat4, mag: number = 100, thickness = 2): void {
+export function drawWorldSpaceBasis(ctx: CanvasRenderingContext2D, camera: Camera, m: ReadonlyMat4, mag: number = 100, thickness = 2): void {
     getMatrixTranslation(scratchVec3a, m);
 
     getMatrixAxisX(scratchVec3b, m);
@@ -258,7 +258,7 @@ export function drawViewportSpacePoint(ctx: CanvasRenderingContext2D, x: number,
     ctx.fillRect(x - rad, ctx.canvas.height - (y - rad), size, size);
 }
 
-export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: mat4, v: vec3, color: Color = Magenta, size: number = 4): void {
+export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v: vec3, color: Color = Magenta, size: number = 4): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
     vec4.set(p[0], v[0], v[1], v[2], 1.0);
@@ -277,7 +277,7 @@ interface TextOptions {
     outline?: number;
 }
 
-export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: mat4, v: vec3, text: string, offsY: number = 0, color: Color = Magenta, options: TextOptions = {}): void {
+export function drawWorldSpaceText(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v: vec3, text: string, offsY: number = 0, color: Color = Magenta, options: TextOptions = {}): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;
     vec4.set(p[0], v[0], v[1], v[2], 1.0);

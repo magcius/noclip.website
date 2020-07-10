@@ -687,7 +687,11 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     private updateBinder(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
         if (this.binder !== null) {
             if (this.calcBinderFlag) {
+                if (Number.isNaN(this.velocity[0]) || Number.isNaN(this.velocity[1]) || Number.isNaN(this.velocity[2]))
+                    debugger;
                 this.binder.bind(sceneObjHolder, scratchVec3a, this.velocity);
+                if (Number.isNaN(scratchVec3a[0]) || Number.isNaN(scratchVec3a[1]) || Number.isNaN(scratchVec3a[2]))
+                    debugger;
                 vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, deltaTimeFrames);
             } else {
                 vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);

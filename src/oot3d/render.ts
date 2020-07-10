@@ -998,7 +998,7 @@ export class CmbInstance {
                 vec3.set(scratchVec3b, 0, 0, 0);
                 vec3.transformMat4(scratchVec3b, scratchVec3b, this.boneMatrices[bone.boneId]);
 
-                drawWorldSpaceLine(ctx, viewerInput.camera, scratchVec3a, scratchVec3b);
+                drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b);
             }
         }
 

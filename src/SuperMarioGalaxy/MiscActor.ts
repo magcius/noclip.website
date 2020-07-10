@@ -4,7 +4,7 @@
 import { LightType } from './DrawBuffer';
 import { SceneObjHolder, getObjectName, getDeltaTimeFrames, getTimeFrames, SceneObj, SpecialTextureType } from './Main';
 import { createCsvParser, JMapInfoIter, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, getJMapInfoArg4, getJMapInfoArg6 } from './JMapInfo';
-import { mat4, vec3, vec2, quat, ReadonlyVec3 } from 'gl-matrix';
+import { mat4, vec3, vec2, quat, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
 import { MathConstants, clamp, lerp, normToLength, clampRange, isNearZeroVec3, computeModelMatrixR, computeModelMatrixS, computeNormalMatrix, invlerp, saturate, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, quatFromEulerRadians, isNearZero, Vec3Zero, Vec3UnitX, Vec3UnitZ, Vec3UnitY, transformVec3Mat4w0, computeEulerAngleRotationFromSRTMatrix, getMatrixAxisX, setMatrixTranslation, computeModelMatrixSRT, transformVec3Mat4w1, scaleMatrix } from '../MathHelpers';
 import { colorNewFromRGBA8, Color, colorCopy, colorNewCopy, colorFromRGBA8, White, Green, Yellow, OpaqueBlack, Red } from '../Color';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams, ub_MaterialParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
@@ -33,12 +33,13 @@ import { getVertexInputLocation } from '../gx/gx_material';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../gfx/helpers/TopologyHelpers';
 import { buildEnvMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater, WaterAreaHolder, WaterInfo, HazeCube } from './MiscMap';
-import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isBinded, isWallCodeNoAction, setBindTriangleFilter, getBindedFixReactionVector, isBindedGround, CollisionKeeperCategory, isGroundCodeDamage, isGroundCodeDamageFire } from './Collision';
+import { getFirstPolyOnLineToMap, calcMapGround, Triangle, getFirstPolyOnLineToMapExceptActor, CollisionParts, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isBinded, isWallCodeNoAction, setBindTriangleFilter, getBindedFixReactionVector, isBindedGround, CollisionKeeperCategory, isGroundCodeDamage, isGroundCodeDamageFire, HitInfo } from './Collision';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
 import { isExistStageSwitchSleep } from './Switch';
 import { BrightObjBase, BrightObjCheckArg, addBrightObj } from './LensFlare';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis } from '../DebugJunk';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceBasis, drawWorldSpaceText, drawWorldSpaceLine } from '../DebugJunk';
 import { initFur, initFurPlanet } from './Fur';
+import { KCHitSphereClassification } from './KCollisionServer';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -3485,13 +3486,13 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         drawWorldSpacePoint(ctx, viewerInput.camera, chasePoint, Magenta, 10);
 
         vec3.scaleAndAdd(scratchVec3, this.translation, this.axisX, 20);
-        drawWorldSpaceLine(ctx, viewerInput.camera, this.translation, scratchVec3, Red);
+        drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, this.translation, scratchVec3, Red);
 
         vec3.scaleAndAdd(scratchVec3, this.translation, this.axisY, 20);
-        drawWorldSpaceLine(ctx, viewerInput.camera, this.translation, scratchVec3, Green);
+        drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, this.translation, scratchVec3, Green);
 
         vec3.scaleAndAdd(scratchVec3, this.translation, this.axisZ, 20);
-        drawWorldSpaceLine(ctx, viewerInput.camera, this.translation, scratchVec3, Blue);
+        drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, this.translation, scratchVec3, Blue);
         */
     }
 
@@ -8185,9 +8186,6 @@ export class BrightSun extends LiveActor {
     }
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (sceneObjHolder.lensFlareDirector === null)
-            return;
-
         getCamPos(scratchVec3, viewerInput.camera);
 
         computeModelMatrixSRT(scratchMatrix, 1, 1, 1, this.rotation[0], this.rotation[1], this.rotation[2], scratchVec3[0], scratchVec3[1], scratchVec3[2]);
@@ -8196,6 +8194,9 @@ export class BrightSun extends LiveActor {
         getMatrixTranslation(this.translation, scratchMatrix);
 
         this.controlSunModel(sceneObjHolder, viewerInput);
+
+        if (sceneObjHolder.lensFlareDirector === null)
+            return;
 
         this.brightObj.checkVisibilityOfSphere(sceneObjHolder, this.checkArg, this.translation, 3000.0, viewerInput);
     }
@@ -10117,6 +10118,33 @@ function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveAct
 
 const enum UnizoNrv { Wait, Jump, Chase, CollidePlayer, CollideEnemy, Break, JumpDown, FireDown }
 
+function debugDrawHitInfo(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, hitInfo: HitInfo): void {
+    if (hitInfo.classification === KCHitSphereClassification.Edge1) {
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0, Yellow);
+    } else if (hitInfo.classification === KCHitSphereClassification.Edge2) {
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1, Yellow);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0);
+    } else if (hitInfo.classification === KCHitSphereClassification.Edge3) {
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2, Yellow);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0);
+    } else {
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos0, hitInfo.pos1);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos1, hitInfo.pos2);
+        drawWorldSpaceLine(ctx, clipFromWorldMatrix, hitInfo.pos2, hitInfo.pos0);
+    }
+
+    if (hitInfo.classification === KCHitSphereClassification.Vertex1 || hitInfo.classification === KCHitSphereClassification.Vertex2 || hitInfo.classification === KCHitSphereClassification.Vertex3)
+        drawWorldSpacePoint(ctx, clipFromWorldMatrix, hitInfo.strikeLoc, Yellow, 10);
+    else
+        drawWorldSpacePoint(ctx, clipFromWorldMatrix, hitInfo.strikeLoc);
+
+    drawWorldSpaceText(ctx, clipFromWorldMatrix, hitInfo.strikeLoc, '' + hitInfo.classification, 10);
+}
+
 export class Unizo extends LiveActor<UnizoNrv> {
     private breakModel: ModelObj;
     private jumpHeight = 0.15;
@@ -10238,6 +10266,10 @@ export class Unizo extends LiveActor<UnizoNrv> {
         // turnMtxToYDir(this.baseMtx, scratchVec3, 1.0);
         setMatrixTranslation(this.baseMtx, this.translation);
         this.updateSurfaceEffect(sceneObjHolder);
+
+        if (isBindedGround(this)) {
+            debugDrawHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.binder!.floorHitInfo);
+        }
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UnizoNrv, deltaTimeFrames: number): void {

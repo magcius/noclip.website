@@ -283,8 +283,8 @@ export class KCollisionServer {
 
         this.loadNormal(scratchVec3c, prism.faceNormalIdx);
         const dotFaceNrm = vec3.dot(scratchVec3c, scratchVec3d);
-        dst.distance = radius - dotFaceNrm;
-        if (dst.distance < 0.0)
+
+        if (radius - dotFaceNrm < 0.0)
             return false;
 
         const sqRadius = radius ** 2.0;
@@ -295,7 +295,6 @@ export class KCollisionServer {
         let t1 = NaN;
         if (dotNrm1 >= dotNrm2 && dotNrm1 >= dotNrm3 && dotNrm1 >= 0.0) {
             // dotNrm1 is the maximum. Pick other edge.
-
             if (dotNrm2 >= dotNrm3) {
                 // Our edges are 1 and 2.
                 this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
@@ -304,7 +303,7 @@ export class KCollisionServer {
                 if (dotNrm2 >= t1 * dotNrm1)
                     dst.classification = KCHitSphereClassification.Vertex1;
             } else {
-                // Our edges are 1 and 3.
+                // Our edges are 3 and 1.
                 this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
                 this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
                 t1 = vec3.dot(scratchVec3c, scratchVec3d);
@@ -316,12 +315,11 @@ export class KCollisionServer {
                 if (dotNrm1 > dotFaceNrm)
                     return false;
 
-                dst.distance = sqRadius - dotNrm1 ** 2.0;
                 dst.classification = KCHitSphereClassification.Edge1;
+                dst.distance = sqRadius - dotNrm1 ** 2.0;
             }
         } else if (dotNrm2 >= dotNrm1 && dotNrm2 >= dotNrm3 && dotNrm2 >= 0.0) {
             // dotNrm2 is the maximum. Pick other edge.
-
             if (dotNrm1 >= dotNrm3) {
                 // Our edges are 1 and 2.
                 this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
@@ -342,25 +340,24 @@ export class KCollisionServer {
                 if (dotNrm2 > dotFaceNrm)
                     return false;
 
-                dst.distance = sqRadius - dotNrm2 ** 2.0;
                 dst.classification = KCHitSphereClassification.Edge2;
+                dst.distance = sqRadius - dotNrm2 ** 2.0;
             }
         } else if (dotNrm3 >= dotNrm1 && dotNrm3 >= dotNrm1 && dotNrm3 >= 0.0) {
             // dotNrm3 is the maximum. Pick other edge.
-
             if (dotNrm2 >= dotNrm1) {
                 // Our edges are 2 and 3.
                 this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
                 this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
                 t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                if (t1 * dotNrm3 <= dotNrm2)
+                if (dotNrm2 >= t1 * dotNrm3)
                     dst.classification = KCHitSphereClassification.Vertex2;
             } else {
                 // Our edges are 3 and 1.
                 this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
                 this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
                 t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                if (t1 * dotNrm3 <= dotNrm1)
+                if (dotNrm1 >= t1 * dotNrm3)
                     dst.classification = KCHitSphereClassification.Vertex3;
             }
 
@@ -368,18 +365,12 @@ export class KCollisionServer {
                 if (dotNrm3 > dotFaceNrm)
                     return false;
 
-                dst.distance = sqRadius - dotNrm3 ** 2.0;
                 dst.classification = KCHitSphereClassification.Edge3;
+                dst.distance = sqRadius - dotNrm3 ** 2.0;
             }
         } else {
-            // All three of our dot products are <= 0.0. Project onto to the plane.
+            // All three of our dot products are <= 0.0. We're on the plane.
             dst.classification = KCHitSphereClassification.Plane;
-
-            // dst.distance is unchanged, so it's already been checked against 0.
-            if (dst.distance > maxDist)
-                return false;
-
-            return true;
         }
 
         // At this point, everything should be classified.
@@ -390,7 +381,7 @@ export class KCollisionServer {
             assert(!Number.isNaN(t1));
 
             if (dst.classification === KCHitSphereClassification.Vertex1) {
-                const c0 = (((t1 * dotNrm2) - dotNrm1)) / (t1 ** 2.0) - 1.0;
+                const c0 = (((t1 * dotNrm2) - dotNrm1)) / ((t1 ** 2.0) - 1.0);
                 const c1 = dotNrm2 - (c0 * t1);
 
                 // Should be loaded already.
@@ -400,7 +391,7 @@ export class KCollisionServer {
                 scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
                 scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
             } else if (dst.classification === KCHitSphereClassification.Vertex2) {
-                const c0 = (((t1 * dotNrm3) - dotNrm2)) / (t1 ** 2.0) - 1.0;
+                const c0 = (((t1 * dotNrm3) - dotNrm2)) / ((t1 ** 2.0) - 1.0);
                 const c1 = dotNrm3 - (c0 * t1);
 
                 // Should be loaded already.
@@ -410,7 +401,7 @@ export class KCollisionServer {
                 scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
                 scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
             } else if (dst.classification === KCHitSphereClassification.Vertex3) {
-                const c0 = (((t1 * dotNrm1) - dotNrm3)) / (t1 ** 2.0) - 1.0;
+                const c0 = (((t1 * dotNrm1) - dotNrm3)) / ((t1 ** 2.0) - 1.0);
                 const c1 = dotNrm1 - (c0 * t1);
 
                 // Should be loaded already.
@@ -421,14 +412,24 @@ export class KCollisionServer {
                 scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
             }
 
-            const sq = vec3.dot(scratchVec3c, scratchVec3c);
-            if (sq > dotFaceNrm ** 2.0 || sq >= sqRadius)
+            if (Number.isNaN(scratchVec3c[0]))
+                debugger;
+
+            const sqDist = vec3.dot(scratchVec3c, scratchVec3c);
+            if (sqDist > dotFaceNrm ** 2.0 || sqDist >= sqRadius)
                 return false;
 
-            dst.distance = sqRadius - sq;
+            dst.distance = sqRadius - sqDist;
+            //
+            dst.distance = Math.sqrt(dst.distance) - dotFaceNrm;
+        } else if (dst.classification === KCHitSphereClassification.Edge1 || dst.classification === KCHitSphereClassification.Edge2 || dst.classification === KCHitSphereClassification.Edge3) {
+            dst.distance = Math.sqrt(dst.distance) - dotFaceNrm;
+        } else if (dst.classification === KCHitSphereClassification.Plane) {
+            dst.distance = radius - dotFaceNrm;
+        } else {
+            throw "whoops";
         }
 
-        dst.distance = Math.sqrt(dst.distance) - dotFaceNrm;
         if (dst.distance < 0.0 || dst.distance > maxDist)
             return false;
 
@@ -697,6 +698,9 @@ export class KCollisionServer {
 
                         if (!this.KCHitSphere(prismHitScratch, prism, pos, radius, invAvgScale))
                             continue;
+
+                        if (Number.isNaN(prismHitScratch.distance))
+                            debugger;
 
                         dst.prisms[dstPrismCount] = prism;
                         dst.distances[dstPrismCount] = prismHitScratch.distance;

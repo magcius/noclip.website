@@ -1002,7 +1002,7 @@ export class ObjectInstance {
                         mat4.mul(parentMtx, parentMtx, mtx);
                         const parentPt = vec3.create();
                         mat4.getTranslation(parentPt, parentMtx);
-                        drawWorldSpaceLine(ctx, objectCtx.viewerInput.camera, parentPt, jointPt);
+                        drawWorldSpaceLine(ctx, objectCtx.viewerInput.camera.clipFromWorldMatrix, parentPt, jointPt);
                     } else {
                         drawWorldSpacePoint(ctx, objectCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
                     }

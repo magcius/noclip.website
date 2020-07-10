@@ -61,11 +61,13 @@ export class Triangle {
 export class HitInfo extends Triangle {
     public strikeLoc = vec3.create();
     public distance: number = -1;
+    public classification: number = 0;
 
     public copy(other: HitInfo): void {
         super.copy(other);
         vec3.copy(this.strikeLoc, other.strikeLoc);
         this.distance = other.distance;
+        this.classification = other.classification;
     }
 }
 
@@ -270,7 +272,8 @@ export class CollisionParts {
     private projectToPlane(dst: vec3, pos: ReadonlyVec3, planePos: ReadonlyVec3, normal: ReadonlyVec3): void {
         // Put in plane space.
         vec3.sub(dst, pos, planePos);
-        vec3.scaleAndAdd(dst, pos, normal, vec3.dot(dst, normal));
+        vec3.scaleAndAdd(dst, pos, normal, -vec3.dot(dst, normal));
+        vec3.add(dst, pos, planePos);
     }
 
     private calcCollidePosition(dst: vec3, prism: KC_PrismData, classification: number): void {
@@ -299,7 +302,7 @@ export class CollisionParts {
             this.collisionServer.getPos(scratchVec3b, prism, 0);
             this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
 
-            this.collisionServer.getEdgeNormal2(scratchVec3a, prism);
+            this.collisionServer.getEdgeNormal3(scratchVec3a, prism);
             this.collisionServer.getPos(scratchVec3b, prism, 1);
             this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
         } else if (classification === KCHitSphereClassification.Vertex1) {
@@ -317,6 +320,7 @@ export class CollisionParts {
         // Copy the positions before we run checkSphere, as pos is scratchVec3a, and we're going to stomp on it below.
         for (let i = dstIdx; i < hitInfo.length; i++)
             vec3.copy(hitInfo[i].strikeLoc, pos);
+
         this.checkCollisionResult.reset();
         this.collisionServer.checkSphere(this.checkCollisionResult, hitInfo.length, pos, radius, invAvgScale);
 
@@ -327,6 +331,7 @@ export class CollisionParts {
                 break;
 
             this.calcCollidePosition(hitInfo[dstIdx].strikeLoc, prism, this.checkCollisionResult.classifications[i]);
+            hitInfo[dstIdx].classification = this.checkCollisionResult.classifications[i];
             transformVec3Mat4w1(hitInfo[dstIdx].strikeLoc, this.worldMtx, hitInfo[dstIdx].strikeLoc);
 
             const prismIdx = this.collisionServer.toIndex(prism);

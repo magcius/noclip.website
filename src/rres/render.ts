@@ -866,7 +866,7 @@ export class MDL0ModelInstance {
                     vec3.set(scratchVec3b, 0, 0, 0);
                     vec3.transformMat4(scratchVec3b, scratchVec3b, this.instanceStateData.jointToWorldMatrixArray[dstMtxId]);
 
-                    drawWorldSpaceLine(ctx, camera, scratchVec3a, scratchVec3b);
+                    drawWorldSpaceLine(ctx, camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b);
                 }
             } else if (op.op === BRRES.ByteCodeOp.MTXDUP) {
                 const srcMtxId = op.fromMtxId;

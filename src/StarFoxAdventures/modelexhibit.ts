@@ -262,7 +262,7 @@ class ModelExhibitRenderer extends SFARenderer {
                     mat4.mul(parentMtx, parentMtx, matrix);
                     const parentPt = vec3.create();
                     mat4.getTranslation(parentPt, parentMtx);
-                    drawWorldSpaceLine(ctx, sceneCtx.viewerInput.camera, parentPt, jointPt);
+                    drawWorldSpaceLine(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, parentPt, jointPt);
                 } else {
                     drawWorldSpacePoint(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
                 }

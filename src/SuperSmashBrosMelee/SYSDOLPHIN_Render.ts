@@ -1376,9 +1376,9 @@ export class HSD_JObjRoot_Instance {
         vec3.transformMat4(scratchVec3b, [0, 0, 0], jobj.jointMtx);
 
         if (highlight) {
-            drawWorldSpacePoint(ctx, camera, scratchVec3b, Red, 6);
+            drawWorldSpacePoint(ctx, camera.clipFromWorldMatrix, scratchVec3b, Red, 6);
             if (idx < 10)
-                drawWorldSpaceText(ctx, camera, scratchVec3b, '' + idx);
+                drawWorldSpaceText(ctx, camera.clipFromWorldMatrix, scratchVec3b, '' + idx);
         }
 
         if (jobj.parent !== null) {
@@ -1386,7 +1386,7 @@ export class HSD_JObjRoot_Instance {
             const color = colorNewCopy(Red);
             if (highlight)
                 colorCopy(color, Yellow);
-            drawWorldSpaceLine(ctx, camera, scratchVec3a, scratchVec3b, color);
+            drawWorldSpaceLine(ctx, camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b, color);
         }
 
         for (let i = 0; i < jobj.children.length; i++)
