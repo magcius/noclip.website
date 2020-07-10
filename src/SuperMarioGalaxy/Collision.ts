@@ -2,7 +2,7 @@
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { SceneObjHolder, ResourceHolder, SceneObj } from "./Main";
 import { NameObj } from "./NameObj";
-import { KCollisionServer, CheckCollideResult, KC_PrismData } from "./KCollisionServer";
+import { KCollisionServer, CheckCollideResult, KC_PrismData, KCHitSphereClassification } from "./KCollisionServer";
 import { HitSensor } from "./HitSensor";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { ZoneAndLayer, LiveActor, makeMtxTRSFromActor } from "./LiveActor";
@@ -274,13 +274,11 @@ export class CollisionParts {
     }
 
     private calcCollidePosition(dst: vec3, prism: KC_PrismData, classification: number): void {
-        assert(classification > 0);
-
-        if (classification === 1) {
+        if (classification === KCHitSphereClassification.Plane) {
             this.collisionServer.getFaceNormal(scratchVec3a, prism);
             this.collisionServer.getPos(scratchVec3b, prism, 0);
             this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
-        } else if (classification === 2) {
+        } else if (classification === KCHitSphereClassification.Edge1) {
             this.collisionServer.getFaceNormal(scratchVec3a, prism);
             this.collisionServer.getPos(scratchVec3b, prism, 0);
             this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
@@ -288,7 +286,7 @@ export class CollisionParts {
             this.collisionServer.getEdgeNormal1(scratchVec3a, prism);
             // this.collisionServer.getPos(scratchVec3b, prism, 0);
             this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
-        } else if (classification === 3) {
+        } else if (classification === KCHitSphereClassification.Edge2) {
             this.collisionServer.getFaceNormal(scratchVec3a, prism);
             this.collisionServer.getPos(scratchVec3b, prism, 0);
             this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
@@ -296,7 +294,7 @@ export class CollisionParts {
             this.collisionServer.getEdgeNormal2(scratchVec3a, prism);
             // this.collisionServer.getPos(scratchVec3b, prism, 0);
             this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
-        } else if (classification === 4) {
+        } else if (classification === KCHitSphereClassification.Edge3) {
             this.collisionServer.getFaceNormal(scratchVec3a, prism);
             this.collisionServer.getPos(scratchVec3b, prism, 0);
             this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
@@ -304,11 +302,11 @@ export class CollisionParts {
             this.collisionServer.getEdgeNormal2(scratchVec3a, prism);
             this.collisionServer.getPos(scratchVec3b, prism, 1);
             this.projectToPlane(dst, dst, scratchVec3b, scratchVec3a);
-        } else if (classification === 5) {
+        } else if (classification === KCHitSphereClassification.Vertex1) {
             this.collisionServer.getPos(dst, prism, 0);
-        } else if (classification === 6) {
+        } else if (classification === KCHitSphereClassification.Vertex2) {
             this.collisionServer.getPos(dst, prism, 1);
-        } else if (classification === 7) {
+        } else if (classification === KCHitSphereClassification.Vertex3) {
             this.collisionServer.getPos(dst, prism, 2);
         } else {
             throw "whoops";

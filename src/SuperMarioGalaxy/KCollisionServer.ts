@@ -52,6 +52,17 @@ export class CheckCollideResult {
 const searchBlockScratch = new SearchBlockResult();
 const prismHitScratch = new KC_PrismHit();
 
+export const enum KCHitSphereClassification {
+    None    = 0,
+    Plane   = 1,
+    Edge1   = 2,
+    Edge2   = 3,
+    Edge3   = 4,
+    Vertex1 = 5,
+    Vertex2 = 6,
+    Vertex3 = 7,
+}
+
 export class KCollisionServer {
     private blocksTrans = vec3.create();
 
@@ -279,144 +290,106 @@ export class KCollisionServer {
         const sqRadius = radius ** 2.0;
         const maxDist = this.maxDistMul * invAvgScale;
 
-        let label = '';
+        dst.classification = 0;
+
         let t1 = NaN;
-        while (true) {
-            if (label === '') {
-                // Prevent infinite loops.
-                label = 'AAA';
+        if (dotNrm1 >= dotNrm2 && dotNrm1 >= dotNrm3 && dotNrm1 >= 0.0) {
+            // dotNrm1 is the maximum. Pick other edge.
 
-                if (dotNrm2 >= dotNrm1) {
-                    if (dotNrm3 >= dotNrm2) {
-                        // goto LAB_80184968;
-                        label = 'LAB_80184968';
-                        continue;
-                    }
+            if (dotNrm2 >= dotNrm3) {
+                // Our edges are 1 and 2.
+                this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
+                this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
+                t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                if (dotNrm2 >= t1 * dotNrm1)
+                    dst.classification = KCHitSphereClassification.Vertex1;
+            } else {
+                // Our edges are 1 and 3.
+                this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
+                this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
+                t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                if (dotNrm3 >= t1 * dotNrm1)
+                    dst.classification = KCHitSphereClassification.Vertex3;
+            }
 
-                    if (dotNrm2 <= 0.0) {
-                        if (dst.distance > maxDist)
-                            return false;
-
-                        dst.classification = 1;
-                        return true;
-                    }
-
-                    if (dotNrm1 >= dotNrm3) {
-                        this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
-                        this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
-                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if (t1 * dotNrm2 <= dotNrm1) {
-                            // goto n_class5;
-                            label = 'n_class5';
-                            continue;
-                        }
-                    } else {
-                        this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
-                        this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
-                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if (t1 * dotNrm2 <= dotNrm3) {
-                            // goto n_class6;
-                            label = 'n_class6';
-                            continue;
-                        }
-                    }
-
-                    if (dotNrm2 > dotFaceNrm)
-                        return false;
-
-                    dst.distance = sqRadius - dotNrm2 ** 2.0;
-                    dst.classification = 3;
-
-                    // n_ret:
-                    break;
-                } else if (dotNrm3 >= dotNrm1) {
-                    // LAB_80184968:
-                    label = 'LAB_80184968';
-                    continue;
-                } else if (dotNrm1 > 0.0) {
-                    if (dotNrm3 >= dotNrm2) {
-                        this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
-                        this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
-                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if (t1 * dotNrm1 > dotNrm3) {
-                            // goto n_class2;
-                            label = 'n_class2';
-                            continue;
-                        } else {
-                            // n_class7:
-                            label = 'n_class7';
-                            continue;
-                        }
-                    } else {
-                        this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
-                        this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
-                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if (t1 * dotNrm1 > dotNrm2) {
-                            // n_class2:
-                            label = 'n_class2';
-                            continue;
-                        } else {
-                            // n_class5:
-                            label = 'n_class5';
-                            continue;
-                        }
-                    }
-                } else {
-                    if (dst.distance > maxDist)
-                        return false;
-
-                    dst.classification = 1;
-                    return true;
-                }
-            } else if (label === 'n_class2') {
+            if (dst.classification === KCHitSphereClassification.None) {
                 if (dotNrm1 > dotFaceNrm)
                     return false;
 
                 dst.distance = sqRadius - dotNrm1 ** 2.0;
-                dst.classification = 2;
+                dst.classification = KCHitSphereClassification.Edge1;
+            }
+        } else if (dotNrm2 >= dotNrm1 && dotNrm2 >= dotNrm3 && dotNrm2 >= 0.0) {
+            // dotNrm2 is the maximum. Pick other edge.
 
-                // goto n_ret;
-                break;
-            } else if (label === 'LAB_80184968') {
-                if (dotNrm3 > 0.0) {
-                    if (dotNrm2 >= dotNrm1) {
-                        this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
-                        this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
-                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if (t1 * dotNrm3 <= dotNrm2) {
-                            // n_class6:
-                            label = 'n_class6';
-                            continue;
-                        }
-                    } else {
-                        this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
-                        this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
-                        t1 = vec3.dot(scratchVec3c, scratchVec3d);
-                        if (t1 * dotNrm3 <= dotNrm1) {
-                            // goto n_class7;
-                            label = 'n_class7';
-                            continue;
-                        }
-                    }
+            if (dotNrm1 >= dotNrm3) {
+                // Our edges are 1 and 2.
+                this.loadNormal(scratchVec3c, prism.edgeNormal1Idx);
+                this.loadNormal(scratchVec3d, prism.edgeNormal2Idx);
+                t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                if (dotNrm1 >= t1 * dotNrm2)
+                    dst.classification = KCHitSphereClassification.Vertex1;
+            } else {
+                // Our edges are 2 and 3.
+                this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
+                this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
+                t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                if (dotNrm3 >= t1 * dotNrm2)
+                    dst.classification = KCHitSphereClassification.Vertex2;
+            }
 
-                    if (dotNrm3 > dotFaceNrm)
-                        return false;
+            if (dst.classification === KCHitSphereClassification.None) {
+                if (dotNrm2 > dotFaceNrm)
+                    return false;
 
-                    dst.classification = 4;
-                    dst.distance = sqRadius - dotNrm3 ** 2.0;
-                    // goto n_ret;
-                    break;
-                } else {
-                    if (dst.distance > maxDist)
-                        return false;
+                dst.distance = sqRadius - dotNrm2 ** 2.0;
+                dst.classification = KCHitSphereClassification.Edge2;
+            }
+        } else if (dotNrm3 >= dotNrm1 && dotNrm3 >= dotNrm1 && dotNrm3 >= 0.0) {
+            // dotNrm3 is the maximum. Pick other edge.
 
-                    dst.classification = 1;
-                    return true;
-                }
-            } else if (label === 'n_class5') {
-                dst.classification = 5;
+            if (dotNrm2 >= dotNrm1) {
+                // Our edges are 2 and 3.
+                this.loadNormal(scratchVec3c, prism.edgeNormal2Idx);
+                this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
+                t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                if (t1 * dotNrm3 <= dotNrm2)
+                    dst.classification = KCHitSphereClassification.Vertex2;
+            } else {
+                // Our edges are 3 and 1.
+                this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
+                this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
+                t1 = vec3.dot(scratchVec3c, scratchVec3d);
+                if (t1 * dotNrm3 <= dotNrm1)
+                    dst.classification = KCHitSphereClassification.Vertex3;
+            }
 
-                assert(!Number.isNaN(t1));
+            if (dst.classification === KCHitSphereClassification.None) {
+                if (dotNrm3 > dotFaceNrm)
+                    return false;
+
+                dst.distance = sqRadius - dotNrm3 ** 2.0;
+                dst.classification = KCHitSphereClassification.Edge3;
+            }
+        } else {
+            // All three of our dot products are <= 0.0. Project onto to the plane.
+            dst.classification = KCHitSphereClassification.Plane;
+
+            // dst.distance is unchanged, so it's already been checked against 0.
+            if (dst.distance > maxDist)
+                return false;
+
+            return true;
+        }
+
+        // At this point, everything should be classified.
+        assert(dst.classification !== KCHitSphereClassification.None);
+
+        // If this is on a vertex, compute our distance.
+        if (dst.classification === KCHitSphereClassification.Vertex1 || dst.classification === KCHitSphereClassification.Vertex2 || dst.classification === KCHitSphereClassification.Vertex3) {
+            assert(!Number.isNaN(t1));
+
+            if (dst.classification === KCHitSphereClassification.Vertex1) {
                 const c0 = (((t1 * dotNrm2) - dotNrm1)) / (t1 ** 2.0) - 1.0;
                 const c1 = dotNrm2 - (c0 * t1);
 
@@ -426,14 +399,7 @@ export class KCollisionServer {
                 scratchVec3c[0] = (c0 * scratchVec3c[0]) + (c1 * scratchVec3d[0]);
                 scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
                 scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
-
-                // n_pret567:
-                label = 'n_pret567';
-                continue;
-            } else if (label === 'n_class6') {
-                dst.classification = 6;
-
-                assert(!Number.isNaN(t1));
+            } else if (dst.classification === KCHitSphereClassification.Vertex2) {
                 const c0 = (((t1 * dotNrm3) - dotNrm2)) / (t1 ** 2.0) - 1.0;
                 const c1 = dotNrm3 - (c0 * t1);
 
@@ -443,14 +409,7 @@ export class KCollisionServer {
                 scratchVec3c[0] = (c0 * scratchVec3c[0]) + (c1 * scratchVec3d[0]);
                 scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
                 scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
-
-                // goto n_pret567;
-                label = 'n_pret567';
-                continue;
-            } else if (label === 'n_class7') {
-                dst.classification = 7;
-
-                assert(!Number.isNaN(t1));
+            } else if (dst.classification === KCHitSphereClassification.Vertex3) {
                 const c0 = (((t1 * dotNrm1) - dotNrm3)) / (t1 ** 2.0) - 1.0;
                 const c1 = dotNrm1 - (c0 * t1);
 
@@ -460,27 +419,15 @@ export class KCollisionServer {
                 scratchVec3c[0] = (c0 * scratchVec3c[0]) + (c1 * scratchVec3d[0]);
                 scratchVec3c[1] = (c0 * scratchVec3c[1]) + (c1 * scratchVec3d[1]);
                 scratchVec3c[2] = (c0 * scratchVec3c[2]) + (c1 * scratchVec3d[2]);
-
-                // goto n_pret567;
-                label = 'n_pret567';
-                continue;
-            } else if (label === 'n_pret567') {
-                const sq = vec3.dot(scratchVec3c, scratchVec3c);
-                if (sq > dotFaceNrm ** 2.0 || sq >= sqRadius)
-                    return false;
-
-                dst.distance = sqRadius - sq;
-
-                // goto n_ret;
-                break;
             }
 
-            // Shouldn't make it here.
-            throw "whoops";
+            const sq = vec3.dot(scratchVec3c, scratchVec3c);
+            if (sq > dotFaceNrm ** 2.0 || sq >= sqRadius)
+                return false;
+
+            dst.distance = sqRadius - sq;
         }
 
-        // n_ret
-        // Final checks.
         dst.distance = Math.sqrt(dst.distance) - dotFaceNrm;
         if (dst.distance < 0.0 || dst.distance > maxDist)
             return false;
