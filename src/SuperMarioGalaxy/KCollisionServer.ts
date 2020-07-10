@@ -671,19 +671,20 @@ export class KCollisionServer {
 
         let dstPrismCount = 0;
 
-        let advanceZ = 1000000, advanceY = 1000000;
-        while (blkMin[2] < blkMax[2]) {
-            while (blkMin[1] < blkMax[1]) {
-                while (blkMin[0] < blkMax[0]) {
-                    const x = (blkMin[0] | 0), y = (blkMin[1] | 0), z = (blkMin[2] | 0);
+        for (let zf = blkMin[2]; zf <= blkMax[2];) {
+            let advanceZ = 1000000;
+            for (let yf = blkMin[1]; yf <= blkMax[1];) {
+                let advanceY = 1000000;
+                for (let xf = blkMin[0]; xf <= blkMax[0];) {
+                    const x = (xf | 0), y = (yf | 0), z = (zf | 0);
                     this.searchBlock(searchBlockScratch, x, y, z);
 
-                    const bit = (1 << searchBlockScratch.shiftR);
-                    const mask = bit - 1;
+                    const blockSize = (1 << searchBlockScratch.shiftR);
+                    const mask = blockSize - 1;
 
-                    const advanceX = bit - (x & mask);
-                    advanceY = Math.min(advanceY, bit - (y & mask));
-                    advanceZ = Math.min(advanceZ, bit - (z & mask));
+                    const advanceX = blockSize - (x & mask);
+                    advanceY = Math.min(advanceY, blockSize - (y & mask));
+                    advanceZ = Math.min(advanceZ, blockSize - (z & mask));
 
                     let prismListIdx = searchBlockScratch.prismListOffs;
                     while (true) {
@@ -712,12 +713,11 @@ export class KCollisionServer {
                             return true;
                         }
                     }
-
-                    blkMin[0] += advanceX;
+                    xf += advanceX;
                 }
-                blkMin[1] += advanceY;
+                yf += advanceY;
             }
-            blkMin[2] += advanceZ;
+            zf += advanceZ;
         }
 
         return dstPrismCount > 0;
