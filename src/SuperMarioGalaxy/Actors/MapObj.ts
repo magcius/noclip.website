@@ -2,21 +2,21 @@
 // Misc MapObj actors.
 
 import { mat4, vec3 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation } from '../MathHelpers';
-import { assertExists, fallback } from '../util';
-import * as Viewer from '../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB } from './ActorUtil';
-import { tryCreateCollisionMoveLimit } from './Collision';
-import { LightType } from './DrawBuffer';
-import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT } from './EffectSystem';
-import { HitSensor } from './HitSensor';
-import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter } from './JMapInfo';
-import { LiveActor, MessageType, ZoneAndLayer } from './LiveActor';
-import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from './Main';
-import { getMapPartsArgMoveConditionType, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRotator, MoveConditionType, RailGuideType } from './MapParts';
+import { MathConstants, setMatrixTranslation } from '../../MathHelpers';
+import { assertExists, fallback } from '../../util';
+import * as Viewer from '../../viewer';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB } from '../ActorUtil';
+import { tryCreateCollisionMoveLimit } from '../Collision';
+import { LightType } from '../DrawBuffer';
+import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT } from '../EffectSystem';
+import { HitSensor } from '../HitSensor';
+import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter } from '../JMapInfo';
+import { LiveActor, MessageType, ZoneAndLayer } from '../LiveActor';
+import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
+import { getMapPartsArgMoveConditionType, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRotator, MoveConditionType, RailGuideType } from '../MapParts';
 import { createIndirectPlanetModel, PartsModel } from './MiscActor';
-import { isConnectedWithRail } from './RailRider';
-import { isFirstStep, isGreaterStep } from './Spine';
+import { isConnectedWithRail } from '../RailRider';
+import { isFirstStep, isGreaterStep } from '../Spine';
 import { ModelObj, createModelObjBloomModel } from './ModelObj';
 
 // Scratchpad

@@ -1,9 +1,9 @@
-import { LiveActor, ZoneAndLayer } from "./LiveActor";
-import { SceneObjHolder } from "./Main";
+import { LiveActor, ZoneAndLayer } from "../LiveActor";
+import { SceneObjHolder } from "../Main";
 import { mat4 } from "gl-matrix";
-import { connectToScene } from "./ActorUtil";
-import { DrawBufferType, MovementType, CalcAnimType } from "./NameObj";
-import { ViewerRenderInput } from "../viewer";
+import { connectToScene } from "../ActorUtil";
+import { DrawBufferType, MovementType, CalcAnimType } from "../NameObj";
+import { ViewerRenderInput } from "../../viewer";
 
 export class ModelObj extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private transformMatrix: mat4 | null, drawBufferType: DrawBufferType, movementType: MovementType, calcAnimType: CalcAnimType) {

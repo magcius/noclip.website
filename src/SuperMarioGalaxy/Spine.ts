@@ -1,5 +1,5 @@
 
-import { clamp, lerp } from "../MathHelpers";
+import { lerp } from "../MathHelpers";
 
 interface SpineHost {
     spine: Spine | null;

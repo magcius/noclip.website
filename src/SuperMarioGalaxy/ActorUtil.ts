@@ -1,25 +1,25 @@
 
 // Utilities for various actor implementations.
 
-import { LiveActor, getJMapInfoTrans, getJMapInfoRotate, MessageType, MsgSharedGroup, ZoneAndLayer, makeMtxTRFromActor } from "./LiveActor";
-import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { SceneObjHolder, SceneObj } from "./Main";
-import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
-import { DrawType, DrawBufferType, CalcAnimType, MovementType, NameObj } from "./NameObj";
-import { assertExists } from "../util";
-import { BTIData, BTI } from "../Common/JSYSTEM/JUTTexture";
-import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
-import { getRes, XanimePlayer } from "./Animation";
-import { vec3, vec2, mat4, quat, ReadonlyVec3, ReadonlyQuat } from "gl-matrix";
-import { HitSensor, HitSensorType } from "./HitSensor";
-import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ, setMatrixTranslation, getMatrixTranslation, scaleMatrix, getMatrixAxisY, getMatrixAxisZ } from "../MathHelpers";
+import { mat4, quat, ReadonlyQuat, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Camera, texProjCameraSceneTex } from "../Camera";
+import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
+import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
-import { GravityInfo, GravityTypeMask } from "./Gravity";
-import { validateCollisionParts, CollisionScaleType, invalidateCollisionParts } from "./Collision";
-import { addSleepControlForLiveActor, isExistStageSwitchAppear, SwitchFunctorEventListener, getSwitchWatcherHolder, SwitchCallback, isExistStageSwitchA, isExistStageSwitchB, isExistStageSwitchDead } from "./Switch";
+import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
+import { assertExists } from "../util";
+import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
+import { CollisionScaleType, invalidateCollisionParts, validateCollisionParts } from "./Collision";
+import { GravityInfo, GravityTypeMask } from "./Gravity";
+import { HitSensor, HitSensorType } from "./HitSensor";
+import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
+import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, makeMtxTRFromActor, MsgSharedGroup } from "./LiveActor";
+import { SceneObj, SceneObjHolder } from "./Main";
+import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
+import { RailDirection } from "./RailRider";
+import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();

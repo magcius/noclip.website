@@ -29,10 +29,10 @@ import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './MiscActor';
+import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
-import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
+import { ObjInfo, NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
@@ -42,11 +42,11 @@ import { CollisionDirector } from './Collision';
 import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
 import { MapPartsRailGuideHolder } from './MapParts';
 import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr, BloomPostFXRenderer } from './ImageEffect';
-import { LensFlareDirector, DrawSyncManager } from './LensFlare';
+import { LensFlareDirector, DrawSyncManager } from './Actors/LensFlare';
 import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
-import { NPCDirector } from './MiscActor_NPC';
+import { NPCDirector } from './Actors/NPC';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -550,7 +550,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 }
 
 function getLayerDirName(index: LayerId) {
-    if (index === LayerId.COMMON) {
+    if (index === LayerId.Common) {
         return 'common';
     } else {
         assert(index >= 0);
@@ -1410,7 +1410,7 @@ class StageDataHolder {
     }
 
     public iterPlacement(callback: LayerObjInfoCallback, priority: boolean | null = null): void {
-        for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
+        for (let i = LayerId.Common; i <= LayerId.LayerMax; i++) {
             const layerDirName = getLayerDirName(i);
 
             const placementDir = this.zoneArchive.findDir(`jmp/Placement/${layerDirName}`);
@@ -1424,7 +1424,7 @@ class StageDataHolder {
     }
 
     public createLocalStageDataHolders(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {
-        for (let i = LayerId.COMMON; i <= LayerId.LAYER_MAX; i++) {
+        for (let i = LayerId.Common; i <= LayerId.LayerMax; i++) {
             const layerDirName = getLayerDirName(i);
             const stageObjInfo = this.zoneArchive.findFileData(`jmp/Placement/${layerDirName}/StageObjInfo`);
 

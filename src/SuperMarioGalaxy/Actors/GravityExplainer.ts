@@ -1,22 +1,22 @@
 
 // Fun actor (not from orig. game) to visualize gravity areas.
 
-import * as GX from '../gx/gx_enum';
-import { LiveActor, ZoneAndLayer } from "./LiveActor";
-import { TDDraw } from "./DDraw";
-import { GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, MaterialParams, PacketParams } from "../gx/gx_render";
+import * as GX from '../../gx/gx_enum';
+import { LiveActor, ZoneAndLayer } from "../LiveActor";
+import { TDDraw } from "../DDraw";
+import { GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, MaterialParams, PacketParams } from "../../gx/gx_render";
 import { vec3, mat4 } from "gl-matrix";
-import { colorNewCopy, White, colorFromHSL } from "../Color";
-import { dfShow } from "../DebugFloaters";
-import { SceneObjHolder, getDeltaTimeFrames } from "./Main";
-import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { connectToScene, getRandomFloat, calcGravityVector } from './ActorUtil';
-import { DrawType } from './NameObj';
-import { ViewerRenderInput } from '../viewer';
-import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1 } from '../MathHelpers';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { Camera } from '../Camera';
+import { colorNewCopy, White, colorFromHSL } from "../../Color";
+import { dfShow } from "../../DebugFloaters";
+import { SceneObjHolder, getDeltaTimeFrames } from "../Main";
+import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
+import { connectToScene, getRandomFloat, calcGravityVector } from '../ActorUtil';
+import { DrawType } from '../NameObj';
+import { ViewerRenderInput } from '../../viewer';
+import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1 } from '../../MathHelpers';
+import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
+import { GfxDevice } from '../../gfx/platform/GfxPlatform';
+import { Camera } from '../../Camera';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();

@@ -344,24 +344,24 @@ export function resetPosition(sceneObjHolder: SceneObjHolder, actor: LiveActor):
 }
 
 export const enum LayerId {
-    COMMON = -1,
-    LAYER_A = 0,
-    LAYER_B,
-    LAYER_C,
-    LAYER_D,
-    LAYER_E,
-    LAYER_F,
-    LAYER_G,
-    LAYER_H,
-    LAYER_I,
-    LAYER_J,
-    LAYER_K,
-    LAYER_L,
-    LAYER_M,
-    LAYER_N,
-    LAYER_O,
-    LAYER_P,
-    LAYER_MAX = LAYER_P,
+    Common = -1,
+    LayerA = 0,
+    LayerB,
+    LayerC,
+    LayerD,
+    LayerE,
+    LayerF,
+    LayerG,
+    LayerH,
+    LayerI,
+    LayerJ,
+    LayerK,
+    LayerL,
+    LayerM,
+    LayerN,
+    LayerO,
+    LayerP,
+    LayerMax = LayerP,
 }
 
 export interface ZoneAndLayer {
@@ -369,7 +369,7 @@ export interface ZoneAndLayer {
     layerId: LayerId;
 }
 
-export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.COMMON };
+export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.Common };
 
 export const enum MessageType {
     EnemyAttack                              = 0x53,

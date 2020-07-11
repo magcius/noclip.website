@@ -2,19 +2,19 @@
 // Misc NPC actors.
 
 import { quat, vec3 } from 'gl-matrix';
-import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { isNearZero, MathConstants, quatFromEulerRadians, Vec3Zero } from '../MathHelpers';
-import { assertExists, fallback } from '../util';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep } from './ActorUtil';
-import { getFirstPolyOnLineToMap } from './Collision';
-import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, JMapInfoIter } from './JMapInfo';
-import { isDead, LiveActor, makeMtxTRFromActor, ZoneAndLayer } from './LiveActor';
-import { getObjectName, SceneObjHolder } from './Main';
+import * as RARC from '../../Common/JSYSTEM/JKRArchive';
+import { isNearZero, MathConstants, quatFromEulerRadians, Vec3Zero } from '../../MathHelpers';
+import { assertExists, fallback } from '../../util';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep } from '../ActorUtil';
+import { getFirstPolyOnLineToMap } from '../Collision';
+import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, JMapInfoIter } from '../JMapInfo';
+import { isDead, LiveActor, makeMtxTRFromActor, ZoneAndLayer } from '../LiveActor';
+import { getObjectName, SceneObjHolder } from '../Main';
 import { PartsModel } from './MiscActor';
-import { DrawBufferType } from './NameObj';
-import { isConnectedWithRail } from './RailRider';
-import { isFirstStep, isGreaterStep } from './Spine';
-import { ViewerRenderInput } from '../viewer';
+import { DrawBufferType } from '../NameObj';
+import { isConnectedWithRail } from '../RailRider';
+import { isFirstStep, isGreaterStep } from '../Spine';
+import { ViewerRenderInput } from '../../viewer';
 
 // Scratchpad
 const scratchVec3 = vec3.create();

@@ -1,17 +1,17 @@
 
 import { NameObj, MovementType, DrawType } from "./NameObj";
-import { OceanBowl } from "./OceanBowl";
+import { OceanBowl } from "./Actors/OceanBowl";
 import { SceneObjHolder, SpecialTextureType, getDeltaTimeFrames, SceneObj } from "./Main";
 import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { OceanRing, isEqualStageName, HeatHazeDirector } from "./MiscActor";
+import { OceanRing, isEqualStageName, HeatHazeDirector } from "./Actors/MiscActor";
 import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";
 import { fallback } from "../util";
-import { OceanSphere } from "./OceanSphere";
+import { OceanSphere } from "./Actors/OceanSphere";
 import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";

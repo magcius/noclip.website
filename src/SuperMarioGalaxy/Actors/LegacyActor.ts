@@ -1,17 +1,17 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { assertExists, hexzero } from "../util";
-import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "./LiveActor";
-import { SceneObjHolder, getObjectName } from "./Main";
-import { JMapInfoIter, createCsvParser } from "./JMapInfo";
-import { ViewerRenderInput } from "../viewer";
-import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, startBtk, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckFrameAtRandom, getCamPos } from "./ActorUtil";
+import { assertExists, hexzero } from "../../util";
+import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "../LiveActor";
+import { SceneObjHolder, getObjectName } from "../Main";
+import { JMapInfoIter, createCsvParser } from "../JMapInfo";
+import { ViewerRenderInput } from "../../viewer";
+import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, startBtk, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckFrameAtRandom, getCamPos } from "../ActorUtil";
 import { MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint } from "./MiscActor";
-import { isFirstStep } from "./Spine";
-import { scaleMatrix } from "../MathHelpers";
-import { initMultiFur } from "./Fur";
-import { LightType } from "./DrawBuffer";
-import { emitEffect } from "./EffectSystem";
+import { isFirstStep } from "../Spine";
+import { scaleMatrix } from "../../MathHelpers";
+import { initMultiFur } from "../Fur";
+import { LightType } from "../DrawBuffer";
+import { emitEffect } from "../EffectSystem";
 import { createModelObjMapObj } from "./ModelObj";
 
 // The old actor code, before we started emulating things natively.
