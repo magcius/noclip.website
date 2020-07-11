@@ -33,6 +33,7 @@ export const enum MovementType {
     Npc                            = 0x28,
     Ride                           = 0x29,
     Enemy                          = 0x2A,
+    Parts                          = 0x2B,
     Item                           = 0x2C,
 }
 
@@ -51,6 +52,7 @@ export const enum CalcAnimType {
 
 export const enum DrawType {
     SwingRope                      = 0x00,
+    Creeper                        = 0x01,
     Trapeze                        = 0x06,
     OceanBowl                      = 0x07,
     OceanRing                      = 0x08,

@@ -418,6 +418,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // executeDrawListOpa();
         this.execute(passRenderer, DrawType.OceanRingOutside);
         this.execute(passRenderer, DrawType.SwingRope);
+        this.execute(passRenderer, DrawType.Creeper);
         this.execute(passRenderer, DrawType.Trapeze);
         this.execute(passRenderer, DrawType.WarpPodPath);
         this.execute(passRenderer, DrawType.WaterPlant);
@@ -446,7 +447,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, DrawBufferType.Ride);
         this.drawXlu(passRenderer, DrawBufferType.Enemy);
         this.drawXlu(passRenderer, DrawBufferType.EnemyDecoration);
-        this.drawXlu(passRenderer, 0x15);
+        this.drawXlu(passRenderer, DrawBufferType.TornadoMario);
         // executeDrawListXlu()
         this.drawXlu(passRenderer, 0x18);
 
@@ -471,7 +472,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.IndirectMapObjStrongLight);
         this.drawOpa(passRenderer, DrawBufferType.IndirectNpc);
         this.drawOpa(passRenderer, DrawBufferType.IndirectEnemy);
-        this.drawOpa(passRenderer, 0x22);
+        this.drawOpa(passRenderer, DrawBufferType.GlaringLight);
         this.drawOpa(passRenderer, 0x17);
         this.drawOpa(passRenderer, 0x16);
         this.drawXlu(passRenderer, DrawBufferType.IndirectPlanet);
@@ -479,7 +480,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawXlu(passRenderer, DrawBufferType.IndirectMapObjStrongLight);
         this.drawXlu(passRenderer, DrawBufferType.IndirectNpc);
         this.drawXlu(passRenderer, DrawBufferType.IndirectEnemy);
-        this.drawXlu(passRenderer, 0x22);
+        this.drawXlu(passRenderer, DrawBufferType.GlaringLight);
         this.drawXlu(passRenderer, 0x17);
         this.drawXlu(passRenderer, 0x16);
         this.execute(passRenderer, DrawType.ElectricRailHolder);

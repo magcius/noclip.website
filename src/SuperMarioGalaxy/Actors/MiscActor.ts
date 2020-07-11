@@ -154,36 +154,43 @@ class FixedPosition {
 
 export class PartsModel extends LiveActor {
     public fixedPosition: FixedPosition | null = null;
-    public transformMatrix: mat4 | null = null;
+    public hostMtx: mat4 | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType, transformMatrix: mat4 | null = null) {
         super(parentActor.zoneAndLayer, sceneObjHolder, objName);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         this.initEffectKeeper(sceneObjHolder, null);
 
-        let movementType: MovementType = 0x2B;
-        let calcAnimType: CalcAnimType = 0x0B;
+        let movementType = MovementType.Parts;
+        let calcAnimType = CalcAnimType.MapObjDecoration;
         if (drawBufferType >= 0x15 && drawBufferType <= 0x18) {
             movementType = 0x26;
             calcAnimType = 0x0A;
-        } else if (drawBufferType === 0x10 || drawBufferType === 0x1B) {
-            movementType = 0x28;
-            calcAnimType = 0x06;
+        } else if (drawBufferType === DrawBufferType.Npc || drawBufferType === DrawBufferType.IndirectNpc) {
+            movementType = MovementType.Npc;
+            calcAnimType = CalcAnimType.Npc;
         }
 
-        this.transformMatrix = transformMatrix;
+        this.hostMtx = transformMatrix;
+        if (this.hostMtx !== null)
+            getMatrixTranslation(this.translation, this.hostMtx);
+        else
+            vec3.copy(this.translation, this.parentActor.translation);
+
+        vec3.copy(this.rotation, this.parentActor.rotation);
+        vec3.copy(this.scale, this.parentActor.scale);
 
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
     }
 
     public initFixedPositionRelative(localTrans: vec3 | null): void {
         this.fixedPosition = new FixedPosition(this.parentActor.modelInstance!.modelMatrix, localTrans);
-        this.transformMatrix = this.fixedPosition.transformMatrix;
+        this.hostMtx = this.fixedPosition.transformMatrix;
     }
 
     public initFixedPositionJoint(jointName: string, localTrans: vec3 | null): void {
         this.fixedPosition = new FixedPosition(getJointMtxByName(this.parentActor, jointName)!, localTrans);
-        this.transformMatrix = this.fixedPosition.transformMatrix;
+        this.hostMtx = this.fixedPosition.transformMatrix;
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -194,9 +201,9 @@ export class PartsModel extends LiveActor {
     }
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.transformMatrix !== null) {
-            getMatrixTranslation(this.translation, this.transformMatrix);
-            mat4.copy(this.modelInstance!.modelMatrix, this.transformMatrix);
+        if (this.hostMtx !== null) {
+            getMatrixTranslation(this.translation, this.hostMtx);
+            mat4.copy(this.modelInstance!.modelMatrix, this.hostMtx);
         } else {
             super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         }
@@ -213,6 +220,10 @@ function createPartsModelNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, par
     const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.NoSilhouettedMapObj);
     model.initFixedPositionRelative(localTrans);
     return model;
+}
+
+function createPartsModelNoSilhouettedMapObjMtx(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, mtx: mat4 | null) {
+    return new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.NoSilhouettedMapObj, mtx);
 }
 
 export class PlanetMap extends LiveActor {
@@ -3910,6 +3921,202 @@ export class Trapeze extends LiveActor {
     public destroy(device: GfxDevice): void {
         super.destroy(device);
         this.ddraw.destroy(device);
+    }
+}
+
+function makeAxisUpSide(axisFront: vec3, axisRight: vec3, up: vec3, side: vec3): void {
+    vec3.cross(axisFront, up, side);
+    vec3.normalize(axisFront, axisFront);
+    vec3.cross(axisRight, up, axisFront);
+}
+
+class CreeperPoint {
+    public pos = vec3.create();
+    public origPos = vec3.create();
+
+    public axisX = vec3.create();
+    public axisY = vec3.create();
+    public axisZ = vec3.create();
+
+    constructor(pos: vec3, dir: vec3, private prevPoint: CreeperPoint | null) {
+        vec3.copy(this.pos, pos);
+        vec3.copy(this.origPos, pos);
+
+        vec3.copy(this.axisX, Vec3UnitX);
+        vec3.copy(this.axisY, dir);
+        vec3.copy(this.axisZ, Vec3UnitZ);
+
+        makeAxisUpSide(this.axisZ, this.axisX, this.axisY, this.axisX);
+
+        if (this.prevPoint !== null) {
+            vec3.sub(scratchVec3, this.pos, this.prevPoint.pos);
+            const dotX = vec3.dot(this.axisX, scratchVec3);
+            const dotY = vec3.dot(this.axisY, scratchVec3);
+            const dotZ = vec3.dot(this.axisZ, scratchVec3);
+        }
+    }
+}
+
+function copyTransRotateScale(dst: LiveActor, src: LiveActor): void {
+    vec3.copy(dst.translation, src.translation);
+    vec3.copy(dst.rotation, src.rotation);
+    vec3.copy(dst.scale, src.scale);
+}
+
+const creeperColorPlusZ = colorNewFromRGBA8(0xFFFFFFFF);
+const creeperColorPlusX = colorNewFromRGBA8(0x969696FF);
+const creeperColorMinusX = colorNewFromRGBA8(0xC8C8C8FF);
+export class Creeper extends LiveActor {
+    private ddraw = new TDDraw();
+    private materialHelper: GXMaterialHelperGfx;
+    private creeperPoints: CreeperPoint[] = [];
+    private creeperLeaf: PartsModel;
+    private creeperFlower: PartsModel;
+    private creeperFlowerMtx = mat4.create();
+    private stalk: BTIData;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        connectToScene(sceneObjHolder, this, MovementType.Ride, -1, -1, DrawType.Creeper);
+        this.initHitSensor();
+        this.initRailRider(sceneObjHolder, infoIter);
+        getRailPos(this.translation, this);
+        this.initPoints();
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        const mb = new GXMaterialBuilder('Creeper');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER,0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setCullMode(GX.CullMode.BACK);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+
+        this.stalk = loadBTIData(sceneObjHolder, sceneObjHolder.modelCache.getObjectData('Creeper'), 'Stalk.bti');
+        this.creeperFlower = createPartsModelNoSilhouettedMapObjMtx(sceneObjHolder, this, 'CreeperFlower', this.creeperFlowerMtx);
+        this.creeperLeaf = createPartsModelNoSilhouettedMapObjMtx(sceneObjHolder, this, 'CreeperLeaf', null);
+        copyTransRotateScale(this.creeperLeaf, this);
+        startBck(this.creeperLeaf, 'Wait');
+        this.creeperLeaf.makeActorAppeared(sceneObjHolder);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    private initPoints(): void {
+        const railTotalLength = getRailTotalLength(this);
+        const pointCount = ((railTotalLength / 50.0) | 0) + 1;
+
+        for (let i = 0; i < pointCount; i++) {
+            if (i < pointCount - 1)
+                setRailCoord(this, 50.0 * i);
+            else
+                moveCoordToEndPos(this);
+
+            getRailPos(scratchVec3a, this);
+            getRailDirection(scratchVec3b, this);
+
+            const prevPoint = i > 0 ? this.creeperPoints[i - 1] : null;
+            const point = new CreeperPoint(scratchVec3a, scratchVec3b, prevPoint);
+            this.creeperPoints.push(point);
+        }
+    }
+
+    private getHeadPoint(): CreeperPoint {
+        return this.creeperPoints[this.creeperPoints.length - 1];
+    }
+
+    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        const headPoint = this.getHeadPoint();
+        setMtxAxisXYZ(this.creeperFlowerMtx, headPoint.axisX, headPoint.axisY, headPoint.axisZ);
+        setMatrixTranslation(this.creeperFlowerMtx, headPoint.pos);
+    }
+
+    private sendPoint(v: vec3, axisX: vec3, axisZ: vec3, sx: number, sz: number, color: Color, tx: number, ty: number): void {
+        this.ddraw.position3f32(
+            v[0] + axisX[0] * sx + axisZ[0] * sz,
+            v[1] + axisX[1] * sx + axisZ[1] * sz,
+            v[2] + axisX[2] * sx + axisZ[2] * sz,
+        );
+        this.ddraw.color4color(GX.Attr.CLR0, color);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, tx, ty);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!isValidDraw(this))
+            return;
+
+        this.ddraw.beginDraw();
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let i = 0; i < this.creeperPoints.length; i++) {
+            const p = this.creeperPoints[i];
+            const txc = i / (this.creeperPoints.length - 1);
+            this.sendPoint(p.pos, p.axisX, p.axisZ,  10.0, -10.0, creeperColorPlusX, 1.0, txc);
+            this.sendPoint(p.pos, p.axisX, p.axisZ,   0.0,  10.0, creeperColorPlusZ, 0.0, txc);
+        }
+        this.ddraw.end();
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let i = 0; i < this.creeperPoints.length; i++) {
+            const p = this.creeperPoints[i];
+            const txc = i / (this.creeperPoints.length - 1);
+            this.sendPoint(p.pos, p.axisX, p.axisZ,   0.0,  10.0, creeperColorPlusZ, 1.0, txc);
+            this.sendPoint(p.pos, p.axisX, p.axisZ, -10.0, -10.0, creeperColorMinusX, 0.0, txc);
+        }
+        this.ddraw.end();
+
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let i = 0; i < this.creeperPoints.length; i++) {
+            const p = this.creeperPoints[i];
+            const txc = i / (this.creeperPoints.length - 1);
+            this.sendPoint(p.pos, p.axisX, p.axisZ, -10.0, -10.0, creeperColorMinusX, 1.0, txc);
+            this.sendPoint(p.pos, p.axisX, p.axisZ,  10.0, -10.0, creeperColorPlusX, 0.0, txc);
+        }
+        this.ddraw.end();
+
+        const device = sceneObjHolder.modelCache.device;
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+
+        this.stalk.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        const materialHelper = this.materialHelper;
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        super.destroy(device);
+        this.stalk.destroy(device);
+        this.ddraw.destroy(device);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('Creeper');
+        sceneObjHolder.modelCache.requestObjectData('CreeperLeaf');
+        sceneObjHolder.modelCache.requestObjectData('CreeperFlower');
     }
 }
 
