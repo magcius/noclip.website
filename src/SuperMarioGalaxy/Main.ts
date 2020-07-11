@@ -29,7 +29,7 @@ import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { NPCDirector, AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './MiscActor';
+import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './LegacyActor';
@@ -46,6 +46,7 @@ import { LensFlareDirector, DrawSyncManager } from './LensFlare';
 import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
+import { NPCDirector } from './MiscActor_NPC';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;

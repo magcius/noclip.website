@@ -19,8 +19,7 @@ import { LiveActor, ZoneAndLayer } from "./LiveActor";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST, isValidDraw, vecKillElement } from "./ActorUtil";
-import { calcActorAxis } from "./MiscActor";
+import { initDefaultPos, connectToScene, loadBTIData, loadTexProjectionMtx, setTextureMatrixST, isValidDraw, vecKillElement, calcActorAxis } from "./ActorUtil";
 import { VertexAttributeInput } from "../gx/gx_displaylist";
 import { isCameraInWater, WaterAreaHolder, WaterInfo } from "./MiscMap";
 

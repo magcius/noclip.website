@@ -967,3 +967,80 @@ function deleteParticleEmitter(emitter: ParticleEmitter): void {
     baseEmitter.flags |= JPA.BaseEmitterFlags.STOP_EMIT_PARTICLES;
     baseEmitter.maxFrame = 1;
 }
+
+export function setEffectHostMtx(actor: LiveActor, effectName: string, hostMtx: mat4): void {
+    const emitter = assertExists(actor.effectKeeper!.getEmitter(effectName));
+    emitter.setHostMtx(hostMtx);
+}
+
+export function setEffectHostSRT(actor: LiveActor, effectName: string, translation: vec3 | null, rotation: vec3 | null, scale: vec3 | null): void {
+    const emitter = assertExists(actor.effectKeeper!.getEmitter(effectName));
+    emitter.setHostSRT(translation, rotation, scale);
+}
+
+export function setEffectName(actor: LiveActor, origName: string, newName: string): void {
+    actor.effectKeeper!.changeEffectName(origName, newName);
+}
+
+export function emitEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string): void {
+    if (actor.effectKeeper === null)
+        return;
+    actor.effectKeeper.createEmitter(sceneObjHolder, name);
+}
+
+export function isEffectValid(actor: LiveActor, name: string): boolean {
+    if (actor.effectKeeper === null)
+        return false;
+    const multiEmitter = actor.effectKeeper.getEmitter(name);
+    if (multiEmitter !== null)
+        return multiEmitter.isValid();
+    else
+        return false;
+}
+
+export function emitEffectWithScale(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, scale: number): void {
+    if (actor.effectKeeper === null)
+        return;
+    const emitter = actor.effectKeeper.createEmitter(sceneObjHolder, name);
+    vec3.set(scratchVec3a, scale, scale, scale);
+    emitter!.setGlobalScale(scratchVec3a);
+}
+
+export function setEffectColor(actor: LiveActor, name: string, prmColor: Color, envColor: Color): void {
+    if (actor.effectKeeper === null)
+        return;
+    const emitter = assertExists(actor.effectKeeper.getEmitter(name));
+    emitter.setGlobalPrmColor(prmColor, -1);
+    emitter.setGlobalEnvColor(envColor, -1);
+}
+
+export function setEffectEnvColor(actor: LiveActor, name: string, color: Color): void {
+    if (actor.effectKeeper === null)
+        return;
+    const emitter = assertExists(actor.effectKeeper.getEmitter(name));
+    emitter.setGlobalEnvColor(color, -1);
+}
+
+export function deleteEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string): void {
+    if (actor.effectKeeper === null)
+        return;
+    actor.effectKeeper.deleteEmitter(sceneObjHolder, name);
+}
+
+export function forceDeleteEffect(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string): void {
+    if (actor.effectKeeper === null)
+        return;
+    actor.effectKeeper.forceDeleteEmitter(sceneObjHolder, name);
+}
+
+export function deleteEffectAll(actor: LiveActor): void {
+    if (actor.effectKeeper === null)
+        return;
+    actor.effectKeeper.deleteEmitterAll();
+}
+
+export function isRegisteredEffect(actor: LiveActor, name: string): boolean {
+    if (actor.effectKeeper === null)
+        return false;
+    return actor.effectKeeper.isRegisteredEmitter(name);
+}

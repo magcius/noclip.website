@@ -1,7 +1,7 @@
 
 // Utilities for various actor implementations.
 
-import { LiveActor, getJMapInfoTrans, getJMapInfoRotate, MessageType, MsgSharedGroup } from "./LiveActor";
+import { LiveActor, getJMapInfoTrans, getJMapInfoRotate, MessageType, MsgSharedGroup, ZoneAndLayer, makeMtxTRFromActor } from "./LiveActor";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { SceneObjHolder, SceneObj } from "./Main";
 import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
@@ -13,7 +13,7 @@ import { getRes, XanimePlayer } from "./Animation";
 import { vec3, vec2, mat4, quat, ReadonlyVec3, ReadonlyQuat } from "gl-matrix";
 import { HitSensor, HitSensorType } from "./HitSensor";
 import { RailDirection } from "./RailRider";
-import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ, setMatrixTranslation, getMatrixTranslation, scaleMatrix } from "../MathHelpers";
+import { isNearZero, isNearZeroVec3, MathConstants, normToLength, Vec3Zero, saturate, Vec3UnitY, Vec3UnitZ, setMatrixTranslation, getMatrixTranslation, scaleMatrix, getMatrixAxisY, getMatrixAxisZ } from "../MathHelpers";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
@@ -1247,4 +1247,69 @@ export function rotateQuatRollBall(dst: quat, fwd: vec3, up: vec3, radius: numbe
     vec3.normalize(scratchVec3, scratchVec3);
     quat.setAxisAngle(scratchQuat, scratchVec3, rollAmount);
     quat.mul(dst, scratchQuat, dst);
+}
+
+export function hideMaterial(actor: LiveActor, materialName: string): void {
+    const materialInstance = assertExists(actor.modelInstance!.materialInstances.find((m) => m.materialData.material.name === materialName));
+    materialInstance.visible = false;
+}
+
+export function calcActorAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, actor: LiveActor): void {
+    const m = scratchMatrix;
+    makeMtxTRFromActor(m, actor);
+    calcMtxAxis(axisX, axisY, axisZ, m);
+}
+
+export function calcUpVec(v: vec3, actor: LiveActor): void {
+    getMatrixAxisY(v, assertExists(actor.getBaseMtx()));
+}
+
+export function calcFrontVec(v: vec3, actor: LiveActor): void {
+    getMatrixAxisZ(v, assertExists(actor.getBaseMtx()));
+}
+
+export function calcMtxFromGravityAndZAxis(dst: mat4, actor: LiveActor, gravityVec: vec3, front: vec3): void {
+    vec3.negate(scratchVec3b, gravityVec);
+    makeMtxUpFrontPos(dst, scratchVec3b, front, actor.translation);
+}
+
+export function getCamYdir(v: vec3, camera: Camera): void {
+    getMatrixAxisY(v, camera.worldMatrix);
+}
+
+export function getCamZdir(v: vec3, camera: Camera): void {
+    getMatrixAxisZ(v, camera.worldMatrix);
+    vec3.negate(v, v);
+}
+
+export function calcDistToCamera(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
+    getCamPos(scratch, camera);
+    return vec3.distance(actor.translation, scratch);
+}
+
+export function calcSqDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
+    getCamPos(scratch, camera);
+    return vec3.squaredDistance(actor.translation, scratch);
+}
+
+export function calcDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
+    return calcDistToCamera(actor, camera, scratch);
+}
+
+export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): boolean {
+    return calcDistanceToPlayer(actor, sceneObjHolder.viewerInput.camera) <= radius;
+}
+
+export function getJointNum(actor: LiveActor): number {
+    return actor.modelInstance!.shapeInstanceState.jointToWorldMatrixArray.length;
+}
+
+export function getRandomVector(dst: vec3, range: number): void {
+    vec3.set(dst, getRandomFloat(-range, range), getRandomFloat(-range, range), getRandomFloat(-range, range));
+}
+
+export function rotateVecDegree(dst: vec3, upVec: vec3, degrees: number, m: mat4 = scratchMatrix): void {
+    const theta = degrees * MathConstants.DEG_TO_RAD;
+    mat4.fromRotation(m, theta, upVec);
+    vec3.transformMat4(dst, dst, m);
 }

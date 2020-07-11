@@ -6,11 +6,13 @@ import { SceneObjHolder, getObjectName } from "./Main";
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ViewerRenderInput } from "../viewer";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, startBtk, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckFrameAtRandom, getCamPos } from "./ActorUtil";
-import { emitEffect, MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint, createModelObjMapObj } from "./MiscActor";
+import { MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint } from "./MiscActor";
 import { isFirstStep } from "./Spine";
 import { scaleMatrix } from "../MathHelpers";
 import { initMultiFur } from "./Fur";
 import { LightType } from "./DrawBuffer";
+import { emitEffect } from "./EffectSystem";
+import { createModelObjMapObj } from "./ModelObj";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.

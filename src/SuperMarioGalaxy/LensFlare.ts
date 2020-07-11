@@ -1,7 +1,7 @@
 
 import { NameObj } from "./NameObj";
 import { SceneObjHolder, SceneObj } from "./Main";
-import { connectToSceneMapObjMovement, getPlayerPos, getAreaObj, connectToScene3DModelFor2D, showModel, hideModel, startBrk, setBrkFrameAndStop, getBrkFrameMax, startBtk, startBckWithInterpole, isBckStopped, setBckFrameAndStop, getBckFrameMax, setMtxAxisXYZ } from "./ActorUtil";
+import { connectToSceneMapObjMovement, getPlayerPos, getAreaObj, connectToScene3DModelFor2D, showModel, hideModel, startBrk, setBrkFrameAndStop, getBrkFrameMax, startBtk, startBckWithInterpole, isBckStopped, setBckFrameAndStop, getBckFrameMax, setMtxAxisXYZ, getCamYdir } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { vec3, vec2, vec4, mat4 } from "gl-matrix";
 import { AreaObj, AreaFormType } from "./AreaObj";
@@ -15,7 +15,6 @@ import { PeekZManager, PeekZResult } from "../WindWaker/d_dlst_peekZ";
 import { GfxDevice, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { DepthStencilAttachment } from "../gfx/helpers/RenderTargetHelpers";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
-import { getCamYdir } from "./MiscActor";
 
 function calcRotateY(x: number, y: number): number {
     return (MathConstants.TAU / 4) + Math.atan2(-y, x);
