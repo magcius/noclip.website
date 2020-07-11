@@ -1,7 +1,7 @@
 
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { SceneObjHolder, ResourceHolder, SceneObj } from "./Main";
-import { NameObj } from "./NameObj";
+import { NameObj, MovementType } from "./NameObj";
 import { KCollisionServer, CheckCollideResult, KC_PrismData, KCHitSphereClassification } from "./KCollisionServer";
 import { HitSensor } from "./HitSensor";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -745,7 +745,7 @@ export class CollisionDirector extends NameObj {
         for (let i = 0; i < 4; i++)
             this.keepers[i] = new CollisionCategorizedKeeper(i);
 
-        connectToScene(sceneObjHolder, this, 0x20, -1, -1, -1);
+        connectToScene(sceneObjHolder, this, MovementType.CollisionDirector, -1, -1, -1);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {

@@ -122,15 +122,15 @@ function createSubModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, 
 }
 
 function createWaterModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
-    return createSubModel(sceneObjHolder, parentActor, 'Water', null, DrawBufferType.MAP_OBJ);
+    return createSubModel(sceneObjHolder, parentActor, 'Water', null, DrawBufferType.MapObj);
 }
 
 export function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor) {
-    return createSubModel(sceneObjHolder, parentActor, 'Indirect', null, DrawBufferType.INDIRECT_PLANET);
+    return createSubModel(sceneObjHolder, parentActor, 'Indirect', null, DrawBufferType.IndirectPlanet);
 }
 
 export function createBloomModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, transformMatrix: mat4) {
-    return createSubModel(sceneObjHolder, parentActor, 'Bloom', transformMatrix, DrawBufferType.BLOOM_MODEL);
+    return createSubModel(sceneObjHolder, parentActor, 'Bloom', transformMatrix, DrawBufferType.BloomModel);
 }
 
 class FixedPosition {
@@ -204,13 +204,13 @@ export class PartsModel extends LiveActor {
 }
 
 function createPartsModelMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.MAP_OBJ);
+    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.MapObj);
     model.initFixedPositionRelative(localTrans);
     return model;
 }
 
 function createPartsModelNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.NO_SILHOUETTED_MAP_OBJ);
+    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.NoSilhouettedMapObj);
     model.initFixedPositionRelative(localTrans);
     return model;
 }
@@ -2889,9 +2889,9 @@ export class WarpPod extends LiveActor {
 
         // This isn't quite the same as original, which has a WarpPodMgr which draws all of the paths...
         if (this.visible) {
-            connectToScene(sceneObjHolder, this, 0x22, 0x05, DrawBufferType.MAP_OBJ, DrawType.WARP_POD_PATH);
+            connectToScene(sceneObjHolder, this, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.MapObj, DrawType.WarpPodPath);
         } else {
-            connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
+            connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, -1);
         }
 
         this.groupId = assertExists(getJMapInfoGroupId(infoIter));
@@ -3034,7 +3034,7 @@ export class WaterPlantDrawInit extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'WaterPlantDrawInit');
 
-        connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, -1);
 
         const arc = sceneObjHolder.modelCache.getObjectData('WaterPlant')!;
         this.waterPlantA = loadBTIData(sceneObjHolder, arc, `WaterPlantA.bti`);
@@ -3122,7 +3122,7 @@ export class WaterPlant extends LiveActor {
 
         sceneObjHolder.create(SceneObj.WaterPlantDrawInit);
 
-        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.WATER_PLANT);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.WaterPlant);
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.plantCount = fallback(getJMapInfoArg0(infoIter), 0x16);
         this.radius = fallback(getJMapInfoArg1(infoIter), 500);
@@ -3579,7 +3579,7 @@ export class SwingRope extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         sceneObjHolder.create(SceneObj.SwingRopeGroup);
-        connectToScene(sceneObjHolder, this, 0x29, -1, -1, DrawType.SWING_ROPE);
+        connectToScene(sceneObjHolder, this, MovementType.Ride, -1, -1, DrawType.SwingRope);
         initDefaultPos(sceneObjHolder, this, infoIter);
         vec3.copy(this.pos, this.translation);
         this.height = 100.0 * this.scale[1];
@@ -3727,7 +3727,7 @@ export class Trapeze extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         sceneObjHolder.create(SceneObj.TrapezeRopeDrawInit);
-        connectToScene(sceneObjHolder, this, 0x29, -1, -1, DrawType.TRAPEZE);
+        connectToScene(sceneObjHolder, this, MovementType.Ride, -1, -1, DrawType.Trapeze);
         initDefaultPos(sceneObjHolder, this, infoIter);
         makeMtxTRFromActor(scratchMatrix, this);
         calcMtxAxis(this.axisX, this.axisY, this.axisZ, scratchMatrix);
@@ -3740,7 +3740,7 @@ export class Trapeze extends LiveActor {
         this.swingRopePoint.updatePosAndAxis(this.axisZ, 0.995);
 
         // I think this is a bug in the original game -- it uses ENEMY rather than RIDE?
-        this.stick = new PartsModel(sceneObjHolder, 'TrapezeStick', 'Trapeze', this, DrawBufferType.ENEMY, this.stickMtx);
+        this.stick = new PartsModel(sceneObjHolder, 'TrapezeStick', 'Trapeze', this, DrawBufferType.Enemy, this.stickMtx);
         this.updateStickMtx();
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
@@ -4121,7 +4121,7 @@ class OceanRingPipeOutside extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private pipe: OceanRingPipe) {
         super(zoneAndLayer, sceneObjHolder, 'OceanRingPipeOutside');
 
-        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OCEAN_RING_OUTSIDE);
+        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanRingOutside);
 
         const arc = sceneObjHolder.modelCache.getObjectData('OceanRing');
         this.waterPipeIndirect = loadBTIData(sceneObjHolder, arc, 'WaterPipeIndirect.bti');
@@ -4402,7 +4402,7 @@ export class OceanRing extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.OCEAN_RING);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.OceanRing);
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initRailRider(sceneObjHolder, infoIter);
         this.initPoints(sceneObjHolder);
@@ -4661,7 +4661,7 @@ export class Flag extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, objectName: string | null = null) {
         super(zoneAndLayer, sceneObjHolder, objectName !== null ? objectName : getObjectName(infoIter!));
 
-        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.FLAG);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.Flag);
 
         this.fixPointCount = 10;
         this.swingPointCount = 10;
@@ -5006,7 +5006,7 @@ interface ElectricRailBase extends LiveActor {
 function createAdaptorAndConnectToDrawBloomModel(sceneObjHolder: SceneObjHolder, name: string, drawCallback: (sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) => void): NameObjAdaptor {
     const adaptor = new NameObjAdaptor(sceneObjHolder, name);
     adaptor.drawCallback = drawCallback;
-    connectToScene(sceneObjHolder, adaptor, -1, -1, -1, DrawType.BLOOM_MODEL);
+    connectToScene(sceneObjHolder, adaptor, -1, -1, -1, DrawType.BloomModel);
     return adaptor;
 }
 
@@ -5017,7 +5017,7 @@ export class ElectricRailHolder extends NameObj {
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'ElectricRailHolder');
-        connectToScene(sceneObjHolder, this, 0x23, 5, -1, DrawType.ELECTRIC_RAIL_HOLDER);
+        connectToScene(sceneObjHolder, this, MovementType.MapObjDecoration, CalcAnimType.MapObj, -1, DrawType.ElectricRailHolder);
 
         createAdaptorAndConnectToDrawBloomModel(sceneObjHolder, 'ElectricRailHolder Bloom', this.draw.bind(this));
     }
@@ -5840,7 +5840,7 @@ export class PlantGroup extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        connectToScene(sceneObjHolder, this, 0x22, -1, -1, -1);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, -1);
         initDefaultPos(sceneObjHolder, this, infoIter);
 
         if (this.name === 'FlowerGroup') {
@@ -6557,7 +6557,7 @@ export class BrightSun extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, "BrightSun");
 
         initDefaultPos(sceneObjHolder, this, infoIter);
-        connectToScene(sceneObjHolder, this, 0x21, -1, -1, DrawType.BRIGHT_SUN);
+        connectToScene(sceneObjHolder, this, MovementType.Environment, -1, -1, DrawType.BrightSun);
 
         this.sun = new Sun(zoneAndLayer, sceneObjHolder, null);
 
@@ -6622,7 +6622,7 @@ export class BrightObj extends LiveActor {
 
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.radius = fallback(getJMapInfoArg0(infoIter), 100.0);
-        connectToScene(sceneObjHolder, this, 0x21, -1, -1, DrawType.BRIGHT_SUN);
+        connectToScene(sceneObjHolder, this, MovementType.Environment, -1, -1, DrawType.BrightSun);
         this.makeActorAppeared(sceneObjHolder);
     }
 
@@ -6938,7 +6938,7 @@ export class Mogucchi extends LiveActor<MogucchiNrv> {
     }
 
     private createHole(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): void {
-        this.hole = new ModelObj(zoneAndLayer, sceneObjHolder, 'MogucchiHole', 'MogucchiHole', this.referenceMtx, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -2, -2);
+        this.hole = new ModelObj(zoneAndLayer, sceneObjHolder, 'MogucchiHole', 'MogucchiHole', this.referenceMtx, DrawBufferType.MapObjStrongLight, -2, -2);
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
@@ -7213,7 +7213,7 @@ export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
         const whichSky = assertExists(getJMapInfoArg0(infoIter)) - 1;
         this.initModelManagerWithAnm(sceneObjHolder, AstroDomeSky.skyNames[whichSky]);
         startBtk(this, AstroDomeSky.skyNames[whichSky]);
-        connectToScene(sceneObjHolder, this, MovementType.Sky, 0x05, DrawBufferType.ASTRO_DOME_SKY, DrawType.ASTRO_DOME_SKY_CLEAR);
+        connectToScene(sceneObjHolder, this, MovementType.Sky, CalcAnimType.MapObjDecoration, DrawBufferType.AstroDomeSky, DrawType.AstroDomeSkyClear);
         // invalidateClipping();
 
         // Original code uses Hide to wait for the player to pull on the handle, we just show the sky immediately.
@@ -7330,7 +7330,7 @@ class AstroDomeOrbit extends LiveActor {
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'AstroDomeOrbit');
-        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.ASTRO_DOME_ORBIT);
+        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.AstroDomeOrbit);
 
         createAdaptorAndConnectToDrawBloomModel(sceneObjHolder, 'AstroDomeOrbit Bloom', this.drawBloom.bind(this));
 
@@ -7581,7 +7581,7 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
 
     private initPartsModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder): void {
         // "Unknown" model for when you haven't unlocked
-        this.shadowModel = new ModelObj(zoneAndLayer, sceneObjHolder, 'MiniatureGalaxyShadow', 'MiniatureGalaxyShadow', this.shadowMtx, DrawBufferType.NO_SILHOUETTED_MAP_OBJ, -2, -2);
+        this.shadowModel = new ModelObj(zoneAndLayer, sceneObjHolder, 'MiniatureGalaxyShadow', 'MiniatureGalaxyShadow', this.shadowMtx, DrawBufferType.NoSilhouettedMapObj, -2, -2);
         // Select model
         // Star Number number
     }
@@ -8493,21 +8493,21 @@ export class Unizo extends LiveActor<UnizoNrv> {
         if (this.name === 'Unizo') {
             this.initModelManagerWithAnm(sceneObjHolder, 'Unizo');
 
-            this.breakModel = new ModelObj(zoneAndLayer, sceneObjHolder, `UnizoBreak`, `UnizoBreak`, null, DrawBufferType.ENEMY, -2, -2);
+            this.breakModel = new ModelObj(zoneAndLayer, sceneObjHolder, `UnizoBreak`, `UnizoBreak`, null, DrawBufferType.Enemy, -2, -2);
             this.breakModel.makeActorDead(sceneObjHolder);
         } else if (this.name === 'UnizoLand') {
             this.jumpHeight = 0.8;
             this.wobbleY = 0.0;
             this.initModelManagerWithAnm(sceneObjHolder, 'UnizoLand');
 
-            this.breakModel = new ModelObj(zoneAndLayer, sceneObjHolder, `UnizoLandBreak`, `UnizoLandBreak`, null, DrawBufferType.ENEMY, -2, -2);
+            this.breakModel = new ModelObj(zoneAndLayer, sceneObjHolder, `UnizoLandBreak`, `UnizoLandBreak`, null, DrawBufferType.Enemy, -2, -2);
             this.breakModel.makeActorDead(sceneObjHolder);
 
             initFur(sceneObjHolder, this);
         } else if (this.name === 'UnizoShoal') {
             this.initModelManagerWithAnm(sceneObjHolder, 'UnizoShoal');
 
-            this.breakModel = new ModelObj(zoneAndLayer, sceneObjHolder, `UnizoShoalBreak`, `UnizoShoalBreak`, null, DrawBufferType.ENEMY, -2, -2);
+            this.breakModel = new ModelObj(zoneAndLayer, sceneObjHolder, `UnizoShoalBreak`, `UnizoShoalBreak`, null, DrawBufferType.Enemy, -2, -2);
             this.breakModel.makeActorDead(sceneObjHolder);
         } else {
             throw "whoops";

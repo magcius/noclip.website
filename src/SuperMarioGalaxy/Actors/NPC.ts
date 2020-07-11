@@ -23,13 +23,13 @@ const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 
 function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.NPC);
+    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.Npc);
     model.initFixedPositionJoint(jointName, localTrans);
     return model;
 }
 
 function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
-    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.INDIRECT_NPC);
+    const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.IndirectNpc);
     model.initFixedPositionJoint(jointName, localTrans);
     return model;
 }
@@ -436,9 +436,9 @@ class RemovableTurtle {
 
     constructor(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, isShiny: boolean) {
         if (isShiny) {
-            this.partsModel = new PartsModel(sceneObjHolder, 'RemovableTurtle', 'KouraShiny', parentActor, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
+            this.partsModel = new PartsModel(sceneObjHolder, 'RemovableTurtle', 'KouraShiny', parentActor, DrawBufferType.NoSilhouettedMapObjStrongLight);
         } else {
-            this.partsModel = new PartsModel(sceneObjHolder, 'RemovableTurtle', 'Koura', parentActor, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
+            this.partsModel = new PartsModel(sceneObjHolder, 'RemovableTurtle', 'Koura', parentActor, DrawBufferType.NoSilhouettedMapObjStrongLight);
 
             // TODO(jstpierre): Where is this done?
             startBrk(this.partsModel, 'Koura');

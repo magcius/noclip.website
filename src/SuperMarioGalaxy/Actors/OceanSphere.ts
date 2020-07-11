@@ -7,7 +7,7 @@ import { MathConstants, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Ve
 import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "../Main";
 import { JMapInfoIter } from "../JMapInfo";
 import { connectToScene, initDefaultPos, loadBTIData, isValidDraw, vecKillElement } from "../ActorUtil";
-import { DrawType } from "../NameObj";
+import { DrawType, MovementType } from "../NameObj";
 import { BTIData } from "../../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { isEqualStageName } from "./MiscActor";
@@ -188,7 +188,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'OceanSphere');
 
-        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.OCEAN_SPHERE);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.OceanSphere);
         initDefaultPos(sceneObjHolder, this, infoIter);
 
         this.radius = 100.0 * this.scale[0];

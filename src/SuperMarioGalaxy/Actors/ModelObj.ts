@@ -16,7 +16,7 @@ export class ModelObj extends LiveActor {
         if (calcAnimType < -1)
             calcAnimType = 0x23;
         if (drawBufferType < -1)
-            drawBufferType = DrawBufferType.NO_SHADOWED_MAP_OBJ;
+            drawBufferType = DrawBufferType.NoShadowedMapObj;
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
     }
 
@@ -31,7 +31,7 @@ export class ModelObj extends LiveActor {
 }
 
 export function createModelObjBloomModel(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, objName: string, modelName: string, baseMtx: mat4): ModelObj {
-    const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, DrawBufferType.BLOOM_MODEL, -2, -2);
+    const bloomModel = new ModelObj(zoneAndLayer, sceneObjHolder, objName, modelName, baseMtx, DrawBufferType.BloomModel, -2, -2);
     return bloomModel;
 }
 

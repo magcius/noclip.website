@@ -41,123 +41,122 @@ export function connectToSceneMapObjMovement(sceneObjHolder: SceneObjHolder, nam
 }
 
 export function connectToSceneMapObjNoMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, 0x05, DrawBufferType.MAP_OBJ, -1);
-}
-
-export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.NPC, 0x06, DrawBufferType.NPC, -1);
-}
-
-export function connectToSceneIndirectNpc(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.NPC, 0x06, DrawBufferType.INDIRECT_NPC, -1);
-}
-
-export function connectToSceneItem(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Item, 0x10, DrawBufferType.NO_SILHOUETTED_MAP_OBJ, -1);
-}
-
-export function connectToSceneItemStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Item, 0x10, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, CalcAnimType.MapObj, DrawBufferType.MapObj, -1);
 }
 
 export function connectToSceneCollisionMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionMapObj, 0x02, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionMapObj, CalcAnimType.CollisionMapObj, DrawBufferType.MapObjStrongLight, -1);
 }
 
 export function connectToSceneCollisionMapObjWeakLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionMapObj, 0x02, DrawBufferType.MAP_OBJ_WEAK_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionMapObj, CalcAnimType.CollisionMapObj, DrawBufferType.MapObjWeakLight, -1);
 }
 
 export function connectToSceneCollisionMapObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionMapObj, 0x02, DrawBufferType.MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionMapObj, CalcAnimType.CollisionMapObj, DrawBufferType.MapObj, -1);
 }
 
 export function connectToSceneMapObjNoCalcAnim(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, -1, DrawBufferType.MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, -1, DrawBufferType.MapObj, -1);
 }
 
 export function connectToSceneMapObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.MapObj, -1);
 }
 
 export function connectToSceneMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.MapObjStrongLight, -1);
 }
 
 export function connectToSceneIndirectMapObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.INDIRECT_MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.IndirectMapObj, -1);
 }
 
 export function connectToSceneIndirectMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.IndirectMapObjStrongLight, -1);
 }
 
 export function connectToSceneNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.NO_SILHOUETTED_MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.NoSilhouettedMapObj, -1);
 }
 
 export function connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT, -1);
-}
-
-export function connectToSceneMapObjDecoration(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObjDecoration, 0x0B, DrawBufferType.MAP_OBJ, -1);
-}
-
-export function connectToSceneMapObjDecorationStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObjDecoration, 0x0B, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.NoSilhouettedMapObjStrongLight, -1);
 }
 
 export function connectToSceneNoSilhouettedMapObjWeakLightNoMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, 0x05, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, -1, CalcAnimType.MapObj, DrawBufferType.NoSilhouettedMapObjWeakLight, -1);
 }
 
 export function connectToSceneNoShadowedMapObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.NoShadowedMapObj, -1);
 }
 
 export function connectToSceneNoShadowedMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.NoShadowedMapObjStrongLight, -1);
+}
+
+export function connectToSceneMapObjDecoration(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObjDecoration, CalcAnimType.MapObjDecoration, DrawBufferType.MapObj, -1);
+}
+
+export function connectToSceneMapObjDecorationStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObjDecoration, CalcAnimType.MapObjDecoration, DrawBufferType.MapObjStrongLight, -1);
+}
+
+export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Npc, CalcAnimType.Npc, DrawBufferType.Npc, -1);
+}
+
+export function connectToSceneIndirectNpc(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Npc, CalcAnimType.Npc, DrawBufferType.IndirectNpc, -1);
+}
+
+export function connectToSceneItem(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Item, CalcAnimType.Item, DrawBufferType.NoSilhouettedMapObj, -1);
+}
+
+export function connectToSceneItemStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Item, CalcAnimType.Item, DrawBufferType.NoSilhouettedMapObjStrongLight, -1);
 }
 
 export function connectToSceneCrystal(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.CRYSTAL, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.Crystal, -1);
 }
 
 export function connectToSceneSun(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Sky, 0x05, DrawBufferType.SUN, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Sky, CalcAnimType.MapObj, DrawBufferType.Sun, -1);
 }
 
 export function connectToSceneSky(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Sky, 0x05, DrawBufferType.SKY, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Sky, CalcAnimType.MapObj, DrawBufferType.Sky, -1);
 }
 
 export function connectToSceneAir(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Sky, 0x05, DrawBufferType.AIR, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Sky, CalcAnimType.MapObj, DrawBufferType.Air, -1);
 }
 
 export function connectToSceneBloom(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    // TODO(jstpierre): Verify
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, 0x05, DrawBufferType.BLOOM_MODEL, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.BloomModel, -1);
 }
 
 export function connectToScenePlanet(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     if (isExistIndirectTexture(actor))
-        sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, MovementType.Planet, 0x01, DrawBufferType.INDIRECT_PLANET, -1);
+        sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, MovementType.Planet, CalcAnimType.Planet, DrawBufferType.IndirectPlanet, -1);
     else 
-        sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, MovementType.Planet, 0x01, DrawBufferType.PLANET, -1);
+        sceneObjHolder.sceneNameObjListExecutor.registerActor(actor, MovementType.Planet, CalcAnimType.Planet, DrawBufferType.Planet, -1);
 }
 
 export function connectToSceneEnvironment(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Environment, 0x04, DrawBufferType.ENVIRONMENT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Environment, CalcAnimType.Environment, DrawBufferType.Environment, -1);
 }
 
 export function connectToSceneEnvironmentStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Environment, 0x04, DrawBufferType.ENVIRONMENT_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Environment, CalcAnimType.Environment, DrawBufferType.EnvironmentStrongLight, -1);
 }
 
 export function connectToSceneEnemy(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Enemy, 0x08, DrawBufferType.ENEMY, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Enemy, CalcAnimType.Enemy, DrawBufferType.Enemy, -1);
 }
 
 export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
@@ -165,15 +164,15 @@ export function connectToSceneEnemyMovement(sceneObjHolder: SceneObjHolder, name
 }
 
 export function connectToSceneIndirectEnemy(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Enemy, 0x08, DrawBufferType.INDIRECT_ENEMY, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Enemy, CalcAnimType.Enemy, DrawBufferType.IndirectEnemy, -1);
 }
 
 export function connectToSceneCollisionEnemyStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionEnemy, 0x03, DrawBufferType.MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionEnemy, CalcAnimType.CollisionEnemy, DrawBufferType.MapObjStrongLight, -1);
 }
 
 export function connectToSceneCollisionEnemyNoShadowedMapObjStrongLight(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionEnemy, 0x03, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.CollisionEnemy, CalcAnimType.CollisionEnemy, DrawBufferType.NoShadowedMapObjStrongLight, -1);
 }
 
 export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
@@ -181,7 +180,7 @@ export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolde
 }
 
 export function connectToScene3DModelFor2D(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Model3DFor2D, 0x0D, DrawBufferType._3D_MODEL_FOR_2D, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Model3DFor2D, CalcAnimType.Model3DFor2D, DrawBufferType.Model3DFor2D, -1);
 }
 
 export function getJointMtx(actor: LiveActor, i: number): mat4 {

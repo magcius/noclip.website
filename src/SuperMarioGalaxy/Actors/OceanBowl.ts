@@ -14,7 +14,7 @@ import * as GX from "../../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
 import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, ub_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../../gx/gx_render";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
-import { DrawType, NameObj } from "../NameObj";
+import { DrawType, NameObj, MovementType } from "../NameObj";
 import { LiveActor, ZoneAndLayer } from "../LiveActor";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
@@ -45,7 +45,7 @@ class OceanBowlPoint {
 class OceanBowlBloomDrawer extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder, private bowl: OceanBowl) {
         super(sceneObjHolder, 'OceanBowlBloomDrawer');
-        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OCEAN_BOWL_BLOOM_DRAWER);
+        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.OceanBowlBloomDrawer);
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -95,7 +95,7 @@ export class OceanBowl extends LiveActor {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.OCEAN_BOWL);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.OceanBowl);
         initDefaultPos(sceneObjHolder, this, infoIter);
         calcActorAxis(this.axisX, this.axisY, this.axisZ, this);
 

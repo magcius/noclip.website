@@ -227,13 +227,13 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         const effectSystem = this.sceneObjHolder.effectSystem;
 
-        for (let drawType = DrawType.EFFECT_DRAW_3D; drawType <= DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT; drawType++) {
+        for (let drawType = DrawType.EffectDraw3D; drawType <= DrawType.EffectDrawAfterImageEffect; drawType++) {
             const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
             template.filterKey = createFilterKeyForDrawType(drawType);
             template.setUniformBufferOffset(ub_SceneParams, this.sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
 
             let texPrjMtx: mat4 | null = null;
-            if (drawType === DrawType.EFFECT_DRAW_INDIRECT) {
+            if (drawType === DrawType.EffectDrawIndirect) {
                 texPrjMtx = scratchMatrix;
                 texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
             }
@@ -354,16 +354,16 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // are prior airs just incompatible with crystals?
         // drawOpa(0x20); drawXlu(0x20);
 
-        this.drawOpa(passRenderer, DrawBufferType.ASTRO_DOME_SKY);
-        this.drawXlu(passRenderer, DrawBufferType.ASTRO_DOME_SKY);
+        this.drawOpa(passRenderer, DrawBufferType.AstroDomeSky);
+        this.drawXlu(passRenderer, DrawBufferType.AstroDomeSky);
 
         if (isExistPriorDrawAir(this.sceneObjHolder)) {
-            this.drawOpa(passRenderer, DrawBufferType.SKY);
-            this.drawOpa(passRenderer, DrawBufferType.AIR);
-            this.drawOpa(passRenderer, DrawBufferType.SUN);
-            this.drawXlu(passRenderer, DrawBufferType.SKY);
-            this.drawXlu(passRenderer, DrawBufferType.AIR);
-            this.drawXlu(passRenderer, DrawBufferType.SUN);
+            this.drawOpa(passRenderer, DrawBufferType.Sky);
+            this.drawOpa(passRenderer, DrawBufferType.Air);
+            this.drawOpa(passRenderer, DrawBufferType.Sun);
+            this.drawXlu(passRenderer, DrawBufferType.Sky);
+            this.drawXlu(passRenderer, DrawBufferType.Air);
+            this.drawXlu(passRenderer, DrawBufferType.Sun);
         }
 
         // if (isDrawSpinDriverPathAtOpa())
@@ -373,23 +373,23 @@ export class SMGRenderer implements Viewer.SceneGfx {
         device.submitPass(passRenderer);
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
 
-        this.drawOpa(passRenderer, DrawBufferType.CRYSTAL);
-        this.drawXlu(passRenderer, DrawBufferType.CRYSTAL);
+        this.drawOpa(passRenderer, DrawBufferType.Crystal);
+        this.drawXlu(passRenderer, DrawBufferType.Crystal);
 
-        this.drawOpa(passRenderer, DrawBufferType.PLANET);
+        this.drawOpa(passRenderer, DrawBufferType.Planet);
         this.drawOpa(passRenderer, 0x05); // planet strong light?
         // execute(0x19);
-        this.drawOpa(passRenderer, DrawBufferType.ENVIRONMENT);
-        this.drawOpa(passRenderer, DrawBufferType.MAP_OBJ);
-        this.drawOpa(passRenderer, DrawBufferType.MAP_OBJ_STRONG_LIGHT);
-        this.drawOpa(passRenderer, DrawBufferType.MAP_OBJ_WEAK_LIGHT);
+        this.drawOpa(passRenderer, DrawBufferType.Environment);
+        this.drawOpa(passRenderer, DrawBufferType.MapObj);
+        this.drawOpa(passRenderer, DrawBufferType.MapObjStrongLight);
+        this.drawOpa(passRenderer, DrawBufferType.MapObjWeakLight);
         this.drawOpa(passRenderer, 0x1F); // player light?
 
         // execute(0x27);
 
         // executeDrawBufferListNormalOpaBeforeSilhouette()
-        this.drawOpa(passRenderer, DrawBufferType.NO_SHADOWED_MAP_OBJ);
-        this.drawOpa(passRenderer, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT);
+        this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObj);
+        this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
 
         // execute(0x28);
         // executeDrawSilhouetteAndFillShadow();
@@ -398,61 +398,61 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // setLensFlareDrawSyncToken();
 
         // executeDrawBufferListBeforeOpa()
-        this.drawOpa(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ);
-        this.drawOpa(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT);
-        this.drawOpa(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
-        this.drawOpa(passRenderer, DrawBufferType.NPC);
-        this.drawOpa(passRenderer, DrawBufferType.RIDE);
-        this.drawOpa(passRenderer, DrawBufferType.ENEMY);
-        this.drawOpa(passRenderer, DrawBufferType.ENEMY_DECORATION);
+        this.drawOpa(passRenderer, DrawBufferType.NoSilhouettedMapObj);
+        this.drawOpa(passRenderer, DrawBufferType.NoSilhouettedMapObjWeakLight);
+        this.drawOpa(passRenderer, DrawBufferType.NoSilhouettedMapObjStrongLight);
+        this.drawOpa(passRenderer, DrawBufferType.Npc);
+        this.drawOpa(passRenderer, DrawBufferType.Ride);
+        this.drawOpa(passRenderer, DrawBufferType.Enemy);
+        this.drawOpa(passRenderer, DrawBufferType.EnemyDecoration);
         this.drawOpa(passRenderer, 0x15);
         if (!isExistPriorDrawAir(this.sceneObjHolder)) {
-            this.drawOpa(passRenderer, DrawBufferType.SKY);
-            this.drawOpa(passRenderer, DrawBufferType.AIR);
-            this.drawOpa(passRenderer, DrawBufferType.SUN);
-            this.drawXlu(passRenderer, DrawBufferType.SKY);
-            this.drawXlu(passRenderer, DrawBufferType.AIR);
-            this.drawXlu(passRenderer, DrawBufferType.SUN);
+            this.drawOpa(passRenderer, DrawBufferType.Sky);
+            this.drawOpa(passRenderer, DrawBufferType.Air);
+            this.drawOpa(passRenderer, DrawBufferType.Sun);
+            this.drawXlu(passRenderer, DrawBufferType.Sky);
+            this.drawXlu(passRenderer, DrawBufferType.Air);
+            this.drawXlu(passRenderer, DrawBufferType.Sun);
         }
 
         // executeDrawListOpa();
-        this.execute(passRenderer, DrawType.OCEAN_RING_OUTSIDE);
-        this.execute(passRenderer, DrawType.SWING_ROPE);
-        this.execute(passRenderer, DrawType.TRAPEZE);
-        this.execute(passRenderer, DrawType.WARP_POD_PATH);
-        this.execute(passRenderer, DrawType.WATER_PLANT);
-        this.execute(passRenderer, DrawType.ASTRO_DOME_ORBIT);
-        this.execute(passRenderer, DrawType.FUR);
-        this.execute(passRenderer, DrawType.OCEAN_SPHERE);
-        this.execute(passRenderer, DrawType.FLAG);
+        this.execute(passRenderer, DrawType.OceanRingOutside);
+        this.execute(passRenderer, DrawType.SwingRope);
+        this.execute(passRenderer, DrawType.Trapeze);
+        this.execute(passRenderer, DrawType.WarpPodPath);
+        this.execute(passRenderer, DrawType.WaterPlant);
+        this.execute(passRenderer, DrawType.AstroDomeOrbit);
+        this.execute(passRenderer, DrawType.Fur);
+        this.execute(passRenderer, DrawType.OceanSphere);
+        this.execute(passRenderer, DrawType.Flag);
 
         this.drawOpa(passRenderer, 0x18);
 
         // executeDrawBufferListNormalXlu()
-        this.drawXlu(passRenderer, DrawBufferType.PLANET);
+        this.drawXlu(passRenderer, DrawBufferType.Planet);
         this.drawXlu(passRenderer, 0x05);
-        this.drawXlu(passRenderer, DrawBufferType.ENVIRONMENT);
-        this.drawXlu(passRenderer, DrawBufferType.ENVIRONMENT_STRONG_LIGHT);
-        this.drawXlu(passRenderer, DrawBufferType.MAP_OBJ);
-        this.drawXlu(passRenderer, DrawBufferType.MAP_OBJ_WEAK_LIGHT);
+        this.drawXlu(passRenderer, DrawBufferType.Environment);
+        this.drawXlu(passRenderer, DrawBufferType.EnvironmentStrongLight);
+        this.drawXlu(passRenderer, DrawBufferType.MapObj);
+        this.drawXlu(passRenderer, DrawBufferType.MapObjWeakLight);
         this.drawXlu(passRenderer, 0x1F);
-        this.drawXlu(passRenderer, DrawBufferType.MAP_OBJ_STRONG_LIGHT);
-        this.drawXlu(passRenderer, DrawBufferType.NO_SHADOWED_MAP_OBJ);
-        this.drawXlu(passRenderer, DrawBufferType.NO_SHADOWED_MAP_OBJ_STRONG_LIGHT);
-        this.drawXlu(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ);
-        this.drawXlu(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_WEAK_LIGHT);
-        this.drawXlu(passRenderer, DrawBufferType.NO_SILHOUETTED_MAP_OBJ_STRONG_LIGHT);
-        this.drawXlu(passRenderer, DrawBufferType.NPC);
-        this.drawXlu(passRenderer, DrawBufferType.RIDE);
-        this.drawXlu(passRenderer, DrawBufferType.ENEMY);
-        this.drawXlu(passRenderer, DrawBufferType.ENEMY_DECORATION);
+        this.drawXlu(passRenderer, DrawBufferType.MapObjStrongLight);
+        this.drawXlu(passRenderer, DrawBufferType.NoShadowedMapObj);
+        this.drawXlu(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
+        this.drawXlu(passRenderer, DrawBufferType.NoSilhouettedMapObj);
+        this.drawXlu(passRenderer, DrawBufferType.NoSilhouettedMapObjWeakLight);
+        this.drawXlu(passRenderer, DrawBufferType.NoSilhouettedMapObjStrongLight);
+        this.drawXlu(passRenderer, DrawBufferType.Npc);
+        this.drawXlu(passRenderer, DrawBufferType.Ride);
+        this.drawXlu(passRenderer, DrawBufferType.Enemy);
+        this.drawXlu(passRenderer, DrawBufferType.EnemyDecoration);
         this.drawXlu(passRenderer, 0x15);
         // executeDrawListXlu()
         this.drawXlu(passRenderer, 0x18);
 
         // execute(0x26);
-        this.execute(passRenderer, DrawType.EFFECT_DRAW_3D);
-        this.execute(passRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
+        this.execute(passRenderer, DrawType.EffectDraw3D);
+        this.execute(passRenderer, DrawType.EffectDrawForBloomEffect);
         // execute(0x2f);
 
         // This execute directs to CaptureScreenActor, which ends up taking the indirect screen capture.
@@ -466,27 +466,27 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.sceneObjHolder.specialTextureBinder.lateBindTexture(renderInstManager.simpleRenderInstList!, SpecialTextureType.OpaqueSceneTexture, this.opaqueSceneTexture.gfxTexture!);
 
         // executeDrawAfterIndirect()
-        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_PLANET);
-        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ);
-        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT);
-        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_NPC);
-        this.drawOpa(passRenderer, DrawBufferType.INDIRECT_ENEMY);
+        this.drawOpa(passRenderer, DrawBufferType.IndirectPlanet);
+        this.drawOpa(passRenderer, DrawBufferType.IndirectMapObj);
+        this.drawOpa(passRenderer, DrawBufferType.IndirectMapObjStrongLight);
+        this.drawOpa(passRenderer, DrawBufferType.IndirectNpc);
+        this.drawOpa(passRenderer, DrawBufferType.IndirectEnemy);
         this.drawOpa(passRenderer, 0x22);
         this.drawOpa(passRenderer, 0x17);
         this.drawOpa(passRenderer, 0x16);
-        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_PLANET);
-        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ);
-        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_MAP_OBJ_STRONG_LIGHT);
-        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_NPC);
-        this.drawXlu(passRenderer, DrawBufferType.INDIRECT_ENEMY);
+        this.drawXlu(passRenderer, DrawBufferType.IndirectPlanet);
+        this.drawXlu(passRenderer, DrawBufferType.IndirectMapObj);
+        this.drawXlu(passRenderer, DrawBufferType.IndirectMapObjStrongLight);
+        this.drawXlu(passRenderer, DrawBufferType.IndirectNpc);
+        this.drawXlu(passRenderer, DrawBufferType.IndirectEnemy);
         this.drawXlu(passRenderer, 0x22);
         this.drawXlu(passRenderer, 0x17);
         this.drawXlu(passRenderer, 0x16);
-        this.execute(passRenderer, DrawType.ELECTRIC_RAIL_HOLDER);
-        this.execute(passRenderer, DrawType.OCEAN_RING);
-        this.execute(passRenderer, DrawType.OCEAN_BOWL);
-        this.execute(passRenderer, DrawType.EFFECT_DRAW_INDIRECT);
-        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_INDIRECT);
+        this.execute(passRenderer, DrawType.ElectricRailHolder);
+        this.execute(passRenderer, DrawType.OceanRing);
+        this.execute(passRenderer, DrawType.OceanBowl);
+        this.execute(passRenderer, DrawType.EffectDrawIndirect);
+        this.execute(passRenderer, DrawType.EffectDrawAfterIndirect);
 
         // Resolve for WaterCameraFilter.
         device.submitPass(passRenderer);
@@ -494,31 +494,31 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.sceneObjHolder.specialTextureBinder.lateBindTexture(renderInstManager.simpleRenderInstList!, SpecialTextureType.ImageEffectTexture1, this.imageEffectTexture1.gfxTexture!);
 
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, null);
-        this.execute(passRenderer, DrawType.WATER_CAMERA_FILTER);
+        this.execute(passRenderer, DrawType.WaterCameraFilter);
 
         // executeDrawImageEffect()
         if (bloomParameterBufferOffs !== -1) {
             device.submitPass(passRenderer);
 
             const objPassRenderer = this.bloomRenderer.renderBeginObjects(device, viewerInput);
-            this.drawOpa(objPassRenderer, DrawBufferType.BLOOM_MODEL);
-            this.drawXlu(objPassRenderer, DrawBufferType.BLOOM_MODEL);
-            this.execute(objPassRenderer, DrawType.BLOOM_MODEL);
-            this.execute(objPassRenderer, DrawType.EFFECT_DRAW_FOR_BLOOM_EFFECT);
-            this.execute(objPassRenderer, DrawType.OCEAN_BOWL_BLOOM_DRAWER);
+            this.drawOpa(objPassRenderer, DrawBufferType.BloomModel);
+            this.drawXlu(objPassRenderer, DrawBufferType.BloomModel);
+            this.execute(objPassRenderer, DrawType.BloomModel);
+            this.execute(objPassRenderer, DrawType.EffectDrawForBloomEffect);
+            this.execute(objPassRenderer, DrawType.OceanBowlBloomDrawer);
             passRenderer = this.bloomRenderer.renderEndObjects(device, objPassRenderer, this.renderHelper.renderInstManager, this.mainRenderTarget, viewerInput, template, bloomParameterBufferOffs);
         }
 
-        this.execute(passRenderer, DrawType.EFFECT_DRAW_AFTER_IMAGE_EFFECT);
-        this.execute(passRenderer, DrawType.GRAVITY_EXPLAINER);
+        this.execute(passRenderer, DrawType.EffectDrawAfterImageEffect);
+        this.execute(passRenderer, DrawType.GravityExplainer);
         device.submitPass(passRenderer);
 
         // GameScene::draw2D()
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, viewerInput.onscreenTexture);
 
         // exceuteDrawList2DNormal()
-        this.drawOpa(passRenderer, DrawBufferType._3D_MODEL_FOR_2D);
-        this.drawXlu(passRenderer, DrawBufferType._3D_MODEL_FOR_2D);
+        this.drawOpa(passRenderer, DrawBufferType.Model3DFor2D);
+        this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
 
         device.submitPass(passRenderer);
 

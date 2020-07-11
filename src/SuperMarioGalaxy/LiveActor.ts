@@ -1,5 +1,5 @@
 
-import { NameObj, NameObjGroup } from "./NameObj";
+import { NameObj, NameObjGroup, MovementType } from "./NameObj";
 import { EffectKeeper } from "./EffectSystem";
 import { Spine } from "./Spine";
 import { ActorLightCtrl } from "./LightData";
@@ -805,7 +805,7 @@ export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
 
     constructor(sceneObjHolder: SceneObjHolder, public zoneId: number, public infoId: number, name: string, maxCount: number) {
         super(sceneObjHolder, name, maxCount);
-        connectToScene(sceneObjHolder, this, 0x06, -1, -1, -1);
+        connectToScene(sceneObjHolder, this, MovementType.MsgSharedGroup, -1, -1, -1);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {

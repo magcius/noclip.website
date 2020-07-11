@@ -3,7 +3,7 @@ import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { LiveActor, isDead, MessageType } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
 import { connectToScene } from "./ActorUtil";
-import { NameObj } from "./NameObj";
+import { NameObj, MovementType } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { arrayRemove } from "../util";
 
@@ -182,7 +182,7 @@ export class SensorHitChecker extends NameObj {
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'SensorHitChecker');
-        connectToScene(sceneObjHolder, this, 0x05, -1, -1, -1);
+        connectToScene(sceneObjHolder, this, MovementType.SensorHitChecker, -1, -1, -1);
     }
 
     private clearGroup(group: SensorGroup): void {

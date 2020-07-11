@@ -1,6 +1,6 @@
 
 import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
-import { NameObj } from "./NameObj";
+import { NameObj, CalcAnimType, MovementType } from "./NameObj";
 import { getMatrixTranslation } from "../MathHelpers";
 import { vec3 } from "gl-matrix";
 import { AreaObj, AreaObjMgr, AreaFormType } from "./AreaObj";
@@ -389,7 +389,7 @@ abstract class ImageEffectBase extends NameObj {
 }
 
 function connectToSceneNormalBloom(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    connectToScene(sceneObjHolder, nameObj, -1, 0x04, -1, -1);
+    connectToScene(sceneObjHolder, nameObj, -1, CalcAnimType.Environment, -1, -1);
 }
 
 export class BloomEffect extends ImageEffectBase {
@@ -526,7 +526,7 @@ class ImageEffectStateBloomNormal extends ImageEffectState {
 }
 
 function connectToSceneImageEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    connectToScene(sceneObjHolder, nameObj, 0x17, -1, -1, -1);
+    connectToScene(sceneObjHolder, nameObj, MovementType.ImageEffect, -1, -1, -1);
 }
 
 class ImageEffectDirector extends NameObj {

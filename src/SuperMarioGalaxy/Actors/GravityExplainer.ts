@@ -11,7 +11,7 @@ import { dfShow } from "../../DebugFloaters";
 import { SceneObjHolder, getDeltaTimeFrames } from "../Main";
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { connectToScene, getRandomFloat, calcGravityVector } from '../ActorUtil';
-import { DrawType } from '../NameObj';
+import { DrawType, MovementType } from '../NameObj';
 import { ViewerRenderInput } from '../../viewer';
 import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1 } from '../../MathHelpers';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
@@ -76,7 +76,7 @@ export class GravityExplainer extends LiveActor {
         mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
 
-        connectToScene(sceneObjHolder, this, 0x22, -1, -1, DrawType.GRAVITY_EXPLAINER);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {

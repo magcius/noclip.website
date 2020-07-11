@@ -3,7 +3,7 @@ import * as Viewer from '../viewer';
 import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, SMGRenderer } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
-import { NameObj } from './NameObj';
+import { NameObj, MovementType } from './NameObj';
 import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength, vecKillElement } from './ActorUtil';
 import { TicoRail } from './Actors/MiscActor';
 import { vec3, mat4 } from 'gl-matrix';
@@ -49,7 +49,7 @@ class DayInTheLifeOfALumaController extends NameObj {
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'DayInTheLifeOfALumaController');
-        connectToScene(sceneObjHolder, this, 0x01, -1, -1, -1);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, -1);
     }
 
     private pickNewTico(): void {

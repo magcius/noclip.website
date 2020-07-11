@@ -594,7 +594,7 @@ export class FurDrawManager extends NameObj {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'FurDrawManager');
 
-        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.FUR);
+        connectToScene(sceneObjHolder, this, -1, -1, -1, DrawType.Fur);
     }
 
     public add(furCtrl: FurCtrl): void {

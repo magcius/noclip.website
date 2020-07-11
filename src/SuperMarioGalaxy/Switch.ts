@@ -1,5 +1,5 @@
 
-import { NameObj } from "./NameObj";
+import { NameObj, MovementType } from "./NameObj";
 import { SceneObjHolder, SceneObj } from "./Main";
 import BitMap from "../BitMap";
 import { JMapInfoIter } from "./JMapInfo";
@@ -276,7 +276,7 @@ export class SwitchWatcherHolder extends NameObj {
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'SwitchWatcherHolder');
-        connectToScene(sceneObjHolder, this, 0x1B, -1, -1, -1);
+        connectToScene(sceneObjHolder, this, MovementType.SwitchWatcherHolder, -1, -1, -1);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {

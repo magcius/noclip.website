@@ -236,7 +236,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'WaterCameraFilter');
 
-        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.WATER_CAMERA_FILTER);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.WaterCameraFilter);
         // invalidateClipping
         this.initNerve(WaterCameraFilterNrv.Air);
 
