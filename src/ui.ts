@@ -1844,7 +1844,7 @@ class StudioPanel extends FloatingPanel {
         this.elem.style.display = 'none';
     }
 
-    public s() : void {
+    public v(): void {
         this.elem.style.display = '';
     }
 
