@@ -2069,7 +2069,7 @@ class StudioPanel extends FloatingPanel {
         this.keyframeDurationInput.dataset.helpText = 'The length of time spent animating between the previous keyframe and this one.';
         this.keyframeDurationInput.onchange = () => {
             const durationVal: number = parseFloat(this.keyframeDurationInput.value);
-            this.selectedKeyframe.durationInSeconds = durationVal;
+            this.selectedKeyframe.interpDuration = durationVal;
             if (this.interpolationSettings.hasAttribute('hidden')) {
                 if (durationVal > 0) {
                     this.interpolationSettings.removeAttribute('hidden');
@@ -2103,7 +2103,7 @@ class StudioPanel extends FloatingPanel {
 
         this.keyframeHoldDurationInput.dataset.helpText = 'The length of time to hold on this keyframe\'s end position before moving to the next.';
         this.keyframeHoldDurationInput.onchange = () => {
-            this.selectedKeyframe.holdDurationInSeconds = parseFloat(this.keyframeHoldDurationInput.value);
+            this.selectedKeyframe.holdDuration = parseFloat(this.keyframeHoldDurationInput.value);
         }
 
         this.moveKeyframeUpBtn.onclick = () => {
@@ -2311,8 +2311,8 @@ class StudioPanel extends FloatingPanel {
         }
         this.selectedKeyframeListItem = liElem;
         this.keyframeNameInput.value = liElem.dataset.name as string;
-        this.keyframeDurationInput.value = this.selectedKeyframe.durationInSeconds.toString();
-        this.keyframeHoldDurationInput.value = this.selectedKeyframe.holdDurationInSeconds.toString();
+        this.keyframeDurationInput.value = this.selectedKeyframe.interpDuration.toString();
+        this.keyframeHoldDurationInput.value = this.selectedKeyframe.holdDuration.toString();
         if (this.selectedKeyframe.usesLinearInterp) {
             this.linearEaseSettingsDiv.removeAttribute('hidden');
             setElementHighlighted(this.hermiteBtn, false);
@@ -2341,7 +2341,7 @@ class StudioPanel extends FloatingPanel {
                 break;
         }
         setElementHighlighted(this.selectedEaseBtn, true);
-        if (this.selectedKeyframe.durationInSeconds > 0) {
+        if (this.selectedKeyframe.interpDuration > 0) {
             this.interpolationSettings.removeAttribute('hidden');
         } else {
             this.interpolationSettings.setAttribute('hidden', '');
