@@ -9,6 +9,7 @@ import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { reverseDepthForPerspectiveProjectionMatrix, reverseDepthForOrthographicProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
+import { CameraAnimationManager } from './CameraAnimationManager';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -494,6 +495,84 @@ export class FPSCameraController implements CameraController {
 
         return important ? CameraUpdateResult.ImportantChange : updated ? CameraUpdateResult.Changed : CameraUpdateResult.Unchanged;
     }
+}
+
+export class StudioCameraController extends FPSCameraController {
+    private isAnimationPlaying: boolean = false;
+    private stepTrs: vec3 = vec3.create();
+    private stepRotQ: quat = quat.create();
+    /**
+     * Indicates if the camera is currently positioned on a keyframe's end position.
+     */
+    private isOnKeyframe: boolean = false;
+
+    constructor(private animationManager: CameraAnimationManager) {
+        super();
+    }
+
+    public update(inputManager: InputManager, dt: number): CameraUpdateResult {
+        let result;
+        if (this.isAnimationPlaying) {
+            result = this.updateAnimation(dt);
+            if (result === CameraUpdateResult.Changed) {
+                mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
+                this.camera.worldMatrixUpdated();
+            }
+            if (inputManager.isKeyDownEventTriggered('Escape')) {
+                this.stopAnimation();
+            }
+        } else {
+            if (!this.isOnKeyframe && inputManager.isKeyDownEventTriggered('Enter')) {
+                this.animationManager.addNextKeyframe(mat4.clone(this.camera.worldMatrix));
+                this.isOnKeyframe = true;
+            }
+            result = super.update(inputManager, dt);
+            if (this.isOnKeyframe && result !== CameraUpdateResult.Unchanged) {
+                this.isOnKeyframe = false;
+            }
+        }
+
+        return result;
+    }
+
+    public updateAnimation(dt: number): CameraUpdateResult {
+        if (this.animationManager.isKeyframeFinished()) {
+            if (this.animationManager.playbackHasNextKeyframe())
+                this.animationManager.playbackNextKeyframe();
+            else
+                this.stopAnimation();
+            return CameraUpdateResult.Unchanged;
+        }
+
+        if (this.animationManager.interpFinished()) {
+            // The interpolation is finished, but this keyframe still has a hold duration to complete.
+            this.animationManager.update(dt);
+            return CameraUpdateResult.Unchanged;
+        } else {
+            this.animationManager.update(dt);
+            this.animationManager.playbackInterpolationStep(this.stepRotQ, this.stepTrs);
+            mat4.fromRotationTranslation(this.camera.worldMatrix, this.stepRotQ, this.stepTrs);
+            return CameraUpdateResult.Changed;
+        }
+    }
+
+    public setToPosition(pos: mat4): void {
+        mat4.copy(this.camera.worldMatrix, pos);
+        mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
+        this.camera.worldMatrixUpdated();
+        this.isOnKeyframe = true;
+    }
+
+    public playAnimation(startPos: mat4) {
+        this.isAnimationPlaying = true;
+        this.setToPosition(startPos);
+    }
+
+    public stopAnimation() {
+        this.isAnimationPlaying = false;
+        this.animationManager.fireStoppedEvent();
+    }
+
 }
 
 export class XRCameraController {
