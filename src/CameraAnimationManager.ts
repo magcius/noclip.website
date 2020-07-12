@@ -3,7 +3,7 @@ import { Viewer } from './viewer';
 import { StudioCameraController } from './Camera';
 import { getPointBezier } from './Spline';
 
-const MAX_KEYFRAME_DURATION_SECONDS = 100.0;
+const MAX_KEYFRAME_DURATION = 100.0;
 const MIN_KEYFRAME_DURATION = 0;
 const MILLISECONDS_IN_SECOND = 1000.0;
 
@@ -27,92 +27,47 @@ const easeBothFunc: Function = (t: number) => {
 
 export class Keyframe {
     /**
-     * The length of time in milliseconds it should take to animate to this Keyframe's end position.
+     * The length of time in seconds it should take to animate to this Keyframe's end position.
      */
-    private _interpDuration: number = 5000.0;
+    private _interpDuration: number = 5.0;
     /**
-     * The length of time in milliseconds to hold on this keyframe's end position before moving to the next keyframe.
+     * The length of time in seconds to hold on this keyframe's end position before moving to the next keyframe.
      */
     private _holdDuration: number = 0.0;
 
-    private _interpProgress: number = 0;
-    private _holdProgress: number = 0;
-
     public usesLinearInterp: boolean = false;
     private _linearEaseType: LinearEaseType = LinearEaseType.EaseBoth;
-    private easingFunction: Function | null = easeBothFunc;
+    public easingFunction: Function | null = easeBothFunc;
     public trsTangentIn: vec3 = vec3.create();
     public trsTangentOut: vec3 = vec3.create();
 
     constructor(public endPos: mat4) {
     }
 
-    /**
-     * Updates the current state of this Keyframe.
-     * 
-     * @param dt delta time since last update
-     */
-    public update(dt: number): void {
-        if (this._interpProgress < this._interpDuration) {
-            this._interpProgress = Math.min(this._interpProgress + dt, this._interpDuration);
-        } else {
-            this._holdProgress = Math.min(this._holdProgress + dt, this._holdDuration);
-        }
+    get interpDuration(): number {
+        return this._interpDuration;
     }
 
-    public interpFinished(): boolean {
-        return this._interpProgress === this._interpDuration;
-    }
-
-    public isFinished(): boolean {
-        return this._interpProgress === this._interpDuration && this._holdProgress === this._holdDuration;
-    }
-
-    /**
-     * Returns a bezier-eased time interpolation value. The easeBoth function is used by default.
-     * If this keyframe uses linear interpolation, the currently-selected easing function is used
-     * instead, if any.
-     */
-    public bezierInterpAmount(): number {
-        if (this.usesLinearInterp) {
-            return this.interpAmount;
-        } else
-            return easeBothFunc(this._interpProgress / this._interpDuration);
-    }
-
-    get interpAmount(): number {
-        if (this.usesLinearInterp && this.easingFunction)
-            return this.easingFunction(this._interpProgress / this._interpDuration);
-        else
-            return this._interpProgress / this._interpDuration;
-    }
-
-    get durationInSeconds(): number {
-        return this._interpDuration / MILLISECONDS_IN_SECOND;
-    }
-
-    set durationInSeconds(newDurationSeconds: number) {
-        if (newDurationSeconds <= MIN_KEYFRAME_DURATION) {
+    set interpDuration(d: number) {
+        if (d <= MIN_KEYFRAME_DURATION)
             this._interpDuration = MIN_KEYFRAME_DURATION;
-        } else if (newDurationSeconds >= MAX_KEYFRAME_DURATION_SECONDS) {
-            this._interpDuration = MAX_KEYFRAME_DURATION_SECONDS * MILLISECONDS_IN_SECOND;
-        } else {
-            this._interpDuration = newDurationSeconds * MILLISECONDS_IN_SECOND;
-        }
+        else if (d >= MAX_KEYFRAME_DURATION)
+            this._interpDuration = MAX_KEYFRAME_DURATION;
+        else
+            this._interpDuration = d;
     }
 
-    get holdDurationInSeconds(): number {
-        return this._holdDuration / MILLISECONDS_IN_SECOND;
+    get holdDuration(): number {
+        return this._holdDuration;
     }
 
-    set holdDurationInSeconds(newHoldDurationSeconds: number) {
-        if (newHoldDurationSeconds <= MIN_KEYFRAME_DURATION) {
+    set holdDuration(d: number) {
+        if (d <= MIN_KEYFRAME_DURATION)
             this._holdDuration = MIN_KEYFRAME_DURATION;
-        } else if (newHoldDurationSeconds >= MAX_KEYFRAME_DURATION_SECONDS) {
-            this._holdDuration = MAX_KEYFRAME_DURATION_SECONDS * MILLISECONDS_IN_SECOND;
-        } else {
-            this._holdDuration = newHoldDurationSeconds * MILLISECONDS_IN_SECOND;
-        }
+        else if (d >= MAX_KEYFRAME_DURATION)
+            this._holdDuration = MAX_KEYFRAME_DURATION;
+        else
+            this._holdDuration = d;
     }
 
     get linearEaseType(): LinearEaseType {
@@ -130,16 +85,6 @@ export class Keyframe {
             this.easingFunction = easeBothFunc;
         this._linearEaseType = type;
     }
-
-    public reset() {
-        this._interpProgress = 0;
-        this._holdProgress = 0;
-    }
-
-    public skipInterpolation() {
-        this._interpProgress = this._interpDuration;
-    }
-
 }
 
 export class CameraAnimation {
