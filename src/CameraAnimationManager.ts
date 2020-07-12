@@ -1,7 +1,7 @@
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, quat } from 'gl-matrix';
 import { Viewer } from './viewer';
 import { StudioCameraController } from './Camera';
-import { getPointBezier } from './Spline';
+import { getPointHermite, getPointBezier } from './Spline';
 
 const MAX_KEYFRAME_DURATION = 100.0;
 const MIN_KEYFRAME_DURATION = 0;
@@ -117,29 +117,40 @@ export class CameraAnimation {
 }
 
 export class CameraAnimationManager {
-    private currentAnimation: CameraAnimation;
+    private animation: CameraAnimation;
     private studioCameraController: StudioCameraController;
     private selectedKeyframeIndex: number = -1;
     private editingKeyframePosition: boolean = false;
     /**
-     * The translation vector components of the keyframes following the current keyframe. Used for calculating tangents.
+     * The translation vector components of the keyframes following and preceding the current keyframe.
+     * Used for calculating tangents.
      */
-    private prevTrs: vec3;
-    private curTrs: vec3;
-    private curPlus1Trs: vec3;
-    private curPlus2Trs: vec3;
-    private trsTangentInScratch: vec3;
-    private trsTangentOutScratch: vec3;
+    private prevTrs: vec3 = vec3.create();
+    private curTrs: vec3 = vec3.create();
+    private curPlus1Trs: vec3 = vec3.create();
+    private curPlus2Trs: vec3 = vec3.create();
+    private trsTangentInScratch: vec3 = vec3.create();
+    private trsTangentOutScratch: vec3 = vec3.create();
+
+    /**
+     * Variables for animation playback.
+     */
+    private currentKeyframeIndex: number;
+    private currentKeyframe: Keyframe;
+    private currentKeyframeProgressMs: number = 0;
+    private currentKeyframeInterpDurationMs: number = 0;
+    private currentKeyframeTotalDurationMs: number = 0;
+    private loopAnimation: boolean = false;
+    private previewingKeyframe: boolean = false;
+    private interpolatingFrom: mat4 = mat4.create();
+    private trsFrom: vec3 = vec3.create();
+    private rotQFrom: quat = quat.create();
+    private trsTo: vec3 = vec3.create();
+    private rotQTo: quat = quat.create();
 
     constructor(private uiKeyframeList: HTMLElement, private uiStudioControls: HTMLElement) {
         this.studioCameraController = new StudioCameraController(this);
-        this.currentAnimation = new CameraAnimation();
-        this.prevTrs = vec3.create();
-        this.curTrs = vec3.create();
-        this.curPlus1Trs = vec3.create();
-        this.curPlus2Trs = vec3.create();
-        this.trsTangentInScratch = vec3.create();
-        this.trsTangentOutScratch = vec3.create();
+        this.animation = new CameraAnimation();
     }
 
     public enableStudioController(viewer: Viewer): void {
@@ -147,13 +158,13 @@ export class CameraAnimationManager {
     }
 
     public totalKeyframesAdded(): number {
-        return this.currentAnimation.totalKeyframesAdded;
+        return this.animation.totalKeyframesAdded;
     }
 
     public getKeyframeByIndex(index: number): Keyframe {
         this.selectedKeyframeIndex = index;
-        this.studioCameraController.setToPosition(this.currentAnimation.keyframes[index].endPos);
-        return this.currentAnimation.keyframes[index];
+        this.studioCameraController.setToPosition(this.animation.keyframes[index].endPos);
+        return this.animation.keyframes[index];
     }
 
     public deselectKeyframe(): void {
@@ -162,28 +173,28 @@ export class CameraAnimationManager {
 
     public addNextKeyframe(pos: mat4) {
         if (this.editingKeyframePosition) {
-            this.currentAnimation.keyframes[this.selectedKeyframeIndex].endPos = pos;
+            this.animation.keyframes[this.selectedKeyframeIndex].endPos = pos;
             this.uiKeyframeList.dispatchEvent(new Event('keyframePositionEdited'));
             this.editingKeyframePosition = false;
         } else if (this.selectedKeyframeIndex > -1) {
             // Insert new keyframe after the currently-selected keyframe.
-            this.currentAnimation.insertKeyframe(this.selectedKeyframeIndex, pos);
+            this.animation.insertKeyframe(this.selectedKeyframeIndex, pos);
             this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: this.selectedKeyframeIndex }));
         } else {
             // No keyframe selected
-            if (this.currentAnimation.keyframes.length === 0) {
-                this.currentAnimation.appendKeyframe(pos);
-                this.currentAnimation.keyframes[0].durationInSeconds = 0;
+            if (this.animation.keyframes.length === 0) {
+                this.animation.appendKeyframe(pos);
+                this.animation.keyframes[0].interpDuration = 0;
                 this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
             } else {
-                this.currentAnimation.appendKeyframe(pos);
-                this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: this.currentAnimation.keyframes.length - 1 }));
+                this.animation.appendKeyframe(pos);
+                this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: this.animation.keyframes.length - 1 }));
             }
         }
     }
 
     public removeKeyframe(toRemove: number) {
-        this.currentAnimation.removeKeyframe(toRemove);
+        this.animation.removeKeyframe(toRemove);
         if (toRemove < this.selectedKeyframeIndex) {
             this.selectedKeyframeIndex--;
         }
@@ -193,26 +204,104 @@ export class CameraAnimationManager {
         this.editingKeyframePosition = true;
     }
 
-    public playAnimation(loop: boolean) {
-        if (this.currentAnimation.keyframes.length > 1) {
-            this.calculateTangents();
-            const startPos: mat4 = this.currentAnimation.keyframes[0].endPos;
-            this.studioCameraController.playAnimation(this.currentAnimation.keyframes, startPos, loop);
-        }
-    }
-
     public previewKeyframe() {
         const index = this.selectedKeyframeIndex;
         let startPos: mat4;
         if (index > 0) {
-            startPos = this.currentAnimation.keyframes[index - 1].endPos;
+            startPos = this.animation.keyframes[index - 1].endPos;
         } else if (index === 0) {
-            startPos = this.currentAnimation.keyframes[this.currentAnimation.keyframes.length - 1].endPos;
+            startPos = this.animation.keyframes[this.animation.keyframes.length - 1].endPos;
         } else {
             return;
         }
+        this.currentKeyframeIndex = index - 1;
+        this.playbackNextKeyframe();
         this.calculateTangents();
-        this.studioCameraController.playAnimation([this.currentAnimation.keyframes[index]], startPos, false);
+        this.previewingKeyframe = true;
+        this.studioCameraController.playAnimation(startPos);
+    }
+
+    public playAnimation(loop: boolean) {
+        if (this.animation.keyframes.length > 1) {
+            this.loopAnimation = loop;
+            this.currentKeyframeIndex = -1;
+            this.playbackNextKeyframe();
+            this.calculateTangents();
+            // Skip interpolation for the first keyframe.
+            this.currentKeyframeProgressMs = this.currentKeyframeInterpDurationMs;
+            const startPos: mat4 = this.animation.keyframes[0].endPos;
+            this.studioCameraController.playAnimation(startPos);
+        }
+    }
+
+    /**
+     * Updates the animation progress value for the current keyframe.
+     * 
+     * @param dt delta time since last update
+     */
+    public update(dt: number): void {
+        if (this.currentKeyframeProgressMs < this.currentKeyframe.interpDuration)
+            this.currentKeyframeProgressMs = Math.min(this.currentKeyframeProgressMs + dt, this.currentKeyframeInterpDurationMs);
+        else
+            this.currentKeyframeProgressMs = Math.min(this.currentKeyframeProgressMs + dt, this.currentKeyframeTotalDurationMs);
+    }
+
+    public interpFinished(): boolean {
+        return this.currentKeyframeProgressMs >= this.currentKeyframeInterpDurationMs;
+    }
+
+    public isKeyframeFinished(): boolean {
+        return this.currentKeyframeProgressMs >= this.currentKeyframeTotalDurationMs;
+    }
+
+    /**
+     * Performs one interpolation step in the current animation, providing a quaternion and vector describing the rotation and translation of the next animation frame.
+     * 
+     * @param outRot the next frame's rotation quaternion
+     * @param outTrs the next frame's translation vector
+     */
+    public playbackInterpolationStep(outRot: quat, outTrs: vec3) {
+        let interpAmount = this.currentKeyframeProgressMs / this.currentKeyframeInterpDurationMs;
+        if (this.currentKeyframe.usesLinearInterp) {
+            if (this.currentKeyframe.easingFunction)
+                interpAmount = this.currentKeyframe.easingFunction(interpAmount);
+            vec3.lerp(outTrs, this.trsFrom, this.trsTo, interpAmount);
+            quat.slerp(outRot, this.rotQFrom, this.rotQTo, interpAmount);
+        } else {
+            for (let i = 0; i < 3; i++) {
+                outTrs[i] = getPointHermite(this.trsFrom[i], this.trsTo[i], this.currentKeyframe.trsTangentIn[i], this.currentKeyframe.trsTangentOut[i], interpAmount);
+            }
+            quat.slerp(outRot, this.rotQFrom, this.rotQTo, easeBothFunc(interpAmount));
+        }
+    }
+
+    public playbackHasNextKeyframe(): boolean {
+        if (this.previewingKeyframe)
+            return false;
+        else if (this.loopAnimation)
+            return true;
+        else
+            return this.currentKeyframeIndex + 1 < this.animation.keyframes.length;
+    }
+
+    public playbackNextKeyframe() {
+        if (this.currentKeyframeIndex + 1 === this.animation.keyframes.length) {
+            if (this.loopAnimation)
+                this.currentKeyframeIndex = 0;
+            else
+                return;
+        } else {
+            this.currentKeyframeIndex++;
+        }
+        this.currentKeyframe = this.animation.keyframes[this.currentKeyframeIndex];
+        this.currentKeyframeProgressMs = 0;
+        this.currentKeyframeInterpDurationMs = this.currentKeyframe.interpDuration * MILLISECONDS_IN_SECOND;
+        this.currentKeyframeTotalDurationMs = (this.currentKeyframe.interpDuration + this.currentKeyframe.holdDuration) * MILLISECONDS_IN_SECOND;
+        if (this.currentKeyframe.interpDuration === 0)
+            this.studioCameraController.setToPosition(this.currentKeyframe.endPos);
+        else
+            this.setInterpolationVectors();
+        return true;
     }
 
     public stopAnimation() {
@@ -220,11 +309,12 @@ export class CameraAnimationManager {
     }
 
     public fireStoppedEvent() {
+        this.previewingKeyframe = false;
         this.uiStudioControls.dispatchEvent(new Event('animationStopped'));
     }
 
     public moveKeyframeUp(): boolean {
-        const kf: Keyframe[] = this.currentAnimation.keyframes;
+        const kf: Keyframe[] = this.animation.keyframes;
         const index: number = this.selectedKeyframeIndex;
         if (index > 1) {
             [kf[index - 1], kf[index]] = [kf[index], kf[index - 1]];
@@ -234,7 +324,7 @@ export class CameraAnimationManager {
     }
 
     public moveKeyframeDown(): boolean {
-        const kf: Keyframe[] = this.currentAnimation.keyframes;
+        const kf: Keyframe[] = this.animation.keyframes;
         const index: number = this.selectedKeyframeIndex;
         if (index > 0 && index < kf.length - 1) {
             [kf[index], kf[index + 1]] = [kf[index + 1], kf[index]];
@@ -243,11 +333,22 @@ export class CameraAnimationManager {
         return false;
     }
 
+    private setInterpolationVectors() {
+        if (this.currentKeyframeIndex > 0)
+            mat4.copy(this.interpolatingFrom, this.animation.keyframes[this.currentKeyframeIndex - 1].endPos);
+        else
+            mat4.copy(this.interpolatingFrom, this.animation.keyframes[this.animation.keyframes.length - 1].endPos);
+        mat4.getTranslation(this.trsFrom, this.interpolatingFrom);
+        mat4.getRotation(this.rotQFrom, this.interpolatingFrom);
+        mat4.getTranslation(this.trsTo, this.currentKeyframe.endPos);
+        mat4.getRotation(this.rotQTo, this.currentKeyframe.endPos);
+    }
+
     /**
      * Called before playing or previewing an animation, calculates and assigns tangent values for hermite interpolation.
      */
     private calculateTangents(): void {
-        const keyframes = this.currentAnimation.keyframes;
+        const keyframes = this.animation.keyframes;
 
         if (keyframes.length < 4) {
             mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 1].endPos);

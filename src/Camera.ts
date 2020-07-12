@@ -9,8 +9,7 @@ import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { reverseDepthForPerspectiveProjectionMatrix, reverseDepthForOrthographicProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
-import { Keyframe, CameraAnimationManager } from './CameraAnimationManager';
-import { getPointHermite } from './Spline';
+import { CameraAnimationManager } from './CameraAnimationManager';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -500,15 +499,6 @@ export class FPSCameraController implements CameraController {
 
 export class StudioCameraController extends FPSCameraController {
     private isAnimationPlaying: boolean = false;
-    private loopAnimation: boolean = false;
-    private animationKeyframes: Keyframe[];
-    private currentKeyframeIndex: number;
-    private currentKeyframe: Keyframe;
-    private interpolatingFrom: mat4 = mat4.create();
-    private trsFrom: vec3 = vec3.create();
-    private rotQFrom: quat = quat.create();
-    private trsTo: vec3 = vec3.create();
-    private rotQTo: quat = quat.create();
     private stepTrs: vec3 = vec3.create();
     private stepRotQ: quat = quat.create();
     /**
@@ -546,41 +536,21 @@ export class StudioCameraController extends FPSCameraController {
     }
 
     public updateAnimation(dt: number): CameraUpdateResult {
-        if (this.currentKeyframe.isFinished()) {
-            if (this.currentKeyframeIndex + 1 === this.animationKeyframes.length) {
-                // We've reached the end of the animation.
-                if (this.loopAnimation) {
-                    this.resetKeyframes();
-                    this.currentKeyframeIndex = -1;
-                } else {
-                    this.stopAnimation();
-                    return CameraUpdateResult.Unchanged;
-                }
-            }
-            // Move to next keyframe.
-            this.nextKeyframe();
-            if (this.currentKeyframe.durationInSeconds === 0) {
-                mat4.copy(this.camera.worldMatrix, this.currentKeyframe.endPos);
-                return CameraUpdateResult.Changed;
-            }
+        if (this.animationManager.isKeyframeFinished()) {
+            if (this.animationManager.playbackHasNextKeyframe())
+                this.animationManager.playbackNextKeyframe();
+            else
+                this.stopAnimation();
+            return CameraUpdateResult.Unchanged;
         }
 
-        if (this.currentKeyframe.interpFinished()) {
+        if (this.animationManager.interpFinished()) {
             // The interpolation is finished, but this keyframe still has a hold duration to complete.
-            this.currentKeyframe.update(dt);
+            this.animationManager.update(dt);
             return CameraUpdateResult.Unchanged;
         } else {
-            this.currentKeyframe.update(dt);
-            const interpAmount: number = this.currentKeyframe.interpAmount;
-
-            if (this.currentKeyframe.usesLinearInterp) {
-                vec3.lerp(this.stepTrs, this.trsFrom, this.trsTo, interpAmount);
-            } else {
-                for (let i = 0; i < 3; i++) {
-                    this.stepTrs[i] = getPointHermite(this.trsFrom[i], this.trsTo[i], this.currentKeyframe.trsTangentIn[i], this.currentKeyframe.trsTangentOut[i], interpAmount);
-                }
-            }
-            quat.slerp(this.stepRotQ, this.rotQFrom, this.rotQTo, this.currentKeyframe.bezierInterpAmount());
+            this.animationManager.update(dt);
+            this.animationManager.playbackInterpolationStep(this.stepRotQ, this.stepTrs);
             mat4.fromRotationTranslation(this.camera.worldMatrix, this.stepRotQ, this.stepTrs);
             return CameraUpdateResult.Changed;
         }
@@ -593,47 +563,16 @@ export class StudioCameraController extends FPSCameraController {
         this.isOnKeyframe = true;
     }
 
-    public playAnimation(keyframes: Keyframe[], startPos: mat4, loop: boolean) {
-        this.animationKeyframes = keyframes;
+    public playAnimation(startPos: mat4) {
         this.isAnimationPlaying = true;
-        this.loopAnimation = loop;
-        this.currentKeyframeIndex = -1;
         this.setToPosition(startPos);
-
-        // If the starting position is the same as the first keyframe's
-        // end position, skip any interpolation for that keyframe.
-        if (mat4.exactEquals(startPos, keyframes[0].endPos)) {
-            this.animationKeyframes[0].skipInterpolation();
-        }
-        this.nextKeyframe();
     }
 
     public stopAnimation() {
         this.isAnimationPlaying = false;
-        this.resetKeyframes();
         this.animationManager.fireStoppedEvent();
     }
 
-    private resetKeyframes() {
-        for (let i = 0; i < this.animationKeyframes.length; i++) {
-            this.animationKeyframes[i].reset();
-        }
-    }
-
-    private nextKeyframe(): void {
-        this.currentKeyframeIndex++;
-        this.currentKeyframe = this.animationKeyframes[this.currentKeyframeIndex];
-        if (this.animationKeyframes.length === 1)
-            mat4.copy(this.interpolatingFrom, this.camera.worldMatrix);
-        else if (this.currentKeyframeIndex > 0)
-            mat4.copy(this.interpolatingFrom, this.animationKeyframes[this.currentKeyframeIndex - 1].endPos);
-        else
-            mat4.copy(this.interpolatingFrom, this.animationKeyframes[this.animationKeyframes.length - 1].endPos);
-        mat4.getTranslation(this.trsFrom, this.interpolatingFrom);
-        mat4.getRotation(this.rotQFrom, this.interpolatingFrom);
-        mat4.getTranslation(this.trsTo, this.currentKeyframe.endPos);
-        mat4.getRotation(this.rotQTo, this.currentKeyframe.endPos);
-    }
 }
 
 export class XRCameraController {
