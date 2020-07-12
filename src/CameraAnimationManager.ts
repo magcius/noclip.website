@@ -303,7 +303,7 @@ export class CameraAnimationManager {
         else if (easeType === LinearEaseType.EaseBoth)
             return easeBothFunc;
         else
-            return null
+            return null;
     }
 
     private setInterpolationVectors() {
