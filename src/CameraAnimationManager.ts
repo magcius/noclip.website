@@ -23,40 +23,20 @@ const easeBothFunc: Function = (t: number) => {
     return getPointBezier(0, 0, 1, 1, t);
 }
 
-export class Keyframe {
+export interface Keyframe {
     /**
      * The length of time in seconds it should take to animate to this Keyframe's end position.
      */
-    public interpDuration: number = 5.0;
+    interpDuration: number;
     /**
      * The length of time in seconds to hold on this keyframe's end position before moving to the next keyframe.
      */
-    public holdDuration: number = 0.0;
-
-    public usesLinearInterp: boolean = false;
-    private _linearEaseType: LinearEaseType = LinearEaseType.EaseBoth;
-    public easingFunction: Function | null = easeBothFunc;
-    public trsTangentIn: vec3 = vec3.create();
-    public trsTangentOut: vec3 = vec3.create();
-
-    constructor(public endPos: mat4) {
-    }
-
-    get linearEaseType(): LinearEaseType {
-        return this._linearEaseType;
-    }
-
-    set linearEaseType(type: LinearEaseType) {
-        if (type === LinearEaseType.NoEase)
-            this.easingFunction = null;
-        else if (type === LinearEaseType.EaseIn)
-            this.easingFunction = easeInFunc;
-        else if (type === LinearEaseType.EaseOut)
-            this.easingFunction = easeOutFunc;
-        else if (type === LinearEaseType.EaseBoth)
-            this.easingFunction = easeBothFunc;
-        this._linearEaseType = type;
-    }
+    holdDuration: number;
+    usesLinearInterp: boolean;
+    linearEaseType: LinearEaseType;
+    trsTangentIn: vec3;
+    trsTangentOut: vec3;
+    endPos: mat4;
 }
 
 export class CameraAnimation {
@@ -74,7 +54,16 @@ export class CameraAnimation {
     public totalKeyframesAdded: number = -1;
 
     public insertKeyframe(after: number, keyframeEndPos: mat4) {
-        this.keyframes.splice(after + 1, 0, new Keyframe(keyframeEndPos));
+        const newKeyframe: Keyframe = {
+            interpDuration: 5,
+            holdDuration: 0,
+            usesLinearInterp: false,
+            linearEaseType: LinearEaseType.EaseBoth,
+            trsTangentIn: vec3.create(),
+            trsTangentOut: vec3.create(),
+            endPos: keyframeEndPos
+        }
+        this.keyframes.splice(after + 1, 0, newKeyframe);
         this.totalKeyframesAdded++;
     }
 
@@ -235,8 +224,9 @@ export class CameraAnimationManager {
     public playbackInterpolationStep(outRot: quat, outTrs: vec3) {
         let interpAmount = this.currentKeyframeProgressMs / this.currentKeyframeInterpDurationMs;
         if (this.currentKeyframe.usesLinearInterp) {
-            if (this.currentKeyframe.easingFunction)
-                interpAmount = this.currentKeyframe.easingFunction(interpAmount);
+            const easeFunc = this.getEasingFuncForEaseType(this.currentKeyframe.linearEaseType);
+            if (easeFunc) 
+                interpAmount = easeFunc(interpAmount);
             vec3.lerp(outTrs, this.trsFrom, this.trsTo, interpAmount);
             quat.slerp(outRot, this.rotQFrom, this.rotQTo, interpAmount);
         } else {
@@ -303,6 +293,17 @@ export class CameraAnimationManager {
             return true;
         }
         return false;
+    }
+
+    private getEasingFuncForEaseType(easeType: LinearEaseType): Function | null {
+        if (easeType === LinearEaseType.EaseIn)
+            return easeInFunc;
+        else if (easeType === LinearEaseType.EaseOut)
+            return easeOutFunc;
+        else if (easeType === LinearEaseType.EaseBoth)
+            return easeBothFunc;
+        else
+            return null
     }
 
     private setInterpolationVectors() {
