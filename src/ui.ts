@@ -2057,7 +2057,10 @@ class StudioPanel extends FloatingPanel {
 
         this.editKeyframePositionBtn.onclick = () => {
             this.disableKeyframeControls();
-            this.animationManager.enableEditKeyframePosition();
+            if (this.animationManager.editingKeyframePosition)
+                this.animationManager.cancelEditKeyframePosition();
+            else
+                this.animationManager.enableEditKeyframePosition();
             this.studioHelpText.innerText = this.studioHelpText.dataset.editPosHelpText as string;
             setElementHighlighted(this.editKeyframePositionBtn, true);
         }

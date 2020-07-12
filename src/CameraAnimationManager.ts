@@ -81,7 +81,7 @@ export class CameraAnimationManager {
     private animation: CameraAnimation;
     private studioCameraController: StudioCameraController;
     private selectedKeyframeIndex: number = -1;
-    private editingKeyframePosition: boolean = false;
+    public editingKeyframePosition: boolean = false;
     /**
      * The translation vector components of the keyframes following and preceding the current keyframe.
      * Used for calculating tangents.
@@ -163,6 +163,11 @@ export class CameraAnimationManager {
 
     public enableEditKeyframePosition(): void {
         this.editingKeyframePosition = true;
+    }
+
+    public cancelEditKeyframePosition(): void {
+        this.editingKeyframePosition = false;
+        this.uiKeyframeList.dispatchEvent(new Event('keyframePositionEdited'));
     }
 
     public previewKeyframe() {
