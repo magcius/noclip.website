@@ -2070,7 +2070,11 @@ class StudioPanel extends FloatingPanel {
         const MIN_KEYFRAME_DURATION = 0;
         this.keyframeDurationInput.dataset.helpText = 'The length of time spent animating between the previous keyframe and this one.';
         this.keyframeDurationInput.onchange = () => {
-            const durationVal: number = clamp(parseFloat(this.keyframeDurationInput.value), MIN_KEYFRAME_DURATION, MAX_KEYFRAME_DURATION);
+            let durationVal = parseFloat(this.keyframeDurationInput.value)
+            if (Number.isNaN(durationVal))
+                durationVal = 5;
+            else
+                clamp(durationVal, MIN_KEYFRAME_DURATION, MAX_KEYFRAME_DURATION);
             this.selectedKeyframe.interpDuration = durationVal;
             this.keyframeDurationInput.value = durationVal.toString();
             if (this.interpolationSettings.hasAttribute('hidden')) {
@@ -2106,8 +2110,13 @@ class StudioPanel extends FloatingPanel {
 
         this.keyframeHoldDurationInput.dataset.helpText = 'The length of time to hold on this keyframe\'s end position before moving to the next.';
         this.keyframeHoldDurationInput.onchange = () => {
-            this.selectedKeyframe.holdDuration = clamp(parseFloat(this.keyframeHoldDurationInput.value), MIN_KEYFRAME_DURATION, MAX_KEYFRAME_DURATION);
-            this.keyframeHoldDurationInput.value = this.selectedKeyframe.holdDuration.toString();
+            let durationVal = parseFloat(this.keyframeHoldDurationInput.value);
+            if (Number.isNaN(durationVal))
+                durationVal = 0;
+            else
+                durationVal = clamp(durationVal, MIN_KEYFRAME_DURATION, MAX_KEYFRAME_DURATION);
+            this.selectedKeyframe.holdDuration = durationVal;
+            this.keyframeHoldDurationInput.value = durationVal.toString();
         }
 
         this.moveKeyframeUpBtn.onclick = () => {
