@@ -2066,10 +2066,13 @@ class StudioPanel extends FloatingPanel {
             }
         }
 
+        const MAX_KEYFRAME_DURATION = 100.0;
+        const MIN_KEYFRAME_DURATION = 0;
         this.keyframeDurationInput.dataset.helpText = 'The length of time spent animating between the previous keyframe and this one.';
         this.keyframeDurationInput.onchange = () => {
-            const durationVal: number = parseFloat(this.keyframeDurationInput.value);
+            const durationVal: number = clamp(parseFloat(this.keyframeDurationInput.value), MIN_KEYFRAME_DURATION, MAX_KEYFRAME_DURATION);
             this.selectedKeyframe.interpDuration = durationVal;
+            this.keyframeDurationInput.value = durationVal.toString();
             if (this.interpolationSettings.hasAttribute('hidden')) {
                 if (durationVal > 0) {
                     this.interpolationSettings.removeAttribute('hidden');
@@ -2103,7 +2106,8 @@ class StudioPanel extends FloatingPanel {
 
         this.keyframeHoldDurationInput.dataset.helpText = 'The length of time to hold on this keyframe\'s end position before moving to the next.';
         this.keyframeHoldDurationInput.onchange = () => {
-            this.selectedKeyframe.holdDuration = parseFloat(this.keyframeHoldDurationInput.value);
+            this.selectedKeyframe.holdDuration = clamp(parseFloat(this.keyframeHoldDurationInput.value), MIN_KEYFRAME_DURATION, MAX_KEYFRAME_DURATION);
+            this.keyframeHoldDurationInput.value = this.selectedKeyframe.holdDuration.toString();
         }
 
         this.moveKeyframeUpBtn.onclick = () => {

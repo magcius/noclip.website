@@ -3,8 +3,6 @@ import { Viewer } from './viewer';
 import { StudioCameraController } from './Camera';
 import { getPointHermite, getPointBezier } from './Spline';
 
-const MAX_KEYFRAME_DURATION = 100.0;
-const MIN_KEYFRAME_DURATION = 0;
 const MILLISECONDS_IN_SECOND = 1000.0;
 
 export const enum LinearEaseType {
@@ -29,11 +27,11 @@ export class Keyframe {
     /**
      * The length of time in seconds it should take to animate to this Keyframe's end position.
      */
-    private _interpDuration: number = 5.0;
+    public interpDuration: number = 5.0;
     /**
      * The length of time in seconds to hold on this keyframe's end position before moving to the next keyframe.
      */
-    private _holdDuration: number = 0.0;
+    public holdDuration: number = 0.0;
 
     public usesLinearInterp: boolean = false;
     private _linearEaseType: LinearEaseType = LinearEaseType.EaseBoth;
@@ -42,32 +40,6 @@ export class Keyframe {
     public trsTangentOut: vec3 = vec3.create();
 
     constructor(public endPos: mat4) {
-    }
-
-    get interpDuration(): number {
-        return this._interpDuration;
-    }
-
-    set interpDuration(d: number) {
-        if (d <= MIN_KEYFRAME_DURATION)
-            this._interpDuration = MIN_KEYFRAME_DURATION;
-        else if (d >= MAX_KEYFRAME_DURATION)
-            this._interpDuration = MAX_KEYFRAME_DURATION;
-        else
-            this._interpDuration = d;
-    }
-
-    get holdDuration(): number {
-        return this._holdDuration;
-    }
-
-    set holdDuration(d: number) {
-        if (d <= MIN_KEYFRAME_DURATION)
-            this._holdDuration = MIN_KEYFRAME_DURATION;
-        else if (d >= MAX_KEYFRAME_DURATION)
-            this._holdDuration = MAX_KEYFRAME_DURATION;
-        else
-            this._holdDuration = d;
     }
 
     get linearEaseType(): LinearEaseType {
