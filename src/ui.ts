@@ -2018,8 +2018,15 @@ class StudioPanel extends FloatingPanel {
                 this.keyframeNameInput.setAttribute('disabled', '');
                 this.moveKeyframeDownBtn.setAttribute('hidden', '');
                 this.moveKeyframeUpBtn.setAttribute('hidden', '');
-                if (!this.loopAnimationCheckbox.checked) {
+                if (this.loopAnimationCheckbox.checked) {
+                    this.keyframeDurationContainer.removeAttribute('hidden');
+                    this.previewKeyframeBtn.removeAttribute('hidden');
+                    if (this.selectedKeyframe.interpDuration > 0) {
+                        this.interpolationSettings.removeAttribute('hidden');
+                    }
+                } else {
                     this.keyframeDurationContainer.setAttribute('hidden', '');
+                    this.interpolationSettings.setAttribute('hidden', '');
                     this.previewKeyframeBtn.setAttribute('hidden', '');
                 }
             };
@@ -2162,9 +2169,12 @@ class StudioPanel extends FloatingPanel {
             if (this.selectedKeyframeListItem === this.keyframeList.children[0] && this.keyframeList.children.length > 1) {
                 if (this.loopAnimationCheckbox.checked) {
                     this.keyframeDurationContainer.removeAttribute('hidden');
+                    if (this.selectedKeyframe.interpDuration > 0)
+                        this.interpolationSettings.removeAttribute('hidden');
                     this.previewKeyframeBtn.removeAttribute('hidden');
                 } else {
                     this.keyframeDurationContainer.setAttribute('hidden', '');
+                    this.interpolationSettings.setAttribute('hidden', '');
                     this.previewKeyframeBtn.setAttribute('hidden', '');
                 }
             }
