@@ -278,9 +278,8 @@ export class XanimeCore implements JointMatrixCalc {
         setMatrixTranslation(dst, transform.translation);
         mat4.scale(dst, dst, transform.scale);
 
-        if (!!(jnt1.calcFlags & 0x01)) {
+        if (!!(jnt1.calcFlags & 0x01))
             calcJointMatrixMayaSSC(dst, shapeInstanceState.parentScale);
-        }
 
         vec3.copy(shapeInstanceState.parentScale, transform.scale);
     }
