@@ -574,7 +574,7 @@ export class GfxRenderInstList {
      */
     public checkUsePostSort(): void {
         // Over a certain threshold, it's faster to push and then sort than insort directly...
-        this.usePostSort = this.renderInsts.length >= 500;
+        this.usePostSort = this.compareFunction !== null && this.renderInsts.length >= 500;
     }
 
     /**
