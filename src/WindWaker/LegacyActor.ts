@@ -20,7 +20,6 @@ import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB }
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { cBgS_GndChk } from './d_bg';
-import { initModelForZelda } from './d_a';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -102,7 +101,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
 
     function buildChildModelRes(model: J3DModelData): BMDObjectRenderer {
         const modelInstance = new J3DModelInstanceSimple(model);
-        initModelForZelda(modelInstance);
         renderer.extraTextures.fillExtraTextures(modelInstance);
         modelInstance.name = actorName!;
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
