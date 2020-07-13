@@ -1161,11 +1161,17 @@ class FrameDebouncer {
     private queued: boolean = false;
     public callback: (() => void) | null = null;
 
+    private onframe = (): void => {
+        if (this.callback !== null)
+            this.callback();
+        this.queued = false;
+    }
+
     public trigger(): void {
         if (this.queued)
             return;
         if (this.callback !== null)
-            window.requestAnimationFrame(this.callback);
+            window.requestAnimationFrame(this.onframe);
         this.queued = true;
     }
 }
