@@ -1196,7 +1196,8 @@ class HSD_JObj_Instance {
     public scale = vec3.create();
     private parentScale = vec3.fromValues(1, 1, 1);
 
-    public visible: boolean = true;
+    public visible = true;
+    public nodeVisible = true;
 
     constructor(public data: HSD_JObj_Data, texImageDataCache: HSD__TexImageDataCache, public parent: HSD_JObj_Instance | null = null) {
         for (let i = 0; i < this.data.dobj.length; i++)
@@ -1208,15 +1209,11 @@ class HSD_JObj_Instance {
         vec3.copy(this.translation, jobj.translation);
         vec3.copy(this.rotation, jobj.rotation);
         vec3.copy(this.scale, jobj.scale);
-        this.visible = !(jobj.flags & HSD_JObjFlags.HIDDEN);
-    }
-
-    public setVisible(v: boolean): void {
-        this.visible = v;
+        this.nodeVisible = !(jobj.flags & HSD_JObjFlags.HIDDEN);
     }
 
     public setVisibleAll(v: boolean): void {
-        this.visible = v;
+        this.nodeVisible = v;
 
         for (let i = 0; i < this.children.length; i++)
             this.children[i].setVisibleAll(v);
@@ -1270,7 +1267,7 @@ class HSD_JObj_Instance {
         } else if (trackType === HSD_JObjAnmType.SCAZ) {
             jobj.scale[2] = value;
         } else if (trackType === HSD_JObjAnmType.NODE) {
-            jobj.setVisible(value >= 0.5);
+            jobj.nodeVisible = value >= 0.5;
         } else if (trackType === HSD_JObjAnmType.BRANCH) {
             jobj.setVisibleAll(value >= 0.5);
         } else {
@@ -1314,9 +1311,13 @@ class HSD_JObj_Instance {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, root: HSD_JObjRoot_Instance): void {
-        if (this.visible)
+        if (!this.visible)
+            return;
+
+        if (this.nodeVisible)
             for (let i = 0; i < this.dobj.length; i++)
                 this.dobj[i].draw(device, renderInstManager, viewerInput, this, root);
+
         for (let i = 0; i < this.children.length; i++)
             this.children[i].draw(device, renderInstManager, viewerInput, root);
     }
