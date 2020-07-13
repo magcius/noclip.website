@@ -1948,7 +1948,7 @@ class StudioPanel extends FloatingPanel {
         </div>`);
         this.studioHelpText = this.contents.querySelector('#studioHelpText') as HTMLElement;
         this.studioHelpText.dataset.startPosHelpText = 'Move the camera to the desired starting position and press Enter.';
-        this.studioHelpText.dataset.editPosHelpText = 'Move the camera to the desired position and press Enter.';
+        this.studioHelpText.dataset.editPosHelpText = 'Move the camera to the desired position and press Enter. Press Escape to cancel.';
         this.studioHelpText.innerText = this.studioHelpText.dataset.startPosHelpText;
         this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
         this.keyframeList = this.contents.querySelector('#keyframeList') as HTMLElement;
@@ -2259,11 +2259,13 @@ class StudioPanel extends FloatingPanel {
     }
 
     private displayHelpText(elem: HTMLElement) {
-        this.studioHelpText.innerText = elem.dataset.helpText ? elem.dataset.helpText : this.studioHelpText.dataset.default as string;
+        if (!this.animationManager.editingKeyframePosition)
+            this.studioHelpText.innerText = elem.dataset.helpText ? elem.dataset.helpText : this.studioHelpText.dataset.default as string;
     }
 
     private resetHelpText() {
-        this.studioHelpText.innerText = this.studioHelpText.dataset.default as string;
+        if (!this.animationManager.editingKeyframePosition)
+            this.studioHelpText.innerText = this.studioHelpText.dataset.default as string;
     }
 
     private handleNewKeyframeEvent(e: CustomEvent) {
