@@ -147,8 +147,8 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         mat4.getTranslation(chk.pos, localModelMatrix);
         chk.pos[1] += 10.0;
         const y = globals.scnPlay.bgS.GroundCross(chk);
-        if (y === -Infinity)
-            debugger;
+        // if (y === -Infinity)
+        //     debugger;
         dstMatrix[13] = y;
     }
 

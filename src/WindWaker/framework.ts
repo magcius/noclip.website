@@ -157,7 +157,7 @@ class standard_create_request_class<T = any> {
     ]);
     public process: base_process_class | null = null;
 
-    constructor(public layer: layer_class, public pcId: number, public constructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
+    constructor(public layer: layer_class, public pcId: number, public konstructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
     }
 
     // fpcSCtRq_Handler
@@ -171,7 +171,7 @@ class standard_create_request_class<T = any> {
 
     private CreateProcess(globals: fGlobals, globalUserData: GlobalUserData, userData: this): cPhs__Status {
         const self = userData;
-        self.process = new self.constructor(globals, self.pcId, self.profileBinary.createDataView());
+        self.process = new self.konstructor(globals, self.pcId, self.profileBinary.createDataView());
         return cPhs__Status.Next;
     }
 
