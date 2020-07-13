@@ -204,7 +204,7 @@ export class CameraAnimationManager {
      */
     public update(dt: number): void {
         if (this.currentKeyframeProgressMs < this.currentKeyframe.interpDuration)
-            this.currentKeyframeProgressMs = Math.min(this.currentKeyframeProgressMs + dt, this.currentKeyframeInterpDurationMs);
+            this.currentKeyframeProgressMs += dt;
         else
             this.currentKeyframeProgressMs = Math.min(this.currentKeyframeProgressMs + dt, this.currentKeyframeTotalDurationMs);
     }
