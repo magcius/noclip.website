@@ -80,18 +80,14 @@ export class CameraAnimation {
 export class CameraAnimationManager {
     private animation: CameraAnimation;
     private studioCameraController: StudioCameraController;
-    private selectedKeyframeIndex: number = -1;
-    public editingKeyframePosition: boolean = false;
+
     /**
      * The translation vector components of the keyframes following and preceding the current keyframe.
      * Used for calculating tangents.
      */
     private prevTrs: vec3 = vec3.create();
-    private curTrs: vec3 = vec3.create();
-    private curPlus1Trs: vec3 = vec3.create();
-    private curPlus2Trs: vec3 = vec3.create();
-    private trsTangentInScratch: vec3 = vec3.create();
-    private trsTangentOutScratch: vec3 = vec3.create();
+    private nextTrs: vec3 = vec3.create();
+    private tangentScratchVec: vec3 = vec3.create();
 
     /**
      * Variables for animation playback.
@@ -118,29 +114,39 @@ export class CameraAnimationManager {
         viewer.setCameraController(this.studioCameraController);
     }
 
+    public loadAnimation(keyframes: Keyframe[]) {
+        this.animation = new CameraAnimation();
+        this.animation.keyframes = keyframes;
+        this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
+        for (let i = 1; i < keyframes.length; i++) {
+            this.animation.totalKeyframesAdded = i;
+            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: i }));
+        }
+    }
+
+    public serializeAnimation(): string {
+        return JSON.stringify(this.animation.keyframes);
+    }
+
     public totalKeyframesAdded(): number {
         return this.animation.totalKeyframesAdded;
     }
 
     public getKeyframeByIndex(index: number): Keyframe {
-        this.selectedKeyframeIndex = index;
         this.studioCameraController.setToPosition(this.animation.keyframes[index].endPos);
         return this.animation.keyframes[index];
     }
 
-    public deselectKeyframe(): void {
-        this.selectedKeyframeIndex = -1;
-    }
-
     public addNextKeyframe(pos: mat4) {
-        if (this.editingKeyframePosition) {
-            this.animation.keyframes[this.selectedKeyframeIndex].endPos = pos;
-            this.uiKeyframeList.dispatchEvent(new Event('keyframePositionEdited'));
-            this.editingKeyframePosition = false;
-        } else if (this.selectedKeyframeIndex > -1) {
-            // Insert new keyframe after the currently-selected keyframe.
-            this.animation.insertKeyframe(this.selectedKeyframeIndex, pos);
-            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: this.selectedKeyframeIndex }));
+        const afterIndex: number = parseInt(this.uiKeyframeList.dataset.selectedIndex as string);
+        if (this.uiKeyframeList.dataset.editingKeyframePosition) {
+            this.editKeyframePosition(pos, afterIndex);
+            return;
+        }
+        if (afterIndex > -1) {
+            // Insert new keyframe after the specified index.
+            this.animation.insertKeyframe(afterIndex, pos);
+            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: afterIndex }));
         } else {
             // No keyframe selected
             if (this.animation.keyframes.length === 0) {
@@ -154,24 +160,21 @@ export class CameraAnimationManager {
         }
     }
 
-    public removeKeyframe(toRemove: number) {
-        this.animation.removeKeyframe(toRemove);
-        if (toRemove < this.selectedKeyframeIndex) {
-            this.selectedKeyframeIndex--;
-        }
+    public editKeyframePosition(pos: mat4, index: number) {
+        if (index > 0 && index < this.animation.keyframes.length)
+            this.animation.keyframes[index].endPos = pos;
+        this.endEditKeyframePosition();
     }
 
-    public enableEditKeyframePosition(): void {
-        this.editingKeyframePosition = true;
-    }
-
-    public cancelEditKeyframePosition(): void {
-        this.editingKeyframePosition = false;
+    public endEditKeyframePosition() {
         this.uiKeyframeList.dispatchEvent(new Event('keyframePositionEdited'));
     }
 
-    public previewKeyframe() {
-        const index = this.selectedKeyframeIndex;
+    public removeKeyframe(toRemove: number) {
+        this.animation.removeKeyframe(toRemove);
+    }
+
+    public previewKeyframe(index: number) {
         let startPos: mat4;
         if (index > 0) {
             startPos = this.animation.keyframes[index - 1].endPos;
@@ -207,7 +210,7 @@ export class CameraAnimationManager {
      */
     public update(dt: number): void {
         if (this.currentKeyframeProgressMs < this.currentKeyframe.interpDuration)
-            this.currentKeyframeProgressMs = Math.min(this.currentKeyframeProgressMs + dt, this.currentKeyframeInterpDurationMs);
+            this.currentKeyframeProgressMs += dt;
         else
             this.currentKeyframeProgressMs = Math.min(this.currentKeyframeProgressMs + dt, this.currentKeyframeTotalDurationMs);
     }
@@ -280,9 +283,8 @@ export class CameraAnimationManager {
         this.uiStudioControls.dispatchEvent(new Event('animationStopped'));
     }
 
-    public moveKeyframeUp(): boolean {
+    public moveKeyframeUp(index: number): boolean {
         const kf: Keyframe[] = this.animation.keyframes;
-        const index: number = this.selectedKeyframeIndex;
         if (index > 1) {
             [kf[index - 1], kf[index]] = [kf[index], kf[index - 1]];
             return true;
@@ -290,9 +292,8 @@ export class CameraAnimationManager {
         return false;
     }
 
-    public moveKeyframeDown(): boolean {
+    public moveKeyframeDown(index: number): boolean {
         const kf: Keyframe[] = this.animation.keyframes;
-        const index: number = this.selectedKeyframeIndex;
         if (index > 0 && index < kf.length - 1) {
             [kf[index], kf[index + 1]] = [kf[index + 1], kf[index]];
             return true;
@@ -329,65 +330,65 @@ export class CameraAnimationManager {
         const keyframes = this.animation.keyframes;
 
         if (keyframes.length < 4) {
-            mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 1].endPos);
-            mat4.getTranslation(this.curTrs, keyframes[0].endPos);
-            mat4.getTranslation(this.curPlus1Trs, keyframes[1].endPos);
-            mat4.getTranslation(this.curPlus2Trs, keyframes[keyframes.length - 1].endPos);
+            mat4.getTranslation(this.prevTrs, keyframes[0].endPos);
+            mat4.getTranslation(this.nextTrs, keyframes[1].endPos);
 
-            vec3.sub(this.trsTangentInScratch, this.curPlus1Trs, this.prevTrs);
-            vec3.scale(this.trsTangentInScratch, this.trsTangentInScratch, 0.5);
-            vec3.sub(this.trsTangentOutScratch, this.curPlus2Trs, this.curTrs);
-            vec3.scale(this.trsTangentOutScratch, this.trsTangentOutScratch, 0.5);
+            vec3.sub(this.tangentScratchVec, this.nextTrs, this.prevTrs);
+            vec3.scale(this.tangentScratchVec, this.tangentScratchVec, 0.5);
+            vec3.copy(keyframes[0].trsTangentIn, this.tangentScratchVec);
+            vec3.copy(keyframes[0].trsTangentOut, this.tangentScratchVec);
 
-            vec3.copy(keyframes[0].trsTangentIn, this.trsTangentInScratch);
-            vec3.copy(keyframes[0].trsTangentOut, this.trsTangentOutScratch);
-            vec3.copy(keyframes[1].trsTangentIn, this.trsTangentOutScratch);
             if (keyframes.length === 2) {
-                vec3.copy(keyframes[1].trsTangentOut, this.trsTangentInScratch);
+                vec3.sub(this.tangentScratchVec, this.prevTrs, this.nextTrs);
+                vec3.scale(this.tangentScratchVec, this.tangentScratchVec, 0.5);
+                vec3.copy(keyframes[1].trsTangentIn, this.tangentScratchVec);
+                vec3.copy(keyframes[1].trsTangentOut, this.tangentScratchVec);
                 return;
             }
-            vec3.copy(this.prevTrs, this.curPlus1Trs);
-            vec3.copy(this.curPlus1Trs, this.curTrs);
-            vec3.copy(this.curTrs, this.curPlus2Trs);
-            vec3.copy(this.curPlus2Trs, this.prevTrs);
+            mat4.getTranslation(this.nextTrs, keyframes[2].endPos);
 
-            vec3.sub(this.trsTangentInScratch, this.curPlus1Trs, this.prevTrs);
-            vec3.scale(this.trsTangentInScratch, this.trsTangentInScratch, 0.5);
-            vec3.sub(this.trsTangentOutScratch, this.curPlus2Trs, this.curTrs);
-            vec3.scale(this.trsTangentOutScratch, this.trsTangentOutScratch, 0.5);
+            vec3.sub(this.tangentScratchVec, this.nextTrs, this.prevTrs);
+            vec3.scale(this.tangentScratchVec, this.tangentScratchVec, 0.5);
+            vec3.copy(keyframes[1].trsTangentIn, this.tangentScratchVec);
+            vec3.copy(keyframes[1].trsTangentOut, this.tangentScratchVec);
 
-            vec3.copy(keyframes[1].trsTangentOut, this.trsTangentInScratch);
-            vec3.copy(keyframes[2].trsTangentIn, this.trsTangentInScratch);
-            vec3.copy(keyframes[2].trsTangentOut, this.trsTangentOutScratch);
+            mat4.getTranslation(this.prevTrs, keyframes[1].endPos);
+            vec3.sub(this.tangentScratchVec, this.nextTrs, this.prevTrs);
+            vec3.scale(this.tangentScratchVec, this.tangentScratchVec, 0.5);
+
+            vec3.copy(keyframes[2].trsTangentIn, this.tangentScratchVec);
+            vec3.copy(keyframes[2].trsTangentOut, this.tangentScratchVec);
             return;
         }
 
         mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 1].endPos);
-        mat4.getTranslation(this.curTrs, keyframes[0].endPos);
-        mat4.getTranslation(this.curPlus1Trs, keyframes[1].endPos);
-        mat4.getTranslation(this.curPlus2Trs, keyframes[2].endPos);
+        mat4.getTranslation(this.nextTrs, keyframes[1].endPos);
 
-        vec3.sub(this.trsTangentInScratch, this.curPlus1Trs, this.prevTrs);
-        vec3.scale(this.trsTangentInScratch, this.trsTangentInScratch, 0.5);
-        vec3.sub(this.trsTangentOutScratch, this.curPlus2Trs, this.curTrs);
-        vec3.scale(this.trsTangentOutScratch, this.trsTangentOutScratch, 0.5);
+        vec3.sub(this.tangentScratchVec, this.nextTrs, this.prevTrs);
+        vec3.scale(this.tangentScratchVec, this.tangentScratchVec, 0.5);
 
-        vec3.copy(keyframes[0].trsTangentIn, this.trsTangentInScratch);
-        vec3.copy(keyframes[0].trsTangentOut, this.trsTangentOutScratch);
+        vec3.copy(keyframes[0].trsTangentOut, this.tangentScratchVec);
+        vec3.copy(keyframes[1].trsTangentIn, this.tangentScratchVec);
 
-        for (let i = 1; i < keyframes.length; i++) {
-            vec3.copy(this.prevTrs, this.curTrs);
-            vec3.copy(this.curTrs, this.curPlus1Trs);
-            vec3.copy(this.curPlus1Trs, this.curPlus2Trs);
-            mat4.getTranslation(this.curPlus2Trs, keyframes[(i + 2) % keyframes.length].endPos);
+        for (let i = 1; i < keyframes.length - 1; i++) {
+            mat4.getTranslation(this.prevTrs, keyframes[i - 1].endPos);
+            mat4.getTranslation(this.nextTrs, keyframes[i + 1].endPos);
 
-            vec3.sub(this.trsTangentInScratch, this.curPlus1Trs, this.prevTrs);
-            vec3.scale(this.trsTangentInScratch, this.trsTangentInScratch, 0.5);
-            vec3.sub(this.trsTangentOutScratch, this.curPlus2Trs, this.curTrs);
-            vec3.scale(this.trsTangentOutScratch, this.trsTangentOutScratch, 0.5);
+            vec3.sub(this.tangentScratchVec, this.nextTrs, this.prevTrs);
+            vec3.scale(this.tangentScratchVec, this.tangentScratchVec, 0.5);
 
-            vec3.copy(keyframes[i].trsTangentIn, this.trsTangentInScratch);
-            vec3.copy(keyframes[i].trsTangentOut, this.trsTangentOutScratch);
+            vec3.copy(keyframes[i].trsTangentOut, this.tangentScratchVec);
+            vec3.copy(keyframes[i + 1].trsTangentIn, this.tangentScratchVec);
+        }
+
+        if (this.loopAnimation) {
+            mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 1].endPos);
+            mat4.getTranslation(this.nextTrs, keyframes[0].endPos);
+
+            vec3.sub(this.tangentScratchVec, this.nextTrs, this.prevTrs);
+            vec3.scale(this.tangentScratchVec, this.tangentScratchVec, 0.5);
+            vec3.copy(keyframes[keyframes.length - 1].trsTangentOut, this.tangentScratchVec);
+            vec3.copy(keyframes[0].trsTangentIn, this.tangentScratchVec);
         }
     }
 }

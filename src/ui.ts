@@ -1740,12 +1740,18 @@ class StudioPanel extends FloatingPanel {
     private studioPanelContents: HTMLElement;
     private studioHelpText: HTMLElement;
 
+    private studioDataBtn: HTMLInputElement;
+    private studioSaveLoadControls: HTMLElement;
+    private loadAnimationBtn: HTMLInputElement;
+    private saveAnimationBtn: HTMLInputElement;
+
     private studioControlsContainer: HTMLElement;
 
     private keyframeList: HTMLElement;
     private selectedKeyframeListItem?: HTMLElement;
 
     private editKeyframePositionBtn: HTMLElement;
+    private editingKeyframePosition: boolean = false;
 
     private keyframeControls: HTMLElement;
     private selectedKeyframe: Keyframe;
@@ -1911,6 +1917,15 @@ class StudioPanel extends FloatingPanel {
         </style>
         `);
         this.studioPanelContents.insertAdjacentHTML('afterbegin', `
+        <div style="width: 40%;margin: auto;">
+            <button type="button" id="studioDataBtn" class="SettingsButton">📁</button>
+            <div id="studioSaveLoadControls" hidden>
+                <div style="display: grid;grid-template-columns: 1fr 1fr;gap: 1rem;">
+                    <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
+                    <button type="button" id="saveAnimationBtn" class="SettingsButton">Save</button>
+                </div>
+            </div>
+        </div>
         <div id="studioHelpText"></div>
         <div id="studioControlsContainer" hidden>
             <div style="display: grid; grid-template-columns: 1fr 1fr;">
@@ -1971,8 +1986,18 @@ class StudioPanel extends FloatingPanel {
         </div>`);
         this.studioHelpText = this.contents.querySelector('#studioHelpText') as HTMLElement;
         this.studioHelpText.dataset.startPosHelpText = 'Move the camera to the desired starting position and press Enter.';
-        this.studioHelpText.dataset.editPosHelpText = 'Move the camera to the desired position and press Enter.';
+        this.studioHelpText.dataset.editPosHelpText = 'Move the camera to the desired position and press Enter. Press Escape to cancel.';
+        this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
         this.studioHelpText.innerText = this.studioHelpText.dataset.startPosHelpText;
+
+        this.studioDataBtn = this.contents.querySelector('#studioDataBtn') as HTMLInputElement;
+        this.studioDataBtn.dataset.helpText = 'Save the current animation, or load a previously-saved animation.';
+        this.studioSaveLoadControls = this.contents.querySelector('#studioSaveLoadControls') as HTMLElement;
+        this.loadAnimationBtn = this.contents.querySelector('#loadAnimationBtn') as HTMLInputElement;
+        this.loadAnimationBtn.dataset.helpText = 'Load the previously-saved animation for this map. Overwrites the current keyframes!';
+        this.saveAnimationBtn = this.contents.querySelector('#saveAnimationBtn') as HTMLInputElement;
+        this.saveAnimationBtn.dataset.helpText = 'Save the current animation for this map to your browser\'s local storage.';
+
         this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
         this.keyframeList = this.contents.querySelector('#keyframeList') as HTMLElement;
 
@@ -2027,6 +2052,22 @@ class StudioPanel extends FloatingPanel {
 
         this.animationManager = new CameraAnimationManager(this.keyframeList, this.studioControlsContainer);
 
+        this.studioDataBtn.onclick = () => {
+            this.studioSaveLoadControls.toggleAttribute('hidden');
+        }
+        this.loadAnimationBtn.onclick = () => {
+            const jsonAnim = window.localStorage.getItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId());
+            if (jsonAnim) {
+                this.keyframeList.innerText = '';
+                const animation: Keyframe[] = JSON.parse(jsonAnim);
+                this.animationManager.loadAnimation(animation);
+            }
+        }
+        this.saveAnimationBtn.onclick = () => {
+            const jsonAnim: string = this.animationManager.serializeAnimation();
+            window.localStorage.setItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId(), jsonAnim);
+        }
+
         this.keyframeList.dataset.helpText = 'Click on a keyframe to jump to its end position.';
         // Event fired when start position for an animation is first set.
         this.keyframeList.addEventListener('startPositionSet', () => {
@@ -2062,20 +2103,25 @@ class StudioPanel extends FloatingPanel {
         this.keyframeList.addEventListener('newKeyframe', e => this.handleNewKeyframeEvent(e as CustomEvent));
 
         this.editKeyframePositionBtn.onclick = () => {
-            this.disableKeyframeControls();
-            if (this.animationManager.editingKeyframePosition)
-                this.animationManager.cancelEditKeyframePosition();
-            else
-                this.animationManager.enableEditKeyframePosition();
-            this.studioHelpText.innerText = this.studioHelpText.dataset.editPosHelpText as string;
-            setElementHighlighted(this.editKeyframePositionBtn, true);
+            if (this.selectedKeyframeListItem) {
+                const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
+                this.disableKeyframeControls();
+                this.editingKeyframePosition = true;
+                this.keyframeList.dataset.editingKeyframePosition = 'true';
+                this.studioHelpText.innerText = this.studioHelpText.dataset.editPosHelpText as string;
+                setElementHighlighted(this.editKeyframePositionBtn, true);
+            }
         }
 
         // Event fired when a keyframe's position is edited.
         this.keyframeList.addEventListener('keyframePositionEdited', () => {
-            this.resetHelpText();
-            this.enableKeyframeControls();
-            setElementHighlighted(this.editKeyframePositionBtn, false);
+            if (this.editingKeyframePosition) {
+                this.editingKeyframePosition = false;
+                this.resetHelpText();
+                this.enableKeyframeControls();
+                this.keyframeList.removeAttribute('data-editing-keyframe-position');
+                setElementHighlighted(this.editKeyframePositionBtn, false);
+            }
         });
 
         this.firstKeyframeBtn.onclick = () => this.navigateKeyframeList(-this.keyframeList.children.length);
@@ -2153,28 +2199,33 @@ class StudioPanel extends FloatingPanel {
         }
 
         this.moveKeyframeUpBtn.onclick = () => {
-            if (this.animationManager.moveKeyframeUp() && this.selectedKeyframeListItem) {
+            if (this.selectedKeyframeListItem) {
                 const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
-                const listItems = this.keyframeList.children;
-                this.keyframeList.insertBefore(listItems[index], listItems[index - 1]);
-                this.updateKeyframeIndices(index - 1);
-                this.selectedKeyframeListItem.click();
+                if (this.animationManager.moveKeyframeUp(index)) {
+                    const listItems = this.keyframeList.children;
+                    this.keyframeList.insertBefore(listItems[index], listItems[index - 1]);
+                    this.updateKeyframeIndices(index - 1);
+                    this.selectedKeyframeListItem.click();
+                }
             }
         }
 
         this.moveKeyframeDownBtn.onclick = () => {
-            if (this.animationManager.moveKeyframeDown() && this.selectedKeyframeListItem) {
+            if (this.selectedKeyframeListItem) {
                 const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
-                const listItems = this.keyframeList.children;
-                this.keyframeList.insertBefore(listItems[index + 1], listItems[index]);
-                this.updateKeyframeIndices(index);
-                this.selectedKeyframeListItem.click();
+                if (this.animationManager.moveKeyframeDown(index)) {
+                    const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
+                    const listItems = this.keyframeList.children;
+                    this.keyframeList.insertBefore(listItems[index + 1], listItems[index]);
+                    this.updateKeyframeIndices(index);
+                    this.selectedKeyframeListItem.click();
+                }
             }
         }
 
         this.previewKeyframeBtn.dataset.helpText = 'Preview the animation between the previous keyframe and this one.'
         this.previewKeyframeBtn.onclick = () => {
-            if (this.keyframeList.children.length > 1) {
+            if (this.keyframeList.children.length > 1 && this.selectedKeyframeListItem) {
                 this.disableKeyframeControls();
                 this.playAnimationBtn.setAttribute('hidden', '');
                 this.previewKeyframeBtn.setAttribute('hidden', '');
@@ -2183,7 +2234,7 @@ class StudioPanel extends FloatingPanel {
                 this.stopPreviewKeyframeBtn.classList.remove('disabled');
                 this.stopAnimationBtn.removeAttribute('hidden');
                 this.stopAnimationBtn.removeAttribute('disabled');
-                this.animationManager.previewKeyframe();
+                this.animationManager.previewKeyframe(parseInt(this.selectedKeyframeListItem.dataset.index as string));
             }
         }
 
@@ -2285,11 +2336,13 @@ class StudioPanel extends FloatingPanel {
     }
 
     private displayHelpText(elem: HTMLElement) {
-        this.studioHelpText.innerText = elem.dataset.helpText ? elem.dataset.helpText : this.studioHelpText.dataset.default as string;
+        if (!this.editingKeyframePosition)
+            this.studioHelpText.innerText = elem.dataset.helpText ? elem.dataset.helpText : this.studioHelpText.dataset.default as string;
     }
 
     private resetHelpText() {
-        this.studioHelpText.innerText = this.studioHelpText.dataset.default as string;
+        if (!this.editingKeyframePosition)
+            this.studioHelpText.innerText = this.studioHelpText.dataset.default as string;
     }
 
     private handleNewKeyframeEvent(e: CustomEvent) {
@@ -2324,9 +2377,9 @@ class StudioPanel extends FloatingPanel {
             }
 
             if (this.selectedKeyframeListItem === keyframeListItem) {
+                this.keyframeList.dataset.selectedIndex = '-1';
                 this.selectedKeyframeListItem = undefined;
                 this.keyframeControls.setAttribute('hidden', '');
-                this.animationManager.deselectKeyframe();
             }
             const toRemove = parseInt(keyframeListItem.dataset.index as string);
             keyframeListItem.remove();
@@ -2354,6 +2407,7 @@ class StudioPanel extends FloatingPanel {
 
         const liElem = e.target as HTMLElement;
         const index: number = parseInt(liElem.dataset.index as string);
+        this.keyframeList.dataset.selectedIndex = index.toString();
         this.selectedKeyframe = this.animationManager.getKeyframeByIndex(index);
         if (this.selectedKeyframeListItem) {
             setElementHighlighted(this.selectedKeyframeListItem, false);
