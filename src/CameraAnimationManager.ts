@@ -113,6 +113,20 @@ export class CameraAnimationManager {
         viewer.setCameraController(this.studioCameraController);
     }
 
+    public loadAnimation(keyframes: Keyframe[]) {
+        this.animation = new CameraAnimation();
+        this.animation.keyframes = keyframes;
+        this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
+        for (let i = 1; i < keyframes.length; i++) {
+            this.animation.totalKeyframesAdded = i;
+            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: i }));
+        }
+    }
+
+    public serializeAnimation(): string {
+        return JSON.stringify(this.animation.keyframes);
+    }
+
     public totalKeyframesAdded(): number {
         return this.animation.totalKeyframesAdded;
     }

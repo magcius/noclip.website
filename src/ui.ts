@@ -1717,6 +1717,11 @@ class StudioPanel extends FloatingPanel {
     private studioPanelContents: HTMLElement;
     private studioHelpText: HTMLElement;
 
+    private studioDataBtn: HTMLInputElement;
+    private studioSaveLoadControls: HTMLElement;
+    private loadAnimationBtn: HTMLInputElement;
+    private saveAnimationBtn: HTMLInputElement;
+
     private studioControlsContainer: HTMLElement;
 
     private keyframeList: HTMLElement;
@@ -1889,6 +1894,15 @@ class StudioPanel extends FloatingPanel {
         </style>
         `);
         this.studioPanelContents.insertAdjacentHTML('afterbegin', `
+        <div style="width: 40%;margin: auto;">
+            <button type="button" id="studioDataBtn" class="SettingsButton">📁</button>
+            <div id="studioSaveLoadControls" hidden>
+                <div style="display: grid;grid-template-columns: 1fr 1fr;gap: 1rem;">
+                    <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
+                    <button type="button" id="saveAnimationBtn" class="SettingsButton">Save</button>
+                </div>
+            </div>
+        </div>
         <div id="studioHelpText"></div>
         <div id="studioControlsContainer" hidden>
             <div style="display: grid; grid-template-columns: 1fr 1fr;">
@@ -1950,7 +1964,17 @@ class StudioPanel extends FloatingPanel {
         this.studioHelpText = this.contents.querySelector('#studioHelpText') as HTMLElement;
         this.studioHelpText.dataset.startPosHelpText = 'Move the camera to the desired starting position and press Enter.';
         this.studioHelpText.dataset.editPosHelpText = 'Move the camera to the desired position and press Enter. Press Escape to cancel.';
+        this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
         this.studioHelpText.innerText = this.studioHelpText.dataset.startPosHelpText;
+
+        this.studioDataBtn = this.contents.querySelector('#studioDataBtn') as HTMLInputElement;
+        this.studioDataBtn.dataset.helpText = 'Save the current animation, or load a previously-saved animation.';
+        this.studioSaveLoadControls = this.contents.querySelector('#studioSaveLoadControls') as HTMLElement;
+        this.loadAnimationBtn = this.contents.querySelector('#loadAnimationBtn') as HTMLInputElement;
+        this.loadAnimationBtn.dataset.helpText = 'Load the previously-saved animation for this map. Overwrites the current keyframes!';
+        this.saveAnimationBtn = this.contents.querySelector('#saveAnimationBtn') as HTMLInputElement;
+        this.saveAnimationBtn.dataset.helpText = 'Save the current animation for this map to your browser\'s local storage.';
+
         this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
         this.keyframeList = this.contents.querySelector('#keyframeList') as HTMLElement;
 
@@ -2004,6 +2028,22 @@ class StudioPanel extends FloatingPanel {
         this.stopAnimationBtn = this.contents.querySelector('#stopAnimationBtn') as HTMLInputElement;
 
         this.animationManager = new CameraAnimationManager(this.keyframeList, this.studioControlsContainer);
+
+        this.studioDataBtn.onclick = () => {
+            this.studioSaveLoadControls.toggleAttribute('hidden');
+        }
+        this.loadAnimationBtn.onclick = () => {
+            const jsonAnim = window.localStorage.getItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId());
+            if (jsonAnim) {
+                this.keyframeList.innerText = '';
+                const animation: Keyframe[] = JSON.parse(jsonAnim);
+                this.animationManager.loadAnimation(animation);
+            }
+        }
+        this.saveAnimationBtn.onclick = () => {
+            const jsonAnim: string = this.animationManager.serializeAnimation();
+            window.localStorage.setItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId(), jsonAnim);
+        }
 
         this.keyframeList.dataset.helpText = 'Click on a keyframe to jump to its end position.';
         // Event fired when start position for an animation is first set.
