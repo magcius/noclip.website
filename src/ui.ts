@@ -1157,12 +1157,32 @@ export interface TextureListHolder {
     onnewtextures: (() => void) | null;
 }
 
+class FrameDebouncer {
+    private queued: boolean = false;
+    public callback: (() => void) | null = null;
+
+    private onframe = (): void => {
+        if (this.callback !== null)
+            this.callback();
+        this.queued = false;
+    }
+
+    public trigger(): void {
+        if (this.queued)
+            return;
+        if (this.callback !== null)
+            window.requestAnimationFrame(this.onframe);
+        this.queued = true;
+    }
+}
+
 export class TextureViewer extends Panel {
     private scrollList: SingleSelect;
     private surfaceView: HTMLElement;
     private fullSurfaceView: HTMLElement;
     private properties: HTMLElement;
     private textureList: Viewer.Texture[] = [];
+    private newTexturesDebouncer = new FrameDebouncer();
 
     constructor() {
         super();
@@ -1300,10 +1320,13 @@ export class TextureViewer extends Panel {
     }
 
     public setTextureHolder(textureHolder: TextureListHolder): void {
-        this.setTextureList(textureHolder.viewerTextures);
-        textureHolder.onnewtextures = () => {
+        this.newTexturesDebouncer.callback = () => {
             this.setTextureList(textureHolder.viewerTextures);
         };
+        textureHolder.onnewtextures = () => {
+            this.newTexturesDebouncer.trigger();
+        };
+        this.newTexturesDebouncer.trigger();
     }
 }
 
@@ -1833,7 +1856,7 @@ class StudioPanel extends FloatingPanel {
         this.elem.style.display = 'none';
     }
 
-    public s() : void {
+    public v(): void {
         this.elem.style.display = '';
     }
 

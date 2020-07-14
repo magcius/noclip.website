@@ -443,7 +443,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         for (let j = 0; j < qwd; j++) {
                             vertexRunData![j * WORKING_VERTEX_STRIDE + 4] = view.getFloat32(packetsIdx + 0x00, true);
                             vertexRunData![j * WORKING_VERTEX_STRIDE + 5] = view.getFloat32(packetsIdx + 0x04, true);
-                            vertexRunData![j * WORKING_VERTEX_STRIDE + 6] = view.getFloat32(packetsIdx + 0x04, true);
+                            vertexRunData![j * WORKING_VERTEX_STRIDE + 6] = view.getFloat32(packetsIdx + 0x08, true);
                             packetsIdx += 0x0C;
                         }
                     }
@@ -793,34 +793,47 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
     const q = quat.create();
     const activeStageAreas: number[] = [];
     let setupSpawnTableIdx = 0x14;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 5; i++, setupSpawnTableIdx += 0x04) {
         let setupSpawnsIdx = view.getUint32(setupSpawnTableIdx, true);
 
-        if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ') {
-            setupSpawnTableIdx += 0x04;
+        if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ')
             continue;
-        }
 
         activeStageAreas.push(i);
         let j = 0;
-        while (true) {
-            const objectId = view.getUint16(setupSpawnsIdx + 0x00, true);
-            const locPosType = view.getUint8(setupSpawnsIdx + 0x02);
-            const dispOffAreaNo = view.getInt8(setupSpawnsIdx + 0x0A);
-
-            let shouldSkip = false;
+        for (; ; setupSpawnsIdx += 0x40) {
+            // Flag names come from Katamari Damacy REROLL, on "AttachableProp"
+            const u16NameIdx = view.getUint16(setupSpawnsIdx + 0x00, true);
+            const u8LocPosType = view.getUint8(setupSpawnsIdx + 0x02);
+            const s8RandomLocGroupNo = view.getInt8(setupSpawnsIdx + 0x03);
+            const s8HitAreaNo = view.getInt16(setupSpawnsIdx + 0x04, true);
+            const s8HitOnAreaNo = view.getInt8(setupSpawnsIdx + 0x06);
+            const u8LinkActNo = view.getUint8(setupSpawnsIdx + 0x07);
+            const u8ExActTypeNo = view.getUint8(setupSpawnsIdx + 0x08);
+            const u8IdNameNo = view.getUint8(setupSpawnsIdx + 0x09);
+            const s8DispOffAreaNo = view.getInt8(setupSpawnsIdx + 0x0A);
+            const u8VsDropFlag = view.getUint8(setupSpawnsIdx + 0x0B);
+            const s8CommentNo = view.getInt8(setupSpawnsIdx + 0x0C);
+            const s8CommentGroupNo = view.getInt8(setupSpawnsIdx + 0x0D);
+            const s8TwinsNo = view.getInt8(setupSpawnsIdx + 0x0E);
+            const u8ShakeOffFlag = view.getUint8(setupSpawnsIdx + 0x0F);
+            // not all of this is correct, as +0x10 is pos x.
+            const s8SpecialActNo = view.getInt16(setupSpawnsIdx + 0x10);
+            const u8Category = view.getUint8(setupSpawnsIdx + 0x11);
+            const u8UnitType = view.getUint8(setupSpawnsIdx + 0x12);
+            const u8HitLod = view.getUint8(setupSpawnsIdx + 0x13);
 
             // We're done.
-            if (objectId === 0xFFFF)
+            if (u16NameIdx === 0xFFFF)
                 break;
 
             // This flag means that the object spawned is random. The table
             // of which objects get spawned for which group is stored in the ELF.
-            if (locPosType !== 0)
-                shouldSkip = true;
+            if (u8LocPosType !== 0)
+                continue;
 
             // Skip "weird" objects (missing models, descriptions)
-            switch (objectId) {
+            switch (u16NameIdx) {
             case 0x0089:
             case 0x0122:
             case 0x017D:
@@ -831,18 +844,12 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
             case 0x059E:
             case 0x05A8:
             case 0x05A9:
-                shouldSkip = true;
-                break;
+                continue;
             }
 
-            const modelIndex = findOrParseObject(objectId);
+            const modelIndex = findOrParseObject(u16NameIdx);
             if (modelIndex === -1) {
-                console.log(`Missing object ${hexzero(objectId, 4)}; layer ${i} object index ${j}`);
-                shouldSkip = true;
-            }
-
-            if (shouldSkip) {
-                setupSpawnsIdx += 0x40;
+                console.log(`Missing object ${hexzero(u16NameIdx, 4)}; layer ${i} object index ${j}`);
                 continue;
             }
 
@@ -859,20 +866,16 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
             const scaleY = view.getFloat32(setupSpawnsIdx + 0x34, true);
             const scaleZ = view.getFloat32(setupSpawnsIdx + 0x38, true);
             assert(view.getUint32(setupSpawnsIdx + 0x3C, true) === 0);
-            const sinHalfAngle = Math.sin(angle / 2);
 
             const modelMatrix = mat4.create();
-            quat.set(q, rotationX * sinHalfAngle, rotationY * sinHalfAngle, rotationZ * sinHalfAngle, Math.cos(angle / 2));
+            quat.setAxisAngle(q, [rotationX, rotationY, rotationZ], angle);
             mat4.fromRotationTranslation(modelMatrix, q, [translationX, translationY, translationZ]);
 
             const dispOnAreaNo = i;
-            const objectSpawn: MissionSetupObjectSpawn = { objectId, modelIndex, dispOnAreaNo, dispOffAreaNo, modelMatrix };
+            const objectSpawn: MissionSetupObjectSpawn = { objectId: u16NameIdx, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix };
             objectSpawns.push(objectSpawn);
-            setupSpawnsIdx += 0x40;
             j++;
         }
-
-        setupSpawnTableIdx += 0x04;
     }
 
     return { objectModels, objectSpawns, activeStageAreas };

@@ -320,6 +320,14 @@ function extractExtra(binaries: Binary[]) {
     extractSymbol(datas, d_a_majuu_flag, `d_a_majuu_flag.o`, `rel_pos_idx_tbl$4099`);
     extractSymbol(datas, d_a_majuu_flag, `d_a_majuu_flag.o`, `rel_pos_idx_tbl$4282`);
 
+    // main.dol : d_drawlist.o
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_matDL$5108`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_bonboriPos`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_bonboriDL`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_backRevZMat`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_frontZMat`);
+    extractSymbol(datas, framework, `d_drawlist.o`, `l_frontNoZSubMat`);
+
     const crg1 = {
         SymbolData: datas,
     };

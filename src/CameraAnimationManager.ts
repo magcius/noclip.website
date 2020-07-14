@@ -80,6 +80,7 @@ export class CameraAnimation {
 export class CameraAnimationManager {
     private animation: CameraAnimation;
     private studioCameraController: StudioCameraController;
+
     /**
      * The translation vector components of the keyframes following and preceding the current keyframe.
      * Used for calculating tangents.
