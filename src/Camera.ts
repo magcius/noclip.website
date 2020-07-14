@@ -526,8 +526,8 @@ export class StudioCameraController extends FPSCameraController {
                 this.animationManager.addNextKeyframe(mat4.clone(this.camera.worldMatrix));
                 this.isOnKeyframe = true;
             }
-            if (inputManager.isKeyDownEventTriggered('Escape') && this.animationManager.editingKeyframePosition) {
-                this.animationManager.cancelEditKeyframePosition();
+            if (inputManager.isKeyDownEventTriggered('Escape')) {
+                this.animationManager.endEditKeyframePosition();
             }
             result = super.update(inputManager, dt);
             if (this.isOnKeyframe && result !== CameraUpdateResult.Unchanged) {

@@ -80,8 +80,6 @@ export class CameraAnimation {
 export class CameraAnimationManager {
     private animation: CameraAnimation;
     private studioCameraController: StudioCameraController;
-    private selectedKeyframeIndex: number = -1;
-    public editingKeyframePosition: boolean = false;
     /**
      * The translation vector components of the keyframes following and preceding the current keyframe.
      * Used for calculating tangents.
@@ -120,24 +118,20 @@ export class CameraAnimationManager {
     }
 
     public getKeyframeByIndex(index: number): Keyframe {
-        this.selectedKeyframeIndex = index;
         this.studioCameraController.setToPosition(this.animation.keyframes[index].endPos);
         return this.animation.keyframes[index];
     }
 
-    public deselectKeyframe(): void {
-        this.selectedKeyframeIndex = -1;
-    }
-
     public addNextKeyframe(pos: mat4) {
-        if (this.editingKeyframePosition) {
-            this.animation.keyframes[this.selectedKeyframeIndex].endPos = pos;
-            this.uiKeyframeList.dispatchEvent(new Event('keyframePositionEdited'));
-            this.editingKeyframePosition = false;
-        } else if (this.selectedKeyframeIndex > -1) {
-            // Insert new keyframe after the currently-selected keyframe.
-            this.animation.insertKeyframe(this.selectedKeyframeIndex, pos);
-            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: this.selectedKeyframeIndex }));
+        const afterIndex: number = parseInt(this.uiKeyframeList.dataset.selectedIndex as string);
+        if (this.uiKeyframeList.dataset.editingKeyframePosition) {
+            this.editKeyframePosition(pos, afterIndex);
+            return;
+        }
+        if (afterIndex > -1) {
+            // Insert new keyframe after the specified index.
+            this.animation.insertKeyframe(afterIndex, pos);
+            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: afterIndex }));
         } else {
             // No keyframe selected
             if (this.animation.keyframes.length === 0) {
@@ -151,24 +145,21 @@ export class CameraAnimationManager {
         }
     }
 
-    public removeKeyframe(toRemove: number) {
-        this.animation.removeKeyframe(toRemove);
-        if (toRemove < this.selectedKeyframeIndex) {
-            this.selectedKeyframeIndex--;
-        }
+    public editKeyframePosition(pos: mat4, index: number) {
+        if (index > 0 && index < this.animation.keyframes.length)
+            this.animation.keyframes[index].endPos = pos;
+        this.endEditKeyframePosition();
     }
 
-    public enableEditKeyframePosition(): void {
-        this.editingKeyframePosition = true;
-    }
-
-    public cancelEditKeyframePosition(): void {
-        this.editingKeyframePosition = false;
+    public endEditKeyframePosition() {
         this.uiKeyframeList.dispatchEvent(new Event('keyframePositionEdited'));
     }
 
-    public previewKeyframe() {
-        const index = this.selectedKeyframeIndex;
+    public removeKeyframe(toRemove: number) {
+        this.animation.removeKeyframe(toRemove);
+    }
+
+    public previewKeyframe(index: number) {
         let startPos: mat4;
         if (index > 0) {
             startPos = this.animation.keyframes[index - 1].endPos;
@@ -277,9 +268,8 @@ export class CameraAnimationManager {
         this.uiStudioControls.dispatchEvent(new Event('animationStopped'));
     }
 
-    public moveKeyframeUp(): boolean {
+    public moveKeyframeUp(index: number): boolean {
         const kf: Keyframe[] = this.animation.keyframes;
-        const index: number = this.selectedKeyframeIndex;
         if (index > 1) {
             [kf[index - 1], kf[index]] = [kf[index], kf[index - 1]];
             return true;
@@ -287,9 +277,8 @@ export class CameraAnimationManager {
         return false;
     }
 
-    public moveKeyframeDown(): boolean {
+    public moveKeyframeDown(index: number): boolean {
         const kf: Keyframe[] = this.animation.keyframes;
-        const index: number = this.selectedKeyframeIndex;
         if (index > 0 && index < kf.length - 1) {
             [kf[index], kf[index + 1]] = [kf[index + 1], kf[index]];
             return true;
