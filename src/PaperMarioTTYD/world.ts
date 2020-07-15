@@ -7,7 +7,7 @@ import * as GX_Material from '../gx/gx_material';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists } from "../util";
-import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas, compileLoadedVertexLayout, LoadedVertexPacket } from '../gx/gx_displaylist';
+import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas, compileLoadedVertexLayout, LoadedVertexDraw } from '../gx/gx_displaylist';
 import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import AnimationController from '../AnimationController';
@@ -995,13 +995,13 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     const totalIndexCount = indexBuffer.length;
                     const indexData = indexBuffer.buffer;
                     const totalVertexCount = vertexCount;
-                    const packet: LoadedVertexPacket = {
+                    const packet: LoadedVertexDraw = {
                         indexOffset: 0, indexCount: totalIndexCount,
                         posNrmMatrixTable: Array(10).fill(0xFFFF),
                         texMatrixTable: Array(10).fill(0xFFFF),
                     };
                     const vertexBuffers: ArrayBuffer[] = [vertexData];
-                    loadedDatas.push({ indexData, packets: [packet], totalIndexCount, totalVertexCount, vertexBuffers, vertexId, drawCalls: null, dlView: null });
+                    loadedDatas.push({ indexData, draws: [packet], totalIndexCount, totalVertexCount, vertexBuffers, vertexId, drawCalls: null, dlView: null });
                     displayListTableIdx += 0x04;
                 }
 

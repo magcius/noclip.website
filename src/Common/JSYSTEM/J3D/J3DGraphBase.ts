@@ -22,7 +22,7 @@ import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
 import { NormalizedViewportCoords } from '../../../gfx/helpers/RenderTargetHelpers';
 import { translateSampler } from '../JUTTexture';
 import { calcJointMatrixFromTransform } from './J3DGraphAnimator';
-import { LoadedVertexPacket } from '../../../gx/gx_displaylist';
+import { LoadedVertexDraw } from '../../../gx/gx_displaylist';
 
 export class ShapeInstanceState {
     // One matrix for each joint, which transform into world space.
@@ -48,7 +48,7 @@ export class ShapeInstanceState {
 
 export class ShapeData {
     public shapeHelper: GXShapeHelperGfx;
-    public packets: LoadedVertexPacket[] = [];
+    public draws: LoadedVertexDraw[] = [];
     public sortKeyBias: number = 0;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public shape: Shape, coalescedBuffers: GfxCoalescedBuffersCombo[]) {
@@ -70,11 +70,11 @@ export class ShapeData {
         for (let i = 0; i < this.shape.mtxGroups.length; i++) {
             const mtxGroup = this.shape.mtxGroups[i];
 
-            assert(mtxGroup.loadedVertexData.packets.length === 1);
-            const packet = mtxGroup.loadedVertexData.packets[0];
+            assert(mtxGroup.loadedVertexData.draws.length === 1);
+            const packet = mtxGroup.loadedVertexData.draws[0];
             packet.indexOffset = totalIndexCount;
             totalIndexCount += packet.indexCount;
-            this.packets.push(packet);
+            this.draws.push(packet);
         }
     }
 
@@ -218,7 +218,7 @@ export class ShapeInstance {
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
-            this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.packets[i]);
+            this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[i]);
             this.shapeData.shapeHelper.fillPacketParams(packetParams, renderInst);
 
             if (multi)

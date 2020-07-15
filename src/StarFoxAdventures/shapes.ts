@@ -4,7 +4,7 @@ import { nArray } from '../util';
 import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxDevice, GfxSampler, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
 import { GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, VertexAttributeInput, LoadedVertexPacket, compilePartialVtxLoader } from '../gx/gx_displaylist';
+import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, VertexAttributeInput, LoadedVertexDraw, compilePartialVtxLoader } from '../gx/gx_displaylist';
 import { PacketParams, MaterialParams, GXMaterialHelperGfx, createInputLayout, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from '../gx/gx_render';
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -87,7 +87,7 @@ class MyShapeHelper {
         device.submitPass(hostAccessPass);
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexDraw | null = null): void {
         renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         if (packet !== null)

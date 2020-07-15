@@ -124,7 +124,22 @@ interface VertexLayout extends LoadedVertexLayout, VtxLoaderDesc {
     vatLayouts: (VatLayout | undefined)[];
 }
 
-export interface LoadedVertexPacket {
+// It is possible for the vertex display list to include indirect load commands, which request a synchronous
+// DMA into graphics memory from main memory. This is the standard way of doing vertex skinning in NW4R, for
+// instance, but it can be seen in other cases too. We handle this by splitting the data into multiple draw
+// commands per display list, which are the "LoadedVertexDraw" structures.
+
+// Note that the loader relies the common convention of the indexed load commands to produce the matrix tables
+// in each LoadedVertexDraw. GX establishes the conventions:
+//
+//  INDX_A = Position Matrices (=> posNrmMatrixTable)
+//  INDX_B = Normal Matrices (currently unsupported)
+//  INDX_C = Texture Matrices (=> texMatrixTable)
+//  INDX_D = Light Objects (currently unsupported)
+//
+// Perhaps it might make sense to one day emulate main memory with a float texture, and then have the vertex
+// stream just change the index used in the rest of the stream, but for now, multiple draw commands seems fine.
+export interface LoadedVertexDraw {
     indexOffset: number;
     indexCount: number;
     posNrmMatrixTable: number[];
@@ -137,7 +152,7 @@ export interface LoadedVertexData {
     totalIndexCount: number;
     totalVertexCount: number;
     vertexId: number;
-    packets: LoadedVertexPacket[];
+    draws: LoadedVertexDraw[];
 
     // Internal. Used for re-running vertices.
     dlView: DataView | null;
@@ -833,7 +848,12 @@ function runVertices(dst, loadedVertexLayout, dstVertexDataView, dstVertexDataOf
     return compileFunction(source, `runVertices`);
 }
 
-type DrawCall = { primType: number, vertexFormat: GX.VtxFmt, srcOffs: number, vertexCount: number };
+interface DrawCall {
+    primType: number;
+    vertexFormat: GX.VtxFmt;
+    srcOffs: number;
+    vertexCount: number;
+}
 
 class VtxLoaderImpl implements VtxLoader {
     public vtxLoaders: SingleVtxLoaderFunc[] = [];
@@ -868,7 +888,7 @@ class VtxLoaderImpl implements VtxLoader {
     public parseDisplayList(srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions): LoadedVertexData {
         // TODO(jstpierre): Clean this up eventually
 
-        function newPacket(indexOffset: number): LoadedVertexPacket {
+        function newDraw(indexOffset: number): LoadedVertexDraw {
             return {
                 indexOffset,
                 indexCount: 0,
@@ -880,12 +900,12 @@ class VtxLoaderImpl implements VtxLoader {
         // Parse display list.
         const dlView = srcBuffer.createDataView();
         const drawCalls: DrawCall[] = [];
-        const packets: LoadedVertexPacket[] = [];
+        const draws: LoadedVertexDraw[] = [];
         let totalVertexCount = 0;
         let totalIndexCount = 0;
         let drawCallIdx = 0;
-        let currentPacketDraw = null;
-        let currentPacketXfmem = null;
+        let currentDraw: LoadedVertexDraw | null = null;
+        let currentXfmem: LoadedVertexDraw | null = null;
 
         while (true) {
             if (drawCallIdx >= srcBuffer.byteLength)
@@ -897,14 +917,14 @@ class VtxLoaderImpl implements VtxLoader {
             // TODO(jstpierre): This hardcodes some assumptions about the arrays and indexed units.
             switch (cmd) {
             case GX.Command.LOAD_INDX_A: { // Position Matrices
-                currentPacketDraw = null;
-                if (currentPacketXfmem === null)
-                    currentPacketXfmem = newPacket(totalIndexCount);
+                currentDraw = null;
+                if (currentXfmem === null)
+                    currentXfmem = newDraw(totalIndexCount);
                 // PosMtx memory address space starts at 0x0000 and goes until 0x0400 (including TexMtx),
                 // each element being 3*4 in size.
                 const memoryElemSize = 3*4;
                 const memoryBaseAddr = 0x0000;
-                const table = currentPacketXfmem.posNrmMatrixTable;
+                const table = currentXfmem.posNrmMatrixTable;
 
                 const arrayIndex = dlView.getUint16(drawCallIdx + 0x01);
                 const addrLen = dlView.getUint16(drawCallIdx + 0x03);
@@ -922,15 +942,15 @@ class VtxLoaderImpl implements VtxLoader {
                 continue;
             }
             case GX.Command.LOAD_INDX_C: { // Texture Matrices
-                currentPacketDraw = null;
-                if (currentPacketXfmem === null)
-                    currentPacketXfmem = newPacket(totalIndexCount);
+                currentDraw = null;
+                if (currentXfmem === null)
+                    currentXfmem = newDraw(totalIndexCount);
                 // TexMtx memory address space is the same as PosMtx memory address space, but by convention
                 // uses the upper 10 matrices. We enforce this convention.
                 // Elements should be 3*4 in size. GD has ways to break this but BRRES should not generate this.
                 const memoryElemSize = 3*4;
                 const memoryBaseAddr = 0x0078;
-                const table = currentPacketXfmem.texMatrixTable;
+                const table = currentXfmem.texMatrixTable;
 
                 const arrayIndex = dlView.getUint16(drawCallIdx + 0x01);
                 const addrLen = dlView.getUint16(drawCallIdx + 0x03);
@@ -962,14 +982,14 @@ class VtxLoaderImpl implements VtxLoader {
             const srcOffs = drawCallIdx;
             totalVertexCount += vertexCount;
 
-            if (currentPacketDraw === null) {
-                if (currentPacketXfmem !== null) {
-                    currentPacketDraw = currentPacketXfmem;
-                    currentPacketXfmem = null;
+            if (currentDraw === null) {
+                if (currentXfmem !== null) {
+                    currentDraw = currentXfmem;
+                    currentXfmem = null;
                 } else {
-                    currentPacketDraw = newPacket(totalIndexCount);
+                    currentDraw = newDraw(totalIndexCount);
                 }
-                packets.push(currentPacketDraw);
+                draws.push(currentDraw);
             }
 
             let indexCount = 0;
@@ -990,7 +1010,7 @@ class VtxLoaderImpl implements VtxLoader {
             }
 
             drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });
-            currentPacketDraw.indexCount += indexCount;
+            currentDraw.indexCount += indexCount;
             totalIndexCount += indexCount;
 
             const vatFormat = this.loadedVertexLayout.vatLayouts[vertexFormat];
@@ -1066,7 +1086,7 @@ class VtxLoaderImpl implements VtxLoader {
         const vertexBuffers: ArrayBuffer[] = [dstVertexData];
 
         const indexData = dstIndexData.buffer;
-        return { indexData, totalIndexCount, totalVertexCount, packets, vertexId, vertexBuffers, dlView, drawCalls };
+        return { indexData, totalIndexCount, totalVertexCount, draws: draws, vertexId, vertexBuffers, dlView, drawCalls };
     }
 
     public loadVertexData(dst: LoadedVertexData, vtxArrays: GX_Array[]): void {
@@ -1414,7 +1434,7 @@ export function displayListRegistersInitGX(r: DisplayListRegisters): void {
 //#endregion
 
 //#region Utilities
-function canMergePackets(a: LoadedVertexPacket, b: LoadedVertexPacket): boolean {
+function canMergeDraws(a: LoadedVertexDraw, b: LoadedVertexDraw): boolean {
     if (a.indexOffset !== b.indexOffset)
         return false;
     if (!arrayEqual(a.posNrmMatrixTable, b.posNrmMatrixTable, (i, j) => i === j))
@@ -1429,24 +1449,24 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
     let totalVertexCount = 0;
     let indexDataSize = 0;
     let packedVertexDataSize = 0;
-    const packets: LoadedVertexPacket[] = [];
+    const draws: LoadedVertexDraw[] = [];
 
     for (let i = 0; i < loadedDatas.length; i++) {
         const loadedData = loadedDatas[i];
         assert(loadedData.vertexBuffers.length === 1);
 
-        for (let j = 0; j < loadedData.packets.length; j++) {
-            const packet = loadedData.packets[j];
-            const existingPacket = packets.length > 0 ? packets[packets.length - 1] : null;
+        for (let j = 0; j < loadedData.draws.length; j++) {
+            const draw = loadedData.draws[j];
+            const existingDraw = draws.length > 0 ? draws[draws.length - 1] : null;
 
-            if (existingPacket !== null && canMergePackets(packet, existingPacket)) {
-                existingPacket.indexCount += packet.indexCount;
+            if (existingDraw !== null && canMergeDraws(draw, existingDraw)) {
+                existingDraw.indexCount += draw.indexCount;
             } else {
-                const indexOffset = totalIndexCount + packet.indexOffset;
-                const indexCount = packet.indexCount;
-                const posNrmMatrixTable = packet.posNrmMatrixTable;
-                const texMatrixTable = packet.texMatrixTable;
-                packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+                const indexOffset = totalIndexCount + draw.indexOffset;
+                const indexCount = draw.indexCount;
+                const posNrmMatrixTable = draw.posNrmMatrixTable;
+                const texMatrixTable = draw.texMatrixTable;
+                draws.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
             }
         }
 
@@ -1475,7 +1495,7 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,
-        packets,
+        draws,
         drawCalls: null,
         dlView: null,
     };

@@ -15,7 +15,7 @@ import { GfxDevice, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, G
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
-import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
 import { colorMult, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Color } from '../Color';
@@ -350,7 +350,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     let totalIndexCount = 0;
     let totalVertexCount = 0;
     let packedVertexDataSize = 0;
-    const packets: LoadedVertexPacket[] = [];
+    const draws: LoadedVertexDraw[] = [];
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
         assert(surface.loadedVertexLayout.vertexBufferStrides[0] === surfaces[0].loadedVertexLayout.vertexBufferStrides[0]);
@@ -378,12 +378,12 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     }
 
     // Merge into one giant packet. We know it doesn't use a posNrmMatrixTable or texMatrixTable.
-    const srcPacket = surfaces[0].loadedVertexData.packets[0];
+    const srcPacket = surfaces[0].loadedVertexData.draws[0];
     const indexOffset = 0;
     const indexCount = totalIndexCount;
     const posNrmMatrixTable = srcPacket.posNrmMatrixTable;
     const texMatrixTable = srcPacket.texMatrixTable;
-    packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+    draws.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
 
     const newLoadedVertexData: LoadedVertexData = {
         indexData: indexData.buffer,
@@ -391,7 +391,7 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,
-        packets,
+        draws,
         drawCalls: null,
         dlView: null,
     };

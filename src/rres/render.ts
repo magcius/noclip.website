@@ -18,7 +18,7 @@ import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy, Color } from '../Color';
 import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { LoadedVertexPacket } from '../gx/gx_displaylist';
+import { LoadedVertexDraw } from '../gx/gx_displaylist';
 import { NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
@@ -90,8 +90,8 @@ class ShapeInstance {
             materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.mtxIdx, null, camera, viewport);
 
         packetParams.clear();
-        for (let p = 0; p < this.shape.loadedVertexData.packets.length; p++) {
-            const packet = this.shape.loadedVertexData.packets[p];
+        for (let p = 0; p < this.shape.loadedVertexData.draws.length; p++) {
+            const packet = this.shape.loadedVertexData.draws[p];
 
             let instVisible = false;
             if (usesSkinning) {
@@ -333,7 +333,7 @@ class MaterialInstance {
         }
     }
 
-    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexPacket | null = null, camera: Camera, viewport: NormalizedViewportCoords): void {
+    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null = null, camera: Camera, viewport: NormalizedViewportCoords): void {
         const material = this.materialData.material;
 
         for (let i = 0; i < 8; i++) {
@@ -416,7 +416,7 @@ class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexPacket | null, camera: Camera, viewport: NormalizedViewportCoords): void {
+    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: NormalizedViewportCoords): void {
         this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, packet, camera, viewport);
 
         const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
