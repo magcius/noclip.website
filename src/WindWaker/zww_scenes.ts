@@ -144,7 +144,6 @@ class dDlst_alphaModel_c {
 
     private materialHelperBackRevZ: GXMaterialHelperGfx;
     private materialHelperFrontZ: GXMaterialHelperGfx;
-    private materialHelperNoZFrontSub: GXMaterialHelperGfx;
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
 
     private bonboriCoalescer: GfxBufferCoalescerCombo;
@@ -185,10 +184,8 @@ class dDlst_alphaModel_c {
 
         setAttachmentStateSimple(this.materialHelperBackRevZ.megaStateFlags, { colorWriteMask: GfxColorWriteMask.ALPHA });
         setAttachmentStateSimple(this.materialHelperFrontZ.megaStateFlags, { colorWriteMask: GfxColorWriteMask.ALPHA });
-        setAttachmentStateSimple(this.materialHelperNoZFrontSub.megaStateFlags, { colorWriteMask: GfxColorWriteMask.ALPHA });
 
         assert(this.materialHelperBackRevZ.materialParamsBufferSize === this.materialHelperFrontZ.materialParamsBufferSize);
-        assert(this.materialHelperBackRevZ.materialParamsBufferSize === this.materialHelperNoZFrontSub.materialParamsBufferSize);
 
         const mb = new GXMaterialBuilder(`dDlst_alphaModel_c drawAlphaBuffer`);
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
