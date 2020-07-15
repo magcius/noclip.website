@@ -357,15 +357,6 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
         packedVertexDataSize += surface.loadedVertexData.vertexBuffers[0].byteLength;
-
-        for (let j = 0; j < surface.loadedVertexData.packets.length; j++) {
-            const packet = surface.loadedVertexData.packets[j];
-            const indexOffset = totalIndexCount + packet.indexOffset;
-            const indexCount = packet.indexCount;
-            const posNrmMatrixTable = packet.posNrmMatrixTable;
-            const texMatrixTable = packet.texMatrixTable;
-            packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
-        }
     }
 
     const packedVertexData = new Uint8Array(packedVertexDataSize);
@@ -385,6 +376,14 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         packedVertexData.set(new Uint8Array(surface.loadedVertexData.vertexBuffers[0]), packedVertexDataOffs);
         packedVertexDataOffs += surface.loadedVertexData.vertexBuffers[0].byteLength;
     }
+
+    // Merge into one giant packet. We know it doesn't use a posNrmMatrixTable or texMatrixTable.
+    const srcPacket = surfaces[0].loadedVertexData.packets[0];
+    const indexOffset = 0;
+    const indexCount = totalIndexCount;
+    const posNrmMatrixTable = srcPacket.posNrmMatrixTable;
+    const texMatrixTable = srcPacket.texMatrixTable;
+    packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
 
     const newLoadedVertexData: LoadedVertexData = {
         indexData: indexData.buffer,
