@@ -484,7 +484,8 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
     for (let i = 0; i < count; i++) {
         const size = view.getUint32(offs + 0x00, true);
         const maxLevel = view.getUint16(offs + 0x04, true);
-        const unk06 = view.getUint16(offs + 0x06, true);
+        const isETC1 = view.getUint8(offs + 0x06);
+        const isCubeMap = view.getUint8(offs + 0x07);
         const width = view.getUint16(offs + 0x08, true);
         const height = view.getUint16(offs + 0x0A, true);
         const glFormat = view.getUint32(offs + 0x0C, true);

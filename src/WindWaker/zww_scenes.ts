@@ -18,7 +18,7 @@ import { Camera, texProjCameraSceneTex } from '../Camera';
 import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, MaterialParams, ColorKind, setChanWriteEnabled, SceneParams, fillSceneParamsData, ub_SceneParams, ub_SceneParamsBufferSize, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask, GfxBlendMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -174,13 +174,14 @@ class dDlst_alphaModel_c {
 
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_matDL$5108`));
 
-        // Create three materials -- 
+        // Original game uses three different materials -- two add, one sub. We can reduce this to two draws.
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_backRevZMat`));
         this.materialHelperBackRevZ = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_alphaModel_c l_backRevZMat`));
         displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontZMat`));
-        this.materialHelperFrontZ = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_alphaModel_c l_frontZMat`));
-        displayListRegistersRun(matRegisters, symbolMap.findSymbolData(`d_drawlist.o`, `l_frontNoZSubMat`));
-        this.materialHelperNoZFrontSub = new GXMaterialHelperGfx(parseMaterial(matRegisters, `dDlst_alphaModel_c l_frontNoZSubMat`));
+        const frontZ = parseMaterial(matRegisters, `dDlst_alphaModel_c l_frontZMat`);
+        frontZ.ropInfo.blendMode = GX.BlendMode.SUBTRACT;
+        frontZ.ropInfo.depthFunc = GX.CompareType.GREATER;
+        this.materialHelperFrontZ = new GXMaterialHelperGfx(frontZ);
 
         setAttachmentStateSimple(this.materialHelperBackRevZ.megaStateFlags, { colorWriteMask: GfxColorWriteMask.ALPHA });
         setAttachmentStateSimple(this.materialHelperFrontZ.megaStateFlags, { colorWriteMask: GfxColorWriteMask.ALPHA });
@@ -246,17 +247,13 @@ class dDlst_alphaModel_c {
                 const offs = this.materialHelperBackRevZ.allocateMaterialParams(template);
                 this.materialHelperBackRevZ.fillMaterialParamsDataOnInst(template, offs, materialParams);
 
-                const r1 = renderInstManager.newRenderInst();
-                this.materialHelperBackRevZ.setOnRenderInst(device, cache, r1);
-                renderInstManager.submitRenderInst(r1);
+                const back = renderInstManager.newRenderInst();
+                this.materialHelperBackRevZ.setOnRenderInst(device, cache, back);
+                renderInstManager.submitRenderInst(back);
 
-                const r2 = renderInstManager.newRenderInst();
-                this.materialHelperFrontZ.setOnRenderInst(device, cache, r2);
-                renderInstManager.submitRenderInst(r2);
-
-                const r3 = renderInstManager.newRenderInst();
-                this.materialHelperNoZFrontSub.setOnRenderInst(device, cache, r3);
-                renderInstManager.submitRenderInst(r3);
+                const front = renderInstManager.newRenderInst();
+                this.materialHelperFrontZ.setOnRenderInst(device, cache, front);
+                renderInstManager.submitRenderInst(front);
             }
 
             renderInstManager.popTemplateRenderInst();
