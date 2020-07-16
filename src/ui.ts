@@ -1719,8 +1719,11 @@ class StudioPanel extends FloatingPanel {
 
     private studioDataBtn: HTMLInputElement;
     private studioSaveLoadControls: HTMLElement;
+    private newAnimationBtn: HTMLInputElement;
     private loadAnimationBtn: HTMLInputElement;
     private saveAnimationBtn: HTMLInputElement;
+    private importAnimationBtn: HTMLInputElement;
+    private exportAnimationBtn: HTMLInputElement;
 
     private studioControlsContainer: HTMLElement;
 
@@ -1729,6 +1732,7 @@ class StudioPanel extends FloatingPanel {
 
     private editKeyframePositionBtn: HTMLElement;
     private editingKeyframePosition: boolean = false;
+    private persistHelpText: boolean = false;
 
     private keyframeControls: HTMLElement;
     private selectedKeyframe: Keyframe;
@@ -1894,13 +1898,15 @@ class StudioPanel extends FloatingPanel {
         </style>
         `);
         this.studioPanelContents.insertAdjacentHTML('afterbegin', `
-        <div style="width: 40%;margin: auto;">
-            <button type="button" id="studioDataBtn" class="SettingsButton">📁</button>
-            <div id="studioSaveLoadControls" hidden>
-                <div style="display: grid;grid-template-columns: 1fr 1fr;gap: 1rem;">
-                    <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
-                    <button type="button" id="saveAnimationBtn" class="SettingsButton">Save</button>
-                </div>
+        <button type="button" id="studioDataBtn" class="SettingsButton" style="width: 40%; display: block; margin: 0 auto 0.25rem;">📁</button>
+        <div id="studioSaveLoadControls" style="width:85%; margin: auto;" hidden>
+            <div style="display: grid;grid-template-columns: 1fr 1fr 1fr; gap: 0.25rem 1rem;">
+                <button type="button" id="newAnimationBtn" class="SettingsButton">New</button>
+                <button type="button" id="loadAnimationBtn" class="SettingsButton">Load</button>
+                <button type="button" id="saveAnimationBtn" class="SettingsButton">Save</button>
+                <div></div>
+                <button type="button" id="importAnimationBtn" class="SettingsButton">Import</button>
+                <button type="button" id="exportAnimationBtn" class="SettingsButton">Export</button>
             </div>
         </div>
         <div id="studioHelpText"></div>
@@ -1969,11 +1975,23 @@ class StudioPanel extends FloatingPanel {
 
         this.studioDataBtn = this.contents.querySelector('#studioDataBtn') as HTMLInputElement;
         this.studioDataBtn.dataset.helpText = 'Save the current animation, or load a previously-saved animation.';
+
         this.studioSaveLoadControls = this.contents.querySelector('#studioSaveLoadControls') as HTMLElement;
+
+        this.newAnimationBtn = this.contents.querySelector('#newAnimationBtn') as HTMLInputElement;
+        this.newAnimationBtn.dataset.helpText = 'Clear the current keyframes and create a new animation.';
+
         this.loadAnimationBtn = this.contents.querySelector('#loadAnimationBtn') as HTMLInputElement;
         this.loadAnimationBtn.dataset.helpText = 'Load the previously-saved animation for this map. Overwrites the current keyframes!';
+
         this.saveAnimationBtn = this.contents.querySelector('#saveAnimationBtn') as HTMLInputElement;
         this.saveAnimationBtn.dataset.helpText = 'Save the current animation for this map to your browser\'s local storage.';
+
+        this.importAnimationBtn = this.contents.querySelector('#importAnimationBtn') as HTMLInputElement;
+        this.importAnimationBtn.dataset.helpText = 'Load an animation from a JSON file.';
+
+        this.exportAnimationBtn = this.contents.querySelector('#exportAnimationBtn') as HTMLInputElement;
+        this.exportAnimationBtn.dataset.helpText = 'Save the current animation as a JSON file.';
 
         this.studioControlsContainer = this.contents.querySelector('#studioControlsContainer') as HTMLElement;
         this.keyframeList = this.contents.querySelector('#keyframeList') as HTMLElement;
@@ -2029,21 +2047,12 @@ class StudioPanel extends FloatingPanel {
 
         this.animationManager = new CameraAnimationManager(this.keyframeList, this.studioControlsContainer);
 
-        this.studioDataBtn.onclick = () => {
-            this.studioSaveLoadControls.toggleAttribute('hidden');
-        }
-        this.loadAnimationBtn.onclick = () => {
-            const jsonAnim = window.localStorage.getItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId());
-            if (jsonAnim) {
-                this.keyframeList.innerText = '';
-                const animation: Keyframe[] = JSON.parse(jsonAnim);
-                this.animationManager.loadAnimation(animation);
-            }
-        }
-        this.saveAnimationBtn.onclick = () => {
-            const jsonAnim: string = this.animationManager.serializeAnimation();
-            window.localStorage.setItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId(), jsonAnim);
-        }
+        this.studioDataBtn.onclick = () => this.studioSaveLoadControls.toggleAttribute('hidden');
+        this.newAnimationBtn.onclick = () => this.newAnimation();
+        this.loadAnimationBtn.onclick = () => this.loadAnimation();
+        this.saveAnimationBtn.onclick = () => this.saveAnimation();
+        this.exportAnimationBtn.onclick = () => this.exportAnimation();
+        this.importAnimationBtn.onclick = () => this.importAnimation();
 
         this.keyframeList.dataset.helpText = 'Click on a keyframe to jump to its end position.';
         // Event fired when start position for an animation is first set.
@@ -2291,6 +2300,80 @@ class StudioPanel extends FloatingPanel {
         }
     }
 
+    private newAnimation(): void {
+        this.animationManager.newAnimation();
+        this.studioControlsContainer.setAttribute('hidden','');
+        this.keyframeList.innerText = '';
+        this.keyframeList.dataset.selectedIndex = '-1';
+        this.keyframeList.removeAttribute('data-editing-keyframe-position');
+        this.studioHelpText.dataset.default = 'Move the camera to the desired starting position and press Enter.';
+        this.resetHelpText();
+    }
+
+    private loadAnimation() {
+        const jsonAnim = window.localStorage.getItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId());
+        if (jsonAnim) {
+            const animation: Keyframe[] = JSON.parse(jsonAnim);
+            if (this.animationManager.isAnimation(animation)) {
+                this.newAnimation();
+                this.animationManager.loadAnimation(animation);
+            } else {
+                // Unlikely, but better not to keep garbage data saved.
+                console.error('Animation saved in localStorage is invalid and will be deleted. Existing animation JSON: ', jsonAnim);
+                window.localStorage.removeItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId());
+                this.errorHelpText('Saved animation invalid. See console for details.');
+            }
+        }
+    }
+
+    private saveAnimation() {
+        const jsonAnim: string = this.animationManager.serializeAnimation();
+        window.localStorage.setItem('studio-animation-' + GlobalSaveManager.getCurrentSceneDescId(), jsonAnim);
+    }
+
+    private exportAnimation() {
+        const a = document.createElement('a');
+        const anim = new Blob([this.animationManager.serializeAnimation()], {type: 'application/json'});
+        a.href = URL.createObjectURL(anim);
+        a.download = 'studio-animation-' + GlobalSaveManager.getCurrentSceneDescId() + '.json';
+        a.click();
+    }
+
+    private importAnimation() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        input.onchange = async () => {
+            if (!input.files || !input.files.item(0))
+                return;
+            try {
+                const fileContents = await this.loadFile(input.files.item(0) as File);
+                const animation = JSON.parse(fileContents);
+                if (this.animationManager.isAnimation(animation)) {
+                    this.newAnimation();
+                    this.animationManager.loadAnimation(animation);
+                } else {
+                    throw new Error('File is not a valid animation.');
+                }
+            } catch (e) {
+                console.error('Failed to load animation from JSON file.', e);
+                this.errorHelpText('Failed to load file. See console for details.');
+            }
+        }
+        input.click();
+    }
+
+    private loadFile(file: File): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                resolve(reader.result as string);
+            }
+            reader.onerror = (e) => reject(e);
+            reader.readAsText(file);
+        });
+    }
+
     private navigateKeyframeList(amount: number): void {
         if (this.selectedKeyframeListItem) {
             let index = parseInt(this.selectedKeyframeListItem.dataset.index as string) + amount;
@@ -2313,13 +2396,26 @@ class StudioPanel extends FloatingPanel {
     }
 
     private displayHelpText(elem: HTMLElement) {
-        if (!this.editingKeyframePosition)
+        if (!this.editingKeyframePosition && !this.persistHelpText)
             this.studioHelpText.innerText = elem.dataset.helpText ? elem.dataset.helpText : this.studioHelpText.dataset.default as string;
     }
 
     private resetHelpText() {
-        if (!this.editingKeyframePosition)
+        if (!this.editingKeyframePosition && !this.persistHelpText)
             this.studioHelpText.innerText = this.studioHelpText.dataset.default as string;
+    }
+
+    private errorHelpText(e: string) {
+        this.studioHelpText.innerText = e;
+        this.studioHelpText.style.color = '#ff4141';
+        this.studioHelpText.style.fontWeight = '700';
+        this.persistHelpText = true;
+        window.setTimeout(() => {
+            this.studioHelpText.style.color = '';
+            this.studioHelpText.style.fontWeight = '';
+            this.persistHelpText = false;
+            this.resetHelpText();
+        }, 5000);
     }
 
     private handleNewKeyframeEvent(e: CustomEvent) {
