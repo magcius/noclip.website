@@ -10,7 +10,7 @@ import { mat4 } from 'gl-matrix';
 import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram, GfxMegaStateDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram, GfxMegaStateDescriptor, GfxCullMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
 import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
@@ -22,7 +22,7 @@ import * as UI from '../ui';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GXMaterialHacks } from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
-import { projectionMatrixD3DFromOpenGL, projectionMatrixOpenGLFromD3D } from '../gfx/helpers/ProjectionHelpers';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 
@@ -321,9 +321,9 @@ class NodeInstance {
                 const d = template.mapUniformBufferF32(ub_SceneParams);
                 fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-                projectionMatrixD3DFromOpenGL(sceneParams.u_Projection);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, viewerInput.camera.clipSpaceNearZ);
                 sceneParams.u_Projection[10] *= depthBias;
-                projectionMatrixOpenGLFromD3D(sceneParams.u_Projection);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.Zero);
                 fillSceneParamsData(d, offs, sceneParams);
             }
         }
