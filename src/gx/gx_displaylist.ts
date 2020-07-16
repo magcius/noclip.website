@@ -714,6 +714,23 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             }
         }
 
+        function compileOneAttribMtxIdx(viewName: string, attrOffs: string): string {
+            let S = ``;
+
+            const srcAttrCompSize = getAttributeComponentByteSize(vtxAttrib, vtxAttrFmt);
+            const srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
+            assertExists(srcAttrCompSize === 1 && srcAttrCompCount === 1);
+
+            const dstOffs = dstBaseOffs;
+            const srcOffs: string = `${attrOffs}`;
+            const value = compileReadOneComponent(viewName, srcOffs);
+
+            S += `
+    ${compileWriteOneComponent(dstOffs, `(${value} / 3)`)};`;
+
+            return S;
+        }
+
         function compileOneAttribOther(viewName: string, attrOffs: string): string {
             let S = ``;
 
@@ -721,7 +738,6 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             const srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
 
             const dstComponentSize = getFormatCompByteSize(dstFormat);
-            const dstComponentCount = getFormatComponentCount(dstFormat);
 
             for (let i = 0; i < srcAttrCompCount; i++) {
                 const dstOffs = dstBaseOffs + (i * dstComponentSize);
@@ -739,7 +755,9 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
             let S = ``;
 
             if (enableOutput) {
-                if (isVtxAttribColor(vtxAttrib))
+                if (isVtxAttribMtxIdx(vtxAttrib))
+                    S += compileOneAttribMtxIdx(viewName, attrOffsetBase);
+                else if (isVtxAttribColor(vtxAttrib))
                     S += compileOneAttribColor(viewName, attrOffsetBase);
                 else
                     S += compileOneAttribOther(viewName, attrOffsetBase);

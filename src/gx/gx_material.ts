@@ -1226,7 +1226,7 @@ ${both}
 ${this.generateVertAttributeDefs()}
 
 Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
-    uint t_MtxIdx = uint(t_MtxIdxFloat / 3.0);
+    uint t_MtxIdx = uint(t_MtxIdxFloat);
     if (t_MtxIdx == 20u)
         return _Mat4x3(1.0);
     else if (t_MtxIdx >= 10u)
