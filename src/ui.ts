@@ -1837,6 +1837,9 @@ class StudioPanel extends FloatingPanel {
                 document.addEventListener('mousedown', keepFocus);
                 setElementHighlighted(this.enableStudioBtn, true);
                 setElementHighlighted(this.disableStudioBtn, false);
+
+                // If there's an existing animation for the current map, load it automatically.
+                this.loadAnimation();
             }
         }
         this.disableStudioBtn.onclick = () => {
@@ -2106,6 +2109,7 @@ class StudioPanel extends FloatingPanel {
             startPositionListItem.dataset.index = '0';
             this.keyframeList.insertAdjacentElement('afterbegin', startPositionListItem);
             startPositionListItem.click();
+            this.saveAnimation();
         });
 
         // Event fired whenever a new keyframe is added.
@@ -2130,6 +2134,7 @@ class StudioPanel extends FloatingPanel {
                 this.enableKeyframeControls();
                 this.keyframeList.removeAttribute('data-editing-keyframe-position');
                 setElementHighlighted(this.editKeyframePositionBtn, false);
+                this.saveAnimation();
             }
         });
 
@@ -2152,6 +2157,7 @@ class StudioPanel extends FloatingPanel {
                 this.selectedKeyframeListItem.dataset.name = 'Keyframe';
                 this.selectedKeyframeListItem.childNodes[0].nodeValue = 'Keyframe';
             }
+            this.saveAnimation();
         }
 
         const MAX_KEYFRAME_DURATION = 100.0;
@@ -2172,6 +2178,7 @@ class StudioPanel extends FloatingPanel {
             } else if (durationVal === 0) {
                 this.interpolationSettings.setAttribute('hidden', '');
             }
+            this.saveAnimation();
         }
 
         this.hermiteBtn.onclick = () => {
@@ -2179,12 +2186,14 @@ class StudioPanel extends FloatingPanel {
             this.selectedKeyframe.usesLinearInterp = false;
             setElementHighlighted(this.hermiteBtn, true);
             setElementHighlighted(this.linearBtn, false);
+            this.saveAnimation();
         }
         this.linearBtn.onclick = () => {
             this.linearEaseSettingsDiv.removeAttribute('hidden');
             this.selectedKeyframe.usesLinearInterp = true;
             setElementHighlighted(this.hermiteBtn, false);
             setElementHighlighted(this.linearBtn, true);
+            this.saveAnimation();
         }
         setElementHighlighted(this.hermiteBtn, false);
         setElementHighlighted(this.linearBtn, false);
@@ -2205,6 +2214,7 @@ class StudioPanel extends FloatingPanel {
                 durationVal = clamp(durationVal, MIN_KEYFRAME_DURATION, MAX_KEYFRAME_DURATION);
             this.selectedKeyframe.holdDuration = durationVal;
             this.keyframeHoldDurationInput.value = durationVal.toString();
+            this.saveAnimation();
         }
 
         this.moveKeyframeUpBtn.onclick = () => {
@@ -2215,6 +2225,7 @@ class StudioPanel extends FloatingPanel {
                     this.keyframeList.insertBefore(listItems[index], listItems[index - 1]);
                     this.updateKeyframeIndices(index - 1);
                     this.selectedKeyframeListItem.click();
+                    this.saveAnimation();
                 }
             }
         }
@@ -2228,6 +2239,7 @@ class StudioPanel extends FloatingPanel {
                     this.keyframeList.insertBefore(listItems[index + 1], listItems[index]);
                     this.updateKeyframeIndices(index);
                     this.selectedKeyframeListItem.click();
+                    this.saveAnimation();
                 }
             }
         }
@@ -2323,6 +2335,11 @@ class StudioPanel extends FloatingPanel {
         }
     }
 
+    public onSceneChange() {
+        this.newAnimation();
+        this.loadAnimation();
+    }
+
     private newAnimation(): void {
         this.animationManager.newAnimation();
         this.studioControlsContainer.setAttribute('hidden','');
@@ -2416,6 +2433,7 @@ class StudioPanel extends FloatingPanel {
         }
         this.selectedEaseBtn = btn;
         setElementHighlighted(this.selectedEaseBtn, true);
+        this.saveAnimation();
     }
 
     private displayHelpText(elem: HTMLElement) {
@@ -2491,6 +2509,7 @@ class StudioPanel extends FloatingPanel {
             this.updateKeyframeIndices(keyframeIndex);
         }
         keyframeListItem.click();
+        this.saveAnimation();
     }
 
     /**
@@ -3505,6 +3524,9 @@ export class UI {
             else
                 this.textureViewer.setTextureList([]);
         }
+
+        if (this.studioModeEnabled)
+            this.studioPanel.onSceneChange();
     }
 
     private setPanels(panels: Panel[]): void {
