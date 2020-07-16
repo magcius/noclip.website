@@ -114,6 +114,8 @@ export class CameraAnimationManager {
     }
 
     public loadAnimation(keyframes: Keyframe[]) {
+        if (keyframes.length === 0)
+            return;
         this.animation = new CameraAnimation();
         this.animation.keyframes = keyframes;
         this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
@@ -121,6 +123,10 @@ export class CameraAnimationManager {
             this.animation.totalKeyframesAdded = i;
             this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: i }));
         }
+    }
+
+    public newAnimation() {
+        this.animation = new CameraAnimation();
     }
 
     public serializeAnimation(): string {
@@ -298,6 +304,35 @@ export class CameraAnimationManager {
             return true;
         }
         return false;
+    }
+
+    public isAnimation(a: Keyframe[]): boolean {
+        if (!Array.isArray(a))
+            return false;
+        try {
+            for (let i = 0; i < a.length; i++) {
+                for (let j = 0; j < 16; j++) {
+                    if (typeof a[i].endPos[j] !== 'number')
+                        return false;
+                    if (j < 3) {
+                        if (typeof a[i].trsTangentIn[j] !== 'number'
+                            || typeof a[i].trsTangentOut[j] !== 'number')
+                            return false;
+                    }
+                }
+                if (typeof a[i].holdDuration !== 'number')
+                    return false;
+                if (typeof a[i].interpDuration !== 'number')
+                    return false;
+                if (typeof a[i].linearEaseType !== 'string')
+                    return false;
+                if (typeof a[i].usesLinearInterp !== 'boolean')
+                    return false;
+            }
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     private getEasingFuncForEaseType(easeType: LinearEaseType): Function | null {
