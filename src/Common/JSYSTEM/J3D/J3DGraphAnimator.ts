@@ -5,7 +5,7 @@ import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationE
 import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
 import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase';
-import { mat4, ReadonlyVec3 } from 'gl-matrix';
+import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { computeModelMatrixSRT } from '../../../MathHelpers';
 import { getPointHermite } from '../../../Spline';
 
@@ -319,9 +319,8 @@ export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransfor
         transform.translationX, transform.translationY, transform.translationZ);
 
     const matrixCalcFlag = (loadFlags & J3DLoadFlags.ScalingRule_Mask);
-    if (matrixCalcFlag === J3DLoadFlags.ScalingRule_Maya && !!(jnt1.calcFlags & 0x01)) {
+    if (matrixCalcFlag === J3DLoadFlags.ScalingRule_Maya && !!(jnt1.calcFlags & 0x01))
         calcJointMatrixMayaSSC(dst, shapeInstanceState.parentScale);
-    }
 }
 
 export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number): void {
@@ -358,6 +357,8 @@ export class J3DJointMatrixAnm {
 
         const loadFlags = modelData.bmd.inf1.loadFlags;
         calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
+
+        vec3.set(shapeInstanceState.parentScale, transform.scaleX, transform.scaleY, transform.scaleZ);
     }
 }
 

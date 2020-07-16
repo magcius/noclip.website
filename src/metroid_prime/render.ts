@@ -15,7 +15,7 @@ import { GfxDevice, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, G
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
-import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx_displaylist';
 import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
 import { colorMult, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Color } from '../Color';
@@ -350,22 +350,13 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     let totalIndexCount = 0;
     let totalVertexCount = 0;
     let packedVertexDataSize = 0;
-    const packets: LoadedVertexPacket[] = [];
+    const draws: LoadedVertexDraw[] = [];
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
         assert(surface.loadedVertexLayout.vertexBufferStrides[0] === surfaces[0].loadedVertexLayout.vertexBufferStrides[0]);
         totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
         packedVertexDataSize += surface.loadedVertexData.vertexBuffers[0].byteLength;
-
-        for (let j = 0; j < surface.loadedVertexData.packets.length; j++) {
-            const packet = surface.loadedVertexData.packets[j];
-            const indexOffset = totalIndexCount + packet.indexOffset;
-            const indexCount = packet.indexCount;
-            const posNrmMatrixTable = packet.posNrmMatrixTable;
-            const texMatrixTable = packet.texMatrixTable;
-            packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
-        }
     }
 
     const packedVertexData = new Uint8Array(packedVertexDataSize);
@@ -386,13 +377,21 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         packedVertexDataOffs += surface.loadedVertexData.vertexBuffers[0].byteLength;
     }
 
+    // Merge into one giant packet. We know it doesn't use a posNrmMatrixTable or texMatrixTable.
+    const srcPacket = surfaces[0].loadedVertexData.draws[0];
+    const indexOffset = 0;
+    const indexCount = totalIndexCount;
+    const posNrmMatrixTable = srcPacket.posNrmMatrixTable;
+    const texMatrixTable = srcPacket.texMatrixTable;
+    draws.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+
     const newLoadedVertexData: LoadedVertexData = {
         indexData: indexData.buffer,
         vertexBuffers: [packedVertexData.buffer],
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,
-        packets,
+        draws,
         drawCalls: null,
         dlView: null,
     };

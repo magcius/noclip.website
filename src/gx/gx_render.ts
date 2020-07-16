@@ -9,7 +9,7 @@ import * as GX_Texture from './gx_texture';
 import * as Viewer from '../viewer';
 
 import { assert, nArray, assertExists } from '../util';
-import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist';
+import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
@@ -475,15 +475,15 @@ export class GXShapeHelperGfx {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexPacket | null = null): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexDraw | null = null): void {
         renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
 
         if (packet === null) {
             // Legacy API -- render a single packet.
             const loadedVertexData = assertExists(this.loadedVertexData);
-            assert(loadedVertexData.packets.length === 1);
-            packet = loadedVertexData.packets[0];
+            assert(loadedVertexData.draws.length === 1);
+            packet = loadedVertexData.draws[0];
         }
 
         renderInst.drawIndexes(packet.indexCount, packet.indexOffset);

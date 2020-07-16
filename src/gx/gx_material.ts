@@ -1226,7 +1226,7 @@ ${both}
 ${this.generateVertAttributeDefs()}
 
 Mat4x3 GetPosTexMatrix(float t_MtxIdxFloat) {
-    uint t_MtxIdx = uint(t_MtxIdxFloat / 3.0);
+    uint t_MtxIdx = uint(t_MtxIdxFloat);
     if (t_MtxIdx == 20u)
         return _Mat4x3(1.0);
     else if (t_MtxIdx >= 10u)
@@ -1742,17 +1742,6 @@ export function parseLightChannels(r: DisplayListRegisters): LightChannelControl
         const colorChannel = parseColorChannelControlRegister(colorCntrl); 
         const alphaChannel = parseColorChannelControlRegister(alphaCntrl);
         lightChannels.push({ colorChannel, alphaChannel });
-
-        const colorUsesReg = colorChannel.lightingEnabled &&  
-            colorChannel.matColorSource === GX.ColorSrc.REG ||
-            colorChannel.ambColorSource === GX.ColorSrc.REG;
-        
-        const alphaUsesReg = colorChannel.lightingEnabled &&  
-            colorChannel.matColorSource === GX.ColorSrc.REG ||
-            colorChannel.ambColorSource === GX.ColorSrc.REG;
-        
-        if (colorUsesReg || alphaUsesReg)
-            console.warn(`CommandList ${name} uses register color values, but these are not yet supported`);
     }
     return lightChannels;
 }

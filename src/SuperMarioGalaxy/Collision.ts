@@ -964,8 +964,11 @@ export class Binder {
     public bind(sceneObjHolder: SceneObjHolder, dstVel: vec3, actorVelocity: ReadonlyVec3): void {
         this.clear();
 
+        if (sceneObjHolder.collisionDirector === null)
+            return;
+
         if (this.exCollisionPartsValid)
-            sceneObjHolder.collisionDirector!.keepers[CollisionKeeperCategory.Map].addToGlobal(assertExists(this.exCollisionParts));
+            sceneObjHolder.collisionDirector.keepers[CollisionKeeperCategory.Map].addToGlobal(assertExists(this.exCollisionParts));
 
         if (this.hostOffsetVec) {
             vec3.copy(scratchVec3c, this.hostOffsetVec);
@@ -1021,7 +1024,7 @@ export class Binder {
         }
 
         if (this.exCollisionPartsValid)
-            sceneObjHolder.collisionDirector!.keepers[CollisionKeeperCategory.Map].removeFromGlobal(assertExists(this.exCollisionParts));
+            sceneObjHolder.collisionDirector.keepers[CollisionKeeperCategory.Map].removeFromGlobal(assertExists(this.exCollisionParts));
     }
 
     private findBindedPos(sceneObjHolder: SceneObjHolder, pos: vec3, vel: vec3, skipInitialPosition: boolean, expandDistance: boolean): BinderFindBindedPositionRet {

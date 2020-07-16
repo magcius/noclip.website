@@ -7,7 +7,7 @@ import { TTK1, TRK1, TPT1, ANK1, JointTransformInfo, TRK1AnimationEntry, TTK1Ani
 import { GfxDevice } from "../../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../../viewer";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { calcJointAnimationTransform, calcJointMatrixFromTransform, sampleAnimationData } from "./J3DGraphAnimator";
 import { ColorKind } from "../../../gx/gx_render";
 import { Color } from "../../../Color";
@@ -58,6 +58,8 @@ class JointMatrixCalcANK1 {
 
         const loadFlags = modelData.bmd.inf1.loadFlags;
         calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
+
+        vec3.set(shapeInstanceState.parentScale, transform.scaleX, transform.scaleY, transform.scaleZ);
     }
 }
 

@@ -1,6 +1,6 @@
 
 import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework";
-import { dGlobals } from "./zww_scenes";
+import { dGlobals, dDlst_alphaModel__Type } from "./zww_scenes";
 import { vec3, mat4, quat } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
 import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -13,7 +13,7 @@ import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, 
 import { dStage_Multi_c } from "./d_stage";
 import { nArray, assertExists, assert } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8 } from "../Color";
+import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8 } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture } from "./d_kankyo_wether";
 import { ColorKind, GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, MaterialParams, PacketParams, fillPacketParamsData } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
@@ -259,18 +259,6 @@ export function createEmitter(globals: dGlobals, resourceId: number): JPABaseEmi
     return emitter;
 }
 
-export function setModelAlphaUpdate(model: J3DModelInstance, alphaUpdate: boolean): void {
-    for (let i = 0; i < model.materialInstances.length; i++)
-        model.materialInstances[i].setAlphaWriteEnabled(alphaUpdate);
-}
-
-export function initModelForZelda(model: J3DModelInstance): void {
-    setModelAlphaUpdate(model, false);
-}
-
-// -------------------------------------------------------
-// Generic Torch
-// -------------------------------------------------------
 class d_a_ep extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_ep;
 
@@ -284,6 +272,15 @@ class d_a_ep extends fopAc_ac_c {
     private lightPower: number = 0.0;
     private lightPowerTarget: number = 0.0;
 
+    private timers = nArray(3, () => 0);
+    private alphaModelMtx = mat4.create();
+    private alphaModelRotX = 0;
+    private alphaModelRotY = 0;
+    private alphaModelAlpha: number = 0.0;
+    private alphaModelAlphaTarget: number = 0.0;
+    private alphaModelScale: number = 0.0;
+    private alphaModelScaleTarget: number = 0.0;
+
     public subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, `Ep`);
         if (status !== cPhs__Status.Complete)
@@ -295,10 +292,8 @@ class d_a_ep extends fopAc_ac_c {
         if (this.type === 0x3F)
             this.type = 0;
 
-        if (this.type === 0 || this.type === 3) {
+        if (this.type === 0 || this.type === 3)
             this.model = new J3DModelInstance(globals.resCtrl.getObjectRes(ResType.Model, `Ep`, this.hasObm ? 0x04 : 0x05));
-            initModelForZelda(this.model);
-        }
 
         this.CreateInit();
 
@@ -329,13 +324,52 @@ class d_a_ep extends fopAc_ac_c {
             setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
             mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
         }
+
+        const alphaModel0 = globals.dlst.alphaModel0;
+        colorFromRGBA8(alphaModel0.color, 0xEB7D0000);
+        alphaModel0.set(dDlst_alphaModel__Type.Bonbori, this.alphaModelMtx, this.alphaModelAlpha);
     }
 
-    public execute(globals: dGlobals): void {
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+
         if (this.type === 0 || this.type === 3) {
             if (this.hasGa)
                 this.ga_move();
         }
+
+        for (let i = 0; i < 3; i++)
+            this.timers[i] = Math.max(this.timers[i] - deltaTimeInFrames, 0);
+
+        if (this.timers[0] === 0) {
+            this.timers[0] = cM_rndF(5.0);
+            // TODO(jstpierre): The original code suggests 8.0 but 32.0 is more accurate to the game
+            // Are the HIO fields non-zero here? That would be wacky.
+            // this.alphaModelAlphaTarget = 8.0 + cM_rndF(4.0);
+            this.alphaModelAlphaTarget = 32.0 + cM_rndF(4.0);
+        }
+
+        if (this.timers[1] === 0) {
+            if (true /* field_0x7d4 == 0 */) {
+                this.timers[1] = 3.0 + cM_rndF(6.0);
+                this.alphaModelScaleTarget = 0.75 + cM_rndF(0.075);
+            } else {
+                this.timers[1] = cM_rndF(5.0);
+                this.alphaModelScaleTarget = 0.55 + cM_rndF(0.2);
+            }
+        }
+
+        this.alphaModelAlpha = cLib_addCalc2(this.alphaModelAlpha, this.alphaModelAlphaTarget, 1.0, 1.0);
+        this.alphaModelScale = cLib_addCalc2(this.alphaModelScale, this.alphaModelScaleTarget, 0.4, 0.04);
+        MtxTrans(this.posTop, false);
+        mDoMtx_YrotM(calc_mtx, this.alphaModelRotY);
+        mDoMtx_YrotM(calc_mtx, this.alphaModelRotX);
+        const scale = this.alphaModelScale * this.lightPower;
+        vec3.set(scratchVec3a, scale, scale, scale);
+        mat4.scale(calc_mtx, calc_mtx, scratchVec3a);
+        mat4.copy(this.alphaModelMtx, calc_mtx);
+        this.alphaModelRotY += 0xD0 * deltaTimeInFrames;
+        this.alphaModelRotX += 0x100 * deltaTimeInFrames;
 
         this.ep_move();
     }
@@ -466,7 +500,6 @@ class d_a_bg extends fopAc_ac_c {
             if (modelData === null)
                 continue;
             this.bgModel[i] = new J3DModelInstance(modelData);
-            initModelForZelda(this.bgModel[i]!);
 
             const btk = globals.resCtrl.getStageResByName(ResType.Btk, arcName, btkName[i]);
             if (btk !== null)
@@ -548,7 +581,6 @@ class d_a_vrbox extends fopAc_ac_c {
 
         const res = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_sky.bdl`));
         this.model = new J3DModelInstance(res);
-        initModelForZelda(this.model);
 
         // vrboxFlags?
         globals.scnPlay.vrboxLoaded = true;
@@ -657,19 +689,14 @@ class d_a_vrbox2 extends fopAc_ac_c {
     public subload(globals: dGlobals): cPhs__Status {
         const backCloudRes = assertExists(globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_back_cloud.bdl`));
         this.backCloud = new J3DModelInstance(backCloudRes);
-        initModelForZelda(this.backCloud);
 
         const kasumiMaeRes = globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_kasumi_mae.bdl`);
-        if (kasumiMaeRes !== null) {
+        if (kasumiMaeRes !== null)
             this.kasumiMae = new J3DModelInstance(kasumiMaeRes);
-            initModelForZelda(this.kasumiMae);
-        }
 
         const usoUmiRes = globals.resCtrl.getStageResByName(ResType.Model, `Stage`, `vr_uso_umi.bdl`);
-        if (usoUmiRes !== null) {
+        if (usoUmiRes !== null)
             this.usoUmi = new J3DModelInstance(usoUmiRes);
-            initModelForZelda(this.usoUmi);
-        }
 
         return cPhs__Status.Next;
     }
@@ -1050,7 +1077,6 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
 
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Ygush00`, mdl_table[this.type]));
-        initModelForZelda(this.model);
         this.btkAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Btk, `Ygush00`, btk_table[this.type]), true, LoopMode.REPEAT);
         this.bckAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Bck, `Ygush00`, bck_table[this.type]), true, LoopMode.REPEAT);
 
@@ -1099,7 +1125,6 @@ class d_a_obj_lpalm extends fopAc_ac_c {
 
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Oyashi`, 0x04));
-        initModelForZelda(this.model);
         this.model.jointMatrixCalcCallback = this.nodeCallBack;
 
         mat4.translate(this.model.modelMatrix, this.model.modelMatrix, this.pos);
@@ -1187,7 +1212,6 @@ class d_a_obj_zouK1 extends fopAc_ac_c {
 
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `VzouK`, 0x08));
-        initModelForZelda(this.model);
 
         const anm = resCtrl.getObjectRes(ResType.Bck, `VzouK`, 0x05);
         this.bckAnm.init(this.model.modelData, anm, true, LoopMode.ONCE, 0.0, anm.duration);
@@ -1254,7 +1278,6 @@ class d_a_swhit0 extends fopAc_ac_c {
     public subload(globals: dGlobals): cPhs__Status {
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Always`, 0x35));
-        initModelForZelda(this.model);
 
         const bckAnm = resCtrl.getObjectRes(ResType.Bck, `Always`, 0x0D);
         this.bckAnm.init(this.model.modelData, bckAnm, true, LoopMode.REPEAT, 1.0, 0);
