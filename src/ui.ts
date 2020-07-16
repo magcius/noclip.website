@@ -2340,6 +2340,7 @@ class StudioPanel extends FloatingPanel {
     public onSceneChange() {
         this.newAnimation();
         this.loadAnimation();
+        this.animationManager.enableStudioController(this.viewer);
     }
 
     private newAnimation(): void {
