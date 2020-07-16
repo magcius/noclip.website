@@ -204,7 +204,6 @@ function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, Gfx
 
 const textureMatrix = mat4.create();
 export class BINModelPartInstance {
-    private gfxSampler: GfxSampler;
     private gfxProgram: GfxProgram;
     private hasDynamicTexture: boolean = false;
     private textureMapping = nArray(1, () => new TextureMapping());
@@ -264,7 +263,7 @@ export class BINModelPartInstance {
         const wrapS = translateWrapMode(wms);
         const wrapT = translateWrapMode(wmt);
 
-        this.gfxSampler = cache.createSampler(device, {
+        this.textureMapping[0].gfxSampler = cache.createSampler(device, {
             minFilter, magFilter, mipFilter,
             wrapS, wrapT,
             minLOD: 1, maxLOD: 1,
