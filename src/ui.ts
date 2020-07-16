@@ -2151,13 +2151,15 @@ class StudioPanel extends FloatingPanel {
         }
 
         this.keyframeNameInput.onchange = () => {
-            if (this.selectedKeyframeListItem &&
-                (!this.keyframeNameInput.value || this.keyframeNameInput.value.trim() === '')) {
-                this.keyframeNameInput.value = 'Keyframe';
-                this.selectedKeyframeListItem.dataset.name = 'Keyframe';
-                this.selectedKeyframeListItem.childNodes[0].nodeValue = 'Keyframe';
+            if (this.selectedKeyframeListItem) {
+                if (!this.keyframeNameInput.value || this.keyframeNameInput.value.trim() === '') {
+                    this.keyframeNameInput.value = 'Keyframe';
+                    this.selectedKeyframeListItem.dataset.name = 'Keyframe';
+                    this.selectedKeyframeListItem.childNodes[0].nodeValue = 'Keyframe';
+                }
+                this.selectedKeyframe.name = this.keyframeNameInput.value;
+                this.saveAnimation();
             }
-            this.saveAnimation();
         }
 
         const MAX_KEYFRAME_DURATION = 100.0;
@@ -2463,7 +2465,8 @@ class StudioPanel extends FloatingPanel {
         const keyframeListItem: HTMLElement = document.createElement('li');
         // The keyframe index is passed as the CustomEvent detail.
         const keyframeIndex: number = e.detail;
-        keyframeListItem.innerText = 'Keyframe ' + (this.animationManager.totalKeyframesAdded());
+        const kf: Keyframe = this.animationManager.getKeyframeByIndex(keyframeIndex);
+        keyframeListItem.innerText = kf.name as string;
         keyframeListItem.dataset.index = keyframeIndex.toString();
         keyframeListItem.dataset.name = keyframeListItem.innerText;
         keyframeListItem.onclick = (e: MouseEvent) => this.selectKeyframeListItem(e);
@@ -2505,8 +2508,8 @@ class StudioPanel extends FloatingPanel {
         if (keyframeIndex === this.keyframeList.children.length) {
             this.keyframeList.insertAdjacentElement('beforeend', keyframeListItem);
         } else {
-            this.keyframeList.children[keyframeIndex].insertAdjacentElement('afterend', keyframeListItem);
-            this.updateKeyframeIndices(keyframeIndex);
+            this.keyframeList.children[keyframeIndex - 1].insertAdjacentElement('afterend', keyframeListItem);
+            this.updateKeyframeIndices(keyframeIndex - 1);
         }
         keyframeListItem.click();
         this.saveAnimation();

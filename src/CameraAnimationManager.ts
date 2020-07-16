@@ -37,6 +37,7 @@ export interface Keyframe {
     trsTangentIn: vec3;
     trsTangentOut: vec3;
     endPos: mat4;
+    name?: string;
 }
 
 export class CameraAnimation {
@@ -54,6 +55,8 @@ export class CameraAnimation {
     public totalKeyframesAdded: number = -1;
 
     public insertKeyframe(after: number, keyframeEndPos: mat4) {
+        this.totalKeyframesAdded++;
+        const name = this.totalKeyframesAdded === 0 ? 'Starting Position' : 'Keyframe ' + this.totalKeyframesAdded;
         const newKeyframe: Keyframe = {
             interpDuration: 5,
             holdDuration: 0,
@@ -61,10 +64,10 @@ export class CameraAnimation {
             linearEaseType: LinearEaseType.EaseBoth,
             trsTangentIn: vec3.create(),
             trsTangentOut: vec3.create(),
-            endPos: keyframeEndPos
+            endPos: keyframeEndPos,
+            name: name
         }
         this.keyframes.splice(after + 1, 0, newKeyframe);
-        this.totalKeyframesAdded++;
     }
 
     public appendKeyframe(keyframeEndPos: mat4) {
@@ -120,6 +123,8 @@ export class CameraAnimationManager {
         this.animation.keyframes = keyframes;
         this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
         for (let i = 1; i < keyframes.length; i++) {
+            if (this.animation.keyframes[i].name === undefined)
+                this.animation.keyframes[i].name = 'Keyframe ' + i;
             this.animation.totalKeyframesAdded = i;
             this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: i }));
         }
@@ -131,10 +136,6 @@ export class CameraAnimationManager {
 
     public serializeAnimation(): string {
         return JSON.stringify(this.animation.keyframes);
-    }
-
-    public totalKeyframesAdded(): number {
-        return this.animation.totalKeyframesAdded;
     }
 
     public getKeyframeByIndex(index: number): Keyframe {
@@ -151,7 +152,7 @@ export class CameraAnimationManager {
         if (afterIndex > -1) {
             // Insert new keyframe after the specified index.
             this.animation.insertKeyframe(afterIndex, pos);
-            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: afterIndex }));
+            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: afterIndex + 1 }));
         } else {
             // No keyframe selected
             if (this.animation.keyframes.length === 0) {
