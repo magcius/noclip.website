@@ -266,7 +266,7 @@ export class BINModelPartInstance {
         this.textureMapping[0].gfxSampler = cache.createSampler(device, {
             minFilter, magFilter, mipFilter,
             wrapS, wrapT,
-            minLOD: 1, maxLOD: 100,
+            minLOD: 0, maxLOD: 100,
         });
     }
 
