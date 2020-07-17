@@ -277,7 +277,6 @@ export class CameraAnimationManager {
             this.studioCameraController.setToPosition(this.currentKeyframe.endPos);
         else
             this.setInterpolationVectors();
-        return true;
     }
 
     public stopAnimation() {
