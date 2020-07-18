@@ -191,8 +191,6 @@ export class KCollisionServer {
         if (which === 0) {
             this.loadPosition(dst, prism.positionIdx);
         } else {
-            const scratchVec3a = vec3.create();
-            const scratchVec3b = vec3.create();
             if (which === 1) {
                 this.loadNormal(scratchVec3a, prism.edgeNormal2Idx);
                 this.loadNormal(scratchVec3b, prism.faceNormalIdx);

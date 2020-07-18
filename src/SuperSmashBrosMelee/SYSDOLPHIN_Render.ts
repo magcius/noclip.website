@@ -1038,9 +1038,8 @@ class HSD_MObj_Instance {
         }
 
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
-        const offs = this.materialHelper.allocateMaterialParams(renderInst);
         this.setupTExpConstants(materialParams);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 }
@@ -1177,7 +1176,7 @@ class HSD_DObj_Instance {
                 megaStateFlags.cullMode = GfxCullMode.FRONT_AND_BACK;
 
             shapeHelper.setOnRenderInst(renderInst);
-            shapeHelper.fillPacketParams(packetParams, renderInst);
+            this.mobj.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
             renderInstManager.submitRenderInst(renderInst);
         }
 

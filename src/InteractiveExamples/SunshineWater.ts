@@ -11,7 +11,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import { ub_PacketParams, PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { PacketParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
@@ -89,7 +89,7 @@ class PlaneShape {
         this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0 });
     }
 
-    public prepareToRender(renderHelper: GXRenderHelperGfx, packetParams: PacketParams): void {
+    public prepareToRender(renderHelper: GXRenderHelperGfx): void {
         const renderInstManager = renderHelper.renderInstManager;
         const renderInst = renderInstManager.newRenderInst();
         // Force this so it renders after the skybox.
@@ -97,11 +97,6 @@ class PlaneShape {
         renderInst.sortKey = makeSortKey((GfxRendererLayer.TRANSLUCENT | GfxRendererLayer.OPAQUE) + 10);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(6);
-
-        let offs = renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
-        const d = renderInst.mapUniformBufferF32(ub_PacketParams);
-        fillPacketParamsData(d, offs, packetParams);
-
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -144,7 +139,7 @@ class SunshineWaterModel {
         const seaMaterial = assertExists(bmd.mat3.materialEntries.find((m) => m.name === '_umi'));
         this.mangleMaterial(seaMaterial, configName);
         const seaMaterialData = new MaterialData(seaMaterial);
-        this.seaMaterialInstance = new MaterialInstance(seaMaterialData, {});
+        this.seaMaterialInstance = new MaterialInstance(seaMaterialData, [], {});
         bindTTK1MaterialInstance(this.seaMaterialInstance, this.animationController, btk);
         this.plane = new PlaneShape(device, cache);
 
@@ -153,6 +148,7 @@ class SunshineWaterModel {
 
     public mangleMaterial(material: MaterialEntry, configName: string): void {
         const gxMaterial = material.gxMaterial;
+        gxMaterial.usePnMtxIdx = false;
 
         if (configName.includes('noalpha')) {
             // Disable alpha test
@@ -194,16 +190,18 @@ class SunshineWaterModel {
     public prepareToRender(device: GfxDevice, renderHelper: GXRenderHelperGfx, viewerInput: ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
         const template = renderHelper.pushTemplateRenderInst();
+
         fillSceneParamsDataOnTemplate(template, viewerInput);
         this.seaMaterialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, template);
-        template.allocateUniformBuffer(ub_MaterialParams, this.seaMaterialInstance.materialHelper.materialParamsBufferSize);
 
         computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, viewerInput.camera);
         mat4.mul(packetParams.u_PosMtx[0], this.shapeInstanceState.worldToViewMatrix, this.modelMatrix);
+        this.seaMaterialInstance.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
         this.seaMaterialInstance.fillMaterialParams(template, this.materialInstanceState, this.shapeInstanceState.worldToViewMatrix, this.modelMatrix, viewerInput.camera, viewerInput.viewport, packetParams);
 
-        this.plane.prepareToRender(renderHelper, packetParams);
+        this.plane.prepareToRender(renderHelper);
+
         renderHelper.renderInstManager.popTemplateRenderInst();
     }
 

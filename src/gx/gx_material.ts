@@ -6,7 +6,7 @@ import * as GX from './gx_enum';
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
 import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
-import { vec3, vec4, mat4 } from 'gl-matrix';
+import { vec3, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 import { assert } from '../util';
 import { reverseDepthForCompareMode, IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
@@ -276,7 +276,11 @@ export function materialHasFogBlock(material: { hasFogBlock?: boolean }): boolea
     return material.hasFogBlock !== undefined ? material.hasFogBlock : false;
 }
 
-function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean }): string {
+export function materialUsePnMtxIdx(material: { usePnMtxIdx?: boolean }): boolean {
+    return material.usePnMtxIdx !== undefined ? material.usePnMtxIdx : true;
+}
+
+function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean, usePnMtxIdx?: boolean }): string {
     return `
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
@@ -326,9 +330,14 @@ ${materialHasFogBlock(material) ? `
 ` : ``}
 };
 
-// Expected to change with each shape packet.
+// Expected to change with each shape draw.
+// TODO(jstpierre): Rename from ub_PacketParams.
 layout(row_major, std140) uniform ub_PacketParams {
+${materialUsePnMtxIdx(material) ? `
     Mat4x3 u_PosMtx[10];
+` : `
+    Mat4x3 u_PosMtx[1];
+`}
 };
 
 uniform sampler2D u_Texture[8];
@@ -347,6 +356,19 @@ export function getMaterialParamsBlockSize(material: GXMaterial): number {
         size += 4*5*8;
     if (hasFogBlock)
         size += 4*5;
+
+    return size;
+}
+
+export function getPacketParamsBlockSize(material: GXMaterial): number {
+    const usePnMtxIdx = materialUsePnMtxIdx(material);
+
+    let size = 0;
+
+    if (usePnMtxIdx)
+        size += 4*3 * 10;
+    else
+        size += 4*3 * 1;
 
     return size;
 }
@@ -1188,20 +1210,16 @@ ${this.generateFogFunc(`t_Fog`)}
     }
 
     private generateMulPos(): string {
-        // Default to using pnmtxidx.
-        const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
         const src = `vec4(a_Position.xyz, 1.0)`;
-        if (usePnMtxIdx)
+        if (materialUsePnMtxIdx(this.material))
             return this.generateMulPntMatrixDynamic(`a_Position.w`, src);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src);
     }
 
     private generateMulNrm(): string {
-        // Default to using pnmtxidx.
-        const usePnMtxIdx = this.material.usePnMtxIdx !== undefined ? this.material.usePnMtxIdx : true;
         const src = `vec4(a_Normal.xyz, 0.0)`;
-        if (usePnMtxIdx)
+        if (materialUsePnMtxIdx(this.material))
             return this.generateMulPntMatrixDynamic(`a_Position.w`, src, `MulNormalMatrix`);
         else
             return this.generateMulPntMatrixStatic(GX.TexGenMatrix.PNMTX0, src, `MulNormalMatrix`);

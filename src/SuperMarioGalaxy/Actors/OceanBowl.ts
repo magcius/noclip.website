@@ -12,7 +12,7 @@ import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { getVertexInputLocation } from "../../gx/gx_material";
 import * as GX from "../../gx/gx_enum";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
-import { MaterialParams, PacketParams, ColorKind, ub_MaterialParams, ub_PacketParamsBufferSize, ub_PacketParams, fillPacketParamsData } from "../../gx/gx_render";
+import { MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from "../../gfx/render/GfxRenderer";
 import { DrawType, NameObj, MovementType } from "../NameObj";
 import { LiveActor, ZoneAndLayer } from "../LiveActor";
@@ -393,14 +393,12 @@ export class OceanBowl extends LiveActor {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelper.programKey);
 
-        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -428,14 +426,12 @@ export class OceanBowl extends LiveActor {
         this.materialHelperBloom.setOnRenderInst(device, cache, renderInst);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelperBloom.programKey);
 
-        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelperBloom.materialParamsBufferSize);
-        this.materialHelperBloom.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelperBloom.allocateMaterialParamsDataOnInst(renderInst, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        this.materialHelperBloom.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }

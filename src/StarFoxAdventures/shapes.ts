@@ -1,23 +1,21 @@
-import * as Viewer from '../viewer';
-import { mat4, vec3 } from 'gl-matrix';
-import { nArray } from '../util';
-import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxDevice, GfxSampler, GfxVertexBufferDescriptor, GfxInputState, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxIndexBufferDescriptor, GfxBufferFrequencyHint } from '../gfx/platform/GfxPlatform';
-import { GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../gfx/platform/GfxPlatform';
-import { GX_VtxDesc, GX_VtxAttrFmt, compileVtxLoaderMultiVat, LoadedVertexLayout, LoadedVertexData, GX_Array, VtxLoader, VertexAttributeInput, LoadedVertexDraw, compilePartialVtxLoader } from '../gx/gx_displaylist';
-import { PacketParams, MaterialParams, GXMaterialHelperGfx, createInputLayout, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from '../gx/gx_render';
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
-import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { Camera, computeViewMatrix } from '../Camera';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GXMaterial } from '../gx/gx_material';
-import { colorNewFromRGBA, colorCopy, White } from '../Color';
 
-import { SFAMaterial } from './materials';
+import { mat4 } from 'gl-matrix';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { Camera, computeViewMatrix } from '../Camera';
+import { colorCopy, colorNewFromRGBA, White } from '../Color';
+import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
+import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
+import { GXMaterial } from '../gx/gx_material';
+import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
+import { nArray } from '../util';
 import { SFAAnimationController } from './animation';
+import { SFAMaterial } from './materials';
 import { ModelRenderContext } from './models';
-import { ViewState, computeModelView } from './util';
+import { computeModelView, ViewState } from './util';
+
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -88,18 +86,11 @@ class MyShapeHelper {
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexDraw | null = null): void {
-        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         if (packet !== null)
             renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
         else
             renderInst.drawIndexes(this.loadedVertexData.totalIndexCount);
-    }
-
-    public fillPacketParams(packetParams: PacketParams, renderInst: GfxRenderInst): void {
-        let offs = renderInst.getUniformBufferOffset(ub_PacketParams);
-        const d = renderInst.mapUniformBufferF32(ub_PacketParams);
-        fillPacketParamsData(d, offs, packetParams);
     }
 
     public destroy(device: GfxDevice): void {
@@ -153,7 +144,7 @@ export class ShapeGeometry {
         mat4.mul(dst, dst, modelMatrix);
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, config: ShapeConfig) {
+    public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, config: ShapeConfig) {
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
                 this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic, false);
@@ -180,12 +171,13 @@ export class ShapeGeometry {
             this.computeModelView(this.packetParams.u_PosMtx[i], config.camera, this.scratchMtx);
         }
 
-        this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
+        material.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
     }
 }
 
 export interface ShapeMaterial {
     setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) => void;
+    allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void;
 }
 
 export class CommonShapeMaterial implements ShapeMaterial {
@@ -233,8 +225,6 @@ export class CommonShapeMaterial implements ShapeMaterial {
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
         this.updateMaterialHelper();
         
-        const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
-
         if (this.viewState === undefined) {
             this.viewState = {
                 sceneCtx: modelCtx,
@@ -276,7 +266,11 @@ export class CommonShapeMaterial implements ShapeMaterial {
         }
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
+    }
+
+    public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void {
+        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
     }
 }
 
@@ -290,7 +284,7 @@ export class Shape {
     }
 
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
-        this.geom.setOnRenderInst(device, renderInstManager, renderInst, {
+        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, {
             matrix: modelMatrix,
             boneMatrices: boneMatrices,
             camera: modelCtx.viewerInput.camera,

@@ -4,7 +4,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
-import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
+import { PacketParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
 
 import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
@@ -219,7 +219,7 @@ export class ShapeInstance {
 
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[i]);
-            this.shapeData.shapeHelper.fillPacketParams(packetParams, renderInst);
+            materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
             if (multi)
                 materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
@@ -355,6 +355,18 @@ interface TexNoCalc {
 
 type EffectMtxCallback = (dst: mat4, texMtx: TexMtx) => void;
 
+function shapeInstancesUsePnMtxIdx(shapeInstances: ShapeInstance[]): boolean | undefined {
+    // If we have no shapes, then we're undetermined.
+    if (shapeInstances.length === 0)
+        return undefined;
+
+    for (let i = 0; i < shapeInstances.length; i++)
+        if (shapeInstances[i].shapeData.shape.displayFlags === ShapeDisplayFlags.MULTI)
+            return true;
+
+    return false;
+}
+
 const materialParams = new MaterialParams();
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create(), matrixScratch4 = mat4.create();
 export class MaterialInstance {
@@ -369,15 +381,17 @@ export class MaterialInstance {
     public sortKey: number = 0;
     public colorOverrides: (Color | null)[] = nArray(ColorKind.COUNT, () => null);
     public fogBlock = new GX_Material.FogBlock();
-    public shapeInstances: ShapeInstance[] = [];
+    public usePnMtxIdx?: boolean = undefined;
 
-    constructor(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks) {
+    constructor(materialData: MaterialData, public shapeInstances: ShapeInstance[], materialHacks?: GX_Material.GXMaterialHacks) {
+        this.usePnMtxIdx = shapeInstancesUsePnMtxIdx(this.shapeInstances);
         this.setMaterialData(materialData, materialHacks);
     }
 
     public setMaterialData(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks): void {
         this.materialData = materialData;
         const material = this.materialData.material;
+        material.gxMaterial.usePnMtxIdx = this.usePnMtxIdx;
         this.materialHelper = new GXMaterialHelperGfx(material.gxMaterial, materialHacks);
         this.name = material.name;
         let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
@@ -738,9 +752,7 @@ export class MaterialInstance {
 
     public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, packetParams: PacketParams): void {
         this.fillOnMaterialParams(materialParams, materialInstanceState, camera, modelMatrix, viewport, packetParams, viewMatrix);
-
-        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 
@@ -882,12 +894,8 @@ export class J3DModelData {
             this.shapeData.push(new ShapeData(device, cache, shp1, this.bufferCoalescer.coalescedBuffers));
         }
 
-        // Load material data.
         this.modelMaterialData = new BMDModelMaterialData(device, cache, bmd);
-
         this.loadHierarchy(bmd.inf1);
-
-        // Load scene graph.
         this.realized = true;
     }
 
@@ -986,20 +994,16 @@ export class J3DModelInstance {
     constructor(public modelData: J3DModelData, materialHacks?: GX_Material.GXMaterialHacks) {
         assert(this.modelData.realized);
 
+        this.shapeInstances = this.modelData.shapeData.map((shapeData) => {
+            return new ShapeInstance(shapeData);
+        });
+
         this.modelMaterialData = this.modelData.modelMaterialData;
-        this.materialInstances = this.modelMaterialData.materialData!.map((materialData) => {
-            return new MaterialInstance(materialData, materialHacks);
+        this.materialInstances = this.modelMaterialData.materialData!.map((materialData, i) => {
+            const shapeInstances = this.shapeInstances.filter((shapeInstance) => shapeInstance.shapeData.shape.materialIndex === i);
+            return new MaterialInstance(materialData, shapeInstances, materialHacks);
         });
         this.tex1Data = this.modelMaterialData.tex1Data!;
-
-        this.shapeInstances = this.modelData.shapeData.map((shapeData) => {
-            const shapeInstance = new ShapeInstance(shapeData);
-
-            const materialInstance = this.materialInstances[shapeData.shape.materialIndex];
-            materialInstance.shapeInstances.push(shapeInstance);
-
-            return shapeInstance;
-        });
 
         this.materialInstanceState.textureMappings = this.modelMaterialData.createDefaultTextureMappings();
 
@@ -1209,8 +1213,8 @@ export class J3DModelInstance {
         // Billboards have their model matrix modified to face the camera, so their world space position doesn't
         // quite match what they kind of do.
         //
-        // For now, we simply don't cull both of these special cases, hoping they'll be simple enough to just always
-        // render. In theory, we could cull billboards using the bounding sphere.
+        // For now, we simply don't cull billboards, hoping they'll be simple enough to just always render.
+        // In theory, we could cull using the bounding sphere instead.
         const disableCulling = this.modelData.hasBillboard;
 
         if (viewMatrix !== null)

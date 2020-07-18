@@ -15,7 +15,7 @@ import { nArray, assertExists, assert } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8 } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture } from "./d_kankyo_wether";
-import { ColorKind, GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, MaterialParams, PacketParams, fillPacketParamsData } from "../gx/gx_render";
+import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, MathConstants, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
@@ -1519,13 +1519,11 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
         tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        const offs = this.materialHelper.allocateMaterialParams(renderInst);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.modelMatrix);
-        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -1559,8 +1557,7 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
         globals.quadStatic.setOnRenderInst(template);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-        const offs = this.materialHelper.allocateMaterialParams(template);
-        this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
 
         let value = this.value;
 
@@ -1572,14 +1569,13 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
             const renderInst = renderInstManager.newRenderInst();
             this.texData[digit].fillTextureMapping(materialParams.m_TextureMapping[0]);
             renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-            renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
 
             vec3.set(scratchVec3a, x, 0, 0);
             mat4.translate(scratchMat4a, this.modelMatrix, scratchVec3a);
             mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
             x -= this.spacing * 2;
 
-            fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+            this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
             renderInstManager.submitRenderInst(renderInst);
 
             // No more digits.
@@ -2224,14 +2220,12 @@ class dCloth_packet_c {
         this.flagTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.toonTex.fillTextureMapping(materialParams.m_TextureMapping[1]);
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        const offs = this.materialHelper.allocateMaterialParams(template);
-        this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        fillPacketParamsData(template.mapUniformBufferF32(ub_PacketParams), template.getUniformBufferOffset(ub_PacketParams), packetParams);
+        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
@@ -2696,14 +2690,11 @@ class d_a_majuu_flag extends fopAc_ac_c {
         this.flagTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.toonTex.fillTextureMapping(materialParams.m_TextureMapping[1]);
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        const offs = this.materialHelper.allocateMaterialParams(template);
-        this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
-        template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
-        fillPacketParamsData(template.mapUniformBufferF32(ub_PacketParams), template.getUniformBufferOffset(ub_PacketParams), packetParams);
+        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;

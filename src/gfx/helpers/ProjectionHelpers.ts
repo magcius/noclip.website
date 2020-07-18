@@ -10,7 +10,7 @@ const mtxOpenGLFromD3D = mat4.fromValues(
 );
 
 // Converts a projection matrix from D3D-style Z range [0, 1] to OpenGL-style Z range [-1, 1]
-export function projectionMatrixOpenGLFromD3D(m: mat4): void {
+function projectionMatrixOpenGLFromD3D(m: mat4): void {
     mat4.mul(m, mtxOpenGLFromD3D, m);
 }
 
@@ -22,7 +22,7 @@ const mtxD3DFromOpenGL = mat4.fromValues(
 );
 
 // Converts a projection matrix from OpenGL-style Z range [-1, 1] to D3D-style Z range [0, 1]
-export function projectionMatrixD3DFromOpenGL(m: mat4): void {
+function projectionMatrixD3DFromOpenGL(m: mat4): void {
     mat4.mul(m, mtxD3DFromOpenGL, m);
 }
 

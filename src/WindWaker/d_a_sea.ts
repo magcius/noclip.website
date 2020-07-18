@@ -11,7 +11,7 @@ import { ResType } from "./d_resorce";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
-import { GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, MaterialParams, PacketParams, ColorKind } from '../gx/gx_render';
+import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from '../gx/gx_render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { dKy_get_seacolor, dKy_GxFog_sea_set } from './d_kankyo';
 import { colorLerp, OpaqueBlack } from '../Color';
@@ -503,11 +503,9 @@ export class d_a_sea extends fopAc_ac_c {
         const renderInst = this.ddraw.endDraw(device, renderInstManager);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        const offs = materialHelper.allocateMaterialParams(renderInst);
-        materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
-        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+        materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 

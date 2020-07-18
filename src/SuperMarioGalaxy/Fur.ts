@@ -368,8 +368,7 @@ class FurDrawer {
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst, materialParams: MaterialParams): void {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
-        const offs = this.materialHelper.allocateMaterialParams(renderInst);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 
@@ -486,7 +485,7 @@ class FurCtrl {
 
                 const renderInst = renderInstManager.newRenderInst();
                 shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[j]);
-                shapeHelper.fillPacketParams(packetParams, renderInst);
+                this.furDrawer.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
                 renderInstManager.submitRenderInst(renderInst);
             }
@@ -572,6 +571,8 @@ export class FurMulti {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.createdDensityMaps.length; i++)
             this.createdDensityMaps[i].destroy(device);
+        for (let i = 0; i < this.furCtrls.length; i++)
+            this.furCtrls[i].destroy(device);
     }
 }
 

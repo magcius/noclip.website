@@ -186,25 +186,24 @@ function translateDepthCompareMode(cmp: GSDepthCompareMode): GfxCompareMode {
 
 function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, GfxMipFilterMode] {
     switch (filter) {
-    case GSTextureFilter.LINEAR:
-        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
     case GSTextureFilter.NEAREST:
         return [GfxTexFilterMode.POINT,    GfxMipFilterMode.NO_MIP];
-    case GSTextureFilter.LINEAR_MIPMAP_LINEAR:
-        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
+    case GSTextureFilter.LINEAR:
+        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP];
+    case GSTextureFilter.NEAREST_MIPMAP_NEAREST:
+        return [GfxTexFilterMode.POINT,    GfxMipFilterMode.NEAREST];
+    case GSTextureFilter.NEAREST_MIPMAP_LINEAR:
+        return [GfxTexFilterMode.POINT,    GfxMipFilterMode.LINEAR];
     case GSTextureFilter.LINEAR_MIPMAP_NEAREST:
         return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST];
-    case GSTextureFilter.NEAREST_MIPMAP_LINEAR:
-        return [GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR];
-    case GSTextureFilter.NEAREST_MIPMAP_NEAREST:
-        return [GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST];
+    case GSTextureFilter.LINEAR_MIPMAP_LINEAR:
+        return [GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR];
     default: throw new Error();
     }
 }
 
 const textureMatrix = mat4.create();
 export class BINModelPartInstance {
-    private gfxSampler: GfxSampler;
     private gfxProgram: GfxProgram;
     private hasDynamicTexture: boolean = false;
     private textureMapping = nArray(1, () => new TextureMapping());
@@ -256,7 +255,7 @@ export class BINModelPartInstance {
 
         const texMagFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 5) & 0x01;
         const texMinFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 6) & 0x07;
-        const [magFilter] = translateTextureFilter(texMagFilter);
+        const [magFilter]            = translateTextureFilter(texMagFilter);
         const [minFilter, mipFilter] = translateTextureFilter(texMinFilter);
 
         const wms = (gsConfiguration.clamp_1_data0 >>> 0) & 0x03;
@@ -264,10 +263,10 @@ export class BINModelPartInstance {
         const wrapS = translateWrapMode(wms);
         const wrapT = translateWrapMode(wmt);
 
-        this.gfxSampler = cache.createSampler(device, {
+        this.textureMapping[0].gfxSampler = cache.createSampler(device, {
             minFilter, magFilter, mipFilter,
             wrapS, wrapT,
-            minLOD: 1, maxLOD: 1,
+            minLOD: 0, maxLOD: 100,
         });
     }
 
