@@ -575,7 +575,7 @@ function patchInTexMtxIdxBuffer(loadedVertexLayout: LoadedVertexLayout, loadedVe
         const p = view.getFloat32(offs, true);
         for (let j = 0; j < bufferStride; j++) {
             if (texMtxIdxBaseOffsets[j] >= 0)
-                buffer[i*bufferStride + j] = (p + texMtxIdxBaseOffsets[j]) / 3;
+                buffer[i*bufferStride + j] = p + (texMtxIdxBaseOffsets[j] / 3);
         }
         offs += loadedStride;
     }
