@@ -37,6 +37,7 @@ export interface Keyframe {
     trsTangentIn: vec3;
     trsTangentOut: vec3;
     endPos: mat4;
+    name?: string;
 }
 
 export class CameraAnimation {
@@ -54,6 +55,8 @@ export class CameraAnimation {
     public totalKeyframesAdded: number = -1;
 
     public insertKeyframe(after: number, keyframeEndPos: mat4) {
+        this.totalKeyframesAdded++;
+        const name = this.totalKeyframesAdded === 0 ? 'Starting Position' : 'Keyframe ' + this.totalKeyframesAdded;
         const newKeyframe: Keyframe = {
             interpDuration: 5,
             holdDuration: 0,
@@ -61,10 +64,10 @@ export class CameraAnimation {
             linearEaseType: LinearEaseType.EaseBoth,
             trsTangentIn: vec3.create(),
             trsTangentOut: vec3.create(),
-            endPos: keyframeEndPos
+            endPos: keyframeEndPos,
+            name: name
         }
         this.keyframes.splice(after + 1, 0, newKeyframe);
-        this.totalKeyframesAdded++;
     }
 
     public appendKeyframe(keyframeEndPos: mat4) {
@@ -80,7 +83,6 @@ export class CameraAnimation {
 export class CameraAnimationManager {
     private animation: CameraAnimation;
     private studioCameraController: StudioCameraController;
-
     /**
      * The translation vector components of the keyframes following and preceding the current keyframe.
      * Used for calculating tangents.
@@ -115,21 +117,25 @@ export class CameraAnimationManager {
     }
 
     public loadAnimation(keyframes: Keyframe[]) {
+        if (keyframes.length === 0)
+            return;
         this.animation = new CameraAnimation();
         this.animation.keyframes = keyframes;
         this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
         for (let i = 1; i < keyframes.length; i++) {
+            if (this.animation.keyframes[i].name === undefined)
+                this.animation.keyframes[i].name = 'Keyframe ' + i;
             this.animation.totalKeyframesAdded = i;
             this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: i }));
         }
     }
 
-    public serializeAnimation(): string {
-        return JSON.stringify(this.animation.keyframes);
+    public newAnimation() {
+        this.animation = new CameraAnimation();
     }
 
-    public totalKeyframesAdded(): number {
-        return this.animation.totalKeyframesAdded;
+    public serializeAnimation(): string {
+        return JSON.stringify(this.animation.keyframes);
     }
 
     public getKeyframeByIndex(index: number): Keyframe {
@@ -146,7 +152,7 @@ export class CameraAnimationManager {
         if (afterIndex > -1) {
             // Insert new keyframe after the specified index.
             this.animation.insertKeyframe(afterIndex, pos);
-            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: afterIndex }));
+            this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: afterIndex + 1 }));
         } else {
             // No keyframe selected
             if (this.animation.keyframes.length === 0) {
@@ -271,7 +277,6 @@ export class CameraAnimationManager {
             this.studioCameraController.setToPosition(this.currentKeyframe.endPos);
         else
             this.setInterpolationVectors();
-        return true;
     }
 
     public stopAnimation() {
@@ -299,6 +304,35 @@ export class CameraAnimationManager {
             return true;
         }
         return false;
+    }
+
+    public isAnimation(a: Keyframe[]): boolean {
+        if (!Array.isArray(a))
+            return false;
+        try {
+            for (let i = 0; i < a.length; i++) {
+                for (let j = 0; j < 16; j++) {
+                    if (typeof a[i].endPos[j] !== 'number')
+                        return false;
+                    if (j < 3) {
+                        if (typeof a[i].trsTangentIn[j] !== 'number'
+                            || typeof a[i].trsTangentOut[j] !== 'number')
+                            return false;
+                    }
+                }
+                if (typeof a[i].holdDuration !== 'number')
+                    return false;
+                if (typeof a[i].interpDuration !== 'number')
+                    return false;
+                if (typeof a[i].linearEaseType !== 'string')
+                    return false;
+                if (typeof a[i].usesLinearInterp !== 'boolean')
+                    return false;
+            }
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     private getEasingFuncForEaseType(easeType: LinearEaseType): Function | null {
