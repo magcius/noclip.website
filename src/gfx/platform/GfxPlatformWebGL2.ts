@@ -1495,6 +1495,9 @@ void main() {
 
     public programPatched(o: GfxProgram): void {
         const program = o as GfxProgramP_GL;
+        const gl = this.gl;
+        gl.deleteProgram(program.gl_program);
+        program.gl_program = this.ensureResourceExists(gl.createProgram());
         program.compileState = GfxProgramCompileStateP_GL.NeedsCompile;
         this._tryCompileProgram(program);
     }
