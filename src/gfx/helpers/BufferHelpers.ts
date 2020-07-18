@@ -11,11 +11,6 @@ export interface GfxCoalescedBuffer {
     byteCount: number;
 }
 
-export interface GfxCoalescedBuffers {
-    vertexBuffer: GfxCoalescedBuffer;
-    indexBuffer: GfxCoalescedBuffer;
-}
-
 export function coalesceBuffer(device: GfxDevice, usage: GfxBufferUsage, datas: ArrayBufferSlice[]): GfxCoalescedBuffer[] {
     let dataLength = 0;
     for (let i = 0; i < datas.length; i++)
