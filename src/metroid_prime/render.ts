@@ -3,7 +3,7 @@ import { vec3, mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray, assert } from '../util';
-import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, ub_MaterialParams } from '../gx/gx_render';
+import { MaterialParams, PacketParams, GXTextureHolder, ColorKind } from '../gx/gx_render';
 
 import { MREA, Material, Surface, UVAnimationType, MaterialSet, AreaLight } from './mrea';
 import * as Viewer from '../viewer';
@@ -16,7 +16,7 @@ import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helper
 import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx_displaylist';
-import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
+import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix, GX_Program } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
 import { colorMult, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Color } from '../Color';
 import { texEnvMtx, computeNormalMatrix } from '../MathHelpers';
@@ -154,7 +154,7 @@ class SurfaceInstance {
         this.materialGroupInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
 
         mat4.mul(this.packetParams.u_PosMtx[0], viewMatrix, modelMatrixScratch);
-        this.surfaceData.shapeHelper.fillPacketParams(this.packetParams, renderInst);
+        this.materialGroupInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
         renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, this.materialTextureKey);
 
         renderInst.setSamplerBindingsFromTextureMappings(this.materialInstance.textureMappings);
@@ -191,7 +191,7 @@ class MaterialGroupInstance {
         // Set up the program.
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
 
-        renderInst.setUniformBufferOffset(ub_MaterialParams, this.materialParamsBlockOffs, this.materialHelper.materialParamsBufferSize);
+        renderInst.setUniformBufferOffset(GX_Program.ub_MaterialParams, this.materialParamsBlockOffs, this.materialHelper.materialParamsBufferSize);
 
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         renderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);

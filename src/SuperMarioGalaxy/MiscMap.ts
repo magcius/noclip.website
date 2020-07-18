@@ -16,11 +16,12 @@ import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { GXMaterialHelperGfx, ub_SceneParams, ub_SceneParamsBufferSize, MaterialParams, PacketParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
+import { GXMaterialHelperGfx, ub_SceneParamsBufferSize, MaterialParams, PacketParams, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { TDDraw } from "./DDraw";
 import * as GX from '../gx/gx_enum';
 import { MathConstants, saturate, Vec3NegY } from "../MathHelpers";
+import { GX_Program } from "../gx/gx_material";
 
 //#region Water
 export class WaterArea extends AreaObj {
@@ -356,13 +357,11 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
 
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
-        renderInst.setUniformBufferOffset(ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
+        renderInst.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
-
-        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
         mat4.identity(packetParams.u_PosMtx[0]);
-        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
     }
 
     public destroy(device: GfxDevice): void {

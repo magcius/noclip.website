@@ -21,9 +21,9 @@ import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
-import { getVertexInputLocation } from "../../gx/gx_material";
+import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
-import { MaterialParams, ColorKind, ub_PacketParams, ub_PacketParamsBufferSize, PacketParams, ub_MaterialParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
+import { MaterialParams, ColorKind, PacketParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0 } from "../../MathHelpers";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
@@ -2130,9 +2130,9 @@ function fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderI
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
     // These should be one allocation.
-    let materialOffs = renderInst.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
-    let packetOffs = renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
-    const d = renderInst.getUniformBuffer().mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + ub_PacketParamsBufferSize);
+    let materialOffs = renderInst.allocateUniformBuffer(GX_Program.ub_MaterialParams, materialHelper.materialParamsBufferSize);
+    let packetOffs = renderInst.allocateUniformBuffer(GX_Program.ub_PacketParams, materialHelper.packetParamsBufferSize);
+    const d = renderInst.getUniformBuffer().mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + materialHelper.packetParamsBufferSize);
 
     // Since this is called quite a *lot*, we have hand-inlined variants of
     // fillMaterialParamsDataWithOptimizations and fillPacketParamsDataWithOptimizations for speed here.

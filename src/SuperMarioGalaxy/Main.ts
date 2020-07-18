@@ -19,7 +19,7 @@ import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
-import { MaterialParams, PacketParams, SceneParams, fillSceneParams, ub_SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from '../gx/gx_render';
+import { MaterialParams, PacketParams, SceneParams, fillSceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from '../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -44,7 +44,7 @@ import { MapPartsRailGuideHolder } from './MapParts';
 import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr, BloomPostFXRenderer } from './ImageEffect';
 import { LensFlareDirector, DrawSyncManager } from './Actors/LensFlare';
 import { DrawCameraType } from './DrawBuffer';
-import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
 
@@ -230,7 +230,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         for (let drawType = DrawType.EffectDraw3D; drawType <= DrawType.EffectDrawAfterImageEffect; drawType++) {
             const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
             template.filterKey = createFilterKeyForDrawType(drawType);
-            template.setUniformBufferOffset(ub_SceneParams, this.sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
+            template.setUniformBufferOffset(GX_Program.ub_SceneParams, this.sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
 
             let texPrjMtx: mat4 | null = null;
             if (drawType === DrawType.EffectDrawIndirect) {
@@ -319,9 +319,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawAllEffects(viewerInput);
 
         const template2 = this.renderHelper.renderInstManager.pushTemplateRenderInst();
-        template2.setUniformBufferOffset(ub_SceneParams, sceneParamsOffs3D, ub_SceneParamsBufferSize);
+        template2.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs3D, ub_SceneParamsBufferSize);
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_3D);
-        template2.setUniformBufferOffset(ub_SceneParams, sceneParamsOffs2D, ub_SceneParamsBufferSize);
+        template2.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs2D, ub_SceneParamsBufferSize);
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 

@@ -4,7 +4,7 @@
 import * as GX from '../../gx/gx_enum';
 import { LiveActor, ZoneAndLayer } from "../LiveActor";
 import { TDDraw } from "../DDraw";
-import { GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, MaterialParams, PacketParams } from "../../gx/gx_render";
+import { GXMaterialHelperGfx, MaterialParams, PacketParams } from "../../gx/gx_render";
 import { vec3, mat4 } from "gl-matrix";
 import { colorNewCopy, White, colorFromHSL } from "../../Color";
 import { dfShow } from "../../DebugFloaters";
@@ -223,14 +223,12 @@ export class GravityExplainer extends LiveActor {
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
 
-        template.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
-        mat4.identity(packetParams.u_PosMtx[0]);
-        fillPacketParamsData(template.mapUniformBufferF32(ub_PacketParams), template.getUniformBufferOffset(ub_PacketParams), packetParams);
-
         const device = sceneObjHolder.modelCache.device;
-
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
         this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
+
+        mat4.identity(packetParams.u_PosMtx[0]);
+        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
         this.ddraw.beginDraw();
         for (let i = 0; i < this.arrows.length; i++)

@@ -18,7 +18,7 @@ import { Camera, divideByW } from "../Camera";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ColorKind, setChanWriteEnabled } from "../gx/gx_render";
+import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind, setChanWriteEnabled } from "../gx/gx_render";
 import { GfxDevice, GfxCompareMode, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert } from "../util";

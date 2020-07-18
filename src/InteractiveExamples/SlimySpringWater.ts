@@ -10,7 +10,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import { ub_PacketParams, PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParams, ub_SceneParamsBufferSize } from '../gx/gx_render';
+import { PacketParams, fillSceneParamsDataOnTemplate, ColorKind, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -132,16 +132,11 @@ class PlaneShape {
         this.inputState = device.createInputState(this.inputLayout, vertexBuffers, { buffer: this.idxBuffer, byteOffset: 0 });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, packetParams: PacketParams): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 10);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indexCount);
-
-        let offs = renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
-        const d = renderInst.mapUniformBufferF32(ub_PacketParams);
-        fillPacketParamsData(d, offs, packetParams);
-
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -180,6 +175,7 @@ class FakeWaterModelInstance {
 
         const materialHelper = this.materialInstance.materialHelper;
         const material = materialHelper.material;
+        material.usePnMtxIdx = false;
 
         {
             const mb = new GXMaterialBuilder();
@@ -240,15 +236,17 @@ class FakeWaterModelInstance {
         this.modelInstance.calcAnim();
         this.modelInstance.calcView(viewerInput.camera, viewerInput.camera.viewMatrix);
 
+        const template = renderInstManager.pushTemplateRenderInst();
+
         // Calc our packet params.
         mat4.copy(packetParams.u_PosMtx[0], this.modelInstance.shapeInstanceState.drawViewMatrixArray[0]);
+        this.materialInstance.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
         // Push our material instance.
-        const template = renderInstManager.pushTemplateRenderInst();
         this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
         this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, viewerInput.viewport, packetParams);
+        this.plane.prepareToRender(renderInstManager);
 
-        this.plane.prepareToRender(renderInstManager, packetParams);
         renderInstManager.popTemplateRenderInst();
     }
 
@@ -293,7 +291,7 @@ class SlimySpringWaterRenderer implements SceneGfx {
         this.skybox.prepareToRender(device, renderInstManager, viewerInput);
         this.flowerBox.prepareToRender(device, renderInstManager, viewerInput);
         const customLODBias = this.useMipmaps ? null : -10000;
-        template.allocateUniformBuffer(ub_SceneParams, ub_SceneParamsBufferSize);
+        template.allocateUniformBuffer(GX_Material.GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsDataOnTemplate(template, viewerInput, customLODBias);
         this.waterModel.prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();

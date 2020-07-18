@@ -1,5 +1,5 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
@@ -20,7 +20,7 @@ import { AABB } from '../Geometry';
 import { colorCopy, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
 import * as UI from '../ui';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GXMaterialHacks } from '../gx/gx_material';
+import { GXMaterialHacks, GX_Program } from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
@@ -233,7 +233,7 @@ class BatchInstance {
         const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
         this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera);
-        this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
+        materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -316,8 +316,8 @@ class NodeInstance {
             const depthBias = 1.0 + (indexBias * -2.0 * far * near) / ((far + near) * (1.0 + indexBias));
 
             if (depthBias !== 1.0) {
-                let offs = template.allocateUniformBuffer(ub_SceneParams, ub_SceneParamsBufferSize);
-                const d = template.mapUniformBufferF32(ub_SceneParams);
+                let offs = template.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+                const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
                 fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
                 projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, viewerInput.camera.clipSpaceNearZ);

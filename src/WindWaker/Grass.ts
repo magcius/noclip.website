@@ -422,7 +422,7 @@ export class FlowerPacket {
                 const renderInst = renderInstManager.newRenderInst();
                 this.flowerModel.shapeWhiteUncut.setOnRenderInst(renderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
-                this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
+                this.flowerModel.whiteMaterial.allocatePacketParamsDataOnInst(renderInst, packetParams);
                 renderInstManager.submitRenderInst(renderInst);
             }
         }
@@ -448,7 +448,7 @@ export class FlowerPacket {
                 const renderInst = renderInstManager.newRenderInst();
                 this.flowerModel.shapePinkUncut.setOnRenderInst(renderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
-                this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
+                this.flowerModel.pinkMaterial.allocatePacketParamsDataOnInst(renderInst, packetParams);
                 renderInstManager.submitRenderInst(renderInst);
             }
         }
@@ -474,7 +474,7 @@ export class FlowerPacket {
                 const renderInst = renderInstManager.newRenderInst();
                 this.flowerModel.shapeBessouUncut.setOnRenderInst(renderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
-                this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
+                this.flowerModel.bessouMaterial.allocatePacketParamsDataOnInst(renderInst, packetParams);
                 renderInstManager.submitRenderInst(renderInst);
             }
         }
@@ -1158,7 +1158,7 @@ export class GrassPacket {
                 const renderInst = renderInstManager.newRenderInst();
                 this.shape.setOnRenderInst(renderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMtx);
-                this.shape.fillPacketParams(packetParams, renderInst);
+                this.material.allocatePacketParamsDataOnInst(renderInst, packetParams);
                 renderInstManager.submitRenderInst(renderInst);
             }
         }

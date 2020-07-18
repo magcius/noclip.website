@@ -117,7 +117,7 @@ class ShapeInstance {
 
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.setOnRenderInst(renderInst, packet);
-            this.shapeData.fillPacketParams(packetParams, renderInst);
+            materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
             if (usesSkinning)
                 materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, packet, camera, viewport);

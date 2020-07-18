@@ -10,7 +10,8 @@ import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { JMapInfoIter } from "./JMapInfo";
 import { mat4 } from "gl-matrix";
 import { assert } from "../util";
-import { ub_SceneParams, ub_SceneParamsBufferSize } from "../gx/gx_render";
+import { ub_SceneParamsBufferSize } from "../gx/gx_render";
+import { GX_Program } from "../gx/gx_material";
 
 export const enum MovementType {
     None                           = -1,
@@ -314,7 +315,7 @@ export class SceneNameObjListExecutor {
                 const template = renderInstManager.pushTemplateRenderInst();
                 template.filterKey = createFilterKeyForDrawType(executeInfo.drawType);
                 // HACK(jstpierre): By default, the execute scene params are 3D. We should replace executeDrawAll with GfxRenderInstList eventually...
-                template.setUniformBufferOffset(ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
+                template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
                 nameObj.draw(sceneObjHolder, renderInstManager, viewerInput);
                 renderInstManager.popTemplateRenderInst();
             }

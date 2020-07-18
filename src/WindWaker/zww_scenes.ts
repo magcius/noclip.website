@@ -15,7 +15,7 @@ import * as GX from '../gx/gx_enum';
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { J3DModelInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Camera, texProjCameraSceneTex } from '../Camera';
-import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, MaterialParams, ColorKind, setChanWriteEnabled, SceneParams, fillSceneParamsData, ub_SceneParams, ub_SceneParamsBufferSize, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../gx/gx_render';
+import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, MaterialParams, ColorKind, SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask, GfxBlendMode } from '../gfx/platform/GfxPlatform';
@@ -25,7 +25,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { range, getMatrixAxisZ, computeProjectionMatrixFromCuboid } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
-import { EFB_WIDTH, EFB_HEIGHT, parseMaterial } from '../gx/gx_material';
+import { EFB_WIDTH, EFB_HEIGHT, parseMaterial, GX_Program } from '../gx/gx_material';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType } from './d_resorce';
@@ -236,7 +236,7 @@ class dDlst_alphaModel_c {
             if (data.type === dDlst_alphaModel__Type.Bonbori) {
                 this.bonboriShape.setOnRenderInst(template);
                 mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, data.mtx);
-                this.bonboriShape.fillPacketParams(packetParams, template);
+                this.materialHelperBackRevZ.allocatePacketParamsDataOnInst(template, packetParams);
 
                 materialParams.u_Color[ColorKind.MAT0].a = data.alpha / 0xFF;
 
@@ -257,8 +257,8 @@ class dDlst_alphaModel_c {
 
         // Blend onto main screen.
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.allocateUniformBuffer(ub_SceneParams, ub_SceneParamsBufferSize);
-        fillSceneParamsData(renderInst.mapUniformBufferF32(ub_SceneParams), renderInst.getUniformBufferOffset(ub_SceneParams), this.orthoSceneParams);
+        const sceneParamsOffs = renderInst.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+        fillSceneParamsData(renderInst.mapUniformBufferF32(GX_Program.ub_SceneParams), sceneParamsOffs, this.orthoSceneParams);
         this.materialHelperDrawAlpha.setOnRenderInst(device, cache, renderInst);
         colorCopy(materialParams.u_Color[ColorKind.MAT0], this.color);
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);

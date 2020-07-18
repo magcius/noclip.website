@@ -16,9 +16,9 @@ import { GridPlane } from "./GridPlane";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { createCsvParser } from "../SuperMarioGalaxy/JMapInfo";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
-import { fillSceneParamsDataOnTemplate, ub_SceneParams, ub_SceneParamsBufferSize, gxBindingLayouts } from "../gx/gx_render";
+import { fillSceneParamsDataOnTemplate, ub_SceneParamsBufferSize, gxBindingLayouts } from "../gx/gx_render";
 import { TextureMapping } from "../TextureHolder";
-import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
+import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from "../gx/gx_material";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { FloatingPanel } from "../DebugFloaters";
 
@@ -443,7 +443,7 @@ export class Explorer implements SceneGfx {
 
         const efTemplate = renderInstManager.pushTemplateRenderInst();
         efTemplate.setBindingLayouts(gxBindingLayouts);
-        efTemplate.allocateUniformBuffer(ub_SceneParams, ub_SceneParamsBufferSize);
+        efTemplate.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsDataOnTemplate(efTemplate, viewerInput);
 
         {
