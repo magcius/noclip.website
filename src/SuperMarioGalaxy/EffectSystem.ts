@@ -4,7 +4,7 @@ import * as JPA from '../Common/JSYSTEM/JPA';
 
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
 import { SceneObjHolder } from "./Main";
-import { leftPad, assert, assertExists, fallback } from "../util";
+import { leftPad, assert, assertExists, fallback, fallbackUndefined } from "../util";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { vec3, mat4 } from "gl-matrix";
@@ -18,7 +18,7 @@ import { getJointMtxByName } from './ActorUtil';
 import { Texture } from '../viewer';
 
 export class ParticleResourceHolder {
-    private effectNames: string[];
+    private effectNameToIndex = new Map<string, number>();
     private jpac: JPA.JPAC;
     private jpacData: JPA.JPACData;
     private resourceDatas = new Map<number, JPA.JPAResourceData>();
@@ -26,8 +26,9 @@ export class ParticleResourceHolder {
 
     constructor(effectArc: RARC.JKRArchive) {
         const effectNames = createCsvParser(effectArc.findFileData(`ParticleNames.bcsv`)!);
-        this.effectNames = effectNames.mapRecords((iter) => {
-            return assertExists(iter.getValueString('name'));
+        effectNames.mapRecords((iter, i) => {
+            const name = assertExists(iter.getValueString('name'));
+            this.effectNameToIndex.set(name, i);
         });
         this.autoEffectList = createCsvParser(effectArc.findFileData(`AutoEffectList.bcsv`)!);
 
@@ -37,7 +38,7 @@ export class ParticleResourceHolder {
     }
 
     public getUserIndex(name: string): number {
-        return this.effectNames.findIndex((effectName) => effectName === name);
+        return fallbackUndefined(this.effectNameToIndex.get(name), -1);
     }
 
     public getResourceRaw(name: string): JPA.JPAResourceRaw {
@@ -612,7 +613,7 @@ export class MultiEmitter {
     }
 }
 
-function registerAutoEffectInGroup(sceneObjHolder: SceneObjHolder, effectKeeper: EffectKeeper, actor: LiveActor, groupName: string): void {
+function registerAutoEffectInGroup(sceneObjHolder: SceneObjHolder, effectKeeper: EffectKeeper, groupName: string): void {
     if (sceneObjHolder.effectSystem === null)
         return;
 
@@ -682,7 +683,7 @@ export class EffectKeeper {
     private visibleDrawParticle: boolean = true;
 
     constructor(sceneObjHolder: SceneObjHolder, public actor: LiveActor, public groupName: string) {
-        registerAutoEffectInGroup(sceneObjHolder, this, this.actor, this.groupName);
+        registerAutoEffectInGroup(sceneObjHolder, this, this.groupName);
     }
 
     public addAutoEffect(sceneObjHolder: SceneObjHolder, autoEffectInfo: JMapInfoIter): void {
