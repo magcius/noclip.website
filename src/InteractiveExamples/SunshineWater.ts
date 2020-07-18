@@ -139,7 +139,7 @@ class SunshineWaterModel {
         const seaMaterial = assertExists(bmd.mat3.materialEntries.find((m) => m.name === '_umi'));
         this.mangleMaterial(seaMaterial, configName);
         const seaMaterialData = new MaterialData(seaMaterial);
-        this.seaMaterialInstance = new MaterialInstance(seaMaterialData, {});
+        this.seaMaterialInstance = new MaterialInstance(seaMaterialData, [], {});
         bindTTK1MaterialInstance(this.seaMaterialInstance, this.animationController, btk);
         this.plane = new PlaneShape(device, cache);
 
