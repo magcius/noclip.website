@@ -571,6 +571,8 @@ export class FurMulti {
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.createdDensityMaps.length; i++)
             this.createdDensityMaps[i].destroy(device);
+        for (let i = 0; i < this.furCtrls.length; i++)
+            this.furCtrls[i].destroy(device);
     }
 }
 
