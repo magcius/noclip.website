@@ -16,7 +16,7 @@ import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { GXMaterialHelperGfx, ub_SceneParams, ub_SceneParamsBufferSize, ub_MaterialParams, MaterialParams, PacketParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
+import { GXMaterialHelperGfx, ub_SceneParams, ub_SceneParamsBufferSize, MaterialParams, PacketParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ColorKind } from "../gx/gx_render";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { TDDraw } from "./DDraw";
 import * as GX from '../gx/gx_enum';
@@ -357,8 +357,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
 
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
         renderInst.setUniformBufferOffset(ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
-        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, this.materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
 
         renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);

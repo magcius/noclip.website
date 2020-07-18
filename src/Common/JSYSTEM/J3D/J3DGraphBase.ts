@@ -4,7 +4,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
 import * as GX_Material from '../../../gx/gx_material';
-import { PacketParams, ColorKind, ub_MaterialParams, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
+import { PacketParams, ColorKind, loadTextureFromMipChain, loadedDataCoalescerComboGfx, MaterialParams, fillIndTexMtx, setChanWriteEnabled } from '../../../gx/gx_render';
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../../../gx/gx_render';
 
 import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from '../../../Camera';
@@ -738,9 +738,7 @@ export class MaterialInstance {
 
     public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, packetParams: PacketParams): void {
         this.fillOnMaterialParams(materialParams, materialInstanceState, camera, modelMatrix, viewport, packetParams, viewMatrix);
-
-        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 

@@ -241,8 +241,7 @@ class dDlst_alphaModel_c {
                 materialParams.u_Color[ColorKind.MAT0].a = data.alpha / 0xFF;
 
                 // These materials should all have the same buffer size (asserted for in constructor)
-                const offs = this.materialHelperBackRevZ.allocateMaterialParams(template);
-                this.materialHelperBackRevZ.fillMaterialParamsDataOnInst(template, offs, materialParams);
+                this.materialHelperBackRevZ.allocateMaterialParamsDataOnInst(template, materialParams);
 
                 const back = renderInstManager.newRenderInst();
                 this.materialHelperBackRevZ.setOnRenderInst(device, cache, back);
@@ -262,12 +261,10 @@ class dDlst_alphaModel_c {
         fillSceneParamsData(renderInst.mapUniformBufferF32(ub_SceneParams), renderInst.getUniformBufferOffset(ub_SceneParams), this.orthoSceneParams);
         this.materialHelperDrawAlpha.setOnRenderInst(device, cache, renderInst);
         colorCopy(materialParams.u_Color[ColorKind.MAT0], this.color);
-        const offs = this.materialHelperDrawAlpha.allocateMaterialParams(renderInst);
-        this.materialHelperDrawAlpha.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.orthoQuad.setOnRenderInst(renderInst);
         mat4.identity(packetParams.u_PosMtx[0]);
-        renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
-        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        this.materialHelperDrawAlpha.allocatePacketParamsDataOnInst(renderInst, packetParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 

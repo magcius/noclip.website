@@ -406,10 +406,9 @@ export class FlowerPacket {
         template = renderInstManager.pushTemplateRenderInst();
         {
             template.setSamplerBindingsFromTextureMappings(this.flowerModel.whiteTextureMapping);
-            const materialParamsOffs = this.flowerModel.whiteMaterial.allocateMaterialParams(template);
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
-            this.flowerModel.whiteMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.flowerModel.whiteMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
             this.flowerModel.whiteMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
             for (let i = 0; i < room.length; i++) {
@@ -433,10 +432,9 @@ export class FlowerPacket {
         template = renderInstManager.pushTemplateRenderInst();
         {
             template.setSamplerBindingsFromTextureMappings(this.flowerModel.pinkTextureMapping);
-            const materialParamsOffs = this.flowerModel.pinkMaterial.allocateMaterialParams(template);
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
-            this.flowerModel.pinkMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.flowerModel.pinkMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
             this.flowerModel.pinkMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
             for (let i = 0; i < room.length; i++) {
@@ -460,10 +458,9 @@ export class FlowerPacket {
         template = renderInstManager.pushTemplateRenderInst();
         {
             template.setSamplerBindingsFromTextureMappings(this.flowerModel.bessouTextureMapping);
-            const materialParamsOffs = this.flowerModel.bessouMaterial.allocateMaterialParams(template);
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
-            this.flowerModel.bessouMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.flowerModel.bessouMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
             this.flowerModel.bessouMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
             for (let i = 0; i < room.length; i++) {
@@ -830,12 +827,11 @@ export class TreePacket {
         {
             // Set transparent
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-            const materialParamsOffs = this.treeModel.woodMaterial.allocateMaterialParams(template);
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
             colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x64/0xFF);
-            this.treeModel.shadowMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.treeModel.shadowMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
             this.treeModel.shadowMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
             template.setSamplerBindingsFromTextureMappings(this.treeModel.shadowTextureMapping);
 
@@ -847,7 +843,7 @@ export class TreePacket {
                 const shadowRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.shapeShadow.setOnRenderInst(shadowRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.shadowModelMtx);
-                this.treeModel.shapeShadow.fillPacketParams(packetParams, shadowRenderInst);
+                this.treeModel.shadowMaterial.allocatePacketParamsDataOnInst(shadowRenderInst, packetParams);
                 renderInstManager.submitRenderInst(shadowRenderInst);
             }
         }
@@ -856,12 +852,11 @@ export class TreePacket {
         // Draw tree trunks
         template = renderInstManager.pushTemplateRenderInst();
         {
-            const materialParamsOffs = this.treeModel.woodMaterial.allocateMaterialParams(template);
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
-            this.treeModel.woodMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.treeModel.woodMaterial.allocateMaterialParamsDataOnInst(template, materialParams);
             this.treeModel.woodMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
             template.setSamplerBindingsFromTextureMappings(this.treeModel.woodTextureMapping);
 
@@ -876,13 +871,13 @@ export class TreePacket {
                 const trunkRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.shapeMain.setOnRenderInst(trunkRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.trunkModelMtx);
-                this.treeModel.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
+                this.treeModel.woodMaterial.allocatePacketParamsDataOnInst(trunkRenderInst, packetParams);
                 renderInstManager.submitRenderInst(trunkRenderInst);
 
                 const topRenderInst = renderInstManager.newRenderInst();
                 this.treeModel.shapeTop.setOnRenderInst(topRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.topModelMtx);
-                this.treeModel.shapeTop.fillPacketParams(packetParams, topRenderInst);
+                this.treeModel.woodMaterial.allocatePacketParamsDataOnInst(trunkRenderInst, packetParams);
                 renderInstManager.submitRenderInst(topRenderInst);
             }
         }
@@ -1147,10 +1142,9 @@ export class GrassPacket {
         template = renderInstManager.pushTemplateRenderInst();
         {
             template.setSamplerBindingsFromTextureMappings(this.textureMapping);
-            const materialParamsOffs = this.material.allocateMaterialParams(template);
             setColorFromRoomNo(globals, materialParams, roomIdx);
             dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
-            this.material.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
+            this.material.allocateMaterialParamsDataOnInst(template, materialParams);
             this.material.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
             for (let i = 0; i < room.length; i++) {

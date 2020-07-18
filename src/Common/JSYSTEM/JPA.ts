@@ -2134,8 +2134,8 @@ function fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderI
     let packetOffs = renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
     const d = renderInst.getUniformBuffer().mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + ub_PacketParamsBufferSize);
 
-    // Since this is called quite a *lot*, we have hand-crafted versions of
-    // fillMaterialParamsData and fillPacketParamsData for speed here.
+    // Since this is called quite a *lot*, we have hand-inlined variants of
+    // fillMaterialParamsDataWithOptimizations and fillPacketParamsDataWithOptimizations for speed here.
 
     // Skip AMB0, AMB1, MAT0, MAT1, K0, K1, K2, K3, CPREV.
     materialOffs += 4*9;

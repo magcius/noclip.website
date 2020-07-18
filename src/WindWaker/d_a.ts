@@ -1519,8 +1519,7 @@ class dDlst_2DObject_c extends dDlst_2DBase_c {
         tex.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        const offs = this.materialHelper.allocateMaterialParams(renderInst);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
         renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
@@ -1559,8 +1558,7 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
         globals.quadStatic.setOnRenderInst(template);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-        const offs = this.materialHelper.allocateMaterialParams(template);
-        this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
 
         let value = this.value;
 
@@ -2224,8 +2222,7 @@ class dCloth_packet_c {
         this.flagTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.toonTex.fillTextureMapping(materialParams.m_TextureMapping[1]);
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        const offs = this.materialHelper.allocateMaterialParams(template);
-        this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
@@ -2696,8 +2693,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         this.flagTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         this.toonTex.fillTextureMapping(materialParams.m_TextureMapping[1]);
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        const offs = this.materialHelper.allocateMaterialParams(template);
-        this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);

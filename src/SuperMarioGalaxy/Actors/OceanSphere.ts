@@ -14,7 +14,7 @@ import { isEqualStageName } from "./MiscActor";
 import { ViewerRenderInput } from "../../viewer";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { TDDraw } from "../DDraw";
-import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind, ub_MaterialParams, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../../gx/gx_render';
+import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData } from '../../gx/gx_render';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { colorFromRGBA8, colorCopy, colorNewFromRGBA8 } from '../../Color';
 import { WaterAreaHolder, WaterInfo } from '../MiscMap';
@@ -487,8 +487,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x000000FF);
 
             const materialHelper = this.materialHelperEnvBack;
-            const offs = renderInstEnvBack.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
-            materialHelper.fillMaterialParamsDataOnInst(renderInstEnvBack, offs, materialParams);
+            materialHelper.allocateMaterialParamsDataOnInst(renderInstEnvBack, materialParams);
             materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstEnvBack);
             renderInstManager.submitRenderInst(renderInstEnvBack);
         }
@@ -512,8 +511,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         this.oceanSphereTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
         renderInstXluBack.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-        const offs = renderInstXluBack.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
-        materialHelper.fillMaterialParamsDataOnInst(renderInstXluBack, offs, materialParams);
+        materialHelper.allocateMaterialParamsDataOnInst(renderInstXluBack, materialParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstXluBack);
         renderInstManager.submitRenderInst(renderInstXluBack);
 
@@ -524,8 +522,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             colorCopy(materialParams.u_Color[ColorKind.C1], this.tevReg1Back);
 
             const materialHelper = this.materialHelperXluFront;
-            const offs = renderInstFrontFaces.allocateUniformBuffer(ub_MaterialParams, materialHelper.materialParamsBufferSize);
-            materialHelper.fillMaterialParamsDataOnInst(renderInstFrontFaces, offs, materialParams);
+            materialHelper.allocateMaterialParamsDataOnInst(renderInstFrontFaces, materialParams);
             materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstFrontFaces);
             renderInstManager.submitRenderInst(renderInstFrontFaces);
         }

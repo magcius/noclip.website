@@ -11,7 +11,7 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { J3DModelData, MaterialInstance, MaterialInstanceState, ShapeInstanceState, MaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { SunshineRenderer, SunshineSceneDesc, SMSPass } from '../j3d/sms_scenes';
 import * as Yaz0 from '../Common/Compression/Yaz0';
-import { ub_PacketParams, PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { ub_PacketParams, PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { GfxDevice, GfxHostAccessPass, GfxBuffer, GfxInputState, GfxInputLayout, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
@@ -196,7 +196,6 @@ class SunshineWaterModel {
         const template = renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
         this.seaMaterialInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, template);
-        template.allocateUniformBuffer(ub_MaterialParams, this.seaMaterialInstance.materialHelper.materialParamsBufferSize);
 
         computeViewMatrix(this.shapeInstanceState.worldToViewMatrix, viewerInput.camera);
         mat4.mul(packetParams.u_PosMtx[0], this.shapeInstanceState.worldToViewMatrix, this.modelMatrix);

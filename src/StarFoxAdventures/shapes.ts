@@ -233,8 +233,6 @@ export class CommonShapeMaterial implements ShapeMaterial {
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
         this.updateMaterialHelper();
         
-        const materialOffs = this.materialHelper.allocateMaterialParams(renderInst);
-
         if (this.viewState === undefined) {
             this.viewState = {
                 sceneCtx: modelCtx,
@@ -276,7 +274,7 @@ export class CommonShapeMaterial implements ShapeMaterial {
         }
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, this.materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
     }
 }
 

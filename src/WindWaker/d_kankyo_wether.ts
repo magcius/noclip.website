@@ -162,11 +162,9 @@ const packetParams = new PacketParams();
 function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, materialParams_ = materialParams, packetParams_ = packetParams): void {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
-    const offs = materialHelper.allocateMaterialParams(renderInst);
-    materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams_);
-    renderInst.allocateUniformBuffer(ub_PacketParams, ub_PacketParamsBufferSize);
+    materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
     mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams_);
+    materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams_);
     renderInstManager.submitRenderInst(renderInst);
 }
 

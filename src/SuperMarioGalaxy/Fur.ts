@@ -368,8 +368,7 @@ class FurDrawer {
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst, materialParams: MaterialParams): void {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
-        const offs = this.materialHelper.allocateMaterialParams(renderInst);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 

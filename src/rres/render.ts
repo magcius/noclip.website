@@ -3,7 +3,7 @@ import * as BRRES from './brres';
 
 import * as GX_Material from '../gx/gx_material';
 import { mat4, vec3 } from "gl-matrix";
-import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from "../Camera";
 import AnimationController from "../AnimationController";
@@ -418,10 +418,7 @@ class MaterialInstance {
 
     public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: NormalizedViewportCoords): void {
         this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, packet, camera, viewport);
-
-        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
-
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 

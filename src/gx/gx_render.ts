@@ -135,6 +135,18 @@ export function fillPacketParamsData(d: Float32Array, bOffs: number, packetParam
     assert(d.length >= offs);
 }
 
+function fillPacketParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, packetParams: PacketParams): void {
+    let offs = bOffs;
+
+    if (GX_Material.materialUsePnMtxIdx(material))
+        for (let i = 0; i < 10; i++)
+            offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[i]);
+    else
+        offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[0]);
+
+    assert(d.length >= offs);
+}
+
 export function fillSceneParams(sceneParams: SceneParams, projectionMatrix: mat4, viewportWidth: number, viewportHeight: number, customLODBias: number | null = null): void {
     mat4.copy(sceneParams.u_Projection, projectionMatrix);
 
@@ -328,6 +340,7 @@ export class GXMaterialHelperGfx {
     public programKey: number;
     public megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public materialParamsBufferSize: number;
+    public packetParamsBufferSize: number;
     private materialHacks: GX_Material.GXMaterialHacks = {};
     private program!: GX_Material.GX_Program;
     private gfxProgram: GfxProgram | null = null;
@@ -337,6 +350,7 @@ export class GXMaterialHelperGfx {
             Object.assign(this.materialHacks, materialHacks);
 
         this.calcMaterialParamsBufferSize();
+        this.calcPacketParamsBufferSize();
         this.createProgram();
 
         this.megaStateFlags = {};
@@ -345,6 +359,10 @@ export class GXMaterialHelperGfx {
 
     public calcMaterialParamsBufferSize(): void {
         this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
+    }
+
+    public calcPacketParamsBufferSize(): void {
+        this.packetParamsBufferSize = GX_Material.getPacketParamsBlockSize(this.material);
     }
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
@@ -364,24 +382,27 @@ export class GXMaterialHelperGfx {
         this.createProgram();
     }
 
-    public fillMaterialParamsDataOnInst(renderInst: GfxRenderInst, offs: number, materialParams: MaterialParams): void {
-        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
-        fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
-    }
-
     public fillMaterialParamsData(renderInstManager: GfxRenderInstManager, offs: number, materialParams: MaterialParams): void {
         const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
         const d = uniformBuffer.mapBufferF32(offs, this.materialParamsBufferSize);
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 
-    public allocateMaterialParams(renderInst: GfxRenderInst): number {
-        return renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialParamsBufferSize);
-    }
-
     public allocateMaterialParamsBlock(renderInstManager: GfxRenderInstManager): number {
         const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
         return uniformBuffer.allocateChunk(this.materialParamsBufferSize);
+    }
+
+    public allocateMaterialParamsDataOnInst(renderInst: GfxRenderInst, materialParams: MaterialParams): void {
+        const offs = renderInst.allocateUniformBuffer(ub_MaterialParams, this.materialParamsBufferSize);
+        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
+        fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
+    }
+
+    public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void {
+        const offs = renderInst.allocateUniformBuffer(ub_PacketParams, this.packetParamsBufferSize);
+        const d = renderInst.mapUniformBufferF32(ub_MaterialParams);
+        fillPacketParamsDataWithOptimizations(this.material, d, offs, packetParams);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {

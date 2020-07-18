@@ -203,9 +203,8 @@ class MaterialInstance {
         // Set up the program.
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
 
-        const offs = this.materialHelper.allocateMaterialParams(renderInst);
         this.fillMaterialParams(materialParams, textureHolder);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         renderInst.setMegaStateFlags(this.materialHelper.megaStateFlags);

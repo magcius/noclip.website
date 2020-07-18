@@ -4,7 +4,7 @@
 import * as GX from '../../gx/gx_enum';
 import { LiveActor, ZoneAndLayer } from "../LiveActor";
 import { TDDraw } from "../DDraw";
-import { GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, ub_MaterialParams, MaterialParams, PacketParams } from "../../gx/gx_render";
+import { GXMaterialHelperGfx, ub_PacketParams, ub_PacketParamsBufferSize, fillPacketParamsData, MaterialParams, PacketParams } from "../../gx/gx_render";
 import { vec3, mat4 } from "gl-matrix";
 import { colorNewCopy, White, colorFromHSL } from "../../Color";
 import { dfShow } from "../../DebugFloaters";
@@ -230,8 +230,7 @@ export class GravityExplainer extends LiveActor {
         const device = sceneObjHolder.modelCache.device;
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-        const offs = template.allocateUniformBuffer(ub_MaterialParams, this.materialHelper.materialParamsBufferSize);
-        this.materialHelper.fillMaterialParamsDataOnInst(template, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
 
         this.ddraw.beginDraw();
         for (let i = 0; i < this.arrows.length; i++)

@@ -1038,9 +1038,8 @@ class HSD_MObj_Instance {
         }
 
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
-        const offs = this.materialHelper.allocateMaterialParams(renderInst);
         this.setupTExpConstants(materialParams);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
 }
