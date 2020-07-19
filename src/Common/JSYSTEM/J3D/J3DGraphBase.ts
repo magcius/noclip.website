@@ -223,7 +223,7 @@ export class ShapeInstance {
 
             if (multi)
                 materialInstance.fillMaterialParams(renderInst, materialInstanceState, shapeInstanceState.worldToViewMatrix, materialJointMatrix, camera, viewport, packetParams);
-    
+
             renderInstManager.submitRenderInst(renderInst);
         }
 

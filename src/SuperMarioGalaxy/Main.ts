@@ -13,7 +13,7 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, NormalizedViewportCoords } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, NormalizedViewportCoords, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
@@ -47,6 +47,7 @@ import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
+import { ShadowControllerHolder, ShadowControllerList } from './Shadow';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -340,7 +341,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         let passRenderer;
 
-        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
 
         // GameScene::draw3D()
         // drawOpa(0);
@@ -385,15 +386,15 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.MapObjWeakLight);
         this.drawOpa(passRenderer, 0x1F); // player light?
 
-        // execute(0x27);
+        this.execute(passRenderer, DrawType.ShadowVolume);
 
         // executeDrawBufferListNormalOpaBeforeSilhouette()
         this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObj);
         this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
 
-        // execute(0x28);
-        // executeDrawSilhouetteAndFillShadow();
-        // executeDrawAlphaShadow();
+        // executeDrawSilhouetteAndFillShadow() / executeDrawAlphaShadow()
+        this.execute(passRenderer, DrawType.AlphaShadow);
+
         // execute(0x39);
         // setLensFlareDrawSyncToken();
 
@@ -463,7 +464,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, this.imageEffectTexture1.gfxTexture);
 
-        // TODO(jstpierre): Fix late binding :/
         this.sceneObjHolder.specialTextureBinder.lateBindTexture(renderInstManager.simpleRenderInstList!, SpecialTextureType.OpaqueSceneTexture, this.opaqueSceneTexture.gfxTexture!);
 
         // executeDrawAfterIndirect()
@@ -976,6 +976,7 @@ export const enum SceneObj {
     CoinRotater             = 0x38,
     AirBubbleHolder         = 0x39,
     StarPieceDirector       = 0x3C,
+    ShadowControllerHolder  = 0x44,
     SwingRopeGroup          = 0x47,
     TrapezeRopeDrawInit     = 0x4A,
     MapPartsRailGuideHolder = 0x56,
@@ -1014,6 +1015,7 @@ export class SceneObjHolder {
     public planetGravityManager: PlanetGravityManager | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
+    public shadowControllerHolder: ShadowControllerHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
     public mapPartsRailGuideHolder: MapPartsRailGuideHolder | null = null;
@@ -1074,6 +1076,8 @@ export class SceneObjHolder {
             return this.coinRotater;
         else if (sceneObj === SceneObj.AirBubbleHolder)
             return this.airBubbleHolder;
+        else if (sceneObj === SceneObj.ShadowControllerHolder)
+            return this.shadowControllerHolder;
         else if (sceneObj === SceneObj.SwingRopeGroup)
             return this.swingRopeGroup;
         else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
@@ -1124,6 +1128,8 @@ export class SceneObjHolder {
             this.coinRotater = new CoinRotater(this);
         else if (sceneObj === SceneObj.AirBubbleHolder)
             this.airBubbleHolder = new AirBubbleHolder(this);
+        else if (sceneObj === SceneObj.ShadowControllerHolder)
+            this.shadowControllerHolder = new ShadowControllerHolder(this);
         else if (sceneObj === SceneObj.SwingRopeGroup)
             this.swingRopeGroup = new SwingRopeGroup(this);
         else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
@@ -1142,6 +1148,10 @@ export class SceneObjHolder {
             this.miniatureGalaxyHolder = new MiniatureGalaxyHolder(this);
         else if (sceneObj === SceneObj.PriorDrawAirHolder)
             this.priorDrawAirHolder = new PriorDrawAirHolder(this);
+    }
+
+    public requestArchives(): void {
+        ShadowControllerHolder.requestArchives(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1588,6 +1598,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.modelCache = modelCache;
         sceneObjHolder.uiContainer = context.uiContainer;
         sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.getCache());
+        sceneObjHolder.requestArchives();
         context.destroyablePool.push(sceneObjHolder);
 
         await modelCache.waitForLoad();

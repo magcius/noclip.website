@@ -825,11 +825,11 @@ export function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void
     }
 }
 
-function calcGravityVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: vec3, gravityTypeMask: GravityTypeMask, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): void {
+export function calcGravityVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: vec3, gravityTypeMask: GravityTypeMask, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): boolean {
     if (attachmentFilter === null)
         attachmentFilter = nameObj;
 
-    sceneObjHolder.planetGravityManager!.calcTotalGravityVector(dst, gravityInfo, coord, gravityTypeMask, attachmentFilter);
+    return sceneObjHolder.planetGravityManager!.calcTotalGravityVector(dst, gravityInfo, coord, gravityTypeMask, attachmentFilter);
 }
 
 export function calcGravityVector(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: vec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): void {
@@ -1311,4 +1311,14 @@ export function rotateVecDegree(dst: vec3, upVec: vec3, degrees: number, m: mat4
     const theta = degrees * MathConstants.DEG_TO_RAD;
     mat4.fromRotation(m, theta, upVec);
     vec3.transformMat4(dst, dst, m);
+}
+
+export function invalidateShadowAll(actor: LiveActor): void {
+    for (let i = 0; i < actor.shadowControllerList!.shadowControllers.length; i++)
+        actor.shadowControllerList!.shadowControllers[i].invalidate();
+}
+
+export function validateShadowAll(actor: LiveActor): void {
+    for (let i = 0; i < actor.shadowControllerList!.shadowControllers.length; i++)
+        actor.shadowControllerList!.shadowControllers[i].validate();
 }

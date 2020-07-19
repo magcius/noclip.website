@@ -36,9 +36,11 @@ export const enum MovementType {
     Enemy                          = 0x2A,
     Parts                          = 0x2B,
     Item                           = 0x2C,
+    ShadowControllerHolder         = 0x2D,
 }
 
 export const enum CalcAnimType {
+    None                           = -1,
     Planet                         = 0x01,
     CollisionMapObj                = 0x02,
     CollisionEnemy                 = 0x03,
@@ -51,38 +53,9 @@ export const enum CalcAnimType {
     Item                           = 0x10,
 }
 
-export const enum DrawType {
-    SwingRope                      = 0x00,
-    Creeper                        = 0x01,
-    Trapeze                        = 0x06,
-    OceanBowl                      = 0x07,
-    OceanRing                      = 0x08,
-    OceanRingOutside               = 0x0A,
-    OceanSphere                    = 0x0B,
-    ElectricRailHolder             = 0x0E,
-    WarpPodPath                    = 0x18,
-    WaterPlant                     = 0x1B,
-    Flag                           = 0x1D,
-    AstroDomeSkyClear              = 0x1E,
-    AstroDomeOrbit                 = 0x1F,
-    OceanBowlBloomDrawer           = 0x21,
-    Fur                            = 0x31,
-    BloomModel                     = 0x36,
-    BrightSun                      = 0x39,
-    WaterCameraFilter              = 0x3A,
-
-    EffectDraw3D                   = 0x47,
-    EffectDrawIndirect             = 0x48,
-    EffectDrawAfterIndirect        = 0x49,
-    EffectDraw2D                   = 0x4A,
-    EffectDrawFor2DModel           = 0x4B,
-    EffectDrawForBloomEffect       = 0x4C,
-    EffectDrawAfterImageEffect     = 0x4D,
-
-    GravityExplainer               = 0x200,
-};
-
 export const enum DrawBufferType {
+    None                           = -1,
+
     Sky                                 = 0x01,
     Air                                 = 0x02,
     Sun                                 = 0x03,
@@ -115,6 +88,41 @@ export const enum DrawBufferType {
     Model3DFor2D                        = 0x24,
     MirrorMapObj                        = 0x27,
 }
+
+export const enum DrawType {
+    None                           = -1,
+
+    SwingRope                      = 0x00,
+    Creeper                        = 0x01,
+    Trapeze                        = 0x06,
+    OceanBowl                      = 0x07,
+    OceanRing                      = 0x08,
+    OceanRingOutside               = 0x0A,
+    OceanSphere                    = 0x0B,
+    ElectricRailHolder             = 0x0E,
+    WarpPodPath                    = 0x18,
+    WaterPlant                     = 0x1B,
+    Flag                           = 0x1D,
+    AstroDomeSkyClear              = 0x1E,
+    AstroDomeOrbit                 = 0x1F,
+    OceanBowlBloomDrawer           = 0x21,
+    ShadowVolume                   = 0x27,
+    AlphaShadow                    = 0x29,
+    Fur                            = 0x31,
+    BloomModel                     = 0x36,
+    BrightSun                      = 0x39,
+    WaterCameraFilter              = 0x3A,
+
+    EffectDraw3D                   = 0x47,
+    EffectDrawIndirect             = 0x48,
+    EffectDrawAfterIndirect        = 0x49,
+    EffectDraw2D                   = 0x4A,
+    EffectDrawFor2DModel           = 0x4B,
+    EffectDrawForBloomEffect       = 0x4C,
+    EffectDrawAfterImageEffect     = 0x4D,
+
+    GravityExplainer               = 0x200,
+};
 
 export const enum OpaXlu {
     OPA, XLU,

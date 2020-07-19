@@ -245,7 +245,7 @@ export class CollisionParts {
         this.resetAllMtxPrivate(scratchMatrix);
     }
 
-    public checkStrikeLine(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, p0: vec3, pDir: vec3, triFilter: TriangleFilterFunc | null): number {
+    public checkStrikeLine(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, p0: ReadonlyVec3, pDir: ReadonlyVec3, triFilter: TriangleFilterFunc | null): number {
         transformVec3Mat4w1(scratchVec3a, this.invWorldMtx, p0);
         transformVec3Mat4w0(scratchVec3b, this.invWorldMtx, pDir);
 
@@ -452,7 +452,7 @@ class CollisionZone {
     }
 }
 
-function checkHitSegmentSphere(dstDirection: vec3 | null, p0: vec3, dir: vec3, sphereCenter: vec3, sphereRadius: number): boolean {
+function checkHitSegmentSphere(dstDirection: vec3 | null, p0: ReadonlyVec3, dir: ReadonlyVec3, sphereCenter: ReadonlyVec3, sphereRadius: number): boolean {
     // Put in space of P0
     vec3.sub(scratchVec3c, sphereCenter, p0);
 
@@ -568,7 +568,7 @@ class CollisionCategorizedKeeper {
         return null;
     }
 
-    public checkStrikeLine(sceneObjHolder: SceneObjHolder, p0: vec3, dir: vec3, partsFilter: CollisionPartsFilterFunc | null = null, triFilter: TriangleFilterFunc | null = null): number {
+    public checkStrikeLine(sceneObjHolder: SceneObjHolder, p0: ReadonlyVec3, dir: ReadonlyVec3, partsFilter: CollisionPartsFilterFunc | null = null, triFilter: TriangleFilterFunc | null = null): number {
         let idx = 0;
 
         scratchAABB.reset();
@@ -757,7 +757,7 @@ export class CollisionDirector extends NameObj {
     }
 }
 
-export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: vec3 | null, dstTriangle: Triangle | null, p0: vec3, dir: vec3, triFilter: TriangleFilterFunc | null, partsFilter: CollisionPartsFilterFunc | null, category: CollisionKeeperCategory): boolean {
+export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: vec3 | null, dstTriangle: Triangle | null, p0: ReadonlyVec3, dir: ReadonlyVec3, triFilter: TriangleFilterFunc | null, partsFilter: CollisionPartsFilterFunc | null, category: CollisionKeeperCategory): boolean {
     const director = sceneObjHolder.collisionDirector;
     if (director === null)
         return false;
@@ -789,7 +789,7 @@ export function getFirstPolyOnLineCategory(sceneObjHolder: SceneObjHolder, dst: 
     return true;
 }
 
-export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3): boolean {
+export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: ReadonlyVec3, dir: ReadonlyVec3): boolean {
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, CollisionKeeperCategory.Map);
 }
 
@@ -799,12 +799,12 @@ export function createCollisionPartsFilterActor(actor: LiveActor): CollisionPart
     };
 }
 
-export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: vec3, dir: vec3, actor: LiveActor): boolean {
+export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: ReadonlyVec3, dir: ReadonlyVec3, actor: LiveActor): boolean {
     const partsFilter = createCollisionPartsFilterActor(actor);
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, CollisionKeeperCategory.Map);
 }
 
-export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: vec3, height: number): boolean {
+export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: ReadonlyVec3, height: number): boolean {
     vec3.set(scratchVec3h, 0.0, -height, 0.0);
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3h, null, null, CollisionKeeperCategory.Map);
 }

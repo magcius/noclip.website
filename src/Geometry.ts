@@ -121,7 +121,7 @@ export class AABB {
         this.maxZ = Math.max(a.maxZ, b.maxZ);
     }
 
-    public unionPoint(v: vec3): boolean {
+    public unionPoint(v: ReadonlyVec3): boolean {
         let changed = false;
 
         if (v[0] < this.minX) {

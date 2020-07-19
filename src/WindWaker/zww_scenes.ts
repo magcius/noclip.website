@@ -144,11 +144,10 @@ class dDlst_alphaModel_c {
 
     private materialHelperBackRevZ: GXMaterialHelperGfx;
     private materialHelperFrontZ: GXMaterialHelperGfx;
-    private materialHelperDrawAlpha: GXMaterialHelperGfx;
-
     private bonboriCoalescer: GfxBufferCoalescerCombo;
     private bonboriShape: GXShapeHelperGfx;
 
+    private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
     private orthoQuad = new TSDraw();
 

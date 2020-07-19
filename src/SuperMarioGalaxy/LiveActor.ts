@@ -20,6 +20,7 @@ import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk,
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
 import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts } from "./Collision";
 import { StageSwitchCtrl, createStageSwitchCtrl } from "./Switch";
+import { ShadowControllerList } from "./Shadow";
 
 class ActorAnimDataInfo {
     public Name: string;
@@ -405,6 +406,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public collisionParts: CollisionParts | null = null;
     public binder: Binder | null = null;
     public stageSwitchCtrl: StageSwitchCtrl | null = null;
+    public shadowControllerList: ShadowControllerList | null = null;
 
     public translation = vec3.create();
     public rotation = vec3.create();
@@ -751,6 +753,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // tryUpdateHitSensorsAll()
         if (this.hitSensorKeeper !== null)
             this.hitSensorKeeper.update();
+
+        // requestCalcActorShadow()
+        if (this.shadowControllerList !== null)
+            this.shadowControllerList.requestCalc();
     }
 }
 
