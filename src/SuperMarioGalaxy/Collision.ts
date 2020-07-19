@@ -805,8 +805,8 @@ export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolde
 }
 
 export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: vec3, height: number): boolean {
-    vec3.set(scratchVec3c, 0.0, -height, 0.0);
-    return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3c, null, null, CollisionKeeperCategory.Map);
+    vec3.set(scratchVec3h, 0.0, -height, 0.0);
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3h, null, null, CollisionKeeperCategory.Map);
 }
 
 export const enum CollisionScaleType {
