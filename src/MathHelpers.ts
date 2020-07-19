@@ -564,6 +564,35 @@ export function getMatrixAxisZ(dst: vec3, m: ReadonlyMat4): void {
     vec3.set(dst, m[8], m[9], m[10]);
 }
 
+export function getMatrixAxis(dstX: vec3 | null, dstY: vec3 | null, dstZ: vec3 | null, m: ReadonlyMat4): void {
+    if (dstX !== null)
+        vec3.set(dstX, m[0], m[1], m[2]);
+    if (dstY !== null)
+        vec3.set(dstY, m[4], m[5], m[6]);
+    if (dstZ !== null)
+        vec3.set(dstZ, m[8], m[9], m[10]);
+}
+
+export function setMatrixAxis(m: mat4, axisX: ReadonlyVec3 | null, axisY: ReadonlyVec3 | null, axisZ: ReadonlyVec3 | null): void {
+    if (axisX !== null) {
+        m[0] = axisX[0];
+        m[1] = axisX[1];
+        m[2] = axisX[2];
+    }
+
+    if (axisY !== null) {
+        m[4] = axisY[0];
+        m[5] = axisY[1];
+        m[6] = axisY[2];
+    }
+
+    if (axisZ !== null) {
+        m[8] = axisZ[0];
+        m[9] = axisZ[1];
+        m[10] = axisZ[2];
+    }
+}
+
 export function getMatrixTranslation(dst: vec3, m: ReadonlyMat4): void {
     vec3.set(dst, m[12], m[13], m[14]);
 }

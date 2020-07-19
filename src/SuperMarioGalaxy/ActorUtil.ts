@@ -7,7 +7,7 @@ import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
-import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
+import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixAxis } from "../MathHelpers";
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
@@ -825,14 +825,14 @@ export function setTextureMatrixST(m: mat4, scale: number, v: vec2 | null): void
     }
 }
 
-export function calcGravityVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: vec3, gravityTypeMask: GravityTypeMask, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): boolean {
+export function calcGravityVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, gravityTypeMask: GravityTypeMask, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): boolean {
     if (attachmentFilter === null)
         attachmentFilter = nameObj;
 
-    return sceneObjHolder.planetGravityManager!.calcTotalGravityVector(dst, gravityInfo, coord, gravityTypeMask, attachmentFilter);
+    return sceneObjHolder.planetGravityManager!.calcTotalGravityVector(dst, gravityInfo, pos, gravityTypeMask, attachmentFilter);
 }
 
-export function calcGravityVector(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: vec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): void {
+export function calcGravityVector(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): void {
     // Can't import GravityTypeMask without circular dependencies... TODO(jstpierre): Change this.
     const GravityTypeMask_Normal = 0x01;
     calcGravityVectorOrZero(sceneObjHolder, nameObj, coord, GravityTypeMask_Normal, dst, gravityInfo, attachmentFilter);
@@ -844,7 +844,7 @@ export function calcGravity(sceneObjHolder: SceneObjHolder, actor: LiveActor): v
         vec3.copy(actor.gravityVector, scratchVec3);
 }
 
-export function makeMtxTRFromQuatVec(dst: mat4, q: quat, translation: vec3): void {
+export function makeMtxTRFromQuatVec(dst: mat4, q: ReadonlyQuat, translation: ReadonlyVec3): void {
     mat4.fromQuat(dst, q);
     dst[12] = translation[0];
     dst[13] = translation[1];
@@ -852,18 +852,7 @@ export function makeMtxTRFromQuatVec(dst: mat4, q: quat, translation: vec3): voi
 }
 
 export function setMtxAxisXYZ(dst: mat4, x: ReadonlyVec3, y: ReadonlyVec3, z: ReadonlyVec3): void {
-    dst[0] = x[0];
-    dst[1] = x[1];
-    dst[2] = x[2];
-    dst[3] = 0.0;
-    dst[4] = y[0];
-    dst[5] = y[1];
-    dst[6] = y[2];
-    dst[7] = 0.0;
-    dst[8] = z[0];
-    dst[9] = z[1];
-    dst[10] = z[2];
-    dst[11] = 0.0;
+    setMatrixAxis(dst, x, y, z);
 }
 
 export function makeMtxFrontUp(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3): void {
@@ -950,13 +939,13 @@ export function isSameDirection(v0: ReadonlyVec3, v1: ReadonlyVec3, ep: number):
     return true;
 }
 
-export function addRandomVector(dst: vec3, src: vec3, mag: number): void {
+export function addRandomVector(dst: vec3, src: ReadonlyVec3, mag: number): void {
     dst[0] = src[0] + getRandomFloat(-mag, mag);
     dst[1] = src[1] + getRandomFloat(-mag, mag);
     dst[2] = src[2] + getRandomFloat(-mag, mag);
 }
 
-export function turnRandomVector(dst: vec3, src: vec3, mag: number): void {
+export function turnRandomVector(dst: vec3, src: ReadonlyVec3, mag: number): void {
     if (isNearZero(vec3.length(src), 0.001)) {
         vec3.copy(dst, src);
     } else {
@@ -965,7 +954,7 @@ export function turnRandomVector(dst: vec3, src: vec3, mag: number): void {
     }
 }
 
-export function blendQuatUpFront(dst: quat, q: quat, up: vec3, front: vec3, speedUp: number, speedFront: number): void {
+export function blendQuatUpFront(dst: quat, q: ReadonlyQuat, up: ReadonlyVec3, front: ReadonlyVec3, speedUp: number, speedFront: number): void {
     const axisY = scratchVec3a;
     const axisZ = scratchVec3b;
     const scratch = scratchVec3;
@@ -989,7 +978,7 @@ export function blendQuatUpFront(dst: quat, q: quat, up: vec3, front: vec3, spee
     quat.normalize(dst, dst);
 }
 
-export function turnQuat(dst: quat, q: quat, v0: vec3, v1: vec3, rad: number): void {
+export function turnQuat(dst: quat, q: ReadonlyQuat, v0: ReadonlyVec3, v1: ReadonlyVec3, rad: number): void {
     if (vec3.dot(v0, v1) < 0.0 && isSameDirection(v0, v1, 0.01)) {
         turnRandomVector(scratchVec3a, v0, 0.001);
         vec3.normalize(scratchVec3a, scratchVec3a);
@@ -1010,7 +999,7 @@ export function turnQuat(dst: quat, q: quat, v0: vec3, v1: vec3, rad: number): v
     quat.normalize(dst, dst);
 }
 
-export function turnQuatYDirRad(dst: quat, q: quat, v: vec3, rad: number): void {
+export function turnQuatYDirRad(dst: quat, q: ReadonlyQuat, v: ReadonlyVec3, rad: number): void {
     quatGetAxisY(scratchVec3, q);
     turnQuat(dst, q, scratchVec3, v, rad);
 }
@@ -1041,7 +1030,7 @@ export function vecKillElement(dst: vec3, a: ReadonlyVec3, b: ReadonlyVec3): num
     return m;
 }
 
-function getMaxAbsElementIndex(v: vec3): number {
+function getMaxAbsElementIndex(v: ReadonlyVec3): number {
     const x = Math.abs(v[0]);
     const y = Math.abs(v[1]);
     const z = Math.abs(v[2]);
@@ -1053,10 +1042,15 @@ function getMaxAbsElementIndex(v: vec3): number {
         return 2;
 }
 
-export function makeMtxUpNoSupportPos(dst: mat4, up: vec3, pos: vec3): void {
+export function makeMtxUpNoSupport(dst: mat4, up: ReadonlyVec3): void {
     const max = getMaxAbsElementIndex(up);
     const front = (max === 2) ? Vec3UnitY : Vec3UnitZ;
-    makeMtxUpFrontPos(dst, up, front, pos);
+    makeMtxUpFront(dst, up, front);
+}
+
+export function makeMtxUpNoSupportPos(dst: mat4, up: ReadonlyVec3, pos: ReadonlyVec3): void {
+    makeMtxUpNoSupport(dst, up);
+    setMatrixTranslation(dst, pos);
 }
 
 export function isExistCollisionResource(actor: LiveActor, name: string): boolean {
@@ -1173,18 +1167,18 @@ export function isOnSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActo
     return actor.stageSwitchCtrl !== null && actor.stageSwitchCtrl.isOnSwitchAppear(sceneObjHolder);
 }
 
-export function getAreaObj<T extends AreaObj = AreaObj>(sceneObjHolder: SceneObjHolder, managerName: string, pos: vec3): T | null {
+export function getAreaObj<T extends AreaObj = AreaObj>(sceneObjHolder: SceneObjHolder, managerName: string, pos: ReadonlyVec3): T | null {
     if (sceneObjHolder.areaObjContainer === null)
         return null;
     return sceneObjHolder.areaObjContainer.getAreaObj(managerName, pos);
 }
 
-export function getCamPos(v: vec3, camera: Camera): void {
-    getMatrixTranslation(v, camera.worldMatrix);
+export function getCamPos(dst: vec3, camera: Camera): void {
+    getMatrixTranslation(dst, camera.worldMatrix);
 }
 
-export function getPlayerPos(v: vec3, sceneObjHolder: SceneObjHolder): void {
-    getMatrixTranslation(v, sceneObjHolder.viewerInput.camera.worldMatrix);
+export function getPlayerPos(dst: vec3, sceneObjHolder: SceneObjHolder): void {
+    getMatrixTranslation(dst, sceneObjHolder.viewerInput.camera.worldMatrix);
 }
 
 export function hideModel(actor: LiveActor): void {

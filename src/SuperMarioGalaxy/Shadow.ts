@@ -1,15 +1,15 @@
 
 import * as GX from "../gx/gx_enum";
-import { PacketParams, MaterialParams, GXMaterialHelperGfx, setChanWriteEnabled, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render";
+import { PacketParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render";
 
 import { LiveActor } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
 import { GravityInfo, GravityTypeMask } from './Gravity';
-import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName } from "./ActorUtil";
-import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, NameObjAdaptor } from "./NameObj";
-import { vec3, mat4 } from "gl-matrix";
+import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport } from "./ActorUtil";
+import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType } from "./NameObj";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
-import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid } from "../MathHelpers";
+import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis } from "../MathHelpers";
 import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision";
 import { JMapInfoIter, getJMapInfoBool, createCsvParser } from "./JMapInfo";
 import { assertExists, fallback, assert } from "../util";
@@ -20,9 +20,8 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import { TSDraw } from "./DDraw";
 import { GX_Program } from "../gx/gx_material";
-import { colorCopy, colorNewFromRGBA8 } from "../Color";
 
-function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: vec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
+function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
 }
 
@@ -37,6 +36,8 @@ const enum CalcDropGravityMode { Off, On, OneTime, PrivateOff, PrivateOn, Privat
 
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchMat4a = mat4.create();
+const scratchMat4b = mat4.create();
 const scratchTriangle = new Triangle();
 class ShadowController {
     public shadowDrawer: ShadowDrawer;
@@ -55,17 +56,17 @@ class ShadowController {
     private calcDropGravityMode = CalcDropGravityMode.Off;
 
     private dropPosMtxRef: mat4 | null = null;
-    private dropPosRef: vec3 | null = null;
+    private dropPosRef: ReadonlyVec3 | null = null;
     private dropPosFix = vec3.create();
-    private dropDirRef: vec3 | null = null;
+    private dropDirRef: ReadonlyVec3 | null = null;
     private dropDirFix = vec3.fromValues(0.0, -1.0, 0.0);
     private dropStartOffset = 50.0;
     private dropLength = 0.0;
     private dropType = DropType.Normal;
 
-    private projectionPosPtr: vec3 | null = null;
+    private projectionPosPtr: ReadonlyVec3 | null = null;
     private projectionPosFix = vec3.create();
-    private projectionNrmPtr: vec3 | null = null;
+    private projectionNrmPtr: ReadonlyVec3 | null = null;
     private projectionNrmFix = vec3.fromValues(0.0, 1.0, 0.0);
 
     constructor(sceneObjHolder: SceneObjHolder, public host: LiveActor, public name: string) {
@@ -82,7 +83,7 @@ class ShadowController {
             vec3.copy(dst, this.dropPosFix);
     }
 
-    public getDropDir(): vec3 {
+    public getDropDir(): ReadonlyVec3 {
         return this.dropDirRef !== null ? this.dropDirRef : this.dropDirFix;
     }
 
@@ -90,11 +91,11 @@ class ShadowController {
         return this.dropLength;
     }
 
-    public getProjectionPos(): vec3 {
+    public getProjectionPos(): ReadonlyVec3 {
         return this.projectionPosPtr !== null ? this.projectionPosPtr : this.projectionPosFix;
     }
 
-    public getProjectionNormal(): vec3 {
+    public getProjectionNormal(): ReadonlyVec3 {
         return this.projectionNrmPtr !== null ? this.projectionNrmPtr : this.projectionNrmFix;
     }
 
@@ -117,15 +118,19 @@ class ShadowController {
         vec3.copy(this.dropPosFix, offs);
     }
 
-    public setDropPosFix(v: vec3): void {
+    public getDropPosMtxPtr(): mat4 | null {
+        return this.dropPosMtxRef;
+    }
+
+    public setDropPosFix(v: ReadonlyVec3): void {
         vec3.copy(this.dropPosFix, v);
     }
 
-    public setDropPosPtr(v: vec3): void {
+    public setDropPosPtr(v: ReadonlyVec3): void {
         this.dropPosRef = v;
     }
 
-    public setDropDirPtr(v: vec3): void {
+    public setDropDirPtr(v: ReadonlyVec3): void {
         this.dropDirRef = v;
     }
 
@@ -327,7 +332,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         const template = renderInstManager.pushTemplateRenderInst();
-        materialParams.u_Color[ColorKind.C0].a = 0x80;
+        materialParams.u_Color[ColorKind.C0].a = 0x80 / 0xFF;
         this.materialFront.allocateMaterialParamsDataOnInst(template, materialParams);
 
         this.loadDrawModelMtx(packetParams, viewerInput);
@@ -360,6 +365,10 @@ abstract class ShadowVolumeModel extends ShadowVolumeDrawer {
         this.modelData = resourceHolder.getModel(filename);
     }
 
+    protected isDraw(): boolean {
+        return this.controller.isProjected && this.controller.isDraw();
+    }
+
     protected drawShapes(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
         const shapeData = this.modelData!.shapeData;
 
@@ -390,10 +399,6 @@ class ShadowVolumeSphere extends ShadowVolumeModel {
         this.initVolumeModel(sceneObjHolder, 'ShadowVolumeSphere');
     }
 
-    protected isDraw(): boolean {
-        return this.controller.isProjected && this.controller.isDraw();
-    }
-
     public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
         let scale = this.radius / 100.0;
         if (this.controller.followHostScale)
@@ -411,9 +416,54 @@ class ShadowVolumeSphere extends ShadowVolumeModel {
     }
 }
 
+class ShadowVolumeOval extends ShadowVolumeModel {
+    public size = vec3.fromValues(100.0, 100.0, 200.0);
+
+    constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
+        super(sceneObjHolder, 'ShadowVolumeOval', controller);
+        this.initVolumeModel(sceneObjHolder, 'ShadowVolumeSphere');
+    }
+
+    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+        vec3.scale(scratchVec3a, this.size, 1 / 100.0);
+        scratchVec3a[0] = Math.max(scratchVec3a[0], 0.01);
+        scratchVec3a[1] = Math.max(scratchVec3a[1], 0.01);
+        scratchVec3a[2] = Math.max(scratchVec3a[2], 0.01);
+
+        if (this.controller.followHostScale)
+            vec3.mul(scratchVec3a, scratchVec3a, this.controller.host.scale);
+
+        computeMatrixWithoutTranslation(scratchMat4a, this.controller.getDropPosMtxPtr()!);
+        mat4.scale(scratchMat4a, scratchMat4a, scratchVec3a);
+        mat4.invert(scratchMat4b, scratchMat4a);
+        transformVec3Mat4w0(scratchVec3a, scratchMat4b, this.controller.getDropDir());
+        makeMtxUpNoSupport(scratchMat4b, scratchVec3a);
+        mat4.mul(scratchMat4a, scratchMat4a, scratchMat4b);
+
+        const projectionPos = this.controller.getProjectionPos();
+        setMatrixTranslation(scratchMat4a, projectionPos);
+
+        getMatrixAxis(null, scratchVec3b, null, scratchMat4a);
+        vec3.normalize(scratchVec3b, scratchVec3b);
+
+        getMatrixAxis(scratchVec3a, null, null, scratchMat4a);
+        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -vec3.dot(scratchVec3a, scratchVec3b));
+        setMatrixAxis(scratchMat4a, scratchVec3a, null, null);
+
+        getMatrixAxis(null, null, scratchVec3a, scratchMat4a);
+        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -vec3.dot(scratchVec3a, scratchVec3b));
+        setMatrixAxis(scratchMat4a, null, null, scratchVec3a);
+
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('ShadowVolumeSphere');
+    }
+}
+
 // TODO(jstpierre): This is not how it's normally done. Remove when we migrate to GfxRenderInstList.
 class AlphaShadow extends NameObj {
-    private color = colorNewFromRGBA8(0x000000FF);
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
     private orthoQuad = new TSDraw();
@@ -426,9 +476,8 @@ class AlphaShadow extends NameObj {
         connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.None, DrawBufferType.None, DrawType.AlphaShadow);
 
         const mb = new GXMaterialBuilder(`dDlst_alphaModel_c drawAlphaBuffer`);
-        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
@@ -460,7 +509,6 @@ class AlphaShadow extends NameObj {
         const sceneParamsOffs = renderInst.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
         fillSceneParamsData(renderInst.mapUniformBufferF32(GX_Program.ub_SceneParams), sceneParamsOffs, this.orthoSceneParams);
         this.materialHelperDrawAlpha.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, renderInst);
-        colorCopy(materialParams.u_Color[ColorKind.MAT0], this.color);
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.orthoQuad.setOnRenderInst(renderInst);
         mat4.identity(packetParams.u_PosMtx[0]);
@@ -546,9 +594,9 @@ function setUpShadowControlBaseMtxFromCSV(controller: ShadowController, actor: L
         getJMapInfoV3f(scratchVec3a, infoIter, 'DropOffset');
         controller.setDropPosMtxPtr(actor.getBaseMtx(), scratchVec3a);
     } else {
-        const joint = assertExists(getJointMtxByName(actor, jointName));
+        const jointMtx = assertExists(getJointMtxByName(actor, jointName));
         getJMapInfoV3f(scratchVec3a, infoIter, 'DropOffset');
-        controller.setDropPosMtxPtr(actor.getBaseMtx(), scratchVec3a);
+        controller.setDropPosMtxPtr(jointMtx, scratchVec3a);
     }
 }
 
@@ -586,6 +634,20 @@ function createShadowVolumeSphereFromCSV(sceneObjHolder: SceneObjHolder, actor: 
     const drawer = new ShadowVolumeSphere(sceneObjHolder, controller);
     setUpShadowVolumeFromCSV(drawer, infoIter);
     drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
+
+    controller.shadowDrawer = drawer;
+    return drawer;
+}
+
+function createShadowVolumeOvalFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): ShadowVolumeOval {
+    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
+    controller.setDropTypeNormal();
+
+    const drawer = new ShadowVolumeOval(sceneObjHolder, controller);
+    setUpShadowVolumeFromCSV(drawer, infoIter);
+    vec3.set(drawer.size, 100.0, 100.0, 100.0);
+    getJMapInfoV3f(drawer.size, infoIter, `Size`);
+
     controller.shadowDrawer = drawer;
     return drawer;
 }
@@ -598,6 +660,7 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     } else if (shadowType === 'VolumeSphere') {
         createShadowVolumeSphereFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeOval') {
+        createShadowVolumeOvalFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeOvalPole') {
     } else if (shadowType === 'VolumeCylinder') {
     } else if (shadowType === 'VolumeBox') {
@@ -640,7 +703,7 @@ export function setShadowDropLength(actor: LiveActor, name: string | null, v: nu
     actor.shadowControllerList!.getController(name).setDropLength(v);
 }
 
-export function setShadowDropPositionPtr(actor: LiveActor, name: string | null, v: vec3): void {
+export function setShadowDropPositionPtr(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
     actor.shadowControllerList!.getController(name).setDropPosPtr(v);
 }
 

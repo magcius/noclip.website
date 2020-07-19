@@ -1,5 +1,5 @@
 
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
@@ -33,7 +33,7 @@ export class PlanetGravityManager extends NameObj {
         super(sceneObjHolder, 'PlanetGravityManager');
     }
 
-    public calcTotalGravityVector(dst: vec3 | null, gravityInfo: GravityInfo | null, coord: vec3, gravityTypeMask: GravityTypeMask, attachmentFilter: any): boolean {
+    public calcTotalGravityVector(dst: vec3 | null, gravityInfo: GravityInfo | null, pos: ReadonlyVec3, gravityTypeMask: GravityTypeMask, attachmentFilter: any): boolean {
         let bestPriority = -1;
         let bestMag = -1.0;
         vec3.set(scratchGravTotal, 0, 0, 0);
@@ -52,7 +52,7 @@ export class PlanetGravityManager extends NameObj {
             if (gravity.priority < bestPriority)
                 continue;
 
-            if (!gravity.calcGravity(scratchGravLocal, coord))
+            if (!gravity.calcGravity(scratchGravLocal, pos))
                 continue;
 
             const mag = vec3.length(scratchGravLocal);
@@ -112,8 +112,8 @@ abstract class PlanetGravity {
     public alive = false;
     public switchActive = true;
 
-    public calcGravity(dst: vec3, coord: vec3): boolean {
-        let distance = this.calcOwnGravityVector(dst, coord);
+    public calcGravity(dst: vec3, pos: ReadonlyVec3): boolean {
+        let distance = this.calcOwnGravityVector(dst, pos);
         if (distance < 0)
             return false;
 
@@ -127,7 +127,7 @@ abstract class PlanetGravity {
         return true;
     }
 
-    protected calcGravityFromMassPosition(dst: vec3, p0: vec3, p1: vec3): number {
+    protected calcGravityFromMassPosition(dst: vec3, p0: ReadonlyVec3, p1: ReadonlyVec3): number {
         vec3.subtract(dst, p1, p0);
         const dist = vec3.length(dst);
         if (this.isInRangeDistance(dist)) {
@@ -154,7 +154,7 @@ abstract class PlanetGravity {
         return distance < range;
     }
 
-    protected abstract calcOwnGravityVector(dst: vec3, coord: vec3): number;
+    protected abstract calcOwnGravityVector(dst: vec3, pos: ReadonlyVec3): number;
 
     // TODO(jstpierre): I don't think this is ever called with a non-identity matrix, so I'm excluding
     // the parameter for now...
@@ -284,7 +284,7 @@ class ParallelGravity extends PlanetGravity {
         }
     }
 
-    private isInSphereRange(coord: vec3): number {
+    private isInSphereRange(coord: ReadonlyVec3): number {
         if (this.range >= 0) {
             const distSq = vec3.squaredDistance(this.pos, coord);
             if (distSq < this.range*this.range)
@@ -296,7 +296,7 @@ class ParallelGravity extends PlanetGravity {
         }
     }
 
-    private isInBoxRange(coord: vec3): number {
+    private isInBoxRange(coord: ReadonlyVec3): number {
         // Put in local space
         const boxMtx = this.boxMtx!;
         mat4.getTranslation(scratchVec3a, boxMtx);
@@ -331,7 +331,7 @@ class ParallelGravity extends PlanetGravity {
             throw "whoops";
     }
 
-    private isInCylinderRange(coord: vec3): number {
+    private isInCylinderRange(coord: ReadonlyVec3): number {
         vec3.subtract(scratchVec3a, coord, this.pos);
         const dot = vec3.dot(this.planeNormal, scratchVec3a);
 
@@ -346,7 +346,7 @@ class ParallelGravity extends PlanetGravity {
         return this.baseDistance + mag;
     }
 
-    private isInRange(coord: vec3): number {
+    private isInRange(coord: ReadonlyVec3): number {
         if (this.rangeType === ParallelGravityRangeType.Sphere)
             return this.isInSphereRange(coord);
         else if (this.rangeType === ParallelGravityRangeType.Box)
@@ -357,7 +357,7 @@ class ParallelGravity extends PlanetGravity {
             throw "whoops";
     }
 
-    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+    protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
         const distance = this.isInRange(coord);
         if (distance < 0)
             return -1;
@@ -424,7 +424,7 @@ class CubeGravity extends PlanetGravity {
         this.extents[2] = vec3.length(scratchVec3c);
     }
 
-    private calcGravityArea(coord: vec3): CubeArea {
+    private calcGravityArea(coord: ReadonlyVec3): CubeArea {
         getMatrixTranslation(scratchVec3a, this.mtx);
         vec3.sub(scratchVec3a, coord, scratchVec3a);
 
@@ -495,7 +495,7 @@ class CubeGravity extends PlanetGravity {
         return areaFlags;
     }
 
-    private calcFaceGravity(dst: vec3, coord: vec3, areaFlags: CubeArea): number {
+    private calcFaceGravity(dst: vec3, coord: ReadonlyVec3, areaFlags: CubeArea): number {
         if (areaFlags === CubeArea.X_Left + CubeArea.Y_Inside + CubeArea.Z_Inside) {
             getMatrixAxisX(dst, this.mtx);
         } else if (areaFlags === CubeArea.X_Inside + CubeArea.Y_Left + CubeArea.Z_Inside) {
@@ -526,7 +526,7 @@ class CubeGravity extends PlanetGravity {
         return dist;
     }
 
-    private calcEdgeGravity(dst: vec3, coord: vec3, areaFlags: CubeArea): number {
+    private calcEdgeGravity(dst: vec3, coord: ReadonlyVec3, areaFlags: CubeArea): number {
         vec3.copy(scratchVec3a, Vec3Zero);
 
         // scratchVec3b = edge axis
@@ -651,7 +651,7 @@ class CubeGravity extends PlanetGravity {
         }
     }
 
-    private calcCornerGravity(dst: vec3, coord: vec3, areaFlags: CubeArea): number {
+    private calcCornerGravity(dst: vec3, coord: ReadonlyVec3, areaFlags: CubeArea): number {
         vec3.copy(scratchVec3a, Vec3Zero);
 
         if (areaFlags === CubeArea.X_Left + CubeArea.Y_Left + CubeArea.Z_Left) {
@@ -736,7 +736,7 @@ class CubeGravity extends PlanetGravity {
         }
     }
 
-    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+    protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
         const areaFlags = this.calcGravityArea(coord);
         if (areaFlags < 0)
             return -1;
@@ -765,7 +765,7 @@ class CubeGravity extends PlanetGravity {
 class PointGravity extends PlanetGravity {
     public pos = vec3.create();
 
-    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+    protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
         vec3.sub(dst, this.pos, coord);
 
         const mag = vec3.length(dst);
@@ -830,7 +830,7 @@ class SegmentGravity extends PlanetGravity {
         this.updateLocalParam();
     }
 
-    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+    protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
         vec3.subtract(scratchVec3a, coord, this.gravityPoints[0]);
         const dot = vec3.dot(scratchVec3a, this.segmentDirection);
 
@@ -944,7 +944,7 @@ class DiskGravity extends PlanetGravity {
         this.worldRadius = this.radius * length;
     }
 
-    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+    protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
         vec3.subtract(scratchVec3a, coord, this.worldPosition);
         const dot = vec3.dot(scratchVec3a, this.worldDirection);
 
@@ -1017,7 +1017,7 @@ class ConeGravity extends PlanetGravity {
         this.magX = vec3.length(scratchVec3a);
     }
 
-    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+    protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
         getMatrixAxisY(scratchVec3a, this.mtx);
         const height = vec3.length(scratchVec3a);
         vec3.normalize(scratchVec3a, scratchVec3a);
@@ -1115,16 +1115,16 @@ class WireGravity extends PlanetGravity {
         this.points.push(vec3.clone(point));
     }
 
-    protected calcOwnGravityVector(dst: vec3, coord: vec3): number {
+    protected calcOwnGravityVector(dst: vec3, pos: ReadonlyVec3): number {
         if (this.points.length === 0)
             return -1;
 
         let bestSquaredDist = Infinity;
 
         for (let i = 0; i < this.points.length - 1; i++) {
-            calcPerpendicFootToLineInside(scratchVec3a, coord, this.points[i], this.points[i + 1]);
+            calcPerpendicFootToLineInside(scratchVec3a, pos, this.points[i], this.points[i + 1]);
 
-            const squaredDist = vec3.squaredDistance(scratchVec3a, coord);
+            const squaredDist = vec3.squaredDistance(scratchVec3a, pos);
             if (squaredDist < bestSquaredDist) {
                 vec3.copy(scratchVec3b, scratchVec3a);
                 bestSquaredDist = squaredDist;
@@ -1134,7 +1134,7 @@ class WireGravity extends PlanetGravity {
         if (bestSquaredDist === Infinity || !this.isInRangeSquared(bestSquaredDist))
             return -1;
 
-        vec3.sub(dst, scratchVec3b, coord);
+        vec3.sub(dst, scratchVec3b, pos);
         const dist = vec3.length(dst);
         vec3.normalize(dst, dst);
         return dist;

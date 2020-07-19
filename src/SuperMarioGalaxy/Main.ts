@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, ReadonlyVec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists, align, nArray, fallback, nullify, spliceBisectRight } from '../util';
 import { DataFetcher, AbortedCallback } from '../DataFetcher';
@@ -953,7 +953,7 @@ class AreaObjContainer extends NameObj {
         throw "whoops";
     }
 
-    public getAreaObj<T extends AreaObj>(managerName: string, position: vec3): T | null {
+    public getAreaObj<T extends AreaObj>(managerName: string, position: ReadonlyVec3): T | null {
         const mgr = this.getManager(managerName);
         return mgr.find_in(position) as (T | null);
     }

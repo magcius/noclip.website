@@ -1,5 +1,5 @@
 
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor";
@@ -12,7 +12,7 @@ import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 interface AreaFormBase {
     // TODO(jstpierre): followMtx
-    isInVolume(v: vec3): boolean;
+    isInVolume(v: ReadonlyVec3): boolean;
 }
 
 export const enum AreaFormType {
@@ -34,7 +34,7 @@ function makeWorldMtxFromPlacement(dst: mat4, sceneObjHolder: SceneObjHolder, in
     setMatrixTranslation(dst, scratchVec3a);
 }
 
-function multTranspose(dst: vec3, a: vec3, m: mat4): void {
+function multTranspose(dst: vec3, a: ReadonlyVec3, m: ReadonlyMat4): void {
     const dx = a[0] - m[12];
     const dy = a[1] - m[13];
     const dz = a[2] - m[14];
@@ -73,7 +73,7 @@ class AreaFormCube implements AreaFormBase {
         mat4.copy(dst, this.worldMatrix);
     }
 
-    public isInVolume(v: vec3): boolean {
+    public isInVolume(v: ReadonlyVec3): boolean {
         this.calcWorldMtx(scratchMatrix);
         multTranspose(scratchVec3a, v, scratchMatrix);
         return this.aabb.containsPoint(scratchVec3a);
@@ -96,7 +96,7 @@ class AreaFormSphere implements AreaFormBase {
         vec3.copy(dst, this.pos);
     }
 
-    public isInVolume(v: vec3): boolean {
+    public isInVolume(v: ReadonlyVec3): boolean {
         this.calcPos(scratchVec3a);
 
         vec3.sub(scratchVec3a, scratchVec3a, v);
@@ -135,7 +135,7 @@ class AreaFormCylinder implements AreaFormBase {
         vec3.copy(dst, this.upVec);
     }
 
-    public isInVolume(v: vec3): boolean {
+    public isInVolume(v: ReadonlyVec3): boolean {
         this.calcPos(scratchVec3a);
         this.calcUpVec(scratchVec3b);
 
@@ -171,7 +171,7 @@ class AreaFormBowl implements AreaFormBase {
         this.radiusSq = radius * radius;
     }
 
-    public isInVolume(v: vec3): boolean {
+    public isInVolume(v: ReadonlyVec3): boolean {
         vec3.sub(scratchVec3a, this.pos, v);
 
         const mag = vec3.squaredLength(scratchVec3a);
@@ -251,7 +251,7 @@ export class AreaObj extends NameObj {
         this.aliveScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
     }
 
-    public isInVolume(v: vec3): boolean {
+    public isInVolume(v: ReadonlyVec3): boolean {
         if (!this.isValid || !this.aliveScenario)
             return false;
         return this.form.isInVolume(v);
@@ -273,7 +273,7 @@ export class AreaObjMgr<T extends AreaObj> extends NameObj {
         this.areaObj.push(areaObj);
     }
 
-    public find_in(v: vec3): T | null {
+    public find_in(v: ReadonlyVec3): T | null {
         for (let i = 0; i < this.areaObj.length; i++)
             if (this.areaObj[i].isInVolume(v))
                 return this.areaObj[i];
