@@ -806,7 +806,7 @@ export function calcDistanceVertical(actor: LiveActor, other: vec3): number {
 }
 
 export function isValidDraw(actor: LiveActor): boolean {
-    return actor.visibleAlive && actor.visibleScenario;
+    return actor.visibleAlive && actor.visibleScenario && actor.visibleModel;
 }
 
 export function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: NormalizedViewportCoords): void {
@@ -1050,6 +1050,17 @@ export function makeMtxUpNoSupport(dst: mat4, up: ReadonlyVec3): void {
 
 export function makeMtxUpNoSupportPos(dst: mat4, up: ReadonlyVec3, pos: ReadonlyVec3): void {
     makeMtxUpNoSupport(dst, up);
+    setMatrixTranslation(dst, pos);
+}
+
+export function makeMtxFrontNoSupport(dst: mat4, front: ReadonlyVec3): void {
+    const max = getMaxAbsElementIndex(front);
+    const up = (max === 0) ? Vec3UnitY : Vec3UnitY;
+    makeMtxFrontUp(dst, front, up);
+}
+
+export function makeMtxFrontNoSupportPos(dst: mat4, front: ReadonlyVec3, pos: ReadonlyVec3): void {
+    makeMtxFrontNoSupport(dst, front);
     setMatrixTranslation(dst, pos);
 }
 
