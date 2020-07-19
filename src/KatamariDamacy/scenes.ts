@@ -133,12 +133,14 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public stageAreaRenderers: StageAreaRenderer[] = [];
     public objectRenderers: ObjectRenderer[] = [];
 
+    public sceneMoveSpeedMult = 8/60;
+
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(8/60);
+        c.setSceneMoveSpeedMult(this.sceneMoveSpeedMult);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -229,7 +231,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 }
 
 class KatamariLevelSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[], public initialAreaNo: number = -1) {
+    constructor(public id: string, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[], public initialAreaNo: number = -1, public cameraSpeedMult: number = 1) {
     }
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -249,6 +251,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             const gsMemoryMap = gsMemoryMapNew();
 
             const renderer = new KatamariDamacyRenderer(device);
+            renderer.sceneMoveSpeedMult *= this.cameraSpeedMult;
             const gfxCache = renderer.renderHelper.getCache();
 
             // Parse through the mission setup data to get our stage spawns.
@@ -369,7 +372,7 @@ const sceneDescs = [
     new KatamariLevelSceneDesc('lvl7',  "Make a Star 7 (World)", worldStageAreaGroup, ['13f7c8', '13f97f', '13fbad', '13fda5']),
     new KatamariLevelSceneDesc('lvl8',  "Make a Star 8 (City)",  cityStageAreaGroup,  ['13ff91', '14017a', '1403d3', '140616']),
     new KatamariLevelSceneDesc('lvl9',  "Make a Star 9 (World)", worldStageAreaGroup, ['140850', '140a3e', '140cc7', '140f02']),
-    new KatamariLevelSceneDesc('lvl10', "Make the Moon (World)", worldStageAreaGroup, ['141133', '141339', '1415d4', '141829']),
+    new KatamariLevelSceneDesc('lvl10', "Make the Moon (World)", worldStageAreaGroup, ['141133', '141339', '1415d4', '141829'], -1, 100),
 
     "Constellations",
     new KatamariLevelSceneDesc('clvl1', "Make Cancer",           houseStageAreaGroup, ['141ab5', '141b43', '141bf5', '141cae']),
