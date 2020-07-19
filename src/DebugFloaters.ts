@@ -95,7 +95,8 @@ export class FloatingPanel implements Widget {
     }
 
     public destroy(): void {
-        this.toplevel.parentElement!.removeChild(this.toplevel);
+        if (this.toplevel.parentElement !== null)
+            this.toplevel.parentElement.removeChild(this.toplevel);
     }
 
     public onMotion(dx: number, dy: number): void {
