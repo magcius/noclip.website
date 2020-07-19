@@ -1126,6 +1126,12 @@ ${this.generateLightAttnFn(chan, lightName)}
 
     private generateAlphaTest() {
         const alphaTest = this.material.alphaTest;
+
+        // Don't even emit an alpha test if we don't need it, to prevent the driver from trying to
+        // incorrectly set late Z.
+        if (alphaTest.op === GX.AlphaOp.OR && (alphaTest.compareA === GX.CompareType.ALWAYS || alphaTest.compareB === GX.CompareType.ALWAYS))
+            return '';
+
         return `
     // Alpha Test: Op ${alphaTest.op}
     // Compare A: ${alphaTest.compareA} Reference A: ${this.generateFloat(alphaTest.referenceA)}
