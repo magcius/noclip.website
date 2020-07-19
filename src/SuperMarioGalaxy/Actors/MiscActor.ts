@@ -6784,7 +6784,7 @@ export class BrightSun extends LiveActor {
 
     private controlSunModel(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         vec3.copy(this.sun.translation, this.translation);
-        vec3.set(this.sun.scale, -100.0, 100.0, 100.0);
+        vec3.set(this.sun.scale, 100.0, 100.0, 100.0);
 
         getCamPos(scratchVec3, viewerInput.camera);
         vec3.sub(scratchVec3, scratchVec3, this.translation);
