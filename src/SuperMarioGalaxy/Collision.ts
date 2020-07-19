@@ -248,11 +248,12 @@ export class CollisionParts {
     public checkStrikeLine(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, p0: vec3, pDir: vec3, triFilter: TriangleFilterFunc | null): number {
         transformVec3Mat4w1(scratchVec3a, this.invWorldMtx, p0);
         transformVec3Mat4w0(scratchVec3b, this.invWorldMtx, pDir);
-        this.checkCollisionResult.reset();
-        this.collisionServer.checkArrow(this.checkCollisionResult, hitInfo.length, scratchVec3a, scratchVec3b);
 
+        this.checkCollisionResult.reset();
         const dstIdxStart = dstIdx;
-        for (let i = 0; i < hitInfo.length; i++) {
+        const numHitInfo = hitInfo.length - dstIdxStart;
+        this.collisionServer.checkArrow(this.checkCollisionResult, numHitInfo, scratchVec3a, scratchVec3b);
+        for (let i = 0; i < numHitInfo; i++) {
             const prism = this.checkCollisionResult.prisms[i];
             if (prism === null)
                 break;
@@ -324,10 +325,10 @@ export class CollisionParts {
             vec3.copy(hitInfo[i].strikeLoc, pos);
 
         this.checkCollisionResult.reset();
-        this.collisionServer.checkSphere(this.checkCollisionResult, hitInfo.length, pos, radius, invAvgScale);
-
         const dstIdxStart = dstIdx;
-        for (let i = 0; i < hitInfo.length; i++) {
+        const numHitInfo = hitInfo.length - dstIdxStart;
+        this.collisionServer.checkSphere(this.checkCollisionResult, numHitInfo, pos, radius, invAvgScale);
+        for (let i = 0; i < numHitInfo; i++) {
             const prism = this.checkCollisionResult.prisms[i];
             if (prism === null)
                 break;
