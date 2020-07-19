@@ -363,7 +363,7 @@ class d_a_ep extends fopAc_ac_c {
         this.alphaModelScale = cLib_addCalc2(this.alphaModelScale, this.alphaModelScaleTarget, 0.4, 0.04);
         MtxTrans(this.posTop, false);
         mDoMtx_YrotM(calc_mtx, this.alphaModelRotY);
-        mDoMtx_YrotM(calc_mtx, this.alphaModelRotX);
+        mDoMtx_XrotM(calc_mtx, this.alphaModelRotX);
         const scale = this.alphaModelScale * this.lightPower;
         vec3.set(scratchVec3a, scale, scale, scale);
         mat4.scale(calc_mtx, calc_mtx, scratchVec3a);
