@@ -11,7 +11,7 @@ import { vec3, mat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
 import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid } from "../MathHelpers";
 import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision";
-import { JMapInfoIter, getJMapInfoBool } from "./JMapInfo";
+import { JMapInfoIter, getJMapInfoBool, createCsvParser } from "./JMapInfo";
 import { assertExists, fallback, assert } from "../util";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
@@ -516,6 +516,13 @@ export class ShadowControllerList {
         this.shadowControllers.push(controller);
     }
 
+    public getController(name: string | null): ShadowController {
+        if (this.shadowControllers.length === 1)
+            return this.shadowControllers[0];
+        else
+            return this.shadowControllers.find((shadow) => shadow.name === name)!;
+    }
+
     public requestCalc(): void {
         for (let i = 0; i < this.shadowControllers.length; i++)
             this.shadowControllers[i].requestCalc();
@@ -583,6 +590,33 @@ function createShadowVolumeSphereFromCSV(sceneObjHolder: SceneObjHolder, actor: 
     return drawer;
 }
 
+function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+    const shadowType = assertExists(infoIter.getValueString('Type'));
+    if (shadowType === 'SurfaceCircle') {
+    } else if (shadowType === 'SurfaceOval') {
+    } else if (shadowType === 'SurfaceBox') {
+    } else if (shadowType === 'VolumeSphere') {
+        createShadowVolumeSphereFromCSV(sceneObjHolder, actor, infoIter);
+    } else if (shadowType === 'VolumeOval') {
+    } else if (shadowType === 'VolumeOvalPole') {
+    } else if (shadowType === 'VolumeCylinder') {
+    } else if (shadowType === 'VolumeBox') {
+    } else if (shadowType === 'VolumeFlatModel') {
+    } else if (shadowType === 'VolumeLine') {
+    } else {
+        throw "whoops";
+    }
+}
+
+export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, filename: string = 'Shadow'): void {
+    actor.shadowControllerList = new ShadowControllerList();
+
+    const shadowData = createCsvParser(assertExists(actor.resourceHolder.arc.findFileData(`${filename}.bcsv`)));
+    shadowData.mapRecords((infoIter) => {
+        addShadowFromCSV(sceneObjHolder, actor, infoIter);
+    });
+}
+
 function createShadowControllerVolumeParam(sceneObjHolder: SceneObjHolder, actor: LiveActor, name = 'ShadowControllerVolumeParam'): ShadowController {
     const controller = new ShadowController(sceneObjHolder, actor, name);
     controller.setDropPosPtr(actor.translation);
@@ -600,4 +634,24 @@ export function initShadowVolumeSphere(sceneObjHolder: SceneObjHolder, actor: Li
     const drawer = new ShadowVolumeSphere(sceneObjHolder, controller);
     drawer.radius = radius;
     controller.shadowDrawer = drawer;
+}
+
+export function setShadowDropLength(actor: LiveActor, name: string | null, v: number): void {
+    actor.shadowControllerList!.getController(name).setDropLength(v);
+}
+
+export function setShadowDropPositionPtr(actor: LiveActor, name: string | null, v: vec3): void {
+    actor.shadowControllerList!.getController(name).setDropPosPtr(v);
+}
+
+export function onCalcShadowOneTime(actor: LiveActor, name: string | null = null): void {
+    actor.shadowControllerList!.getController(name).setCalcCollisionMode(CalcCollisionMode.OneTime);
+}
+
+export function onCalcShadowDropPrivateGravityOneTime(actor: LiveActor, name: string | null = null): void {
+    actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.PrivateOneTime);
+}
+
+export function onCalcShadowDropPrivateGravity(actor: LiveActor, name: string | null = null): void {
+    actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.PrivateOn);
 }

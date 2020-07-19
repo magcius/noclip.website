@@ -15,6 +15,7 @@ import { DrawBufferType } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep } from '../Spine';
 import { ViewerRenderInput } from '../../viewer';
+import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime } from '../Shadow';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -165,6 +166,7 @@ export class Butler extends NPCActor {
         this.initModelManagerWithAnm(sceneObjHolder, 'Butler');
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
+        initShadowFromCSV(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
         const location = getJMapInfoArg0(infoIter);
@@ -181,6 +183,7 @@ export class Rosetta extends NPCActor {
         this.initModelManagerWithAnm(sceneObjHolder, 'Rosetta');
         connectToSceneIndirectNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
+        initShadowFromCSV(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
         startAction(this, 'WaitA');
@@ -196,6 +199,7 @@ export class Tico extends NPCActor {
         connectToSceneIndirectNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
+        initShadowFromCSV(sceneObjHolder, this);
 
         const color = fallback(getJMapInfoArg0(infoIter), -1);
         if (color !== -1) {
@@ -227,6 +231,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         this.initModelManagerWithAnm(sceneObjHolder, 'Kinopio');
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
+        initShadowVolumeSphere(sceneObjHolder, this, 36.0);
         this.initEffectKeeper(sceneObjHolder, null);
         this.initNerve(KinopioNrv.Wait);
 
@@ -479,6 +484,8 @@ export class Penguin extends NPCActor<PenguinNrv> {
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
+        initShadowVolumeSphere(sceneObjHolder, this, 50.0)
+        onCalcShadowOneTime(this);
 
         this.boundingSphereRadius = 100;
 
@@ -611,6 +618,7 @@ export class TicoComet extends NPCActor {
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
+        initShadowFromCSV(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
         this.boundingSphereRadius = 100;
@@ -645,6 +653,8 @@ export class SignBoard extends NPCActor {
         const objName = this.name;
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
+        initShadowVolumeSphere(sceneObjHolder, this, 30.0);
+        // setShadowProjection, offCalcShadow
         connectToSceneNpc(sceneObjHolder, this);
     }
 }

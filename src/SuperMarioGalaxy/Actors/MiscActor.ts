@@ -28,7 +28,7 @@ import { TDDraw, TSDraw } from '../DDraw';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { initFur, initFurPlanet } from '../Fur';
 import { HitSensor, HitSensorType, isSensorEnemy, isSensorNpc, isSensorPlayer, isSensorPlayerOrRide, sendArbitraryMsg, sendMsgEnemyAttack } from '../HitSensor';
-import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
+import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter, getJMapInfoArg5 } from '../JMapInfo';
 import { WorldmapPointInfo } from './LegacyActor';
 import { addBrightObj, BrightObjBase, BrightObjCheckArg } from './LensFlare';
 import { dynamicSpawnZoneAndLayer, isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
@@ -40,7 +40,7 @@ import { isConnectedWithRail } from '../RailRider';
 import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
-import { initShadowVolumeSphere } from '../Shadow';
+import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV } from '../Shadow';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -579,6 +579,7 @@ class Coin extends LiveActor {
     public useLocalGravity: boolean = false;
     private isInWater: boolean = false;
     private airBubble: PartsModel | null = null;
+    private shadowDropPos = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, protected isPurpleCoin: boolean) {
         super(zoneAndLayer, sceneObjHolder, isPurpleCoin ? 'PurpleCoin' : 'Coin');
@@ -604,6 +605,8 @@ class Coin extends LiveActor {
             vec3.negate(this.gravityVector, this.gravityVector);
         }
 
+        this.initShadow(sceneObjHolder, infoIter);
+
         if (infoIter === null) {
             this.makeActorDead(sceneObjHolder);
         } else {
@@ -616,6 +619,24 @@ class Coin extends LiveActor {
         }
 
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
+    }
+
+    private initShadow(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): void {
+        let shadowLength = -1.0;
+        let shadowType = -1;
+
+        if (infoIter !== null) {
+            shadowLength = fallback(getJMapInfoArg5(infoIter), shadowLength);
+            shadowType = fallback(getJMapInfoArg6(infoIter), shadowType);
+        }
+
+        if (shadowType < 0)
+            initShadowVolumeSphere(sceneObjHolder, this, 50.0);
+
+        setShadowDropPositionPtr(this, null, this.shadowDropPos);
+
+        if (shadowLength > 0.0)
+            setShadowDropLength(this, null, shadowLength);
     }
 
     private appearFixInit(sceneObjHolder: SceneObjHolder): void {
@@ -636,6 +657,8 @@ class Coin extends LiveActor {
     }
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        vec3.scaleAndAdd(this.shadowDropPos, this.translation, this.gravityVector, 70.0);
+
         if (this.useLocalGravity) {
             this.calcAndSetBaseMtxBase();
         } else {
@@ -1470,16 +1493,29 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
 }
 
 class ChipBase extends LiveActor {
+    private groupID: number = -1;
     private airBubble: PartsModel | null = null;
+    private railMover: MapPartsRailMover | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, modelName: string) {
         super(zoneAndLayer, sceneObjHolder, modelName);
 
-        initDefaultPos(sceneObjHolder, this, infoIter);
-        this.initModelManagerWithAnm(sceneObjHolder, modelName);
-        connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
+        this.initModel(sceneObjHolder, infoIter, modelName);
+        this.initJMapParam(sceneObjHolder, infoIter);
+        this.initShadow(sceneObjHolder, infoIter);
         this.initEffectKeeper(sceneObjHolder, null);
         tryStartAllAnim(this, 'Wait');
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
+    }
+
+    private initModel(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null, modelName: string): void {
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+        connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
 
         if (infoIter !== null) {
             const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg3(infoIter), -1));
@@ -1487,6 +1523,54 @@ class ChipBase extends LiveActor {
                 this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble");
                 tryStartAllAnim(this, "Move");
             }
+        }
+    }
+
+    private initJMapParam(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): void {
+        if (infoIter !== null) {
+            initDefaultPos(sceneObjHolder, this, infoIter);
+            this.groupID = fallback(getJMapInfoArg0(infoIter), this.groupID);
+
+            if (isConnectedWithRail(infoIter)) {
+                this.initRailRider(sceneObjHolder, infoIter);
+                this.railMover = new MapPartsRailMover(sceneObjHolder, this, infoIter);
+            }
+        }
+    }
+
+    private initShadow(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): void {
+        let shadowType = -1;
+        let shadowLength = 2000.0;
+        let shadowContinuous = false;
+
+        if (infoIter !== null) {
+            shadowType = fallback(getJMapInfoArg5(infoIter), shadowType);
+            shadowLength = fallback(getJMapInfoArg4(infoIter), shadowLength);
+            shadowContinuous = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
+        }
+
+        if (shadowType === 0) {
+             // initShadowVolumeCylinder
+             shadowContinuous = false;
+        } else {
+            initShadowVolumeSphere(sceneObjHolder, this, 50.0 * this.scale[0]);
+        }
+
+        setShadowDropLength(this, null, shadowLength);
+        if (this.railMover === null && !shadowContinuous) {
+            onCalcShadowOneTime(this, null);
+            onCalcShadowDropPrivateGravityOneTime(this, null);
+        } else {
+            onCalcShadowDropPrivateGravity(this, null);
+        }
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        if (this.railMover !== null) {
+            this.railMover.movement(sceneObjHolder, viewerInput);
+            vec3.copy(this.translation, this.railMover.translation);
         }
     }
 
@@ -2455,6 +2539,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         this.hitSensorKeeper!.validateBySystem();
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
+        initShadowFromCSV(sceneObjHolder, this);
         this.initRailRider(sceneObjHolder, infoIter);
         moveCoordAndTransToNearestRailPos(this);
         getRailDirection(this.direction, this);
@@ -3420,6 +3505,10 @@ export class PunchBox extends LiveActor {
     }
 }
 
+function addMessageSensorMapObjMoveCollision(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string): void {
+    actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.MapObjMoveCollision, 0, 0.0, actor, Vec3Zero);
+}
+
 export class ChooChooTrain extends LiveActor {
     private trainBodies: ModelObj[] = [];
     private speed: number;
@@ -3432,6 +3521,10 @@ export class ChooChooTrain extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, 'ChooChooTrain');
         connectToSceneCollisionMapObj(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
+        initShadowVolumeSphere(sceneObjHolder, this, 80.0 * this.scale[1]);
+        this.initHitSensor();
+        addMessageSensorMapObjMoveCollision(sceneObjHolder, this, 'body');
+        initCollisionParts(sceneObjHolder, this, 'ChooChooTrain', this.getSensor('body')!, null);
 
         const numTrainBodies = fallback(getJMapInfoArg0(infoIter), 3);
         this.speed = fallback(getJMapInfoArg1(infoIter), 5);

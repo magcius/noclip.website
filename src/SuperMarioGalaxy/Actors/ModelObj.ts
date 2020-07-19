@@ -18,6 +18,7 @@ export class ModelObj extends LiveActor {
         if (drawBufferType < -1)
             drawBufferType = DrawBufferType.NoShadowedMapObj;
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
+        this.initEffectKeeper(sceneObjHolder, null);
     }
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
