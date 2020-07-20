@@ -339,6 +339,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         this.materialFront.allocatePacketParamsDataOnInst(template, packetParams);
 
         this.drawShapes(sceneObjHolder, renderInstManager);
+        renderInstManager.popTemplateRenderInst();
     }
 
     protected calcBaseDropLength(controller: ShadowController = this.controller): number {
@@ -350,7 +351,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         return length - this.startDrawShapeOffset + this.endDrawShapeOffset;
     }
 
-    public calcBaseDropPosition(dst: vec3, controller: ShadowController = this.controller): void {
+    protected calcBaseDropPosition(dst: vec3, controller: ShadowController = this.controller): void {
         controller.getDropPos(scratchVec3a);
         const dir = controller.getDropDir();
         vec3.scaleAndAdd(dst, scratchVec3a, dir, this.startDrawShapeOffset);
