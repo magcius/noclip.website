@@ -5,6 +5,7 @@ import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat } from "gl-matrix";
 import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString } from "../Common/PS2/GS";
+import { MathConstants } from "../MathHelpers";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -695,6 +696,75 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
     return { sectors };
 }
 
+interface RandomIDOption {
+    id: number;
+    maxUses: number;
+    chance: number;
+
+    usesLeft: number;
+}
+
+interface RandomGroup {
+    objectCount: number;
+    useCount: number;
+    options: RandomIDOption[];
+}
+
+export function initRandomGroups(index: number, data: ArrayBufferSlice): RandomGroup[] {
+    const addressOffset = 0x215980; // start address in RAM
+    const levelTable = 0x216188; // ram address of table
+
+    const view = data.createDataView();
+    let nextGroup = view.getUint32(levelTable - addressOffset + 4 * index, true);
+    if (nextGroup === 0)
+        return [];
+
+    const groups: RandomGroup[] = [];
+    while (true) {
+        const groupStart = view.getUint32(nextGroup - addressOffset, true);
+        // stage 6 seems to use the first group from the next level, others are null-terminated
+        if (index === 6) {
+            if (groupStart === 0) {
+                groups.push({objectCount: 0, useCount: 0, options: []});
+                nextGroup += 4;
+                continue;
+            }
+            if (groups.length === 17)
+                break;
+        } else if (groupStart === 0)
+            break;
+
+        const options: RandomIDOption[] = [];
+
+        let nextOption = groupStart - addressOffset;
+        const count = view.getUint16(nextOption, true);
+        for (let i = 0; i < count; i++, nextOption += 8) {
+            const maxUses = view.getUint8(nextOption + 2);
+            const id = view.getUint16(nextOption + 4, true);
+            const chance = view.getUint16(nextOption + 6, true) / 0x100;
+
+            options.push({ id, maxUses, chance, usesLeft: 0});
+        }
+        groups.push({ objectCount: 0, useCount: 0, options });
+        nextGroup += 4;
+    }
+    return groups;
+}
+
+function resetRandomGroups(groups: RandomGroup[]): void {
+    for (let g of groups) {
+        g.objectCount = 0;
+        g.useCount = 0;
+        for (let opt of g.options) {
+            if (Math.random() < opt.chance) {
+                opt.usesLeft = opt.maxUses;
+                g.useCount += opt.maxUses;
+            } else
+                opt.usesLeft = 0;
+        }
+    }
+}
+
 export interface MissionSetupObjectSpawn {
     // The original in-game object ID.
     objectId: number;
@@ -736,7 +806,7 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
     return new ArrayBufferSlice(dstBuffer.buffer);
 }
 
-export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSMemoryMap): LevelSetupBIN {
+export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSMemoryMap, randomGroups: RandomGroup[]): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
@@ -800,6 +870,21 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
             continue;
 
         activeStageAreas.push(i);
+
+        // each stage uses groups separately
+        resetRandomGroups(randomGroups);
+        // initial loop to set random group counts
+        for (let randomSpawnsIdx = setupSpawnsIdx; ; randomSpawnsIdx += 0x40) {
+            // Flag names come from Katamari Damacy REROLL, on "AttachableProp"
+            const u16NameIdx = view.getUint16(randomSpawnsIdx + 0x00, true);
+            const u8LocPosType = view.getUint8(randomSpawnsIdx + 0x02);
+            const s8RandomLocGroupNo = view.getInt8(randomSpawnsIdx + 0x03);
+            if (u16NameIdx == 0xFFFF)
+                break;
+            if (u8LocPosType !== 0)
+                assertExists(randomGroups[s8RandomLocGroupNo]).objectCount++;
+        }
+
         let j = 0;
         for (; ; setupSpawnsIdx += 0x40) {
             // Flag names come from Katamari Damacy REROLL, on "AttachableProp"
@@ -827,13 +912,26 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
             if (u16NameIdx === 0xFFFF)
                 break;
 
+            let objectId = u16NameIdx;
             // This flag means that the object spawned is random. The table
             // of which objects get spawned for which group is stored in the ELF.
-            if (u8LocPosType !== 0)
-                continue;
+            if (u8LocPosType !== 0) {
+                const group = randomGroups[s8RandomLocGroupNo];
+                let optionIndex = (Math.random() * group.options.length) | 0;
+                const shouldUse = group.useCount >= group.objectCount || (group.options[optionIndex].usesLeft > 0 && Math.random() < .5);
+                group.objectCount--;
+                if (shouldUse) {
+                    while (group.options[optionIndex].usesLeft === 0)
+                        optionIndex = (optionIndex + 1) % group.options.length;
+                    objectId = group.options[optionIndex].id;
+                    group.options[optionIndex].usesLeft--;
+                    group.useCount--;
+                } else
+                    continue;
+            }
 
             // Skip "weird" objects (missing models, descriptions)
-            switch (u16NameIdx) {
+            switch (objectId) {
             case 0x0089:
             case 0x0122:
             case 0x017D:
@@ -847,9 +945,9 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
                 continue;
             }
 
-            const modelIndex = findOrParseObject(u16NameIdx);
+            const modelIndex = findOrParseObject(objectId);
             if (modelIndex === -1) {
-                console.log(`Missing object ${hexzero(u16NameIdx, 4)}; layer ${i} object index ${j}`);
+                console.log(`Missing object ${hexzero(objectId, 4)}; layer ${i} object index ${j}`);
                 continue;
             }
 
@@ -872,7 +970,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
             mat4.fromRotationTranslation(modelMatrix, q, [translationX, translationY, translationZ]);
 
             const dispOnAreaNo = i;
-            const objectSpawn: MissionSetupObjectSpawn = { objectId: u16NameIdx, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix };
+            const objectSpawn: MissionSetupObjectSpawn = { objectId, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix };
             objectSpawns.push(objectSpawn);
             j++;
         }

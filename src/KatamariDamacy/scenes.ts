@@ -231,7 +231,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 }
 
 class KatamariLevelSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[], public initialAreaNo: number = -1, public cameraSpeedMult: number = 1) {
+    constructor(public id: string, private index: number, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[], public initialAreaNo: number = -1, public cameraSpeedMult: number = 1) {
     }
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -247,6 +247,8 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             cache.fetchFileData(getMissionSetupFilePath(this.missionSetupFile[i]));
         }
 
+        cache.fetchFileData(`${pathBase}/randomBlock.bin`); // 0x116980 to 0x1171C8 from the ELF
+
         return cache.waitForLoad().then(() => {
             const gsMemoryMap = gsMemoryMapNew();
 
@@ -258,7 +260,10 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             const buffers: ArrayBufferSlice[] = [];
             for (let i = 0; i < this.missionSetupFile.length; i++)
                 buffers.push(cache.getFileData(getMissionSetupFilePath(this.missionSetupFile[i])));
-            const missionSetupBin = BIN.parseMissionSetupBIN(buffers, gsMemoryMap);
+
+            const randomGroups = BIN.initRandomGroups(this.index, cache.getFileData(`${pathBase}/randomBlock.bin`));
+
+            const missionSetupBin = BIN.parseMissionSetupBIN(buffers, gsMemoryMap, randomGroups);
             renderer.missionSetupBin = missionSetupBin;
 
             // Parse our different stages.
@@ -363,32 +368,32 @@ const worldStageAreaGroup: StageAreaFileGroup[] = [
 
 const sceneDescs = [
     "Planets",
-    new KatamariLevelSceneDesc('lvl1',  "Make a Star 1 (House)", houseStageAreaGroup, ['13d9bd', '13da02', '13da55', '13daa6']),
-    new KatamariLevelSceneDesc('lvl2',  "Make a Star 2 (House)", houseStageAreaGroup, ['13daff', '13db9c', '13dc59', '13dd08']),
-    new KatamariLevelSceneDesc('lvl3',  "Make a Star 3 (City)",  cityStageAreaGroup,  ['13e462', '13e553', '13e68e', '13e7b1']),
-    new KatamariLevelSceneDesc('lvl4',  "Make a Star 4 (House)", houseStageAreaGroup, ['13ddc6', '13df3f', '13e10e', '13e2b1']),
-    new KatamariLevelSceneDesc('lvl5',  "Make a Star 5 (City)",  cityStageAreaGroup,  ['13e8d2', '13ea87', '13eca3', '13eeb0']),
-    new KatamariLevelSceneDesc('lvl6',  "Make a Star 6 (World)", worldStageAreaGroup, ['13f0b4', '13f244', '13f443', '13f605']),
-    new KatamariLevelSceneDesc('lvl7',  "Make a Star 7 (World)", worldStageAreaGroup, ['13f7c8', '13f97f', '13fbad', '13fda5']),
-    new KatamariLevelSceneDesc('lvl8',  "Make a Star 8 (City)",  cityStageAreaGroup,  ['13ff91', '14017a', '1403d3', '140616']),
-    new KatamariLevelSceneDesc('lvl9',  "Make a Star 9 (World)", worldStageAreaGroup, ['140850', '140a3e', '140cc7', '140f02']),
-    new KatamariLevelSceneDesc('lvl10', "Make the Moon (World)", worldStageAreaGroup, ['141133', '141339', '1415d4', '141829'], -1, 100),
+    new KatamariLevelSceneDesc('lvl1',  1,  "Make a Star 1 (House)", houseStageAreaGroup, ['13d9bd', '13da02', '13da55', '13daa6']),
+    new KatamariLevelSceneDesc('lvl2',  2,  "Make a Star 2 (House)", houseStageAreaGroup, ['13daff', '13db9c', '13dc59', '13dd08']),
+    new KatamariLevelSceneDesc('lvl3',  4,  "Make a Star 3 (City)",  cityStageAreaGroup,  ['13e462', '13e553', '13e68e', '13e7b1']),
+    new KatamariLevelSceneDesc('lvl4',  3,  "Make a Star 4 (House)", houseStageAreaGroup, ['13ddc6', '13df3f', '13e10e', '13e2b1']),
+    new KatamariLevelSceneDesc('lvl5',  5,  "Make a Star 5 (City)",  cityStageAreaGroup,  ['13e8d2', '13ea87', '13eca3', '13eeb0']),
+    new KatamariLevelSceneDesc('lvl6',  6,  "Make a Star 6 (World)", worldStageAreaGroup, ['13f0b4', '13f244', '13f443', '13f605']),
+    new KatamariLevelSceneDesc('lvl7',  7,  "Make a Star 7 (World)", worldStageAreaGroup, ['13f7c8', '13f97f', '13fbad', '13fda5']),
+    new KatamariLevelSceneDesc('lvl8',  8,  "Make a Star 8 (City)",  cityStageAreaGroup,  ['13ff91', '14017a', '1403d3', '140616']),
+    new KatamariLevelSceneDesc('lvl9',  9,  "Make a Star 9 (World)", worldStageAreaGroup, ['140850', '140a3e', '140cc7', '140f02']),
+    new KatamariLevelSceneDesc('lvl10', 10, "Make the Moon (World)", worldStageAreaGroup, ['141133', '141339', '1415d4', '141829'], -1, 100),
 
     "Constellations",
-    new KatamariLevelSceneDesc('clvl1', "Make Cancer",           houseStageAreaGroup, ['141ab5', '141b43', '141bf5', '141cae']),
-    new KatamariLevelSceneDesc('clvl2', "Make Cygnus",           houseStageAreaGroup, ['141d5d', '141dfb', '141ec1', '141f82']),
-    new KatamariLevelSceneDesc('clvl3', "Make Corona Borealis",  cityStageAreaGroup,  ['1422c5', '1423de', '142542', '1426ac']),
-    new KatamariLevelSceneDesc('clvl4', "Make Gemini",           worldStageAreaGroup, ['14364f', '143796', '143938', '143aae']),
-    new KatamariLevelSceneDesc('clvl5', "Make Ursa Major",       cityStageAreaGroup,  ['14317d', '143287', '1433dc', '143518']),
-    new KatamariLevelSceneDesc('clvl6', "Make Taurus",           worldStageAreaGroup, ['143c24', '143d77', '143f34', '1440b8']),
-    new KatamariLevelSceneDesc('clvl7', "Make Pisces",           cityStageAreaGroup,  ['142801', '14290d', '142a52', '142b90']),
-    new KatamariLevelSceneDesc('clvl8', "Make Virgo",            cityStageAreaGroup,  ['142cc5', '142dd2', '142f0e', '143046']),
+    new KatamariLevelSceneDesc('clvl1', 11, "Make Cancer",           houseStageAreaGroup, ['141ab5', '141b43', '141bf5', '141cae']),
+    new KatamariLevelSceneDesc('clvl2', 12, "Make Cygnus",           houseStageAreaGroup, ['141d5d', '141dfb', '141ec1', '141f82']),
+    new KatamariLevelSceneDesc('clvl3', 14, "Make Corona Borealis",  cityStageAreaGroup,  ['1422c5', '1423de', '142542', '1426ac']),
+    new KatamariLevelSceneDesc('clvl4', 18, "Make Gemini",           worldStageAreaGroup, ['14364f', '143796', '143938', '143aae']),
+    new KatamariLevelSceneDesc('clvl5', 17, "Make Ursa Major",       cityStageAreaGroup,  ['14317d', '143287', '1433dc', '143518']),
+    new KatamariLevelSceneDesc('clvl6', 19, "Make Taurus",           worldStageAreaGroup, ['143c24', '143d77', '143f34', '1440b8']),
+    new KatamariLevelSceneDesc('clvl7', 15, "Make Pisces",           cityStageAreaGroup,  ['142801', '14290d', '142a52', '142b90']),
+    new KatamariLevelSceneDesc('clvl8', 16, "Make Virgo",            cityStageAreaGroup,  ['142cc5', '142dd2', '142f0e', '143046']),
 
     // Make the North Star seems to have a dummy mission setup as the first area... just display the other one by default...
-    new KatamariLevelSceneDesc('clvl9', "Make the North Star",   worldStageAreaGroup, ['144633', '1447b1', '1449ba', '144b78'], 1),
+    new KatamariLevelSceneDesc('clvl9', 21, "Make the North Star",  worldStageAreaGroup, ['144633', '1447b1', '1449ba', '144b78'], 1),
 
     "Unused Levels",
-    new KatamariLevelSceneDesc('snow', "Snow", [
+    new KatamariLevelSceneDesc('snow', 0, "Snow", [
         { texFile: '135042', modelFile: '135adb' },
     ], ['13d9b1', '13d9b3', '13d9b5', '13d9b8']),
 ];
