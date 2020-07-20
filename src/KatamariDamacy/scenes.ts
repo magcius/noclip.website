@@ -366,6 +366,12 @@ const worldStageAreaGroup: StageAreaFileGroup[] = [
     { texFile: '135745', modelFile: '136797', },
 ];
 
+const multiplayerStageAreaGroup: StageAreaFileGroup[] = [
+    { texFile: '135753', modelFile: '1367a0', },
+    { texFile: '135778', modelFile: '1367af', },
+    { texFile: '1357a5', modelFile: '1367be', },
+];
+
 const sceneDescs = [
     "Planets",
     new KatamariLevelSceneDesc('lvl1',  1,  "Make a Star 1 (House)", houseStageAreaGroup, ['13d9bd', '13da02', '13da55', '13daa6']),
@@ -391,6 +397,13 @@ const sceneDescs = [
 
     // Make the North Star seems to have a dummy mission setup as the first area... just display the other one by default...
     new KatamariLevelSceneDesc('clvl9', 21, "Make the North Star",  worldStageAreaGroup, ['144633', '1447b1', '1449ba', '144b78'], 1),
+
+    "Multiplayer",
+    new KatamariLevelSceneDesc('mplvl1', 31, "Multiplayer Level 1", multiplayerStageAreaGroup, ['1472a8', '1472b8', '1472d6', '1472ef']),
+    new KatamariLevelSceneDesc('mplvl2', 32, "Multiplayer Level 2", multiplayerStageAreaGroup, ['147307', '147319', '147334', '147350']),
+    new KatamariLevelSceneDesc('mplvl3', 33, "Multiplayer Level 3", multiplayerStageAreaGroup, ['14736c', '147380', '14739a', '1473be']),
+    new KatamariLevelSceneDesc('mplvl4', 34, "Multiplayer Level 4", multiplayerStageAreaGroup, ['1473db', '1473ec', '147409', '147429']),
+    new KatamariLevelSceneDesc('mplvl5', 35, "Multiplayer Level 5", multiplayerStageAreaGroup, ['147445', '147457', '14746e', '14748c']),
 
     "Unused Levels",
     new KatamariLevelSceneDesc('snow', 0, "Snow", [
