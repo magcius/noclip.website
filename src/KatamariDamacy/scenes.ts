@@ -321,9 +321,9 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                 const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
                 for (let j = 0; j < binModelSectorData.modelData.length; j++) {
                     const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[j]);
+                    mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectSpawn.modelMatrix);
                     if (objectModel.transforms.length > 0)
                         mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j]);
-                    mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectSpawn.modelMatrix);
                     objectRenderer.modelInstance.push(binModelInstance);
                 }
 
