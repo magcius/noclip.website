@@ -3,9 +3,9 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, hexzero, assertExists, readString } from "../util";
 import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
-import { mat4, quat } from "gl-matrix";
+import { mat4, quat, vec3 } from "gl-matrix";
 import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString } from "../Common/PS2/GS";
-import { MathConstants } from "../MathHelpers";
+import { computeModelMatrixPosRot } from "../SourceEngine/Main";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -87,6 +87,12 @@ export interface BINModel {
 export interface BINModelSector {
     models: BINModel[];
     textures: BINTexture[];
+}
+
+export interface ObjectModel {
+    sector: BINModelSector;
+    transforms: mat4[];
+    bbox: AABB;
 }
 
 export interface LevelModelBIN {
@@ -765,6 +771,51 @@ function resetRandomGroups(groups: RandomGroup[]): void {
     }
 }
 
+function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: number): mat4[] {
+    const addressOffset = 0x210260; // start address in RAM
+    const indexTable = 0x211290; // ram address of table 
+    const transformTable = 0x2111A0; // ram address of table 
+
+    const view = data.createDataView();
+    if (indexTable + 2 * objectID - addressOffset > data.byteLength)
+        console.log(hexzero(indexTable, 8), hexzero(objectID, 8), hexzero(addressOffset, 8), hexzero(data.byteLength, 8))
+    // only very few objects have transforms, so first use the index table to find the right entry
+    const index = view.getInt16(indexTable + 2 * objectID - addressOffset, true);
+    if (index === -1)
+        return [];
+
+    const firstTransform = view.getUint32(transformTable + 4 * index - addressOffset, true);
+    if (firstTransform === 0)
+        return []; // even the condensed table has empty entries
+
+    const out: mat4[] = [];
+    for (let i = 0; i < partCount; i++) {
+        const x = view.getFloat32(firstTransform + 0x20 * i + 0x00 - addressOffset, true);
+        const y = view.getFloat32(firstTransform + 0x20 * i + 0x04 - addressOffset, true);
+        const z = view.getFloat32(firstTransform + 0x20 * i + 0x08 - addressOffset, true);
+        const rx = view.getFloat32(firstTransform + 0x20 * i + 0x10 - addressOffset, true);
+        const ry = view.getFloat32(firstTransform + 0x20 * i + 0x14 - addressOffset, true);
+        const rz = view.getFloat32(firstTransform + 0x20 * i + 0x18 - addressOffset, true);
+        const xform = mat4.create();
+        computeModelMatrixPosRot(xform, vec3.fromValues(x, y, z), vec3.fromValues(rx, ry, rz));
+        out.push(xform);
+    }
+    return out;
+}
+
+const scratchObjectAABB = new AABB();
+const scratchAABBTransform = mat4.create();
+function computeObjectAABB(sector: BINModelSector, transforms: mat4[]): AABB {
+    const out = new AABB();
+    mat4.identity(scratchAABBTransform);
+    out.transform(sector.models[0].bbox, transforms.length > 0 ? transforms[0] : scratchAABBTransform);
+    for (let i = 1; i < transforms.length; i++) {
+        scratchObjectAABB.transform(sector.models[i].bbox, transforms.length > 0 ? transforms[i] : scratchAABBTransform);
+        out.union(out, scratchObjectAABB);
+    }
+    return out;
+}
+
 export interface MissionSetupObjectSpawn {
     // The original in-game object ID.
     objectId: number;
@@ -784,7 +835,7 @@ export interface MissionSetupObjectSpawn {
 
 export interface LevelSetupBIN {
     activeStageAreas: number[];
-    objectModels: BINModelSector[];
+    objectModels: ObjectModel[];
     objectSpawns: MissionSetupObjectSpawn[];
 }
 
@@ -806,13 +857,13 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
     return new ArrayBufferSlice(dstBuffer.buffer);
 }
 
-export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSMemoryMap, randomGroups: RandomGroup[]): LevelSetupBIN {
+export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSMemoryMap, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
     const numSectors = view.getUint32(0x00, true);
 
-    function parseObject(objectId: number): BINModelSector | null {
+    function parseObject(objectId: number): ObjectModel | null {
         const firstSectorIndex = 0x09 + objectId * 0x0B;
         assert(firstSectorIndex + 0x0B <= numSectors);
 
@@ -824,7 +875,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
         const unk10Offs = view.getUint32(firstSectorOffs + 0x10, true);
         const clutAOffs = view.getUint32(firstSectorOffs + 0x14, true);
         const clutBOffs = view.getUint32(firstSectorOffs + 0x18, true);
-        const unk1COffs = view.getUint32(firstSectorOffs + 0x1C, true);
+        const collisionOffs = view.getUint32(firstSectorOffs + 0x1C, true);
         const unk20Offs = view.getUint32(firstSectorOffs + 0x20, true);
         const descriptionOffs = view.getUint32(firstSectorOffs + 0x24, true);
         const audioOffs = view.getUint32(firstSectorOffs + 0x28, true);
@@ -841,10 +892,14 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
         }
 
         // Load in LOD 0.
-        return parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
+        const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
+        if (sector === null)
+            return null;
+        const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
+        return {sector, transforms, bbox: computeObjectAABB(sector, transforms)};
     }
 
-    const objectModels: BINModelSector[] = [];
+    const objectModels: ObjectModel[] = [];
     const objectSpawns: MissionSetupObjectSpawn[] = [];
 
     function findOrParseObject(objectId: number): number {
@@ -968,6 +1023,13 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
             const modelMatrix = mat4.create();
             quat.setAxisAngle(q, [rotationX, rotationY, rotationZ], angle);
             mat4.fromRotationTranslation(modelMatrix, q, [translationX, translationY, translationZ]);
+
+            // random spawn positions give the ground height, so need to be adjusted based on the object
+            // there's an alternative path that I don't understand yet, just the simple stuff for now
+            if (u8LocPosType !== 0) {
+                scratchObjectAABB.transform(objectModels[modelIndex].bbox, modelMatrix);
+                modelMatrix[13] = scratchObjectAABB.minY;
+            }
 
             const dispOnAreaNo = i;
             const objectSpawn: MissionSetupObjectSpawn = { objectId, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix };

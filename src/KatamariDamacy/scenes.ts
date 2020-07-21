@@ -10,7 +10,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { Camera, CameraController } from '../Camera';
-import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor, noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureOverride } from '../TextureHolder';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
@@ -247,6 +247,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             cache.fetchFileData(getMissionSetupFilePath(this.missionSetupFile[i]));
         }
 
+        cache.fetchFileData(`${pathBase}/transformBlock.bin`); // 0x111260 to 0x112FFC from the ELF
         cache.fetchFileData(`${pathBase}/randomBlock.bin`); // 0x116980 to 0x1171C8 from the ELF
 
         return cache.waitForLoad().then(() => {
@@ -263,7 +264,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
 
             const randomGroups = BIN.initRandomGroups(this.index, cache.getFileData(`${pathBase}/randomBlock.bin`));
 
-            const missionSetupBin = BIN.parseMissionSetupBIN(buffers, gsMemoryMap, randomGroups);
+            const missionSetupBin = BIN.parseMissionSetupBIN(buffers, gsMemoryMap, randomGroups, cache.getFileData(`${pathBase}/transformBlock.bin`));
             renderer.missionSetupBin = missionSetupBin;
 
             // Parse our different stages.
@@ -305,9 +306,9 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             const objectDatas: BINModelSectorData[] = [];
             for (let i = 0; i < missionSetupBin.objectModels.length; i++) {
                 const objectModel = missionSetupBin.objectModels[i];
-                renderer.textureHolder.addBINTexture(device, objectModel);
+                renderer.textureHolder.addBINTexture(device, objectModel.sector);
 
-                const binModelSectorData = new BINModelSectorData(device, gfxCache, objectModel);
+                const binModelSectorData = new BINModelSectorData(device, gfxCache, objectModel.sector);
                 objectDatas.push(binModelSectorData);
                 renderer.modelSectorData.push(binModelSectorData);
             }
@@ -317,8 +318,11 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                 const objectRenderer = new ObjectRenderer(objectSpawn);
 
                 const binModelSectorData = objectDatas[objectSpawn.modelIndex];
+                const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
                 for (let j = 0; j < binModelSectorData.modelData.length; j++) {
                     const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[j]);
+                    if (objectModel.transforms.length > 0)
+                        mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j]);
                     mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectSpawn.modelMatrix);
                     objectRenderer.modelInstance.push(binModelInstance);
                 }
