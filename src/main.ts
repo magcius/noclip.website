@@ -63,6 +63,7 @@ import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
+import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -119,6 +120,7 @@ const sceneGroups = [
     Scenes_SuperMario64DS.sceneGroup,
     "Nintendo 64",
     Scenes_BanjoKazooie.sceneGroup,
+    Scenes_BeetleAdventureRacing.sceneGroup,
     Scenes_PaperMario64.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
     Scenes_PokemonSnap.sceneGroup,
