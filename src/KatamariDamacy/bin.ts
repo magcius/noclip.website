@@ -957,11 +957,6 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
             const s8CommentGroupNo = view.getInt8(setupSpawnsIdx + 0x0D);
             const s8TwinsNo = view.getInt8(setupSpawnsIdx + 0x0E);
             const u8ShakeOffFlag = view.getUint8(setupSpawnsIdx + 0x0F);
-            // not all of this is correct, as +0x10 is pos x.
-            const s8SpecialActNo = view.getInt16(setupSpawnsIdx + 0x10);
-            const u8Category = view.getUint8(setupSpawnsIdx + 0x11);
-            const u8UnitType = view.getUint8(setupSpawnsIdx + 0x12);
-            const u8HitLod = view.getUint8(setupSpawnsIdx + 0x13);
 
             // We're done.
             if (u16NameIdx === 0xFFFF)

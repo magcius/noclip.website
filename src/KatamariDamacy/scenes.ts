@@ -4,7 +4,7 @@ import { GfxDevice, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxRenderPass
 import { DataFetcher } from "../DataFetcher";
 import * as BIN from "./bin";
 import { BINModelInstance, BINModelSectorData, KatamariDamacyTextureHolder, KatamariDamacyProgram } from './render';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
@@ -16,6 +16,9 @@ import { SceneContext } from '../SceneBase';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { getMatrixTranslation } from '../MathHelpers';
+import { ObjectRenderer } from './objects';
 
 const pathBase = `katamari_damacy`;
 
@@ -63,28 +66,6 @@ function getStageAreaFilePath(filename: string): string {
 
 function getMissionSetupFilePath(filename: string): string {
     return `${pathBase}/17f590/${filename}.bin`;
-}
-
-class ObjectRenderer {
-    public modelInstance: BINModelInstance[] = [];
-
-    constructor(public objectSpawn: BIN.MissionSetupObjectSpawn) {
-    }
-
-    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
-        for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(renderInstManager, textureHolder, viewRenderer);
-    }
-
-    public setVisible(visible: boolean): void {
-        for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].setVisible(visible);
-    }
-
-    public setActiveAreaNo(areaNo: number): void {
-        const visible = areaNo >= this.objectSpawn.dispOnAreaNo && ((areaNo < this.objectSpawn.dispOffAreaNo) || this.objectSpawn.dispOffAreaNo === -1);
-        this.setVisible(visible);
-    }
 }
 
 class StageAreaSector {
@@ -230,6 +211,9 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     }
 }
 
+const katamariWorldSpaceToNoclipSpace = mat4.create();
+mat4.rotateX(katamariWorldSpaceToNoclipSpace, katamariWorldSpaceToNoclipSpace, Math.PI);
+
 class KatamariLevelSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, private index: number, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[], public initialAreaNo: number = -1, public cameraSpeedMult: number = 1) {
     }
@@ -293,6 +277,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
 
                     for (let k = 0; k < sector.models.length; k++) {
                         const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[k]);
+                        mat4.copy(binModelInstance.modelMatrix, katamariWorldSpaceToNoclipSpace);
                         stageAreaRenderer.modelInstance.push(binModelInstance);
                         stageAreaSector.modelInstance.push(binModelInstance);
                     }
@@ -321,7 +306,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                 const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
                 for (let j = 0; j < binModelSectorData.modelData.length; j++) {
                     const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[j]);
-                    mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectSpawn.modelMatrix);
+                    mat4.mul(binModelInstance.modelMatrix, katamariWorldSpaceToNoclipSpace, objectSpawn.modelMatrix);
                     if (objectModel.transforms.length > 0)
                         mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j]);
                     objectRenderer.modelInstance.push(binModelInstance);

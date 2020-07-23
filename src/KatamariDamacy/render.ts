@@ -298,7 +298,7 @@ export class BINModelPartInstance {
     }
 }
 
-const scratchMat4 = mat4.create();
+const scratchMatrix = mat4.create();
 const cullModeFlags = {
     cullMode: GfxCullMode.BACK,
 };
@@ -308,8 +308,6 @@ export class BINModelInstance {
     public visible = true;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
-        mat4.rotateX(this.modelMatrix, this.modelMatrix, Math.PI);
-
         for (let i = 0; i < this.binModelData.binModel.modelParts.length; i++)
             this.modelParts.push(new BINModelPartInstance(device, cache, textureHolder, this.binModelData.binModel.modelParts[i]));
     }
@@ -318,7 +316,7 @@ export class BINModelInstance {
         this.visible = visible;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewerInput: Viewer.ViewerRenderInput) {
         if (!this.visible)
             return;
 
@@ -326,11 +324,11 @@ export class BINModelInstance {
         template.setInputLayoutAndState(this.binModelData.inputLayout, this.binModelData.inputState);
         template.setMegaStateFlags(cullModeFlags);
 
-        computeViewMatrix(scratchMat4, viewRenderer.camera);
-        mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
+        computeViewMatrix(scratchMatrix, viewerInput.camera);
+        mat4.mul(scratchMatrix, scratchMatrix, this.modelMatrix);
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(renderInstManager, textureHolder, scratchMat4, this.modelMatrix);
+            this.modelParts[i].prepareToRender(renderInstManager, textureHolder, scratchMatrix, this.modelMatrix);
 
         renderInstManager.popTemplateRenderInst();
     }
