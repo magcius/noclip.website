@@ -6,7 +6,7 @@ import { LiveActor } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
 import { GravityInfo, GravityTypeMask } from './Gravity';
 import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport } from "./ActorUtil";
-import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType } from "./NameObj";
+import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
 import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis } from "../MathHelpers";
@@ -20,6 +20,7 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import { TSDraw } from "./DDraw";
 import { GX_Program } from "../gx/gx_material";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
@@ -672,10 +673,19 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
     }
 }
 
-export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, filename: string = 'Shadow'): void {
+export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     actor.shadowControllerList = new ShadowControllerList();
 
-    const shadowData = createCsvParser(assertExists(actor.resourceHolder.arc.findFileData(`${filename}.bcsv`)));
+    let shadowFile: ArrayBufferSlice;
+
+    if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG1)
+        shadowFile = assertExists(actor.resourceHolder.arc.findFileData(`Shadow.bcsv`));
+    else if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG2)
+        shadowFile = assertExists(actor.resourceHolder.arc.findFileData(`ActorInfo/Shadow.bcsv`));
+    else
+        throw "whoops";
+
+    const shadowData = createCsvParser(shadowFile);
     shadowData.mapRecords((infoIter) => {
         addShadowFromCSV(sceneObjHolder, actor, infoIter);
     });

@@ -11,7 +11,7 @@ import { Air, AirBubble, AirBubbleGenerator, AstroCountDownPlate, AstroDomeSky, 
 import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction } from './Actors/MapObj';
 import { Butler, Kinopio, KinopioAstro, Peach, Penguin, PenguinRacer, Rosetta, SignBoard, Tico, TicoAstro, TicoComet } from './Actors/NPC';
 import { createHazeCube, createSwitchCube, createSwitchCylinder, createSwitchSphere, createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, requestArchivesHazeCube, requestArchivesWaterArea } from './MiscMap';
-import { NameObj } from './NameObj';
+import { NameObj, GameBits } from './NameObj';
 import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
@@ -23,12 +23,6 @@ export interface NameObjFactory {
 
 export type NameObjFactoryFunc = (zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => NameObj;
 export type NameObjRequestArchivesFunc = (sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) => void;
-
-export const enum GameBits {
-    SMG1 = 0b01,
-    SMG2 = 0b10,
-    Both = SMG1 | SMG2,
-}
 
 export interface NameObjFactoryTableEntry {
     objName: string;

@@ -3,13 +3,14 @@ import * as Viewer from '../viewer';
 import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, SMGRenderer } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
-import { NameObj, MovementType } from './NameObj';
+import { NameObj, MovementType, GameBits } from './NameObj';
 import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength, vecKillElement } from './ActorUtil';
 import { TicoRail } from './Actors/MiscActor';
 import { vec3, mat4 } from 'gl-matrix';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
     public pathBase: string = `SuperMarioGalaxy`;
+    public gameBit = GameBits.SMG1;
     public getLightData(modelCache: ModelCache): JMapInfoIter {
         const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
         return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);

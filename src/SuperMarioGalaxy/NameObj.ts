@@ -13,6 +13,12 @@ import { assert } from "../util";
 import { ub_SceneParamsBufferSize } from "../gx/gx_render";
 import { GX_Program } from "../gx/gx_material";
 
+export const enum GameBits {
+    SMG1 = 0b01,
+    SMG2 = 0b10,
+    Both = SMG1 | SMG2,
+}
+
 export const enum MovementType {
     None                           = -1,
 

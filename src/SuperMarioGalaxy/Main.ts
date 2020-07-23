@@ -26,11 +26,11 @@ import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, T
 import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
-import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
+import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
 import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './Actors/MiscActor';
-import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
+import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { BckCtrl } from './Animation';
@@ -1201,25 +1201,19 @@ class SMGSpawner {
     public zones: ZoneNode[] = [];
 
     private legacySpawner: NoclipLegacyActorSpawner;
-    private gameBit: GameBits;
 
     constructor(private sceneObjHolder: SceneObjHolder) {
         this.legacySpawner = new NoclipLegacyActorSpawner(this.sceneObjHolder);
-
-        if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy')
-            this.gameBit = GameBits.SMG1;
-        else if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy2')
-            this.gameBit = GameBits.SMG2;
-        else
-            throw "whoops";
     }
 
     private getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
-        const actorTableEntry = getNameObjFactoryTableEntry(objName, this.gameBit);
+        const gameBit = this.sceneObjHolder.sceneDesc.gameBit;
+
+        const actorTableEntry = getNameObjFactoryTableEntry(objName, gameBit);
         if (actorTableEntry !== null)
             return actorTableEntry;
 
-        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName, this.gameBit);
+        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName, gameBit);
         if (planetTableEntry !== null)
             return planetTableEntry;
 
@@ -1550,6 +1544,7 @@ class MessageDataHolder {
 export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public id: string;
     public pathBase: string;
+    public gameBit: GameBits;
 
     constructor(public name: string, public galaxyName: string, public scenarioOverride: number | null = null, id: string | null = null) {
         if (id !== null) {

@@ -3,9 +3,11 @@ import * as Viewer from '../viewer';
 import { SMGSceneDescBase, ModelCache } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
+import { GameBits } from './NameObj';
 
 class SMG2SceneDesc extends SMGSceneDescBase {
     public pathBase: string = `SuperMarioGalaxy2`;
+    public gameBit = GameBits.SMG2;
     public getLightData(modelCache: ModelCache): JMapInfoIter {
         const lightDataRarc = modelCache.getArchive(`LightData/LightData.arc`)!;
         return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);
