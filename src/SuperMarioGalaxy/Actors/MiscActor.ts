@@ -630,8 +630,12 @@ class Coin extends LiveActor {
             shadowType = fallback(getJMapInfoArg6(infoIter), shadowType);
         }
 
-        if (shadowType < 0)
+        if (shadowType < 0) {
             initShadowVolumeSphere(sceneObjHolder, this, 50.0);
+        } else {
+            // TODO(jstpierre): Other shadow types
+            initShadowVolumeSphere(sceneObjHolder, this, 50.0);
+        }
 
         setShadowDropPositionPtr(this, null, this.shadowDropPos);
 
@@ -1550,8 +1554,9 @@ class ChipBase extends LiveActor {
         }
 
         if (shadowType === 0) {
-             // initShadowVolumeCylinder
-             shadowContinuous = false;
+            // TODO(jstpierre): initShadowVolumeCylinder
+            initShadowVolumeSphere(sceneObjHolder, this, 50.0 * this.scale[0]);
+            shadowContinuous = false;
         } else {
             initShadowVolumeSphere(sceneObjHolder, this, 50.0 * this.scale[0]);
         }
