@@ -501,12 +501,23 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     protected onScenario(sceneObjHolder: SceneObjHolder): void {
         // this.makeActorAppeared(sceneObjHolder);
 
+        if (this.hitSensorKeeper !== null) {
+            this.hitSensorKeeper.clear();
+            if (!isDead(this))
+                this.hitSensorKeeper.validateBySystem();
+        }
+
         if (this.effectKeeper !== null)
             this.effectKeeper.setVisibleScenario(true);
     }
 
     protected offScenario(sceneObjHolder: SceneObjHolder): void {
         // this.makeActorDead(sceneObjHolder);
+
+        if (this.hitSensorKeeper !== null) {
+            this.hitSensorKeeper.clear();
+            this.hitSensorKeeper.invalidateBySystem();
+        }
 
         if (this.effectKeeper !== null)
             this.effectKeeper.setVisibleScenario(false);
