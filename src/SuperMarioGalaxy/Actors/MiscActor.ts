@@ -6573,8 +6573,10 @@ function getPolygonOnRailPoint(sceneObjHolder: SceneObjHolder, dstPos: vec3, dst
     vec3.scale(dstNrm, dstNrm, 2000.0);
     // TODO(jstpierre): getFirstPolyOnLineToMapExceptSensor
     // const hitSensor = actor.getSensor('body');
-    assert(getFirstPolyOnLineToMap(sceneObjHolder, dstPos, triangleScratch, dstPos, dstNrm));
-    vec3.copy(dstNrm, triangleScratch.faceNormal);
+    if (getFirstPolyOnLineToMap(sceneObjHolder, dstPos, triangleScratch, dstPos, dstNrm))
+        vec3.copy(dstNrm, triangleScratch.faceNormal);
+    else
+        vec3.normalize(dstNrm, dstNrm);
 }
 
 export class OnimasuJump extends Onimasu {
