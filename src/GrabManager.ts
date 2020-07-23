@@ -125,6 +125,7 @@ export class GrabManager {
         this.grabButton = e.button;
 
         const target = e.target as HTMLElement;
+        target.focus();
 
         this.usingPointerLock = false;
         if (grabOptions.takePointerLock && target.requestPointerLock !== undefined) {
