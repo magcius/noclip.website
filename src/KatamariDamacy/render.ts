@@ -14,6 +14,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { AABB } from "../Geometry";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -299,6 +300,7 @@ export class BINModelPartInstance {
 }
 
 const scratchMatrix = mat4.create();
+const scratchAABB = new AABB();
 const cullModeFlags = {
     cullMode: GfxCullMode.BACK,
 };
@@ -318,6 +320,10 @@ export class BINModelInstance {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewerInput: Viewer.ViewerRenderInput) {
         if (!this.visible)
+            return;
+
+        scratchAABB.transform(this.binModelData.binModel.bbox, this.modelMatrix);
+        if (!viewerInput.camera.frustum.contains(scratchAABB))
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
