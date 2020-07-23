@@ -47,7 +47,8 @@ export function decodeString(buffer: ArrayBufferSlice, encoding = 'utf8'): strin
     } else if (typeof require !== 'undefined') {
         // @ts-ignore
         const iconv = require('iconv-lite');
-        return iconv.decode(buffer.copyToBuffer(), encoding);
+        // @ts-ignore
+        return iconv.decode(Buffer.from(buffer.copyToBuffer()), encoding);
     } else {
         throw "whoops";
     }
