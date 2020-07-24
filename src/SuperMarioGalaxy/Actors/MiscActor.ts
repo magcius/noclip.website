@@ -661,7 +661,7 @@ class Coin extends LiveActor {
     }
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
-        vec3.scaleAndAdd(this.shadowDropPos, this.translation, this.gravityVector, 70.0);
+        vec3.scaleAndAdd(this.shadowDropPos, this.translation, this.gravityVector, -70.0);
 
         if (this.useLocalGravity) {
             this.calcAndSetBaseMtxBase();
