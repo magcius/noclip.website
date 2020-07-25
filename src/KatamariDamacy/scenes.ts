@@ -4,7 +4,7 @@ import { GfxDevice, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxRenderPass
 import { DataFetcher } from "../DataFetcher";
 import * as BIN from "./bin";
 import { BINModelInstance, BINModelSectorData, KatamariDamacyTextureHolder, KatamariDamacyProgram } from './render';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
@@ -16,8 +16,6 @@ import { SceneContext } from '../SceneBase';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
-import { getMatrixTranslation } from '../MathHelpers';
 import { ObjectRenderer } from './objects';
 
 const pathBase = `katamari_damacy`;
