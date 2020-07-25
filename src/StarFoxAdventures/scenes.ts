@@ -320,8 +320,8 @@ const sceneDescs = [
     new SFAWorldSceneDesc('dragrock', 'dragrock', 2, 'Dragon Rock'),
     new SFAWorldSceneDesc('animtest', 'animtest', 26, 'Test Map (animtest)'),
 
-    // 'Miscellaneous',
-    // new SwapcircleSceneDesc(22, 'betaswapcircle', 'Swap Circle', SFADEMO_GAME_INFO),
+    'Miscellaneous',
+    new SwapcircleSceneDesc(22, 'betaswapcircle', 'Swap Circle', SFADEMO_GAME_INFO),
     // new SFAModelExhibitSceneDesc('modelexhibit', 'Model Exhibit', 'swaphol', ModelVersion.Final),
     // new SFAModelExhibitSceneDesc('betamodelexhibit', 'Beta Model Exhibit', 'swapcircle', ModelVersion.Beta, SFADEMO_GAME_INFO),
 

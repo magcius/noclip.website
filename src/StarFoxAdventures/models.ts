@@ -1,20 +1,18 @@
-import * as Viewer from '../viewer';
 import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
 import { GameInfo } from './scenes';
-import { SFAMaterial, ShaderAttrFlags } from './materials';
+import { SFAMaterial, ShaderAttrFlags, ANCIENT_MAP_SHADER_FIELDS } from './materials';
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './materials';
-import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, getCamPos } from './util';
+import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3 } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
@@ -36,6 +34,7 @@ interface CoarseBlend {
 }
 
 export enum ModelVersion {
+    AncientMap,
     Beta,
     BetaMap, // Demo swapcircle
     Demo, // Most demo files
@@ -271,6 +270,35 @@ export class Model {
                 numListBits: 6,
                 bitsOffsets: [0x90],
                 bitsByteCounts: [0x94],
+                oldVat: true,
+                hasYTranslate: false,
+            };
+        } else if (this.modelVersion === ModelVersion.AncientMap) {
+            fields = {
+                isBeta: true,
+                isMapBlock: true,
+                alwaysUseTex1: true,
+                shaderFields: ANCIENT_MAP_SHADER_FIELDS,
+                hasNormals: false,
+                hasBones: false,
+                texOffset: 0x58,
+                posOffset: 0x5c,
+                clrOffset: 0x60,
+                texcoordOffset: 0x64,
+                shaderOffset: 0x68,
+                listOffsets: 0x6c,
+                listSizes: 0x70,
+                posCount: 0x90,
+                clrCount: 0x94,
+                texcoordCount: 0x96,
+                texCount: 0xa0,
+                shaderCount: 0x9a,
+                dlOffsets: 0x6c,
+                dlSizes: 0x70,
+                dlInfoCount: 0x99,
+                numListBits: 6,
+                bitsOffsets: [0x7c],
+                bitsByteCounts: [0x86],
                 oldVat: true,
                 hasYTranslate: false,
             };
@@ -661,7 +689,7 @@ export class Model {
 
         const dlInfos: DisplayListInfo[] = [];
         const dlInfoCount = blockDv.getUint8(fields.dlInfoCount);
-        // console.log(`Loading ${dlInfoCount} display lists...`);
+        console.log(`Loading ${dlInfoCount} display lists...`);
         if (fields.isBeta) {
             for (let i = 0; i < dlInfoCount; i++) {
                 const dlOffsetsOffs = blockDv.getUint32(fields.dlOffsets);
@@ -669,7 +697,7 @@ export class Model {
 
                 const dlOffset = blockDv.getUint32(dlOffsetsOffs + i * 4);
                 const dlSize = blockDv.getUint16(dlSizesOffs + i * 2);
-                // console.log(`DL ${i}: offset 0x${dlOffset.toString(16)}, size 0x${dlSize.toString(16)}`);
+                console.log(`DL ${i}: offset 0x${dlOffset.toString(16)}, size 0x${dlSize.toString(16)}`);
                 dlInfos.push({
                     offset: dlOffset,
                     size: dlSize,
