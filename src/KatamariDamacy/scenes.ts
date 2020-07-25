@@ -108,6 +108,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public modelSectorData: BINModelSectorData[] = [];
     public textureHolder = new KatamariDamacyTextureHolder();
     public missionSetupBin: BIN.LevelSetupBIN;
+    public levelParams: BIN.LevelParameters;
 
     public stageAreaRenderers: StageAreaRenderer[] = [];
     public objectRenderers: ObjectRenderer[] = [];
@@ -213,189 +214,194 @@ const katamariWorldSpaceToNoclipSpace = mat4.create();
 mat4.rotateX(katamariWorldSpaceToNoclipSpace, katamariWorldSpaceToNoclipSpace, Math.PI);
 
 class KatamariLevelSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, private index: number, public name: string, public stageAreaFileGroup: StageAreaFileGroup[], public missionSetupFile: string[], public initialAreaNo: number = -1, public cameraSpeedMult: number = 1) {
+    constructor(public id: string, private index: number, public name: string, public cameraSpeedMult: number = 1) {
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const cache = new LevelCache(dataFetcher);
 
-        for (let i = 0; i < this.stageAreaFileGroup.length; i++) {
-            cache.fetchFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].texFile));
-            cache.fetchFileData(getStageAreaFilePath(this.stageAreaFileGroup[i].modelFile));
+        cache.fetchFileData(`${pathBase}/transformBlock.bin`);
+        cache.fetchFileData(`${pathBase}/randomBlock.bin?cache_bust=1`);
+        cache.fetchFileData(`${pathBase}/levelBlock.bin`);
+        cache.fetchFileData(`${pathBase}/missionBlock.bin`);
+
+        const renderer = new KatamariDamacyRenderer(device);
+        renderer.sceneMoveSpeedMult *= this.cameraSpeedMult;
+        const gfxCache = renderer.renderHelper.getCache();
+        await cache.waitForLoad();
+
+        // first load level-specific data
+        const levelParams = BIN.parseLevelParameters(this.index, cache.getFileData(`${pathBase}/levelBlock.bin`), cache.getFileData(`${pathBase}/missionBlock.bin`),);
+        renderer.levelParams = levelParams;
+        for (let i = 0; i < levelParams.missionSetupFiles.length; i++) {
+            cache.fetchFileData(getMissionSetupFilePath(levelParams.missionSetupFiles[i]));
         }
+        await cache.waitForLoad();
 
-        for (let i = 0; i < this.missionSetupFile.length; i++) {
-            cache.fetchFileData(getMissionSetupFilePath(this.missionSetupFile[i]));
+        const gsMemoryMap = gsMemoryMapNew();
+
+        // Parse through the mission setup data to get our stage spawns.
+        const buffers: ArrayBufferSlice[] = [];
+        for (let i = 0; i < levelParams.missionSetupFiles.length; i++)
+            buffers.push(cache.getFileData(getMissionSetupFilePath(levelParams.missionSetupFiles[i])));
+
+        const randomGroups = BIN.initRandomGroups(this.index, cache.getFileData(`${pathBase}/randomBlock.bin?cache_bust=1`));
+
+        const missionSetupBin = BIN.parseMissionSetupBIN(buffers, levelParams.startArea, gsMemoryMap, randomGroups, cache.getFileData(`${pathBase}/transformBlock.bin`));
+        renderer.missionSetupBin = missionSetupBin;
+
+        // request stage area data
+        for (let i = 0; i < missionSetupBin.activeStageAreas.length; i++) {
+            cache.fetchFileData(getStageAreaFilePath(stageTextures[levelParams.stageAreaIndex + i]));
+            cache.fetchFileData(getStageAreaFilePath(stageModels[levelParams.stageAreaIndex + i]));
         }
+        await cache.waitForLoad();
 
-        cache.fetchFileData(`${pathBase}/transformBlock.bin`); // 0x111260 to 0x112FFC from the ELF
-        cache.fetchFileData(`${pathBase}/randomBlock.bin`); // 0x116980 to 0x1171C8 from the ELF
+        // Parse our different stages.
+        for (let i = 0; i < missionSetupBin.activeStageAreas.length; i++) {
+            const stageAreaIndex = missionSetupBin.activeStageAreas[i];
 
-        return cache.waitForLoad().then(() => {
-            const gsMemoryMap = gsMemoryMapNew();
+            const stageTexBinData = cache.getFileData(getStageAreaFilePath(stageTextures[levelParams.stageAreaIndex + i]));
+            const stageModelBinData = cache.getFileData(getStageAreaFilePath(stageModels[levelParams.stageAreaIndex + i]));
+            BIN.parseStageTextureBIN(stageTexBinData, gsMemoryMap);
+            const stageModelBin = BIN.parseLevelModelBIN(stageModelBinData, gsMemoryMap, this.id);
 
-            const renderer = new KatamariDamacyRenderer(device);
-            renderer.sceneMoveSpeedMult *= this.cameraSpeedMult;
-            const gfxCache = renderer.renderHelper.getCache();
+            const stageAreaRenderer = new StageAreaRenderer(stageAreaIndex);
 
-            // Parse through the mission setup data to get our stage spawns.
-            const buffers: ArrayBufferSlice[] = [];
-            for (let i = 0; i < this.missionSetupFile.length; i++)
-                buffers.push(cache.getFileData(getMissionSetupFilePath(this.missionSetupFile[i])));
+            for (let j = 0; j < stageModelBin.sectors.length; j++) {
+                const sector = stageModelBin.sectors[j];
+                renderer.textureHolder.addBINTexture(device, sector);
 
-            const randomGroups = BIN.initRandomGroups(this.index, cache.getFileData(`${pathBase}/randomBlock.bin`));
+                const stageAreaSector = new StageAreaSector();
 
-            const missionSetupBin = BIN.parseMissionSetupBIN(buffers, gsMemoryMap, randomGroups, cache.getFileData(`${pathBase}/transformBlock.bin`));
-            renderer.missionSetupBin = missionSetupBin;
-
-            // Parse our different stages.
-            for (let i = 0; i < missionSetupBin.activeStageAreas.length; i++) {
-                const stageAreaIndex = missionSetupBin.activeStageAreas[i];
-
-                // TODO(jstpierre): What does it mean to have an "active stage" that's past our level set?
-                if (stageAreaIndex >= this.stageAreaFileGroup.length)
-                    continue;
-
-                const stageTexBinData = cache.getFileData(getStageAreaFilePath(this.stageAreaFileGroup[stageAreaIndex].texFile));
-                const stageModelBinData = cache.getFileData(getStageAreaFilePath(this.stageAreaFileGroup[stageAreaIndex].modelFile));
-                BIN.parseStageTextureBIN(stageTexBinData, gsMemoryMap);
-                const stageModelBin = BIN.parseLevelModelBIN(stageModelBinData, gsMemoryMap, this.id);
-
-                const stageAreaRenderer = new StageAreaRenderer(stageAreaIndex);
-
-                for (let j = 0; j < stageModelBin.sectors.length; j++) {
-                    const sector = stageModelBin.sectors[j];
-                    renderer.textureHolder.addBINTexture(device, sector);
-
-                    const stageAreaSector = new StageAreaSector();
-
-                    const binModelSectorData = new BINModelSectorData(device, gfxCache, sector);
-                    renderer.modelSectorData.push(binModelSectorData);
-
-                    for (let k = 0; k < sector.models.length; k++) {
-                        const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[k]);
-                        mat4.copy(binModelInstance.modelMatrix, katamariWorldSpaceToNoclipSpace);
-                        stageAreaRenderer.modelInstance.push(binModelInstance);
-                        stageAreaSector.modelInstance.push(binModelInstance);
-                    }
-
-                    stageAreaRenderer.stageAreaSector.push(stageAreaSector);
-                }
-
-                renderer.stageAreaRenderers.push(stageAreaRenderer);
-            }
-
-            const objectDatas: BINModelSectorData[] = [];
-            for (let i = 0; i < missionSetupBin.objectModels.length; i++) {
-                const objectModel = missionSetupBin.objectModels[i];
-                renderer.textureHolder.addBINTexture(device, objectModel.sector);
-
-                const binModelSectorData = new BINModelSectorData(device, gfxCache, objectModel.sector);
-                objectDatas.push(binModelSectorData);
+                const binModelSectorData = new BINModelSectorData(device, gfxCache, sector);
                 renderer.modelSectorData.push(binModelSectorData);
-            }
 
-            for (let i = 0; i < missionSetupBin.objectSpawns.length; i++) {
-                const objectSpawn = missionSetupBin.objectSpawns[i];
-                const objectRenderer = new ObjectRenderer(objectSpawn);
-
-                const binModelSectorData = objectDatas[objectSpawn.modelIndex];
-                const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
-                for (let j = 0; j < binModelSectorData.modelData.length; j++) {
-                    const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[j]);
-                    mat4.mul(binModelInstance.modelMatrix, katamariWorldSpaceToNoclipSpace, objectSpawn.modelMatrix);
-                    if (objectModel.transforms.length > 0)
-                        mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j]);
-                    objectRenderer.modelInstance.push(binModelInstance);
+                for (let k = 0; k < sector.models.length; k++) {
+                    const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[k]);
+                    mat4.copy(binModelInstance.modelMatrix, katamariWorldSpaceToNoclipSpace);
+                    stageAreaRenderer.modelInstance.push(binModelInstance);
+                    stageAreaSector.modelInstance.push(binModelInstance);
                 }
 
-                renderer.objectRenderers.push(objectRenderer);
+                stageAreaRenderer.stageAreaSector.push(stageAreaSector);
             }
 
-            if (this.initialAreaNo !== -1)
-                renderer.setCurrentAreaNo(missionSetupBin.activeStageAreas[this.initialAreaNo]);
+            renderer.stageAreaRenderers.push(stageAreaRenderer);
+        }
 
-            return renderer;
-        });
+        const objectDatas: BINModelSectorData[] = [];
+        for (let i = 0; i < missionSetupBin.objectModels.length; i++) {
+            const objectModel = missionSetupBin.objectModels[i];
+            renderer.textureHolder.addBINTexture(device, objectModel.sector);
+
+            const binModelSectorData = new BINModelSectorData(device, gfxCache, objectModel.sector);
+            objectDatas.push(binModelSectorData);
+            renderer.modelSectorData.push(binModelSectorData);
+        }
+
+        for (let i = 0; i < missionSetupBin.objectSpawns.length; i++) {
+            const objectSpawn = missionSetupBin.objectSpawns[i];
+            const objectRenderer = new ObjectRenderer(objectSpawn);
+
+            const binModelSectorData = objectDatas[objectSpawn.modelIndex];
+            const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
+            for (let j = 0; j < binModelSectorData.modelData.length; j++) {
+                const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[j]);
+                mat4.mul(binModelInstance.modelMatrix, katamariWorldSpaceToNoclipSpace, objectSpawn.modelMatrix);
+                if (objectModel.transforms.length > 0)
+                    mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j]);
+                objectRenderer.modelInstance.push(binModelInstance);
+            }
+
+            renderer.objectRenderers.push(objectRenderer);
+        }
+
+        return renderer;
     }
 }
 
 const id = 'katamari_damacy';
 const name = 'Katamari Damacy';
 
-const houseStageAreaGroup: StageAreaFileGroup[] = [
-    { texFile: '135049', modelFile: '135b75', },
-    // The game loads 1350c3, 13513d, 1351b7 as the texture files, but these files are byte-for-byte
-    // identical to 135049, so we cut down on loading time here.
-    { texFile: '135049', modelFile: '135c43', },
-    { texFile: '135049', modelFile: '135d18', },
-    { texFile: '135049', modelFile: '135ded', },
+// commented out files have been replaced by identical files to reduce loading
+
+// table at 1879b0 in elf
+const stageTextures: string[] = [
+    '135042',
+    '135049', '135049', '135049', '135049', //'1350c3', '13513d', '1351b7',
+    '135231', '135231', '135231', '135231', // '135299', '135301', '135369',
+    '1353d1', '1353d1', '1353d1', /*'13548c', '135547',*/ '135602', '135745',
+    '135753', '135778', '1357a5',
+    '1357de', '135834', '135840', '135840', //'1358c5',
+    '13594a', '13594d', '135972', '1353d1', //'135a20',
 ];
 
-const cityStageAreaGroup: StageAreaFileGroup[] = [
-    // The game loads 135299, 135301, 135369 as the texture files, but these files are byte-for-byte
-    // identical to 135231, so we cut down on loading time here.
-    { texFile: '135231', modelFile: '135ebf', },
-    { texFile: '135231', modelFile: '135fe0', },
-    { texFile: '135231', modelFile: '13612f', },
-    { texFile: '135231', modelFile: '136282', },
-];
-
-const worldStageAreaGroup: StageAreaFileGroup[] = [
-    // The game loads 13548c, 134fda as the texture files, but these files are byte-for-byte
-    // identical to 1353d1, so we cut down on loading time here.
-    { texFile: '1353d1', modelFile: '1363c5', },
-    { texFile: '1353d1', modelFile: '1364a3', },
-    { texFile: '1353d1', modelFile: '136599', },
-    // The next two texture files are not identical.
-    { texFile: '135602', modelFile: '1366d7', },
-    { texFile: '135745', modelFile: '136797', },
-];
-
-const multiplayerStageAreaGroup: StageAreaFileGroup[] = [
-    { texFile: '135753', modelFile: '1367a0', },
-    { texFile: '135778', modelFile: '1367af', },
-    { texFile: '1357a5', modelFile: '1367be', },
+// table at 187b40 in elf
+const stageModels: string[] = [
+    '135adb',
+    '135b75', '135c43', '135d18', '135ded',
+    '135ebf', '135fe0', '13612f', '136282',
+    '1363c5', '1364a3', '136599', '1366d7', '136797',
+    '1367a0', '1367af', '1367be',
+    '1367cd', '13681e', '13685f', '13685f', // '1368f2', 
+    '136985', '13698a', '13699b', '1369ae',
+    '136a83',
 ];
 
 const sceneDescs = [
     "Planets",
-    new KatamariLevelSceneDesc('lvl1',  1,  "Make a Star 1 (House)", houseStageAreaGroup, ['13d9bd', '13da02', '13da55', '13daa6']),
-    new KatamariLevelSceneDesc('lvl2',  2,  "Make a Star 2 (House)", houseStageAreaGroup, ['13daff', '13db9c', '13dc59', '13dd08']),
-    new KatamariLevelSceneDesc('lvl3',  4,  "Make a Star 3 (City)",  cityStageAreaGroup,  ['13e462', '13e553', '13e68e', '13e7b1']),
-    new KatamariLevelSceneDesc('lvl4',  3,  "Make a Star 4 (House)", houseStageAreaGroup, ['13ddc6', '13df3f', '13e10e', '13e2b1']),
-    new KatamariLevelSceneDesc('lvl5',  5,  "Make a Star 5 (City)",  cityStageAreaGroup,  ['13e8d2', '13ea87', '13eca3', '13eeb0']),
-    new KatamariLevelSceneDesc('lvl6',  6,  "Make a Star 6 (World)", worldStageAreaGroup, ['13f0b4', '13f244', '13f443', '13f605']),
-    new KatamariLevelSceneDesc('lvl7',  7,  "Make a Star 7 (World)", worldStageAreaGroup, ['13f7c8', '13f97f', '13fbad', '13fda5']),
-    new KatamariLevelSceneDesc('lvl8',  8,  "Make a Star 8 (City)",  cityStageAreaGroup,  ['13ff91', '14017a', '1403d3', '140616']),
-    new KatamariLevelSceneDesc('lvl9',  9,  "Make a Star 9 (World)", worldStageAreaGroup, ['140850', '140a3e', '140cc7', '140f02']),
-    new KatamariLevelSceneDesc('lvl10', 10, "Make the Moon (World)", worldStageAreaGroup, ['141133', '141339', '1415d4', '141829'], -1, 100),
+    new KatamariLevelSceneDesc('lvl1', 1, "Make a Star 1 (House)"),
+    new KatamariLevelSceneDesc('lvl2', 2, "Make a Star 2 (House)"),
+    new KatamariLevelSceneDesc('lvl3', 4, "Make a Star 3 (City)"),
+    new KatamariLevelSceneDesc('lvl4', 3, "Make a Star 4 (House)"),
+    new KatamariLevelSceneDesc('lvl5', 5, "Make a Star 5 (City)"),
+    new KatamariLevelSceneDesc('lvl6', 6, "Make a Star 6 (World)"),
+    new KatamariLevelSceneDesc('lvl7', 7, "Make a Star 7 (World)"),
+    new KatamariLevelSceneDesc('lvl8', 8, "Make a Star 8 (City)"),
+    new KatamariLevelSceneDesc('lvl9', 9, "Make a Star 9 (World)"),
+    new KatamariLevelSceneDesc('lvl10', 10, "Make the Moon (World)", 100),
 
     "Constellations",
-    new KatamariLevelSceneDesc('clvl1', 11, "Make Cancer",           houseStageAreaGroup, ['141ab5', '141b43', '141bf5', '141cae']),
-    new KatamariLevelSceneDesc('clvl2', 12, "Make Cygnus",           houseStageAreaGroup, ['141d5d', '141dfb', '141ec1', '141f82']),
-    new KatamariLevelSceneDesc('clvl3', 14, "Make Corona Borealis",  cityStageAreaGroup,  ['1422c5', '1423de', '142542', '1426ac']),
-    new KatamariLevelSceneDesc('clvl4', 18, "Make Gemini",           worldStageAreaGroup, ['14364f', '143796', '143938', '143aae']),
-    new KatamariLevelSceneDesc('clvl5', 17, "Make Ursa Major",       cityStageAreaGroup,  ['14317d', '143287', '1433dc', '143518']),
-    new KatamariLevelSceneDesc('clvl6', 19, "Make Taurus",           worldStageAreaGroup, ['143c24', '143d77', '143f34', '1440b8']),
-    new KatamariLevelSceneDesc('clvl7', 15, "Make Pisces",           cityStageAreaGroup,  ['142801', '14290d', '142a52', '142b90']),
-    new KatamariLevelSceneDesc('clvl8', 16, "Make Virgo",            cityStageAreaGroup,  ['142cc5', '142dd2', '142f0e', '143046']),
+    new KatamariLevelSceneDesc('clvl1', 11, "Make Cancer"),
+    new KatamariLevelSceneDesc('clvl2', 12, "Make Cygnus"),
+    new KatamariLevelSceneDesc('clvl3', 14, "Make Corona Borealis"),
+    new KatamariLevelSceneDesc('clvl4', 18, "Make Gemini"),
+    new KatamariLevelSceneDesc('clvl5', 17, "Make Ursa Major"),
+    new KatamariLevelSceneDesc('clvl6', 19, "Make Taurus"),
+    new KatamariLevelSceneDesc('clvl7', 15, "Make Pisces"),
+    new KatamariLevelSceneDesc('clvl8', 16, "Make Virgo"),
 
-    // Make the North Star seems to have a dummy mission setup as the first area... just display the other one by default...
-    new KatamariLevelSceneDesc('clvl9', 21, "Make the North Star",  worldStageAreaGroup, ['144633', '1447b1', '1449ba', '144b78'], 1),
+    new KatamariLevelSceneDesc('clvl9', 21, "Make the North Star"),
+
+    "Special Levels",
+    new KatamariLevelSceneDesc('slvl28', 28, "Tutorial"),
+    new KatamariLevelSceneDesc('slvl29', 29, "Credits"),
+    // new KatamariLevelSceneDesc('slvl30', 30, "Load"), same as snow?
 
     "Multiplayer",
-    new KatamariLevelSceneDesc('mplvl1', 31, "Multiplayer Level 1", multiplayerStageAreaGroup, ['1472a8', '1472b8', '1472d6', '1472ef']),
-    new KatamariLevelSceneDesc('mplvl2', 32, "Multiplayer Level 2", multiplayerStageAreaGroup, ['147307', '147319', '147334', '147350']),
-    new KatamariLevelSceneDesc('mplvl3', 33, "Multiplayer Level 3", multiplayerStageAreaGroup, ['14736c', '147380', '14739a', '1473be']),
-    new KatamariLevelSceneDesc('mplvl4', 34, "Multiplayer Level 4", multiplayerStageAreaGroup, ['1473db', '1473ec', '147409', '147429']),
-    new KatamariLevelSceneDesc('mplvl5', 35, "Multiplayer Level 5", multiplayerStageAreaGroup, ['147445', '147457', '14746e', '14748c']),
+    new KatamariLevelSceneDesc('mplvl1', 31, "Multiplayer Level 1"),
+    new KatamariLevelSceneDesc('mplvl2', 32, "Multiplayer Level 2"),
+    new KatamariLevelSceneDesc('mplvl3', 33, "Multiplayer Level 3"),
+    new KatamariLevelSceneDesc('mplvl4', 34, "Multiplayer Level 4"),
+    new KatamariLevelSceneDesc('mplvl5', 35, "Multiplayer Level 5"),
+    new KatamariLevelSceneDesc('mplvl6', 36, "Multiplayer Level 6"),
+    new KatamariLevelSceneDesc('mplvl7', 37, "Multiplayer Level 7"),
+    new KatamariLevelSceneDesc('mplvl8', 38, "Multiplayer Level 8"),
 
     "Unused Levels",
-    new KatamariLevelSceneDesc('snow', 0, "Snow", [
-        { texFile: '135042', modelFile: '135adb' },
-    ], ['13d9b1', '13d9b3', '13d9b5', '13d9b8']),
+    new KatamariLevelSceneDesc('snow', 0, "Snow"),
+    new KatamariLevelSceneDesc('ulvl13', 13, "13"),
+    new KatamariLevelSceneDesc('ulvl20', 20, "20"),
+    new KatamariLevelSceneDesc('ulvl25', 25, "Seagull Park Demo"), // store demo
+    new KatamariLevelSceneDesc('ulvl26', 26, "26"),
+    new KatamariLevelSceneDesc('ulvl27', 27, "27"),
+    new KatamariLevelSceneDesc('ulvl39', 39, "Demo Island Demo"),
+    new KatamariLevelSceneDesc('ulvl40', 40, "Test 0"),
+    new KatamariLevelSceneDesc('ulvl41', 41, "Test 1"),
+    new KatamariLevelSceneDesc('ulvl42', 42, "Test 2"),
+    new KatamariLevelSceneDesc('ulvl43', 43, "Test 3"),
 ];
 const sceneIdMap = new Map<string, string>();
 // When I first was testing Katamari, I was testing the Tutorial Level. At some point

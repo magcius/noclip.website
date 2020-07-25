@@ -287,7 +287,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         const minX = view.getFloat32(objOffs + 0x00, true);
         const minY = view.getFloat32(objOffs + 0x04, true);
         const minZ = view.getFloat32(objOffs + 0x08, true);
-        // Not sure what 0x0C is.
+        const modelQuadwordCount = view.getUint16(objOffs + 0x0C, true);
         const maxX = view.getFloat32(objOffs + 0x10, true);
         const maxY = view.getFloat32(objOffs + 0x14, true);
         const maxZ = view.getFloat32(objOffs + 0x18, true);
@@ -702,6 +702,35 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
     return { sectors };
 }
 
+export interface LevelParameters {
+    lightingIndex: number;
+    startArea: number;
+    stageAreaIndex: number;
+    missionSetupFiles: string[];
+}
+
+export function parseLevelParameters(index: number, parameters: ArrayBufferSlice, files: ArrayBufferSlice): LevelParameters {
+    const addressOffset = 0x1BE1A0; // start address in RAM
+    const levelTable = 0x1BEF80; // ram address of table
+    const paramView = parameters.createDataView();
+
+    const missionSetupFiles: string[] = [];
+    const fileView = files.createDataView();
+    for (let i = 4 * index + 1; i < 4 * index + 5; i++)
+        missionSetupFiles.push(fileView.getUint32(0x10 * i + 0x08, true).toString(16));
+
+    if (index > 31 && index < 39)
+        index = 31; // TODO: figure out what's going on with versus stages
+
+    const levelPointer = paramView.getUint32(levelTable + 4 * index - addressOffset, true) - addressOffset;
+
+    const lightingIndex = paramView.getUint8(levelPointer + 0x00);
+    const startArea = paramView.getUint8(levelPointer + 0x01);
+    const stageAreaIndex = paramView.getUint16(levelPointer + 0x04, true);
+
+    return { lightingIndex, startArea, stageAreaIndex, missionSetupFiles };
+}
+
 interface RandomIDOption {
     id: number;
     maxUses: number;
@@ -777,8 +806,6 @@ function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: 
     const transformTable = 0x2111A0; // ram address of table 
 
     const view = data.createDataView();
-    if (indexTable + 2 * objectID - addressOffset > data.byteLength)
-        console.log(hexzero(indexTable, 8), hexzero(objectID, 8), hexzero(addressOffset, 8), hexzero(data.byteLength, 8))
     // only very few objects have transforms, so first use the index table to find the right entry
     const index = view.getInt16(indexTable + 2 * objectID - addressOffset, true);
     if (index === -1)
@@ -857,7 +884,7 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
     return new ArrayBufferSlice(dstBuffer.buffer);
 }
 
-export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSMemoryMap, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
+export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: number, gsMemoryMap: GSMemoryMap, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
@@ -919,10 +946,12 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
     const activeStageAreas: number[] = [];
     let setupSpawnTableIdx = 0x14;
     for (let i = 0; i < 5; i++, setupSpawnTableIdx += 0x04) {
-        let setupSpawnsIdx = view.getUint32(setupSpawnTableIdx, true);
+        if (i < firstArea)
+            continue; // TODO: figure out why cygnus has an extra area
 
+        let setupSpawnsIdx = view.getUint32(setupSpawnTableIdx, true);
         if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ')
-            continue;
+            break;
 
         activeStageAreas.push(i);
 
