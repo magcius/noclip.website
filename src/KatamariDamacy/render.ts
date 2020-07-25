@@ -30,6 +30,8 @@ precision mediump float;
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
+    vec3 u_LightDirs[2];
+    vec3 u_LightColors[3];
 };
 
 layout(row_major, std140) uniform ub_ModelParams {
@@ -112,10 +114,15 @@ void main() {
     t_Color = texture(SAMPLER_2D(u_Texture[0]), v_TexCoord);
     t_Color.rgba *= u_Color.rgba;
 
-    // Basic fake directional.
-    vec3 t_LightDirection = normalize(vec3(0.8, -1, 0.5));
-    float t_LightIntensity = max(dot(-v_Normal, t_LightDirection), 0.0);
-    t_Color.rgb *= mix(0.7, 1.2, t_LightIntensity);
+#ifdef LIGHTING
+    vec3 t_CombinedIntensity = u_LightColors[2];
+    float t_intensity = max(dot(v_Normal, u_LightDirs[0]), 0.0);
+    t_CombinedIntensity += t_intensity * u_LightColors[0];
+    t_intensity = max(dot(v_Normal, u_LightDirs[1]), 0.0);
+    t_CombinedIntensity += t_intensity * u_LightColors[1];
+
+    t_Color.rgb *= clamp(t_CombinedIntensity, 0.0, 1.0);
+#endif
 
 ${this.generateAlphaTest(ate, atst, aref, afail)}
 
@@ -214,6 +221,8 @@ export class BINModelPartInstance {
         const gsConfiguration = this.binModelPart.gsConfiguration!;
 
         const program = new KatamariDamacyProgram(gsConfiguration);
+        if (this.binModelPart.lit)
+            program.defines.set("LIGHTING", "1");
         this.gfxProgram = cache.createProgram(device, program);
 
         const zte = !!((gsConfiguration.test_1_data0 >>> 16) & 0x01);

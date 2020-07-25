@@ -75,6 +75,7 @@ export interface BINModelPart {
     indexCount: number;
     textureName: string | null;
     gsConfiguration: GSConfiguration;
+    lit: boolean;
 }
 
 export interface BINModel {
@@ -305,6 +306,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             vertexRunColor: Color;
             textureName: string | null;
             gsConfiguration: GSConfiguration;
+            lit: boolean;
         }
         const modelVertexRuns: BINModelRun[] = [];
 
@@ -332,6 +334,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         let expectedNormalsOffs = -1;
         let expectedDiffuseColorOffs = -1;
         let skipVertices = false;
+        let lit = false;
 
         const newVertexRun = () => {
             // Parse out the header.
@@ -341,6 +344,14 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             vertexRunCount = vertexRunFlags0 & 0x000000FF;
             vertexRunData = new Float32Array(vertexRunCount * WORKING_VERTEX_STRIDE);
             skipVertices = false;
+
+            const lightingFlags = vertexRunFlags1 & 3;
+            if (lightingFlags === 2)
+                lit = false;
+            else if (lightingFlags === 0)
+                lit = true;
+            else
+                throw(`bad lighting flags ${lightingFlags}`)
 
             // Seems to be some sort of format code.
             if (vertexRunFlags2 === 0x0412) {
@@ -409,7 +420,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         }
                     } else {
                         // It should be diffuse color.
-                        assert(imm === expectedDiffuseColorOffs);
+                        assert(imm === expectedDiffuseColorOffs && lit);
                         assert(qwd === 0x01);
 
                         const diffuseColorR = view.getFloat32(packetsIdx + 0x00, true) / 128;
@@ -445,7 +456,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         }
                     } else {
                         // If it's not positions, it should be vertex normals.
-                        assert(imm === expectedNormalsOffs);
+                        assert(imm === expectedNormalsOffs && lit);
 
                         for (let j = 0; j < qwd; j++) {
                             vertexRunData![j * WORKING_VERTEX_STRIDE + 4] = view.getFloat32(packetsIdx + 0x00, true);
@@ -455,22 +466,21 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         }
                     }
                 } else if (format === VifUnpackFormat.V4_8) {
-                    // TODO(jstpierre): An unknown color?
-                    assert(qwd === 0x01);
-                    packetsIdx += 0x04;
-
-                    /*
-                    const expectedOffs = 0x8000 + 1 + vertexRunCount * 3;
-                    assert(imm === expectedOffs);
+                    // unlit color
+                    assert((imm & (~0x4000)) === expectedNormalsOffs && !lit);
                     assert(qwd === 0x01);
 
                     const diffuseColorR = view.getUint8(packetsIdx + 0x00) / 0x80;
                     const diffuseColorG = view.getUint8(packetsIdx + 0x01) / 0x80;
                     const diffuseColorB = view.getUint8(packetsIdx + 0x02) / 0x80;
                     const diffuseColorA = view.getUint8(packetsIdx + 0x03) / 0x80;
+
+                    const signExtend = (imm & 0x4000) === 0;
+                    if (signExtend)
+                        assert(diffuseColorR < 1 && diffuseColorG < 1 && diffuseColorB < 1 && diffuseColorA < 1)
+
                     colorFromRGBA(vertexRunColor, diffuseColorR, diffuseColorG, diffuseColorB, diffuseColorA);
                     packetsIdx += 0x04;
-                    */
                 } else {
                     console.error(`Unsupported format ${hexzero(format, 2)}`);
                     throw "whoops";
@@ -582,7 +592,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     const indexRunData = indexData.slice(0, indexDataIdx);
                     const textureName = currentTextureName;
                     const gsConfiguration: GSConfiguration = Object.assign({}, currentGSConfiguration);
-                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, vertexRunColor: vertexRunColor!, textureName: textureName!, gsConfiguration });
+                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, vertexRunColor: vertexRunColor!, textureName: textureName!, gsConfiguration, lit });
                 }
 
                 vertexRunFlags0 = 0;
@@ -626,17 +636,15 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             const vertexRunData = vertexRun.vertexRunData;
 
             // Check if we can coalesce this into the existing model part.
-            let modelPartsCompatible = currentModelPart !== null;
-            if (modelPartsCompatible && !colorEqual(vertexRun.vertexRunColor, currentModelPart!.diffuseColor))
-                modelPartsCompatible = false;
-            if (modelPartsCompatible && vertexRun.textureName !== currentModelPart!.textureName)
-                modelPartsCompatible = false;
-            if (modelPartsCompatible && !gsConfigurationEqual(vertexRun.gsConfiguration, currentModelPart!.gsConfiguration))
-                modelPartsCompatible = false;
+            let modelPartsCompatible = currentModelPart !== null
+                && colorEqual(vertexRun.vertexRunColor, currentModelPart!.diffuseColor)
+                && vertexRun.textureName === currentModelPart!.textureName
+                && gsConfigurationEqual(vertexRun.gsConfiguration, currentModelPart!.gsConfiguration)
+                && vertexRun.lit === currentModelPart.lit;
 
             // TODO(jstpierre): Texture settings
             if (!modelPartsCompatible) {
-                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: vertexRun.textureName, gsConfiguration: vertexRun.gsConfiguration };
+                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: vertexRun.textureName, gsConfiguration: vertexRun.gsConfiguration, lit: vertexRun.lit };
                 modelParts.push(currentModelPart);
             }
 

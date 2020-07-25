@@ -4,11 +4,11 @@ import { GfxDevice, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxRenderPass
 import { DataFetcher } from "../DataFetcher";
 import * as BIN from "./bin";
 import { BINModelInstance, BINModelSectorData, KatamariDamacyTextureHolder, KatamariDamacyProgram } from './render';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists } from '../util';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { Camera, CameraController } from '../Camera';
 import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureOverride } from '../TextureHolder';
@@ -16,6 +16,7 @@ import { SceneContext } from '../SceneBase';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
+import { Vec3Zero } from '../MathHelpers';
 import { ObjectRenderer } from './objects';
 
 const pathBase = `katamari_damacy`;
@@ -92,8 +93,72 @@ class StageAreaRenderer {
     }
 }
 
-function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
+interface LightingConfiguration {
+    topColor: vec3;
+    topDir: vec3;
+    bottomColor: vec3;
+    bottomDir: vec3;
+    ambient: vec3;
+}
+
+// from a table at 17BE40 in the ELF
+const lightingData: LightingConfiguration[] = [
+    {
+        topColor: vec3.fromValues(.6, .59, .55),
+        topDir: vec3.fromValues(-.1, 1, .2),
+        bottomColor: vec3.fromValues(.04, .04, .05),
+        bottomDir: vec3.fromValues(0, -1, 0),
+        ambient: vec3.fromValues(.39, .375, .415),
+    },
+    {
+        topColor: vec3.fromValues(.56, .55, .52),
+        topDir: vec3.fromValues(.25, 1, -.65),
+        bottomColor: vec3.fromValues(.08, .07, .1),
+        bottomDir: vec3.fromValues(0, -1, 0),
+        ambient: vec3.fromValues(.36, .36, .37),
+    },
+    {
+        topColor: vec3.fromValues(.56, .56, .55),
+        topDir: vec3.fromValues(.15, 1, -.2),
+        bottomColor: vec3.fromValues(.13, .145, .15),
+        bottomDir: vec3.fromValues(0, -1, 0),
+        ambient: vec3.fromValues(.39, .375, .4),
+    },
+    {
+        topColor: vec3.fromValues(.6, .55, .5),
+        topDir: vec3.fromValues(.3, .5, .4),
+        bottomColor: vec3.fromValues(.04, .04, .1),
+        bottomDir: vec3.fromValues(-.3, -.5, -.4),
+        ambient: vec3.fromValues(.2, .18, .3),
+    },
+    {
+        topColor: vec3.fromValues(.6, .59, .55),
+        topDir: vec3.fromValues(.2, 1, .1),
+        bottomColor: vec3.fromValues(.04, .04, .05),
+        bottomDir: vec3.fromValues(0, -1, 0),
+        ambient: vec3.fromValues(.55, .5, .6),
+    },
+];
+
+const lightingSetupList: number[] = [0, 0, 1, 2, 0, 0, 0, 0, 0, 3, 4, 0, 0];
+
+const lightDirScratch = vec3.create();
+function fillSceneParamsData(d: Float32Array, camera: Camera, lightingIndex: number = -1, offs: number = 0): void {
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
+    if (lightingIndex === -1) {
+        for (let i = 0; i < 5; i++)
+            offs += fillVec3v(d, offs, Vec3Zero);
+    } else {
+        const usedIndex = lightingSetupList[lightingIndex];
+        vec3.normalize(lightDirScratch, lightingData[usedIndex].topDir);
+        offs += fillVec3v(d, offs, lightDirScratch);
+        vec3.normalize(lightDirScratch, lightingData[usedIndex].bottomDir);
+        offs += fillVec3v(d, offs, lightDirScratch);
+
+        offs += fillVec3v(d, offs, lightingData[usedIndex].topColor);
+        offs += fillVec3v(d, offs, lightingData[usedIndex].bottomColor);
+        offs += fillVec3v(d, offs, lightingData[usedIndex].ambient);
+    }
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -161,9 +226,9 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        const offs = template.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16);
+        const offs = template.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16 + 20);
         const sceneParamsMapped = template.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
-        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
+        fillSceneParamsData(sceneParamsMapped, viewerInput.camera, this.levelParams.lightingIndex, offs);
 
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
             this.stageAreaRenderers[i].prepareToRender(this.renderHelper.renderInstManager, this.textureHolder, viewerInput);
