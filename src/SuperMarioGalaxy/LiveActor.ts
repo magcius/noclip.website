@@ -18,7 +18,7 @@ import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } fro
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity, resetAllCollisionMtx, validateCollisionPartsForActor, invalidateCollisionPartsForActor, connectToScene } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
-import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts } from "./Collision";
+import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts, setCollisionMtx } from "./Collision";
 import { StageSwitchCtrl, createStageSwitchCtrl } from "./Switch";
 import { ShadowControllerList } from "./Shadow";
 
@@ -394,6 +394,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     // calcGravity is off by default until we can feel comfortable turning it on...
     public calcGravityFlag: boolean = false;
     public calcBinderFlag: boolean = false;
+    public calcAnimFlag: boolean = true;
     public boundingSphereRadius: number | null = null;
 
     public actorAnimKeeper: ActorAnimKeeper | null = null;
@@ -633,13 +634,18 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.modelManager === null)
+        if (!this.calcAnimFlag)
             return;
 
         // calcAnmMtx
-        vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
-        this.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
-        this.modelManager.calcAnim(viewerInput);
+        if (this.modelManager !== null) {
+            vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+            this.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+            this.modelManager.calcAnim(viewerInput);
+        }
+
+        if (this.collisionParts !== null)
+            setCollisionMtx(this, this.collisionParts);
     }
 
     public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {

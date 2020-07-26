@@ -141,12 +141,10 @@ export class CollisionParts {
     }
 
     public updateMtx(): void {
-        const notMoved = !mat4.equals(this.newWorldMtx, this.worldMtx);
+        const moved = !mat4.equals(this.newWorldMtx, this.worldMtx);
 
         if (this.setUpdateMtx || this.setUpdateMtxOneTime) {
-            if (notMoved) {
-                this.notMovedCounter++;
-            } else {
+            if (moved) {
                 // Matrices are different, update the notMovedCounter.
                 this.notMovedCounter = 0;
                 if (this.setUpdateMtxOneTime)
@@ -155,6 +153,8 @@ export class CollisionParts {
                 const scale = this.makeEqualScale(this.newWorldMtx);
                 if (isNearZero(scale - this.scale, 0.001))
                     this.updateBoundingSphereRangePrivate(scale);
+            } else {
+                this.notMovedCounter++;
             }
 
             this.setUpdateMtxOneTime = false;
@@ -165,7 +165,7 @@ export class CollisionParts {
                 mat4.invert(this.invWorldMtx, this.worldMtx);
             }
         } else {
-            if (notMoved)
+            if (!moved)
                 this.notMovedCounter++;
         }
     }
@@ -868,6 +868,21 @@ export function tryCreateCollisionMoveLimit(sceneObjHolder: SceneObjHolder, acto
 
 export function tryCreateCollisionWaterSurface(sceneObjHolder: SceneObjHolder, actor: LiveActor, hitSensor: HitSensor): CollisionParts | null {
     return tryCreateCollisionParts(sceneObjHolder, actor, hitSensor, CollisionKeeperCategory.WaterSurface, 'WaterSurface');
+}
+
+function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
+    mat4.copy(dst, actor.getBaseMtx()!);
+    mat4.scale(dst, dst, actor.scale);
+}
+
+export function setCollisionMtx(actor: LiveActor, collisionParts: CollisionParts): void {
+    if (!collisionParts.validated)
+        return;
+
+    if (collisionParts.hostMtx !== null)
+        collisionParts.setMtxFromHost();
+    else
+        calcCollisionMtx(collisionParts.newWorldMtx, actor);
 }
 
 //#region Binder
