@@ -23,7 +23,7 @@ import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { assertExists } from '../../util';
 import { getDebugOverlayCanvas2D, drawWorldSpaceAABB } from '../../DebugJunk';
 import { AABB } from '../../Geometry';
-import { initShadowVolumeSphere, setShadowDropLength } from '../Shadow';
+import { initShadowVolumeSphere, setShadowDropLength, onCalcShadowDropGravity, setShadowVolumeSphereRadius } from '../Shadow';
 import { getBindedFixReactionVector, isBinded } from '../Collision';
 
 const materialParams = new MaterialParams();
@@ -311,6 +311,7 @@ class GravityExplainerParticle extends LiveActor<GravityExplainerParticleNrv> {
         this.initBinder(100.0, 0, 1);
         initShadowVolumeSphere(sceneObjHolder, this, 100.0);
         setShadowDropLength(this, null, 50000.0);
+        onCalcShadowDropGravity(this);
         this.calcGravityFlag = false;
 
         vec3.copy(this.originalTranslation, pos);
@@ -324,12 +325,18 @@ class GravityExplainerParticle extends LiveActor<GravityExplainerParticleNrv> {
             this.makeActorAppeared(sceneObjHolder);
         else
             this.makeActorDead(sceneObjHolder);
+
+        const distance = this.shadowControllerList!.shadowControllers[0].getProjectionLength();
+        const distanceScale = lerp(1.0, 0.5, saturate(invlerp(0, 8000.0, distance)));
+        setShadowVolumeSphereRadius(this, null, 35.0 * this.scale[0] * distanceScale);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNrv: GravityExplainerParticleNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNrv, deltaTimeFrames);
 
         if (currentNrv === GravityExplainerParticleNrv.Spawn) {
+            this.parentGravity.calcGravity(this.gravityVector, this.translation);
+
             if (isFirstStep(this)) {
                 vec3.copy(this.translation, this.originalTranslation);
                 const scale = 0;
