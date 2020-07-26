@@ -208,10 +208,13 @@ function main() {
     const objectCount = 1718;
     extractFileTable(pathBaseOut, isoFilename, elf, objectFileTableOffs, objectCount, objectBaseLBA);
 
-    writeBufferSync(`${pathBaseOut}/levelBlock.bin`, elf.slice(0XBF1A0, 0XC0034));
-    writeBufferSync(`${pathBaseOut}/transformBlock.bin`, elf.slice(0x111260, 0x112FFC));
-    writeBufferSync(`${pathBaseOut}/randomBlock.bin`, elf.slice(0x116980, 0x117238));
-    writeBufferSync(`${pathBaseOut}/missionBlock.bin`, elf.slice(0x180340, 0X180E50));
+    writeBufferSync(`${pathBaseOut}/levelBlock.bin`,        elf.slice(0XBF1A0, 0XC0034));
+    writeBufferSync(`${pathBaseOut}/objectBlock.bin`,       elf.slice(0xCDF70, 0XDD108));
+    writeBufferSync(`${pathBaseOut}/transformBlock.bin`,    elf.slice(0x111260, 0x112FFC));
+    writeBufferSync(`${pathBaseOut}/randomBlock.bin`,       elf.slice(0x116980, 0x117238));
+    writeBufferSync(`${pathBaseOut}/pathBlock.bin`,         elf.slice(0x117290, 0X1607B0)); // maybe split this up?
+    writeBufferSync(`${pathBaseOut}/movementBlock.bin`,     elf.slice(0x161D90, 0X162CF4));
+    writeBufferSync(`${pathBaseOut}/missionBlock.bin`,      elf.slice(0x180340, 0X180E50));
 }
 
 main();

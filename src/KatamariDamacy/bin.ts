@@ -6,6 +6,7 @@ import { AABB } from "../Geometry";
 import { mat4, quat, vec3 } from "gl-matrix";
 import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString } from "../Common/PS2/GS";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
+import { Endianness } from "../endian";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -92,7 +93,7 @@ export interface BINModelSector {
 
 export interface ObjectModel {
     sector: BINModelSector;
-    transforms: mat4[];
+    transforms: PartTransform[];
     bbox: AABB;
 }
 
@@ -734,7 +735,9 @@ export function parseLevelParameters(index: number, parameters: ArrayBufferSlice
 
     const lightingIndex = paramView.getUint8(levelPointer + 0x00);
     const startArea = paramView.getUint8(levelPointer + 0x01);
-    const stageAreaIndex = paramView.getUint16(levelPointer + 0x04, true);
+    let stageAreaIndex = paramView.getUint16(levelPointer + 0x04, true);
+    if (index === 41) // this stage seems to want the crazy test map
+        stageAreaIndex++;
 
     return { lightingIndex, startArea, stageAreaIndex, missionSetupFiles };
 }
@@ -808,7 +811,7 @@ function resetRandomGroups(groups: RandomGroup[]): void {
     }
 }
 
-function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: number): mat4[] {
+function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: number): PartTransform[] {
     const addressOffset = 0x210260; // start address in RAM
     const indexTable = 0x211290; // ram address of table 
     const transformTable = 0x2111A0; // ram address of table 
@@ -823,7 +826,7 @@ function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: 
     if (firstTransform === 0)
         return []; // even the condensed table has empty entries
 
-    const out: mat4[] = [];
+    const out: PartTransform[] = [];
     for (let i = 0; i < partCount; i++) {
         const x = view.getFloat32(firstTransform + 0x20 * i + 0x00 - addressOffset, true);
         const y = view.getFloat32(firstTransform + 0x20 * i + 0x04 - addressOffset, true);
@@ -831,21 +834,97 @@ function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: 
         const rx = view.getFloat32(firstTransform + 0x20 * i + 0x10 - addressOffset, true);
         const ry = view.getFloat32(firstTransform + 0x20 * i + 0x14 - addressOffset, true);
         const rz = view.getFloat32(firstTransform + 0x20 * i + 0x18 - addressOffset, true);
-        const xform = mat4.create();
-        computeModelMatrixPosRot(xform, vec3.fromValues(x, y, z), vec3.fromValues(rx, ry, rz));
-        out.push(xform);
+        const transform = mat4.create();
+        const translation = vec3.fromValues(x, y, z);
+        const rotation = vec3.fromValues(rx, ry, rz);
+        computeModelMatrixPosRot(transform, translation, rotation);
+        out.push({ translation, rotation, matrix: transform });
     }
     return out;
 }
 
+export interface MotionParameters {
+    globalMotionIndex: number;
+    motionID: number;
+    altMotionID: number;
+    pathPoints: Float32Array;
+    speed: number;
+}
+
+export function parseMotion(pathData: ArrayBufferSlice, motionData: ArrayBufferSlice, levelIndex: number, moveType: number): MotionParameters | null {
+    const motionOffset = 0x260D90;
+    const levelMotions = 0x261B88;
+    const allMotions = 0x261C40;
+
+    const motionView = motionData.createDataView();
+    const motionList = motionView.getUint32(levelMotions + 4 * levelIndex - motionOffset, true);
+    if (motionList === 0) {
+        console.warn("missing motion", levelIndex, moveType);
+        return null;
+    }
+    const entryStart = motionList + 6 * moveType - motionOffset;
+
+    const backupIndex = motionView.getInt16(entryStart + 0x00, true);
+    const pathIndex = motionView.getInt16(entryStart + 0x02, true);
+    const globalMotionIndex = motionView.getInt16(entryStart + 0x04, true);
+
+    let motionID = 0, altMotionID = 0;
+    if (globalMotionIndex < 0) {
+        assert(backupIndex >= 0 && backupIndex < 3)
+        motionID = backupIndex + 1;
+    } else {
+        motionID = motionView.getUint16(allMotions + 4 * globalMotionIndex + 0x00 - motionOffset, true);
+        altMotionID = motionView.getUint16(allMotions + 4 * globalMotionIndex + 0x02 - motionOffset, true);
+    }
+
+    const pathOffset = 0x216290;
+    const levelPaths = 0x25F6F0;
+
+    if (levelIndex === 41)
+        levelIndex = 42; // test 1 has motion, test 2 has paths ???
+
+    const pathView = pathData.createDataView();
+    const pathList = pathView.getUint32(levelPaths + 4 * levelIndex - pathOffset, true);
+    assert(pathList !== 0);
+    const pathStart = pathList + 8 * pathIndex - pathOffset;
+    const pointStart = pathView.getUint32(pathStart + 0x00, true);
+    const speed = pathView.getFloat32(pathStart + 0x04, true);
+    // find last path point
+    let pointCount = 0;
+    while (pathView.getFloat32(pointStart - pathOffset + 0x10 * (pointCount++) + 0x0C, true) !== 255) { }
+    pointCount -= 2; // we incremented once too many, and the 255 point isn't part of the path
+    const pathPoints = pathData.createTypedArray(Float32Array, pointStart - pathOffset, 4 * pointCount, Endianness.LITTLE_ENDIAN);
+
+    return { motionID, altMotionID, pathPoints, speed, globalMotionIndex };
+}
+
+export interface ObjectDefinition {
+    stayLevel: boolean;
+    speedIndex: number;
+    altUpdate: number;
+}
+
+export function parseObjectDefinition(data: ArrayBufferSlice, id: number): ObjectDefinition {
+    const view = data.createDataView();
+    const offs = id * 0x24;
+
+    // internal name pointer
+    // two volume-related floats
+    const stayLevel = view.getUint8(offs + 0x0C) !== 0;
+    const speedIndex = view.getInt8(offs + 0x13);
+    const altUpdate = view.getInt8(offs + 0x14);
+
+    return { stayLevel, speedIndex, altUpdate };
+}
+
 const scratchObjectAABB = new AABB();
 const scratchAABBTransform = mat4.create();
-function computeObjectAABB(sector: BINModelSector, transforms: mat4[]): AABB {
+function computeObjectAABB(sector: BINModelSector, transforms: PartTransform[]): AABB {
     const out = new AABB();
     mat4.identity(scratchAABBTransform);
-    out.transform(sector.models[0].bbox, transforms.length > 0 ? transforms[0] : scratchAABBTransform);
+    out.transform(sector.models[0].bbox, transforms.length > 0 ? transforms[0].matrix : scratchAABBTransform);
     for (let i = 1; i < transforms.length; i++) {
-        scratchObjectAABB.transform(sector.models[i].bbox, transforms.length > 0 ? transforms[i] : scratchAABBTransform);
+        scratchObjectAABB.transform(sector.models[i].bbox, transforms.length > 0 ? transforms[i].matrix : scratchAABBTransform);
         out.union(out, scratchObjectAABB);
     }
     return out;
@@ -866,6 +945,9 @@ export interface MissionSetupObjectSpawn {
 
     // Object transformation.
     modelMatrix: mat4;
+
+    // per-level motion specifier, including path and logic
+    moveType: number;
 }
 
 export interface LevelSetupBIN {
@@ -890,6 +972,12 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
     }
 
     return new ArrayBufferSlice(dstBuffer.buffer);
+}
+
+export interface PartTransform {
+    matrix: mat4;
+    translation: vec3;
+    rotation: vec3;
 }
 
 export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: number, gsMemoryMap: GSMemoryMap, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
@@ -954,14 +1042,17 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
     const activeStageAreas: number[] = [];
     let setupSpawnTableIdx = 0x14;
     for (let i = 0; i < 5; i++, setupSpawnTableIdx += 0x04) {
-        if (i < firstArea)
-            continue; // TODO: figure out why cygnus has an extra area
-
         let setupSpawnsIdx = view.getUint32(setupSpawnTableIdx, true);
-        if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ')
-            break;
+        if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ') {
+            if (i >= firstArea)
+                break;
+            else
+                continue;
+        }
 
-        activeStageAreas.push(i);
+        // until we know better, merge early stages in with the first one
+        if (i >= firstArea)
+            activeStageAreas.push(i);
 
         // each stage uses groups separately
         resetRandomGroups(randomGroups);
@@ -983,7 +1074,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
             const u16NameIdx = view.getUint16(setupSpawnsIdx + 0x00, true);
             const u8LocPosType = view.getUint8(setupSpawnsIdx + 0x02);
             const s8RandomLocGroupNo = view.getInt8(setupSpawnsIdx + 0x03);
-            const s8HitAreaNo = view.getInt16(setupSpawnsIdx + 0x04, true);
+            const s16MoveTypeNo = view.getInt16(setupSpawnsIdx + 0x04, true);
             const s8HitOnAreaNo = view.getInt8(setupSpawnsIdx + 0x06);
             const u8LinkActNo = view.getUint8(setupSpawnsIdx + 0x07);
             const u8ExActTypeNo = view.getUint8(setupSpawnsIdx + 0x08);
@@ -1060,11 +1151,11 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
             // there's an alternative path that I don't understand yet, just the simple stuff for now
             if (u8LocPosType !== 0) {
                 scratchObjectAABB.transform(objectModels[modelIndex].bbox, modelMatrix);
-                modelMatrix[13] = scratchObjectAABB.minY;
+                modelMatrix[13] -= scratchObjectAABB.maxY - modelMatrix[13];
             }
 
-            const dispOnAreaNo = i;
-            const objectSpawn: MissionSetupObjectSpawn = { objectId, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix };
+            const dispOnAreaNo = Math.max(i, firstArea);
+            const objectSpawn: MissionSetupObjectSpawn = { objectId, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix, moveType: s16MoveTypeNo };
             objectSpawns.push(objectSpawn);
             j++;
         }

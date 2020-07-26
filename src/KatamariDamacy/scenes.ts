@@ -80,7 +80,7 @@ class StageAreaRenderer {
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
         for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(renderInstManager, textureHolder, viewRenderer);
+            this.modelInstance[i].prepareToRender(renderInstManager, textureHolder, viewRenderer, katamariWorldSpaceToNoclipSpace);
     }
 
     public setVisible(visible: boolean): void {
@@ -233,7 +233,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
             this.stageAreaRenderers[i].prepareToRender(this.renderHelper.renderInstManager, this.textureHolder, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(this.renderHelper.renderInstManager, this.textureHolder, viewerInput);
+            this.objectRenderers[i].prepareToRender(this.renderHelper.renderInstManager, this.textureHolder, viewerInput, katamariWorldSpaceToNoclipSpace);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -304,6 +304,10 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         }
         await cache.waitForLoad();
 
+        cache.fetchFileData(`${pathBase}/pathBlock.bin`);
+        cache.fetchFileData(`${pathBase}/movementBlock.bin`);
+        cache.fetchFileData(`${pathBase}/objectBlock.bin`);
+
         const gsMemoryMap = gsMemoryMapNew();
 
         // Parse through the mission setup data to get our stage spawns.
@@ -322,6 +326,10 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             cache.fetchFileData(getStageAreaFilePath(stageModels[levelParams.stageAreaIndex + i]));
         }
         await cache.waitForLoad();
+
+        const motionData = cache.getFileData(`${pathBase}/movementBlock.bin`);
+        const pathData = cache.getFileData(`${pathBase}/pathBlock.bin`);
+        const objectData = cache.getFileData(`${pathBase}/objectBlock.bin`);
 
         // Parse our different stages.
         for (let i = 0; i < missionSetupBin.activeStageAreas.length; i++) {
@@ -345,7 +353,6 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
 
                 for (let k = 0; k < sector.models.length; k++) {
                     const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[k]);
-                    mat4.copy(binModelInstance.modelMatrix, katamariWorldSpaceToNoclipSpace);
                     stageAreaRenderer.modelInstance.push(binModelInstance);
                     stageAreaSector.modelInstance.push(binModelInstance);
                 }
@@ -366,17 +373,33 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             renderer.modelSectorData.push(binModelSectorData);
         }
 
+        const motionCache = new Map<number, BIN.MotionParameters | null>();
+        const objectCache = new Map<number, BIN.ObjectDefinition | null>();
         for (let i = 0; i < missionSetupBin.objectSpawns.length; i++) {
             const objectSpawn = missionSetupBin.objectSpawns[i];
-            const objectRenderer = new ObjectRenderer(objectSpawn);
+            let motion: BIN.MotionParameters | null = null;
+            if (objectSpawn.moveType >= 0) { // level 27 has a bunch of negative indices that aren't -1
+                if (!motionCache.has(objectSpawn.moveType))
+                    motionCache.set(objectSpawn.moveType, BIN.parseMotion(pathData, motionData, this.index, objectSpawn.moveType));
+                motion = motionCache.get(objectSpawn.moveType)!;
+            }
+
+            if (!objectCache.has(objectSpawn.objectId))
+                objectCache.set(objectSpawn.objectId, BIN.parseObjectDefinition(objectData, objectSpawn.objectId));
+            const objectDef = objectCache.get(objectSpawn.objectId)!;
+
+            const objectRenderer = new ObjectRenderer(objectSpawn, missionSetupBin.objectModels[objectSpawn.modelIndex].bbox, objectDef, motion);
 
             const binModelSectorData = objectDatas[objectSpawn.modelIndex];
             const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
             for (let j = 0; j < binModelSectorData.modelData.length; j++) {
                 const binModelInstance = new BINModelInstance(device, gfxCache, renderer.textureHolder, binModelSectorData.modelData[j]);
-                mat4.mul(binModelInstance.modelMatrix, katamariWorldSpaceToNoclipSpace, objectSpawn.modelMatrix);
-                if (objectModel.transforms.length > 0)
-                    mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j]);
+                mat4.copy(binModelInstance.modelMatrix, objectSpawn.modelMatrix);
+                if (objectModel.transforms.length > 0) {
+                    mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j].matrix);
+                    vec3.copy(binModelInstance.euler, objectModel.transforms[j].rotation);
+                    vec3.copy(binModelInstance.translation, objectModel.transforms[j].translation);
+                }
                 objectRenderer.modelInstance.push(binModelInstance);
             }
 
