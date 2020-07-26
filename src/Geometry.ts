@@ -87,10 +87,10 @@ export class AABB {
     public set(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): void {
         this.minX = minX;
         this.minY = minY;
-        this.minX = minZ;
+        this.minZ = minZ;
         this.maxX = maxX;
         this.maxY = maxY;
-        this.maxX = maxZ;
+        this.maxZ = maxZ;
     }
 
     public reset(): void {
