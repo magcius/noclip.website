@@ -418,9 +418,9 @@ enum CubeArea {
     Z_Right  = 18,
 }
 
-class CubeGravity extends PlanetGravity {
-    private mtx = mat4.create();
-    private extents = vec3.create();
+export class CubeGravity extends PlanetGravity {
+    public mtx = mat4.create();
+    public extents = vec3.create();
     public validAreaFlags: CubeGravityValidAreaFlags = 0x3F;
 
     public setCube(mtx: ReadonlyMat4): void {
