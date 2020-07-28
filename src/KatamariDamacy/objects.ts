@@ -16,6 +16,7 @@ function debugDrawObject(object: ObjectRenderer): void {
 
 export class ObjectRenderer {
     public modelInstance: BINModelInstance[] = [];
+    public visible = true;
 
     private animFunc: AnimFunc | null = null;
 
@@ -24,6 +25,9 @@ export class ObjectRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewerInput: ViewerRenderInput) {
+        if (!this.visible)
+            return;
+
         // Game runs at 30fps.
         const deltaTimeInFrames = clamp(viewerInput.deltaTime / 33.0, 0.0, 2.0);
         if (this.animFunc !== null)

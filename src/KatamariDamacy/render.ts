@@ -9,7 +9,7 @@ import { mat4 } from "gl-matrix";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRendererLayer, setSortKeyLayer } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
@@ -216,6 +216,7 @@ export class BINModelPartInstance {
     private hasDynamicTexture: boolean = false;
     private textureMapping = nArray(1, () => new TextureMapping());
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    private layer: GfxRendererLayer;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
         const gsConfiguration = this.binModelPart.gsConfiguration!;
@@ -233,9 +234,7 @@ export class BINModelPartInstance {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
         };
 
-        if (gsConfiguration.alpha_1_data0 === -1) {
-            // Do nothing? Not sure what the default is...
-        } else if (gsConfiguration.alpha_1_data0 === 0x44) {
+        if (gsConfiguration.alpha_1_data0 === 0x44) {
             setAttachmentStateSimple(this.megaStateFlags, {
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
@@ -250,6 +249,10 @@ export class BINModelPartInstance {
         } else {
             throw "whoops";
         }
+
+        const ate = !!((gsConfiguration.test_1_data0 >>> 0) & 0x01);
+        if (!ate)
+            this.layer = GfxRendererLayer.TRANSLUCENT;
 
         if (this.binModelPart.textureName !== null) {
             this.hasDynamicTexture = this.binModelPart.textureName.endsWith('/0000/0000');
@@ -284,6 +287,7 @@ export class BINModelPartInstance {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
+        renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, this.layer);
 
         if (this.hasDynamicTexture && this.binModelPart.textureName)
             textureHolder.fillTextureMapping(this.textureMapping[0], this.binModelPart.textureName);
