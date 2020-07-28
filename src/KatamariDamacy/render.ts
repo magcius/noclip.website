@@ -234,7 +234,9 @@ export class BINModelPartInstance {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
         };
 
-        if (gsConfiguration.alpha_1_data0 === 0x44) {
+        if (gsConfiguration.alpha_1_data0 === -1) {
+            // TODO(jstpierre): What does this mean?
+        } else if (gsConfiguration.alpha_1_data0 === 0x44) {
             setAttachmentStateSimple(this.megaStateFlags, {
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
