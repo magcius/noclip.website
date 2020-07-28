@@ -2,7 +2,7 @@
 // Fun actor (not from orig. game) to visualize gravity areas.
 
 import * as GX from '../../gx/gx_enum';
-import { LiveActor, ZoneAndLayer, makeMtxTRSFromActor } from "../LiveActor";
+import { LiveActor, ZoneAndLayer, makeMtxTRSFromActor, MessageType } from "../LiveActor";
 import { TDDraw, TSDraw } from "../DDraw";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
 import { vec3, mat4 } from "gl-matrix";
@@ -10,7 +10,7 @@ import { colorNewCopy, White, colorFromHSL, colorNewFromRGBA, colorFromRGBA, col
 import { dfShow } from "../../DebugFloaters";
 import { SceneObjHolder, getDeltaTimeFrames } from "../Main";
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
-import { connectToScene, getRandomFloat, calcGravityVector, connectToSceneMapObjDecoration, makeMtxUpNoSupportPos } from '../ActorUtil';
+import { connectToScene, getRandomFloat, calcGravityVector, connectToSceneMapObjDecoration, makeMtxUpNoSupportPos, addVelocityMoveToDirection, addHitSensor, invalidateHitSensors, validateHitSensors, getRandomInt } from '../ActorUtil';
 import { DrawType, MovementType } from '../NameObj';
 import { ViewerRenderInput } from '../../viewer';
 import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants, saturate, computeModelMatrixS, computeModelMatrixSRT, lerp, getMatrixTranslation, normToLength, isNearZeroVec3 } from '../../MathHelpers';
@@ -18,13 +18,14 @@ import { GfxRenderInstManager, setSortKeyLayer, GfxRendererLayer, setSortKeyDept
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../../Camera';
 import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType, CubeGravity } from '../Gravity';
-import { isFirstStep } from '../Spine';
+import { isFirstStep, isGreaterEqualStep } from '../Spine';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { assertExists } from '../../util';
-import { getDebugOverlayCanvas2D, drawWorldSpaceAABB } from '../../DebugJunk';
+import { getDebugOverlayCanvas2D, drawWorldSpaceAABB, drawWorldSpaceText, drawWorldSpacePoint } from '../../DebugJunk';
 import { AABB } from '../../Geometry';
 import { initShadowVolumeSphere, setShadowDropLength, onCalcShadowDropGravity, setShadowVolumeSphereRadius } from '../Shadow';
-import { getBindedFixReactionVector, isBinded } from '../Collision';
+import { getBindedFixReactionVector, isBinded, isBindedGround } from '../Collision';
+import { HitSensor, HitSensorType, sendMsgEnemyAttack, sendArbitraryMsg } from '../HitSensor';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -265,7 +266,7 @@ export class GravityExplainer extends LiveActor {
     }
 }
 
-const enum GravityExplainerParticleNrv { Spawn, Fall }
+const enum GravityExplainerParticleNrv { Spawn, Fall, Fade }
 
 function reboundVelocityFromCollision(actor: LiveActor, bounce: number, p3: number, reboundDrag: number): boolean {
     if (!isBinded(actor))
@@ -289,6 +290,10 @@ function reboundVelocityFromCollision(actor: LiveActor, bounce: number, p3: numb
     }
 }
 
+function addVelocityToGravity(actor: LiveActor, speed: number): void {
+    vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
+}
+
 function restrictVelocity(actor: LiveActor, maxSpeed: number): void {
     if (vec3.squaredLength(actor.velocity) >= maxSpeed ** 2)
         normToLength(actor.velocity, maxSpeed);
@@ -300,6 +305,8 @@ function attenuateVelocity(actor: LiveActor, drag: number): void {
 
 class GravityExplainerParticle extends LiveActor<GravityExplainerParticleNrv> {
     public originalTranslation = vec3.create();
+    public lastHit: HitSensor | null = null;
+    public noneHitCounter = 0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private parentGravity: PlanetGravity, pos: vec3) {
         super(zoneAndLayer, sceneObjHolder, 'GravityExplainerParticle');
@@ -308,13 +315,42 @@ class GravityExplainerParticle extends LiveActor<GravityExplainerParticleNrv> {
         connectToSceneMapObjDecoration(sceneObjHolder, this);
 
         this.initNerve(GravityExplainerParticleNrv.Spawn);
-        this.initBinder(100.0, 0, 1);
-        initShadowVolumeSphere(sceneObjHolder, this, 100.0);
+        this.initBinder(110.0, 0, 1);
+        this.binder!.moveWithCollision = true;
+
+        initShadowVolumeSphere(sceneObjHolder, this, 110.0);
         setShadowDropLength(this, null, 50000.0);
         onCalcShadowDropGravity(this);
-        this.calcGravityFlag = false;
+        this.calcGravityFlag = true;
+
+        this.initHitSensor();
+        addHitSensor(sceneObjHolder, this, 'body', HitSensorType.GravityExplainerParticle, 1, 120.0, Vec3Zero);
+        invalidateHitSensors(this);
 
         vec3.copy(this.originalTranslation, pos);
+
+        this.initWaitPhase = getRandomInt(0, 500);
+    }
+
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        super.attackSensor(sceneObjHolder, thisSensor, otherSensor);
+
+        if (otherSensor.sensorType === HitSensorType.GravityExplainerParticle)
+            sendMsgEnemyAttack(sceneObjHolder, otherSensor, thisSensor);
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.EnemyAttack && otherSensor!.sensorType === HitSensorType.GravityExplainerParticle) {
+            vec3.sub(scratchVec3, thisSensor!.center, otherSensor!.center);
+            const dist = vec3.length(scratchVec3);
+            vec3.normalize(scratchVec3, scratchVec3);
+            const r = (110.0 * 2.0) - dist;
+            addVelocityMoveToDirection(this, scratchVec3, r * 0.4);
+
+            return true;
+        }
+
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
@@ -335,9 +371,12 @@ class GravityExplainerParticle extends LiveActor<GravityExplainerParticleNrv> {
         super.updateSpine(sceneObjHolder, currentNrv, deltaTimeFrames);
 
         if (currentNrv === GravityExplainerParticleNrv.Spawn) {
-            this.parentGravity.calcGravity(this.gravityVector, this.translation);
+            // this.parentGravity.calcGravity(this.gravityVector, this.translation);
 
             if (isFirstStep(this)) {
+                this.parentGravity.generateRandomPoint(this.originalTranslation);
+
+                invalidateHitSensors(this);
                 vec3.copy(this.translation, this.originalTranslation);
                 const scale = 0;
                 vec3.set(this.scale, scale, scale, scale);
@@ -350,18 +389,50 @@ class GravityExplainerParticle extends LiveActor<GravityExplainerParticleNrv> {
             if (scale >= maxScale)
                 this.setNerve(GravityExplainerParticleNrv.Fall);
         } else if (currentNrv === GravityExplainerParticleNrv.Fall) {
-            if (this.parentGravity.calcGravity(this.gravityVector, this.translation)) {
-                vec3.add(this.velocity, this.velocity, this.gravityVector);
-                reboundVelocityFromCollision(this, 2.0, 1.0, 1.0);
-                attenuateVelocity(this, Math.pow(0.996, deltaTimeFrames));
-                restrictVelocity(this, 50.0);
-            } else {
-                const scale = Math.max(0.0, this.scale[0] - (0.1 * deltaTimeFrames));
-                vec3.set(this.scale, scale, scale, scale);
-
-                if (scale <= 0.0)
-                    this.setNerve(GravityExplainerParticleNrv.Spawn);
+            if (isFirstStep(this)) {
+                validateHitSensors(this);
+                this.lastHit = null;
             }
+
+            if (!this.parentGravity.calcGravity(scratchVec3, this.translation)) {
+                this.setNerve(GravityExplainerParticleNrv.Fade);
+                return;
+            }
+
+            reboundVelocityFromCollision(this, 2.0, 0.0, 1.0);
+
+            if (isBindedGround(this))
+                addVelocityToGravity(this, 0.2);
+            else
+                addVelocityToGravity(this, 1.0);
+
+            restrictVelocity(this, 80.0);
+            attenuateVelocity(this, Math.pow(0.996, deltaTimeFrames));
+
+            if (isBindedGround(this)) {
+                const hitSensor = this.binder!.floorHitInfo.hitSensor;
+                if (hitSensor !== null && hitSensor !== this.lastHit) {
+                    this.lastHit = hitSensor;
+                    sendArbitraryMsg(sceneObjHolder, MessageType.NoclipGravityExplainerParticle_Hit, hitSensor, this.getSensor('body')!);
+                }
+
+                this.noneHitCounter = 0;
+            } else {
+                if (this.noneHitCounter++ >= 5)
+                    this.lastHit = null;
+            }
+
+            // if (isGreaterEqualStep(this, 100) && isNearZeroVec3(this.velocity, 0.5))
+            //     this.setNerve(GravityExplainerParticleNrv.Fade);
+        } else if (currentNrv === GravityExplainerParticleNrv.Fade) {
+            if (isFirstStep(this))
+                invalidateHitSensors(this);
+
+            const scale = Math.max(0.0, this.scale[0] - (0.1 * deltaTimeFrames));
+            vec3.set(this.scale, scale, scale, scale);
+
+            if (scale <= 0.0)
+                this.setNerve(GravityExplainerParticleNrv.Spawn);
         }
     }
 
@@ -1008,9 +1079,8 @@ export class GravityExplainer2 extends LiveActor {
             }
             */
 
-            const numParticles = 50;
+            const numParticles = 500;
             for (let j = 0; j < numParticles; j++) {
-                gravity.generateRandomPoint(scratchVec3);
                 const particle = new GravityExplainerParticle(this.zoneAndLayer, sceneObjHolder, gravity, scratchVec3);
             }
         }

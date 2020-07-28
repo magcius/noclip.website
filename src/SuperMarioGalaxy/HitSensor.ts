@@ -144,6 +144,9 @@ export const enum HitSensorType {
     MessageSensorHolder         = 0x83,
     Receiver                    = 0x84,
     _Special_End                = 0x85,
+
+
+    GravityExplainerParticle    = 0x200,
 }
 
 export class HitSensor {

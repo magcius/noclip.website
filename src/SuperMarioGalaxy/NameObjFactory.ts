@@ -8,7 +8,7 @@ import { createLightCtrlCube, createLightCtrlCylinder } from './LightData';
 import { ZoneAndLayer } from './LiveActor';
 import { SceneObjHolder } from "./Main";
 import { Air, AirBubble, AirBubbleGenerator, AstroCountDownPlate, AstroDomeSky, AstroEffectObj, BallBeamer, BlackHole, BlueChip, BrightObj, BrightSun, ChooChooTrain, CoconutTree, CoconutTreeLeafGroup, createCircleCoinGroup, createCoin, createPurpleCircleCoinGroup, createPurpleCoin, createPurpleRailCoin, createRailCoin, createSuperSpinDriverGreen, createSuperSpinDriverPink, createSuperSpinDriverYellow, CrystalCage, DemoGroupFake, Dossun, EarthenPipe, EffectObj10x10x10SyncClipping, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObjR1000F50, EffectObjR100F50SyncClipping, EffectObjR500F50, ElectricRail, ElectricRailMoving, FirePressureRadiate, FishGroup, Flag, FluffWind, Fountain, FountainBig, FurPlanetMap, GCaptureTarget, HatchWaterPlanet, LavaGeyser, LavaProminence, LavaSteam, MiniatureGalaxy, Mogucchi, MovieStarter, OceanFloaterLandParts, OceanRing, OnimasuJump, PalmIsland, PhantomTorch, PlanetMap, PlantGroup, Pole, PriorDrawAir, PunchBox, QuestionCoin, RailPlanetMap, RandomEffectObj, requestArchivesCoin, requestArchivesPurpleCoin, requestArchivesSuperSpinDriver, ScrewSwitch, ScrewSwitchReverse, SeaGullGroup, Shellfish, ShootingStar, SimpleEffectObj, Sky, StarPiece, StarPieceGroup, SubmarineSteam, SurprisedGalaxy, SwingRope, TimerSwitch, Trapeze, TreasureBoxCracked, UFOBreakable, UFOSolid, Unizo, WarpPod, WaterLeakPipe, WaterPlant, WoodBox, YellowChip, Creeper, Kuribo } from "./Actors/MiscActor";
-import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep } from './Actors/MapObj';
+import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, FlipPanel } from './Actors/MapObj';
 import { Butler, Kinopio, KinopioAstro, Peach, Penguin, PenguinRacer, Rosetta, SignBoard, Tico, TicoAstro, TicoComet, TicoRail } from './Actors/NPC';
 import { createHazeCube, createSwitchCube, createSwitchCylinder, createSwitchSphere, createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, requestArchivesHazeCube, requestArchivesWaterArea } from './MiscMap';
 import { NameObj, GameBits } from './NameObj';
@@ -533,6 +533,8 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("OceanRingRuinsMove",             RailMoveObj),
     _("GhostShipCaveMoveGroundA",       RailMoveObj),
     _("GhostShipCaveMoveGroundB",       RailMoveObj),
+    _("FlipPanel",                      FlipPanel),
+    _("FlipPanelReverse",               FlipPanel),
     _("OceanFloaterTypeU",              OceanFloaterLandParts),
     _("UFONormalB",                     UFOBreakable),
     _("UFONormalD",                     UFOBreakable),

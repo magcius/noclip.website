@@ -2,17 +2,17 @@
 // Misc MapObj actors.
 
 import { mat4, vec3 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, scaleMatrix, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation } from '../../MathHelpers';
+import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation } from '../../MathHelpers';
 import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos } from '../ActorUtil';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, getBckFrameMax, setBrkFrame, connectToSceneMapObj, calcFrontVec, makeMtxFrontUpPos, getJointMtx } from '../ActorUtil';
 import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall } from '../Collision';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
 import { HitSensor, HitSensorType } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter, getJMapInfoArg2, getJMapInfoArg5, getJMapInfoBool, getJMapInfoArg3, getJMapInfoArg4 } from '../JMapInfo';
 import { LiveActor, MessageType, ZoneAndLayer, isDead, makeMtxTRFromActor } from '../LiveActor';
-import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
+import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder, getTimeFrames } from '../Main';
 import { getMapPartsArgMoveConditionType, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRotator, MoveConditionType, RailGuideType } from '../MapParts';
 import { createIndirectPlanetModel, PartsModel } from './MiscActor';
 import { isConnectedWithRail } from '../RailRider';
@@ -21,7 +21,7 @@ import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } f
 import { initMultiFur } from '../Fur';
 import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength, initShadowVolumeBox, setShadowVolumeStartDropOffset } from '../Shadow';
 import { initLightCtrl } from '../LightData';
-import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { DrawBufferType } from '../NameObj';
 
 // Scratchpad
@@ -102,8 +102,8 @@ class MapObjActorInitInfo<TNerve extends number = number> {
 }
 
 abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
-    private bloomModel: ModelObj | null = null;
     private objName: string;
+    protected bloomModel: ModelObj | null = null;
     protected rotator: MapPartsRotator | null = null;
     protected railMover: MapPartsRailMover | null = null;
     protected railGuideDrawer: MapPartsRailGuideDrawer | null = null;
@@ -1540,5 +1540,107 @@ export class WatchTowerRotateStep extends LiveActor<WatchTowerRotateStepNrv> {
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         sceneObjHolder.modelCache.requestObjectData('WatchTowerRotateStepLift');
+    }
+}
+
+const enum FlipPanelNrv { Front, FrontLand, Back, BackLand }
+export class FlipPanel extends MapObjActor<FlipPanelNrv> {
+    private isReverse: boolean;
+    private wasHit: boolean;
+    private wasHitOld: boolean;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        initInfo.setupDefaultPos();
+        initInfo.setupConnectToScene();
+        initInfo.setupEffect('FlipPanel');
+        // initInfo.setupSound();
+        initInfo.setupNerve(FlipPanelNrv.Front);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        this.modelInstance!.jointMatrixCalcCallback = this.jointCallback.bind(this);
+
+        this.isReverse = this.isObjectName('FlipPanelReverse');
+        if (this.isReverse) {
+            this.appearBloomModel(sceneObjHolder);
+        } else {
+            this.killBloomModel(sceneObjHolder);
+        }
+
+        startBck(this, 'PanelB');
+        setBckFrameAndStop(this, getBckFrameMax(this));
+
+        this.wasHit = false;
+        this.wasHitOld = false;
+    }
+
+    private jointCallback(dst: mat4, modelData: J3DModelData, i: number): void {
+        if (modelData.bmd.jnt1.joints[i].name !== 'Panel')
+            return;
+
+        if (this.getCurrentNerve() === FlipPanelNrv.BackLand || this.getCurrentNerve() === FlipPanelNrv.FrontLand) {
+            vec3.set(scratchVec3a, 0.0, -25.0, 0.0);
+            mat4.translate(dst, dst, scratchVec3a);
+        }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
+        if (messageType === MessageType.NoclipGravityExplainerParticle_Hit)
+            this.wasHit = true;
+
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+    }
+
+    private syncBloomModelFirstStep(sceneObjHolder: SceneObjHolder): void {
+        const shouldShowOnNormal = this.getCurrentNerve() === FlipPanelNrv.BackLand;
+        const shouldShow = this.isReverse ? !shouldShowOnNormal : shouldShowOnNormal;
+
+        if (shouldShow) {
+            const timeFrames = getTimeFrames(sceneObjHolder.viewerInput);
+            this.appearBloomModel(sceneObjHolder);
+            setBrkFrame(this.bloomModel!, timeFrames % getBrkFrameMax(this.bloomModel!));
+        } else {
+            this.killBloomModel(sceneObjHolder);
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FlipPanelNrv, deltaTimeFrames: number): void {
+        if (currentNerve === FlipPanelNrv.Front || currentNerve === FlipPanelNrv.Back) {
+            if (this.wasHit && !this.wasHitOld) {
+                // Change places!!!
+                if (currentNerve === FlipPanelNrv.Front)
+                    this.setNerve(FlipPanelNrv.BackLand);
+                else if (currentNerve === FlipPanelNrv.Back)
+                    this.setNerve(FlipPanelNrv.FrontLand);
+            }
+        } else if (currentNerve === FlipPanelNrv.BackLand) {
+            if (isFirstStep(this)) {
+                startBck(this, 'PanelA');
+                this.syncBloomModelFirstStep(sceneObjHolder);
+
+                // tryRumblePadMiddle
+            }
+
+            if (!this.wasHit)
+                this.setNerve(FlipPanelNrv.Back);
+
+        } else if (currentNerve === FlipPanelNrv.FrontLand) {
+            if (isFirstStep(this)) {
+                startBck(this, 'PanelB');
+                this.syncBloomModelFirstStep(sceneObjHolder);
+
+                // tryRumblePadMiddle
+            }
+
+            if (!this.wasHit)
+                this.setNerve(FlipPanelNrv.Front);
+        }
+
+        this.wasHit = false;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData(getObjectName(infoIter));
+        sceneObjHolder.modelCache.requestObjectData(`${getObjectName(infoIter)}Bloom`);
     }
 }

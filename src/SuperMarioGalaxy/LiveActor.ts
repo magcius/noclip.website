@@ -384,6 +384,7 @@ export const enum MessageType {
     SphereSelector_SelectEnd                 = 0xE1,
 
     NoclipButton_Click                       = 0x200,
+    NoclipGravityExplainerParticle_Hit       = 0x201,
 }
 
 const scratchVec3a = vec3.create();
