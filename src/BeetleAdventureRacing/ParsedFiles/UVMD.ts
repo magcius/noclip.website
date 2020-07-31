@@ -1,15 +1,16 @@
 import { Filesystem, UVFile } from "../Filesystem";
 import { assert } from "../../util";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { UVTX } from "./UVTX";
 import { parseVertices, parseTriangles, parseMatrix } from "./Common";
+import { clamp } from "../../MathHelpers";
 
 // This is more of a placeholder while I figure out what exactly is needed.
 class MoreAccurateUVMDMaterial {
     public vertexData: Float32Array; //obviously in BAR these are not turned into floats
     public unk_someinfo: number; //32-bit
     public indexData: Uint16Array; // again, in BAR this is a pointer to the displaylist commands
-    public unk_someLightingThing: number; //short
+    public lightColors: LightColors | null; // again again, in BAR this is an index into a global array of lights
     public vertCount: number; //16-bit
     public almostAlwaysVertCount: number; //16-bit
     public triangleCount: number; //16-bit
@@ -47,6 +48,7 @@ export class UVMD {
     // struct also contains pDisplayListCommands but we don't need it
     // struct also contains vertexCount but we don't need it
     // TODO: the actual struct has an extra 6 bytes after this - what is it used for?
+
     // This code I've manually decompiled, so it should be functionally complete
     // aside from a few bits marked TODO
     // (obviously, there's still a lot I don't understand though)
@@ -126,9 +128,9 @@ export class UVMD {
                 for (let k = 0; k < materialCount; k++) {
                     const unk_someinfo = view.getUint32(curPos);
 
-                    const unk_usedByLightingFn1 = view.getUint32(curPos + 4);
-                    const unk_usedByLightingFn2 = view.getUint32(curPos + 8);
-                    const unk_usedByLightingFn3 = view.getUint32(curPos + 12);
+                    const lightPackedColor1 = view.getUint32(curPos + 4);
+                    const lightPackedColor2 = view.getUint32(curPos + 8);
+                    const lightPackedColor3 = view.getUint32(curPos + 12);
 
                     curPos += 16;
                     const vertCount = view.getUint16(curPos);
@@ -151,13 +153,9 @@ export class UVMD {
                     if (uvtxIndex !== 0xFFF) {
                         uvtx = filesystem.getParsedFile(UVTX, "UVTX", uvtxIndex);
                     }
-                    let unk_someLightingThing = -1;
+                    let lights = null;
                     if (((unk_someinfo << 13) & 0x80000000) !== 0) {
-                        // TODO: it calls some function related to lighting
-                        //  (I think it's related to lighting because of the vertex structure
-                        // when something has this flag set).
-                        // pass in unk_usedByLightingFn1, 2, 3
-                        // unk_someLightingThing = return value of lighting function
+                        lights = this.buildLightColors(lightPackedColor1, lightPackedColor2, lightPackedColor3);
                     }
                     //TODO: what is this
                     if ((unk_someinfo & 0x08000000) != 0) {
@@ -175,7 +173,7 @@ export class UVMD {
                         vertexData,
                         unk_someinfo,
                         indexData,
-                        unk_someLightingThing,
+                        lightColors: lights,
                         vertCount,
                         almostAlwaysVertCount,
                         triangleCount,
@@ -197,4 +195,68 @@ export class UVMD {
             this.matrices.push(mat);
         }
     }
+
+    private buildLightColors(packedColor1: number, packedColor2: number, packedColor3: number): LightColors {
+        if(packedColor1 === 0x10101000) {
+            //TODO
+            assert(false);
+        }
+
+        // TODO
+        // these are probably global environment colors
+        const unkGlobalVec31: vec3 = vec3.fromValues(NaN, NaN, NaN);
+        const unkGlobalVec32: vec3 = vec3.fromValues(NaN, NaN, NaN);
+        
+
+        let vecColor1 = this.unpackVec3(packedColor1);
+        let vecColor2 = this.unpackVec3(packedColor2);
+        let vecColor3 = this.unpackVec3(packedColor3);
+
+        let asd = vec3.create();
+        vec3.mul(asd, unkGlobalVec31, vecColor2);
+
+        let asd2 = vec3.create();
+        let asd3 = vec3.create();
+        vec3.mul(asd2, unkGlobalVec32, vecColor3);
+        vec3.add(asd3, vecColor1, asd2);
+
+        return {
+            vecColor1,
+            vecColor2,
+            vecColor3,
+            packedColor1,
+            packedColor2,
+            packedColor3,
+            unk_packedVec31: this.packVec3(asd),
+            unk_packedVec32: this.packVec3(asd3)
+        }
+    }
+
+    private unpackVec3(v: number): vec3 {
+        return vec3.fromValues(
+            ((v >>> 0x18) & 0xff) / 0xff,
+            ((v >>> 0x10) & 0xff) / 0xff,
+            ((v >>> 0x08) & 0xff) / 0xff,
+        );
+    }
+
+    private packVec3(v: vec3): number {
+        return (clamp((v[0] * 255) | 0, 0, 255) << 0x18) |
+            (clamp((v[1] * 255) | 0, 0, 255) << 0x10) |
+            (clamp((v[2] * 255) | 0, 0, 255) << 0x08);
+    }
+}
+
+class LightColors {
+    public vecColor1: vec3;
+    public vecColor2: vec3;
+    public vecColor3: vec3;
+    public packedColor1: number;
+    public packedColor2: number;
+    public packedColor3: number;
+
+    // these are stored in separate arrays: TODO figure out what they mean
+    // premultiplied color?
+    public unk_packedVec31: number;
+    public unk_packedVec32: number;
 }

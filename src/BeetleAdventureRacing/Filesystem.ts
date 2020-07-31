@@ -88,6 +88,10 @@ export class Filesystem {
         return { chunks: this.parseChunks(this.filesBuffer.subarray(formBegin + 8, fileLen)) };
     }
 
+    public getFileTypeCount(type: string): number {
+        return this.fileTypeToFileLocations.get(type)!.length;
+    }
+
 
     private getFileLocation(type: string, index: number): number {
         const fileLocs = this.fileTypeToFileLocations.get(type);

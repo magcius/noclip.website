@@ -2,9 +2,10 @@ import { Filesystem, UVFile } from "../Filesystem";
 import { assert } from "../../util";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { ImageFormat, ImageSize, decodeTex_RGBA16, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, getImageFormatName, getImageSizeName, decodeTex_CI4, parseTLUT, TextureLUT } from "../../Common/N64/Image";
+import { UVTS, AnimationState } from "./UVTS";
 
 // only the limited number of commands UVTX actually uses.
-export enum F3DEX2_GBI {
+enum F3DEX2_GBI {
     G_TEXTURE = 0xD7,
     G_ENDDL = 0xDF,
 
@@ -22,19 +23,56 @@ export enum F3DEX2_GBI {
     G_SETOTHERMODE_H = 0xE3
 }
 
+class UnkStruct {
+    public f1: number;
+    public f2: number;
+    public f3: number;
+    public f4: number;
+    public f5: number;
+    public f6: number;
+    public byte1: number;
+    public byte2: number;
+    public byte3: number;
+}
+
+// UVTX aka "texture"
+// Most of these just represent a single texture, possibly with mipmaps along with some extra info.
+// However, a UVTX can also have two textures (using otherUVTX) and/or be an animated texture (using animationState)
 export class UVTX {
+    // pCommands
+    public firstUnkStruct: UnkStruct | null;
+    public secondUnkStruct: UnkStruct | null;
+    // pTexelData
+    // pPalettes (TODO: it seems like the UVTX stores 4 copies of each palette. Why?)
+    public flagsAndIndex: number; //uint
+    public otherUVTX: UVTX | null; // originally ushort otherUVTXIndex
+    // texelDataSize
+    public imageWidth: number; //ushort
+    public imageHeight: number; //ushort
+    public animationState: AnimationState | null; // originally animationStateIndex
+    public unkByte1: number;
+    public levelCount: number; // 1 if no mipmapping, +1 for each mipmap level, etc.
+    public alpha: number;
+    public unkByte3: number;
+    public unkByte4: number;
+    public unkByte5: number;
+    public unkByte6: number;
+
+
+
+
+    // below stuff is not in the original UVTX struct
+
+
+
+
     public not_supported_yet = false;
     public convertedTexelData: Uint8Array;
     public tile_sLo: number;
     public tile_tLo: number;
     public tile_sHi: number;
     public tile_tHi: number;
-    public width: number;
-    public height: number;
 
-    // TODO: i've barely done any reverse engineering here,
-    // mostly just educated guesses based on looking at the
-    // files themselves
     constructor(uvFile: UVFile, filesystem: Filesystem) {
         assert(uvFile.chunks.length === 1);
         assert(uvFile.chunks[0].tag === 'COMM');
@@ -42,53 +80,118 @@ export class UVTX {
         const view = buffer.createDataView();
         let curPos = 0;
 
-        const dataSize = view.getUint16(0);
+        const texelDataSize = view.getUint16(0);
         const dlCommandCount = view.getUint16(2);
         curPos += 4;
 
-        const unknownFloats = [
-            view.getFloat32(curPos + 0),
-            view.getFloat32(curPos + 4),
-            view.getFloat32(curPos + 8),
-            view.getFloat32(curPos + 12),
-            view.getFloat32(curPos + 16),
-            view.getFloat32(curPos + 20)
-        ];
-        curPos += 24;
+        let f1 = view.getFloat32(curPos + 0);
+        let f2 = view.getFloat32(curPos + 4);
+        if(f1 === 0 && f2 === 0) {
+            this.firstUnkStruct = null;
+        } else {
+            this.firstUnkStruct = {
+                f1: 1,
+                f2: 1,
+                f3: f1,
+                byte1: 0,
+                byte2: 0,
+                byte3: 1,
+                f4: 0,
+                f5: 0,
+                f6: f2,
+            }
+        }
+        curPos += 8;
 
-        const texelData = buffer.subarray(curPos, dataSize);
-        curPos += dataSize;
+        let f3 = view.getFloat32(curPos + 0);
+        let f4 = view.getFloat32(curPos + 4);
+        let f5 = view.getFloat32(curPos + 8);
+        let f6 = view.getFloat32(curPos + 12);
+        if(f3 === 0 && f4 === 0 && f5 === 0 && f6 === 0) {
+            this.secondUnkStruct = null;
+        } else {
+            this.secondUnkStruct = {
+                f1: 1,
+                f2: 1,
+                f3: f3,
+                f4: f4,
+                f5: f5,
+                f6: f6,
+                byte1: 0,
+                byte2: 0,
+                byte3: 1,
+            }
+        }
+        curPos += 16;
+
+        const texelData = buffer.subarray(curPos, texelDataSize);
+        curPos += texelDataSize;
         const dlCommandsData = buffer.subarray(curPos, dlCommandCount * 8);
         curPos += dlCommandCount * 8;
 
-        // TODO: what are all these? also double check image width and height
-        const imageWidth = view.getUint16(curPos + 0);
-        const imageHeight = view.getUint16(curPos + 2);
-        const unk1 = view.getUint8(curPos + 4); // 1
-        const unk2 = view.getUint8(curPos + 5); // 1
-        const unk3 = view.getUint8(curPos + 6); // 1
-        const unk4 = view.getUint32(curPos + 7); // 4
-        const unk5 = view.getUint16(curPos + 11); // 2
+        // TODO: what are all these?
+        this.imageWidth = view.getUint16(curPos + 0);
+        this.imageHeight = view.getUint16(curPos + 2);
+        this.unkByte3 = view.getUint8(curPos + 4);
+        this.unkByte4 = view.getUint8(curPos + 5);
+        this.unkByte5 = view.getUint8(curPos + 6);
+        // bottom half of this is just this uvtx's index
+        // (so it can be compared to otherUVTXIndex, maybe other things?)
+        this.flagsAndIndex = view.getUint32(curPos + 7);
+        let otherUVTXIndex = view.getUint16(curPos + 11);
         const unk6 = view.getUint16(curPos + 13); // 2
-        const unk7 = view.getUint8(curPos + 15); // 1
-        const unk8 = view.getUint8(curPos + 16); // 1
-        const unk9 = view.getUint8(curPos + 17); // 1
-        const unk10 = view.getUint8(curPos + 18); // 1
-        const unk11 = view.getUint8(curPos + 19); // 1
-        const unk12 = view.getUint32(curPos + 20); // 4
-        const unk13 = view.getUint8(curPos + 24); // 1
-
-
-        // includes full size texture, so minimum is 1.
-        // TODO: not a good name
-        const mipMapCount = view.getUint8(curPos + 25);
+        this.unkByte6 = unk6 & 0xFF; // TODO: Other half doesn't seem to be used?
+        this.unkByte1 = view.getUint8(curPos + 15);
+        //These all seem to be completely ignored, they're not even stored in the UVTX object
+        const unk8 = view.getUint8(curPos + 16);
+        const unk9 = view.getUint8(curPos + 17);
+        const unk10 = view.getUint8(curPos + 18);
+        const unk11 = view.getUint8(curPos + 19);
+        const unk12 = view.getUint32(curPos + 20);
+        //TODO: this is used to set BLEND alpha
+        this.alpha = view.getUint8(curPos + 24);
+        this.levelCount = view.getUint8(curPos + 25);
         curPos += 26;
 
+
+        if((this.flagsAndIndex & 0x00080000) !== 0) {
+            let uvtsCt = filesystem.getFileTypeCount("UVTS");
+            // I checked, there are no null UVTSs
+            let foundMatch = false;
+            for(let i = 0; i < uvtsCt; i++) {
+                //TODO: this is going to cause infinite recursion.
+                // idea: instead of getparsedfile, get chunks and pass to other fn?
+                let uvts = filesystem.getParsedFile(UVTS, "UVTS", i);               
+                if(uvts.frames[0].uvtxIndex === (this.flagsAndIndex & 0xFFF)) {
+                    // init entry
+
+                    let startFrame = (uvts.playAnimationInReverse ? (uvts.frames.length - 1) : 0);
+                    this.animationState = {
+                        thisSlotIsAllocated: true,
+                        enabled: true,
+                        currentFrame: startFrame,
+                        unitsUntilFrameEnds: uvts.frames[startFrame].frameLengthUnits,
+                        uvts,
+                    };
+                    foundMatch = true;
+                    break;
+                }
+            }
+
+            // if this is ever false, some assumptions go out the window.
+            // would need to expand the code
+            assert(foundMatch);
+        } else {
+            this.animationState = null;
+        }
+
+        // TODO: for some reason BAR makes 4 copies of each palette... why?
+
         // then read palettes if there are any to read
-        // TODO: unk7 is not just a bool - what is it
+        // TODO: this.unkByte1 is not just a bool - what is it
         const palettesData: ArrayBufferSlice[] = [];
-        if (unk7 == 0) {
-            for (let i = 0; i < mipMapCount; i++) {
+        if (this.unkByte1 == 0) {
+            for (let i = 0; i < this.levelCount; i++) {
                 //TODO(?)
                 // i+1 because 0 palette is reserved or something
                 palettesData[i + 1] = buffer.subarray(curPos, 32);
@@ -96,8 +199,14 @@ export class UVTX {
             }
         }
 
+        if(this.unkByte1 != 0 && this.unkByte1 != 1) {
+            console.log(this.unkByte1);
+        }
 
+        // TODO: load second texture if necessary,
+        // and include it in the fake command execution.
 
+        
 
 
 
@@ -199,8 +308,8 @@ export class UVTX {
         let tileHeight = (tile_tHi - tile_tLo) + 1;
         assert(tileWidth === Math.round(tileWidth));
         assert(tileHeight === Math.round(tileHeight));
-        assert(tileWidth === imageWidth);
-        assert(tileHeight === imageHeight);
+        assert(tileWidth === this.imageWidth);
+        assert(tileHeight === this.imageHeight);
 
 
         const dest = new Uint8Array(tileWidth * tileHeight * 4);
@@ -225,7 +334,5 @@ export class UVTX {
         this.tile_tLo = tile_tLo;
         this.tile_sHi = tile_sHi;
         this.tile_tHi = tile_tHi;
-        this.width = imageWidth;
-        this.height = imageHeight;
     }
 }

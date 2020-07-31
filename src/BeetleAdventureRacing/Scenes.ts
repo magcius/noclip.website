@@ -133,7 +133,7 @@ class MaterialRenderer {
         if(material.uvtx !== null && !material.uvtx.not_supported_yet) {
             this.hasTextureData = true;
             const uvtx = material.uvtx;
-            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, uvtx.width, uvtx.height, 1));
+            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, uvtx.imageWidth, uvtx.imageHeight, 1));
             //device.setResourceName(this.gfxTexture, texture.name);
             const hostAccessPass = device.createHostAccessPass();
             hostAccessPass.uploadTextureData(this.gfxTexture, 0, [uvtx.convertedTexelData]);
