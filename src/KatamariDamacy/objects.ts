@@ -7,13 +7,18 @@ import { mat4, vec3 } from "gl-matrix";
 import { clamp, Vec3Zero, angleDist, computeModelMatrixSRT, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength } from "../MathHelpers";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { AABB } from "../Geometry";
+import { Magenta } from "../Color";
 
 type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => void;
 type MotionFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState) => boolean;
 
 const scratchMatrix = mat4.create();
 function debugDrawObject(object: ObjectRenderer): void {
-    drawWorldSpacePoint(getDebugOverlayCanvas2D(), mat4.mul(scratchMatrix, window.main.viewer.camera.clipFromWorldMatrix, object.modelInstance[0].modelMatrix), Vec3Zero);
+    mat4.identity(scratchMatrix);
+    mat4.rotateX(scratchMatrix, scratchMatrix, Math.PI);
+    mat4.mul(scratchMatrix, scratchMatrix, object.modelInstance[0].modelMatrix);
+    mat4.mul(scratchMatrix, window.main.viewer.camera.clipFromWorldMatrix, scratchMatrix);
+    drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, Magenta, 8);
 }
 
 // this is a combination of fields in the object struct, which are common for all objects,
@@ -98,7 +103,6 @@ export class ObjectRenderer {
                 state: -1,
             };
         }
-
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewerInput: ViewerRenderInput, toNoclip: mat4) {
@@ -158,9 +162,7 @@ export class ObjectRenderer {
 const enum Axis { X, Y, Z }
 
 function rotateObject(modelInstance: BINModelInstance, deltaTimeInFrames: number, axis: Axis, value: number): void {
-    // TODO(jstpierre): Empirically matched to game footage. I don't know why it runs super fast.
-    const mult = 0.4;
-    const angle = (value / -60.0) * deltaTimeInFrames * mult;
+    const angle = (value / -60.0) * deltaTimeInFrames;
 
     if (axis === Axis.X)
         mat4.rotateX(modelInstance.modelMatrix, modelInstance.modelMatrix, angle);

@@ -870,7 +870,7 @@ export function parseMotion(pathData: ArrayBufferSlice, motionData: ArrayBufferS
 
     let motionID = 0, altMotionID = 0;
     if (globalMotionIndex < 0) {
-        assert(backupIndex >= 0 && backupIndex < 3)
+        assert(backupIndex >= 0 && backupIndex < 3);
         motionID = backupIndex + 1;
     } else {
         motionID = motionView.getUint16(allMotions + 4 * globalMotionIndex + 0x00 - motionOffset, true);
