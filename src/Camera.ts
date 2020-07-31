@@ -9,7 +9,7 @@ import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { reverseDepthForPerspectiveProjectionMatrix, reverseDepthForOrthographicProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
-import { CameraAnimationManager } from './CameraAnimationManager';
+import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -499,8 +499,7 @@ export class FPSCameraController implements CameraController {
 
 export class StudioCameraController extends FPSCameraController {
     private isAnimationPlaying: boolean = false;
-    private stepTrs: vec3 = vec3.create();
-    private stepRotQ: quat = quat.create();
+    private interpStep: InterpolationStep = {bank: 0, pos: vec3.create(), lookAtPos: vec3.create()};
     /**
      * Indicates if the camera is currently positioned on a keyframe's end position.
      */
@@ -553,8 +552,9 @@ export class StudioCameraController extends FPSCameraController {
             return CameraUpdateResult.Unchanged;
         } else {
             this.animationManager.update(dt);
-            this.animationManager.playbackInterpolationStep(this.stepRotQ, this.stepTrs);
-            mat4.fromRotationTranslation(this.camera.worldMatrix, this.stepRotQ, this.stepTrs);
+            this.animationManager.playbackInterpolationStep(this.interpStep);
+            mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
+            mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
             return CameraUpdateResult.Changed;
         }
     }
