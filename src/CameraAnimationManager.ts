@@ -271,6 +271,9 @@ export class CameraAnimationManager {
             if (easeFunc)
                 interpAmount = easeFunc(interpAmount);
             vec3.lerp(outInterpStep.pos, this.posFrom, this.posTo, interpAmount);
+            vec3.lerp(outInterpStep.lookAtPos, this.lookAtPosFrom, this.lookAtPosTo, interpAmount);
+            vec3.lerp(this.nextRot, this.rotEFrom, this.rotETo, interpAmount);
+            outInterpStep.bank = this.nextRot[2];
         } else {
             for (let i = 0; i < 3; i++) {
                 if (this.interpPos)
@@ -428,7 +431,7 @@ export class CameraAnimationManager {
         vec3.scaleAndAdd(this.lookAtPosTo, this.posTo, this.forwardVecTo, -100);
         this.interpPos = !vec3.exactEquals(this.posFrom, this.posTo);
         this.interpLookAtPos = !vec3.exactEquals(this.lookAtPosFrom, this.lookAtPosTo);
-        this.interpRot = this.rotEFrom[2] != this.rotETo[2];
+        this.interpRot = Math.round(this.rotEFrom[2] * 10000) != Math.round(this.rotETo[2] * 10000);
     }
 
     /**

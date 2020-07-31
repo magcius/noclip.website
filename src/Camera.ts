@@ -499,7 +499,7 @@ export class FPSCameraController implements CameraController {
 
 export class StudioCameraController extends FPSCameraController {
     private isAnimationPlaying: boolean = false;
-    private interpStep: InterpolationStep = {bank: 0, pos: vec3.create(), lookAtPos: vec3.create()};
+    private interpStep: InterpolationStep = {pos: vec3.create(), lookAtPos: vec3.create(), bank: 0};
     /**
      * Indicates if the camera is currently positioned on a keyframe's end position.
      */
