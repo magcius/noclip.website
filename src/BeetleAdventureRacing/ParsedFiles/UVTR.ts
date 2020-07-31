@@ -1,9 +1,13 @@
 import { Filesystem, UVFile } from "../Filesystem";
 import { assert } from "../../util";
 import { mat4 } from "gl-matrix";
-import { UVCT } from "./UVCT";
+import { UVCT, UVCTRenderer } from "./UVCT";
 import { parseMatrix } from "./Common";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
+import { ViewerRenderInput } from "../../viewer";
 
+// UVTR aka "terra"
 export class UVTR {
     //TODO: this is bad(?)
     public uvcts: [UVCT, mat4][];
@@ -51,5 +55,25 @@ export class UVTR {
         }
 
         // TODO: there is other processing after this in the game
+    }
+}
+
+export class UVTRRenderer {
+    public uvctRenderers: Map<UVCT, UVCTRenderer> = new Map();
+    constructor(public uvtr: UVTR, device: GfxDevice) {
+        for(let [uvct, placementMat] of uvtr.uvcts) {
+            this.uvctRenderers.set(uvct, (new UVCTRenderer(uvct, device)));
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
+        for(let [uvct, placementMat] of this.uvtr.uvcts) {
+            const uvctRenderer = this.uvctRenderers.get(uvct)!;
+            uvctRenderer.prepareToRender(device, renderInstManager, viewerInput, placementMat);
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.uvctRenderers.forEach(r => r.destroy(device));
     }
 }

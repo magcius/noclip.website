@@ -25,6 +25,8 @@ export class Filesystem {
     private filesBuffer: ArrayBufferSlice;
     private filesDataView: DataView;
 
+    private parsedFilesCache: Map<string, any> = new Map();
+
     constructor(filesystemBuffer: ArrayBufferSlice) {
         const filesystemView = filesystemBuffer.createDataView();
 
@@ -60,10 +62,16 @@ export class Filesystem {
         }
     }
 
-    // what's the point of a powerful type system if you can't have some fun with it?
-    // TODO: caching
-    public getParsedFile<T>(returnClass: new(uvFile: UVFile, filesystem: Filesystem) => T, type: string, index: number, ): T {
-        return new returnClass(this.getFile(type, index), this);
+    public getParsedFile<T>(returnClass: new(uvFile: UVFile, filesystem: Filesystem) => T, type: string, index: number): T {
+        let key: string = type + index.toString();
+        
+        if(this.parsedFilesCache.has(key)) {
+            return this.parsedFilesCache.get(key);
+        } else {
+            let parsedFile = new returnClass(this.getFile(type, index), this);
+            this.parsedFilesCache.set(key, parsedFile);
+            return parsedFile;
+        }
     }
 
     public getRawFile(index: number): ArrayBufferSlice {

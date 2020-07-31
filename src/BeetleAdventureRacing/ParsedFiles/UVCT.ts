@@ -2,9 +2,12 @@ import { Filesystem, UVFile } from "../Filesystem";
 import { assert } from "../../util";
 import { mat4 } from "gl-matrix";
 import { UVTX } from "./UVTX";
-import { UVMD } from "./UVMD";
+import { UVMD, UVMDRenderer } from "./UVMD";
 import { parseVertices, parseTriangles } from "./Common";
-import { Material } from "../Scenes";
+import { Material, MaterialRenderer } from "../MaterialRenderer";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
+import { ViewerRenderInput } from "../../viewer";
 
 export class UVCT {
     public uvmds: [UVMD, mat4][] = [];
@@ -155,5 +158,41 @@ export class UVCT {
         const asdfasdfasdfasd3 = view.getUint32(curPos + 8);
         const asdfasdfasdfasd4 = view.getUint32(curPos + 12);
         curPos += 16;
+    }
+}
+
+export class UVCTRenderer {
+    public materialRenderers: MaterialRenderer[] = [];
+    public uvmdRenderers: Map<UVMD, UVMDRenderer> = new Map();
+    constructor(public uvct: UVCT, device: GfxDevice) {
+        for(let material of uvct.materials) {
+            this.materialRenderers.push(new MaterialRenderer(device, material));
+        }
+        for(let [uvmd, placementMat] of uvct.uvmds) {
+            this.uvmdRenderers.set(uvmd, (new UVMDRenderer(uvmd, device)));
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput,
+        placementMatrix: mat4) {
+        
+        for(let matRenderer of this.materialRenderers) {
+            matRenderer.prepareToRender(device, renderInstManager, viewerInput, placementMatrix);
+        }
+
+        for(let [uvmd, uvmdPlacementMat] of this.uvct.uvmds) {
+            const uvmdRenderer = this.uvmdRenderers.get(uvmd)!;
+
+            let combinedPlacementMatrix = mat4.create();
+            mat4.multiply(combinedPlacementMatrix, placementMatrix, uvmdPlacementMat);
+
+            uvmdRenderer.prepareToRender(device, renderInstManager, viewerInput, combinedPlacementMatrix);
+        }
+    }
+
+
+    public destroy(device: GfxDevice): void {
+        this.uvmdRenderers.forEach(r => r.destroy(device));
+        this.materialRenderers.forEach(r => r.destroy(device));
     }
 }

@@ -199,10 +199,6 @@ export class UVTX {
             }
         }
 
-        if(this.unkByte1 != 0 && this.unkByte1 != 1) {
-            console.log(this.unkByte1);
-        }
-
         // TODO: load second texture if necessary,
         // and include it in the fake command execution.
 

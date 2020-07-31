@@ -4,6 +4,10 @@ import { mat4, vec3 } from "gl-matrix";
 import { UVTX } from "./UVTX";
 import { parseVertices, parseTriangles, parseMatrix } from "./Common";
 import { clamp } from "../../MathHelpers";
+import { MaterialRenderer } from "../MaterialRenderer";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
+import { ViewerRenderInput } from "../../viewer";
 
 // This is more of a placeholder while I figure out what exactly is needed.
 class MoreAccurateUVMDMaterial {
@@ -150,7 +154,7 @@ export class UVMD {
 
                     const uvtxIndex = (unk_someinfo & 0xFFF);
                     let uvtx: UVTX | null = null;
-                    if (uvtxIndex !== 0xFFF) {
+                    if (uvtxIndex !== 0xFFF) {                   
                         uvtx = filesystem.getParsedFile(UVTX, "UVTX", uvtxIndex);
                     }
                     let lights = null;
@@ -259,4 +263,40 @@ class LightColors {
     // premultiplied color?
     public unk_packedVec31: number;
     public unk_packedVec32: number;
+}
+
+export class UVMDRenderer {
+    // TODO: may not be the best way of organizing this.
+    public materialRenderers: Map<MoreAccurateUVMDMaterial, MaterialRenderer> = new Map();
+
+    constructor(public uvmd: UVMD, device: GfxDevice) {
+        // Only render LOD0 for now.
+        for(let part of this.uvmd.lods[0].modelParts) {
+            for(let material of part.materials) {
+                this.materialRenderers.set(material, new MaterialRenderer(device, material));
+            }
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput,
+        placementMatrix: mat4) {
+        const lod0 = this.uvmd.lods[0];
+        for(let part of lod0.modelParts) {
+            // TODO: bad
+            let index = lod0.modelParts.indexOf(part);
+            let partMatrix = this.uvmd.matrices[index];
+
+            for(let material of part.materials) { 
+                let modelToWorldMatrix = mat4.create();
+                mat4.multiply(modelToWorldMatrix, placementMatrix, partMatrix);
+
+                const materialRenderer = this.materialRenderers.get(material)!;
+                materialRenderer.prepareToRender(device, renderInstManager, viewerInput, modelToWorldMatrix);
+            }
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.materialRenderers.forEach(r => r.destroy(device));
+    }
 }
