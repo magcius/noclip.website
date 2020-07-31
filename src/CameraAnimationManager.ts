@@ -216,10 +216,10 @@ export class CameraAnimationManager {
      * @param dt delta time since last update
      */
     public update(dt: number): void {
-        if (this.currentKeyframeProgressMs < this.currentKeyframe.interpDuration) {
+        if (this.currentKeyframeProgressMs < this.currentKeyframeInterpDurationMs) {
             this.currentKeyframeProgressMs += dt;
-            if (this.currentKeyframeProgressMs > this.currentKeyframe.interpDuration)
-                this.pastDurationMs = this.currentKeyframeProgressMs - this.currentKeyframe.interpDuration;
+            if (this.currentKeyframeProgressMs > this.currentKeyframeInterpDurationMs)
+                this.pastDurationMs = this.currentKeyframeProgressMs - this.currentKeyframeInterpDurationMs;
         } else {
             this.currentKeyframeProgressMs = Math.min(this.currentKeyframeProgressMs + dt, this.currentKeyframeTotalDurationMs);
         }
@@ -275,6 +275,7 @@ export class CameraAnimationManager {
         }
         this.currentKeyframe = this.animation.keyframes[this.currentKeyframeIndex];
         this.currentKeyframeProgressMs = 0 + this.pastDurationMs;
+        this.pastDurationMs = 0;
         this.currentKeyframeInterpDurationMs = this.currentKeyframe.interpDuration * MILLISECONDS_IN_SECOND;
         this.currentKeyframeTotalDurationMs = (this.currentKeyframe.interpDuration + this.currentKeyframe.holdDuration) * MILLISECONDS_IN_SECOND;
         if (this.currentKeyframe.interpDuration === 0)
