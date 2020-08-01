@@ -1,10 +1,10 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, readString } from "../util";
+import { assert, hexzero, assertExists, readString, nArray } from "../util";
 import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat, vec3 } from "gl-matrix";
-import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString } from "../Common/PS2/GS";
+import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
 import { Endianness } from "../endian";
 
@@ -64,17 +64,17 @@ function getVifUnpackFormatByteSize(format: number): number {
 export interface BINTexture {
     tex0_data0: number;
     tex0_data1: number;
+    pixels: (Uint8Array | 'framebuffer')[];
     name: string;
     width: number;
     height: number;
-    pixels: Uint8Array;
 }
 
 export interface BINModelPart {
     diffuseColor: Color;
     indexOffset: number;
     indexCount: number;
-    textureName: string | null;
+    textureIndex: number | null;
     gsConfiguration: GSConfiguration;
     lit: boolean;
 }
@@ -203,8 +203,7 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
     return texDataIdx;
 }
 
-// TODO(jstpierre): Do we need a texture cache?
-function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1: number, namePrefix: string = ''): BINTexture {
+function decodeTexture(gsMemoryMap: GSMemoryMap[], tex0_data0: number, tex0_data1: number, namePrefix: string = ''): BINTexture {
     // Unpack TEX0 register.
     const tbp0 = (tex0_data0 >>> 0) & 0x3FFF;
     const tbw = (tex0_data0 >>> 14) & 0x3F;
@@ -231,13 +230,22 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     // TODO(jstpierre): Read the TEXALPHA register.
     const alphaReg = tcc === GSTextureColorComponent.RGBA ? -1 : 0x80;
 
-    let pixels: Uint8Array = new Uint8Array(width * height * 4);
-    if (psm === GSPixelStorageFormat.PSMT4)
-        gsMemoryMapReadImagePSMT4_PSMCT32(pixels, gsMemoryMap, tbp0, tbw, width, height, cbp, csa, alphaReg);
-    else if (psm === GSPixelStorageFormat.PSMT8)
-        gsMemoryMapReadImagePSMT8_PSMCT32(pixels, gsMemoryMap, tbp0, tbw, width, height, cbp, alphaReg);
-    else
-        console.warn(`Unsupported PSM ${psmToString(psm)} in texture ${name}`);
+    const pixels: (Uint8Array | 'framebuffer')[] = [];
+    for (let i = 0; i < gsMemoryMap.length; i++) {
+        if (tbp0 === 0x0000 && cbp === 0x0000) {
+            // Framebuffer texture; dynamic.
+            pixels.push('framebuffer');
+        } else {
+            const p = new Uint8Array(width * height * 4);
+            if (psm === GSPixelStorageFormat.PSMT4)
+                gsMemoryMapReadImagePSMT4_PSMCT32(p, gsMemoryMap[i], tbp0, tbw, width, height, cbp, csa, alphaReg);
+            else if (psm === GSPixelStorageFormat.PSMT8)
+                gsMemoryMapReadImagePSMT8_PSMCT32(p, gsMemoryMap[i], tbp0, tbw, width, height, cbp, alphaReg);
+            else
+                console.warn(`Unsupported PSM ${psmToString(psm)} in texture ${name}`);
+            pixels.push(p);
+        }
+    }
 
     return { name, width, height, pixels, tex0_data0, tex0_data1 };
 }
@@ -256,7 +264,7 @@ export function parseStageTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     assert(offs === buffer.byteLength);
 }
 
-function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): BINModelSector | null {
+function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], namePrefix: string, sectorOffs: number): BINModelSector | null {
     const view = buffer.createDataView();
 
     const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
@@ -265,7 +273,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         return null;
 
     const textures: BINTexture[] = [];
-    function findOrDecodeTexture(tex0_data0: number, tex0_data1: number): string {
+    function findOrDecodeTexture(tex0_data0: number, tex0_data1: number): number {
         let texture = textures.find((texture) => {
             return texture.tex0_data0 === tex0_data0 && texture.tex0_data1 === tex0_data1;
         });
@@ -273,7 +281,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             texture = decodeTexture(gsMemoryMap, tex0_data0, tex0_data1, namePrefix);
             textures.push(texture);
         }
-        return texture.name;
+        return textures.indexOf(texture);
     }
 
     // 4 positions, 3 normals, 2 UV coordinates.
@@ -305,7 +313,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             vertexRunCount: number;
             indexRunData: Uint16Array;
             vertexRunColor: Color;
-            textureName: string | null;
+            textureIndex: number | null;
             gsConfiguration: GSConfiguration;
             lit: boolean;
         }
@@ -321,7 +329,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         let vertexRunCount = 0;
         let vertexRunData: Float32Array | null = null;
         let vertexRunColor = colorNewFromRGBA(1, 1, 1, 1);
-        let currentTextureName: string | null = null;
+        let currentTextureIndex: number | null = null;
         let currentGSConfiguration: GSConfiguration = {
             tex0_1_data0: -1, tex0_1_data1: -1,
             tex1_1_data0: -1, tex1_1_data1: -1,
@@ -529,7 +537,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         // TODO(jstpierre): PRIM is sometimes set in here. A bug in our parsing logic?
                     } else if (addr === GSRegister.TEX0_1) {
                         // TEX0_1 contains the texture configuration.
-                        currentTextureName = findOrDecodeTexture(data0, data1);
+                        currentTextureIndex = findOrDecodeTexture(data0, data1);
                         currentGSConfiguration.tex0_1_data0 = data0;
                         currentGSConfiguration.tex0_1_data1 = data1;
                     } else if (addr === GSRegister.TEX1_1) {
@@ -556,7 +564,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                 }
 
                 // Make sure that we actually created something here.
-                assertExists(currentTextureName !== null);
+                assertExists(currentTextureIndex !== null);
             } else if (cmd === 0x17) { // MSCNT
                 // Run an HLE form of the VU1 program.
                 assert(vertexRunData !== null);
@@ -591,9 +599,9 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     }
 
                     const indexRunData = indexData.slice(0, indexDataIdx);
-                    const textureName = currentTextureName;
+                    const textureIndex = currentTextureIndex;
                     const gsConfiguration: GSConfiguration = Object.assign({}, currentGSConfiguration);
-                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, vertexRunColor: vertexRunColor!, textureName: textureName!, gsConfiguration, lit });
+                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, vertexRunColor: vertexRunColor!, textureIndex: textureIndex!, gsConfiguration, lit });
                 }
 
                 vertexRunFlags0 = 0;
@@ -639,13 +647,13 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             // Check if we can coalesce this into the existing model part.
             let modelPartsCompatible = currentModelPart !== null
                 && colorEqual(vertexRun.vertexRunColor, currentModelPart!.diffuseColor)
-                && vertexRun.textureName === currentModelPart!.textureName
+                && vertexRun.textureIndex === currentModelPart!.textureIndex
                 && gsConfigurationEqual(vertexRun.gsConfiguration, currentModelPart!.gsConfiguration)
                 && vertexRun.lit === currentModelPart.lit;
 
             // TODO(jstpierre): Texture settings
             if (!modelPartsCompatible) {
-                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: vertexRun.textureName, gsConfiguration: vertexRun.gsConfiguration, lit: vertexRun.lit };
+                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureIndex: vertexRun.textureIndex, gsConfiguration: vertexRun.gsConfiguration, lit: vertexRun.lit };
                 modelParts.push(currentModelPart);
             }
 
@@ -704,7 +712,7 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
         sectorTableIdx += 0x04;
         if (sectorIsNIL(buffer, sectorOffs))
             continue;
-        const sectorModel = assertExists(parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs));
+        const sectorModel = assertExists(parseModelSector(buffer, [gsMemoryMap], namePrefix, sectorOffs));
         sectors.push(sectorModel);
     }
 
@@ -980,11 +988,13 @@ export interface PartTransform {
     rotation: vec3;
 }
 
-export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: number, gsMemoryMap: GSMemoryMap, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
+export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
     const numSectors = view.getUint32(0x00, true);
+
+    const gsMemoryMap = nArray(2, () => gsMemoryMapNew());
 
     function parseObject(objectId: number): ObjectModel | null {
         const firstSectorIndex = 0x09 + objectId * 0x0B;
@@ -1009,9 +1019,11 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
 
         if (!sectorIsNIL(buffer, texDataOffs)) {
             // Parse texture data.
-            parseDIRECT(gsMemoryMap, buffer.slice(texDataOffs));
-            // TODO(jstpierre): Which CLUT do I want?
-            parseDIRECT(gsMemoryMap, buffer.slice(clutAOffs));
+            parseDIRECT(gsMemoryMap[0], buffer.slice(texDataOffs));
+            parseDIRECT(gsMemoryMap[1], buffer.slice(texDataOffs));
+
+            parseDIRECT(gsMemoryMap[0], buffer.slice(clutAOffs));
+            parseDIRECT(gsMemoryMap[1], buffer.slice(clutBOffs));
         }
 
         // Load in LOD 0.
@@ -1019,7 +1031,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
         if (sector === null)
             return null;
         const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
-        return {sector, transforms, bbox: computeObjectAABB(sector, transforms)};
+        return { sector, transforms, bbox: computeObjectAABB(sector, transforms) };
     }
 
     const objectModels: ObjectModel[] = [];

@@ -453,8 +453,9 @@ export class GfxRenderInst {
                     dst.gfxTexture = null;
                     dst.gfxSampler = null;
                 } else {
-                    dst.gfxTexture = binding!.gfxTexture;
-                    dst.gfxSampler = binding!.gfxSampler;
+                    dst.gfxTexture = binding.gfxTexture;
+                    dst.gfxSampler = binding.gfxSampler;
+                    assert(binding.lateBinding === null);
                 }
             }
         }

@@ -1,5 +1,5 @@
 
-import { BINModelInstance, KatamariDamacyTextureHolder } from "./render";
+import { BINModelInstance } from "./render";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition } from "./bin";
@@ -105,7 +105,7 @@ export class ObjectRenderer {
         }
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewerInput: ViewerRenderInput, toNoclip: mat4) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, toNoclip: mat4, currentPalette: number): void {
         if (!this.visible)
             return;
         // Game runs at 30fps.
@@ -145,7 +145,7 @@ export class ObjectRenderer {
             this.animFunc(this, deltaTimeInFrames);
 
         for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(renderInstManager, textureHolder, viewerInput, toNoclip);
+            this.modelInstance[i].prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette);
     }
 
     public setVisible(visible: boolean): void {
