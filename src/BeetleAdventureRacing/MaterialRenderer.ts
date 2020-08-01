@@ -6,6 +6,9 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
 import { UVTX } from "./ParsedFiles/UVTX";
+import { F3DEX_Program } from "../BanjoKazooie/render";
+
+import * as RDP from '../Common/N64/RDP';
 
 export class TempTestingProgram extends DeviceProgram {
     public static inPosition = 0;
@@ -81,14 +84,31 @@ export class MaterialRenderer {
 
     private indexCount: number;
 
+    
     constructor(device: GfxDevice, material: Material) {
+        // TODO TODO TODO
+        // let x: RDP.CombineParams = RDP.decodeCombineParams(0, 0);
+        // const program = new F3DEX_Program(0 /* TODO */, 0 /* TODO */, x); //TODO: blendalpha? tiles?
+        // program.defines.set("BONE_MATRIX_COUNT", '1');
+        // program.setDefineBool("USE_VERTEX_COLOR", true);
+        // program.setDefineBool("USE_TEXTURE", material.uvtx !== null);
+        // program.setDefineBool("ONLY_VERTEX_COLOR", material.uvtx === null);
+
+
+
+
+
+
+
+
         let vertexDataCopy = Float32Array.from(material.vertexData);
         if (material.uvtx !== null) {
             for (let q = 0; q < vertexDataCopy.byteLength / 9; q++) {
                 let origS = vertexDataCopy[q * 9 + 3];
                 let origT = vertexDataCopy[q * 9 + 4];
-                let oglS = (origS - material.uvtx.tile_sLo) / (material.uvtx.tile_sHi - material.uvtx.tile_sLo);
-                let oglT = (origT - material.uvtx.tile_tLo) / (material.uvtx.tile_tHi - material.uvtx.tile_tLo);
+                let tile = material.uvtx.rspState.primitiveTile;
+                let oglS = (origS - (tile.uls / 4)) / ((tile.lrs - tile.uls) / 4);
+                let oglT = (origT - (tile.ult / 4)) / ((tile.lrt - tile.ult) / 4);
                 vertexDataCopy[q * 9 + 3] = oglS;
                 vertexDataCopy[q * 9 + 4] = oglT;
                 console.warn("REMOVEME!!!");
@@ -145,7 +165,7 @@ export class MaterialRenderer {
         this.program.setDefineBool("TEXTURED", this.hasTextureData);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelToWorldMatrix: mat4) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelToWorldMatrix: mat4) {        
         const renderInst = renderInstManager.newRenderInst();
 
         // Build model->NDC matrix

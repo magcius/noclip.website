@@ -54,10 +54,7 @@ export class UVTX {
 
     public not_supported_yet = false;
     public convertedTexelData: Uint8Array;
-    public tile_sLo: number;
-    public tile_tLo: number;
-    public tile_sHi: number;
-    public tile_tHi: number;
+    public rspState: UVTXRSPState;
 
     constructor(uvFile: UVFile, filesystem: Filesystem) {
         assert(uvFile.chunks.length === 1);
@@ -132,7 +129,7 @@ export class UVTX {
             } else {
                 this.otherUVTX = filesystem.getParsedFile(UVTX, "UVTX", otherUVTXIndex);
             }
-        }
+        } 
         const unk6 = view.getUint16(curPos + 13); // 2
         this.unkByte6 = unk6 & 0xFF; // TODO: Other half doesn't seem to be used?
         this.unkByte1 = view.getUint8(curPos + 15);
@@ -208,18 +205,12 @@ export class UVTX {
         const cmdCount = dlCommandsData.byteLength / 8;
         const cmdView = dlCommandsData.createDataView();
 
-        let settimgIndex = 0;
+        let settimgCount = 0;
 
-        let tex1ImageState: F3DEX.TextureImageState = new F3DEX.TextureImageState();
-        let tex2ImageState: F3DEX.TextureImageState = new F3DEX.TextureImageState();
-        let tileStates: RDP.TileState[] = nArray(8, () => new RDP.TileState());
+        let rspState = new UVTXRSPState();
+        this.rspState = rspState;
 
-        let otherModeH: number = 0;
-        let combineParams: RDP.CombineParams;
-        let textureState: F3DEX.TextureState = new F3DEX.TextureState();
-        let primitiveColor: vec4;
-        let environmentColor: vec4;
-
+        // This code is a modified version of the Pokemon Snap F3DEX2 code
         for (let i = 0; i < cmdView.byteLength; i += 0x08) {
             const w0 = cmdView.getUint32(i + 0x00);
             const w1 = cmdView.getUint32(i + 0x04);
@@ -227,21 +218,22 @@ export class UVTX {
             const cmd: F3DEX2.F3DEX2_GBI = w0 >>> 24;
     
             // TODO: we can ignore commands for any mipmaps since we're not going to use them
-            // (might also be able to ignore some of these variables)
             switch (cmd) {
                 case F3DEX2.F3DEX2_GBI.G_SETTIMG: {
-                    const format = (w0 >>> 21) & 0x07;
-                    const bitSize = (w0 >>> 19) & 0x03;
-                    const width = (w0 & 0x0FFF) + 1;
-                    
                     // When the UVTX file is loaded, it modifies the G_SETTIMG instruction(s)
                     // so that the addresses point to the location of the loaded texel data.
                     // We're going to load the texel data separately, so we can ignore this.
+
+                    // (We get format and bitSize from the subsequent G_SETTILE call)
+
+                    // const format = (w0 >>> 21) & 0x07;
+                    // const bitSize = (w0 >>> 19) & 0x03;
+                    // const width = (w0 & 0x0FFF) + 1;
                     //const address = w1;
 
-                    let imageState = settimgIndex === 0 ? tex1ImageState : tex2ImageState
-                    imageState.set(format, bitSize, width, NaN);
-                    settimgIndex++;
+                    // let imageState = settimgIndex === 0 ? rspState.tex1ImageState : rspState.tex2ImageState
+                    // imageState.set(format, bitSize, width, NaN);
+                    settimgCount++;
                 } break;
     
                 case F3DEX2.F3DEX2_GBI.G_SETTILE: {
@@ -258,7 +250,7 @@ export class UVTX {
                     const cms = (w1 >>> 8) & 0x03;
                     const masks = (w1 >>> 4) & 0x0F;
                     const shifts = (w1 >>> 0) & 0x0F;
-                    tileStates[tile].set(fmt, siz, line, tmem, palette, cmt, maskt, shiftt, cms, masks, shifts);
+                    rspState.tileStates[tile].set(fmt, siz, line, tmem, palette, cmt, maskt, shiftt, cms, masks, shifts);
                 } break;    
                 case F3DEX2.F3DEX2_GBI.G_LOADBLOCK: {
                     // We can completely ignore, we already know how long the data is
@@ -279,11 +271,11 @@ export class UVTX {
                     const len = ((w0 >>> 0) & 0xFF) + 1;
                     const sft = 0x20 - ((w0 >>> 8) & 0xFF) - len;
                     const mask = ((1 << len) - 1) << sft;
-                    otherModeH = (otherModeH & ~mask) | (w1 & mask);
+                    rspState.otherModeH = (rspState.otherModeH & ~mask) | (w1 & mask);
                 } break;
     
                 case F3DEX2.F3DEX2_GBI.G_SETCOMBINE: {
-                    combineParams = RDP.decodeCombineParams(w0, w1);
+                    rspState.combineParams = RDP.decodeCombineParams(w0, w1);
                 } break;
     
                 case F3DEX2.F3DEX2_GBI.G_TEXTURE: {
@@ -293,7 +285,7 @@ export class UVTX {
                     assert(on);
                     const sScale = (w1 >>> 16) & 0xFFFF;
                     const tScale = (w1 >>> 0) & 0xFFFF;
-                    textureState.set(true, tile, NaN, sScale / 0x10000, tScale / 0x10000);
+                    rspState.textureState.set(true, tile, NaN, sScale / 0x10000, tScale / 0x10000);
                 } break;
     
                 case F3DEX2.F3DEX2_GBI.G_SETTILESIZE: {
@@ -302,7 +294,7 @@ export class UVTX {
                     const tile = (w1 >>> 24) & 0x07;
                     const lrs = (w1 >>> 12) & 0x0FFF;
                     const lrt = (w1 >>> 0) & 0x0FFF;
-                    tileStates[tile].setSize(uls, ult, lrs, lrt);
+                    rspState.tileStates[tile].setSize(uls, ult, lrs, lrt);
                 } break;
     
                 case F3DEX2.F3DEX2_GBI.G_SETPRIMCOLOR: {
@@ -311,7 +303,7 @@ export class UVTX {
                     const g = (w1 >>> 16) & 0xFF;
                     const b = (w1 >>> 8) & 0xFF;
                     const a = (w1 >>> 0) & 0xFF;
-                    primitiveColor = vec4.fromValues(r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
+                    rspState.primitiveColor = vec4.fromValues(r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
                 } break;
     
                 case F3DEX2.F3DEX2_GBI.G_SETENVCOLOR: {
@@ -319,7 +311,7 @@ export class UVTX {
                     const g = (w1 >>> 16) & 0xFF;
                     const b = (w1 >>> 8) & 0xFF;
                     const a = (w1 >>> 0) & 0xFF;
-                    environmentColor = vec4.fromValues(r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
+                    rspState.environmentColor = vec4.fromValues(r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
                 } break;
 
                 case F3DEX2.F3DEX2_GBI.G_RDPTILESYNC:
@@ -333,20 +325,20 @@ export class UVTX {
         }
 
         /////
-        assert(settimgIndex == 1 || settimgIndex == 2);
-        assert(tex1ImageState !== null);
-        if(this.otherUVTX !== null) {
-            assert(tex2ImageState !== null);
+        if(this.otherUVTX === null || this.otherUVTX === this) {
+            assert(settimgCount === 1);
+        } else {
+            assert(settimgCount === 2);
         }
         if(this.levelCount === 6 && this.otherUVTX !== null) {
-            assert(textureState.tile === 0);
+            assert(rspState.textureState.tile === 0);
         } else {
-            assert(textureState.tile === 1);
+            assert(rspState.textureState.tile === 1);
         }
-        assert(tileStates[textureState.tile].line !== 0);
+        assert(rspState.primitiveTile.line !== 0);
 
         /////
-        let tile = tileStates[textureState.tile];
+        let tile = rspState.primitiveTile;
 
         if (tile.uls === 0 && tile.ult === 0 && 
             tile.lrs === 0 && tile.lrt === 0) {
@@ -381,9 +373,20 @@ export class UVTX {
             console.warn(`Unsupported texture format ${getImageFormatName(tile.fmt)} / ${getImageSizeName(tile.siz)}`);
 
         this.convertedTexelData = dest;
-        this.tile_sLo = tile.uls / 4;
-        this.tile_tLo = tile.ult / 4;
-        this.tile_sHi = tile.lrs / 4;
-        this.tile_tHi = tile.lrt / 4;
+    }
+}
+
+// Class to hold state of RSP after executing a UVTX's display list
+class UVTXRSPState {
+    public tileStates: RDP.TileState[] = nArray(8, () => new RDP.TileState());
+    public otherModeH: number = 0;
+    public combineParams: RDP.CombineParams;
+    public textureState: F3DEX.TextureState = new F3DEX.TextureState();
+    public primitiveColor: vec4 = vec4.create();
+    public environmentColor: vec4 = vec4.create();
+
+    // This seems to be the "official" name for it?
+    get primitiveTile() {
+        return this.tileStates[this.textureState.tile];
     }
 }
