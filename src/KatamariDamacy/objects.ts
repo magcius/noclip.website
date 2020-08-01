@@ -153,16 +153,19 @@ export class ObjectRenderer {
         for (let i = 0; i < this.modelInstance.length; i++)
             this.modelInstance[i].prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette);
 
-        if (this.motionState !== null && this.motionState.useAltMotion) {
-            mat4.identity(scratchMatrix);
-            mat4.rotateX(scratchMatrix, scratchMatrix, Math.PI);
-            mat4.mul(scratchMatrix, scratchMatrix, this.modelInstance[0].modelMatrix);
-            mat4.mul(scratchMatrix, window.main.viewer.camera.clipFromWorldMatrix, scratchMatrix);
-            drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, Magenta, 4);
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Motion 1 ${hexzero(this.motionState.parameters.motionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Motion 2 ${hexzero(this.motionState.parameters.altMotionID, 2)}`, 65, Magenta, { outline: 2, shadowBlur: 2 });
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Misc Motion ${hexzero(this.motionState.parameters.subMotionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
+        const debugMotion = false;
+        if (debugMotion) {
+            if (this.motionState !== null && this.motionState.useAltMotion) {
+                mat4.identity(scratchMatrix);
+                mat4.rotateX(scratchMatrix, scratchMatrix, Math.PI);
+                mat4.mul(scratchMatrix, scratchMatrix, this.modelInstance[0].modelMatrix);
+                mat4.mul(scratchMatrix, window.main.viewer.camera.clipFromWorldMatrix, scratchMatrix);
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, Magenta, 4);
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Motion 1 ${hexzero(this.motionState.parameters.motionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Motion 2 ${hexzero(this.motionState.parameters.altMotionID, 2)}`, 65, Magenta, { outline: 2, shadowBlur: 2 });
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Misc Motion ${hexzero(this.motionState.parameters.subMotionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
+            }
         }
     }
 
