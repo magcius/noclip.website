@@ -1,28 +1,14 @@
 import { Filesystem, UVFile } from "../Filesystem";
-import { assert } from "../../util";
+import { assert, nArray } from "../../util";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { ImageFormat, ImageSize, decodeTex_RGBA16, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, getImageFormatName, getImageSizeName, decodeTex_CI4, parseTLUT, TextureLUT } from "../../Common/N64/Image";
 import { UVTS, AnimationState } from "./UVTS";
+import * as F3DEX2 from "../../PokemonSnap/f3dex2";
+import * as F3DEX from '../../BanjoKazooie/f3dex';
+import * as RDP from '../../Common/N64/RDP';
+import { vec4 } from "gl-matrix";
 
-// only the limited number of commands UVTX actually uses.
-enum F3DEX2_GBI {
-    G_TEXTURE = 0xD7,
-    G_ENDDL = 0xDF,
-
-    // RDP
-    G_SETTIMG = 0xFD,
-    G_SETCOMBINE = 0xFC,
-    G_SETENVCOLOR = 0xFB,
-    G_SETPRIMCOLOR = 0xFA,
-    G_SETTILE = 0xF5,
-    G_LOADTILE = 0xF4,
-    G_LOADBLOCK = 0xF3,
-    G_SETTILESIZE = 0xF2,
-    G_RDPTILESYNC = 0xE8,
-    G_RDPLOADSYNC = 0xE6,
-    G_SETOTHERMODE_H = 0xE3
-}
-
+// I have a feeling this might be used for texture scrolling (and/or distorting/something else?)
 class UnkStruct {
     public f1: number;
     public f2: number;
@@ -40,16 +26,16 @@ class UnkStruct {
 // However, a UVTX can also have two textures (using otherUVTX) and/or be an animated texture (using animationState)
 export class UVTX {
     // pCommands
-    public firstUnkStruct: UnkStruct | null;
-    public secondUnkStruct: UnkStruct | null;
+    public firstUnkStruct: UnkStruct | null = null;
+    public secondUnkStruct: UnkStruct | null = null;
     // pTexelData
     // pPalettes (TODO: it seems like the UVTX stores 4 copies of each palette. Why?)
     public flagsAndIndex: number; //uint
-    public otherUVTX: UVTX | null; // originally ushort otherUVTXIndex
+    public otherUVTX: UVTX | null = null; // originally ushort otherUVTXIndex
     // texelDataSize
     public imageWidth: number; //ushort
     public imageHeight: number; //ushort
-    public animationState: AnimationState | null; // originally animationStateIndex
+    public animationState: AnimationState | null = null; // originally animationStateIndex
     public unkByte1: number;
     public levelCount: number; // 1 if no mipmapping, +1 for each mipmap level, etc.
     public alpha: number;
@@ -139,6 +125,14 @@ export class UVTX {
         // (so it can be compared to otherUVTXIndex, maybe other things?)
         this.flagsAndIndex = view.getUint32(curPos + 7);
         let otherUVTXIndex = view.getUint16(curPos + 11);
+        if(otherUVTXIndex != 0xFFF) {
+            //TODO: I think this is right?
+            if(otherUVTXIndex === (this.flagsAndIndex & 0xFFF)) {
+                this.otherUVTX = this;
+            } else {
+                this.otherUVTX = filesystem.getParsedFile(UVTX, "UVTX", otherUVTXIndex);
+            }
+        }
         const unk6 = view.getUint16(curPos + 13); // 2
         this.unkByte6 = unk6 & 0xFF; // TODO: Other half doesn't seem to be used?
         this.unkByte1 = view.getUint8(curPos + 15);
@@ -204,131 +198,192 @@ export class UVTX {
 
         
 
-
-
         // Now that we have read the full file data, let's turn it into something
         // we can use in noclip
-        // TODO: maybe use runDL_F3DEX2?
+        
+        this.convertImageData(texelData, dlCommandsData, palettesData);
+    }
+
+    private convertImageData(texelData: ArrayBufferSlice, dlCommandsData: ArrayBufferSlice, palettesData: ArrayBufferSlice[]) {
         const cmdCount = dlCommandsData.byteLength / 8;
         const cmdView = dlCommandsData.createDataView();
 
-        let indexOfTileToUseWhenTexturing = -1;
-        // all in 10.2 fixed point
-        let tile_sLo = Number.NaN;
-        let tile_tLo = Number.NaN;
-        let tile_sHi = Number.NaN;
-        let tile_tHi = Number.NaN;
+        let settimgIndex = 0;
 
-        let tile_format = Number.NaN;
-        let tile_bitSize = Number.NaN;
-        let tile_wordsPerLine = Number.NaN;
-        let tile_paletteIndex = Number.NaN;
+        let tex1ImageState: F3DEX.TextureImageState = new F3DEX.TextureImageState();
+        let tex2ImageState: F3DEX.TextureImageState = new F3DEX.TextureImageState();
+        let tileStates: RDP.TileState[] = nArray(8, () => new RDP.TileState());
 
-        //let load_format = Number.NaN;
-        //let load_bitSize = Number.NaN;
-        for (let i = 0; i < cmdCount; i++) {
-            const w0 = cmdView.getUint32(i * 8);
-            const w1 = cmdView.getUint32((i * 8) + 4);
+        let otherModeH: number = 0;
+        let combineParams: RDP.CombineParams;
+        let textureState: F3DEX.TextureState = new F3DEX.TextureState();
+        let primitiveColor: vec4;
+        let environmentColor: vec4;
 
-            const cmd: F3DEX2_GBI = w0 >>> 24;
-
-            // TODO: this is *extremely* hacky code just to get something visible.
-            // It misses a *ton* of details
+        for (let i = 0; i < cmdView.byteLength; i += 0x08) {
+            const w0 = cmdView.getUint32(i + 0x00);
+            const w1 = cmdView.getUint32(i + 0x04);
+    
+            const cmd: F3DEX2.F3DEX2_GBI = w0 >>> 24;
+    
+            // TODO: we can ignore commands for any mipmaps since we're not going to use them
+            // (might also be able to ignore some of these variables)
             switch (cmd) {
-                case F3DEX2_GBI.G_TEXTURE: {
-                    const tileIndex = (w0 >>> 8) & 0x07;
-                    indexOfTileToUseWhenTexturing = tileIndex;
+                case F3DEX2.F3DEX2_GBI.G_SETTIMG: {
+                    const format = (w0 >>> 21) & 0x07;
+                    const bitSize = (w0 >>> 19) & 0x03;
+                    const width = (w0 & 0x0FFF) + 1;
+                    
+                    // When the UVTX file is loaded, it modifies the G_SETTIMG instruction(s)
+                    // so that the addresses point to the location of the loaded texel data.
+                    // We're going to load the texel data separately, so we can ignore this.
+                    //const address = w1;
+
+                    let imageState = settimgIndex === 0 ? tex1ImageState : tex2ImageState
+                    imageState.set(format, bitSize, width, NaN);
+                    settimgIndex++;
                 } break;
-                case F3DEX2_GBI.G_SETTIMG: {
-                    //load_format = (w0 >>> 21) & 0x07;
-                    //load_bitSize = (w0 >>> 19) & 0x03;
-                } break;
-                case F3DEX2_GBI.G_SETTILE: {
+    
+                case F3DEX2.F3DEX2_GBI.G_SETTILE: {
+
                     const fmt = (w0 >>> 21) & 0x07;
                     const siz = (w0 >>> 19) & 0x03;
                     const line = (w0 >>> 9) & 0x1FF;
                     const tmem = (w0 >>> 0) & 0x1FF;
-                    const tileIndex = (w1 >>> 24) & 0x07;
+                    const tile = (w1 >>> 24) & 0x07;
                     const palette = (w1 >>> 20) & 0x0F;
+                    const cmt = (w1 >>> 18) & 0x03;
+                    const maskt = (w1 >>> 14) & 0x0F;
+                    const shiftt = (w1 >>> 10) & 0x0F;
+                    const cms = (w1 >>> 8) & 0x03;
+                    const masks = (w1 >>> 4) & 0x0F;
+                    const shifts = (w1 >>> 0) & 0x0F;
+                    tileStates[tile].set(fmt, siz, line, tmem, palette, cmt, maskt, shiftt, cms, masks, shifts);
+                } break;    
+                case F3DEX2.F3DEX2_GBI.G_LOADBLOCK: {
+                    // We can completely ignore, we already know how long the data is
+                    // and we already know where we're loading from (since we ignore mip levels)
 
-                    if (tileIndex === indexOfTileToUseWhenTexturing) {
-                        tile_format = fmt;
-                        tile_bitSize = siz;
-                        tile_wordsPerLine = line;
-                        tile_paletteIndex = palette;
-                    }
+                    // TODO: unless the game relies on this setting lrs and lrt?
+
+                    // const uls = (w0 >>> 12) & 0x0FFF;
+                    // const ult = (w0 >>> 0) & 0x0FFF;
+                    // const tile = (w1 >>> 24) & 0x07;
+                    // const lrs = (w1 >>> 12) & 0x0FFF;
+                    // const dxt = (w1 >>> 0) & 0x0FFF;
+                    // rspState.gDPLoadBlock(tile, uls, ult, lrs, dxt);
                 } break;
-                case F3DEX2_GBI.G_SETTILESIZE: {
-                    const sLo = (w0 >>> 12) & 0x0FFF;
-                    const tLo = (w0 >>> 0) & 0x0FFF;
-                    const tileIndex = (w1 >>> 24) & 0x07;
-                    const sHi = (w1 >>> 12) & 0x0FFF;
-                    const tHi = (w1 >>> 0) & 0x0FFF;
-                    if (tileIndex === indexOfTileToUseWhenTexturing) {
-                        tile_sLo = sLo / 4;
-                        tile_tLo = tLo / 4;
-                        tile_sHi = sHi / 4;
-                        tile_tHi = tHi / 4;
-                    }
+    
+                case F3DEX2.F3DEX2_GBI.G_SETOTHERMODE_H: {
+                    // TODO: might be able to optimize this similar to PW64 code
+                    const len = ((w0 >>> 0) & 0xFF) + 1;
+                    const sft = 0x20 - ((w0 >>> 8) & 0xFF) - len;
+                    const mask = ((1 << len) - 1) << sft;
+                    otherModeH = (otherModeH & ~mask) | (w1 & mask);
                 } break;
-                case F3DEX2_GBI.G_ENDDL:
+    
+                case F3DEX2.F3DEX2_GBI.G_SETCOMBINE: {
+                    combineParams = RDP.decodeCombineParams(w0, w1);
+                } break;
+    
+                case F3DEX2.F3DEX2_GBI.G_TEXTURE: {
+                    // const level = (w0 >>> 11) & 0x07;
+                    let tile = (w0 >>> 8) & 0x07;
+                    const on = !!((w0 >>> 0) & 0x7F);
+                    assert(on);
+                    const sScale = (w1 >>> 16) & 0xFFFF;
+                    const tScale = (w1 >>> 0) & 0xFFFF;
+                    textureState.set(true, tile, NaN, sScale / 0x10000, tScale / 0x10000);
+                } break;
+    
+                case F3DEX2.F3DEX2_GBI.G_SETTILESIZE: {
+                    const uls = (w0 >>> 12) & 0x0FFF;
+                    const ult = (w0 >>> 0) & 0x0FFF;
+                    const tile = (w1 >>> 24) & 0x07;
+                    const lrs = (w1 >>> 12) & 0x0FFF;
+                    const lrt = (w1 >>> 0) & 0x0FFF;
+                    tileStates[tile].setSize(uls, ult, lrs, lrt);
+                } break;
+    
+                case F3DEX2.F3DEX2_GBI.G_SETPRIMCOLOR: {
+                    //const lod = (w0 >>> 0) & 0xFF;
+                    const r = (w1 >>> 24) & 0xFF;
+                    const g = (w1 >>> 16) & 0xFF;
+                    const b = (w1 >>> 8) & 0xFF;
+                    const a = (w1 >>> 0) & 0xFF;
+                    primitiveColor = vec4.fromValues(r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
+                } break;
+    
+                case F3DEX2.F3DEX2_GBI.G_SETENVCOLOR: {
+                    const r = (w1 >>> 24) & 0xFF;
+                    const g = (w1 >>> 16) & 0xFF;
+                    const b = (w1 >>> 8) & 0xFF;
+                    const a = (w1 >>> 0) & 0xFF;
+                    environmentColor = vec4.fromValues(r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
+                } break;
+
+                case F3DEX2.F3DEX2_GBI.G_RDPTILESYNC:
+                case F3DEX2.F3DEX2_GBI.G_RDPLOADSYNC:
+                case F3DEX2.F3DEX2_GBI.G_ENDDL:
                     break;
-
-
-                case F3DEX2_GBI.G_LOADBLOCK: {
-                    const sLo = (w0 >>> 12) & 0x0FFF;
-                    const tLo = (w0 >>> 0) & 0x0FFF;
-                    const tileIndex = (w1 >>> 24) & 0x07;
-                    const sHi = (w1 >>> 12) & 0x0FFF;
-                    const dxt = (w1 >>> 0) & 0x0FFF;
-
-                    assert(tileIndex === 7);
-                    assert(sLo === 0 && tLo === 0);
-                    assert(dxt === 0);
-                } break;
+    
                 default:
-                    break;
+                    console.error(`Unknown DL opcode: ${cmd.toString(16)}`);
             }
         }
 
         /////
-        if (Number.isNaN(tile_sLo) || Number.isNaN(tile_tLo) || Number.isNaN(tile_sHi) || Number.isNaN(tile_tHi) ||
-            Number.isNaN(tile_wordsPerLine) || Number.isNaN(tile_format) || Number.isNaN(tile_bitSize) ||
-            Number.isNaN(tile_paletteIndex)) {
-            console.warn("NAN, skipping");
+        assert(settimgIndex == 1 || settimgIndex == 2);
+        assert(tex1ImageState !== null);
+        if(this.otherUVTX !== null) {
+            assert(tex2ImageState !== null);
+        }
+        if(this.levelCount === 6 && this.otherUVTX !== null) {
+            assert(textureState.tile === 0);
+        } else {
+            assert(textureState.tile === 1);
+        }
+        assert(tileStates[textureState.tile].line !== 0);
+
+        /////
+        let tile = tileStates[textureState.tile];
+
+        if (tile.uls === 0 && tile.ult === 0 && 
+            tile.lrs === 0 && tile.lrt === 0) {
+            console.warn("G_SETTILESIZE was never called, skipping");
             this.not_supported_yet = true;
             return;
         }
 
-        let tileWidth = (tile_sHi - tile_sLo) + 1;
-        let tileHeight = (tile_tHi - tile_tLo) + 1;
+        // Decode image data
+        let tileWidth = ((tile.lrs - tile.uls) / 4) + 1;
+        let tileHeight = ((tile.lrt - tile.ult) / 4) + 1;
         assert(tileWidth === Math.round(tileWidth));
         assert(tileHeight === Math.round(tileHeight));
         assert(tileWidth === this.imageWidth);
         assert(tileHeight === this.imageHeight);
 
-
         const dest = new Uint8Array(tileWidth * tileHeight * 4);
         const texelDataView = texelData.createDataView();
 
-        if (tile_format === ImageFormat.G_IM_FMT_RGBA && tile_bitSize === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dest, texelDataView, 0, tileWidth, tileHeight, tile_wordsPerLine, true);
-        else if (tile_format === ImageFormat.G_IM_FMT_I && tile_bitSize === ImageSize.G_IM_SIZ_4b) decodeTex_I4(dest, texelDataView, 0, tileWidth, tileHeight, tile_wordsPerLine, true);
-        else if (tile_format === ImageFormat.G_IM_FMT_I && tile_bitSize === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dest, texelDataView, 0, tileWidth, tileHeight, tile_wordsPerLine, true);
-        else if (tile_format === ImageFormat.G_IM_FMT_IA && tile_bitSize === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dest, texelDataView, 0, tileWidth, tileHeight, tile_wordsPerLine, true);
-        else if (tile_format === ImageFormat.G_IM_FMT_IA && tile_bitSize === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dest, texelDataView, 0, tileWidth, tileHeight, tile_wordsPerLine, true);
-        else if (tile_format === ImageFormat.G_IM_FMT_IA && tile_bitSize === ImageSize.G_IM_SIZ_16b) decodeTex_IA16(dest, texelDataView, 0, tileWidth, tileHeight, tile_wordsPerLine, true);
-        else if (tile_format === ImageFormat.G_IM_FMT_CI && tile_bitSize === ImageSize.G_IM_SIZ_4b) {
+        if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_I4(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_IA16(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_CI && tile.siz === ImageSize.G_IM_SIZ_4b) {
             const tlut = new Uint8Array(16 * 4);
-            parseTLUT(tlut, palettesData[tile_paletteIndex].createDataView(), 0, tile_bitSize, TextureLUT.G_TT_RGBA16);
-            decodeTex_CI4(dest, texelDataView, 0, tileWidth, tileHeight, tlut, tile_wordsPerLine, true);
+            parseTLUT(tlut, palettesData[tile.palette].createDataView(), 0, tile.siz, TextureLUT.G_TT_RGBA16);
+            decodeTex_CI4(dest, texelDataView, 0, tileWidth, tileHeight, tlut, tile.line, true);
         }
         else
-            console.warn(`Unsupported texture format ${getImageFormatName(tile_format)} / ${getImageSizeName(tile_bitSize)}`);
+            console.warn(`Unsupported texture format ${getImageFormatName(tile.fmt)} / ${getImageSizeName(tile.siz)}`);
 
         this.convertedTexelData = dest;
-        this.tile_sLo = tile_sLo;
-        this.tile_tLo = tile_tLo;
-        this.tile_sHi = tile_sHi;
-        this.tile_tHi = tile_tHi;
+        this.tile_sLo = tile.uls / 4;
+        this.tile_tLo = tile.ult / 4;
+        this.tile_sHi = tile.lrs / 4;
+        this.tile_tHi = tile.lrt / 4;
     }
 }
