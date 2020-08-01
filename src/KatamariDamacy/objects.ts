@@ -127,7 +127,7 @@ export class ObjectRenderer {
             // Position model instances correctly.
             for (let i = 0; i < this.modelInstance.length; i++) {
                 const dst = this.modelInstance[i].modelMatrix;
-                computeModelMatrixPosRot(dst, this.modelInstance[i].translation, this.modelInstance[i].translation);
+                computeModelMatrixPosRot(dst, this.modelInstance[i].translation, this.modelInstance[i].euler);
                 mat4.mul(dst, this.motionState.final, dst);
             }
         }
