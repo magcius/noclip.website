@@ -11,7 +11,7 @@ import { assert, assertExists } from '../util';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { Camera, CameraController } from '../Camera';
 import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { TextureOverride, TextureMapping, FakeTextureHolder } from '../TextureHolder';
+import { TextureMapping, FakeTextureHolder } from '../TextureHolder';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
@@ -302,6 +302,8 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         cache.fetchFileData(`${pathBase}/pathBlock.bin`);
         cache.fetchFileData(`${pathBase}/movementBlock.bin`);
         cache.fetchFileData(`${pathBase}/objectBlock.bin`);
+        cache.fetchFileData(`${pathBase}/parentBlock.bin`);
+
         await cache.waitForLoad();
 
         // first load level-specific data
@@ -331,6 +333,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         const motionData = cache.getFileData(`${pathBase}/movementBlock.bin`);
         const pathData = cache.getFileData(`${pathBase}/pathBlock.bin`);
         const objectData = cache.getFileData(`${pathBase}/objectBlock.bin`);
+        const parentData = cache.getFileData(`${pathBase}/parentBlock.bin`);
 
         const gsMemoryMap = gsMemoryMapNew();
 
@@ -378,35 +381,53 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
 
         const motionCache = new Map<number, BIN.MotionParameters | null>();
         const objectCache = new Map<number, BIN.ObjectDefinition | null>();
-        for (let i = 0; i < missionSetupBin.objectSpawns.length; i++) {
-            const objectSpawn = missionSetupBin.objectSpawns[i];
-            let motion: BIN.MotionParameters | null = null;
-            if (objectSpawn.moveType >= 0) { // level 27 has a bunch of negative indices that aren't -1
-                if (!motionCache.has(objectSpawn.moveType))
-                    motionCache.set(objectSpawn.moveType, BIN.parseMotion(pathData, motionData, this.index, objectSpawn.moveType));
-                motion = motionCache.get(objectSpawn.moveType)!;
-            }
-
-            if (!objectCache.has(objectSpawn.objectId))
-                objectCache.set(objectSpawn.objectId, BIN.parseObjectDefinition(objectData, objectSpawn.objectId));
-            const objectDef = objectCache.get(objectSpawn.objectId)!;
-
-            const objectRenderer = new ObjectRenderer(objectSpawn, missionSetupBin.objectModels[objectSpawn.modelIndex].bbox, objectDef, motion);
-
-            const binModelSectorData = objectDatas[objectSpawn.modelIndex];
-            const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
-            for (let j = 0; j < binModelSectorData.modelData.length; j++) {
-                const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j]);
-                mat4.copy(binModelInstance.modelMatrix, objectSpawn.modelMatrix);
-                if (objectModel.transforms.length > 0) {
-                    mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j].matrix);
-                    vec3.copy(binModelInstance.euler, objectModel.transforms[j].rotation);
-                    vec3.copy(binModelInstance.translation, objectModel.transforms[j].translation);
+        for (let area = 0; area < missionSetupBin.objectSpawns.length; area++) {
+            const areaStartIndex = renderer.objectRenderers.length;
+            if (missionSetupBin.objectSpawns[area].length === 0)
+                continue;
+            for (let i = 0; i < missionSetupBin.objectSpawns[area].length; i++) {
+                const objectSpawn = missionSetupBin.objectSpawns[area][i];
+                let motion: BIN.MotionParameters | null = null;
+                if (objectSpawn.moveType >= 0) { // level 27 has a bunch of negative indices that aren't -1
+                    if (!motionCache.has(objectSpawn.moveType))
+                        motionCache.set(objectSpawn.moveType, BIN.parseMotion(pathData, motionData, this.index, objectSpawn.moveType));
+                    motion = motionCache.get(objectSpawn.moveType)!;
                 }
-                objectRenderer.modelInstance.push(binModelInstance);
-            }
 
-            renderer.objectRenderers.push(objectRenderer);
+                if (!objectCache.has(objectSpawn.objectId))
+                    objectCache.set(objectSpawn.objectId, BIN.parseObjectDefinition(objectData, objectSpawn.objectId));
+                const objectDef = objectCache.get(objectSpawn.objectId)!;
+
+                const modelInstances: BINModelInstance[] = [];
+                const binModelSectorData = objectDatas[objectSpawn.modelIndex];
+                const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
+                for (let j = 0; j < binModelSectorData.modelData.length; j++) {
+                    const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j]);
+                    mat4.copy(binModelInstance.modelMatrix, objectSpawn.modelMatrix);
+                    if (objectModel.transforms.length > 0) {
+                        mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j].matrix);
+                        vec3.copy(binModelInstance.euler, objectModel.transforms[j].rotation);
+                        vec3.copy(binModelInstance.translation, objectModel.transforms[j].translation);
+                    }
+                    modelInstances.push(binModelInstance);
+                }
+
+                const objectRenderer = new ObjectRenderer(objectSpawn, missionSetupBin.objectModels[objectSpawn.modelIndex].bbox, objectDef, modelInstances, motion);
+                renderer.objectRenderers.push(objectRenderer);
+            }
+            const parentList = BIN.getParentList(parentData, this.index, area);
+            if (parentList !== null) {
+                for (let j = 0; parentList[j] >= 0; j += 2) {
+                    if (parentList[j+1] < 0) // just set parent flag on object
+                        continue;
+                    const childIdx = missionSetupBin.objectSpawns[area].findIndex((spawn) => spawn.tableIndex === parentList[j]);
+                    const parentIdx = missionSetupBin.objectSpawns[area].findIndex((spawn) => spawn.tableIndex === parentList[j+1]);
+                    if (childIdx < 0 || parentIdx < 0)
+                        continue; // these seem to be the unnamed objects we are skipping
+                    assert(childIdx > parentIdx); // ensure proper processing order
+                    renderer.objectRenderers[areaStartIndex + childIdx].setParent(renderer.objectRenderers[areaStartIndex + parentIdx]);
+                }
+            }
         }
 
         return renderer;

@@ -92,6 +92,7 @@ export interface BINModelSector {
 }
 
 export interface ObjectModel {
+    id: number;
     sector: BINModelSector;
     transforms: PartTransform[];
     bbox: AABB;
@@ -132,6 +133,8 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
     // sometimes it appears like a dummy UNPACK (0x60, seen in model object binaries) ?
 
     const tag2 = view.getUint8(texDataOffs + 0x0F);
+    if (tag2 !== 0x50)
+        return 0; // TODO: fix credits
     assert(tag2 === 0x50, "TAG"); // DIRECT
     const texDataSize = view.getUint16(texDataOffs + 0x0C, true) * 0x10;
     const texDataEnd = texDataOffs + texDataSize;
@@ -925,6 +928,25 @@ export function parseObjectDefinition(data: ArrayBufferSlice, id: number): Objec
     return { stayLevel, speedIndex, altUpdate };
 }
 
+export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIndex: number): Int16Array | null {
+    const view = data.createDataView();
+    const offset = 0x261EC0;
+    const tableStart = 0x267798;
+
+    const entryStart = view.getUint32(tableStart + 4*levelIndex - offset, true);
+    if (entryStart === 0)
+        return null;
+
+    const pairStart = view.getUint32(entryStart + 4*areaIndex - offset, true);
+    if (pairStart === 0)
+        return null;
+
+    if (pairStart > 0xf0000000) // accidentally reading pair info? MAS7 area 2
+        return null;
+
+    return data.createTypedArray(Int16Array, pairStart - offset, undefined, Endianness.LITTLE_ENDIAN);
+}
+
 const scratchObjectAABB = new AABB();
 const scratchAABBTransform = mat4.create();
 function computeObjectAABB(sector: BINModelSector, transforms: PartTransform[]): AABB {
@@ -956,12 +978,18 @@ export interface MissionSetupObjectSpawn {
 
     // per-level motion specifier, including path and logic
     moveType: number;
+
+    // determines relationship to parent object, if any
+    linkAction: number;
+
+    // index in the master object table in the game
+    tableIndex: number;
 }
 
 export interface LevelSetupBIN {
     activeStageAreas: number[];
     objectModels: ObjectModel[];
-    objectSpawns: MissionSetupObjectSpawn[];
+    objectSpawns: MissionSetupObjectSpawn[][];
 }
 
 function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
@@ -1031,16 +1059,16 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
         if (sector === null)
             return null;
         const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
-        return { sector, transforms, bbox: computeObjectAABB(sector, transforms) };
+        return {id: objectId, sector, transforms, bbox: computeObjectAABB(sector, transforms)};
     }
 
     const objectModels: ObjectModel[] = [];
-    const objectSpawns: MissionSetupObjectSpawn[] = [];
+    const objectSpawns: MissionSetupObjectSpawn[][] = [];
 
     function findOrParseObject(objectId: number): number {
-        const existingSpawn = objectSpawns.find((spawn) => spawn.objectId === objectId);
-        if (existingSpawn !== undefined) {
-            return existingSpawn.modelIndex;
+        const existingIndex = objectModels.findIndex((model) => model.id === objectId);
+        if (existingIndex >= 0) {
+            return existingIndex;
         } else {
             const newObject = parseObject(objectId);
             if (newObject === null)
@@ -1054,6 +1082,8 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
     const activeStageAreas: number[] = [];
     let setupSpawnTableIdx = 0x14;
     for (let i = 0; i < 5; i++, setupSpawnTableIdx += 0x04) {
+        const areaObjectSpawns: MissionSetupObjectSpawn[] = [];
+        objectSpawns.push(areaObjectSpawns);
         let setupSpawnsIdx = view.getUint32(setupSpawnTableIdx, true);
         if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ') {
             if (i >= firstArea)
@@ -1081,7 +1111,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
         }
 
         let j = 0;
-        for (; ; setupSpawnsIdx += 0x40) {
+        for (let tableIndex = 0; ; setupSpawnsIdx += 0x40, tableIndex++) {
             // Flag names come from Katamari Damacy REROLL, on "AttachableProp"
             const u16NameIdx = view.getUint16(setupSpawnsIdx + 0x00, true);
             const u8LocPosType = view.getUint8(setupSpawnsIdx + 0x02);
@@ -1120,21 +1150,6 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
                     continue;
             }
 
-            // Skip "weird" objects (missing models, descriptions)
-            switch (objectId) {
-            case 0x0089:
-            case 0x0122:
-            case 0x017D:
-            case 0x01F3:
-            case 0x026B:
-            case 0x0277:
-            case 0x0364:
-            case 0x059E:
-            case 0x05A8:
-            case 0x05A9:
-                continue;
-            }
-
             const modelIndex = findOrParseObject(objectId);
             if (modelIndex === -1) {
                 console.log(`Missing object ${hexzero(objectId, 4)}; layer ${i} object index ${j}`);
@@ -1167,8 +1182,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
             }
 
             const dispOnAreaNo = Math.max(i, firstArea);
-            const objectSpawn: MissionSetupObjectSpawn = { objectId, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix, moveType: s16MoveTypeNo };
-            objectSpawns.push(objectSpawn);
+            areaObjectSpawns.push({ objectId, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix, moveType: s16MoveTypeNo, tableIndex, linkAction: u8LinkActNo });
             j++;
         }
     }

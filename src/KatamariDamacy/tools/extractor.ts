@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { openSync, readSync, closeSync, writeFileSync, mkdirSync } from "fs";
-import { readString } from "../../util";
+import { readString, hexzero } from "../../util";
 import { assert } from "console";
 
 // Ported from "unpack.py" by Murugo.
@@ -88,7 +88,7 @@ function dumpObjectNames(elf: ArrayBufferSlice): void {
     let idx = nametableOffs;
     for (let i = 0; i < 1718; i++) {
         const objectName = parseName(view, idx, 0x50);
-        console.log(objectName);
+        console.log(hexzero(i, 4), objectName);
         idx += 0x50;
     }
 }
@@ -214,6 +214,7 @@ function main() {
     writeBufferSync(`${pathBaseOut}/randomBlock.bin`,       elf.slice(0x116980, 0x117238));
     writeBufferSync(`${pathBaseOut}/pathBlock.bin`,         elf.slice(0x117290, 0X1607B0)); // maybe split this up?
     writeBufferSync(`${pathBaseOut}/movementBlock.bin`,     elf.slice(0x161D90, 0X162CF4));
+    writeBufferSync(`${pathBaseOut}/parentBlock.bin`,       elf.slice(0x162EC0, 0X168850));
     writeBufferSync(`${pathBaseOut}/missionBlock.bin`,      elf.slice(0x180340, 0X180E50));
 }
 

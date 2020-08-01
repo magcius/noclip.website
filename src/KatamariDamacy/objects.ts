@@ -23,6 +23,7 @@ interface MotionState {
     velocity: vec3; // not actually in the game
 
     adjustPitch: boolean;
+    isTall: boolean;
     pathIndex: number;
     speed: number;
 
@@ -38,25 +39,34 @@ interface MotionState {
 
     base: mat4;
     reference: mat4;
-    final: mat4;
     axis: vec3;
 
     timer: number;
     state: number;
 }
 
+interface ParentState {
+    parent: ObjectRenderer;
+    parentOffset: vec3;
+}
+
 const speedTable: number[] = [0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0];
 
 const scratchMatrix = mat4.create();
 export class ObjectRenderer {
-    public modelInstance: BINModelInstance[] = [];
     public visible = true;
 
     private animFunc: AnimFunc | null = null;
     public motionState: MotionState | null = null;
 
-    constructor(public objectSpawn: MissionSetupObjectSpawn, public bbox: AABB, def: ObjectDefinition, motion: MotionParameters | null) {
+    private parentState: ParentState | null = null;
+    public modelMatrix = mat4.create();
+    public position = vec3.create();
+
+    constructor(public objectSpawn: MissionSetupObjectSpawn, public bbox: AABB, def: ObjectDefinition, public modelInstances: BINModelInstance[], motion: MotionParameters | null) {
         this.animFunc = animFuncSelect(this.objectSpawn.objectId);
+        mat4.copy(this.modelMatrix, objectSpawn.modelMatrix);
+        mat4.getTranslation(this.position, this.modelMatrix);
         if (motion !== null) {
             // common speed logic, there may be others
             let speed = motion.speed; // from the path
@@ -69,12 +79,15 @@ export class ObjectRenderer {
 
             const pos = vec3.create();
             mat4.getTranslation(pos, objectSpawn.modelMatrix);
+            const isTall = motion.subMotionID === 0x14 && modelInstances.length > 0 &&
+                (modelInstances[0].binModelData.binModel.bbox.maxY > modelInstances[0].binModelData.binModel.bbox.maxX);
             this.motionState = {
                 parameters: motion,
                 useAltMotion: false,
                 speed,
                 pathIndex: -1,
                 adjustPitch: !def.stayLevel,
+                isTall,
 
                 pos,
                 target: vec3.create(),
@@ -92,13 +105,23 @@ export class ObjectRenderer {
 
                 base: mat4.clone(objectSpawn.modelMatrix),
                 reference: mat4.create(),
-                final: mat4.create(),
                 axis: vec3.create(),
 
                 timer: -1,
                 state: -1,
             };
         }
+    }
+
+    public setParent(parent: ObjectRenderer): void {
+        const parentOffset = vec3.create();
+        vec3.sub(parentOffset, this.position, parent.position);
+        mat4.transpose(scratchMatrix, parent.modelMatrix);
+        transformVec3Mat4w0(parentOffset, scratchMatrix, parentOffset);
+        this.parentState = {
+            parent,
+            parentOffset,
+        };
     }
 
     private runMotion(deltaTimeInFrames: number): boolean {
@@ -114,40 +137,66 @@ export class ObjectRenderer {
         // Game runs at 30fps.
         const deltaTimeInFrames = clamp(viewerInput.deltaTime / 33.0, 0.0, 2.0);
 
+        let updateInstances = false;
         let hasMotionImplementation = false;
         if (this.motionState !== null) {
             hasMotionImplementation = this.runMotion(deltaTimeInFrames);
+            vec3.copy(this.position, this.motionState.pos);
+            updateInstances = true;
 
             // TODO(jstpierre): Instead of generic transform structs, make the motions do their own matrix math? That would
             // make the XYZ ordering a lot easier to manage...
-            computeModelMatrixR(scratchMatrix, this.motionState.euler[0], this.motionState.euler[1], this.motionState.euler[2]);
-            mat4.mul(this.motionState.final, this.motionState.base, scratchMatrix);
-            computeModelMatrixR(scratchMatrix, this.motionState.euler2[0], this.motionState.euler2[1], this.motionState.euler2[2]);
-            mat4.mul(this.motionState.final, this.motionState.final, scratchMatrix);
-            computeModelMatrixR(scratchMatrix, this.motionState.euler3[0], this.motionState.euler3[1], this.motionState.euler3[2]);
-            mat4.mul(this.motionState.final, this.motionState.final, scratchMatrix);
-            setMatrixTranslation(this.motionState.final, this.motionState.pos);
+            computeModelMatrixR(this.modelMatrix, this.motionState.euler[0], this.motionState.euler[1], this.motionState.euler[2]);
+            mat4.mul(this.modelMatrix, this.motionState.base, this.modelMatrix);
 
-            // Position model instances correctly.
-            for (let i = 0; i < this.modelInstance.length; i++) {
-                const dst = this.modelInstance[i].modelMatrix;
-                computeModelMatrixPosRot(dst, this.modelInstance[i].translation, this.modelInstance[i].euler);
-                mat4.mul(dst, this.motionState.final, dst);
+            computeModelMatrixR(scratchMatrix, this.motionState.euler2[0], this.motionState.euler2[1], this.motionState.euler2[2]);
+            mat4.mul(this.modelMatrix, this.modelMatrix, scratchMatrix);
+            computeModelMatrixR(scratchMatrix, this.motionState.euler3[0], this.motionState.euler3[1], this.motionState.euler3[2]);
+            mat4.mul(this.modelMatrix, this.modelMatrix, scratchMatrix);
+            setMatrixTranslation(this.modelMatrix, this.position);
+        } else if (this.parentState)
+            // in the game, the parent composition uses the base matrix, which only exists in our motionState
+            // instead, make sure the model matrix stays at the initial "base" value before parent transform
+            mat4.copy(this.modelMatrix, this.objectSpawn.modelMatrix);
+
+        if (this.parentState) {
+            const parent = this.parentState.parent;
+            const ignoreParent = this.objectSpawn.linkAction === 4 || this.objectSpawn.linkAction === 6;
+            if (!ignoreParent) {
+                updateInstances = true;
+                // overwrite position entirely?
+                vec3.transformMat4(this.position, this.parentState.parentOffset, parent.modelMatrix);
+                // TODO: track when other logic gets used, default for now
+                if (parent.motionState) {
+                    computeModelMatrixR(scratchMatrix, parent.motionState.euler[0], parent.motionState.euler[1], parent.motionState.euler[2]);
+                    mat4.mul(this.modelMatrix, scratchMatrix, this.modelMatrix);
+                }
+                setMatrixTranslation(this.modelMatrix, this.position);
+                // skipping euler compose logic until it's actually used somewhere
             }
         }
+
+        // Position model instances correctly.
+        if (updateInstances)
+            for (let i = 0; i < this.modelInstances.length; i++) {
+                const dst = this.modelInstances[i].modelMatrix;
+                computeModelMatrixPosRot(dst, this.modelInstances[i].translation, this.modelInstances[i].euler);
+                mat4.mul(dst, this.modelMatrix, dst);
+            }
 
         if (this.animFunc !== null)
             this.animFunc(this, deltaTimeInFrames);
 
-        for (let i = 0; i < this.modelInstance.length; i++)
-            this.modelInstance[i].prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette);
+        for (let i = 0; i < this.modelInstances.length; i++)
+            this.modelInstances[i].prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette);
 
         const debugMotion = false;
-        if (debugMotion && this.motionState !== null) {
+        if (debugMotion) {
             mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
 
-            if (hasMotionImplementation) {
-                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, Green, 4);
+            if (hasMotionImplementation && this.motionState !== null) {
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.position, Green, 4);
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.target, Green, 4);
 
                 const m = mat4.create();
 
@@ -159,13 +208,13 @@ export class ObjectRenderer {
                 transformVec3Mat4w0(swayScratch, m, Vec3UnitZ);
                 drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 100, Green);
             } else {
-                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, Red, 4);
-                // drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.target, Green, 4);
-
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Motion 1 ${hexzero(this.motionState.parameters.motionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Motion 2 ${hexzero(this.motionState.parameters.altMotionID, 2)}`, 65, Magenta, { outline: 2, shadowBlur: 2 });
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Misc Motion ${hexzero(this.motionState.parameters.subMotionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.position, Red, 4);
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
+                if (this.motionState !== null) {
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Motion 1 ${hexzero(this.motionState.parameters.motionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Motion 2 ${hexzero(this.motionState.parameters.altMotionID, 2)}`, 65, Magenta, { outline: 2, shadowBlur: 2 });
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Misc Motion ${hexzero(this.motionState.parameters.subMotionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
+                }
             }
         }
     }
@@ -262,40 +311,40 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
 function animFunc_BARBER_D(object: ObjectRenderer, deltaTimeInFrames: number): void {
     // XXX(jstpierre): 100% empirical, not from game code at all, just want to show
     // how to use scrollTexture() basically.
-    scrollTexture(object.modelInstance[1], deltaTimeInFrames, Axis.X, -0.001);
+    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, -0.001);
 }
 
 function animFunc_HUKUBIKI_C(object: ObjectRenderer, deltaTimeInFrames: number): void {
-    rotateObject(object.modelInstance[1], deltaTimeInFrames, Axis.Z, 1.0);
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Z, 1.0);
 }
 
 function animFunc_COMPASS_A(object: ObjectRenderer, deltaTimeInFrames: number): void {
-    rotateObject(object.modelInstance[1], deltaTimeInFrames, Axis.Y, 1.0);
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Y, 1.0);
 }
 
 function animFunc_WINDMILL01_G(object: ObjectRenderer, deltaTimeInFrames: number): void {
-    rotateObject(object.modelInstance[1], deltaTimeInFrames, Axis.Z, 12.0);
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Z, 12.0);
 }
 
 function animFunc_POLIHOUSE_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
-    rotateObject(object.modelInstance[1], deltaTimeInFrames, Axis.Z, 1.0);
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Z, 1.0);
 }
 
 function animFunc_PLANE02_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
-    rotateObject(object.modelInstance[1], deltaTimeInFrames, Axis.Y, 16.8);
-    rotateObject(object.modelInstance[2], deltaTimeInFrames, Axis.X, 16.8);
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Y, 16.8);
+    rotateObject(object.modelInstances[2], deltaTimeInFrames, Axis.X, 16.8);
 }
 
 function animFunc_PLANE03_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
-    rotateObject(object.modelInstance[0], deltaTimeInFrames, Axis.Z, 16.8);
-    rotateObject(object.modelInstance[2], deltaTimeInFrames, Axis.Z, 16.8);
+    rotateObject(object.modelInstances[0], deltaTimeInFrames, Axis.Z, 16.8);
+    rotateObject(object.modelInstances[2], deltaTimeInFrames, Axis.Z, 16.8);
 }
 
 function animFunc_GenericVehicle(object: ObjectRenderer, deltaTimeInFrames: number): void {
     if (object.motionState === null)
         return;
-    rotateObject(object.modelInstance[1], deltaTimeInFrames, Axis.X, -4.0);
-    rotateObject(object.modelInstance[2], deltaTimeInFrames, Axis.X, -4.0);
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.X, -4.0);
+    rotateObject(object.modelInstances[2], deltaTimeInFrames, Axis.X, -4.0);
 }
 
 const enum MotionID {
@@ -411,21 +460,20 @@ function motionPathAngleStep(motion: MotionState, deltaTimeInFrames: number): nu
     return motion.euler[1];
 }
 
-function motionPathAdvancePoint(motion: MotionState, yOffset: number): void {
+function motionPathAdvancePoint(motion: MotionState, bbox: AABB): void {
     vec3.copy(motion.pos, motion.target);
     motion.pathIndex++;
     if (motion.pathIndex * 4 === motion.parameters.pathPoints.length)
         motion.pathIndex = 0;
     pathGetPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
-    motion.target[1] -= yOffset;
+    motion.target[1] -= motion.isTall ? bbox.maxX : bbox.maxY;
 }
 
 function motion_PathSpin_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
     if (motionPathHasReachedTarget(motion, deltaTimeInFrames)) {
         vec3.copy(motion.pos, motion.target);
 
-        const yOffset = object.bbox.maxY;
-        motionPathAdvancePoint(motion, yOffset);
+        motionPathAdvancePoint(motion, object.bbox);
     }
 
     vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
@@ -445,8 +493,7 @@ function motion_PathRoll_Follow(object: ObjectRenderer, motion: MotionState, del
         vec3.normalize(pathScratch, motion.velocity);
         motion.euler[1] = Math.PI + Math.atan2(pathScratch[0], pathScratch[2]);
 
-        const yOffset = object.bbox.maxY;
-        motionPathAdvancePoint(motion, yOffset);
+        motionPathAdvancePoint(motion, object.bbox);
 
         // Compute new velocity based on new target.
         vec3.sub(motion.velocity, motion.target, motion.pos);
@@ -472,13 +519,12 @@ function motion_PathRoll_Update(object: ObjectRenderer, motion: MotionState, del
 
 function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
     if (motionPathHasReachedTarget(motion, deltaTimeInFrames)) {
-        const yOffset = object.bbox.maxY;
-        motionPathAdvancePoint(motion, yOffset);
+        motionPathAdvancePoint(motion, object.bbox);
 
         vec3.sub(motion.velocity, motion.target, motion.pos);
         const distToTarget = vec3.length(motion.velocity);
 
-        getMatrixAxisZ(pathScratch, motion.final);
+        getMatrixAxisZ(pathScratch, object.modelMatrix);
 
         // compute angles based on forward vector, not current euler angle
         motion.euler[1] = Math.atan2(pathScratch[0], pathScratch[2]);
@@ -566,8 +612,8 @@ function miscSwayMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, m
     // translate by new up vector
     if (object.objectSpawn.objectId !== ObjectId.BALANCEDOLL01_C) {
         vec3.set(swayScratch, Math.sin(motion.euler[2]), -Math.cos(motion.euler[2]), 0);
-        transformVec3Mat4w0(swayScratch, motion.final, swayScratch);
-        const bottomOffset = object.modelInstance[0].binModelData.binModel.bbox.maxY;
+        transformVec3Mat4w0(swayScratch, object.modelMatrix, swayScratch);
+        const bottomOffset = object.modelInstances[0].binModelData.binModel.bbox.maxY;
         vec3.scale(swayScratch, swayScratch, bottomOffset);
         motion.pos[0] = object.objectSpawn.modelMatrix[12] + swayScratch[0];
         motion.pos[1] = object.objectSpawn.modelMatrix[13] + swayScratch[1] + bottomOffset;
@@ -588,7 +634,7 @@ function miscWhackAMoleMotionFunc(object: ObjectRenderer, deltaTimeInFrames: num
             motion.angle = 0;
             motion.timer = -1;
         }
-        const firstBBox = object.modelInstance[0].binModelData.binModel.bbox;
+        const firstBBox = object.modelInstances[0].binModelData.binModel.bbox;
         const buriedDepth = firstBBox.maxY + (firstBBox.maxY - firstBBox.minY);
         motion.pos[1] = object.objectSpawn.modelMatrix[13] + buriedDepth * (motion.state === 0 ? (1 - Math.sin(motion.angle)) : Math.sin(motion.angle));
     } else {
