@@ -852,7 +852,7 @@ function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: 
 }
 
 export interface MotionParameters {
-    globalMotionIndex: number;
+    subMotionID: number;
     motionID: number;
     altMotionID: number;
     pathPoints: Float32Array;
@@ -874,15 +874,15 @@ export function parseMotion(pathData: ArrayBufferSlice, motionData: ArrayBufferS
 
     const backupIndex = motionView.getInt16(entryStart + 0x00, true);
     const pathIndex = motionView.getInt16(entryStart + 0x02, true);
-    const globalMotionIndex = motionView.getInt16(entryStart + 0x04, true);
+    const subMotionID = motionView.getInt16(entryStart + 0x04, true);
 
     let motionID = 0, altMotionID = 0;
-    if (globalMotionIndex < 0) {
+    if (subMotionID < 0) {
         assert(backupIndex >= 0 && backupIndex < 3);
         motionID = backupIndex + 1;
     } else {
-        motionID = motionView.getUint16(allMotions + 4 * globalMotionIndex + 0x00 - motionOffset, true);
-        altMotionID = motionView.getUint16(allMotions + 4 * globalMotionIndex + 0x02 - motionOffset, true);
+        motionID = motionView.getUint16(allMotions + 4 * subMotionID + 0x00 - motionOffset, true);
+        altMotionID = motionView.getUint16(allMotions + 4 * subMotionID + 0x02 - motionOffset, true);
     }
 
     const pathOffset = 0x216290;
@@ -903,7 +903,7 @@ export function parseMotion(pathData: ArrayBufferSlice, motionData: ArrayBufferS
     pointCount -= 2; // we incremented once too many, and the 255 point isn't part of the path
     const pathPoints = pathData.createTypedArray(Float32Array, pointStart - pathOffset, 4 * pointCount, Endianness.LITTLE_ENDIAN);
 
-    return { motionID, altMotionID, pathPoints, speed, globalMotionIndex };
+    return { motionID, altMotionID, pathPoints, speed, subMotionID };
 }
 
 export interface ObjectDefinition {

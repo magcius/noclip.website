@@ -210,7 +210,6 @@ function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, Gfx
     }
 }
 
-const textureMatrix = mat4.create();
 export class BINModelPartInstance {
     private gfxProgram: GfxProgram;
     private textureMapping = nArray(1, () => new TextureMapping());
@@ -278,14 +277,15 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrix: mat4, modelMatrix: mat4, currentPalette: number): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrix: mat4, modelMatrix: mat4, textureMatrix: mat4, currentPalette: number): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
         renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, this.layer);
 
+        mat4.copy(scratchTextureMatrix, textureMatrix);
         if (this.binModelPart.textureIndex !== null)
-            this.sectorData.textureData[this.binModelPart.textureIndex].fillTextureMapping(this.textureMapping[0], textureMatrix, currentPalette);
+            this.sectorData.textureData[this.binModelPart.textureIndex].fillTextureMapping(this.textureMapping[0], scratchTextureMatrix, currentPalette);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
@@ -294,7 +294,7 @@ export class BINModelPartInstance {
         const mapped = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
         offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
         offs += fillMatrix4x3(mapped, offs, modelMatrix);
-        offs += fillMatrix4x2(mapped, offs, textureMatrix);
+        offs += fillMatrix4x2(mapped, offs, scratchTextureMatrix);
         offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -306,8 +306,9 @@ const cullModeFlags = {
     cullMode: GfxCullMode.BACK,
 };
 export class BINModelInstance {
-    public modelMatrix: mat4 = mat4.create();
+    public modelMatrix = mat4.create();
     public modelParts: BINModelPartInstance[] = [];
+    public textureMatrix = mat4.create();
     public visible = true;
 
     public translation = vec3.create();
@@ -340,12 +341,13 @@ export class BINModelInstance {
         mat4.mul(scratchMatrix[0], scratchMatrix[0], scratchMatrix[1]);
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(renderInstManager, scratchMatrix[0], scratchMatrix[1], currentPalette);
+            this.modelParts[i].prepareToRender(renderInstManager, scratchMatrix[0], scratchMatrix[1], this.textureMatrix, currentPalette);
 
         renderInstManager.popTemplateRenderInst();
     }
 }
 
+const scratchTextureMatrix = mat4.create();
 class BINTextureData {
     public gfxTexture: GfxTexture[] = [];
     public viewerTexture: Viewer.Texture[] = [];
@@ -370,12 +372,10 @@ class BINTextureData {
     public fillTextureMapping(m: TextureMapping, dstMtx: mat4, paletteIndex: number = 0): void {
         if (this.texture.pixels[paletteIndex] === 'framebuffer') {
             m.lateBinding = 'framebuffer';
-            dstMtx[5] = -1;
-            dstMtx[13] = 1;
+            dstMtx[5] *= -1;
+            dstMtx[13] += 1;
         } else {
             m.gfxTexture = this.gfxTexture[paletteIndex];
-            dstMtx[5] = 1;
-            dstMtx[13] = 0;
         }
     }
 

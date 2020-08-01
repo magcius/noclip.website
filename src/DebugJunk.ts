@@ -2,7 +2,7 @@
 
 import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS, Red, Green, Blue } from "./Color";
-import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
+import { divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, vec3, mat4, ReadonlyMat4, ReadonlyVec3 } from "gl-matrix";
 import { nArray, assert, assertExists, hexdump, magicstr } from "./util";
 import { UI, Slider } from "./ui";
