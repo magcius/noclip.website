@@ -4,12 +4,12 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition } from "./bin";
 import { mat4, vec3 } from "gl-matrix";
-import { clamp, Vec3Zero, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR } from "../MathHelpers";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceText } from "../DebugJunk";
+import { clamp, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR, Vec3UnitZ } from "../MathHelpers";
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceText } from "../DebugJunk";
 import { AABB } from "../Geometry";
-import { Magenta } from "../Color";
-import { hexzero } from "../util";
+import { Red, Green, Magenta } from "../Color";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
+import { hexzero } from "../util";
 
 type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => void;
 
@@ -141,15 +141,24 @@ export class ObjectRenderer {
         const debugMotion = false;
         if (debugMotion) {
             if (this.motionState !== null && this.motionState.useAltMotion) {
-                mat4.identity(scratchMatrix);
-                mat4.rotateX(scratchMatrix, scratchMatrix, Math.PI);
-                mat4.mul(scratchMatrix, scratchMatrix, this.modelInstance[0].modelMatrix);
-                mat4.mul(scratchMatrix, window.main.viewer.camera.clipFromWorldMatrix, scratchMatrix);
-                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, Magenta, 4);
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Motion 1 ${hexzero(this.motionState.parameters.motionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Motion 2 ${hexzero(this.motionState.parameters.altMotionID, 2)}`, 65, Magenta, { outline: 2, shadowBlur: 2 });
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, Vec3Zero, `Misc Motion ${hexzero(this.motionState.parameters.subMotionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
+                mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.target, Green, 4);
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, Red, 4);
+
+                const m = mat4.create();
+
+                mat4.fromYRotation(m, this.motionState.euler[1]);
+                transformVec3Mat4w0(swayScratch, m, Vec3UnitZ);
+                drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 50, Red);
+
+                mat4.fromYRotation(m, this.motionState.eulerTarget[1]);
+                transformVec3Mat4w0(swayScratch, m, Vec3UnitZ);
+                drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 50, Green);
+
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Motion 1 ${hexzero(this.motionState.parameters.motionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Motion 2 ${hexzero(this.motionState.parameters.altMotionID, 2)}`, 65, Magenta, { outline: 2, shadowBlur: 2 });
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Misc Motion ${hexzero(this.motionState.parameters.subMotionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
             }
         }
     }
@@ -292,25 +301,25 @@ function vehicleAnimFunc(object: ObjectRenderer, deltaTimeInFrames: number): voi
 }
 
 const enum MotionID {
-    PATH_COLLISION = 0x02,
-    PATH_ROLL      = 0x15,
-    MISC           = 0x16,
-    PATH_SETUP     = 0x19,
-    PATH_SIMPLE    = 0x1D,
+    PathCollision = 0x02,
+    PathRoll      = 0x15,
+    Misc          = 0x16,
+    PathSetup     = 0x19,
+    PathSimple    = 0x1D,
 }
 
 function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: MotionID, deltaTimeInFrames: number): void {
-    if (motionID === MotionID.PATH_ROLL) {
+    if (motionID === MotionID.PathRoll) {
         motion.euler2[0] += 0.15 * deltaTimeInFrames;
         motionPathAngleStep(motion, deltaTimeInFrames);
-        motionPathFollowBasic(object, motion, deltaTimeInFrames, true);
-    } else if (motionID === MotionID.PATH_SIMPLE || motionID === MotionID.PATH_COLLISION) {
-        followPath(object, motion, deltaTimeInFrames);
-    } else if (motionID === MotionID.PATH_SETUP) {
+        motion_PathRoll_Follow(object, motion, deltaTimeInFrames);
+    } else if (motionID === MotionID.PathSimple || motionID === MotionID.PathCollision) {
+        motion_PathSimple_Update(object, motion, deltaTimeInFrames);
+    } else if (motionID === MotionID.PathSetup) {
         // TODO(jstpierre): Set up the path differently based on the submotion.
         motion.useAltMotion = true;
-        followPath(object, motion, deltaTimeInFrames);
-    } else if (motionID === MotionID.MISC) {
+        motion_PathSimple_Update(object, motion, deltaTimeInFrames);
+    } else if (motionID === MotionID.Misc) {
         const subMotionID = motion.parameters.subMotionID;
         if (subMotionID === 0x15)
             miscSpinMotionFunc(object, deltaTimeInFrames, motion);
@@ -325,7 +334,7 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: Mo
     }
 }
 
-function pathPoint(dst: vec3, path: Float32Array, i: number): void {
+function pathGetPoint(dst: vec3, path: Float32Array, i: number): void {
     vec3.set(dst, path[4 * i + 0], path[4 * i + 1], path[4 * i + 2]);
 }
 
@@ -335,11 +344,11 @@ function pathFindStartIndex(pos: vec3, path: Float32Array): number {
     let secPoint = -1;
     let secDist = 0;
 
-    pathPoint(pathScratch, path, 0);
+    pathGetPoint(pathScratch, path, 0);
     let minDist = vec3.dist(pos, pathScratch);
 
     for (let i = 1; 4 * i < path.length; i++) {
-        pathPoint(pathScratch, path, i);
+        pathGetPoint(pathScratch, path, i);
         const d = vec3.dist(pos, pathScratch);
         if (d < minDist) {
             secDist = minDist;
@@ -358,49 +367,8 @@ function pathFindStartIndex(pos: vec3, path: Float32Array): number {
     return Math.max(minPoint, secPoint);
 }
 
-function motionPathTargetNextPoint(motion: MotionState, yOffset: number, calcEuler: boolean): void {
-    vec3.copy(motion.pos, motion.target);
-    motion.pathIndex++;
-    if (motion.pathIndex * 4 === motion.parameters.pathPoints.length)
-        motion.pathIndex = 0;
-    pathPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
-    motion.target[1] -= yOffset;
-
-    vec3.sub(motion.velocity, motion.target, motion.pos);
-    const distToTarget = vec3.length(motion.velocity);
-
-    getMatrixAxisZ(pathScratch, motion.final);
-
-    if (calcEuler) {
-        // compute angles based on forward vector, not current euler angle
-        motion.euler[1] = Math.atan2(pathScratch[0], pathScratch[2]);
-
-        motion.eulerTarget[1] = Math.PI + Math.atan2(motion.velocity[0], motion.velocity[2]);
-        const framesUntilYaw = distToTarget / (motion.speed === 0 ? 30 : motion.speed);
-        motion.eulerStep[1] = angleDist(motion.euler[1], motion.eulerTarget[1]) / framesUntilYaw;
-    }
-
-    // TODO: figure out what's going on with the collision check for COLLISION_PATH
-    if (motion.adjustPitch) {
-        mat4.copy(motion.reference, motion.base);
-        // set rotation axis for pitch, perpendicular to slope
-        vec3.set(motion.axis, motion.velocity[2], 0, -motion.velocity[0]);
-        vec3.normalize(motion.axis, motion.axis);
-
-        vec3.normalize(motion.velocity, motion.velocity);
-        vec3.normalize(pathScratch, pathScratch);
-        const dot = -motion.velocity[1] * pathScratch[1] +
-            Math.hypot(motion.velocity[0], motion.velocity[2]) * Math.hypot(pathScratch[0], pathScratch[2]);
-        motion.angleTarget = Math.acos(clamp(dot, -1, 1));
-        if (-motion.velocity[1] < pathScratch[1])
-            motion.angleTarget *= -1;
-        const framesUntilPitch = motion.speed === 0 ? 4 : (0.25 * distToTarget / motion.speed);
-        // pitch will actual track how much we've rotated about the axis
-        motion.angleStep = motion.angleTarget / framesUntilPitch;
-        motion.angle = 0;
-    }
-
-    normToLength(motion.velocity, motion.speed);
+function motionPathHasReachedTarget(motion: MotionState, deltaTimeInFrames: number): boolean {
+    return vec3.dist(motion.target, motion.pos) <= motion.speed * deltaTimeInFrames;
 }
 
 const pitchTransformScratch = mat4.create();
@@ -429,25 +397,97 @@ function motionPathAngleStep(motion: MotionState, deltaTimeInFrames: number): nu
     return motion.euler[1];
 }
 
-function motionPathFollowBasic(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number, calcEuler: boolean): void {
-    if (vec3.dist(motion.target, motion.pos) <= motion.speed * deltaTimeInFrames)
-        motionPathTargetNextPoint(motion, object.bbox.maxY, calcEuler);
+function motionPathAdvancePoint(motion: MotionState, yOffset: number): void {
+    vec3.copy(motion.pos, motion.target);
+    motion.pathIndex++;
+    if (motion.pathIndex * 4 === motion.parameters.pathPoints.length)
+        motion.pathIndex = 0;
+    pathGetPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
+    motion.target[1] -= yOffset;
+}
+
+function motion_PathRoll_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
+    if (motionPathHasReachedTarget(motion, deltaTimeInFrames)) {
+        // Compute angles based on velocity before the point switch
+        vec3.normalize(pathScratch, motion.velocity);
+        motion.euler[1] = Math.PI + Math.atan2(pathScratch[0], pathScratch[2]);
+
+        const yOffset = object.bbox.maxY;
+        motionPathAdvancePoint(motion, yOffset);
+
+        // Compute new velocity based on new target.
+        vec3.sub(motion.velocity, motion.target, motion.pos);
+        const distToTarget = vec3.length(motion.velocity);
+
+        getMatrixAxisZ(pathScratch, motion.final);
+
+        motion.eulerTarget[1] = Math.PI + Math.atan2(motion.velocity[0], motion.velocity[2]);
+        const framesUntilYaw = distToTarget / (motion.speed === 0 ? 30 : motion.speed);
+        motion.eulerStep[1] = angleDist(motion.euler[1], motion.eulerTarget[1]) / framesUntilYaw;
+
+        // TODO(jstpierre): Verify, but I don't believe that adjustPitch support exists in the PathRoll code.
+
+        normToLength(motion.velocity, motion.speed);
+    }
 
     vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
 }
 
-function followPath(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
+function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
+    if (motionPathHasReachedTarget(motion, deltaTimeInFrames)) {
+        const yOffset = object.bbox.maxY;
+        motionPathAdvancePoint(motion, yOffset);
+
+        vec3.sub(motion.velocity, motion.target, motion.pos);
+        const distToTarget = vec3.length(motion.velocity);
+
+        getMatrixAxisZ(pathScratch, motion.final);
+
+        // compute angles based on forward vector, not current euler angle
+        motion.euler[1] = Math.atan2(pathScratch[0], pathScratch[2]);
+
+        motion.eulerTarget[1] = Math.PI + Math.atan2(motion.velocity[0], motion.velocity[2]);
+        const framesUntilYaw = distToTarget / (motion.speed === 0 ? 30 : motion.speed);
+        motion.eulerStep[1] = angleDist(motion.euler[1], motion.eulerTarget[1]) / framesUntilYaw;
+
+        // TODO: figure out what's going on with the collision check for COLLISION_PATH
+        if (motion.adjustPitch) {
+            mat4.copy(motion.reference, motion.base);
+            // set rotation axis for pitch, perpendicular to slope
+            vec3.set(motion.axis, motion.velocity[2], 0, -motion.velocity[0]);
+            vec3.normalize(motion.axis, motion.axis);
+    
+            vec3.normalize(motion.velocity, motion.velocity);
+            vec3.normalize(pathScratch, pathScratch);
+            const dot = -motion.velocity[1] * pathScratch[1] +
+                Math.hypot(motion.velocity[0], motion.velocity[2]) * Math.hypot(pathScratch[0], pathScratch[2]);
+            motion.angleTarget = Math.acos(clamp(dot, -1, 1));
+            if (-motion.velocity[1] < pathScratch[1])
+                motion.angleTarget *= -1;
+            const framesUntilPitch = motion.speed === 0 ? 4 : (0.25 * distToTarget / motion.speed);
+            // pitch will actual track how much we've rotated about the axis
+            motion.angleStep = motion.angleTarget / framesUntilPitch;
+            motion.angle = 0;
+        }
+
+        normToLength(motion.velocity, motion.speed);
+    }
+
+    vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
+}
+
+function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
     if (motion.pathIndex < 0) {
         mat4.identity(motion.base);
         motion.pathIndex = pathFindStartIndex(motion.pos, motion.parameters.pathPoints);
 
         // snapping to the first point only happens for COLLISION_PATH, but it fixes some weirdness with starting simple paths
         // which might not be visible in game
-        pathPoint(motion.pos, motion.parameters.pathPoints, motion.pathIndex);
+        pathGetPoint(motion.pos, motion.parameters.pathPoints, motion.pathIndex);
         motion.pos[1] -= object.bbox.maxY;
         motion.pathIndex++;
 
-        pathPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
+        pathGetPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
         motion.target[1] -= object.bbox.maxY; // adjust target to object center height, kind of weird because of the coordinate system
         motion.euler[1] = Math.PI + Math.atan2(motion.target[0] - motion.pos[0], motion.target[2] - motion.pos[2]);
 
@@ -456,7 +496,7 @@ function followPath(object: ObjectRenderer, motion: MotionState, deltaTimeInFram
     }
 
     motionPathAngleStep(motion, deltaTimeInFrames);
-    motionPathFollowBasic(object, motion, deltaTimeInFrames, true);
+    motion_PathSimple_Follow(object, motion, deltaTimeInFrames);
 
     if (motion.adjustPitch)
         motionPathAdjustBasePitch(motion, deltaTimeInFrames);
