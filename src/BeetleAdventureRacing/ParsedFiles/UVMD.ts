@@ -1,5 +1,5 @@
 import { Filesystem, UVFile } from "../Filesystem";
-import { assert } from "../../util";
+import { assert, leftPad } from "../../util";
 import { mat4, vec3 } from "gl-matrix";
 import { UVTX } from "./UVTX";
 import { parseVertices, parseTriangles, parseMatrix } from "./Common";
@@ -51,7 +51,7 @@ export class UVMD {
     // struct also contains lodCount and partsPerLOD/matrixCount but that's redundant here
     // struct also contains pDisplayListCommands but we don't need it
     // struct also contains vertexCount but we don't need it
-    // TODO: the actual struct has an extra 6 bytes after this - what is it used for?
+    public unkPtr: null; //TODO: figure out what this pointer means
 
     // This code I've manually decompiled, so it should be functionally complete
     // aside from a few bits marked TODO
@@ -131,7 +131,7 @@ export class UVMD {
 
                 for (let k = 0; k < materialCount; k++) {
                     const unk_someinfo = view.getUint32(curPos);
-
+                    
                     const lightPackedColor1 = view.getUint32(curPos + 4);
                     const lightPackedColor2 = view.getUint32(curPos + 8);
                     const lightPackedColor3 = view.getUint32(curPos + 12);

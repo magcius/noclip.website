@@ -1,7 +1,6 @@
-import { mat4 } from "gl-matrix";
-import { colorNewFromRGBA } from "../Color";
+
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { BasicRenderTarget, makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { executeOnPass } from "../gfx/render/GfxRenderer";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
@@ -9,24 +8,30 @@ import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Filesystem, loadFilesystem } from "./Filesystem";
 import { UVTR, UVTRRenderer } from "./ParsedFiles/UVTR";
-import { TempTestingProgram, MaterialRenderer } from "./MaterialRenderer";
+import { CameraController } from "../Camera";
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 1 },
+    { numUniformBuffers: 3, numSamplers: 2 },
 ];
 
 class BARRenderer implements SceneGfx {
 
     public renderHelper: GfxRenderHelper;
-    public program: TempTestingProgram;
     private renderTarget = new BasicRenderTarget();
 
     private uvtrRenderer: UVTRRenderer;
 
     constructor(device: GfxDevice, uvtr: UVTR) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.program = new TempTestingProgram();
+
+        // TODO: the way this rendering setup works, it should result in a ton of duplicate renderers
+        // Simplest way to solve this would be with a cache but maybe it's a sign there's a better way
+        // to organize my code?
         this.uvtrRenderer = new UVTRRenderer(uvtr, device);
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(0.05);
     }
 
     // TODO-ASK: what is a render inst?
@@ -59,7 +64,7 @@ class BARRenderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, makeClearRenderPassDescriptor(true, colorNewFromRGBA(0, 0, 0, 1)));
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, passRenderer, 0);
         // executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
 

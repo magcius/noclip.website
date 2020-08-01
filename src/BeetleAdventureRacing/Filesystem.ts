@@ -21,6 +21,8 @@ export class UVFile {
 
 // Everything is set up to be lazy for now
 export class Filesystem {
+    //TODO: use magicstr()
+
     private fileTypeToFileLocations: Map<string, number[]> = new Map();
     private filesBuffer: ArrayBufferSlice;
     private filesDataView: DataView;
@@ -62,6 +64,7 @@ export class Filesystem {
         }
     }
 
+    // what's the point of a powerful type system if you can't have a little fun with it
     public getParsedFile<T>(returnClass: new(uvFile: UVFile, filesystem: Filesystem) => T, type: string, index: number): T {
         let key: string = type + index.toString();
         
@@ -136,14 +139,6 @@ export class Filesystem {
         return chunks;
     }
 
-
     public destroy(device: GfxDevice): void {
-        // for (let i = 0; i < this.textureData.length; i++)
-        //     this.textureData[i].destroy(device);
-        // for (let i = 0; i < this.uvmdData.length; i++)
-        //     this.uvmdData[i].destroy(device);
-        // for (let i = 0; i < this.uvctData.length; i++)
-        //     this.uvctData[i].destroy(device);
-        // this.gfxRenderCache.destroy(device);
     }
 }

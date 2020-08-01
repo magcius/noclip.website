@@ -36,6 +36,7 @@ export class UVCT {
 
         // Copied (with some modifications) from PW64
         // TODO: why is there this and also the materials?
+        // TODO: try rendering this
         this.indexData = new Uint16Array(3 * faceCount);
         this.triFlags = new Uint16Array(faceCount);
         for (let i = 0, j = 0; i < this.indexData.length;) {
