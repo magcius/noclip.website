@@ -9,7 +9,7 @@ import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, dra
 import { AABB } from "../Geometry";
 import { Red, Green, Magenta } from "../Color";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
-import { hexzero } from "../util";
+import { hexzero, assert } from "../util";
 
 type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => void;
 
@@ -29,8 +29,8 @@ interface MotionState {
     euler: vec3;
     eulerStep: vec3;
     eulerTarget: vec3;
-
     euler2: vec3;
+    euler3: vec3;
 
     angle: number;
     angleStep: number;
@@ -84,6 +84,7 @@ export class ObjectRenderer {
                 eulerStep: vec3.create(),
                 eulerTarget: vec3.create(),
                 euler2: vec3.create(),
+                euler3: vec3.create(),
 
                 angle: 0,
                 angleStep: 0,
@@ -100,10 +101,10 @@ export class ObjectRenderer {
         }
     }
 
-    private runMotion(deltaTimeInFrames: number): void {
+    private runMotion(deltaTimeInFrames: number): boolean {
         const motionState = this.motionState!;
         const motionID = (motionState.useAltMotion && motionState.parameters.altMotionID !== 0) ? motionState.parameters.altMotionID : motionState.parameters.motionID;
-        runMotionFunc(this, motionState, motionID, deltaTimeInFrames);
+        return runMotionFunc(this, motionState, motionID, deltaTimeInFrames);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, toNoclip: mat4, currentPalette: number): void {
@@ -113,14 +114,17 @@ export class ObjectRenderer {
         // Game runs at 30fps.
         const deltaTimeInFrames = clamp(viewerInput.deltaTime / 33.0, 0.0, 2.0);
 
+        let hasMotionImplementation = false;
         if (this.motionState !== null) {
-            this.runMotion(deltaTimeInFrames);
+            hasMotionImplementation = this.runMotion(deltaTimeInFrames);
 
             // TODO(jstpierre): Instead of generic transform structs, make the motions do their own matrix math? That would
             // make the XYZ ordering a lot easier to manage...
-            computeModelMatrixR(this.motionState.final, this.motionState.euler[0], this.motionState.euler[1], this.motionState.euler[2]);
-            mat4.mul(this.motionState.final, this.motionState.base, this.motionState.final);
+            computeModelMatrixR(scratchMatrix, this.motionState.euler[0], this.motionState.euler[1], this.motionState.euler[2]);
+            mat4.mul(this.motionState.final, this.motionState.base, scratchMatrix);
             computeModelMatrixR(scratchMatrix, this.motionState.euler2[0], this.motionState.euler2[1], this.motionState.euler2[2]);
+            mat4.mul(this.motionState.final, this.motionState.final, scratchMatrix);
+            computeModelMatrixR(scratchMatrix, this.motionState.euler3[0], this.motionState.euler3[1], this.motionState.euler3[2]);
             mat4.mul(this.motionState.final, this.motionState.final, scratchMatrix);
             setMatrixTranslation(this.motionState.final, this.motionState.pos);
 
@@ -139,21 +143,24 @@ export class ObjectRenderer {
             this.modelInstance[i].prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette);
 
         const debugMotion = false;
-        if (debugMotion) {
-            if (this.motionState !== null && this.animFunc !== null) {
-                mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
-                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.target, Green, 4);
-                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, Red, 4);
+        if (debugMotion && this.motionState !== null) {
+            mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
+
+            if (hasMotionImplementation) {
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, Green, 4);
 
                 const m = mat4.create();
 
                 mat4.fromYRotation(m, this.motionState.euler[1]);
                 transformVec3Mat4w0(swayScratch, m, Vec3UnitZ);
-                drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 50, Red);
+                drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 100, Red);
 
                 mat4.fromYRotation(m, this.motionState.eulerTarget[1]);
                 transformVec3Mat4w0(swayScratch, m, Vec3UnitZ);
-                drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 50, Green);
+                drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 100, Green);
+            } else {
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, Red, 4);
+                // drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.target, Green, 4);
 
                 drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
                 drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, `Motion 1 ${hexzero(this.motionState.parameters.motionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
@@ -300,7 +307,7 @@ const enum MotionID {
     PathSimple    = 0x1D,
 }
 
-function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: MotionID, deltaTimeInFrames: number): void {
+function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: MotionID, deltaTimeInFrames: number): boolean {
     if (motionID === MotionID.PathSpin) {
         motion_PathSpin_Update(object, motion, deltaTimeInFrames);
     } else if (motionID === MotionID.PathRoll) {
@@ -308,7 +315,18 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: Mo
     } else if (motionID === MotionID.PathSimple || motionID === MotionID.PathCollision) {
         motion_PathSimple_Update(object, motion, deltaTimeInFrames);
     } else if (motionID === MotionID.PathSetup) {
-        // TODO(jstpierre): Set up the path differently based on the submotion.
+        if (motion.parameters.subMotionID === 0x14) {
+            // Submotion 0x14 seems to suggest PathRoll.
+            assert(motion.parameters.altMotionID === MotionID.PathRoll);
+
+            // If it's taller than it is wide, roll it on its side. Normally, this is implemented
+            // by setting a bitflag, and the setup code for PathRoll does the rotation. But since
+            // we don't have setup funcs for the states (yet), just do it here in the PathSetup.
+            if (object.bbox.maxY > object.bbox.maxX)
+                motion.euler3[2] = MathConstants.TAU / 4;
+        }
+
+        // TODO(jstpierre): Implement PathSetup properly.
         motion.useAltMotion = true;
         motion_PathSimple_Update(object, motion, deltaTimeInFrames);
     } else if (motionID === MotionID.Misc) {
@@ -323,7 +341,11 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: Mo
             miscSwayMotionFunc(object, deltaTimeInFrames, motion);
         else if (subMotionID === 0x22)
             miscWhackAMoleMotionFunc(object, deltaTimeInFrames, motion);
+    } else {
+        return false;
     }
+
+    return true;
 }
 
 function pathGetPoint(dst: vec3, path: Float32Array, i: number): void {
