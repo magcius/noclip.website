@@ -140,7 +140,7 @@ export class ObjectRenderer {
 
         const debugMotion = false;
         if (debugMotion) {
-            if (this.motionState !== null && this.motionState.useAltMotion) {
+            if (this.motionState !== null && this.animFunc !== null) {
                 mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
                 drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.target, Green, 4);
                 drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, Red, 4);
@@ -173,14 +173,6 @@ const enum Axis { X, Y, Z }
 
 function rotateObject(modelInstance: BINModelInstance, deltaTimeInFrames: number, axis: Axis, value: number): void {
     const angle = (value / -60.0) * deltaTimeInFrames;
-
-    if (axis === Axis.X)
-        mat4.rotateX(modelInstance.modelMatrix, modelInstance.modelMatrix, angle);
-    else if (axis === Axis.Y)
-        mat4.rotateY(modelInstance.modelMatrix, modelInstance.modelMatrix, angle);
-    else if (axis === Axis.Z)
-        mat4.rotateZ(modelInstance.modelMatrix, modelInstance.modelMatrix, angle);
-
     modelInstance.euler[axis] += angle;
 }
 
@@ -253,7 +245,7 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     case ObjectId.KIDDYCAR01_C:
     case ObjectId.KIDDYCAR02_C:
     case ObjectId.ZOKUCAR_E:
-        return vehicleAnimFunc;
+        return animFunc_GenericVehicle;
     case ObjectId.PLANE02_F: return animFunc_PLANE02_F;
     case ObjectId.PLANE03_F: return animFunc_PLANE03_F;
     }
@@ -292,16 +284,16 @@ function animFunc_PLANE03_F(object: ObjectRenderer, deltaTimeInFrames: number): 
     rotateObject(object.modelInstance[2], deltaTimeInFrames, Axis.Z, 16.8);
 }
 
-function vehicleAnimFunc(object: ObjectRenderer, deltaTimeInFrames: number): void {
+function animFunc_GenericVehicle(object: ObjectRenderer, deltaTimeInFrames: number): void {
     if (object.motionState === null)
-        return; // don't turn the wheels if we aren't moving
-    // really feels like this should depend on movement speed
+        return;
     rotateObject(object.modelInstance[1], deltaTimeInFrames, Axis.X, -4.0);
     rotateObject(object.modelInstance[2], deltaTimeInFrames, Axis.X, -4.0);
 }
 
 const enum MotionID {
     PathCollision = 0x02,
+    PathSpin      = 0x14,
     PathRoll      = 0x15,
     Misc          = 0x16,
     PathSetup     = 0x19,
@@ -309,10 +301,10 @@ const enum MotionID {
 }
 
 function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: MotionID, deltaTimeInFrames: number): void {
-    if (motionID === MotionID.PathRoll) {
-        motion.euler2[0] += 0.15 * deltaTimeInFrames;
-        motionPathAngleStep(motion, deltaTimeInFrames);
-        motion_PathRoll_Follow(object, motion, deltaTimeInFrames);
+    if (motionID === MotionID.PathSpin) {
+        motion_PathSpin_Update(object, motion, deltaTimeInFrames);
+    } else if (motionID === MotionID.PathRoll) {
+        motion_PathRoll_Update(object, motion, deltaTimeInFrames);
     } else if (motionID === MotionID.PathSimple || motionID === MotionID.PathCollision) {
         motion_PathSimple_Update(object, motion, deltaTimeInFrames);
     } else if (motionID === MotionID.PathSetup) {
@@ -406,6 +398,25 @@ function motionPathAdvancePoint(motion: MotionState, yOffset: number): void {
     motion.target[1] -= yOffset;
 }
 
+function motion_PathSpin_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
+    if (motionPathHasReachedTarget(motion, deltaTimeInFrames)) {
+        vec3.copy(motion.pos, motion.target);
+
+        const yOffset = object.bbox.maxY;
+        motionPathAdvancePoint(motion, yOffset);
+    }
+
+    vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
+
+    vec3.sub(motion.velocity, motion.target, motion.pos);
+    normToLength(motion.velocity, motion.speed);
+}
+
+function motion_PathSpin_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
+    motion.euler2[1] += 0.05 * deltaTimeInFrames;
+    motion_PathSpin_Follow(object, motion, deltaTimeInFrames);
+}
+
 function motion_PathRoll_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
     if (motionPathHasReachedTarget(motion, deltaTimeInFrames)) {
         // Compute angles based on velocity before the point switch
@@ -419,8 +430,6 @@ function motion_PathRoll_Follow(object: ObjectRenderer, motion: MotionState, del
         vec3.sub(motion.velocity, motion.target, motion.pos);
         const distToTarget = vec3.length(motion.velocity);
 
-        getMatrixAxisZ(pathScratch, motion.final);
-
         motion.eulerTarget[1] = Math.PI + Math.atan2(motion.velocity[0], motion.velocity[2]);
         const framesUntilYaw = distToTarget / (motion.speed === 0 ? 30 : motion.speed);
         motion.eulerStep[1] = angleDist(motion.euler[1], motion.eulerTarget[1]) / framesUntilYaw;
@@ -431,6 +440,12 @@ function motion_PathRoll_Follow(object: ObjectRenderer, motion: MotionState, del
     }
 
     vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
+}
+
+function motion_PathRoll_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
+    motion.euler2[0] += 0.15 * deltaTimeInFrames;
+    motionPathAngleStep(motion, deltaTimeInFrames);
+    motion_PathRoll_Follow(object, motion, deltaTimeInFrames);
 }
 
 function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {

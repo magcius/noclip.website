@@ -15,6 +15,7 @@ import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers"
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { AABB } from "../Geometry";
+import { computeModelMatrixR } from "../MathHelpers";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -327,9 +328,11 @@ export class BINModelInstance {
         if (!this.visible)
             return;
 
-        mat4.mul(scratchMatrix[1], toNoclip, this.modelMatrix);
+        computeModelMatrixR(scratchMatrix[0], this.euler[0], this.euler[1], this.euler[2]);
+        mat4.mul(scratchMatrix[0], this.modelMatrix, scratchMatrix[0]);
+        mat4.mul(scratchMatrix[0], toNoclip, scratchMatrix[0]);
 
-        scratchAABB.transform(this.binModelData.binModel.bbox, scratchMatrix[1]);
+        scratchAABB.transform(this.binModelData.binModel.bbox, scratchMatrix[0]);
         if (!viewerInput.camera.frustum.contains(scratchAABB))
             return;
 
@@ -337,11 +340,10 @@ export class BINModelInstance {
         template.setInputLayoutAndState(this.binModelData.inputLayout, this.binModelData.inputState);
         template.setMegaStateFlags(cullModeFlags);
 
-        computeViewMatrix(scratchMatrix[0], viewerInput.camera);
-        mat4.mul(scratchMatrix[0], scratchMatrix[0], scratchMatrix[1]);
+        mat4.mul(scratchMatrix[1], viewerInput.camera.viewMatrix, scratchMatrix[0]);
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(renderInstManager, scratchMatrix[0], scratchMatrix[1], this.textureMatrix, currentPalette);
+            this.modelParts[i].prepareToRender(renderInstManager, scratchMatrix[1], scratchMatrix[0], this.textureMatrix, currentPalette);
 
         renderInstManager.popTemplateRenderInst();
     }
