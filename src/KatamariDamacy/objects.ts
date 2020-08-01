@@ -4,11 +4,12 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition } from "./bin";
 import { mat4, vec3 } from "gl-matrix";
-import { clamp, Vec3Zero, angleDist, computeModelMatrixSRT, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR } from "../MathHelpers";
+import { clamp, Vec3Zero, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR } from "../MathHelpers";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceText } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { Magenta } from "../Color";
 import { hexzero } from "../util";
+import { computeModelMatrixPosRot } from "../SourceEngine/Main";
 
 type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => void;
 
@@ -46,7 +47,6 @@ interface MotionState {
 
 const speedTable: number[] = [0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0];
 
-const objectPosScratch = vec3.create();
 const scratchMatrix = mat4.create();
 export class ObjectRenderer {
     public modelInstance: BINModelInstance[] = [];
@@ -100,10 +100,10 @@ export class ObjectRenderer {
         }
     }
 
-    private runMotion(deltaTimeInFrames: number): boolean {
+    private runMotion(deltaTimeInFrames: number): void {
         const motionState = this.motionState!;
         const motionID = (motionState.useAltMotion && motionState.parameters.altMotionID !== 0) ? motionState.parameters.altMotionID : motionState.parameters.motionID;
-        return runMotionFunc(this, motionState, motionID, deltaTimeInFrames);
+        runMotionFunc(this, motionState, motionID, deltaTimeInFrames);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, toNoclip: mat4, currentPalette: number): void {
@@ -114,36 +114,21 @@ export class ObjectRenderer {
         const deltaTimeInFrames = clamp(viewerInput.deltaTime / 33.0, 0.0, 2.0);
 
         if (this.motionState !== null) {
-            vec3.copy(objectPosScratch, this.motionState.pos);
+            this.runMotion(deltaTimeInFrames);
 
-            // TODO(jstpierre): I think we should just be able to rebuild always -- makes things a lot easier and
-            // some tiny extra ALU cost isn't where our perf is going to be hitting us hard, I think.
-            const rebuild = this.runMotion(deltaTimeInFrames);
+            // TODO(jstpierre): Instead of generic transform structs, make the motions do their own matrix math? That would
+            // make the XYZ ordering a lot easier to manage...
+            computeModelMatrixR(this.motionState.final, this.motionState.euler[0], this.motionState.euler[1], this.motionState.euler[2]);
+            mat4.mul(this.motionState.final, this.motionState.base, this.motionState.final);
+            computeModelMatrixR(scratchMatrix, this.motionState.euler2[0], this.motionState.euler2[1], this.motionState.euler2[2]);
+            mat4.mul(this.motionState.final, this.motionState.final, scratchMatrix);
+            setMatrixTranslation(this.motionState.final, this.motionState.pos);
 
-            if (rebuild) {
-                // TODO(jstpierre): Instead of generic transform structs, make the motions do their own setup? That would
-                // make the XYZ ordering a lot easier to manage...
-                computeModelMatrixR(this.motionState.final, this.motionState.euler[0], this.motionState.euler[1], this.motionState.euler[2]);
-                mat4.mul(this.motionState.final, this.motionState.base, this.motionState.final);
-                computeModelMatrixR(scratchMatrix, this.motionState.euler2[0], this.motionState.euler2[1], this.motionState.euler2[2]);
-                mat4.mul(this.motionState.final, this.motionState.final, scratchMatrix);
-                setMatrixTranslation(this.motionState.final, this.motionState.pos);
-            }
-
+            // Position model instances correctly.
             for (let i = 0; i < this.modelInstance.length; i++) {
                 const dst = this.modelInstance[i].modelMatrix;
-                if (rebuild) {
-                    computeModelMatrixSRT(dst,
-                        1, 1, 1,
-                        this.modelInstance[i].euler[0], this.modelInstance[i].euler[1], this.modelInstance[i].euler[2],
-                        this.modelInstance[i].translation[0], this.modelInstance[i].translation[1], this.modelInstance[i].translation[2],
-                    );
-                    mat4.mul(dst, this.motionState.final, dst);
-                } else {
-                    dst[12] += this.motionState.pos[0] - objectPosScratch[0];
-                    dst[13] += this.motionState.pos[1] - objectPosScratch[1];
-                    dst[14] += this.motionState.pos[2] - objectPosScratch[2];
-                }
+                computeModelMatrixPosRot(dst, this.modelInstance[i].translation, this.modelInstance[i].translation);
+                mat4.mul(dst, this.motionState.final, dst);
             }
         }
 
@@ -314,34 +299,30 @@ const enum MotionID {
     PATH_SIMPLE    = 0x1D,
 }
 
-function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: MotionID, deltaTimeInFrames: number): boolean {
+function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: MotionID, deltaTimeInFrames: number): void {
     if (motionID === MotionID.PATH_ROLL) {
         motion.euler2[0] += 0.15 * deltaTimeInFrames;
         motionPathAngleStep(motion, deltaTimeInFrames);
         motionPathFollowBasic(object, motion, deltaTimeInFrames, true);
-        return true;
     } else if (motionID === MotionID.PATH_SIMPLE || motionID === MotionID.PATH_COLLISION) {
-        return followPath(object, motion, deltaTimeInFrames);
+        followPath(object, motion, deltaTimeInFrames);
     } else if (motionID === MotionID.PATH_SETUP) {
         // TODO(jstpierre): Set up the path differently based on the submotion.
         motion.useAltMotion = true;
-        return followPath(object, motion, deltaTimeInFrames);
+        followPath(object, motion, deltaTimeInFrames);
     } else if (motionID === MotionID.MISC) {
         const subMotionID = motion.parameters.subMotionID;
         if (subMotionID === 0x15)
-            return miscSpinMotionFunc(object, deltaTimeInFrames, motion);
+            miscSpinMotionFunc(object, deltaTimeInFrames, motion);
         else if (subMotionID === 0x16)
-            return miscBobMotionFunc(object, deltaTimeInFrames, motion);
+            miscBobMotionFunc(object, deltaTimeInFrames, motion);
         else if (subMotionID === 0x1E)
-            return miscFlipMotionFunc(object, deltaTimeInFrames, motion);
+            miscFlipMotionFunc(object, deltaTimeInFrames, motion);
         else if (subMotionID === 0x20)
-            return miscSwayMotionFunc(object, deltaTimeInFrames, motion);
+            miscSwayMotionFunc(object, deltaTimeInFrames, motion);
         else if (subMotionID === 0x22)
-            return miscWhackAMoleMotionFunc(object, deltaTimeInFrames, motion);
+            miscWhackAMoleMotionFunc(object, deltaTimeInFrames, motion);
     }
-
-    // Nothing.
-    return false;
 }
 
 function pathPoint(dst: vec3, path: Float32Array, i: number): void {
@@ -455,7 +436,7 @@ function motionPathFollowBasic(object: ObjectRenderer, motion: MotionState, delt
     vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
 }
 
-function followPath(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): boolean {
+function followPath(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
     if (motion.pathIndex < 0) {
         mat4.identity(motion.base);
         motion.pathIndex = pathFindStartIndex(motion.pos, motion.parameters.pathPoints);
@@ -479,34 +460,29 @@ function followPath(object: ObjectRenderer, motion: MotionState, deltaTimeInFram
 
     if (motion.adjustPitch)
         motionPathAdjustBasePitch(motion, deltaTimeInFrames);
-
-    return true;
 }
 
-function miscSpinMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): boolean {
+function miscSpinMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     motion.euler[1] += .05 * deltaTimeInFrames;
-    return true;
 }
 
-function miscBobMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): boolean {
+function miscBobMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     if (motion.timer === -1)
         motion.timer = Math.random() * 60;
     if (motion.timer < deltaTimeInFrames) {
         motion.angle += deltaTimeInFrames * Math.PI / 45;
         motion.pos[1] = object.objectSpawn.modelMatrix[13] + object.bbox.maxY * .15 * Math.sin(motion.angle);
-    } else
+    } else {
         motion.timer -= deltaTimeInFrames;
-
-    return false;
+    }
 }
 
-function miscFlipMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): boolean {
+function miscFlipMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     motion.euler[0] -= .05 * deltaTimeInFrames;
-    return true;
 }
 
 const swayScratch = vec3.create();
-function miscSwayMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): boolean {
+function miscSwayMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     motion.angle += deltaTimeInFrames * Math.PI / 45;
     motion.euler[2] = Math.sin(motion.angle) * MathConstants.TAU / 36;
 
@@ -520,10 +496,9 @@ function miscSwayMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, m
         motion.pos[1] = object.objectSpawn.modelMatrix[13] + swayScratch[1] + bottomOffset;
         motion.pos[2] = object.objectSpawn.modelMatrix[14] + swayScratch[2];
     }
-    return true;
 }
 
-function miscWhackAMoleMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): boolean {
+function miscWhackAMoleMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     if (motion.timer === -1) {
         motion.timer = Math.random() * 150 + 60;
         motion.angle = Math.PI / 2;
@@ -539,7 +514,7 @@ function miscWhackAMoleMotionFunc(object: ObjectRenderer, deltaTimeInFrames: num
         const firstBBox = object.modelInstance[0].binModelData.binModel.bbox;
         const buriedDepth = firstBBox.maxY + (firstBBox.maxY - firstBBox.minY);
         motion.pos[1] = object.objectSpawn.modelMatrix[13] + buriedDepth * (motion.state === 0 ? (1 - Math.sin(motion.angle)) : Math.sin(motion.angle));
-    } else
+    } else {
         motion.timer -= deltaTimeInFrames;
-    return false;
+    }
 }
