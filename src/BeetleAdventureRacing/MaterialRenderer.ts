@@ -86,9 +86,7 @@ export class MaterialRenderer {
 
     
     constructor(device: GfxDevice, material: Material) {
-        // TODO TODO TODO
-        // let x: RDP.CombineParams = RDP.decodeCombineParams(0, 0);
-        // const program = new F3DEX_Program(0 /* TODO */, 0 /* TODO */, x); //TODO: blendalpha? tiles?
+        //const program = new F3DEX_Program(0 /* TODO */, 0 /* TODO */, x); //TODO: blendalpha? tiles?
         // program.defines.set("BONE_MATRIX_COUNT", '1');
         // program.setDefineBool("USE_VERTEX_COLOR", true);
         // program.setDefineBool("USE_TEXTURE", material.uvtx !== null);
@@ -107,8 +105,8 @@ export class MaterialRenderer {
                 let origS = vertexDataCopy[q * 9 + 3];
                 let origT = vertexDataCopy[q * 9 + 4];
                 let tile = material.uvtx.rspState.primitiveTile;
-                let oglS = (origS - (tile.uls / 4)) / ((tile.lrs - tile.uls) / 4);
-                let oglT = (origT - (tile.ult / 4)) / ((tile.lrt - tile.ult) / 4);
+                let oglS = (origS - tile.uls) / (tile.lrs - tile.uls);
+                let oglT = (origT - tile.ult) / (tile.lrt - tile.ult);
                 vertexDataCopy[q * 9 + 3] = oglS;
                 vertexDataCopy[q * 9 + 4] = oglT;
                 console.warn("REMOVEME!!!");

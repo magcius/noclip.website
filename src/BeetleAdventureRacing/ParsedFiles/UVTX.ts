@@ -294,7 +294,7 @@ export class UVTX {
                     const tile = (w1 >>> 24) & 0x07;
                     const lrs = (w1 >>> 12) & 0x0FFF;
                     const lrt = (w1 >>> 0) & 0x0FFF;
-                    rspState.tileStates[tile].setSize(uls, ult, lrs, lrt);
+                    rspState.tileStates[tile].setSize(uls / 4, ult / 4, lrs / 4, lrt / 4);
                 } break;
     
                 case F3DEX2.F3DEX2_GBI.G_SETPRIMCOLOR: {
@@ -340,16 +340,15 @@ export class UVTX {
         /////
         let tile = rspState.primitiveTile;
 
-        if (tile.uls === 0 && tile.ult === 0 && 
-            tile.lrs === 0 && tile.lrt === 0) {
+        if (tile.uls === 0 && tile.ult === 0 && tile.lrs === 0 && tile.lrt === 0) {
             console.warn("G_SETTILESIZE was never called, skipping");
             this.not_supported_yet = true;
             return;
         }
 
         // Decode image data
-        let tileWidth = ((tile.lrs - tile.uls) / 4) + 1;
-        let tileHeight = ((tile.lrt - tile.ult) / 4) + 1;
+        let tileWidth = (tile.lrs - tile.uls) + 1;
+        let tileHeight = (tile.lrt - tile.ult) + 1;
         assert(tileWidth === Math.round(tileWidth));
         assert(tileHeight === Math.round(tileHeight));
         assert(tileWidth === this.imageWidth);
