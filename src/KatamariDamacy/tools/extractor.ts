@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { openSync, readSync, closeSync, writeFileSync, mkdirSync } from "fs";
-import { readString, hexzero } from "../../util";
+import { readString, hexzero, leftPad } from "../../util";
 import { assert } from "console";
 
 // Ported from "unpack.py" by Murugo.
@@ -85,11 +85,17 @@ function dumpObjectNames(elf: ArrayBufferSlice): void {
     const view = elf.createDataView();
 
     const nametableOffs = 0xE06B8;
-    let idx = nametableOffs;
+    const objectDescTableOffs = 0xCDF70;
+
+    let nameIdx = nametableOffs, objectDescIdx = objectDescTableOffs;
     for (let i = 0; i < 1718; i++) {
-        const objectName = parseName(view, idx, 0x50);
-        console.log(hexzero(i, 4), objectName);
-        idx += 0x50;
+        const internalNamePtr = view.getUint32(objectDescIdx + 0x00, true);
+        const internalName = readString(elf, internalNamePtr - 0xFF000);
+
+        const objectName = parseName(view, nameIdx, 0x50);
+        console.log(`${leftPad('' + i, 4)}\t${hexzero(i, 4)}\t${internalName}\t${objectName}`);
+        nameIdx += 0x50;
+        objectDescIdx += 0x24;
     }
 }
 
@@ -208,8 +214,8 @@ function main() {
     const objectCount = 1718;
     extractFileTable(pathBaseOut, isoFilename, elf, objectFileTableOffs, objectCount, objectBaseLBA);
 
-    writeBufferSync(`${pathBaseOut}/levelBlock.bin`,        elf.slice(0XBF1A0, 0XC0034));
-    writeBufferSync(`${pathBaseOut}/objectBlock.bin`,       elf.slice(0xCDF70, 0XDD108));
+    writeBufferSync(`${pathBaseOut}/levelBlock.bin`,        elf.slice(0xBF1A0, 0xC0034));
+    writeBufferSync(`${pathBaseOut}/objectBlock.bin`,       elf.slice(0xCDF70, 0xDD108));
     writeBufferSync(`${pathBaseOut}/transformBlock.bin`,    elf.slice(0x111260, 0x112FFC));
     writeBufferSync(`${pathBaseOut}/randomBlock.bin`,       elf.slice(0x116980, 0x117238));
     writeBufferSync(`${pathBaseOut}/pathBlock.bin`,         elf.slice(0x117290, 0X1607B0)); // maybe split this up?
