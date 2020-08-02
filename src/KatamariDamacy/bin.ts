@@ -421,7 +421,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
 
                         newVertexRun();
                         packetsIdx += 0x10;
-        
+
                         for (let j = 0; j < qwd - 1; j++) {
                             vertexRunData![j * WORKING_VERTEX_STRIDE + 0] = view.getFloat32(packetsIdx + 0x00, true);
                             vertexRunData![j * WORKING_VERTEX_STRIDE + 1] = view.getFloat32(packetsIdx + 0x04, true);
@@ -824,8 +824,8 @@ function resetRandomGroups(groups: RandomGroup[]): void {
 
 function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: number): PartTransform[] {
     const addressOffset = 0x210260; // start address in RAM
-    const indexTable = 0x211290; // ram address of table 
-    const transformTable = 0x2111A0; // ram address of table 
+    const indexTable = 0x211290; // ram address of table
+    const transformTable = 0x2111A0; // ram address of table
 
     const view = data.createDataView();
     // only very few objects have transforms, so first use the index table to find the right entry
@@ -855,17 +855,89 @@ function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: 
 }
 
 export interface MotionParameters {
-    subMotionID: number;
-    motionID: number;
-    altMotionID: number;
+    motionID: MotionID;
+    motionActionID: MotionActionID;
+    altMotionActionID: MotionActionID;
     pathPoints: Float32Array;
     speed: number;
 }
 
+export const enum MotionID {
+    PathSpin      = 0x13,
+    PathRoll      = 0x14,
+    Spin          = 0x15,
+    Bob           = 0x16,
+    Flip          = 0x1E,
+    Sway          = 0x20,
+    WhackAMole    = 0x22,
+}
+
+export const enum MotionActionID {
+    None          = 0x00,
+    PathCollision = 0x02,
+    PathSpin      = 0x14,
+    PathRoll      = 0x15,
+    Misc          = 0x16,
+    PathSetup     = 0x19,
+    PathSimple    = 0x1D,
+}
+
+interface MotionActionTableEntry {
+    main: MotionActionID;
+    alt: MotionActionID;
+}
+
+const motionActionTable: MotionActionTableEntry[] = [
+    /* 0x00 */ { main: 0x04,                         alt: 0x05 },
+    /* 0x01 */ { main: 0x03,                         alt: 0x05 },
+    /* 0x02 */ { main: MotionActionID.PathCollision, alt: 0x06 },
+    /* 0x03 */ { main: 0x03,                         alt: 0x07 },
+    /* 0x04 */ { main: 0x04,                         alt: 0x08 },
+    /* 0x05 */ { main: 0x0C,                         alt: 0x09 },
+    /* 0x06 */ { main: 0x04,                         alt: 0x0D },
+    /* 0x07 */ { main: 0x04,                         alt: 0x0A },
+    /* 0x08 */ { main: MotionActionID.PathCollision, alt: 0x0B },
+    /* 0x09 */ { main: 0x03,                         alt: 0x0A },
+    /* 0x0A */ { main: 0x01,                         alt: 0x0E },
+    /* 0x0B */ { main: 0x0F,                         alt: MotionActionID.None },
+    /* 0x0C */ { main: 0x0F,                         alt: 0x05 },
+    /* 0x0D */ { main: 0x0C,                         alt: 0x10 },
+    /* 0x0E */ { main: 0x11,                         alt: 0x12 },
+    /* 0x0F */ { main: 0x04,                         alt: 0x12 },
+    /* 0x10 */ { main: 0x13,                         alt: 0x09 },
+    /* 0x11 */ { main: 0x13,                         alt: 0x09 },
+    /* 0x12 */ { main: 0x0C,                         alt: 0x09 },
+    /* 0x13 */ { main: MotionActionID.PathSetup,     alt: MotionActionID.PathSpin },
+    /* 0x14 */ { main: MotionActionID.PathSetup,     alt: MotionActionID.PathRoll },
+    /* 0x15 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x16 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x17 */ { main: MotionActionID.PathSetup,     alt: 0x17 },
+    /* 0x18 */ { main: 0x18,                         alt: MotionActionID.None },
+    /* 0x19 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x1A */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x1B */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x1C */ { main: MotionActionID.PathSetup,     alt: 0x1A },
+    /* 0x1D */ { main: MotionActionID.PathSetup,     alt: 0x1A },
+    /* 0x1E */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x1F */ { main: 0x04,                         alt: 0x03 },
+    /* 0x20 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x21 */ { main: 0x0C,                         alt: 0x09 },
+    /* 0x22 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x23 */ { main: 0x1B,                         alt: MotionActionID.None },
+    /* 0x24 */ { main: 0x1C,                         alt: MotionActionID.None },
+    /* 0x25 */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x26 */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x27 */ { main: MotionActionID.PathSimple,    alt: MotionActionID.None },
+    /* 0x28 */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x29 */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x2A */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x2B */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x2C */ { main: 0x01,                         alt: MotionActionID.None },
+];
+
 export function parseMotion(pathData: ArrayBufferSlice, motionData: ArrayBufferSlice, levelIndex: number, moveType: number): MotionParameters | null {
     const motionOffset = 0x260D90;
     const levelMotions = 0x261B88;
-    const allMotions = 0x261C40;
 
     const motionView = motionData.createDataView();
     const motionList = motionView.getUint32(levelMotions + 4 * levelIndex - motionOffset, true);
@@ -877,15 +949,17 @@ export function parseMotion(pathData: ArrayBufferSlice, motionData: ArrayBufferS
 
     const backupIndex = motionView.getInt16(entryStart + 0x00, true);
     const pathIndex = motionView.getInt16(entryStart + 0x02, true);
-    const subMotionID = motionView.getInt16(entryStart + 0x04, true);
+    const motionID = motionView.getInt16(entryStart + 0x04, true);
 
-    let motionID = 0, altMotionID = 0;
-    if (subMotionID < 0) {
+    let motionActionID = 0, altMotionActionID = 0;
+    if (motionID < 0) {
         assert(backupIndex >= 0 && backupIndex < 3);
-        motionID = backupIndex + 1;
+        motionActionID = backupIndex + 1;
     } else {
-        motionID = motionView.getUint16(allMotions + 4 * subMotionID + 0x00 - motionOffset, true);
-        altMotionID = motionView.getUint16(allMotions + 4 * subMotionID + 0x02 - motionOffset, true);
+        assert(motionID < motionActionTable.length);
+        const motionAction = motionActionTable[motionID];
+        motionActionID = motionAction.main;
+        altMotionActionID = motionAction.alt;
     }
 
     const pathOffset = 0x216290;
@@ -906,7 +980,7 @@ export function parseMotion(pathData: ArrayBufferSlice, motionData: ArrayBufferS
     pointCount -= 2; // we incremented once too many, and the 255 point isn't part of the path
     const pathPoints = pathData.createTypedArray(Float32Array, pointStart - pathOffset, 4 * pointCount, Endianness.LITTLE_ENDIAN);
 
-    return { motionID, altMotionID, pathPoints, speed, subMotionID };
+    return { motionActionID, altMotionActionID, pathPoints, speed, motionID };
 }
 
 export interface ObjectDefinition {

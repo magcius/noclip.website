@@ -2,7 +2,7 @@
 import { BINModelInstance } from "./render";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition } from "./bin";
+import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition, MotionActionID, MotionID } from "./bin";
 import { mat4, vec3 } from "gl-matrix";
 import { clamp, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceText, drawWorldSpaceLine } from "../DebugJunk";
@@ -81,7 +81,7 @@ export class ObjectRenderer {
 
             const pos = vec3.create();
             mat4.getTranslation(pos, objectSpawn.modelMatrix);
-            const isTall = motion.subMotionID === 0x14 && modelInstances.length > 0 &&
+            const isTall = motion.motionID === MotionID.PathRoll && modelInstances.length > 0 &&
                 (modelInstances[0].binModelData.binModel.bbox.maxY > modelInstances[0].binModelData.binModel.bbox.maxX);
             this.motionState = {
                 parameters: motion,
@@ -130,7 +130,7 @@ export class ObjectRenderer {
 
     private runMotion(deltaTimeInFrames: number): boolean {
         const motionState = this.motionState!;
-        const motionID = (motionState.useAltMotion && motionState.parameters.altMotionID !== 0) ? motionState.parameters.altMotionID : motionState.parameters.motionID;
+        const motionID = (motionState.useAltMotion && motionState.parameters.altMotionActionID !== 0) ? motionState.parameters.altMotionActionID : motionState.parameters.motionActionID;
         return runMotionFunc(this, motionState, motionID, deltaTimeInFrames);
     }
 
@@ -237,9 +237,9 @@ export class ObjectRenderer {
                 drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.position, Red, 4);
                 drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
                 if (this.motionState !== null) {
-                    drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Motion 1 ${hexzero(this.motionState.parameters.motionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
-                    drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Motion 2 ${hexzero(this.motionState.parameters.altMotionID, 2)}`, 65, Magenta, { outline: 2, shadowBlur: 2 });
-                    drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Misc Motion ${hexzero(this.motionState.parameters.subMotionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Motion 1 ${hexzero(this.motionState.parameters.motionActionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Motion 2 ${hexzero(this.motionState.parameters.altMotionActionID, 2)}`, 65, Magenta, { outline: 2, shadowBlur: 2 });
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Misc Motion ${hexzero(this.motionState.parameters.motionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
                 }
             }
             if (this.parentState)
@@ -405,26 +405,17 @@ function animFunc_GenericVehicle(object: ObjectRenderer, deltaTimeInFrames: numb
     rotateObject(object.modelInstances[2], deltaTimeInFrames, Axis.X, -4.0);
 }
 
-const enum MotionID {
-    PathCollision = 0x02,
-    PathSpin      = 0x14,
-    PathRoll      = 0x15,
-    Misc          = 0x16,
-    PathSetup     = 0x19,
-    PathSimple    = 0x1D,
-}
-
-function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: MotionID, deltaTimeInFrames: number): boolean {
-    if (motionID === MotionID.PathSpin) {
+function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionActionID: MotionActionID, deltaTimeInFrames: number): boolean {
+    if (motionActionID === MotionActionID.PathSpin) {
         motion_PathSpin_Update(object, motion, deltaTimeInFrames);
-    } else if (motionID === MotionID.PathRoll) {
+    } else if (motionActionID === MotionActionID.PathRoll) {
         motion_PathRoll_Update(object, motion, deltaTimeInFrames);
-    } else if (motionID === MotionID.PathSimple || motionID === MotionID.PathCollision) {
+    } else if (motionActionID === MotionActionID.PathSimple || motionActionID === MotionActionID.PathCollision) {
         motion_PathSimple_Update(object, motion, deltaTimeInFrames);
-    } else if (motionID === MotionID.PathSetup) {
+    } else if (motionActionID === MotionActionID.PathSetup) {
         if (motion.isTall) {
             // Submotion 0x14 seems to suggest we'll transition to PathRoll after.
-            assert(motion.parameters.altMotionID === MotionID.PathRoll);
+            assert(motion.parameters.altMotionActionID === MotionActionID.PathRoll);
 
             // If it's taller than it is wide, roll it on its side. Normally, this is implemented
             // by setting a bitflag, and the setup code for PathRoll does the rotation. But since
@@ -435,17 +426,17 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: Mo
         // TODO(jstpierre): Implement PathSetup properly.
         motion.useAltMotion = true;
         motion_PathSimple_Update(object, motion, deltaTimeInFrames);
-    } else if (motionID === MotionID.Misc) {
-        const subMotionID = motion.parameters.subMotionID;
-        if (subMotionID === 0x15)
+    } else if (motionActionID === MotionActionID.Misc) {
+        const motionID = motion.parameters.motionID;
+        if (motionID === MotionID.Spin)
             motion_MiscSpin_Update(object, deltaTimeInFrames, motion);
-        else if (subMotionID === 0x16)
+        else if (motionID === MotionID.Bob)
             motion_MiscBob_Update(object, deltaTimeInFrames, motion);
-        else if (subMotionID === 0x1E)
+        else if (motionID === MotionID.Flip)
             motion_MiscFlip_Update(object, deltaTimeInFrames, motion);
-        else if (subMotionID === 0x20)
+        else if (motionID === MotionID.Sway)
             motion_MiscSway_Update(object, deltaTimeInFrames, motion);
-        else if (subMotionID === 0x22)
+        else if (motionID === MotionID.WhackAMole)
             motion_MiscWhackAMole_Update(object, deltaTimeInFrames, motion);
     } else {
         return false;
