@@ -282,10 +282,20 @@ function scrollTextureWrapMin(modelInstance: BINModelInstance, axis: Axis, min: 
         modelInstance.textureMatrix[13] = uvWrapMin(modelInstance.textureMatrix[13], min);
 }
 
+function oscillateTexture(modelInstance: BINModelInstance, deltaTimeInFrames: number, axis: Axis, value: number, min: number, max: number) {
+    scrollTexture(modelInstance, deltaTimeInFrames, axis, modelInstance.uvState === 0 ? -value : value);
+    const newValue = axis === Axis.X ? modelInstance.textureMatrix[12] : modelInstance.textureMatrix[13];
+    if (modelInstance.uvState === 0 && newValue < min)
+        modelInstance.uvState = 1;
+    else if (modelInstance.uvState === 1 && newValue > max)
+        modelInstance.uvState = 0;
+}
+
 const enum ObjectId {
     BARBER_D        = 0x001E,
     HUKUBIKI_C      = 0x0023,
     COMPASS_A       = 0x002F,
+    OMEN05_B        = 0X003F,
     CAR02_F         = 0x0091,
     CAR03_F         = 0x0092,
     CAR04_F         = 0x0093,
@@ -305,16 +315,41 @@ const enum ObjectId {
     CAR08_F         = 0x01A2,
     WORKCAR04_F     = 0x01A8,
     WORKCAR06_F     = 0x01AB,
+    TANK01_F        = 0x01B0,
     BIKE04_E        = 0x01B2,
     BIKE05_E        = 0x01B3,
     RADICON02_E     = 0x0220,
     BIKE06_E        = 0x02B0,
     WINDMILL01_G    = 0x02C6,
+    TORNADO_G       = 0x02D6,
+    SPINWAVE_G      = 0x02D7,
     KIDDYCAR01_C    = 0x02F1,
     KIDDYCAR02_C    = 0x02F2,
     PLANE02_F       = 0x0382,
     PLANE03_F       = 0x0383,
+    SIGNAL01_E      = 0x03A1,
+    SIGNAL02_E      = 0x03A2,
+    OMEN08_B        = 0x03FB,
     ZOKUCAR_E       = 0x0405,
+    MAJANPAI01_A    = 0x041B,
+    MAJANPAI02_A    = 0x041C,
+    MAJANPAI03_A    = 0x041D,
+    MAJANPAI04_A    = 0x041E,
+    BOOTH02_E       = 0x044C,
+    RAIN01_G        = 0x04D2,
+    SCHOOLNAME01_D  = 0x04F8,
+    SCHOOLNAME02_D  = 0x04F9,
+    SCHOOLNAME03_D  = 0x04FA,
+    SCHOOLNAME04_D  = 0x04FB,
+    SCHOOLNAME05_D  = 0x04FC,
+    SCHOOLNAME06_D  = 0x04FD,
+    SCHOOLNAME07_D  = 0x04FE,
+    COPYKI_E        = 0x052F,
+    HOTEL03_E       = 0x0556,
+    HOTEL04_E       = 0x0557,
+    HOTEL05_E       = 0x0558,
+    HOTEL06_E       = 0x0559,
+    HOTEL07_E       = 0x055A,
 }
 
 function animFuncSelect(objectId: ObjectId): AnimFunc | null {
@@ -322,10 +357,19 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     case ObjectId.BARBER_D:     return animFunc_BARBER_D;
     case ObjectId.HUKUBIKI_C:   return animFunc_HUKUBIKI_C;
     case ObjectId.COMPASS_A:    return animFunc_COMPASS_A;
+    case ObjectId.OMEN05_B:     return animFunc_OMEN05_B;
     case ObjectId.WINDMILL01_G: return animFunc_WINDMILL01_G;
     case ObjectId.POLIHOUSE_E:  return animFunc_POLIHOUSE_E;
     case ObjectId.FARMCAR02_E:  return animFunc_FARMCAR02_E;
     case ObjectId.WORKCAR04_F:  return animFunc_WORKCAR04_F;
+    case ObjectId.TANK01_F:     return animFunc_TANK01_F;
+    case ObjectId.TORNADO_G:    return animFunc_TORNADO_G;
+    case ObjectId.SPINWAVE_G:   return animFunc_SPINWAVE_G;
+    case ObjectId.SIGNAL01_E:   return animFunc_SIGNAL01_E;
+    case ObjectId.SIGNAL02_E:   return animFunc_SIGNAL02_E;
+    case ObjectId.BOOTH02_E:    return animFunc_BOOTH02_E;
+    case ObjectId.OMEN08_B:     return animFunc_OMEN08_B;
+    case ObjectId.RAIN01_G:     return animFunc_RAIN01_G;
     case ObjectId.CAR02_F:
     case ObjectId.CAR03_F:
     case ObjectId.CAR04_F:
@@ -349,6 +393,26 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
         return animFunc_GenericVehicle;
     case ObjectId.PLANE02_F: return animFunc_PLANE02_F;
     case ObjectId.PLANE03_F: return animFunc_PLANE03_F;
+    case ObjectId.COPYKI_E:  return animFunc_COPYKI_E;
+    case ObjectId.MAJANPAI01_A:
+    case ObjectId.MAJANPAI02_A:
+    case ObjectId.MAJANPAI03_A:
+    case ObjectId.MAJANPAI04_A:
+        return animFunc_Mahjong;
+    case ObjectId.SCHOOLNAME01_D:
+    case ObjectId.SCHOOLNAME02_D:
+    case ObjectId.SCHOOLNAME03_D:
+    case ObjectId.SCHOOLNAME04_D:
+    case ObjectId.SCHOOLNAME05_D:
+    case ObjectId.SCHOOLNAME06_D:
+    case ObjectId.SCHOOLNAME07_D:
+        return animFunc_SchoolName;
+    case ObjectId.HOTEL03_E:
+    case ObjectId.HOTEL04_E:
+    case ObjectId.HOTEL05_E:
+    case ObjectId.HOTEL06_E:
+    case ObjectId.HOTEL07_E:
+        return animFunc_HotelSign;
     }
     return null;
 }
@@ -363,6 +427,16 @@ function animFunc_HUKUBIKI_C(object: ObjectRenderer, deltaTimeInFrames: number):
 
 function animFunc_COMPASS_A(object: ObjectRenderer, deltaTimeInFrames: number): void {
     rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Y, 1.0);
+}
+
+function animFunc_OMEN05_B(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    oscillateTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/500.0, -3/100, 3/100);
+    object.modelInstances[2].textureMatrix[12] = object.modelInstances[1].textureMatrix[12];
+}
+
+function animFunc_OMEN08_B(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    oscillateTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/500.0, -3/100, 3/100);
+    object.modelInstances[2].textureMatrix[12] = -object.modelInstances[1].textureMatrix[12];
 }
 
 function animFunc_WINDMILL01_G(object: ObjectRenderer, deltaTimeInFrames: number): void {
@@ -388,6 +462,46 @@ function animFunc_WORKCAR04_F(object: ObjectRenderer, deltaTimeInFrames: number)
     scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/150.0);
 }
 
+function animFunc_TANK01_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.motionState === null)
+        return;
+    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/120.0);
+}
+
+// these show up without motion in a test level, should probably worry about that
+function animFunc_TORNADO_G(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    scrollTexture(object.modelInstances[0], deltaTimeInFrames, Axis.X, 1/30.0);
+    object.motionState!.euler[1] -= Math.PI/30.0 * deltaTimeInFrames;
+}
+
+function animFunc_SPINWAVE_G(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    object.motionState!.euler[1] -= Math.PI/75.0 * deltaTimeInFrames;
+}
+
+function animFunc_BOOTH02_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    object.modelInstances[1].uvState += deltaTimeInFrames;
+    if (object.modelInstances[1].uvState > 0x10) {
+        object.modelInstances[1].textureMatrix[13] = .765 - object.modelInstances[1].textureMatrix[13];
+        object.modelInstances[1].uvState = 0;
+    }
+}
+
+let rainTimer = 0;
+let rainCoord = 0
+// in game this is only run for objects in view,
+// so the animation would be slower when fewer are on screen
+function animFunc_RAIN01_G(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    object.modelInstances[0].uvState += deltaTimeInFrames;
+    if (object.modelInstances[0].uvState > 2) {
+        object.modelInstances[0].uvState -= 2;
+        if (rainTimer % 2 === 0)
+            rainCoord = (rainCoord + .1) % .9;
+        rainTimer++;
+    }
+
+    object.modelInstances[0].textureMatrix[12] = rainCoord;
+}
+
 function animFunc_PLANE02_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
     rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Y, 16.8);
     rotateObject(object.modelInstances[2], deltaTimeInFrames, Axis.X, 16.8);
@@ -403,6 +517,109 @@ function animFunc_GenericVehicle(object: ObjectRenderer, deltaTimeInFrames: numb
         return;
     rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.X, -4.0);
     rotateObject(object.modelInstances[2], deltaTimeInFrames, Axis.X, -4.0);
+}
+
+function animFunc_COPYKI_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.modelInstances[1].uvState < 0) {
+        object.modelInstances[1].uvState += deltaTimeInFrames;
+        if (object.modelInstances[1].uvState >= 0)
+            object.modelInstances[1].uvState = object.modelInstances[1].textureMatrix[12] < 0 ? 1 : 0;
+        else
+            return;
+    }
+    const increasing = object.modelInstances[1].uvState === 1;
+    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, increasing ? 1 / 50.0 : -1 / 300.0);
+    const newValue = object.modelInstances[1].textureMatrix[12];
+    if (increasing && newValue > 0) {
+        object.modelInstances[1].textureMatrix[12] = 0;
+        object.modelInstances[1].uvState = -30;
+    } else if (!increasing && newValue < -1 / 5.0) {
+        object.modelInstances[1].textureMatrix[12] = -1 / 5.0;
+        object.modelInstances[1].uvState = -5;
+    }
+}
+
+function animFunc_Mahjong(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    let x = 0;
+    let y = 0;
+    switch (object.objectSpawn.objectId) {
+        case ObjectId.MAJANPAI02_A:
+            x = .5; y = 0; break;
+        case ObjectId.MAJANPAI03_A:
+            x = 0; y = .56; break;
+        case ObjectId.MAJANPAI04_A:
+            x = .5; y = .56; break;
+    }
+    object.modelInstances[0].textureMatrix[12] = x;
+    object.modelInstances[0].textureMatrix[13] = y;
+}
+
+function animFunc_HotelSign(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    let x = 0;
+    let y = 0;
+    switch (object.objectSpawn.objectId) {
+        case ObjectId.HOTEL03_E:
+            x = 0; y = .75; break;
+        case ObjectId.HOTEL04_E:
+            x = 0; y = .5; break;
+        case ObjectId.HOTEL05_E:
+            x = .5; y = 0; break;
+        case ObjectId.HOTEL06_E:
+            x = .5; y = .75; break;
+        case ObjectId.HOTEL07_E:
+            x = .5; y = .5; break;
+    }
+    object.modelInstances[0].textureMatrix[12] = x;
+    object.modelInstances[0].textureMatrix[13] = y;
+}
+
+function animFunc_SchoolName(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    let x = 0;
+    let y = 0;
+    switch (object.objectSpawn.objectId) {
+        case ObjectId.SCHOOLNAME02_D:
+            x = .25; y = 0; break;
+        case ObjectId.SCHOOLNAME03_D:
+            x = .5; y = 0; break;
+        case ObjectId.SCHOOLNAME04_D:
+            x = .75; y = 0; break;
+        case ObjectId.SCHOOLNAME05_D:
+            x = 0; y = .56; break;
+        case ObjectId.SCHOOLNAME06_D:
+            x = .25; y = .56; break;
+        case ObjectId.SCHOOLNAME07_D:
+            x = .5; y = .56; break;
+    }
+    object.modelInstances[0].textureMatrix[12] = x;
+    object.modelInstances[0].textureMatrix[13] = y;
+}
+
+function animFunc_SIGNAL01_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    // in game, depends on something external (being rolled up?) to swap
+    if (object.modelInstances[1].uvState < 0) {
+        object.modelInstances[1].textureMatrix[12] = .24 - object.modelInstances[1].textureMatrix[12];
+        object.modelInstances[1].uvState = 60 + 90 * Math.random();
+    }
+    object.modelInstances[1].uvState -= deltaTimeInFrames;
+}
+
+function animFunc_SIGNAL02_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    object.modelInstances[1].uvState -= deltaTimeInFrames;
+    object.modelInstances[2].uvState -= deltaTimeInFrames;
+
+    // in game, depends on something external (being rolled up?) to swap
+    if (object.modelInstances[1].uvState < 0) {
+        object.modelInstances[1].textureMatrix[12] = .25 - object.modelInstances[1].textureMatrix[12];
+        object.modelInstances[1].uvState = 60 + 90 * Math.random();
+    }
+    if (object.modelInstances[1].textureMatrix[12] === 0) {
+        if (object.modelInstances[2].uvState < 0) {
+            object.modelInstances[2].uvState = 10;
+            object.modelInstances[2].textureMatrix[12] = .25 - object.modelInstances[2].textureMatrix[12];
+        }
+    } else {
+        object.modelInstances[2].textureMatrix[12] = .25;
+    }
 }
 
 function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionActionID: MotionActionID, deltaTimeInFrames: number): boolean {

@@ -310,6 +310,7 @@ export class BINModelInstance {
     public modelMatrix = mat4.create();
     public modelParts: BINModelPartInstance[] = [];
     public textureMatrix = mat4.create();
+    public uvState = 0;
     public visible = true;
 
     public translation = vec3.create();
