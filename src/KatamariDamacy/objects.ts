@@ -5,7 +5,7 @@ import { ViewerRenderInput } from "../viewer";
 import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition } from "./bin";
 import { mat4, vec3 } from "gl-matrix";
 import { clamp, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR, Vec3UnitZ } from "../MathHelpers";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceText } from "../DebugJunk";
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceText, drawWorldSpaceLine } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { Red, Green, Magenta } from "../Color";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
@@ -24,6 +24,7 @@ interface MotionState {
 
     adjustPitch: boolean;
     isTall: boolean;
+    composeEuler: boolean;
     pathIndex: number;
     speed: number;
 
@@ -48,6 +49,7 @@ interface MotionState {
 interface ParentState {
     parent: ObjectRenderer;
     parentOffset: vec3;
+    inheritedEuler: vec3;
 }
 
 const speedTable: number[] = [0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0];
@@ -88,6 +90,7 @@ export class ObjectRenderer {
                 pathIndex: -1,
                 adjustPitch: !def.stayLevel,
                 isTall,
+                composeEuler: true, // inverted from game
 
                 pos,
                 target: vec3.create(),
@@ -121,6 +124,7 @@ export class ObjectRenderer {
         this.parentState = {
             parent,
             parentOffset,
+            inheritedEuler: vec3.create(),
         };
     }
 
@@ -153,7 +157,6 @@ export class ObjectRenderer {
             mat4.mul(this.modelMatrix, this.modelMatrix, scratchMatrix);
             computeModelMatrixR(scratchMatrix, this.motionState.euler3[0], this.motionState.euler3[1], this.motionState.euler3[2]);
             mat4.mul(this.modelMatrix, this.modelMatrix, scratchMatrix);
-            setMatrixTranslation(this.modelMatrix, this.position);
         } else if (this.parentState) {
             // in the game, the parent composition uses the base matrix, which only exists in our motionState
             // instead, make sure the model matrix stays at the initial "base" value before parent transform
@@ -162,20 +165,40 @@ export class ObjectRenderer {
 
         if (this.parentState) {
             const parent = this.parentState.parent;
+            let ancestor = parent;
+            while (ancestor.parentState)
+                ancestor = ancestor.parentState.parent;
             const ignoreParent = this.objectSpawn.linkAction === 4 || this.objectSpawn.linkAction === 6;
             if (!ignoreParent) {
                 updateInstances = true;
                 // overwrite position entirely?
-                vec3.transformMat4(this.position, this.parentState.parentOffset, parent.modelMatrix);
-                // TODO: track when other logic gets used, default for now
-                if (parent.motionState) {
-                    computeModelMatrixR(scratchMatrix, parent.motionState.euler[0], parent.motionState.euler[1], parent.motionState.euler[2]);
+                vec3.transformMat4(this.position, this.parentState!.parentOffset, parent.modelMatrix);
+
+                if (ancestor.motionState === null || ancestor.motionState.composeEuler) {
+                    // nonsense euler angle transformation
+                    let parentEuler: vec3 | null = null;
+                    if (parent.parentState)
+                        parentEuler = parent.parentState.inheritedEuler;
+                    else if (parent.motionState)
+                        parentEuler = parent.motionState.euler;
+                    if (parentEuler) {
+                        transformVec3Mat4w0(this.parentState.inheritedEuler, parent.modelMatrix, parentEuler);
+                        computeModelMatrixR(scratchMatrix, this.parentState.inheritedEuler[0], this.parentState.inheritedEuler[1], this.parentState.inheritedEuler[2]);
+                        mat4.mul(this.modelMatrix, scratchMatrix, this.modelMatrix);
+                    }
+                    // add on our own rotation, if any
+                    if (this.motionState)
+                        vec3.add(this.parentState.inheritedEuler, this.parentState.inheritedEuler, this.motionState.euler);
+                } else {
+                    // the game stores the base and euler separately for each, but doesn't modify it in this case
+                    computeModelMatrixR(scratchMatrix, ancestor.motionState.euler[0], ancestor.motionState.euler[1], ancestor.motionState.euler[2]);
                     mat4.mul(this.modelMatrix, scratchMatrix, this.modelMatrix);
+                    mat4.mul(this.modelMatrix, ancestor.motionState.base, this.modelMatrix);
                 }
-                setMatrixTranslation(this.modelMatrix, this.position);
-                // skipping euler compose logic until it's actually used somewhere
             }
         }
+
+        setMatrixTranslation(this.modelMatrix, this.position);
 
         // Position model instances correctly.
         if (updateInstances) {
@@ -218,6 +241,8 @@ export class ObjectRenderer {
                     drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Misc Motion ${hexzero(this.motionState.parameters.subMotionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
                 }
             }
+            if (this.parentState)
+                drawWorldSpaceLine(getDebugOverlayCanvas2D(), scratchMatrix, this.position, this.parentState.parent.position, Magenta);
         }
     }
 
@@ -593,6 +618,7 @@ function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, d
 function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
     if (motion.pathIndex < 0) {
         mat4.identity(motion.base);
+        motion.composeEuler = false;
         motion.pathIndex = pathFindStartIndex(motion.pos, motion.parameters.pathPoints);
 
         // snapping to the first point only happens for COLLISION_PATH, but it fixes some weirdness with starting simple paths
