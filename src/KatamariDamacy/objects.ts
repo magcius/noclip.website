@@ -154,10 +154,11 @@ export class ObjectRenderer {
             computeModelMatrixR(scratchMatrix, this.motionState.euler3[0], this.motionState.euler3[1], this.motionState.euler3[2]);
             mat4.mul(this.modelMatrix, this.modelMatrix, scratchMatrix);
             setMatrixTranslation(this.modelMatrix, this.position);
-        } else if (this.parentState)
+        } else if (this.parentState) {
             // in the game, the parent composition uses the base matrix, which only exists in our motionState
             // instead, make sure the model matrix stays at the initial "base" value before parent transform
             mat4.copy(this.modelMatrix, this.objectSpawn.modelMatrix);
+        }
 
         if (this.parentState) {
             const parent = this.parentState.parent;
@@ -177,12 +178,13 @@ export class ObjectRenderer {
         }
 
         // Position model instances correctly.
-        if (updateInstances)
+        if (updateInstances) {
             for (let i = 0; i < this.modelInstances.length; i++) {
                 const dst = this.modelInstances[i].modelMatrix;
                 computeModelMatrixPosRot(dst, this.modelInstances[i].translation, this.modelInstances[i].euler);
                 mat4.mul(dst, this.modelMatrix, dst);
             }
+        }
 
         if (this.animFunc !== null)
             this.animFunc(this, deltaTimeInFrames);
@@ -241,6 +243,19 @@ function scrollTexture(modelInstance: BINModelInstance, deltaTimeInFrames: numbe
         modelInstance.textureMatrix[13] += offs;
 }
 
+function uvWrapMin(v: number, min: number): number {
+    if (v < min)
+        v += 1.0 - min;
+    return v;
+}
+
+function scrollTextureWrapMin(modelInstance: BINModelInstance, axis: Axis, min: number): void {
+    if (axis === Axis.X)
+        modelInstance.textureMatrix[12] = uvWrapMin(modelInstance.textureMatrix[12], min);
+    else if (axis === Axis.Y)
+        modelInstance.textureMatrix[13] = uvWrapMin(modelInstance.textureMatrix[13], min);
+}
+
 const enum ObjectId {
     BARBER_D        = 0x001E,
     HUKUBIKI_C      = 0x0023,
@@ -251,6 +266,7 @@ const enum ObjectId {
     CAR05_E         = 0x0094,
     CAR06_E         = 0x0095,
     CAR07_E         = 0x0096,
+    FARMCAR02_E     = 0x0098,
     POLIHOUSE_E     = 0x00C6,
     DUSTCAR_F       = 0x0133,
     TRUCK01_F       = 0x0135,
@@ -261,6 +277,7 @@ const enum ObjectId {
     BALANCEDOLL01_C = 0x016B,
     SHOPHUGU02_D    = 0x0189,
     CAR08_F         = 0x01A2,
+    WORKCAR04_F     = 0x01A8,
     WORKCAR06_F     = 0x01AB,
     BIKE04_E        = 0x01B2,
     BIKE05_E        = 0x01B3,
@@ -281,6 +298,8 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     case ObjectId.COMPASS_A:    return animFunc_COMPASS_A;
     case ObjectId.WINDMILL01_G: return animFunc_WINDMILL01_G;
     case ObjectId.POLIHOUSE_E:  return animFunc_POLIHOUSE_E;
+    case ObjectId.FARMCAR02_E:  return animFunc_FARMCAR02_E;
+    case ObjectId.WORKCAR04_F:  return animFunc_WORKCAR04_F;
     case ObjectId.CAR02_F:
     case ObjectId.CAR03_F:
     case ObjectId.CAR04_F:
@@ -309,9 +328,7 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
 }
 
 function animFunc_BARBER_D(object: ObjectRenderer, deltaTimeInFrames: number): void {
-    // XXX(jstpierre): 100% empirical, not from game code at all, just want to show
-    // how to use scrollTexture() basically.
-    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, -0.001);
+    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/600.0);
 }
 
 function animFunc_HUKUBIKI_C(object: ObjectRenderer, deltaTimeInFrames: number): void {
@@ -328,6 +345,21 @@ function animFunc_WINDMILL01_G(object: ObjectRenderer, deltaTimeInFrames: number
 
 function animFunc_POLIHOUSE_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
     rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Z, 1.0);
+}
+
+function animFunc_FARMCAR02_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.motionState === null)
+        return;
+    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.Y, -1/600.0);
+    scrollTextureWrapMin(object.modelInstances[1], Axis.Y, 0.765);
+    scrollTexture(object.modelInstances[2], deltaTimeInFrames, Axis.Y, -1/600.0);
+    scrollTextureWrapMin(object.modelInstances[2], Axis.Y, 0.75);
+}
+
+function animFunc_WORKCAR04_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.motionState === null)
+        return;
+    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/300.0);
 }
 
 function animFunc_PLANE02_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
@@ -364,15 +396,14 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: Mo
     } else if (motionID === MotionID.PathSimple || motionID === MotionID.PathCollision) {
         motion_PathSimple_Update(object, motion, deltaTimeInFrames);
     } else if (motionID === MotionID.PathSetup) {
-        if (motion.parameters.subMotionID === 0x14) {
-            // Submotion 0x14 seems to suggest PathRoll.
+        if (motion.isTall) {
+            // Submotion 0x14 seems to suggest we'll transition to PathRoll after.
             assert(motion.parameters.altMotionID === MotionID.PathRoll);
 
             // If it's taller than it is wide, roll it on its side. Normally, this is implemented
             // by setting a bitflag, and the setup code for PathRoll does the rotation. But since
             // we don't have setup funcs for the states (yet), just do it here in the PathSetup.
-            if (object.bbox.maxY > object.bbox.maxX)
-                motion.euler3[2] = MathConstants.TAU / 4;
+            motion.euler3[2] = MathConstants.TAU / 4;
         }
 
         // TODO(jstpierre): Implement PathSetup properly.
