@@ -4,7 +4,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition } from "./bin";
 import { mat4, vec3 } from "gl-matrix";
-import { clamp, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR, Vec3UnitZ } from "../MathHelpers";
+import { clamp, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceText, drawWorldSpaceLine } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { Red, Green, Magenta } from "../Color";
@@ -185,7 +185,8 @@ export class ObjectRenderer {
                         transformVec3Mat4w0(this.parentState.inheritedEuler, parent.modelMatrix, parentEuler);
                         computeModelMatrixR(scratchMatrix, this.parentState.inheritedEuler[0], this.parentState.inheritedEuler[1], this.parentState.inheritedEuler[2]);
                         mat4.mul(this.modelMatrix, scratchMatrix, this.modelMatrix);
-                    }
+                    } else
+                        vec3.copy(this.parentState.inheritedEuler, Vec3Zero);
                     // add on our own rotation, if any
                     if (this.motionState)
                         vec3.add(this.parentState.inheritedEuler, this.parentState.inheritedEuler, this.motionState.euler);
