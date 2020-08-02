@@ -1065,7 +1065,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
     const objectModels: ObjectModel[] = [];
     const objectSpawns: MissionSetupObjectSpawn[][] = [];
 
-    function findOrParseObject(objectId: number): number {
+    function findOrParseObjectModel(objectId: number): number {
         const existingIndex = objectModels.findIndex((model) => model.id === objectId);
         if (existingIndex >= 0) {
             return existingIndex;
@@ -1150,9 +1150,9 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
                     continue;
             }
 
-            const modelIndex = findOrParseObject(objectId);
+            const modelIndex = findOrParseObjectModel(objectId);
             if (modelIndex === -1) {
-                console.log(`Missing object ${hexzero(objectId, 4)}; layer ${i} object index ${j}`);
+                // It's possible (and normal!) for object models to be missing if they're just parent objects.
                 continue;
             }
 

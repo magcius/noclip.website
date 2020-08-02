@@ -384,7 +384,7 @@ function animFunc_FARMCAR02_E(object: ObjectRenderer, deltaTimeInFrames: number)
 function animFunc_WORKCAR04_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
     if (object.motionState === null)
         return;
-    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/300.0);
+    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/150.0);
 }
 
 function animFunc_PLANE02_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
@@ -437,15 +437,15 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionID: Mo
     } else if (motionID === MotionID.Misc) {
         const subMotionID = motion.parameters.subMotionID;
         if (subMotionID === 0x15)
-            miscSpinMotionFunc(object, deltaTimeInFrames, motion);
+            motion_MiscSpin_Update(object, deltaTimeInFrames, motion);
         else if (subMotionID === 0x16)
-            miscBobMotionFunc(object, deltaTimeInFrames, motion);
+            motion_MiscBob_Update(object, deltaTimeInFrames, motion);
         else if (subMotionID === 0x1E)
-            miscFlipMotionFunc(object, deltaTimeInFrames, motion);
+            motion_MiscFlip_Update(object, deltaTimeInFrames, motion);
         else if (subMotionID === 0x20)
-            miscSwayMotionFunc(object, deltaTimeInFrames, motion);
+            motion_MiscSway_Update(object, deltaTimeInFrames, motion);
         else if (subMotionID === 0x22)
-            miscWhackAMoleMotionFunc(object, deltaTimeInFrames, motion);
+            motion_MiscWhackAMole_Update(object, deltaTimeInFrames, motion);
     } else {
         return false;
     }
@@ -642,11 +642,11 @@ function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, d
         motionPathAdjustBasePitch(motion, deltaTimeInFrames);
 }
 
-function miscSpinMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
+function motion_MiscSpin_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     motion.euler[1] += .05 * deltaTimeInFrames;
 }
 
-function miscBobMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
+function motion_MiscBob_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     if (motion.timer === -1)
         motion.timer = Math.random() * 60;
     if (motion.timer < deltaTimeInFrames) {
@@ -657,12 +657,12 @@ function miscBobMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, mo
     }
 }
 
-function miscFlipMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
+function motion_MiscFlip_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     motion.euler[0] -= .05 * deltaTimeInFrames;
 }
 
 const swayScratch = vec3.create();
-function miscSwayMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
+function motion_MiscSway_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     motion.angle += deltaTimeInFrames * Math.PI / 45;
     motion.euler[2] = Math.sin(motion.angle) * MathConstants.TAU / 36;
 
@@ -678,7 +678,7 @@ function miscSwayMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, m
     }
 }
 
-function miscWhackAMoleMotionFunc(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
+function motion_MiscWhackAMole_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     if (motion.timer === -1) {
         motion.timer = Math.random() * 150 + 60;
         motion.angle = Math.PI / 2;
