@@ -303,6 +303,7 @@ export class UVTX {
                     const g = (w1 >>> 16) & 0xFF;
                     const b = (w1 >>> 8) & 0xFF;
                     const a = (w1 >>> 0) & 0xFF;
+                    //rspState.primitiveLODFraction = lod / 0xFF;
                     rspState.primitiveColor = vec4.fromValues(r / 0xFF, g / 0xFF, b / 0xFF, a / 0xFF);
                 } break;
     
@@ -330,11 +331,12 @@ export class UVTX {
         } else {
             assert(settimgCount === 2);
         }
-        if(this.levelCount === 6 && this.otherUVTX !== null) {
-            assert(rspState.textureState.tile === 0);
-        } else {
-            assert(rspState.textureState.tile === 1);
-        }
+        // Assumption doesn't hold
+        // if(this.levelCount === 6 && this.otherUVTX !== null) {
+        //     assert(rspState.textureState.tile === 0);
+        // } else {
+        //     assert(rspState.textureState.tile === 1);
+        // }
         assert(rspState.primitiveTile.line !== 0);
 
         /////
@@ -381,6 +383,7 @@ class UVTXRSPState {
     public otherModeH: number = 0;
     public combineParams: RDP.CombineParams;
     public textureState: F3DEX.TextureState = new F3DEX.TextureState();
+    //public primitiveLODFraction: number = 0;
     public primitiveColor: vec4 = vec4.create();
     public environmentColor: vec4 = vec4.create();
 

@@ -31,7 +31,7 @@ class BARRenderer implements SceneGfx {
     }
 
     public adjustCameraController(c: CameraController) {
-        c.setSceneMoveSpeedMult(0.05);
+        c.setSceneMoveSpeedMult(0.02);
     }
 
     // TODO-ASK: what is a render inst?

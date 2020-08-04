@@ -1,4 +1,4 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
@@ -9,6 +9,8 @@ import { UVTX } from "./ParsedFiles/UVTX";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 
 import * as RDP from '../Common/N64/RDP';
+import { humanReadableCombineParams } from './Util';
+import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 export interface Material {
     uvtx: UVTX | null;
@@ -47,18 +49,48 @@ export class MaterialRenderer {
     private indexCount: number;
 
     private uvtx: UVTX;
+
+
+    private materialCenter: vec3;
     
     constructor(device: GfxDevice, material: Material) {
-
         this.isTextured = material.uvtx !== null && !material.uvtx.not_supported_yet;
+
+        // let xSum = 0;
+        // let ySum = 0;
+        // let zSum = 0;
+        // let vCt = material.vertexData.length / 9;
+        // for(let i = 0; i < material.vertexData.length; i += 9) {
+        //     xSum += material.vertexData[i];
+        //     ySum += material.vertexData[i + 1];
+        //     zSum += material.vertexData[i + 2];
+        // }
+        // this.materialCenter = vec3.fromValues(xSum / vCt, ySum / vCt, zSum / vCt);
+
+
+        // if(!this.isTextured || (material.uvtx!.flagsAndIndex & 0xFFF) !== 0x494) {
+        //     this.isTextured = false
+        //     return;
+        // }
+
+
 
         // TODO: what's going on with the textures missing vert colors?
         if(this.isTextured) {
             this.uvtx = material.uvtx!;
             let rspState = this.uvtx.rspState;
-            // TODO: actually figure out othermodeL?
-            this.program = new F3DEX_Program(rspState.otherModeH, 0, rspState.combineParams);
+
+            // console.log(humanReadableCombineParams(rspState.combineParams));
+            // TODO: K4 is used, though it's not supported by F3DEX_Program - is it important?
+            // TODO: what other CC settings does BAR use that F3DEX_Program doesn't support?
+            // TODO: K5 is also used, as is NOISE
+
+            this.program = new F3DEX_Program(rspState.otherModeH, 0, rspState.combineParams, this.uvtx.alpha / 0xFF, rspState.tileStates);
             this.program.setDefineBool("USE_TEXTURE", true);
+
+            //console.log(this.uvtx);
+            // TODO: Figure out what actually determines if this is set
+            this.program.setDefineBool("TWO_CYCLE", true);
             
         } else {
             // TODO: better
@@ -113,7 +145,11 @@ export class MaterialRenderer {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelToWorldMatrix: mat4) {        
         //TODO: a lot
-        
+
+        // if(!this.isTextured || (this.uvtx.flagsAndIndex & 0xFFF) !== 0x494) {
+        //     return;
+        // }
+
         const renderInst = renderInstManager.newRenderInst();
 
         // TODO: move this to template, it only needs to be set once
@@ -148,6 +184,12 @@ export class MaterialRenderer {
             mat4.fromScaling(texMatrix, [1 / this.uvtx.imageWidth, 1 / this.uvtx.imageHeight, 1]);
             drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, texMatrix);
 
+            // if(this.uvtx.otherUVTX !== null) {
+            //     texMatrix = mat4.create();
+            //     mat4.fromScaling(texMatrix, [1 / this.uvtx.otherUVTX.imageWidth, 1 / this.uvtx.otherUVTX.imageHeight, 1]);
+            //     drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, texMatrix);
+            // }
+
             fillVec4v(combineParams, combineParamsOffs, this.uvtx.rspState.primitiveColor);
             fillVec4v(combineParams, combineParamsOffs + 4, this.uvtx.rspState.environmentColor);
         }
@@ -158,6 +200,14 @@ export class MaterialRenderer {
         renderInst.setGfxProgram(gfxProgram);
         renderInst.drawIndexes(this.indexCount, 0);
         renderInstManager.submitRenderInst(renderInst);
+
+
+
+        // if(this.isTextured) {
+        //     let outCtr = vec3.create();
+        //     vec3.transformMat4(outCtr, this.materialCenter, adjmodelToWorldMatrix);
+        //     drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, outCtr, (this.uvtx.flagsAndIndex & 0xfff).toString(16));
+        // }
     }
 
     public destroy(device: GfxDevice): void {
