@@ -2,14 +2,14 @@
 import { BINModelInstance } from "./render";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition, MotionActionID, MotionID } from "./bin";
+import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition, MotionActionID, MotionID, CollisionList } from "./bin";
 import { mat4, vec3 } from "gl-matrix";
-import { clamp, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
+import { clamp, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR, Vec3UnitZ, Vec3Zero, Vec3UnitY, Vec3NegY, transformVec3Mat4w1, float32AsBits, getMatrixAxisY } from "../MathHelpers";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceText, drawWorldSpaceLine } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { Red, Green, Magenta } from "../Color";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
-import { hexzero, assert } from "../util";
+import { hexzero, assert, nArray } from "../util";
 
 type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => void;
 
@@ -138,13 +138,13 @@ export class ObjectRenderer {
         };
     }
 
-    private runMotion(deltaTimeInFrames: number): boolean {
+    private runMotion(deltaTimeInFrames: number, zones: CollisionList[], levelCollision: CollisionList[][] ): boolean {
         const motionState = this.motionState!;
         const motionID = (motionState.useAltMotion && motionState.parameters.altMotionActionID !== 0) ? motionState.parameters.altMotionActionID : motionState.parameters.motionActionID;
-        return runMotionFunc(this, motionState, motionID, deltaTimeInFrames);
+        return runMotionFunc(this, motionState, motionID, deltaTimeInFrames, zones, levelCollision);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, toNoclip: mat4, currentPalette: number): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, toNoclip: mat4, currentPalette: number, zones: CollisionList[], levelCollision: CollisionList[][]): void {
         if (!this.visible)
             return;
 
@@ -154,7 +154,7 @@ export class ObjectRenderer {
         let updateInstances = false;
         let hasMotionImplementation = false;
         if (this.motionState !== null) {
-            hasMotionImplementation = this.runMotion(deltaTimeInFrames);
+            hasMotionImplementation = this.runMotion(deltaTimeInFrames, zones, levelCollision);
             updateInstances = true;
             vec3.copy(this.position, this.motionState.pos);
             computeKatamariRotation(this.modelMatrix, this.motionState.euler);
@@ -220,6 +220,7 @@ export class ObjectRenderer {
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette);
 
+
         const debugMotion = false;
         if (debugMotion) {
             mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
@@ -246,8 +247,10 @@ export class ObjectRenderer {
                     drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Misc Motion ${hexzero(this.motionState.parameters.motionID, 2)}`, 85, Magenta, { outline: 2, shadowBlur: 2 });
                 }
             }
-            if (this.parentState)
+            if (this.parentState) {
                 drawWorldSpaceLine(getDebugOverlayCanvas2D(), scratchMatrix, this.position, this.parentState.parent.position, Magenta);
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, this.objectSpawn.linkAction.toString(10), 25);
+            }
         }
     }
 
@@ -274,6 +277,110 @@ function computeKatamariRotation(dst: mat4, euler: vec3): void {
         computeModelMatrixR(dst, euler[0], 0, euler[2]);
         mat4.rotateY(dst, dst, euler[1]);
     }
+}
+
+// game also tracks depth, depth as a fraction of aabb radius, and the vertices
+interface TriangleInfo {
+    normal: vec3;
+    zone: number;
+}
+
+const scratchTri: TriangleInfo = { normal: vec3.create(), zone: -1 };
+const scratchAABB = new AABB();
+const groundScratch = nArray(3, () => vec3.create());
+const normalScratch = nArray(4, () => vec3.create());
+const groundMatrices = nArray(2, () => mat4.create());
+
+function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, target: vec3): boolean {
+    let minDepth = vec3.dist(pos, target);
+    let foundAny = false;
+    mat4.identity(groundMatrices[0]);
+    if (pos[0] !== target[0] || pos[2] !== target[2])
+        mat4.lookAt(groundMatrices[0], pos, target, Vec3NegY);
+    else if (pos[1] !== target[1]) {
+        // vertical separation, common case
+        groundMatrices[0][5] = 0;
+        groundMatrices[0][6] = 1;
+        groundMatrices[0][9] = -1;
+        groundMatrices[0][10] = 0;
+
+        groundMatrices[0][12] = -pos[0];
+        groundMatrices[0][13] = pos[2];
+        groundMatrices[0][14] = -pos[1];
+    } else {
+        // pos and target identical, shouldn't happen
+        groundMatrices[0][5] = 0;
+        groundMatrices[0][6] = -1;
+        groundMatrices[0][9] = 1;
+        groundMatrices[0][10] = 0;
+
+        groundMatrices[0][12] = -pos[0];
+        groundMatrices[0][13] = -pos[2];
+        groundMatrices[0][14] = pos[1];
+    }
+    mat4.transpose(groundMatrices[1], groundMatrices[0]);
+    vec3.min(groundScratch[0], pos, target);
+    vec3.max(groundScratch[1], pos, target);
+    scratchAABB.set(
+        groundScratch[0][0], groundScratch[0][1], groundScratch[0][2],
+        groundScratch[1][0], groundScratch[1][1], groundScratch[1][2],
+    );
+    // default values
+    out.zone = -1;
+    vec3.copy(out.normal, Vec3NegY);
+    for (let i = 0; i < collision.length; i++) {
+        if (!AABB.intersect(scratchAABB, collision[i].bbox))
+            continue;
+        for (let j = 0; j < collision[i].groups.length; j++) {
+            const verts = collision[i].groups[j].vertices;
+            let inOrder = true;
+            for (let k = 0; k < verts.length; k += 4) {
+                vec3.copy(groundScratch[0], groundScratch[1]);
+                vec3.copy(groundScratch[1], groundScratch[2]);
+                vec3.set(groundScratch[2], verts[k], verts[k + 1], verts[k + 2])
+                transformVec3Mat4w1(groundScratch[2], scratchMatrix, groundScratch[2]);
+                if (k < 8 || (!collision[i].groups[j].isTriStrip && k % 0xC !== 0x8))
+                    continue;
+
+                if (inOrder) {
+                    vec3.sub(normalScratch[0], groundScratch[0], groundScratch[2]);
+                    vec3.sub(normalScratch[1], groundScratch[1], groundScratch[2]);
+                } else {
+                    vec3.sub(normalScratch[0], groundScratch[0], groundScratch[1]);
+                    vec3.sub(normalScratch[1], groundScratch[2], groundScratch[1]);
+                }
+                vec3.cross(normalScratch[3], normalScratch[0], normalScratch[1]);
+                vec3.normalize(normalScratch[3], normalScratch[3]); // preserve unscaled normal
+
+                // optionally shift vertices along normal by radius
+                // but so far the provided radius is 0
+                for (let v = 0; v < 3; v++)
+                    vec3.copy(normalScratch[v], groundScratch[v]);
+
+                // check if translated triangle is below the origin
+                let contained = true;
+                for (let v = 0; v < 3; v++) {
+                    const w = (v + (inOrder ? 1 : 2)) % 3;
+                    if (normalScratch[v][0] * normalScratch[w][1] - normalScratch[v][1] * normalScratch[w][0] >= 0) {
+                        contained = false;
+                        break;
+                    }
+                }
+                if (contained) {
+                    const depth = vec3.dot(normalScratch[3], normalScratch[0]) / normalScratch[3][2];
+                    if (depth > 0 && depth < minDepth) {
+                        foundAny = true;
+                        minDepth = depth;
+                        transformVec3Mat4w0(out.normal, groundMatrices[1], normalScratch[3]);
+                        out.zone = float32AsBits(verts[k + 3]);
+                    }
+                }
+                if (collision[i].groups[j].isTriStrip)
+                    inOrder = !inOrder;
+            }
+        }
+    }
+    return foundAny;
 }
 
 const enum Axis { X, Y, Z }
@@ -650,13 +757,13 @@ function animFunc_SIGNAL02_E(object: ObjectRenderer, deltaTimeInFrames: number):
     }
 }
 
-function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionActionID: MotionActionID, deltaTimeInFrames: number): boolean {
+function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionActionID: MotionActionID, deltaTimeInFrames: number, zones: CollisionList[], levelCollision: CollisionList[][]): boolean {
     if (motionActionID === MotionActionID.PathSpin) {
         motion_PathSpin_Update(object, motion, deltaTimeInFrames);
     } else if (motionActionID === MotionActionID.PathRoll) {
         motion_PathRoll_Update(object, motion, deltaTimeInFrames);
     } else if (motionActionID === MotionActionID.PathSimple || motionActionID === MotionActionID.PathCollision) {
-        motion_PathSimple_Update(object, motion, deltaTimeInFrames);
+        motion_PathSimple_Update(object, motion, deltaTimeInFrames, levelCollision[0]);
     } else if (motionActionID === MotionActionID.PathSetup) {
         if (motion.isTall) {
             // Submotion 0x14 seems to suggest we'll transition to PathRoll after.
@@ -670,7 +777,7 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionAction
 
         // TODO(jstpierre): Implement PathSetup properly.
         motion.useAltMotion = true;
-        motion_PathSimple_Update(object, motion, deltaTimeInFrames);
+        motion_PathSimple_Update(object, motion, deltaTimeInFrames, levelCollision[0]);
     } else if (motionActionID === MotionActionID.Misc) {
         const motionID = motion.parameters.motionID;
         if (motionID === MotionID.Spin)
@@ -728,7 +835,7 @@ function motionPathHasReachedTarget(motion: MotionState, deltaTimeInFrames: numb
 }
 
 const pitchTransformScratch = mat4.create();
-function motionPathAdjustBasePitch(motion: MotionState, deltaTimeInFrames: number): void {
+function pathSimpleAdjustBasePitch(motion: MotionState, deltaTimeInFrames: number): void {
     if (motion.angleStep * deltaTimeInFrames === 0)
         return;
     motion.angle += motion.angleStep * deltaTimeInFrames;
@@ -815,7 +922,7 @@ function motion_PathRoll_Update(object: ObjectRenderer, motion: MotionState, del
     mat4.mul(motion.base, scratchMatrix, motion.reference);
 }
 
-function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
+function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number, collision: CollisionList[]): void {
     if (motionPathHasReachedTarget(motion, deltaTimeInFrames)) {
         motionPathAdvancePoint(motion, object.bbox);
 
@@ -831,22 +938,14 @@ function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, d
         const framesUntilYaw = distToTarget / (motion.speed === 0 ? 30 : motion.speed);
         motion.eulerStep[1] = angleDist(motion.euler[1], motion.eulerTarget[1]) / framesUntilYaw;
 
-        // TODO: figure out what's going on with the collision check for COLLISION_PATH
         if (motion.adjustPitch) {
             mat4.copy(motion.reference, motion.base);
-            // set rotation axis for pitch, perpendicular to slope
-            vec3.set(motion.axis, motion.velocity[2], 0, -motion.velocity[0]);
-            vec3.normalize(motion.axis, motion.axis);
-    
-            vec3.normalize(motion.velocity, motion.velocity);
-            vec3.normalize(pathScratch, pathScratch);
-            const dot = -motion.velocity[1] * pathScratch[1] +
-                Math.hypot(motion.velocity[0], motion.velocity[2]) * Math.hypot(pathScratch[0], pathScratch[2]);
-            motion.angleTarget = Math.acos(clamp(dot, -1, 1));
-            if (-motion.velocity[1] < pathScratch[1])
-                motion.angleTarget *= -1;
+            if (motion.parameters.motionActionID === MotionActionID.PathCollision)
+                pathCollisionSetPitchTarget(object, motion, collision);
+            else
+                pathSimpleSetPitchTarget(object, motion);
             const framesUntilPitch = motion.speed === 0 ? 4 : (0.25 * distToTarget / motion.speed);
-            // pitch will actual track how much we've rotated about the axis
+            // the angle will actually track how much we've rotated about the axis
             motion.angleStep = motion.angleTarget / framesUntilPitch;
             motion.angle = 0;
         }
@@ -857,7 +956,7 @@ function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, d
     vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
 }
 
-function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
+function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number, collision: CollisionList[]): void {
     if (motion.pathIndex < 0) {
         motion.composeEuler = false;
         mat4.identity(motion.base);
@@ -879,10 +978,52 @@ function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, d
     }
 
     motionPathAngleStep(motion.euler, motion, deltaTimeInFrames);
-    motion_PathSimple_Follow(object, motion, deltaTimeInFrames);
+    motion_PathSimple_Follow(object, motion, deltaTimeInFrames, collision);
 
     if (motion.adjustPitch)
-        motionPathAdjustBasePitch(motion, deltaTimeInFrames);
+        if (motion.parameters.motionActionID === MotionActionID.PathCollision)
+            pathCollisionAdjustBasePitch(motion, deltaTimeInFrames);
+        else
+            pathSimpleAdjustBasePitch(motion, deltaTimeInFrames);
+}
+
+function pathCollisionAdjustBasePitch(motion: MotionState, deltaTimeInFrames: number): void {
+    if (motion.angleStep * deltaTimeInFrames === 0)
+        return;
+    motion.angle += motion.angleStep * deltaTimeInFrames;
+    const delta = (motion.angleTarget - motion.angle) * motion.angleStep;
+    if (delta < 0) {
+        motion.angleStep = 0;
+        motion.angle = motion.angleTarget;
+    }
+    mat4.fromRotation(pitchTransformScratch, -motion.angle, motion.axis);
+    mat4.mul(motion.base, motion.reference, pitchTransformScratch);
+}
+
+function pathCollisionSetPitchTarget(object: ObjectRenderer, motion: MotionState, collision: CollisionList[]): void {
+    const radius = object.bbox.maxCornerRadius();
+    vec3.scaleAndAdd(pathScratch, object.position, Vec3UnitY, radius);
+    findGround(collision, scratchTri, object.position, pathScratch);
+    getMatrixAxisY(pathScratch, object.modelMatrix);
+    vec3.scale(pathScratch, pathScratch, -1);
+    vec3.cross(motion.axis, scratchTri.normal, pathScratch);
+    // set pitch variables
+    const dot = vec3.dot(scratchTri.normal, pathScratch);
+    motion.angleTarget = Math.acos(clamp(dot, -1, 1));
+}
+
+function pathSimpleSetPitchTarget(object: ObjectRenderer, motion: MotionState): void {
+    // set rotation axis for pitch, perpendicular to slope
+    vec3.set(motion.axis, motion.velocity[2], 0, -motion.velocity[0]);
+    vec3.normalize(motion.axis, motion.axis);
+
+    vec3.normalize(motion.velocity, motion.velocity);
+    vec3.normalize(pathScratch, pathScratch);
+    const dot = -motion.velocity[1] * pathScratch[1] +
+        Math.hypot(motion.velocity[0], motion.velocity[2]) * Math.hypot(pathScratch[0], pathScratch[2]);
+    motion.angleTarget = Math.acos(clamp(dot, -1, 1));
+    if (-motion.velocity[1] < pathScratch[1])
+        motion.angleTarget *= -1;
 }
 
 function motion_MiscSpin_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {

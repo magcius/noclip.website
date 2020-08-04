@@ -159,7 +159,6 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, lightingIndex: num
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 1 },
 ];
-
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
     private currentAreaNo: number = 0;
     private sceneTexture = new ColorTexture();
@@ -169,6 +168,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public framebufferTextureMapping = new TextureMapping();
     public textureHolder = new FakeTextureHolder([]);
     public currentPalette: number = 0;
+    public areaCollision: BIN.CollisionList[][][] = [];
 
     public stageAreaRenderers: StageAreaRenderer[] = [];
     public objectRenderers: ObjectRenderer[] = [];
@@ -228,10 +228,18 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         const sceneParamsMapped = template.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, this.levelParams.lightingIndex, offs);
 
+        let activeArea = 0;
+        for (let i = 0; i < this.missionSetupBin.activeStageAreas.length; i++)
+            if (this.missionSetupBin.activeStageAreas[i] === this.currentAreaNo) {
+                activeArea = i;
+                break;
+            }
+
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
             this.stageAreaRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, katamariWorldSpaceToNoclipSpace, this.currentPalette);
+            this.objectRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, katamariWorldSpaceToNoclipSpace,
+                this.currentPalette, this.missionSetupBin.zones, this.areaCollision[activeArea]);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -345,6 +353,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             const stageModelBinData = cache.getFileData(getStageAreaFilePath(stageModels[levelParams.stageAreaIndex + i]));
             BIN.parseStageTextureBIN(stageTexBinData, gsMemoryMap);
             const stageModelBin = BIN.parseLevelModelBIN(stageModelBinData, gsMemoryMap, this.id);
+            renderer.areaCollision.push(stageModelBin.collision);
 
             const stageAreaRenderer = new StageAreaRenderer(stageAreaIndex);
 
@@ -429,7 +438,6 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                 }
             }
         }
-
         return renderer;
     }
 }

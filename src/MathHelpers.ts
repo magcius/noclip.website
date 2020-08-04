@@ -611,6 +611,11 @@ export function bitsAsFloat32(x: number): number {
     return asFloat32[0];
 }
 
+export function float32AsBits(x: number): number {
+    asFloat32[0] = x;
+    return asUint32[0];
+}
+
 /**
  * Reflects a given vector
  */

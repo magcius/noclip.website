@@ -100,6 +100,7 @@ export interface ObjectModel {
 
 export interface LevelModelBIN {
     sectors: BINModelSector[];
+    collision: CollisionList[][];
 }
 
 export interface GSConfiguration {
@@ -703,6 +704,7 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
     assert(numSectors === 0x08);
 
     const sectors: BINModelSector[] = [];
+    const collision: CollisionList[][] = [];
 
     // There appear to be up to four graphical sectors.
     // 1. Main Level Graphics
@@ -719,7 +721,16 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
         sectors.push(sectorModel);
     }
 
-    return { sectors };
+    for (let i = 0; i < 4; i++) {
+        const sectorOffs = view.getUint32(sectorTableIdx + 0x00, true);
+        sectorTableIdx += 0x04;
+        if (sectorIsNIL(buffer, sectorOffs))
+            collision.push([]);
+        else
+            collision.push(parseCollisionLists(buffer, sectorOffs));
+    }
+
+    return { sectors, collision };
 }
 
 export interface LevelParameters {
@@ -751,6 +762,58 @@ export function parseLevelParameters(index: number, parameters: ArrayBufferSlice
         stageAreaIndex++;
 
     return { lightingIndex, startArea, stageAreaIndex, missionSetupFiles };
+}
+
+export interface CollisionList {
+    bbox: AABB;
+    groups: CollisionTriangleGroup[];
+}
+
+interface CollisionTriangleGroup {
+    vertices: Float32Array;
+    isTriStrip: boolean;
+}
+
+function parseCollisionLists(data: ArrayBufferSlice, start: number): CollisionList[] {
+    const lists: CollisionList[] = [];
+
+    const view = data.createDataView();
+    const collisionCount = view.getUint8(start);
+    const aabbOffset = start + view.getUint32(start + 4, true);
+    const aabbCount = view.getUint16(aabbOffset, true) & 0x3FF;
+    assert(view.getUint8(aabbOffset + 0x07) === 0x68); // unpack v3-32
+    assert(aabbCount === collisionCount);
+
+    for (let i = 0; i < collisionCount; i++) {
+        const bbox = new AABB(
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x00, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x04, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x08, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x0C, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x10, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x14, true),
+        );
+
+        let vertexOffset = start + view.getUint32(start + 8 + 4 * i, true);
+        const groups: CollisionTriangleGroup[] = [];
+        while (true) {
+            assert(view.getUint8(vertexOffset + 0x07) === 0x6c); // unpack v4-32, though not sure this is actually executed as vifcode
+            const lowByte = view.getUint8(vertexOffset);
+            const isTriStrip = (lowByte & 0x80) !== 0;
+            const vertexCount = isTriStrip ? ((lowByte & 0x7F) + 2) : (lowByte & 0x7F) * 3;
+            const vertices = data.createTypedArray(Float32Array, vertexOffset + 8, 4 * vertexCount, Endianness.LITTLE_ENDIAN);
+            groups.push({vertices, isTriStrip});
+
+            vertexOffset += 0x10*vertexCount + 0x0C;
+            const vifcode = view.getUint8(vertexOffset - 1);
+            if (vifcode >= 0x80) {
+                assert(vifcode === 0x97); //MSCNT with interrupt
+                break;
+            }
+        }
+        lists.push({ bbox, groups });
+    }
+    return lists;
 }
 
 interface RandomIDOption {
@@ -1066,6 +1129,7 @@ export interface LevelSetupBIN {
     activeStageAreas: number[];
     objectModels: ObjectModel[];
     objectSpawns: MissionSetupObjectSpawn[][];
+    zones: CollisionList[];
 }
 
 function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
@@ -1097,6 +1161,9 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
     const numSectors = view.getUint32(0x00, true);
+
+    const collisionOffset = view.getUint32(0x04, true);
+    const zones = parseCollisionLists(buffer, collisionOffset);
 
     const gsMemoryMap = nArray(2, () => gsMemoryMapNew());
 
@@ -1263,5 +1330,5 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
         }
     }
 
-    return { objectModels, objectSpawns, activeStageAreas };
+    return { objectModels, objectSpawns, activeStageAreas, zones };
 }

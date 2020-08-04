@@ -226,6 +226,13 @@ export class AABB {
         return chord / 2;
     }
 
+    public maxCornerRadius(): number {
+        const x = Math.max(this.maxX, -this.minX);
+        const y = Math.max(this.maxY, -this.minY);
+        const z = Math.max(this.maxZ, -this.minZ);
+        return Math.sqrt(x*x + y*y + z*z);
+    }
+
     public isEmpty(): boolean {
         this.extents(scratchVec3a);
         return scratchVec3a[0] === 0 && scratchVec3a[1] === 0 && scratchVec3a[2] === 0;
