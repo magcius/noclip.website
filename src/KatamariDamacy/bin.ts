@@ -987,6 +987,7 @@ export interface ObjectDefinition {
     stayLevel: boolean;
     speedIndex: number;
     altUpdate: number;
+    dummyParent: boolean;
 }
 
 export function parseObjectDefinition(data: ArrayBufferSlice, id: number): ObjectDefinition {
@@ -998,8 +999,9 @@ export function parseObjectDefinition(data: ArrayBufferSlice, id: number): Objec
     const stayLevel = view.getUint8(offs + 0x0C) !== 0;
     const speedIndex = view.getInt8(offs + 0x13);
     const altUpdate = view.getInt8(offs + 0x14);
+    const dummyParent = view.getUint8(offs + 0x21) !== 0;
 
-    return { stayLevel, speedIndex, altUpdate };
+    return { stayLevel, speedIndex, altUpdate, dummyParent};
 }
 
 export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIndex: number): Int16Array | null {

@@ -32,7 +32,6 @@ interface MotionState {
     eulerStep: vec3;
     eulerTarget: vec3;
     euler2: vec3;
-    euler3: vec3;
 
     angle: number;
     angleStep: number;
@@ -52,6 +51,15 @@ interface ParentState {
     inheritedEuler: vec3;
 }
 
+function reduceAngle(t: number): number {
+    t = t % MathConstants.TAU;
+    if (t > MathConstants.TAU / 2)
+        t -= MathConstants.TAU;
+    else if (t < - MathConstants.TAU / 2)
+        t += MathConstants.TAU;
+    return t;
+}
+
 const speedTable: number[] = [0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0];
 
 const scratchMatrix = mat4.create();
@@ -65,11 +73,13 @@ export class ObjectRenderer {
     public modelMatrix = mat4.create();
     public position = vec3.create();
 
+    private dummyParent = false;
+
     constructor(public objectSpawn: MissionSetupObjectSpawn, public bbox: AABB, def: ObjectDefinition, public modelInstances: BINModelInstance[], motion: MotionParameters | null) {
         this.animFunc = animFuncSelect(this.objectSpawn.objectId);
         mat4.copy(this.modelMatrix, objectSpawn.modelMatrix);
         mat4.getTranslation(this.position, this.modelMatrix);
-        if (motion !== null) {
+        if (motion !== null && !stationaryObjects.has(objectSpawn.objectId)) {
             // common speed logic, there may be others
             let speed = motion.speed; // from the path
             if (speed < 0) {
@@ -100,20 +110,20 @@ export class ObjectRenderer {
                 eulerStep: vec3.create(),
                 eulerTarget: vec3.create(),
                 euler2: vec3.create(),
-                euler3: vec3.create(),
 
                 angle: 0,
                 angleStep: 0,
                 angleTarget: 0,
 
                 base: mat4.clone(objectSpawn.modelMatrix),
-                reference: mat4.create(),
+                reference: mat4.clone(objectSpawn.modelMatrix),
                 axis: vec3.create(),
 
                 timer: -1,
                 state: -1,
             };
         }
+        this.dummyParent = def.dummyParent;
     }
 
     public setParent(parent: ObjectRenderer): void {
@@ -145,21 +155,13 @@ export class ObjectRenderer {
         let hasMotionImplementation = false;
         if (this.motionState !== null) {
             hasMotionImplementation = this.runMotion(deltaTimeInFrames);
-            vec3.copy(this.position, this.motionState.pos);
             updateInstances = true;
-
-            // TODO(jstpierre): Instead of generic transform structs, make the motions do their own matrix math? That would
-            // make the XYZ ordering a lot easier to manage...
-            computeModelMatrixR(this.modelMatrix, this.motionState.euler[0], this.motionState.euler[1], this.motionState.euler[2]);
+            vec3.copy(this.position, this.motionState.pos);
+            computeKatamariRotation(this.modelMatrix, this.motionState.euler);
             mat4.mul(this.modelMatrix, this.motionState.base, this.modelMatrix);
-
-            computeModelMatrixR(scratchMatrix, this.motionState.euler2[0], this.motionState.euler2[1], this.motionState.euler2[2]);
-            mat4.mul(this.modelMatrix, this.modelMatrix, scratchMatrix);
-            computeModelMatrixR(scratchMatrix, this.motionState.euler3[0], this.motionState.euler3[1], this.motionState.euler3[2]);
-            mat4.mul(this.modelMatrix, this.modelMatrix, scratchMatrix);
-        } else if (this.parentState) {
-            // in the game, the parent composition uses the base matrix, which only exists in our motionState
-            // instead, make sure the model matrix stays at the initial "base" value before parent transform
+        } else {
+            // before the parent logic, we want the model matrix to be the composition of base and euler
+            // objects without motion won't have changed it themselves, but might have been affected by parents
             mat4.copy(this.modelMatrix, this.objectSpawn.modelMatrix);
         }
 
@@ -172,7 +174,7 @@ export class ObjectRenderer {
             if (!ignoreParent) {
                 updateInstances = true;
                 // overwrite position entirely?
-                vec3.transformMat4(this.position, this.parentState!.parentOffset, parent.modelMatrix);
+                vec3.transformMat4(this.position, this.parentState.parentOffset, parent.modelMatrix);
 
                 if (ancestor.motionState === null || ancestor.motionState.composeEuler) {
                     // nonsense euler angle transformation
@@ -183,7 +185,9 @@ export class ObjectRenderer {
                         parentEuler = parent.motionState.euler;
                     if (parentEuler) {
                         transformVec3Mat4w0(this.parentState.inheritedEuler, parent.modelMatrix, parentEuler);
-                        computeModelMatrixR(scratchMatrix, this.parentState.inheritedEuler[0], this.parentState.inheritedEuler[1], this.parentState.inheritedEuler[2]);
+                        for (let i = 0; i < 3; i++)
+                            this.parentState.inheritedEuler[i] = reduceAngle(this.parentState.inheritedEuler[i]);
+                        computeKatamariRotation(scratchMatrix, this.parentState.inheritedEuler);
                         mat4.mul(this.modelMatrix, scratchMatrix, this.modelMatrix);
                     } else
                         vec3.copy(this.parentState.inheritedEuler, Vec3Zero);
@@ -192,7 +196,7 @@ export class ObjectRenderer {
                         vec3.add(this.parentState.inheritedEuler, this.parentState.inheritedEuler, this.motionState.euler);
                 } else {
                     // the game stores the base and euler separately for each, but doesn't modify it in this case
-                    computeModelMatrixR(scratchMatrix, ancestor.motionState.euler[0], ancestor.motionState.euler[1], ancestor.motionState.euler[2]);
+                    computeKatamariRotation(scratchMatrix, ancestor.motionState.euler);
                     mat4.mul(this.modelMatrix, scratchMatrix, this.modelMatrix);
                     mat4.mul(this.modelMatrix, ancestor.motionState.base, this.modelMatrix);
                 }
@@ -250,6 +254,25 @@ export class ObjectRenderer {
     public setActiveAreaNo(areaNo: number): void {
         const visible = areaNo >= this.objectSpawn.dispOnAreaNo && ((areaNo < this.objectSpawn.dispOffAreaNo) || this.objectSpawn.dispOffAreaNo === -1);
         this.visible = visible;
+        // not 100% on this logic
+        if (this.parentState) {
+            const parent = this.parentState.parent;
+            const parentVisible = areaNo >= parent.objectSpawn.dispOnAreaNo && ((areaNo < parent.objectSpawn.dispOffAreaNo) || parent.objectSpawn.dispOffAreaNo === -1);
+            if (!parentVisible && (this.objectSpawn.linkAction === 2 || parent.dummyParent))
+                this.visible = false;
+        }
+    }
+}
+
+function computeKatamariRotation(dst: mat4, euler: vec3): void {
+    // game wants Z.X.Y
+    if (euler[0] === 0) {
+        // no X, just do Z.Y
+        computeModelMatrixR(dst, 0, euler[1], euler[2]);
+    } else {
+        // just get Z.X from the standard order, then post multiply by Y
+        computeModelMatrixR(dst, euler[0], 0, euler[2]);
+        mat4.rotateY(dst, dst, euler[1]);
     }
 }
 
@@ -329,6 +352,9 @@ const enum ObjectId {
     PLANE03_F       = 0x0383,
     SIGNAL01_E      = 0x03A1,
     SIGNAL02_E      = 0x03A2,
+    KAPSEL01_B	    = 0x0321,
+    KAPSEL02_B	    = 0x0322,
+    KAPSEL03_B	    = 0x0323,
     OMEN08_B        = 0x03FB,
     ZOKUCAR_E       = 0x0405,
     MAJANPAI01_A    = 0x041B,
@@ -351,6 +377,8 @@ const enum ObjectId {
     HOTEL06_E       = 0x0559,
     HOTEL07_E       = 0x055A,
 }
+
+const stationaryObjects: Set<ObjectId> = new Set([ObjectId.KAPSEL01_B, ObjectId.KAPSEL02_B, ObjectId.KAPSEL03_B]);
 
 function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     switch (objectId) {
@@ -637,7 +665,7 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionAction
             // If it's taller than it is wide, roll it on its side. Normally, this is implemented
             // by setting a bitflag, and the setup code for PathRoll does the rotation. But since
             // we don't have setup funcs for the states (yet), just do it here in the PathSetup.
-            motion.euler3[2] = MathConstants.TAU / 4;
+            motion.euler2[2] = MathConstants.TAU / 4;
         }
 
         // TODO(jstpierre): Implement PathSetup properly.
@@ -716,13 +744,13 @@ function motionPathAdjustBasePitch(motion: MotionState, deltaTimeInFrames: numbe
     }
 }
 
-function motionPathAngleStep(motion: MotionState, deltaTimeInFrames: number): number {
-    motion.euler[1] += motion.eulerStep[1] * deltaTimeInFrames;
-    if (Math.sign(motion.eulerStep[1]) !== Math.sign(angleDist(motion.euler[1], motion.eulerTarget[1]))) {
-        motion.euler[1] = motion.eulerTarget[1];
+function motionPathAngleStep(dst: vec3, motion: MotionState, deltaTimeInFrames: number): number {
+    dst[1] += motion.eulerStep[1] * deltaTimeInFrames;
+    if (Math.sign(motion.eulerStep[1]) !== Math.sign(angleDist(dst[1], motion.eulerTarget[1]))) {
+        dst[1] = motion.eulerTarget[1];
         motion.eulerStep[1] = 0;
     }
-    return motion.euler[1];
+    return dst[1];
 }
 
 function motionPathAdvancePoint(motion: MotionState, bbox: AABB): void {
@@ -748,7 +776,7 @@ function motion_PathSpin_Follow(object: ObjectRenderer, motion: MotionState, del
 }
 
 function motion_PathSpin_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
-    motion.euler2[1] += 0.05 * deltaTimeInFrames;
+    motion.euler[1] += 0.05 * deltaTimeInFrames;
     motion_PathSpin_Follow(object, motion, deltaTimeInFrames);
 }
 
@@ -756,7 +784,7 @@ function motion_PathRoll_Follow(object: ObjectRenderer, motion: MotionState, del
     if (motionPathHasReachedTarget(motion, deltaTimeInFrames)) {
         // Compute angles based on velocity before the point switch
         vec3.normalize(pathScratch, motion.velocity);
-        motion.euler[1] = Math.PI + Math.atan2(pathScratch[0], pathScratch[2]);
+        motion.euler2[1] = Math.PI + Math.atan2(pathScratch[0], pathScratch[2]);
 
         motionPathAdvancePoint(motion, object.bbox);
 
@@ -766,9 +794,7 @@ function motion_PathRoll_Follow(object: ObjectRenderer, motion: MotionState, del
 
         motion.eulerTarget[1] = Math.PI + Math.atan2(motion.velocity[0], motion.velocity[2]);
         const framesUntilYaw = distToTarget / (motion.speed === 0 ? 30 : motion.speed);
-        motion.eulerStep[1] = angleDist(motion.euler[1], motion.eulerTarget[1]) / framesUntilYaw;
-
-        // TODO(jstpierre): Verify, but I don't believe that adjustPitch support exists in the PathRoll code.
+        motion.eulerStep[1] = angleDist(motion.euler2[1], motion.eulerTarget[1]) / framesUntilYaw;
 
         normToLength(motion.velocity, motion.speed);
     }
@@ -778,8 +804,15 @@ function motion_PathRoll_Follow(object: ObjectRenderer, motion: MotionState, del
 
 function motion_PathRoll_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
     motion.euler2[0] += 0.15 * deltaTimeInFrames;
-    motionPathAngleStep(motion, deltaTimeInFrames);
+    motionPathAngleStep(motion.euler2, motion, deltaTimeInFrames);
     motion_PathRoll_Follow(object, motion, deltaTimeInFrames);
+    if (motion.isTall) {
+        // reassign euler angles to the corresponding axes after the Z rotation
+        vec3.set(pathScratch, motion.euler2[1], -motion.euler2[0], motion.euler2[2]);
+        computeKatamariRotation(scratchMatrix, pathScratch);
+    } else // this case is Y.X
+        computeModelMatrixR(scratchMatrix, motion.euler2[0], motion.euler2[1], 0);
+    mat4.mul(motion.base, scratchMatrix, motion.reference);
 }
 
 function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
@@ -826,8 +859,9 @@ function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, d
 
 function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
     if (motion.pathIndex < 0) {
-        mat4.identity(motion.base);
         motion.composeEuler = false;
+        mat4.identity(motion.base);
+        mat4.identity(motion.reference);
         motion.pathIndex = pathFindStartIndex(motion.pos, motion.parameters.pathPoints);
 
         // snapping to the first point only happens for COLLISION_PATH, but it fixes some weirdness with starting simple paths
@@ -844,7 +878,7 @@ function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, d
         normToLength(motion.velocity, motion.speed);
     }
 
-    motionPathAngleStep(motion, deltaTimeInFrames);
+    motionPathAngleStep(motion.euler, motion, deltaTimeInFrames);
     motion_PathSimple_Follow(object, motion, deltaTimeInFrames);
 
     if (motion.adjustPitch)
