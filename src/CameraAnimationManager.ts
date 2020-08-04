@@ -1,8 +1,8 @@
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, ReadonlyVec3 } from 'gl-matrix';
 import { Viewer } from './viewer';
 import { StudioCameraController } from './Camera';
 import { getPointHermite, getPointBezier } from './Spline';
-import { computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ } from './MathHelpers';
+import { computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, getMatrixAxisY, Vec3UnitY, lerp, computeModelMatrixR, computeMatrixWithoutTranslation, Vec3UnitZ, transformVec3Mat4w0 } from './MathHelpers';
 
 const MILLISECONDS_IN_SECOND = 1000.0;
 
@@ -119,10 +119,12 @@ export class CameraAnimationManager {
     private interpolatingFrom: mat4 = mat4.create();
     private posFrom: vec3 = vec3.create();
     private forwardVecFrom: vec3 = vec3.create();
-    private rotEFrom: vec3 = vec3.create();
+    private upVecFrom: vec3 = vec3.create();
+    private bankRotFrom: number = 0;
     private posTo: vec3 = vec3.create();
     private forwardVecTo: vec3 = vec3.create();
-    private rotETo: vec3 = vec3.create();
+    private upVecTo: vec3 = vec3.create();
+    private bankRotTo: number = 0;
     private lookAtPosFrom: vec3 = vec3.create();
     private lookAtPosTo: vec3 = vec3.create();
     /**
@@ -272,8 +274,7 @@ export class CameraAnimationManager {
                 interpAmount = easeFunc(interpAmount);
             vec3.lerp(outInterpStep.pos, this.posFrom, this.posTo, interpAmount);
             vec3.lerp(outInterpStep.lookAtPos, this.lookAtPosFrom, this.lookAtPosTo, interpAmount);
-            vec3.lerp(this.nextRot, this.rotEFrom, this.rotETo, interpAmount);
-            outInterpStep.bank = this.nextRot[2];
+            outInterpStep.bank = lerp(this.bankRotFrom, this.bankRotTo, interpAmount);
         } else {
             for (let i = 0; i < 3; i++) {
                 if (this.interpPos)
@@ -282,7 +283,7 @@ export class CameraAnimationManager {
                     outInterpStep.lookAtPos[i] = getPointHermite(this.lookAtPosFrom[i], this.lookAtPosTo[i], this.currentKeyframe.trsTangentIn[i], this.currentKeyframe.trsTangentOut[i], interpAmount);
             }
             if (this.interpRot)
-                outInterpStep.bank = getPointHermite(this.rotEFrom[2], this.rotETo[2], 0, 0, interpAmount);
+                outInterpStep.bank = lerp(this.bankRotFrom, this.bankRotTo, interpAmount);
         }
     }
 
@@ -414,6 +415,10 @@ export class CameraAnimationManager {
             return null;
     }
 
+    private eulerRotFrom: vec3 = vec3.create();
+    private eulerRotTo: vec3 = vec3.create();
+    private scratchVec: vec3 = vec3.create();
+
     private setInterpolationVectors() {
         if (this.currentKeyframeIndex > 0)
             mat4.copy(this.interpolatingFrom, this.animation.keyframes[this.currentKeyframeIndex - 1].endPos);
@@ -421,17 +426,33 @@ export class CameraAnimationManager {
             mat4.copy(this.interpolatingFrom, this.animation.keyframes[this.animation.keyframes.length - 1].endPos);
         mat4.getTranslation(this.posFrom, this.interpolatingFrom);
         mat4.getTranslation(this.posTo, this.currentKeyframe.endPos);
-        computeEulerAngleRotationFromSRTMatrix(this.rotEFrom, this.interpolatingFrom);
-        computeEulerAngleRotationFromSRTMatrix(this.rotETo, this.currentKeyframe.endPos);
         getMatrixAxisZ(this.forwardVecFrom, this.interpolatingFrom);
         getMatrixAxisZ(this.forwardVecTo, this.currentKeyframe.endPos);
+        getMatrixAxisY(this.upVecFrom, this.interpolatingFrom);
+        getMatrixAxisY(this.upVecTo, this.currentKeyframe.endPos);
         vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
         vec3.normalize(this.forwardVecTo, this.forwardVecTo);
+        vec3.normalize(this.upVecFrom, this.upVecFrom);
+        vec3.normalize(this.upVecTo, this.upVecTo);
+
+        computeEulerAngleRotationFromSRTMatrix(this.eulerRotFrom, this.interpolatingFrom);
+        computeEulerAngleRotationFromSRTMatrix(this.eulerRotTo, this.currentKeyframe.endPos);
+
+        vec3.copy(this.scratchVec, Vec3UnitY);
+        vec3.rotateX(this.scratchVec, this.scratchVec, this.posFrom, this.eulerRotFrom[0]);
+        vec3.normalize(this.scratchVec, this.scratchVec);
+        this.bankRotFrom = vec3.angle(this.upVecFrom, this.scratchVec);
+
+        vec3.copy(this.scratchVec, Vec3UnitY);
+        vec3.rotateX(this.scratchVec, this.scratchVec, this.posTo, this.eulerRotTo[0]);
+        vec3.normalize(this.scratchVec, this.scratchVec);
+        this.bankRotTo = vec3.angle(this.upVecTo, this.scratchVec);
+
         vec3.scaleAndAdd(this.lookAtPosFrom, this.posFrom, this.forwardVecFrom, -100);
         vec3.scaleAndAdd(this.lookAtPosTo, this.posTo, this.forwardVecTo, -100);
         this.interpPos = !vec3.exactEquals(this.posFrom, this.posTo);
         this.interpLookAtPos = !vec3.exactEquals(this.lookAtPosFrom, this.lookAtPosTo);
-        this.interpRot = Math.round(this.rotEFrom[2] * 10000) != Math.round(this.rotETo[2] * 10000);
+        this.interpRot = Math.round(this.bankRotFrom * 10000) != Math.round(this.bankRotTo * 10000);
     }
 
     /**
