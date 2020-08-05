@@ -643,7 +643,6 @@ class Main {
 
         const isInteractive = fallbackUndefined<boolean>(scene.isInteractive, true);
         this.viewer.inputManager.isInteractive = isInteractive;
-        this._toggleUI(isInteractive);
 
         const sceneDescId = this._getCurrentSceneDescId()!;
         this.saveManager.setCurrentSceneDescId(sceneDescId);

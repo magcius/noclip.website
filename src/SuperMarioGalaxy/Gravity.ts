@@ -515,14 +515,14 @@ class CubeGravity extends PlanetGravity {
             return -1;
         }
 
-        const size = vec3.length(dst);
+        const axisSize = vec3.length(dst);
         vec3.normalize(dst, dst);
 
         getMatrixTranslation(scratchVec3a, this.mtx);
         vec3.sub(scratchVec3a, scratchVec3a, coord);
 
         // Project onto axis.
-        const dist = Math.max(size * vec3.dot(scratchVec3a, dst), 0.0);
+        const dist = Math.max(vec3.dot(scratchVec3a, dst) - axisSize, 0.0);
         return dist;
     }
 
@@ -640,7 +640,6 @@ class CubeGravity extends PlanetGravity {
         // Orthagonalize to axis.
         vec3.scaleAndAdd(dst, scratchVec3d, scratchVec3b, -vec3.dot(scratchVec3b, scratchVec3d));
 
-        vec3.sub(dst, dst, coord);
         if (!vec3.equals(dst, Vec3Zero)) {
             const dist = vec3.length(dst);
             vec3.normalize(dst, dst);
@@ -713,7 +712,7 @@ class CubeGravity extends PlanetGravity {
         } else if (areaFlags === CubeArea.X_Right + CubeArea.Y_Right + CubeArea.Z_Right) {
             // dst = +axisX +axisY +axisZ;
             getMatrixAxisX(scratchVec3b, this.mtx);
-            vec3.sub(scratchVec3a, scratchVec3a, scratchVec3b);
+            vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
             getMatrixAxisY(scratchVec3b, this.mtx);
             vec3.add(scratchVec3a, scratchVec3a, scratchVec3b);
             getMatrixAxisZ(scratchVec3b, this.mtx);

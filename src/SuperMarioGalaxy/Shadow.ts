@@ -729,3 +729,19 @@ export function onCalcShadowDropPrivateGravityOneTime(actor: LiveActor, name: st
 export function onCalcShadowDropPrivateGravity(actor: LiveActor, name: string | null = null): void {
     actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.PrivateOn);
 }
+
+export function onCalcShadowDropGravityOneTime(actor: LiveActor, name: string | null = null): void {
+    actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.OneTime);
+}
+
+export function onCalcShadowDropGravity(actor: LiveActor, name: string | null = null): void {
+    actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.On);
+}
+
+function getShadowVolumeSphere(actor: LiveActor, name: string | null): ShadowVolumeSphere {
+    return actor.shadowControllerList!.getController(name).shadowDrawer as ShadowVolumeSphere;
+}
+
+export function setShadowVolumeSphereRadius(actor: LiveActor, name: string | null, v: number): void {
+    getShadowVolumeSphere(actor, name).radius = v;
+}

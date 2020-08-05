@@ -7,7 +7,7 @@ import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
-import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixAxis } from "../MathHelpers";
+import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixAxis, getMatrixAxis } from "../MathHelpers";
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
@@ -790,12 +790,7 @@ export function calcDistanceToCurrentAndNextRailPoint(dst: vec2, actor: LiveActo
 }
 
 export function calcMtxAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, m: mat4): void {
-    if (axisX !== null)
-        vec3.set(axisX, m[0], m[1], m[2]);
-    if (axisY !== null)
-        vec3.set(axisY, m[4], m[5], m[6]);
-    if (axisZ !== null)
-        vec3.set(axisZ, m[8], m[9], m[10]);
+    getMatrixAxis(axisX, axisY, axisZ, m);
 }
 
 export function calcDistanceVertical(actor: LiveActor, other: vec3): number {

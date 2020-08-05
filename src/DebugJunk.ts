@@ -2,7 +2,7 @@
 
 import { AABB } from "./Geometry";
 import { Color, Magenta, colorToCSS, Red, Green, Blue } from "./Color";
-import { Camera, divideByW, ScreenSpaceProjection } from "./Camera";
+import { divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, vec3, mat4, ReadonlyMat4, ReadonlyVec3 } from "gl-matrix";
 import { nArray, assert, assertExists, hexdump, magicstr } from "./util";
 import { UI, Slider } from "./ui";
@@ -206,7 +206,7 @@ export function drawWorldSpaceBasis(ctx: CanvasRenderingContext2D, clipFromWorld
     drawWorldSpaceVector(ctx, clipFromWorldMatrix, scratchVec3a, scratchVec3b, mag, Blue, thickness);
 }
 
-export function drawWorldSpaceVector(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, pos: ReadonlyVec3, dir: vec3, mag: number, color: Color = Magenta, thickness = 2): void {
+export function drawWorldSpaceVector(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, pos: ReadonlyVec3, dir: ReadonlyVec3, mag: number, color: Color = Magenta, thickness = 2): void {
     vec4.set(p[0], pos[0], pos[1], pos[2], 1.0);
     vec4.set(p[1], pos[0] + dir[0] * mag, pos[1] + dir[1] * mag, pos[2] + dir[2] * mag, 1.0);
     transformToClipSpace(ctx, clipFromWorldMatrix, 2);
@@ -286,6 +286,7 @@ export function drawScreenSpaceText(ctx: CanvasRenderingContext2D, x: number, y:
     if (options.outline) {
         const oldLineWidth = ctx.lineWidth;
         ctx.lineWidth = options.outline;
+        ctx.strokeStyle = 'black';
         ctx.strokeText(text, x, y);
         ctx.lineWidth = oldLineWidth;
     }

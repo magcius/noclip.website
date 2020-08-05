@@ -1,11 +1,12 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, readString } from "../util";
+import { assert, hexzero, assertExists, readString, nArray } from "../util";
 import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat, vec3 } from "gl-matrix";
-import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString } from "../Common/PS2/GS";
+import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
+import { Endianness } from "../endian";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -63,18 +64,19 @@ function getVifUnpackFormatByteSize(format: number): number {
 export interface BINTexture {
     tex0_data0: number;
     tex0_data1: number;
+    pixels: (Uint8Array | 'framebuffer')[];
     name: string;
     width: number;
     height: number;
-    pixels: Uint8Array;
 }
 
 export interface BINModelPart {
     diffuseColor: Color;
     indexOffset: number;
     indexCount: number;
-    textureName: string | null;
+    textureIndex: number | null;
     gsConfiguration: GSConfiguration;
+    lit: boolean;
 }
 
 export interface BINModel {
@@ -90,13 +92,15 @@ export interface BINModelSector {
 }
 
 export interface ObjectModel {
+    id: number;
     sector: BINModelSector;
-    transforms: mat4[];
+    transforms: PartTransform[];
     bbox: AABB;
 }
 
 export interface LevelModelBIN {
     sectors: BINModelSector[];
+    collision: CollisionList[][];
 }
 
 export interface GSConfiguration {
@@ -130,6 +134,8 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
     // sometimes it appears like a dummy UNPACK (0x60, seen in model object binaries) ?
 
     const tag2 = view.getUint8(texDataOffs + 0x0F);
+    if (tag2 !== 0x50)
+        return 0; // TODO: fix credits
     assert(tag2 === 0x50, "TAG"); // DIRECT
     const texDataSize = view.getUint16(texDataOffs + 0x0C, true) * 0x10;
     const texDataEnd = texDataOffs + texDataSize;
@@ -201,8 +207,7 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
     return texDataIdx;
 }
 
-// TODO(jstpierre): Do we need a texture cache?
-function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1: number, namePrefix: string = ''): BINTexture {
+function decodeTexture(gsMemoryMap: GSMemoryMap[], tex0_data0: number, tex0_data1: number, namePrefix: string = ''): BINTexture {
     // Unpack TEX0 register.
     const tbp0 = (tex0_data0 >>> 0) & 0x3FFF;
     const tbw = (tex0_data0 >>> 14) & 0x3F;
@@ -229,13 +234,22 @@ function decodeTexture(gsMemoryMap: GSMemoryMap, tex0_data0: number, tex0_data1:
     // TODO(jstpierre): Read the TEXALPHA register.
     const alphaReg = tcc === GSTextureColorComponent.RGBA ? -1 : 0x80;
 
-    let pixels: Uint8Array = new Uint8Array(width * height * 4);
-    if (psm === GSPixelStorageFormat.PSMT4)
-        gsMemoryMapReadImagePSMT4_PSMCT32(pixels, gsMemoryMap, tbp0, tbw, width, height, cbp, csa, alphaReg);
-    else if (psm === GSPixelStorageFormat.PSMT8)
-        gsMemoryMapReadImagePSMT8_PSMCT32(pixels, gsMemoryMap, tbp0, tbw, width, height, cbp, alphaReg);
-    else
-        console.warn(`Unsupported PSM ${psmToString(psm)} in texture ${name}`);
+    const pixels: (Uint8Array | 'framebuffer')[] = [];
+    for (let i = 0; i < gsMemoryMap.length; i++) {
+        if (tbp0 === 0x0000 && cbp === 0x0000) {
+            // Framebuffer texture; dynamic.
+            pixels.push('framebuffer');
+        } else {
+            const p = new Uint8Array(width * height * 4);
+            if (psm === GSPixelStorageFormat.PSMT4)
+                gsMemoryMapReadImagePSMT4_PSMCT32(p, gsMemoryMap[i], tbp0, tbw, width, height, cbp, csa, alphaReg);
+            else if (psm === GSPixelStorageFormat.PSMT8)
+                gsMemoryMapReadImagePSMT8_PSMCT32(p, gsMemoryMap[i], tbp0, tbw, width, height, cbp, alphaReg);
+            else
+                console.warn(`Unsupported PSM ${psmToString(psm)} in texture ${name}`);
+            pixels.push(p);
+        }
+    }
 
     return { name, width, height, pixels, tex0_data0, tex0_data1 };
 }
@@ -254,7 +268,7 @@ export function parseStageTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     assert(offs === buffer.byteLength);
 }
 
-function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string, sectorOffs: number): BINModelSector | null {
+function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], namePrefix: string, sectorOffs: number): BINModelSector | null {
     const view = buffer.createDataView();
 
     const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
@@ -263,7 +277,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         return null;
 
     const textures: BINTexture[] = [];
-    function findOrDecodeTexture(tex0_data0: number, tex0_data1: number): string {
+    function findOrDecodeTexture(tex0_data0: number, tex0_data1: number): number {
         let texture = textures.find((texture) => {
             return texture.tex0_data0 === tex0_data0 && texture.tex0_data1 === tex0_data1;
         });
@@ -271,7 +285,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             texture = decodeTexture(gsMemoryMap, tex0_data0, tex0_data1, namePrefix);
             textures.push(texture);
         }
-        return texture.name;
+        return textures.indexOf(texture);
     }
 
     // 4 positions, 3 normals, 2 UV coordinates.
@@ -287,7 +301,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         const minX = view.getFloat32(objOffs + 0x00, true);
         const minY = view.getFloat32(objOffs + 0x04, true);
         const minZ = view.getFloat32(objOffs + 0x08, true);
-        // Not sure what 0x0C is.
+        const modelQuadwordCount = view.getUint16(objOffs + 0x0C, true);
         const maxX = view.getFloat32(objOffs + 0x10, true);
         const maxY = view.getFloat32(objOffs + 0x14, true);
         const maxZ = view.getFloat32(objOffs + 0x18, true);
@@ -303,8 +317,9 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             vertexRunCount: number;
             indexRunData: Uint16Array;
             vertexRunColor: Color;
-            textureName: string | null;
+            textureIndex: number | null;
             gsConfiguration: GSConfiguration;
+            lit: boolean;
         }
         const modelVertexRuns: BINModelRun[] = [];
 
@@ -318,7 +333,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         let vertexRunCount = 0;
         let vertexRunData: Float32Array | null = null;
         let vertexRunColor = colorNewFromRGBA(1, 1, 1, 1);
-        let currentTextureName: string | null = null;
+        let currentTextureIndex: number | null = null;
         let currentGSConfiguration: GSConfiguration = {
             tex0_1_data0: -1, tex0_1_data1: -1,
             tex1_1_data0: -1, tex1_1_data1: -1,
@@ -332,6 +347,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
         let expectedNormalsOffs = -1;
         let expectedDiffuseColorOffs = -1;
         let skipVertices = false;
+        let lit = false;
 
         const newVertexRun = () => {
             // Parse out the header.
@@ -341,6 +357,14 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             vertexRunCount = vertexRunFlags0 & 0x000000FF;
             vertexRunData = new Float32Array(vertexRunCount * WORKING_VERTEX_STRIDE);
             skipVertices = false;
+
+            const lightingFlags = vertexRunFlags1 & 3;
+            if (lightingFlags === 2)
+                lit = false;
+            else if (lightingFlags === 0)
+                lit = true;
+            else
+                throw(`bad lighting flags ${lightingFlags}`)
 
             // Seems to be some sort of format code.
             if (vertexRunFlags2 === 0x0412) {
@@ -398,7 +422,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
 
                         newVertexRun();
                         packetsIdx += 0x10;
-        
+
                         for (let j = 0; j < qwd - 1; j++) {
                             vertexRunData![j * WORKING_VERTEX_STRIDE + 0] = view.getFloat32(packetsIdx + 0x00, true);
                             vertexRunData![j * WORKING_VERTEX_STRIDE + 1] = view.getFloat32(packetsIdx + 0x04, true);
@@ -409,7 +433,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         }
                     } else {
                         // It should be diffuse color.
-                        assert(imm === expectedDiffuseColorOffs);
+                        assert(imm === expectedDiffuseColorOffs && lit);
                         assert(qwd === 0x01);
 
                         const diffuseColorR = view.getFloat32(packetsIdx + 0x00, true) / 128;
@@ -445,7 +469,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         }
                     } else {
                         // If it's not positions, it should be vertex normals.
-                        assert(imm === expectedNormalsOffs);
+                        assert(imm === expectedNormalsOffs && lit);
 
                         for (let j = 0; j < qwd; j++) {
                             vertexRunData![j * WORKING_VERTEX_STRIDE + 4] = view.getFloat32(packetsIdx + 0x00, true);
@@ -455,22 +479,21 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         }
                     }
                 } else if (format === VifUnpackFormat.V4_8) {
-                    // TODO(jstpierre): An unknown color?
-                    assert(qwd === 0x01);
-                    packetsIdx += 0x04;
-
-                    /*
-                    const expectedOffs = 0x8000 + 1 + vertexRunCount * 3;
-                    assert(imm === expectedOffs);
+                    // unlit color
+                    assert((imm & (~0x4000)) === expectedNormalsOffs && !lit);
                     assert(qwd === 0x01);
 
                     const diffuseColorR = view.getUint8(packetsIdx + 0x00) / 0x80;
                     const diffuseColorG = view.getUint8(packetsIdx + 0x01) / 0x80;
                     const diffuseColorB = view.getUint8(packetsIdx + 0x02) / 0x80;
                     const diffuseColorA = view.getUint8(packetsIdx + 0x03) / 0x80;
+
+                    const signExtend = (imm & 0x4000) === 0;
+                    if (signExtend)
+                        assert(diffuseColorR < 1 && diffuseColorG < 1 && diffuseColorB < 1 && diffuseColorA < 1)
+
                     colorFromRGBA(vertexRunColor, diffuseColorR, diffuseColorG, diffuseColorB, diffuseColorA);
                     packetsIdx += 0x04;
-                    */
                 } else {
                     console.error(`Unsupported format ${hexzero(format, 2)}`);
                     throw "whoops";
@@ -518,7 +541,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                         // TODO(jstpierre): PRIM is sometimes set in here. A bug in our parsing logic?
                     } else if (addr === GSRegister.TEX0_1) {
                         // TEX0_1 contains the texture configuration.
-                        currentTextureName = findOrDecodeTexture(data0, data1);
+                        currentTextureIndex = findOrDecodeTexture(data0, data1);
                         currentGSConfiguration.tex0_1_data0 = data0;
                         currentGSConfiguration.tex0_1_data1 = data1;
                     } else if (addr === GSRegister.TEX1_1) {
@@ -545,7 +568,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                 }
 
                 // Make sure that we actually created something here.
-                assertExists(currentTextureName !== null);
+                assertExists(currentTextureIndex !== null);
             } else if (cmd === 0x17) { // MSCNT
                 // Run an HLE form of the VU1 program.
                 assert(vertexRunData !== null);
@@ -580,9 +603,9 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
                     }
 
                     const indexRunData = indexData.slice(0, indexDataIdx);
-                    const textureName = currentTextureName;
+                    const textureIndex = currentTextureIndex;
                     const gsConfiguration: GSConfiguration = Object.assign({}, currentGSConfiguration);
-                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, vertexRunColor: vertexRunColor!, textureName: textureName!, gsConfiguration });
+                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, vertexRunColor: vertexRunColor!, textureIndex: textureIndex!, gsConfiguration, lit });
                 }
 
                 vertexRunFlags0 = 0;
@@ -626,17 +649,15 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, na
             const vertexRunData = vertexRun.vertexRunData;
 
             // Check if we can coalesce this into the existing model part.
-            let modelPartsCompatible = currentModelPart !== null;
-            if (modelPartsCompatible && !colorEqual(vertexRun.vertexRunColor, currentModelPart!.diffuseColor))
-                modelPartsCompatible = false;
-            if (modelPartsCompatible && vertexRun.textureName !== currentModelPart!.textureName)
-                modelPartsCompatible = false;
-            if (modelPartsCompatible && !gsConfigurationEqual(vertexRun.gsConfiguration, currentModelPart!.gsConfiguration))
-                modelPartsCompatible = false;
+            let modelPartsCompatible = currentModelPart !== null
+                && colorEqual(vertexRun.vertexRunColor, currentModelPart!.diffuseColor)
+                && vertexRun.textureIndex === currentModelPart!.textureIndex
+                && gsConfigurationEqual(vertexRun.gsConfiguration, currentModelPart!.gsConfiguration)
+                && vertexRun.lit === currentModelPart.lit;
 
             // TODO(jstpierre): Texture settings
             if (!modelPartsCompatible) {
-                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureName: vertexRun.textureName, gsConfiguration: vertexRun.gsConfiguration };
+                currentModelPart = { diffuseColor: vertexRun.vertexRunColor, indexOffset: indexDst, indexCount: 0, textureIndex: vertexRun.textureIndex, gsConfiguration: vertexRun.gsConfiguration, lit: vertexRun.lit };
                 modelParts.push(currentModelPart);
             }
 
@@ -683,6 +704,7 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
     assert(numSectors === 0x08);
 
     const sectors: BINModelSector[] = [];
+    const collision: CollisionList[][] = [];
 
     // There appear to be up to four graphical sectors.
     // 1. Main Level Graphics
@@ -695,11 +717,103 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
         sectorTableIdx += 0x04;
         if (sectorIsNIL(buffer, sectorOffs))
             continue;
-        const sectorModel = assertExists(parseModelSector(buffer, gsMemoryMap, namePrefix, sectorOffs));
+        const sectorModel = assertExists(parseModelSector(buffer, [gsMemoryMap], namePrefix, sectorOffs));
         sectors.push(sectorModel);
     }
 
-    return { sectors };
+    for (let i = 0; i < 4; i++) {
+        const sectorOffs = view.getUint32(sectorTableIdx + 0x00, true);
+        sectorTableIdx += 0x04;
+        if (sectorIsNIL(buffer, sectorOffs))
+            collision.push([]);
+        else
+            collision.push(parseCollisionLists(buffer, sectorOffs));
+    }
+
+    return { sectors, collision };
+}
+
+export interface LevelParameters {
+    lightingIndex: number;
+    startArea: number;
+    stageAreaIndex: number;
+    missionSetupFiles: string[];
+}
+
+export function parseLevelParameters(index: number, parameters: ArrayBufferSlice, files: ArrayBufferSlice): LevelParameters {
+    const addressOffset = 0x1BE1A0; // start address in RAM
+    const levelTable = 0x1BEF80; // ram address of table
+    const paramView = parameters.createDataView();
+
+    const missionSetupFiles: string[] = [];
+    const fileView = files.createDataView();
+    for (let i = 4 * index + 1; i < 4 * index + 5; i++)
+        missionSetupFiles.push(fileView.getUint32(0x10 * i + 0x08, true).toString(16));
+
+    if (index > 31 && index < 39)
+        index = 31; // TODO: figure out what's going on with versus stages
+
+    const levelPointer = paramView.getUint32(levelTable + 4 * index - addressOffset, true) - addressOffset;
+
+    const lightingIndex = paramView.getUint8(levelPointer + 0x00);
+    const startArea = paramView.getUint8(levelPointer + 0x01);
+    let stageAreaIndex = paramView.getUint16(levelPointer + 0x04, true);
+    if (index === 41) // this stage seems to want the crazy test map
+        stageAreaIndex++;
+
+    return { lightingIndex, startArea, stageAreaIndex, missionSetupFiles };
+}
+
+export interface CollisionList {
+    bbox: AABB;
+    groups: CollisionTriangleGroup[];
+}
+
+interface CollisionTriangleGroup {
+    vertices: Float32Array;
+    isTriStrip: boolean;
+}
+
+function parseCollisionLists(data: ArrayBufferSlice, start: number): CollisionList[] {
+    const lists: CollisionList[] = [];
+
+    const view = data.createDataView();
+    const collisionCount = view.getUint8(start);
+    const aabbOffset = start + view.getUint32(start + 4, true);
+    const aabbCount = view.getUint16(aabbOffset, true) & 0x3FF;
+    assert(view.getUint8(aabbOffset + 0x07) === 0x68); // unpack v3-32
+    assert(aabbCount === collisionCount);
+
+    for (let i = 0; i < collisionCount; i++) {
+        const bbox = new AABB(
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x00, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x04, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x08, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x0C, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x10, true),
+            view.getFloat32(aabbOffset + 8 + 0x18 * i + 0x14, true),
+        );
+
+        let vertexOffset = start + view.getUint32(start + 8 + 4 * i, true);
+        const groups: CollisionTriangleGroup[] = [];
+        while (true) {
+            assert(view.getUint8(vertexOffset + 0x07) === 0x6c); // unpack v4-32, though not sure this is actually executed as vifcode
+            const lowByte = view.getUint8(vertexOffset);
+            const isTriStrip = (lowByte & 0x80) !== 0;
+            const vertexCount = isTriStrip ? ((lowByte & 0x7F) + 2) : (lowByte & 0x7F) * 3;
+            const vertices = data.createTypedArray(Float32Array, vertexOffset + 8, 4 * vertexCount, Endianness.LITTLE_ENDIAN);
+            groups.push({vertices, isTriStrip});
+
+            vertexOffset += 0x10*vertexCount + 0x0C;
+            const vifcode = view.getUint8(vertexOffset - 1);
+            if (vifcode >= 0x80) {
+                assert(vifcode === 0x97); //MSCNT with interrupt
+                break;
+            }
+        }
+        lists.push({ bbox, groups });
+    }
+    return lists;
 }
 
 interface RandomIDOption {
@@ -771,14 +885,12 @@ function resetRandomGroups(groups: RandomGroup[]): void {
     }
 }
 
-function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: number): mat4[] {
+function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: number): PartTransform[] {
     const addressOffset = 0x210260; // start address in RAM
-    const indexTable = 0x211290; // ram address of table 
-    const transformTable = 0x2111A0; // ram address of table 
+    const indexTable = 0x211290; // ram address of table
+    const transformTable = 0x2111A0; // ram address of table
 
     const view = data.createDataView();
-    if (indexTable + 2 * objectID - addressOffset > data.byteLength)
-        console.log(hexzero(indexTable, 8), hexzero(objectID, 8), hexzero(addressOffset, 8), hexzero(data.byteLength, 8))
     // only very few objects have transforms, so first use the index table to find the right entry
     const index = view.getInt16(indexTable + 2 * objectID - addressOffset, true);
     if (index === -1)
@@ -788,7 +900,7 @@ function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: 
     if (firstTransform === 0)
         return []; // even the condensed table has empty entries
 
-    const out: mat4[] = [];
+    const out: PartTransform[] = [];
     for (let i = 0; i < partCount; i++) {
         const x = view.getFloat32(firstTransform + 0x20 * i + 0x00 - addressOffset, true);
         const y = view.getFloat32(firstTransform + 0x20 * i + 0x04 - addressOffset, true);
@@ -796,21 +908,192 @@ function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: 
         const rx = view.getFloat32(firstTransform + 0x20 * i + 0x10 - addressOffset, true);
         const ry = view.getFloat32(firstTransform + 0x20 * i + 0x14 - addressOffset, true);
         const rz = view.getFloat32(firstTransform + 0x20 * i + 0x18 - addressOffset, true);
-        const xform = mat4.create();
-        computeModelMatrixPosRot(xform, vec3.fromValues(x, y, z), vec3.fromValues(rx, ry, rz));
-        out.push(xform);
+        const transform = mat4.create();
+        const translation = vec3.fromValues(x, y, z);
+        const rotation = vec3.fromValues(rx, ry, rz);
+        computeModelMatrixPosRot(transform, translation, rotation);
+        out.push({ translation, rotation, matrix: transform });
     }
     return out;
 }
 
+export interface MotionParameters {
+    motionID: MotionID;
+    motionActionID: MotionActionID;
+    altMotionActionID: MotionActionID;
+    pathPoints: Float32Array;
+    speed: number;
+}
+
+export const enum MotionID {
+    PathSpin      = 0x13,
+    PathRoll      = 0x14,
+    Spin          = 0x15,
+    Bob           = 0x16,
+    Flip          = 0x1E,
+    Sway          = 0x20,
+    WhackAMole    = 0x22,
+}
+
+export const enum MotionActionID {
+    None          = 0x00,
+    PathCollision = 0x02,
+    PathSpin      = 0x14,
+    PathRoll      = 0x15,
+    Misc          = 0x16,
+    PathSetup     = 0x19,
+    PathSimple    = 0x1D,
+}
+
+interface MotionActionTableEntry {
+    main: MotionActionID;
+    alt: MotionActionID;
+}
+
+const motionActionTable: MotionActionTableEntry[] = [
+    /* 0x00 */ { main: 0x04,                         alt: 0x05 },
+    /* 0x01 */ { main: 0x03,                         alt: 0x05 },
+    /* 0x02 */ { main: MotionActionID.PathCollision, alt: 0x06 },
+    /* 0x03 */ { main: 0x03,                         alt: 0x07 },
+    /* 0x04 */ { main: 0x04,                         alt: 0x08 },
+    /* 0x05 */ { main: 0x0C,                         alt: 0x09 },
+    /* 0x06 */ { main: 0x04,                         alt: 0x0D },
+    /* 0x07 */ { main: 0x04,                         alt: 0x0A },
+    /* 0x08 */ { main: MotionActionID.PathCollision, alt: 0x0B },
+    /* 0x09 */ { main: 0x03,                         alt: 0x0A },
+    /* 0x0A */ { main: 0x01,                         alt: 0x0E },
+    /* 0x0B */ { main: 0x0F,                         alt: MotionActionID.None },
+    /* 0x0C */ { main: 0x0F,                         alt: 0x05 },
+    /* 0x0D */ { main: 0x0C,                         alt: 0x10 },
+    /* 0x0E */ { main: 0x11,                         alt: 0x12 },
+    /* 0x0F */ { main: 0x04,                         alt: 0x12 },
+    /* 0x10 */ { main: 0x13,                         alt: 0x09 },
+    /* 0x11 */ { main: 0x13,                         alt: 0x09 },
+    /* 0x12 */ { main: 0x0C,                         alt: 0x09 },
+    /* 0x13 */ { main: MotionActionID.PathSetup,     alt: MotionActionID.PathSpin },
+    /* 0x14 */ { main: MotionActionID.PathSetup,     alt: MotionActionID.PathRoll },
+    /* 0x15 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x16 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x17 */ { main: MotionActionID.PathSetup,     alt: 0x17 },
+    /* 0x18 */ { main: 0x18,                         alt: MotionActionID.None },
+    /* 0x19 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x1A */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x1B */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x1C */ { main: MotionActionID.PathSetup,     alt: 0x1A },
+    /* 0x1D */ { main: MotionActionID.PathSetup,     alt: 0x1A },
+    /* 0x1E */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x1F */ { main: 0x04,                         alt: 0x03 },
+    /* 0x20 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x21 */ { main: 0x0C,                         alt: 0x09 },
+    /* 0x22 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
+    /* 0x23 */ { main: 0x1B,                         alt: MotionActionID.None },
+    /* 0x24 */ { main: 0x1C,                         alt: MotionActionID.None },
+    /* 0x25 */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x26 */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x27 */ { main: MotionActionID.PathSimple,    alt: MotionActionID.None },
+    /* 0x28 */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x29 */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x2A */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x2B */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x2C */ { main: 0x01,                         alt: MotionActionID.None },
+];
+
+export function parseMotion(pathData: ArrayBufferSlice, motionData: ArrayBufferSlice, levelIndex: number, moveType: number): MotionParameters | null {
+    const motionOffset = 0x260D90;
+    const levelMotions = 0x261B88;
+
+    const motionView = motionData.createDataView();
+    const motionList = motionView.getUint32(levelMotions + 4 * levelIndex - motionOffset, true);
+    if (motionList === 0) {
+        console.warn("missing motion", levelIndex, moveType);
+        return null;
+    }
+    const entryStart = motionList + 6 * moveType - motionOffset;
+
+    const backupIndex = motionView.getInt16(entryStart + 0x00, true);
+    const pathIndex = motionView.getInt16(entryStart + 0x02, true);
+    const motionID = motionView.getInt16(entryStart + 0x04, true);
+
+    let motionActionID = 0, altMotionActionID = 0;
+    if (motionID < 0) {
+        assert(backupIndex >= 0 && backupIndex < 3);
+        motionActionID = backupIndex + 1;
+    } else {
+        assert(motionID < motionActionTable.length);
+        const motionAction = motionActionTable[motionID];
+        motionActionID = motionAction.main;
+        altMotionActionID = motionAction.alt;
+    }
+
+    const pathOffset = 0x216290;
+    const levelPaths = 0x25F6F0;
+
+    if (levelIndex === 41)
+        levelIndex = 42; // test 1 has motion, test 2 has paths ???
+
+    const pathView = pathData.createDataView();
+    const pathList = pathView.getUint32(levelPaths + 4 * levelIndex - pathOffset, true);
+    assert(pathList !== 0);
+    const pathStart = pathList + 8 * pathIndex - pathOffset;
+    const pointStart = pathView.getUint32(pathStart + 0x00, true);
+    const speed = pathView.getFloat32(pathStart + 0x04, true);
+    // find last path point
+    let pointCount = 0;
+    while (pathView.getFloat32(pointStart - pathOffset + 0x10 * (pointCount++) + 0x0C, true) !== 255) { }
+    pointCount -= 2; // we incremented once too many, and the 255 point isn't part of the path
+    const pathPoints = pathData.createTypedArray(Float32Array, pointStart - pathOffset, 4 * pointCount, Endianness.LITTLE_ENDIAN);
+
+    return { motionActionID, altMotionActionID, pathPoints, speed, motionID };
+}
+
+export interface ObjectDefinition {
+    stayLevel: boolean;
+    speedIndex: number;
+    altUpdate: number;
+    dummyParent: boolean;
+}
+
+export function parseObjectDefinition(data: ArrayBufferSlice, id: number): ObjectDefinition {
+    const view = data.createDataView();
+    const offs = id * 0x24;
+
+    // internal name pointer
+    // two volume-related floats
+    const stayLevel = view.getUint8(offs + 0x0C) !== 0;
+    const speedIndex = view.getInt8(offs + 0x13);
+    const altUpdate = view.getInt8(offs + 0x14);
+    const dummyParent = view.getUint8(offs + 0x21) !== 0;
+
+    return { stayLevel, speedIndex, altUpdate, dummyParent};
+}
+
+export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIndex: number): Int16Array | null {
+    const view = data.createDataView();
+    const offset = 0x261EC0;
+    const tableStart = 0x267798;
+
+    const entryStart = view.getUint32(tableStart + 4*levelIndex - offset, true);
+    if (entryStart === 0)
+        return null;
+
+    const pairStart = view.getUint32(entryStart + 4*areaIndex - offset, true);
+    if (pairStart === 0)
+        return null;
+
+    if (pairStart > 0xf0000000) // accidentally reading pair info? MAS7 area 2
+        return null;
+
+    return data.createTypedArray(Int16Array, pairStart - offset, undefined, Endianness.LITTLE_ENDIAN);
+}
+
 const scratchObjectAABB = new AABB();
 const scratchAABBTransform = mat4.create();
-function computeObjectAABB(sector: BINModelSector, transforms: mat4[]): AABB {
+function computeObjectAABB(sector: BINModelSector, transforms: PartTransform[]): AABB {
     const out = new AABB();
     mat4.identity(scratchAABBTransform);
-    out.transform(sector.models[0].bbox, transforms.length > 0 ? transforms[0] : scratchAABBTransform);
+    out.transform(sector.models[0].bbox, transforms.length > 0 ? transforms[0].matrix : scratchAABBTransform);
     for (let i = 1; i < transforms.length; i++) {
-        scratchObjectAABB.transform(sector.models[i].bbox, transforms.length > 0 ? transforms[i] : scratchAABBTransform);
+        scratchObjectAABB.transform(sector.models[i].bbox, transforms.length > 0 ? transforms[i].matrix : scratchAABBTransform);
         out.union(out, scratchObjectAABB);
     }
     return out;
@@ -831,12 +1114,22 @@ export interface MissionSetupObjectSpawn {
 
     // Object transformation.
     modelMatrix: mat4;
+
+    // per-level motion specifier, including path and logic
+    moveType: number;
+
+    // determines relationship to parent object, if any
+    linkAction: number;
+
+    // index in the master object table in the game
+    tableIndex: number;
 }
 
 export interface LevelSetupBIN {
     activeStageAreas: number[];
     objectModels: ObjectModel[];
-    objectSpawns: MissionSetupObjectSpawn[];
+    objectSpawns: MissionSetupObjectSpawn[][];
+    zones: CollisionList[];
 }
 
 function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
@@ -857,11 +1150,22 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
     return new ArrayBufferSlice(dstBuffer.buffer);
 }
 
-export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: GSMemoryMap, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
+export interface PartTransform {
+    matrix: mat4;
+    translation: vec3;
+    rotation: vec3;
+}
+
+export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
     const numSectors = view.getUint32(0x00, true);
+
+    const collisionOffset = view.getUint32(0x04, true);
+    const zones = parseCollisionLists(buffer, collisionOffset);
+
+    const gsMemoryMap = nArray(2, () => gsMemoryMapNew());
 
     function parseObject(objectId: number): ObjectModel | null {
         const firstSectorIndex = 0x09 + objectId * 0x0B;
@@ -886,9 +1190,11 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
 
         if (!sectorIsNIL(buffer, texDataOffs)) {
             // Parse texture data.
-            parseDIRECT(gsMemoryMap, buffer.slice(texDataOffs));
-            // TODO(jstpierre): Which CLUT do I want?
-            parseDIRECT(gsMemoryMap, buffer.slice(clutAOffs));
+            parseDIRECT(gsMemoryMap[0], buffer.slice(texDataOffs));
+            parseDIRECT(gsMemoryMap[1], buffer.slice(texDataOffs));
+
+            parseDIRECT(gsMemoryMap[0], buffer.slice(clutAOffs));
+            parseDIRECT(gsMemoryMap[1], buffer.slice(clutBOffs));
         }
 
         // Load in LOD 0.
@@ -896,16 +1202,16 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
         if (sector === null)
             return null;
         const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
-        return {sector, transforms, bbox: computeObjectAABB(sector, transforms)};
+        return {id: objectId, sector, transforms, bbox: computeObjectAABB(sector, transforms)};
     }
 
     const objectModels: ObjectModel[] = [];
-    const objectSpawns: MissionSetupObjectSpawn[] = [];
+    const objectSpawns: MissionSetupObjectSpawn[][] = [];
 
-    function findOrParseObject(objectId: number): number {
-        const existingSpawn = objectSpawns.find((spawn) => spawn.objectId === objectId);
-        if (existingSpawn !== undefined) {
-            return existingSpawn.modelIndex;
+    function findOrParseObjectModel(objectId: number): number {
+        const existingIndex = objectModels.findIndex((model) => model.id === objectId);
+        if (existingIndex >= 0) {
+            return existingIndex;
         } else {
             const newObject = parseObject(objectId);
             if (newObject === null)
@@ -919,12 +1225,19 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
     const activeStageAreas: number[] = [];
     let setupSpawnTableIdx = 0x14;
     for (let i = 0; i < 5; i++, setupSpawnTableIdx += 0x04) {
+        const areaObjectSpawns: MissionSetupObjectSpawn[] = [];
+        objectSpawns.push(areaObjectSpawns);
         let setupSpawnsIdx = view.getUint32(setupSpawnTableIdx, true);
+        if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ') {
+            if (i >= firstArea)
+                break;
+            else
+                continue;
+        }
 
-        if (readString(buffer, setupSpawnsIdx, 0x04) === 'NIL ')
-            continue;
-
-        activeStageAreas.push(i);
+        // until we know better, merge early stages in with the first one
+        if (i >= firstArea)
+            activeStageAreas.push(i);
 
         // each stage uses groups separately
         resetRandomGroups(randomGroups);
@@ -941,12 +1254,12 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
         }
 
         let j = 0;
-        for (; ; setupSpawnsIdx += 0x40) {
+        for (let tableIndex = 0; ; setupSpawnsIdx += 0x40, tableIndex++) {
             // Flag names come from Katamari Damacy REROLL, on "AttachableProp"
             const u16NameIdx = view.getUint16(setupSpawnsIdx + 0x00, true);
             const u8LocPosType = view.getUint8(setupSpawnsIdx + 0x02);
             const s8RandomLocGroupNo = view.getInt8(setupSpawnsIdx + 0x03);
-            const s8HitAreaNo = view.getInt16(setupSpawnsIdx + 0x04, true);
+            const s16MoveTypeNo = view.getInt16(setupSpawnsIdx + 0x04, true);
             const s8HitOnAreaNo = view.getInt8(setupSpawnsIdx + 0x06);
             const u8LinkActNo = view.getUint8(setupSpawnsIdx + 0x07);
             const u8ExActTypeNo = view.getUint8(setupSpawnsIdx + 0x08);
@@ -980,24 +1293,9 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
                     continue;
             }
 
-            // Skip "weird" objects (missing models, descriptions)
-            switch (objectId) {
-            case 0x0089:
-            case 0x0122:
-            case 0x017D:
-            case 0x01F3:
-            case 0x026B:
-            case 0x0277:
-            case 0x0364:
-            case 0x059E:
-            case 0x05A8:
-            case 0x05A9:
-                continue;
-            }
-
-            const modelIndex = findOrParseObject(objectId);
+            const modelIndex = findOrParseObjectModel(objectId);
             if (modelIndex === -1) {
-                console.log(`Missing object ${hexzero(objectId, 4)}; layer ${i} object index ${j}`);
+                // It's possible (and normal!) for object models to be missing if they're just parent objects.
                 continue;
             }
 
@@ -1023,15 +1321,14 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], gsMemoryMap: G
             // there's an alternative path that I don't understand yet, just the simple stuff for now
             if (u8LocPosType !== 0) {
                 scratchObjectAABB.transform(objectModels[modelIndex].bbox, modelMatrix);
-                modelMatrix[13] = scratchObjectAABB.minY;
+                modelMatrix[13] -= scratchObjectAABB.maxY - modelMatrix[13];
             }
 
-            const dispOnAreaNo = i;
-            const objectSpawn: MissionSetupObjectSpawn = { objectId, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix };
-            objectSpawns.push(objectSpawn);
+            const dispOnAreaNo = Math.max(i, firstArea);
+            areaObjectSpawns.push({ objectId, modelIndex, dispOnAreaNo, dispOffAreaNo: s8DispOffAreaNo, modelMatrix, moveType: s16MoveTypeNo, tableIndex, linkAction: u8LinkActNo });
             j++;
         }
     }
 
-    return { objectModels, objectSpawns, activeStageAreas };
+    return { objectModels, objectSpawns, activeStageAreas, zones };
 }
