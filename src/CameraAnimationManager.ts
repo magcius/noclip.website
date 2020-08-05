@@ -1,8 +1,8 @@
-import { mat4, vec3, ReadonlyVec3 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { Viewer } from './viewer';
 import { StudioCameraController } from './Camera';
 import { getPointHermite, getPointBezier } from './Spline';
-import { computeEulerAngleRotationFromSRTMatrix, getMatrixAxisZ, getMatrixAxisY, Vec3UnitY, lerp, computeModelMatrixR, computeMatrixWithoutTranslation, Vec3UnitZ, transformVec3Mat4w0 } from './MathHelpers';
+import { getMatrixAxisZ } from './MathHelpers';
 
 const MILLISECONDS_IN_SECOND = 1000.0;
 
@@ -43,8 +43,6 @@ export interface Keyframe {
     linearEaseType: LinearEaseType;
     trsTangentIn: vec3;
     trsTangentOut: vec3;
-    rotTangentIn: vec3;
-    rotTangentOut: vec3;
     endPos: mat4;
     name?: string;
 }
@@ -73,8 +71,6 @@ export class CameraAnimation {
             linearEaseType: LinearEaseType.EaseBoth,
             trsTangentIn: vec3.create(),
             trsTangentOut: vec3.create(),
-            rotTangentIn: vec3.create(),
-            rotTangentOut: vec3.create(),
             endPos: keyframeEndPos,
             name: name
         }
@@ -101,10 +97,7 @@ export class CameraAnimationManager {
     private beforePrevTrs: vec3 = vec3.create();
     private prevTrs: vec3 = vec3.create();
     private nextTrs: vec3 = vec3.create();
-    private prevRot: vec3 = vec3.create();
-    private nextRot: vec3 = vec3.create();
     private trsTangentScratchVec: vec3 = vec3.create();
-    private rotTangentScratchVec: vec3 = vec3.create();
     /**
      * Variables for animation playback.
      */
@@ -116,24 +109,21 @@ export class CameraAnimationManager {
     private currentKeyframeTotalDurationMs: number = 0;
     private loopAnimation: boolean = false;
     private previewingKeyframe: boolean = false;
+    /**
+     * Interpolation variables.
+     */
     private interpolatingFrom: mat4 = mat4.create();
     private posFrom: vec3 = vec3.create();
     private forwardVecFrom: vec3 = vec3.create();
-    private upVecFrom: vec3 = vec3.create();
-    private bankRotFrom: number = 0;
     private posTo: vec3 = vec3.create();
     private forwardVecTo: vec3 = vec3.create();
-    private upVecTo: vec3 = vec3.create();
-    private bankRotTo: number = 0;
     private lookAtPosFrom: vec3 = vec3.create();
     private lookAtPosTo: vec3 = vec3.create();
     /**
-     * Flags to indicate whether the position, lookAt position,
-     * and bank rotation should be interpolated for the current keyframe.
+     * Flags to indicate whether the position and lookAt position should be interpolated for the current keyframe.
      */
     private interpPos: boolean = true;
     private interpLookAtPos: boolean = true;
-    private interpRot: boolean = true;
 
     constructor(private uiKeyframeList: HTMLElement, private uiStudioControls: HTMLElement) {
         this.studioCameraController = new StudioCameraController(this);
@@ -261,10 +251,10 @@ export class CameraAnimationManager {
     }
 
     /**
-     * Performs one interpolation step in the current animation, providing a quaternion and vector describing the rotation and translation of the next animation frame.
+     * Performs one interpolation step in the current animation, updating the provided 
+     * object with the translation and lookAt focus point of the next animation frame.
      * 
-     * @param outRot the next frame's rotation quaternion
-     * @param outTrs the next frame's translation vector
+     * @param outInterpStep the next interpolation step of the animation
      */
     public playbackInterpolationStep(outInterpStep: InterpolationStep) {
         let interpAmount = this.currentKeyframeProgressMs / this.currentKeyframeInterpDurationMs;
@@ -274,7 +264,7 @@ export class CameraAnimationManager {
                 interpAmount = easeFunc(interpAmount);
             vec3.lerp(outInterpStep.pos, this.posFrom, this.posTo, interpAmount);
             vec3.lerp(outInterpStep.lookAtPos, this.lookAtPosFrom, this.lookAtPosTo, interpAmount);
-            outInterpStep.bank = lerp(this.bankRotFrom, this.bankRotTo, interpAmount);
+            // TODO(Veegie) Interpolate bank rotation.
         } else {
             for (let i = 0; i < 3; i++) {
                 if (this.interpPos)
@@ -282,8 +272,7 @@ export class CameraAnimationManager {
                 if (this.interpLookAtPos)
                     outInterpStep.lookAtPos[i] = getPointHermite(this.lookAtPosFrom[i], this.lookAtPosTo[i], this.currentKeyframe.trsTangentIn[i], this.currentKeyframe.trsTangentOut[i], interpAmount);
             }
-            if (this.interpRot)
-                outInterpStep.bank = lerp(this.bankRotFrom, this.bankRotTo, interpAmount);
+            // TODO(Veegie) Interpolate bank rotation.
         }
     }
 
@@ -384,9 +373,6 @@ export class CameraAnimationManager {
                         if (typeof a[i].trsTangentIn[j] !== 'number'
                             || typeof a[i].trsTangentOut[j] !== 'number')
                             return false;
-                        if (typeof a[i].rotTangentIn[j] !== 'number'
-                            || typeof a[i].rotTangentOut[j] !== 'number')
-                            return false;
                     }
                 }
                 if (typeof a[i].holdDuration !== 'number')
@@ -415,10 +401,6 @@ export class CameraAnimationManager {
             return null;
     }
 
-    private eulerRotFrom: vec3 = vec3.create();
-    private eulerRotTo: vec3 = vec3.create();
-    private scratchVec: vec3 = vec3.create();
-
     private setInterpolationVectors() {
         if (this.currentKeyframeIndex > 0)
             mat4.copy(this.interpolatingFrom, this.animation.keyframes[this.currentKeyframeIndex - 1].endPos);
@@ -428,31 +410,12 @@ export class CameraAnimationManager {
         mat4.getTranslation(this.posTo, this.currentKeyframe.endPos);
         getMatrixAxisZ(this.forwardVecFrom, this.interpolatingFrom);
         getMatrixAxisZ(this.forwardVecTo, this.currentKeyframe.endPos);
-        getMatrixAxisY(this.upVecFrom, this.interpolatingFrom);
-        getMatrixAxisY(this.upVecTo, this.currentKeyframe.endPos);
         vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
         vec3.normalize(this.forwardVecTo, this.forwardVecTo);
-        vec3.normalize(this.upVecFrom, this.upVecFrom);
-        vec3.normalize(this.upVecTo, this.upVecTo);
-
-        computeEulerAngleRotationFromSRTMatrix(this.eulerRotFrom, this.interpolatingFrom);
-        computeEulerAngleRotationFromSRTMatrix(this.eulerRotTo, this.currentKeyframe.endPos);
-
-        vec3.copy(this.scratchVec, Vec3UnitY);
-        vec3.rotateX(this.scratchVec, this.scratchVec, this.posFrom, this.eulerRotFrom[0]);
-        vec3.normalize(this.scratchVec, this.scratchVec);
-        this.bankRotFrom = vec3.angle(this.upVecFrom, this.scratchVec);
-
-        vec3.copy(this.scratchVec, Vec3UnitY);
-        vec3.rotateX(this.scratchVec, this.scratchVec, this.posTo, this.eulerRotTo[0]);
-        vec3.normalize(this.scratchVec, this.scratchVec);
-        this.bankRotTo = vec3.angle(this.upVecTo, this.scratchVec);
-
         vec3.scaleAndAdd(this.lookAtPosFrom, this.posFrom, this.forwardVecFrom, -100);
         vec3.scaleAndAdd(this.lookAtPosTo, this.posTo, this.forwardVecTo, -100);
         this.interpPos = !vec3.exactEquals(this.posFrom, this.posTo);
         this.interpLookAtPos = !vec3.exactEquals(this.lookAtPosFrom, this.lookAtPosTo);
-        this.interpRot = Math.round(this.bankRotFrom * 10000) != Math.round(this.bankRotTo * 10000);
     }
 
     /**
@@ -495,51 +458,32 @@ export class CameraAnimationManager {
 
         mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 1].endPos);
         mat4.getTranslation(this.nextTrs, keyframes[1].endPos);
-        computeEulerAngleRotationFromSRTMatrix(this.prevRot, keyframes[keyframes.length - 1].endPos);
-        computeEulerAngleRotationFromSRTMatrix(this.nextRot, keyframes[1].endPos);
 
         vec3.sub(this.trsTangentScratchVec, this.nextTrs, this.prevTrs);
         vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
-        vec3.sub(this.rotTangentScratchVec, this.nextRot, this.prevRot);
-        vec3.scale(this.rotTangentScratchVec, this.rotTangentScratchVec, 0.5);
 
         vec3.copy(keyframes[0].trsTangentOut, this.trsTangentScratchVec);
-        vec3.copy(keyframes[0].rotTangentOut, this.rotTangentScratchVec);
         vec3.copy(keyframes[1].trsTangentIn, this.trsTangentScratchVec);
-        vec3.copy(keyframes[1].rotTangentIn, this.rotTangentScratchVec);
 
         for (let i = 1; i < keyframes.length - 1; i++) {
             mat4.getTranslation(this.prevTrs, keyframes[i - 1].endPos);
             mat4.getTranslation(this.nextTrs, keyframes[i + 1].endPos);
-            computeEulerAngleRotationFromSRTMatrix(this.prevRot, keyframes[i - 1].endPos);
-            computeEulerAngleRotationFromSRTMatrix(this.nextRot, keyframes[i + 1].endPos);
-
             vec3.sub(this.trsTangentScratchVec, this.nextTrs, this.prevTrs);
             vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
-            vec3.sub(this.rotTangentScratchVec, this.nextRot, this.prevRot);
-            vec3.scale(this.rotTangentScratchVec, this.rotTangentScratchVec, 0.5);
 
             vec3.copy(keyframes[i].trsTangentOut, this.trsTangentScratchVec);
-            vec3.copy(keyframes[i].rotTangentOut, this.rotTangentScratchVec);
             vec3.copy(keyframes[i + 1].trsTangentIn, this.trsTangentScratchVec);
-            vec3.copy(keyframes[i + 1].rotTangentIn, this.rotTangentScratchVec);
         }
 
         if (this.loopAnimation) {
             mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 2].endPos);
             mat4.getTranslation(this.nextTrs, keyframes[0].endPos);
-            computeEulerAngleRotationFromSRTMatrix(this.prevRot, keyframes[keyframes.length - 2].endPos);
-            computeEulerAngleRotationFromSRTMatrix(this.nextRot, keyframes[0].endPos);
 
             vec3.sub(this.trsTangentScratchVec, this.nextTrs, this.prevTrs);
             vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
-            vec3.sub(this.rotTangentScratchVec, this.nextRot, this.prevRot);
-            vec3.scale(this.rotTangentScratchVec, this.rotTangentScratchVec, 0.5);
 
             vec3.copy(keyframes[keyframes.length - 1].trsTangentOut, this.trsTangentScratchVec);
-            vec3.copy(keyframes[keyframes.length - 1].rotTangentOut, this.rotTangentScratchVec);
             vec3.copy(keyframes[0].trsTangentIn, this.trsTangentScratchVec);
-            vec3.copy(keyframes[0].rotTangentIn, this.rotTangentScratchVec);
         }
     }
 }
