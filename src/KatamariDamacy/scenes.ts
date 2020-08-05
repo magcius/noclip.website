@@ -18,6 +18,8 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
 import { Vec3Zero } from '../MathHelpers';
 import { ObjectRenderer } from './objects';
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D, drawWorldSpaceText } from '../DebugJunk';
+import { Magenta } from '../Color';
 
 const pathBase = `katamari_damacy`;
 
@@ -159,6 +161,11 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, lightingIndex: num
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 2, numSamplers: 1 },
 ];
+
+function mod(a: number, b: number) {
+    return (a + b) % b;
+}
+
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
     private currentAreaNo: number = 0;
     private sceneTexture = new ColorTexture();
@@ -174,6 +181,8 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public objectRenderers: ObjectRenderer[] = [];
 
     public sceneMoveSpeedMult = 8/60;
+    public motionCache: Map<number, BIN.MotionParameters | null> | null;
+    private drawPaths = false;
 
     constructor(device: GfxDevice, public levelParams: BIN.LevelParameters, public missionSetupBin: BIN.LevelSetupBIN) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -186,6 +195,23 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(this.sceneMoveSpeedMult);
+    }
+
+    private drawPath(viewerInput: Viewer.ViewerRenderInput, n: Float32Array): void {
+        const scratchMatrix = mat4.create();
+        mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, katamariWorldSpaceToNoclipSpace);
+
+        assert((n.length % 4) === 0);
+        const numPoints = n.length / 4;
+
+        const p0 = vec3.create();
+        const p1 = vec3.create();
+        for (let i = 1; i < numPoints + 1; i++) {
+            const i0 = mod(i - 1, numPoints), i1 = mod(i, numPoints);
+            vec3.set(p0, n[i0*4+0], n[i0*4+1], n[i0*4+2]);
+            vec3.set(p1, n[i1*4+0], n[i1*4+1], n[i1*4+2]);
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), scratchMatrix, p0, p1);
+        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -204,6 +230,14 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
         renderInstManager.drawOnPassRenderer(device, passRenderer);
         renderInstManager.resetRenderInsts();
+
+        if (this.motionCache !== null && this.drawPaths) {
+            for (const [k, v] of this.motionCache.entries()) {
+                if (v === null)
+                    continue;
+                this.drawPath(viewerInput, v.pathPoints);
+            }
+        }
 
         return passRenderer;
     }
@@ -389,6 +423,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         }
 
         const motionCache = new Map<number, BIN.MotionParameters | null>();
+        renderer.motionCache = motionCache;
         const objectCache = new Map<number, BIN.ObjectDefinition | null>();
         for (let area = 0; area < missionSetupBin.objectSpawns.length; area++) {
             const areaStartIndex = renderer.objectRenderers.length;
