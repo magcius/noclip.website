@@ -10,6 +10,9 @@ import { Filesystem, loadFilesystem } from "./Filesystem";
 import { UVTR, UVTRRenderer } from "./ParsedFiles/UVTR";
 import { CameraController } from "../Camera";
 import * as UI from '../ui';
+import { UVEN } from "./ParsedFiles/UVEN";
+import { UVMDRenderer } from "./ParsedFiles/UVMD";
+import { mat4 } from "gl-matrix";
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2 },
@@ -26,14 +29,21 @@ class BARRenderer implements SceneGfx {
     private renderTarget = new BasicRenderTarget();
 
     private uvtrRenderer: UVTRRenderer;
+    
+    private uvenModelRenderers: UVMDRenderer[] | null = null;
 
-    constructor(device: GfxDevice, uvtr: UVTR) {
+    constructor(device: GfxDevice, uvtr: UVTR, uven: UVEN | null) {
         this.renderHelper = new GfxRenderHelper(device);
 
         // TODO: the way this rendering setup works, it should result in a ton of duplicate renderers
         // Simplest way to solve this would be with a cache but maybe it's a sign there's a better way
         // to organize my code?
         this.uvtrRenderer = new UVTRRenderer(uvtr, device);
+
+        // TODO: less sketchy uven setup
+        if(uven !== null) {
+            this.uvenModelRenderers = uven.uvmds.map(md => new UVMDRenderer(md, device));
+        }
     }
 
     public adjustCameraController(c: CameraController) {
@@ -70,7 +80,13 @@ class BARRenderer implements SceneGfx {
 
         // TODO-ASK
         const renderInstManager = this.renderHelper.renderInstManager;
+
+        if(this.uvenModelRenderers !== null) {
+            this.uvenModelRenderers.forEach(r => r.prepareToRender(device, renderInstManager, viewerInput, mat4.create()))
+        }
+
         this.uvtrRenderer.prepareToRender(device, renderInstManager, viewerInput);
+
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();       
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -100,11 +116,10 @@ class BARRenderer implements SceneGfx {
     }
 }
 
-// TODO: move?
 export const pathBase = `BeetleAdventureRacing`;
 class BARSceneDesc implements SceneDesc {
     public id: string;
-    constructor(public uvtrIndex: number, public name: string) {
+    constructor(public uvtrIndex: number, public name: string, public uvenIndex: number | null = null) {
         this.id = uvtrIndex.toString();
     }
 
@@ -115,21 +130,31 @@ class BARSceneDesc implements SceneDesc {
 
         const uvtr = filesystem.getParsedFile(UVTR, "UVTR", this.uvtrIndex);
         console.log(uvtr);
-        return new BARRenderer(device, uvtr);
+
+        // TODO: II env contains pyramid duplicates?
+        // (maybe so that they always appear even when contour is unloaded?)
+        let uven = null;
+        if (this.uvenIndex !== null) {
+            uven = filesystem.getParsedFile(UVEN, "UVEN", this.uvenIndex)
+        }
+        return new BARRenderer(device, uvtr, uven);
+
+
     }
 }
 
 const id = 'BeetleAdventureRacing';
 const name = "Beetle Adventure Racing!";
 const sceneDescs = [
-    'Tracks', // TODO: name?
-    new BARSceneDesc(19, 'Coventry Cove'),
-    new BARSceneDesc(34, 'Mount Mayhem'),
+    'Tracks',
+    // TODO: these are just guesses. Figure out the actual pairings
+    new BARSceneDesc(19, 'Coventry Cove', 14),
+    new BARSceneDesc(34, 'Mount Mayhem', 16),
     new BARSceneDesc(22, 'Inferno Isle'),
-    new BARSceneDesc(20, 'Sunset Sands'),
+    new BARSceneDesc(20, 'Sunset Sands', 17),
     new BARSceneDesc(21, '[thing under sunset sands]'),
-    new BARSceneDesc(35, 'Metro Madness'),
-    new BARSceneDesc(23, 'Wicked Woods'),
+    new BARSceneDesc(35, 'Metro Madness', 10),
+    new BARSceneDesc(23, 'Wicked Woods', 15),
     'Beetle Battle',
     new BARSceneDesc(24, 'Airport'),
     new BARSceneDesc(26, 'Castle'),

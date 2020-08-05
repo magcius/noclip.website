@@ -42,11 +42,11 @@ class TextureData {
     public height: number;
     
     public constructor(device: GfxDevice, uvtx: UVTX) {
-        this.width = uvtx.imageWidth;
-        this.height = uvtx.imageHeight;
+        this.width = uvtx.width;
+        this.height = uvtx.height;
 
         let rspState = uvtx.rspState;
-        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, uvtx.imageWidth, uvtx.imageHeight, 1));
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, uvtx.width, uvtx.height, 1));
         //device.setResourceName(this.gfxTexture, texture.name);
         const hostAccessPass = device.createHostAccessPass();
         hostAccessPass.uploadTextureData(this.gfxTexture, 0, [uvtx.convertedTexelData]);
@@ -90,6 +90,8 @@ export class MaterialRenderer {
     private material: Material;
     private uvtx: UVTX;
     
+    // TODO: some models are being culled incorrectly, figure out what's
+    // up with that
     constructor(device: GfxDevice, material: Material) {
         this.material = material;
         this.isTextured = material.uvtx !== null && !material.uvtx.not_supported_yet;
@@ -115,8 +117,9 @@ export class MaterialRenderer {
             this.program.setDefineBool("USE_TEXTURE", true);
 
             if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null) {
-                console.log(humanReadableCombineParams(rspState.combineParams));
+                console.log(this.program.frag);
                 console.log(this.uvtx);
+                console.log(humanReadableCombineParams(rspState.combineParams));
             }
 
             // TODO: Figure out what actually determines if this is set
@@ -173,6 +176,12 @@ export class MaterialRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelToWorldMatrix: mat4) {        
         //TODO: a lot
 
+        // TODO: scale
+        // TODO: properly handle other modes
+        // TODO: figure out other processing
+        // TODO: clamp/mask/shift?
+        // TODO: correct texture matrices
+
         if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null && 
             (!this.isTextured || (this.uvtx.flagsAndIndex & 0xFFF) !== DEBUGGING_TOOLS_STATE.singleUVTXToRender)) {
             return;
@@ -212,7 +221,6 @@ export class MaterialRenderer {
             let textureMappings = [this.texel0TextureData.getTextureMapping()];
 
             let texMatrix = mat4.create();
-            // TODO: proper matrix
             mat4.fromScaling(texMatrix, [1 / this.texel0TextureData.width, 1 / this.texel0TextureData.height, 1]);
             drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, texMatrix);
 

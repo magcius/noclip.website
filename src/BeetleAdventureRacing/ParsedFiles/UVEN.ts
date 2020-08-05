@@ -1,7 +1,11 @@
 import { Filesystem, UVFile } from "../Filesystem";
 import { assert } from "../../util";
+import { UVMD } from "./UVMD";
 
 export class UVEN {
+    // TODO: actual state
+    public uvmds: UVMD[] = [];
+
     constructor(uvFile: UVFile, filesystem: Filesystem) {
         assert(uvFile.chunks.length === 1);
         assert(uvFile.chunks[0].tag === 'COMM');
@@ -16,7 +20,10 @@ export class UVEN {
         for(let i = 0; i < uvmdCt; i++) {
             let uvmdIndex = view.getUint16(curPos);
             let unkByte = view.getUint8(curPos + 2);
-            
+
+            console.log(uvmdIndex);
+
+            this.uvmds.push(filesystem.getParsedFile(UVMD, "UVMD", uvmdIndex));
 
             curPos += 3;
         }

@@ -33,8 +33,8 @@ export class UVTX {
     public flagsAndIndex: number; //uint
     public otherUVTX: UVTX | null = null; // originally ushort otherUVTXIndex
     // texelDataSize
-    public imageWidth: number; //ushort
-    public imageHeight: number; //ushort
+    public width: number; //ushort
+    public height: number; //ushort
     public animationState: AnimationState | null = null; // originally animationStateIndex
     public unkByte1: number;
     public levelCount: number; // 1 if no mipmapping, +1 for each mipmap level, etc.
@@ -113,8 +113,8 @@ export class UVTX {
         curPos += dlCommandCount * 8;
 
         // TODO: what are all these?
-        this.imageWidth = view.getUint16(curPos + 0);
-        this.imageHeight = view.getUint16(curPos + 2);
+        this.width = view.getUint16(curPos + 0);
+        this.height = view.getUint16(curPos + 2);
         this.unkByte3 = view.getUint8(curPos + 4);
         this.unkByte4 = view.getUint8(curPos + 5);
         this.unkByte5 = view.getUint8(curPos + 6);
@@ -371,9 +371,12 @@ export class UVTX {
         }
         let tile = rspState.primitiveTile;
 
+        // TODO: figure out what's going on with these
         if (tile.uls === 0 && tile.ult === 0 && tile.lrs === 0 && tile.lrt === 0) {
             console.warn("G_SETTILESIZE was never called, skipping");
             this.not_supported_yet = true;
+            // set tile size is not in the displaylist because that's handled by the animation
+            assert(this.firstUnkStruct !== null)
             return;
         }
 
@@ -382,8 +385,8 @@ export class UVTX {
         let tileHeight = (tile.lrt - tile.ult) + 1;
         assert(tileWidth === Math.round(tileWidth));
         assert(tileHeight === Math.round(tileHeight));
-        assert(tileWidth === this.imageWidth);
-        assert(tileHeight === this.imageHeight);
+        assert(tileWidth === this.width);
+        assert(tileHeight === this.height);
 
         const dest = new Uint8Array(tileWidth * tileHeight * 4);
         const texelDataView = texelData.createDataView();
