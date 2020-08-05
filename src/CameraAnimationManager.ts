@@ -87,6 +87,7 @@ export class CameraAnimationManager {
      * The translation vector components of the keyframes following and preceding the current keyframe.
      * Used for calculating tangents.
      */
+    private beforePrevTrs: vec3 = vec3.create();
     private prevTrs: vec3 = vec3.create();
     private nextTrs: vec3 = vec3.create();
     private tangentScratchVec: vec3 = vec3.create();
@@ -243,7 +244,7 @@ export class CameraAnimationManager {
         let interpAmount = this.currentKeyframeProgressMs / this.currentKeyframeInterpDurationMs;
         if (this.currentKeyframe.usesLinearInterp) {
             const easeFunc = this.getEasingFuncForEaseType(this.currentKeyframe.linearEaseType);
-            if (easeFunc) 
+            if (easeFunc)
                 interpAmount = easeFunc(interpAmount);
             vec3.lerp(outTrs, this.trsFrom, this.trsTo, interpAmount);
             quat.slerp(outRot, this.rotQFrom, this.rotQTo, interpAmount);
@@ -309,6 +310,35 @@ export class CameraAnimationManager {
             return true;
         }
         return false;
+    }
+
+    public getMatchedSpeedDuration(index: number): number {
+        let curKf = this.animation.keyframes[index];
+        let duration = curKf.interpDuration;
+        if (this.animation.keyframes.length < 3)
+            return duration;
+        let prevKf;
+        let beforePrevKf;
+        if (index > 1) {
+            prevKf = this.animation.keyframes[index - 1];
+            beforePrevKf = this.animation.keyframes[index - 2];
+        } else if (index === 1) {
+            prevKf = this.animation.keyframes[0];
+            beforePrevKf = this.animation.keyframes[this.animation.keyframes.length - 1];
+        } else {
+            prevKf = this.animation.keyframes[this.animation.keyframes.length - 1];
+            beforePrevKf = this.animation.keyframes[this.animation.keyframes.length - 2];
+        }
+        mat4.getTranslation(this.prevTrs, prevKf.endPos);
+        mat4.getTranslation(this.beforePrevTrs, beforePrevKf.endPos);
+        const prevDistance = vec3.distance(this.prevTrs, this.beforePrevTrs);
+        if (prevKf.interpDuration > 0 && prevDistance > 0) {
+            const ratio = prevKf.interpDuration / prevDistance;
+            mat4.getTranslation(this.nextTrs, curKf.endPos);
+            const distance = vec3.distance(this.prevTrs, this.nextTrs);
+            duration = distance * ratio;
+        }
+        return duration;
     }
 
     public isAnimation(a: Keyframe[]): boolean {
