@@ -185,7 +185,7 @@ export class CameraAnimationManager {
     }
 
     public editKeyframePosition(pos: mat4, index: number) {
-        if (index > 0 && index < this.animation.keyframes.length)
+        if (index > -1 && index < this.animation.keyframes.length)
             this.animation.keyframes[index].endPos = pos;
         this.endEditKeyframePosition();
     }
@@ -269,8 +269,9 @@ export class CameraAnimationManager {
             for (let i = 0; i < 3; i++) {
                 if (this.interpPos)
                     outInterpStep.pos[i] = getPointHermite(this.posFrom[i], this.posTo[i], this.currentKeyframe.trsTangentIn[i], this.currentKeyframe.trsTangentOut[i], interpAmount);
-                if (this.interpLookAtPos)
-                    outInterpStep.lookAtPos[i] = getPointHermite(this.lookAtPosFrom[i], this.lookAtPosTo[i], this.currentKeyframe.trsTangentIn[i], this.currentKeyframe.trsTangentOut[i], interpAmount);
+                else
+                    outInterpStep.pos[i] = this.posTo[i];
+                outInterpStep.lookAtPos[i] = getPointHermite(this.lookAtPosFrom[i], this.lookAtPosTo[i], this.currentKeyframe.trsTangentIn[i], this.currentKeyframe.trsTangentOut[i], interpAmount);
             }
             // TODO(Veegie) Interpolate bank rotation.
         }
