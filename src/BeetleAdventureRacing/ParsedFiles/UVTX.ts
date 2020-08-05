@@ -210,6 +210,13 @@ export class UVTX {
         let rspState = new UVTXRSPState();
         this.rspState = rspState;
 
+
+        // TODO: probably a simpler way of doing this
+        let uvtxJustLoaded = -1;
+        let loadLocationFromSetTile = -1;
+        let thisTextureIsTheFirstTexture: boolean | null = null;
+
+
         // This code is a modified version of the Pokemon Snap F3DEX2 code
         for (let i = 0; i < cmdView.byteLength; i += 0x08) {
             const w0 = cmdView.getUint32(i + 0x00);
@@ -251,6 +258,19 @@ export class UVTX {
                     const masks = (w1 >>> 4) & 0x0F;
                     const shifts = (w1 >>> 0) & 0x0F;
                     rspState.tileStates[tile].set(fmt, siz, line, tmem, palette, cmt, maskt, shiftt, cms, masks, shifts);
+
+                    if(tile === 7) {
+                        loadLocationFromSetTile = tmem;
+                    } else if (uvtxJustLoaded === 0 && tmem === loadLocationFromSetTile) {
+                        // we are setting the tile for the first uvtx
+                        if (tile === rspState.textureState.tile) {
+                            thisTextureIsTheFirstTexture = true;
+                        } else if (tile === rspState.textureState.tile + 1) {
+                            thisTextureIsTheFirstTexture = false;
+                        } else {
+                            assert(false);
+                        }
+                    }
                 } break;    
                 case F3DEX2.F3DEX2_GBI.G_LOADBLOCK: {
                     // We can completely ignore, we already know how long the data is
@@ -264,6 +284,7 @@ export class UVTX {
                     // const lrs = (w1 >>> 12) & 0x0FFF;
                     // const dxt = (w1 >>> 0) & 0x0FFF;
                     // rspState.gDPLoadBlock(tile, uls, ult, lrs, dxt);
+                    uvtxJustLoaded++;
                 } break;
     
                 case F3DEX2.F3DEX2_GBI.G_SETOTHERMODE_H: {
@@ -331,6 +352,11 @@ export class UVTX {
         } else {
             assert(settimgCount === 2);
         }
+        assert(uvtxJustLoaded === 0 || uvtxJustLoaded === 1);
+        if(this.otherUVTX !== null) {
+            assert(thisTextureIsTheFirstTexture !== null);
+            console.log(thisTextureIsTheFirstTexture);
+        }
         // Assumption doesn't hold
         // if(this.levelCount === 6 && this.otherUVTX !== null) {
         //     assert(rspState.textureState.tile === 0);
@@ -340,6 +366,9 @@ export class UVTX {
         assert(rspState.primitiveTile.line !== 0);
 
         /////
+        if(thisTextureIsTheFirstTexture !== null) {
+            rspState.mainTextureIsFirstTexture = thisTextureIsTheFirstTexture;
+        }
         let tile = rspState.primitiveTile;
 
         if (tile.uls === 0 && tile.ult === 0 && tile.lrs === 0 && tile.lrt === 0) {
@@ -386,6 +415,10 @@ class UVTXRSPState {
     //public primitiveLODFraction: number = 0;
     public primitiveColor: vec4 = vec4.create();
     public environmentColor: vec4 = vec4.create();
+
+    // true if this UVTX is the first texture (texel0, primitive tile)
+    // false if the other UVTX is the first texture (texel1)
+    public mainTextureIsFirstTexture: boolean;
 
     // This seems to be the "official" name for it?
     get primitiveTile() {

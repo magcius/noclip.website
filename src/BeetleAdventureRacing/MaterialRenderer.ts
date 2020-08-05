@@ -11,6 +11,7 @@ import { F3DEX_Program } from "../BanjoKazooie/render";
 import * as RDP from '../Common/N64/RDP';
 import { humanReadableCombineParams } from './Util';
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { DEBUGGING_TOOLS_STATE } from "./Scenes";
 
 export interface Material {
     uvtx: UVTX | null;
@@ -34,6 +35,43 @@ function translateCM(cm: TexCM): GfxWrapMode {
     }
 }
 
+class TextureData {
+    private gfxTexture: GfxTexture;
+    private gfxSampler: GfxSampler;
+    public width: number;
+    public height: number;
+    
+    public constructor(device: GfxDevice, uvtx: UVTX) {
+        this.width = uvtx.imageWidth;
+        this.height = uvtx.imageHeight;
+
+        let rspState = uvtx.rspState;
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, uvtx.imageWidth, uvtx.imageHeight, 1));
+        //device.setResourceName(this.gfxTexture, texture.name);
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(this.gfxTexture, 0, [uvtx.convertedTexelData]);
+        device.submitPass(hostAccessPass);
+
+        this.gfxSampler = device.createSampler({
+            wrapS: translateCM(rspState.primitiveTile.cms),
+            wrapT: translateCM(rspState.primitiveTile.cmt),
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0, maxLOD: 0,
+        });
+    }
+
+    public getTextureMapping()  {
+        return { gfxTexture: this.gfxTexture, gfxSampler: this.gfxSampler, lateBinding: null };
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
+        device.destroySampler(this.gfxSampler);
+    }
+}
+
 export class MaterialRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
@@ -41,46 +79,34 @@ export class MaterialRenderer {
     private inputState: GfxInputState;
 
     private isTextured: boolean;
-    private gfxTexture: GfxTexture;
-    private gfxSampler: GfxSampler;
+    private hasPairedTexture: boolean;
+    private texel0TextureData: TextureData;
+    private texel1TextureData: TextureData;
 
     private program: DeviceProgram;
 
     private indexCount: number;
 
+    private material: Material;
     private uvtx: UVTX;
-
-
-    private materialCenter: vec3;
     
     constructor(device: GfxDevice, material: Material) {
+        this.material = material;
         this.isTextured = material.uvtx !== null && !material.uvtx.not_supported_yet;
-
-        // let xSum = 0;
-        // let ySum = 0;
-        // let zSum = 0;
-        // let vCt = material.vertexData.length / 9;
-        // for(let i = 0; i < material.vertexData.length; i += 9) {
-        //     xSum += material.vertexData[i];
-        //     ySum += material.vertexData[i + 1];
-        //     zSum += material.vertexData[i + 2];
-        // }
-        // this.materialCenter = vec3.fromValues(xSum / vCt, ySum / vCt, zSum / vCt);
-
-
-        // if(!this.isTextured || (material.uvtx!.flagsAndIndex & 0xFFF) !== 0x494) {
-        //     this.isTextured = false
-        //     return;
-        // }
-
-
-
-        // TODO: what's going on with the textures missing vert colors?
         if(this.isTextured) {
             this.uvtx = material.uvtx!;
-            let rspState = this.uvtx.rspState;
+        }
+        this.hasPairedTexture = this.isTextured && this.uvtx.otherUVTX !== null;
 
-            // console.log(humanReadableCombineParams(rspState.combineParams));
+        //TODO: remove
+        if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null && 
+            (!this.isTextured || (material.uvtx!.flagsAndIndex & 0xFFF) !== DEBUGGING_TOOLS_STATE.singleUVTXToRender)) {
+            this.isTextured = false;
+            return;
+        }
+
+        if(this.isTextured) {
+            let rspState = this.uvtx.rspState;
             // TODO: K4 is used, though it's not supported by F3DEX_Program - is it important?
             // TODO: what other CC settings does BAR use that F3DEX_Program doesn't support?
             // TODO: K5 is also used, as is NOISE
@@ -88,7 +114,11 @@ export class MaterialRenderer {
             this.program = new F3DEX_Program(rspState.otherModeH, 0, rspState.combineParams, this.uvtx.alpha / 0xFF, rspState.tileStates);
             this.program.setDefineBool("USE_TEXTURE", true);
 
-            //console.log(this.uvtx);
+            if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null) {
+                console.log(humanReadableCombineParams(rspState.combineParams));
+                console.log(this.uvtx);
+            }
+
             // TODO: Figure out what actually determines if this is set
             this.program.setDefineBool("TWO_CYCLE", true);
             
@@ -125,30 +155,28 @@ export class MaterialRenderer {
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         if (this.isTextured) {
-            let rspState =  this.uvtx.rspState;
-            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.uvtx.imageWidth,  this.uvtx.imageHeight, 1));
-            //device.setResourceName(this.gfxTexture, texture.name);
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(this.gfxTexture, 0, [ this.uvtx.convertedTexelData]);
-            device.submitPass(hostAccessPass);
-
-            this.gfxSampler = device.createSampler({
-                wrapS: translateCM(rspState.primitiveTile.cms),
-                wrapT: translateCM(rspState.primitiveTile.cmt),
-                minFilter: GfxTexFilterMode.POINT,
-                magFilter: GfxTexFilterMode.POINT,
-                mipFilter: GfxMipFilterMode.NO_MIP,
-                minLOD: 0, maxLOD: 0,
-            });
+            if(this.hasPairedTexture) {
+                // TODO: smarter handling of case where other uvtx = this uvtx ?
+                if(this.uvtx.rspState.mainTextureIsFirstTexture) {
+                    this.texel0TextureData = new TextureData(device, this.uvtx);
+                    this.texel1TextureData = new TextureData(device, this.uvtx.otherUVTX!);
+                } else {
+                    this.texel0TextureData = new TextureData(device, this.uvtx.otherUVTX!);
+                    this.texel1TextureData = new TextureData(device, this.uvtx);
+                }
+            } else {
+                this.texel0TextureData = new TextureData(device, this.uvtx);
+            }
         }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelToWorldMatrix: mat4) {        
         //TODO: a lot
 
-        // if(!this.isTextured || (this.uvtx.flagsAndIndex & 0xFFF) !== 0x494) {
-        //     return;
-        // }
+        if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null && 
+            (!this.isTextured || (this.uvtx.flagsAndIndex & 0xFFF) !== DEBUGGING_TOOLS_STATE.singleUVTXToRender)) {
+            return;
+        }
 
         const renderInst = renderInstManager.newRenderInst();
 
@@ -179,16 +207,22 @@ export class MaterialRenderer {
         const combineParams = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
 
         if(this.isTextured) {
-            renderInst.setSamplerBindingsFromTextureMappings([{ gfxTexture: this.gfxTexture, gfxSampler: this.gfxSampler, lateBinding: null }]);
+
+            
+            let textureMappings = [this.texel0TextureData.getTextureMapping()];
+
             let texMatrix = mat4.create();
-            mat4.fromScaling(texMatrix, [1 / this.uvtx.imageWidth, 1 / this.uvtx.imageHeight, 1]);
+            // TODO: proper matrix
+            mat4.fromScaling(texMatrix, [1 / this.texel0TextureData.width, 1 / this.texel0TextureData.height, 1]);
             drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, texMatrix);
 
-            // if(this.uvtx.otherUVTX !== null) {
-            //     texMatrix = mat4.create();
-            //     mat4.fromScaling(texMatrix, [1 / this.uvtx.otherUVTX.imageWidth, 1 / this.uvtx.otherUVTX.imageHeight, 1]);
-            //     drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, texMatrix);
-            // }
+            if(this.hasPairedTexture) {
+                mat4.fromScaling(texMatrix, [1 / this.texel1TextureData.width, 1 / this.texel1TextureData.height, 1]);
+                drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, texMatrix);
+                textureMappings.push(this.texel1TextureData.getTextureMapping());
+            }
+
+            renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
 
             fillVec4v(combineParams, combineParamsOffs, this.uvtx.rspState.primitiveColor);
             fillVec4v(combineParams, combineParamsOffs + 4, this.uvtx.rspState.environmentColor);
@@ -202,12 +236,22 @@ export class MaterialRenderer {
         renderInstManager.submitRenderInst(renderInst);
 
 
+        if(DEBUGGING_TOOLS_STATE.showTextureIndices && this.isTextured) {
+            let xSum = 0;
+            let ySum = 0;
+            let zSum = 0;
+            let vCt = this.material.vertexData.length / 9;
+            for(let i = 0; i < this.material.vertexData.length; i += 9) {
+                xSum += this.material.vertexData[i];
+                ySum += this.material.vertexData[i + 1];
+                zSum += this.material.vertexData[i + 2];
+            }
+            let centerModelSpace = vec3.fromValues(xSum / vCt, ySum / vCt, zSum / vCt);
 
-        // if(this.isTextured) {
-        //     let outCtr = vec3.create();
-        //     vec3.transformMat4(outCtr, this.materialCenter, adjmodelToWorldMatrix);
-        //     drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, outCtr, (this.uvtx.flagsAndIndex & 0xfff).toString(16));
-        // }
+            let centerWorldSpace = vec3.create();
+            vec3.transformMat4(centerWorldSpace, centerModelSpace, adjmodelToWorldMatrix);
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, centerWorldSpace, (this.uvtx.flagsAndIndex & 0xfff).toString(16));
+        }
     }
 
     public destroy(device: GfxDevice): void {
@@ -216,8 +260,10 @@ export class MaterialRenderer {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         if(this.isTextured) {
-            device.destroyTexture(this.gfxTexture);
-            device.destroySampler(this.gfxSampler);
+            this.texel0TextureData.destroy(device);
+            if(this.hasPairedTexture) {
+                this.texel1TextureData.destroy(device);
+            }
         }
     }
 }

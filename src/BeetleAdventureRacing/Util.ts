@@ -108,10 +108,10 @@ export function humanReadableCombineParams(combineParams: RDP.CombineParams) {
         alphaABD[combineParams.a1.d],
     );
     return `Cycle 0:
-    Color: ${c0}
-    Alpha: ${a0}
+    Color: ${c0} (${combineParams.c0.a}, ${combineParams.c0.b}, ${combineParams.c0.c}, ${combineParams.c0.d})
+    Alpha: ${a0} (${combineParams.a0.a}, ${combineParams.a0.b}, ${combineParams.a0.c}, ${combineParams.a0.d})
 Cycle 1:
-   Color: ${c1}
-   Alpha: ${a1}
+   Color: ${c1} (${combineParams.c1.a}, ${combineParams.c1.b}, ${combineParams.c1.c}, ${combineParams.c1.d})
+   Alpha: ${a1} (${combineParams.a1.a}, ${combineParams.a1.b}, ${combineParams.a1.c}, ${combineParams.a1.d})
 `;
 }

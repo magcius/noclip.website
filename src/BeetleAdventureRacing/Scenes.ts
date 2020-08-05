@@ -9,10 +9,16 @@ import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Filesystem, loadFilesystem } from "./Filesystem";
 import { UVTR, UVTRRenderer } from "./ParsedFiles/UVTR";
 import { CameraController } from "../Camera";
+import * as UI from '../ui';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2 },
 ];
+
+export const DEBUGGING_TOOLS_STATE = {
+    showTextureIndices: false,
+    singleUVTXToRender: null
+};
 
 class BARRenderer implements SceneGfx {
 
@@ -32,6 +38,21 @@ class BARRenderer implements SceneGfx {
 
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(0.02);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const debuggingToolsPanel = new UI.Panel();
+
+        debuggingToolsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        debuggingToolsPanel.setTitle(UI.RENDER_HACKS_ICON, 'Debug');
+
+        const showTextureIndicesCheckbox = new UI.Checkbox('Show Texture Indices', DEBUGGING_TOOLS_STATE.showTextureIndices);
+        showTextureIndicesCheckbox.onchanged = () => {
+            DEBUGGING_TOOLS_STATE.showTextureIndices = showTextureIndicesCheckbox.checked;
+        };
+        debuggingToolsPanel.contents.appendChild(showTextureIndicesCheckbox.elem);
+
+        return [debuggingToolsPanel];
     }
 
     // TODO-ASK: what is a render inst?
