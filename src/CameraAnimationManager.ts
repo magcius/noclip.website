@@ -41,8 +41,10 @@ export interface Keyframe {
     holdDuration: number;
     usesLinearInterp: boolean;
     linearEaseType: LinearEaseType;
-    trsTangentIn: vec3;
-    trsTangentOut: vec3;
+    posTangentIn: vec3;
+    posTangentOut: vec3;
+    lookAtPosTangentIn: vec3;
+    lookAtPosTangentOut: vec3;
     endPos: mat4;
     name?: string;
 }
@@ -69,8 +71,10 @@ export class CameraAnimation {
             holdDuration: 0,
             usesLinearInterp: false,
             linearEaseType: LinearEaseType.EaseBoth,
-            trsTangentIn: vec3.create(),
-            trsTangentOut: vec3.create(),
+            posTangentIn: vec3.create(),
+            posTangentOut: vec3.create(),
+            lookAtPosTangentIn: vec3.create(),
+            lookAtPosTangentOut: vec3.create(),
             endPos: keyframeEndPos,
             name: name
         }
@@ -94,10 +98,13 @@ export class CameraAnimationManager {
      * The translation vector components of the keyframes following and preceding the current keyframe.
      * Used for calculating tangents.
      */
-    private beforePrevTrs: vec3 = vec3.create();
-    private prevTrs: vec3 = vec3.create();
-    private nextTrs: vec3 = vec3.create();
-    private trsTangentScratchVec: vec3 = vec3.create();
+    private beforePrevPos: vec3 = vec3.create();
+    private prevPos: vec3 = vec3.create();
+    private nextPos: vec3 = vec3.create();
+    private prevLookAtPos: vec3 = vec3.create();
+    private nextLookAtPos: vec3 = vec3.create();
+    private posTangentScratchVec: vec3 = vec3.create();
+    private lookAtPosTangentScratchVec: vec3 = vec3.create();
     /**
      * Variables for animation playback.
      */
@@ -123,7 +130,6 @@ export class CameraAnimationManager {
      * Flags to indicate whether the position and lookAt position should be interpolated for the current keyframe.
      */
     private interpPos: boolean = true;
-    private interpLookAtPos: boolean = true;
 
     constructor(private uiKeyframeList: HTMLElement, private uiStudioControls: HTMLElement) {
         this.studioCameraController = new StudioCameraController(this);
@@ -268,10 +274,10 @@ export class CameraAnimationManager {
         } else {
             for (let i = 0; i < 3; i++) {
                 if (this.interpPos)
-                    outInterpStep.pos[i] = getPointHermite(this.posFrom[i], this.posTo[i], this.currentKeyframe.trsTangentIn[i], this.currentKeyframe.trsTangentOut[i], interpAmount);
+                    outInterpStep.pos[i] = getPointHermite(this.posFrom[i], this.posTo[i], this.currentKeyframe.posTangentIn[i], this.currentKeyframe.posTangentOut[i], interpAmount);
                 else
                     outInterpStep.pos[i] = this.posTo[i];
-                outInterpStep.lookAtPos[i] = getPointHermite(this.lookAtPosFrom[i], this.lookAtPosTo[i], this.currentKeyframe.trsTangentIn[i], this.currentKeyframe.trsTangentOut[i], interpAmount);
+                outInterpStep.lookAtPos[i] = getPointHermite(this.lookAtPosFrom[i], this.lookAtPosTo[i], this.currentKeyframe.posTangentIn[i], this.currentKeyframe.posTangentOut[i], interpAmount);
             }
             // TODO(Veegie) Interpolate bank rotation.
         }
@@ -350,13 +356,13 @@ export class CameraAnimationManager {
             prevKf = this.animation.keyframes[this.animation.keyframes.length - 1];
             beforePrevKf = this.animation.keyframes[this.animation.keyframes.length - 2];
         }
-        mat4.getTranslation(this.prevTrs, prevKf.endPos);
-        mat4.getTranslation(this.beforePrevTrs, beforePrevKf.endPos);
-        const prevDistance = vec3.distance(this.prevTrs, this.beforePrevTrs);
+        mat4.getTranslation(this.prevPos, prevKf.endPos);
+        mat4.getTranslation(this.beforePrevPos, beforePrevKf.endPos);
+        const prevDistance = vec3.distance(this.prevPos, this.beforePrevPos);
         if (prevKf.interpDuration > 0 && prevDistance > 0) {
             const ratio = prevKf.interpDuration / prevDistance;
-            mat4.getTranslation(this.nextTrs, curKf.endPos);
-            const distance = vec3.distance(this.prevTrs, this.nextTrs);
+            mat4.getTranslation(this.nextPos, curKf.endPos);
+            const distance = vec3.distance(this.prevPos, this.nextPos);
             duration = distance * ratio;
         }
         return duration;
@@ -371,8 +377,8 @@ export class CameraAnimationManager {
                     if (typeof a[i].endPos[j] !== 'number')
                         return false;
                     if (j < 3) {
-                        if (typeof a[i].trsTangentIn[j] !== 'number'
-                            || typeof a[i].trsTangentOut[j] !== 'number')
+                        if (typeof a[i].posTangentIn[j] !== 'number'
+                            || typeof a[i].posTangentOut[j] !== 'number')
                             return false;
                     }
                 }
@@ -416,7 +422,6 @@ export class CameraAnimationManager {
         vec3.scaleAndAdd(this.lookAtPosFrom, this.posFrom, this.forwardVecFrom, -100);
         vec3.scaleAndAdd(this.lookAtPosTo, this.posTo, this.forwardVecTo, -100);
         this.interpPos = !vec3.exactEquals(this.posFrom, this.posTo);
-        this.interpLookAtPos = !vec3.exactEquals(this.lookAtPosFrom, this.lookAtPosTo);
     }
 
     /**
@@ -426,65 +431,129 @@ export class CameraAnimationManager {
         const keyframes = this.animation.keyframes;
 
         if (keyframes.length < 4) {
-            mat4.getTranslation(this.prevTrs, keyframes[0].endPos);
-            mat4.getTranslation(this.nextTrs, keyframes[1].endPos);
+            mat4.getTranslation(this.prevPos, keyframes[0].endPos);
+            mat4.getTranslation(this.nextPos, keyframes[1].endPos);
+            vec3.sub(this.posTangentScratchVec, this.nextPos, this.prevPos);
+            vec3.scale(this.posTangentScratchVec, this.posTangentScratchVec, 0.5);
 
-            vec3.sub(this.trsTangentScratchVec, this.nextTrs, this.prevTrs);
-            vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
-            vec3.copy(keyframes[0].trsTangentIn, this.trsTangentScratchVec);
-            vec3.copy(keyframes[0].trsTangentOut, this.trsTangentScratchVec);
+            getMatrixAxisZ(this.forwardVecFrom, keyframes[0].endPos);
+            getMatrixAxisZ(this.forwardVecTo, keyframes[1].endPos);
+            vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
+            vec3.normalize(this.forwardVecTo, this.forwardVecTo);
+            vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
+            vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
+            vec3.sub(this.lookAtPosTangentScratchVec, this.nextLookAtPos, this.prevLookAtPos);
+            vec3.scale(this.lookAtPosTangentScratchVec, this.lookAtPosTangentScratchVec, 0.5);
+
+            vec3.copy(keyframes[0].posTangentIn, this.posTangentScratchVec);
+            vec3.copy(keyframes[0].lookAtPosTangentIn, this.lookAtPosTangentScratchVec);
+            vec3.copy(keyframes[0].posTangentOut, this.posTangentScratchVec);
+            vec3.copy(keyframes[0].lookAtPosTangentOut, this.lookAtPosTangentScratchVec);
 
             if (keyframes.length === 2) {
-                vec3.sub(this.trsTangentScratchVec, this.prevTrs, this.nextTrs);
-                vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
-                vec3.copy(keyframes[1].trsTangentIn, this.trsTangentScratchVec);
-                vec3.copy(keyframes[1].trsTangentOut, this.trsTangentScratchVec);
+                vec3.sub(this.posTangentScratchVec, this.prevPos, this.nextPos);
+                vec3.scale(this.posTangentScratchVec, this.posTangentScratchVec, 0.5);
+
+                vec3.sub(this.lookAtPosTangentScratchVec, this.prevLookAtPos, this.nextLookAtPos);
+                vec3.scale(this.lookAtPosTangentScratchVec, this.lookAtPosTangentScratchVec, 0.5);
+
+                vec3.copy(keyframes[1].posTangentIn, this.posTangentScratchVec);
+                vec3.copy(keyframes[1].lookAtPosTangentIn, this.lookAtPosTangentScratchVec);
+                vec3.copy(keyframes[1].posTangentOut, this.posTangentScratchVec);
+                vec3.copy(keyframes[1].lookAtPosTangentOut, this.lookAtPosTangentScratchVec);
                 return;
             }
-            mat4.getTranslation(this.nextTrs, keyframes[2].endPos);
+            mat4.getTranslation(this.nextPos, keyframes[2].endPos);
+            vec3.sub(this.posTangentScratchVec, this.nextPos, this.prevPos);
+            vec3.scale(this.posTangentScratchVec, this.posTangentScratchVec, 0.5);
 
-            vec3.sub(this.trsTangentScratchVec, this.nextTrs, this.prevTrs);
-            vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
-            vec3.copy(keyframes[1].trsTangentIn, this.trsTangentScratchVec);
-            vec3.copy(keyframes[1].trsTangentOut, this.trsTangentScratchVec);
+            getMatrixAxisZ(this.forwardVecTo, keyframes[2].endPos);
+            vec3.normalize(this.forwardVecTo, this.forwardVecTo);
+            vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
+            vec3.sub(this.lookAtPosTangentScratchVec, this.nextLookAtPos, this.prevLookAtPos);
+            vec3.scale(this.lookAtPosTangentScratchVec, this.lookAtPosTangentScratchVec, 0.5);
 
-            mat4.getTranslation(this.prevTrs, keyframes[1].endPos);
-            vec3.sub(this.trsTangentScratchVec, this.nextTrs, this.prevTrs);
-            vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
+            vec3.copy(keyframes[1].posTangentIn, this.posTangentScratchVec);
+            vec3.copy(keyframes[1].lookAtPosTangentIn, this.lookAtPosTangentScratchVec);
+            vec3.copy(keyframes[1].posTangentOut, this.posTangentScratchVec);
+            vec3.copy(keyframes[1].lookAtPosTangentOut, this.lookAtPosTangentScratchVec);
 
-            vec3.copy(keyframes[2].trsTangentIn, this.trsTangentScratchVec);
-            vec3.copy(keyframes[2].trsTangentOut, this.trsTangentScratchVec);
+            mat4.getTranslation(this.prevPos, keyframes[1].endPos);
+            vec3.sub(this.posTangentScratchVec, this.nextPos, this.prevPos);
+            vec3.scale(this.posTangentScratchVec, this.posTangentScratchVec, 0.5);
+
+            getMatrixAxisZ(this.forwardVecFrom, keyframes[1].endPos);
+            vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
+            vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
+            vec3.sub(this.lookAtPosTangentScratchVec, this.nextLookAtPos, this.prevLookAtPos);
+            vec3.scale(this.lookAtPosTangentScratchVec, this.lookAtPosTangentScratchVec, 0.5);
+
+            vec3.copy(keyframes[2].posTangentIn, this.posTangentScratchVec);
+            vec3.copy(keyframes[2].lookAtPosTangentIn, this.lookAtPosTangentScratchVec);
+            vec3.copy(keyframes[2].posTangentOut, this.posTangentScratchVec);
+            vec3.copy(keyframes[2].lookAtPosTangentOut, this.lookAtPosTangentScratchVec);
             return;
         }
 
-        mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 1].endPos);
-        mat4.getTranslation(this.nextTrs, keyframes[1].endPos);
+        mat4.getTranslation(this.prevPos, keyframes[keyframes.length - 1].endPos);
+        mat4.getTranslation(this.nextPos, keyframes[1].endPos);
+        vec3.sub(this.posTangentScratchVec, this.nextPos, this.prevPos);
+        vec3.scale(this.posTangentScratchVec, this.posTangentScratchVec, 0.5);
 
-        vec3.sub(this.trsTangentScratchVec, this.nextTrs, this.prevTrs);
-        vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
+        getMatrixAxisZ(this.forwardVecFrom, keyframes[keyframes.length - 1].endPos);
+        getMatrixAxisZ(this.forwardVecTo, keyframes[1].endPos);
+        vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
+        vec3.normalize(this.forwardVecTo, this.forwardVecTo);
+        vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
+        vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
+        vec3.sub(this.lookAtPosTangentScratchVec, this.nextLookAtPos, this.prevLookAtPos);
+        vec3.scale(this.lookAtPosTangentScratchVec, this.lookAtPosTangentScratchVec, 0.5);
 
-        vec3.copy(keyframes[0].trsTangentOut, this.trsTangentScratchVec);
-        vec3.copy(keyframes[1].trsTangentIn, this.trsTangentScratchVec);
+        vec3.copy(keyframes[0].posTangentOut, this.posTangentScratchVec);
+        vec3.copy(keyframes[0].lookAtPosTangentOut, this.lookAtPosTangentScratchVec);
+        vec3.copy(keyframes[1].posTangentIn, this.posTangentScratchVec);
+        vec3.copy(keyframes[1].lookAtPosTangentIn, this.lookAtPosTangentScratchVec);
 
         for (let i = 1; i < keyframes.length - 1; i++) {
-            mat4.getTranslation(this.prevTrs, keyframes[i - 1].endPos);
-            mat4.getTranslation(this.nextTrs, keyframes[i + 1].endPos);
-            vec3.sub(this.trsTangentScratchVec, this.nextTrs, this.prevTrs);
-            vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
+            mat4.getTranslation(this.prevPos, keyframes[i - 1].endPos);
+            mat4.getTranslation(this.nextPos, keyframes[i + 1].endPos);
+            vec3.sub(this.posTangentScratchVec, this.nextPos, this.prevPos);
+            vec3.scale(this.posTangentScratchVec, this.posTangentScratchVec, 0.5);
 
-            vec3.copy(keyframes[i].trsTangentOut, this.trsTangentScratchVec);
-            vec3.copy(keyframes[i + 1].trsTangentIn, this.trsTangentScratchVec);
+            getMatrixAxisZ(this.forwardVecFrom, keyframes[i - 1].endPos);
+            getMatrixAxisZ(this.forwardVecTo, keyframes[i + 1].endPos);
+            vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
+            vec3.normalize(this.forwardVecTo, this.forwardVecTo);
+            vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
+            vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
+            vec3.sub(this.lookAtPosTangentScratchVec, this.nextLookAtPos, this.prevLookAtPos);
+            vec3.scale(this.lookAtPosTangentScratchVec, this.lookAtPosTangentScratchVec, 0.5);
+
+            vec3.copy(keyframes[i].posTangentOut, this.posTangentScratchVec);
+            vec3.copy(keyframes[i].lookAtPosTangentOut, this.lookAtPosTangentScratchVec);
+            vec3.copy(keyframes[i + 1].posTangentIn, this.posTangentScratchVec);
+            vec3.copy(keyframes[i + 1].lookAtPosTangentOut, this.lookAtPosTangentScratchVec);
         }
 
         if (this.loopAnimation) {
-            mat4.getTranslation(this.prevTrs, keyframes[keyframes.length - 2].endPos);
-            mat4.getTranslation(this.nextTrs, keyframes[0].endPos);
+            mat4.getTranslation(this.prevPos, keyframes[keyframes.length - 2].endPos);
+            mat4.getTranslation(this.nextPos, keyframes[0].endPos);
+            vec3.sub(this.posTangentScratchVec, this.nextPos, this.prevPos);
+            vec3.scale(this.posTangentScratchVec, this.posTangentScratchVec, 0.5);
 
-            vec3.sub(this.trsTangentScratchVec, this.nextTrs, this.prevTrs);
-            vec3.scale(this.trsTangentScratchVec, this.trsTangentScratchVec, 0.5);
+            getMatrixAxisZ(this.forwardVecFrom, keyframes[keyframes.length - 2].endPos);
+            getMatrixAxisZ(this.forwardVecTo, keyframes[0].endPos);
+            vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
+            vec3.normalize(this.forwardVecTo, this.forwardVecTo);
+            vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
+            vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
+            vec3.sub(this.lookAtPosTangentScratchVec, this.nextLookAtPos, this.prevLookAtPos);
+            vec3.scale(this.lookAtPosTangentScratchVec, this.lookAtPosTangentScratchVec, 0.5);
 
-            vec3.copy(keyframes[keyframes.length - 1].trsTangentOut, this.trsTangentScratchVec);
-            vec3.copy(keyframes[0].trsTangentIn, this.trsTangentScratchVec);
+            vec3.copy(keyframes[keyframes.length - 1].posTangentOut, this.posTangentScratchVec);
+            vec3.copy(keyframes[keyframes.length - 1].lookAtPosTangentOut, this.lookAtPosTangentScratchVec);
+            vec3.copy(keyframes[0].posTangentIn, this.posTangentScratchVec);
+            vec3.copy(keyframes[0].lookAtPosTangentIn, this.lookAtPosTangentScratchVec);
         }
     }
 }
