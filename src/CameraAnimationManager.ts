@@ -143,6 +143,12 @@ export class CameraAnimationManager {
     public loadAnimation(keyframes: Keyframe[]) {
         if (keyframes.length === 0)
             return;
+        for (let i = 0; i < keyframes.length; i++) {
+            keyframes[i].posTangentIn = vec3.create();
+            keyframes[i].posTangentOut = vec3.create();
+            keyframes[i].lookAtPosTangentIn = vec3.create();
+            keyframes[i].lookAtPosTangentOut = vec3.create();
+        }
         this.animation = new CameraAnimation();
         this.animation.keyframes = keyframes;
         this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
@@ -159,7 +165,13 @@ export class CameraAnimationManager {
     }
 
     public serializeAnimation(): string {
-        return JSON.stringify(this.animation.keyframes);
+        const exclude = ['posTangentIn', 'posTangentOut', 'lookAtPosTangentIn', 'lookAtPosTangentOut'];
+        return JSON.stringify(this.animation.keyframes, (key, value) => {
+            if (exclude.includes(key))
+                return undefined;
+            else
+                return value;
+        });
     }
 
     public getKeyframeByIndex(index: number): Keyframe {
@@ -402,11 +414,6 @@ export class CameraAnimationManager {
                 for (let j = 0; j < 16; j++) {
                     if (typeof a[i].endPos[j] !== 'number')
                         return false;
-                    if (j < 3) {
-                        if (typeof a[i].posTangentIn[j] !== 'number'
-                            || typeof a[i].posTangentOut[j] !== 'number')
-                            return false;
-                    }
                 }
                 if (typeof a[i].holdDuration !== 'number')
                     return false;
