@@ -13,6 +13,7 @@ import * as UI from '../ui';
 import { UVEN } from "./ParsedFiles/UVEN";
 import { UVMDRenderer } from "./ParsedFiles/UVMD";
 import { mat4 } from "gl-matrix";
+import { UVTX, UVTXRenderHelper } from "./ParsedFiles/UVTX";
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2 },
@@ -31,19 +32,30 @@ class BARRenderer implements SceneGfx {
     private uvtrRenderer: UVTRRenderer;
     
     private uvenModelRenderers: UVMDRenderer[] | null = null;
+    private uvtxHelpers: UVTXRenderHelper[];
 
     constructor(device: GfxDevice, uvtr: UVTR, uven: UVEN | null) {
         this.renderHelper = new GfxRenderHelper(device);
 
-        // TODO: the way this rendering setup works, it should result in a ton of duplicate renderers
-        // Simplest way to solve this would be with a cache but maybe it's a sign there's a better way
-        // to organize my code?
-        this.uvtrRenderer = new UVTRRenderer(uvtr, device);
+        // TODO: this is a kind of hacky solution?
+        let rendererCache = new Map<any, any>();
+        
+        this.uvtrRenderer = new UVTRRenderer(uvtr, device, rendererCache);
 
         // TODO: less sketchy uven setup
         if(uven !== null) {
-            this.uvenModelRenderers = uven.uvmds.map(md => new UVMDRenderer(md, device));
+            this.uvenModelRenderers = uven.uvmds.map(md => new UVMDRenderer(md, device, rendererCache));
         }
+
+        // TODO: this is a kind of hacky solution?
+        this.uvtxHelpers = [];
+        for(let renderer of rendererCache.values()) {
+            if(renderer instanceof UVTXRenderHelper) {
+                this.uvtxHelpers.push(renderer);
+            }
+        }
+
+        console.log(this.uvtxHelpers);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -67,6 +79,10 @@ class BARRenderer implements SceneGfx {
 
     // TODO-ASK: what is a render inst?
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+        for(let uvtxRenderHelper of this.uvtxHelpers) {
+            uvtxRenderHelper.updateAnimations(viewerInput);
+        }
+
         const topTemplate = this.renderHelper.pushTemplateRenderInst();
         
         topTemplate.setBindingLayouts(bindingLayouts);
@@ -86,7 +102,6 @@ class BARRenderer implements SceneGfx {
         }
 
         this.uvtrRenderer.prepareToRender(device, renderInstManager, viewerInput);
-
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();       
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -179,12 +194,12 @@ const sceneDescs = [
     new BARSceneDesc(17, '17'), // checkerboard test level
     new BARSceneDesc(18, '18'),
     new BARSceneDesc(37, '37'),
-    //new BARSceneDesc(1, '1'), blue tint
-    //new BARSceneDesc(3, '3'), blue tint
-    // new BARSceneDesc(8, '8'), blue tint
-    // new BARSceneDesc(9, '9'), blue tint
-    // new BARSceneDesc(10, '10'), blue tint
-    // new BARSceneDesc(11, '11'), blue tint
+    // new BARSceneDesc(1, '1'), // blue tint
+    // new BARSceneDesc(3, '3'), // blue tint
+    // new BARSceneDesc(8, '8'), // blue tint
+    // new BARSceneDesc(9, '9'), // blue tint
+    // new BARSceneDesc(10, '10'), // blue tint
+    // new BARSceneDesc(11, '11'), // blue tint
     // new BARSceneDesc(4, '4'), advertise segment
     // new BARSceneDesc(5, '5'), advertise segment
     // new BARSceneDesc(6, '6'), advertise segment

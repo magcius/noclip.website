@@ -21,8 +21,6 @@ export class UVEN {
             let uvmdIndex = view.getUint16(curPos);
             let unkByte = view.getUint8(curPos + 2);
 
-            console.log(uvmdIndex);
-
             this.uvmds.push(filesystem.getParsedFile(UVMD, "UVMD", uvmdIndex));
 
             curPos += 3;

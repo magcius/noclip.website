@@ -99,17 +99,16 @@ export class Filesystem {
         return { chunks: this.parseChunks(this.filesBuffer.subarray(formBegin + 8, fileLen)) };
     }
 
-    public getFileTypeCount(type: string): number {
-        return this.fileTypeToFileLocations.get(type)!.length;
-    }
-
-
     private getFileLocation(type: string, index: number): number {
         const fileLocs = this.fileTypeToFileLocations.get(type);
         assert(fileLocs !== undefined, `Unrecognized file type ${type}`);
         const fileLocation = fileLocs[index];
         assert(fileLocation !== -1, `File table entry for ${type} file at ${index} is -1`);
         return fileLocation;
+    }
+
+    public getFileTypeCount(type: string): number {
+        return this.fileTypeToFileLocations.get(type)!.length;
     }
 
 

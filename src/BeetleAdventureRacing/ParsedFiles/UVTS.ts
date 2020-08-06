@@ -1,26 +1,11 @@
 import { UVFile, Filesystem } from "../Filesystem";
 import { assert } from "../../util";
-import { UVTX } from "./UVTX";
+import { TexSeqAnimMode } from "./UVTX";
 
 class UVTSFrame {
-    //public uvtx: UVTX; // ushort uvtxIndex
     public uvtxIndex: number; // Loading UVTX directly causes infinite recursion. TODO: better solution?
     public unk_sbyte: number;
     public frameLengthUnits: number;
-}
-
-enum AnimationMode {
-    PlayOnce = 0,
-    Loop = 1,
-    Bounce = 2
-}
-
-export class AnimationState {
-    public enabled: boolean; // set to false to pause animation
-    public thisSlotIsAllocated: boolean; // table is inited with a bunch of entries where this is 0, it's set to 1 when the slot is chosen to be used
-    public currentFrame: number;
-    public unitsUntilFrameEnds: number;
-    public uvts: UVTS;
 }
 
 // UVTS aka "tseq"
@@ -28,7 +13,7 @@ export class AnimationState {
 // For having textures that animate by cycling through a set of images
 export class UVTS {
     public frames: UVTSFrame[]; // originally a pointer
-    public animationMode: AnimationMode;
+    public animationMode: TexSeqAnimMode;
     public playAnimationInReverse: boolean; // if this is true, start at 0 and ++, otherwise start at the end and --
     public unitsPerSecond: number;
 
@@ -56,6 +41,7 @@ export class UVTS {
         }
 
         this.animationMode = view.getUint8(curPos);
+        assert(this.animationMode !== TexSeqAnimMode.Bounce);
         this.playAnimationInReverse = view.getUint8(curPos + 1) !== 0;
         this.unitsPerSecond = view.getFloat32(curPos + 2);
     }

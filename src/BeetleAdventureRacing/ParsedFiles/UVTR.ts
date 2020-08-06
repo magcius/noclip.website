@@ -60,9 +60,17 @@ export class UVTR {
 
 export class UVTRRenderer {
     public uvctRenderers: Map<UVCT, UVCTRenderer> = new Map();
-    constructor(public uvtr: UVTR, device: GfxDevice) {
+    constructor(public uvtr: UVTR, device: GfxDevice, rendererCache: Map<any, any>) {
+        rendererCache.set(uvtr, this);
+
         for(let [uvct, placementMat] of uvtr.uvcts) {
-            this.uvctRenderers.set(uvct, (new UVCTRenderer(uvct, device)));
+            let uvctRenderer;
+            if(rendererCache.has(uvct)) {
+                uvctRenderer = rendererCache.get(uvct);
+            } else {
+                uvctRenderer = new UVCTRenderer(uvct, device, rendererCache);
+            }
+            this.uvctRenderers.set(uvct, uvctRenderer);
         }
     }
 

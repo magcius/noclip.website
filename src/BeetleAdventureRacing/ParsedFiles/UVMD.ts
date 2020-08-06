@@ -269,11 +269,13 @@ export class UVMDRenderer {
     // TODO: may not be the best way of organizing this.
     public materialRenderers: Map<MoreAccurateUVMDMaterial, MaterialRenderer> = new Map();
 
-    constructor(public uvmd: UVMD, device: GfxDevice) {
+    constructor(public uvmd: UVMD, device: GfxDevice, rendererCache: Map<any, any>) {
+        rendererCache.set(uvmd, this);
+
         // Only render LOD0 for now.
         for(let part of this.uvmd.lods[0].modelParts) {
             for(let material of part.materials) {
-                this.materialRenderers.set(material, new MaterialRenderer(device, material));
+                this.materialRenderers.set(material, new MaterialRenderer(device, material, rendererCache));
             }
         }
     }

@@ -2,32 +2,115 @@ import { Filesystem, UVFile } from "../Filesystem";
 import { assert, nArray } from "../../util";
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { ImageFormat, ImageSize, decodeTex_RGBA16, decodeTex_I4, decodeTex_I8, decodeTex_IA4, decodeTex_IA8, decodeTex_IA16, getImageFormatName, getImageSizeName, decodeTex_CI4, parseTLUT, TextureLUT } from "../../Common/N64/Image";
-import { UVTS, AnimationState } from "./UVTS";
+import { UVTS } from "./UVTS";
 import * as F3DEX2 from "../../PokemonSnap/f3dex2";
 import * as F3DEX from '../../BanjoKazooie/f3dex';
 import * as RDP from '../../Common/N64/RDP';
-import { vec4 } from "gl-matrix";
+import { vec4, mat4 } from "gl-matrix";
+import { GfxDevice, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, makeTextureDescriptor2D, GfxFormat } from "../../gfx/platform/GfxPlatform";
+import { fillVec4v, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
+import { ViewerRenderInput } from "../../viewer";
 
-// I have a feeling this might be used for texture scrolling (and/or distorting/something else?)
-class UnkStruct {
-    public f1: number;
-    public f2: number;
-    public f3: number;
-    public f4: number;
-    public f5: number;
-    public f6: number;
-    public byte1: number;
-    public byte2: number;
-    public byte3: number;
+// TODO: figure out if any mode other than Loop is used
+enum TexScrollAnimMode {
+    Loop = 0,
+    PlayOnce = 1,
+    Bounce = 2,
+    NeverStop = 3 // no bounds check
+}
+
+class TexScrollAnim {
+    // TODO: are these first two ever used
+    public unusedFloat1: number;
+    public unusedFloat2: number;
+    public sVel: number;
+    public tVel: number;
+    public sOffset: number;
+    public tOffset: number;
+    public sMode: TexScrollAnimMode;
+    public tMode: TexScrollAnimMode;
+    public playing: boolean;
+
+    public constructor(sVel: number, tVel: number, sOffset: number, tOffset: number) {
+        this.sVel = sVel;
+        this.tVel = tVel;
+        this.sOffset = sOffset;
+        this.tOffset = tOffset;
+
+        this.sMode = TexScrollAnimMode.Loop;
+        this.tMode = TexScrollAnimMode.Loop;
+        this.playing = true;
+
+        this.unusedFloat1 = 1;
+        this.unusedFloat2 = 1;
+    }
+
+    public update(deltaTime: number) {
+        // TODO: these are too fast!
+        if(this.playing) {
+            assert(this.sMode === TexScrollAnimMode.Loop);
+            assert(this.tMode === TexScrollAnimMode.Loop);
+
+            this.sOffset += (this.sVel * deltaTime);
+            this.sOffset = (this.sOffset + 1) % 1;
+
+            this.tOffset += (this.tVel * deltaTime);
+            this.tOffset = (this.tOffset + 1) % 1;
+        }
+    }
+}
+
+export enum TexSeqAnimMode {
+    PlayOnce = 0,
+    Loop = 1,
+    Bounce = 2
+}
+
+class TexSeqAnim {
+    public playing: boolean; // set to false to pause animation
+    //public thisSlotIsAllocated: boolean; // table is inited with a bunch of entries where this is 0, it's set to 1 when the slot is chosen to be used
+    public curFrameIndex: number;
+    public unitsUntilFrameEnds: number;
+    public uvts: UVTS;
+
+    public constructor(uvts: UVTS) {
+        this.playing = true;
+        this.curFrameIndex = (uvts.playAnimationInReverse ? (uvts.frames.length - 1) : 0);
+        this.unitsUntilFrameEnds = uvts.frames[this.curFrameIndex].frameLengthUnits;
+        this.uvts = uvts;
+    }
+
+    public update(deltaTime: number) {
+        this.unitsUntilFrameEnds -= (this.uvts.unitsPerSecond * deltaTime);
+        let frameCount = this.uvts.frames.length;
+
+        while(this.unitsUntilFrameEnds <= 0) {
+            this.curFrameIndex += this.uvts.playAnimationInReverse ? -1 : 1;
+
+            if(this.uvts.animationMode === TexSeqAnimMode.PlayOnce) {
+                if(this.curFrameIndex === -1 || this.curFrameIndex === frameCount)  {
+                    this.playing = false;
+                    return;
+                }
+            } else if (this.uvts.animationMode === TexSeqAnimMode.Loop) {
+                this.curFrameIndex = (this.curFrameIndex + frameCount) % frameCount;
+            } else { // Bounce doesn't seem to be used
+                assert(false);
+            }
+
+            this.unitsUntilFrameEnds += this.uvts.frames[this.curFrameIndex].frameLengthUnits;
+        }
+    }
 }
 
 // UVTX aka "texture"
-// Most of these just represent a single texture, possibly with mipmaps along with some extra info.
-// However, a UVTX can also have two textures (using otherUVTX) and/or be an animated texture (using animationState)
+// UVTX is a bit of a complex class - at minimum it's just a texture (i.e. texels and a display list, possibly with a palette)
+// but it can also contain information about animation
+// as well as a reference to a second UVTX that's also used when drawing this texture
 export class UVTX {
     // pCommands
-    public firstUnkStruct: UnkStruct | null = null;
-    public secondUnkStruct: UnkStruct | null = null;
+    public scrollAnim1: TexScrollAnim | null = null; // both originally pointers
+    public scrollAnim2: TexScrollAnim | null = null;
     // pTexelData
     // pPalettes (TODO: it seems like the UVTX stores 4 copies of each palette. Why?)
     public flagsAndIndex: number; //uint
@@ -35,7 +118,7 @@ export class UVTX {
     // texelDataSize
     public width: number; //ushort
     public height: number; //ushort
-    public animationState: AnimationState | null = null; // originally animationStateIndex
+    public seqAnim: TexSeqAnim | null = null; // originally animationStateIndex
     public unkByte1: number;
     public levelCount: number; // 1 if no mipmapping, +1 for each mipmap level, etc.
     public alpha: number;
@@ -44,15 +127,7 @@ export class UVTX {
     public unkByte5: number;
     public unkByte6: number;
 
-
-
-
     // below stuff is not in the original UVTX struct
-
-
-
-
-    public not_supported_yet = false;
     public convertedTexelData: Uint8Array;
     public rspState: UVTXRSPState;
 
@@ -70,19 +145,9 @@ export class UVTX {
         let f1 = view.getFloat32(curPos + 0);
         let f2 = view.getFloat32(curPos + 4);
         if(f1 === 0 && f2 === 0) {
-            this.firstUnkStruct = null;
+            this.scrollAnim1 = null;
         } else {
-            this.firstUnkStruct = {
-                f1: 1,
-                f2: 1,
-                f3: f1,
-                byte1: 0,
-                byte2: 0,
-                byte3: 1,
-                f4: 0,
-                f5: 0,
-                f6: f2,
-            }
+            this.scrollAnim1 = new TexScrollAnim(f1, f2, 0, 0);
         }
         curPos += 8;
 
@@ -91,19 +156,9 @@ export class UVTX {
         let f5 = view.getFloat32(curPos + 8);
         let f6 = view.getFloat32(curPos + 12);
         if(f3 === 0 && f4 === 0 && f5 === 0 && f6 === 0) {
-            this.secondUnkStruct = null;
+            this.scrollAnim2 = null;
         } else {
-            this.secondUnkStruct = {
-                f1: 1,
-                f2: 1,
-                f3: f3,
-                f4: f4,
-                f5: f5,
-                f6: f6,
-                byte1: 0,
-                byte2: 0,
-                byte3: 1,
-            }
+            this.scrollAnim2 = new TexScrollAnim(f3, f4, f5, f6);
         }
         curPos += 16;
 
@@ -147,23 +202,12 @@ export class UVTX {
 
         if((this.flagsAndIndex & 0x00080000) !== 0) {
             let uvtsCt = filesystem.getFileTypeCount("UVTS");
-            // I checked, there are no null UVTSs
             let foundMatch = false;
             for(let i = 0; i < uvtsCt; i++) {
-                //TODO: this is going to cause infinite recursion.
-                // idea: instead of getparsedfile, get chunks and pass to other fn?
+                // I checked, there are no null UVTSs
                 let uvts = filesystem.getParsedFile(UVTS, "UVTS", i);               
                 if(uvts.frames[0].uvtxIndex === (this.flagsAndIndex & 0xFFF)) {
-                    // init entry
-
-                    let startFrame = (uvts.playAnimationInReverse ? (uvts.frames.length - 1) : 0);
-                    this.animationState = {
-                        thisSlotIsAllocated: true,
-                        enabled: true,
-                        currentFrame: startFrame,
-                        unitsUntilFrameEnds: uvts.frames[startFrame].frameLengthUnits,
-                        uvts,
-                    };
+                    this.seqAnim = new TexSeqAnim(uvts);
                     foundMatch = true;
                     break;
                 }
@@ -173,7 +217,7 @@ export class UVTX {
             // would need to expand the code
             assert(foundMatch);
         } else {
-            this.animationState = null;
+            this.seqAnim = null;
         }
 
         // TODO: for some reason BAR makes 4 copies of each palette... why?
@@ -371,36 +415,34 @@ export class UVTX {
         }
         let tile = rspState.primitiveTile;
 
-        // TODO: figure out what's going on with these
         if (tile.uls === 0 && tile.ult === 0 && tile.lrs === 0 && tile.lrt === 0) {
-            console.warn("G_SETTILESIZE was never called, skipping");
-            this.not_supported_yet = true;
-            // set tile size is not in the displaylist because that's handled by the animation
-            assert(this.firstUnkStruct !== null)
-            return;
+            //console.warn("G_SETTILESIZE was never called, skipping");
+            //this.not_supported_yet = true;
+            assert(this.scrollAnim1 !== null)
+            //return;
         }
 
         // Decode image data
-        let tileWidth = (tile.lrs - tile.uls) + 1;
-        let tileHeight = (tile.lrt - tile.ult) + 1;
-        assert(tileWidth === Math.round(tileWidth));
-        assert(tileHeight === Math.round(tileHeight));
-        assert(tileWidth === this.width);
-        assert(tileHeight === this.height);
+        // let tileWidth = (tile.lrs - tile.uls) + 1;
+        // let tileHeight = (tile.lrt - tile.ult) + 1;
+        // assert(tileWidth === Math.round(tileWidth));
+        // assert(tileHeight === Math.round(tileHeight));
+        // assert(tileWidth === this.width);
+        // assert(tileHeight === this.height);
 
-        const dest = new Uint8Array(tileWidth * tileHeight * 4);
+        const dest = new Uint8Array(this.width * this.height * 4);
         const texelDataView = texelData.createDataView();
 
-        if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_I4(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
-        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_IA16(dest, texelDataView, 0, tileWidth, tileHeight, tile.line, true);
+        if (tile.fmt === ImageFormat.G_IM_FMT_RGBA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_RGBA16(dest, texelDataView, 0, this.width, this.height, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_I4(dest, texelDataView, 0, this.width, this.height, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_I && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_I8(dest, texelDataView, 0, this.width, this.height, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_4b) decodeTex_IA4(dest, texelDataView, 0, this.width, this.height, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_8b) decodeTex_IA8(dest, texelDataView, 0, this.width, this.height, tile.line, true);
+        else if (tile.fmt === ImageFormat.G_IM_FMT_IA && tile.siz === ImageSize.G_IM_SIZ_16b) decodeTex_IA16(dest, texelDataView, 0, this.width, this.height, tile.line, true);
         else if (tile.fmt === ImageFormat.G_IM_FMT_CI && tile.siz === ImageSize.G_IM_SIZ_4b) {
             const tlut = new Uint8Array(16 * 4);
             parseTLUT(tlut, palettesData[tile.palette].createDataView(), 0, tile.siz, TextureLUT.G_TT_RGBA16);
-            decodeTex_CI4(dest, texelDataView, 0, tileWidth, tileHeight, tlut, tile.line, true);
+            decodeTex_CI4(dest, texelDataView, 0, this.width, this.height, tlut, tile.line, true);
         }
         else
             console.warn(`Unsupported texture format ${getImageFormatName(tile.fmt)} / ${getImageSizeName(tile.siz)}`);
@@ -426,5 +468,144 @@ class UVTXRSPState {
     // This seems to be the "official" name for it?
     get primitiveTile() {
         return this.tileStates[this.textureState.tile];
+    }
+}
+
+export class UVTXRenderHelper {
+    private hasPairedTexture: boolean;
+    private texel0TextureData: TextureData;
+    private texel1TextureData: TextureData;
+
+    constructor(public uvtx: UVTX, device: GfxDevice) {
+        this.hasPairedTexture = this.uvtx.otherUVTX !== null;
+        if(this.hasPairedTexture) {
+            // TODO: smarter handling of case where other uvtx = this uvtx ?
+            if(this.uvtx.rspState.mainTextureIsFirstTexture) {
+                this.texel0TextureData = new TextureData(device, this.uvtx);
+                this.texel1TextureData = new TextureData(device, this.uvtx.otherUVTX!);
+            } else {
+                this.texel0TextureData = new TextureData(device, this.uvtx.otherUVTX!);
+                this.texel1TextureData = new TextureData(device, this.uvtx);
+            }
+        } else {
+            this.texel0TextureData = new TextureData(device, this.uvtx);
+        }
+
+        // TODO: Reset animations
+    }
+
+    public updateAnimations(viewerInput: ViewerRenderInput) {
+        let deltaTimeSecs = viewerInput.deltaTime / 1000;
+
+        if(this.uvtx.seqAnim !== null) {
+            this.uvtx.seqAnim.update(deltaTimeSecs);
+        }
+        if(this.uvtx.scrollAnim1 !== null) {
+            if(this.uvtx.flagsAndIndex === 4399)
+                console.log("Updating 1 for " + this.uvtx.flagsAndIndex);
+            this.uvtx.scrollAnim1.update(deltaTimeSecs);
+        }
+        if(this.uvtx.scrollAnim2 !== null) {
+            if(this.uvtx.flagsAndIndex === 4399)
+                console.log("Updating 2 for " + this.uvtx.flagsAndIndex);
+            this.uvtx.scrollAnim2.update(deltaTimeSecs);
+        }
+    }
+
+    public getTextureMappings() {
+        if(this.hasPairedTexture) {
+            return [this.texel0TextureData.getTextureMapping(), this.texel1TextureData.getTextureMapping()]
+        } else {
+            return [this.texel0TextureData.getTextureMapping()];
+        }
+    }
+
+    public fillTexMatrices(drawParams: Float32Array, drawParamsOffs: number) {
+        drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, this.makeMat(this.texel0TextureData, this.uvtx.scrollAnim1));
+
+        if(this.hasPairedTexture) {
+            drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, this.makeMat(this.texel1TextureData, this.uvtx.scrollAnim2));
+        }
+    }
+
+    private makeMat(texData: TextureData, scrollAnim: TexScrollAnim | null) {
+        let texMatrix = mat4.fromValues(
+            1 / texData.width, 0, 0, 0,
+            0, 1 / texData.height, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1
+        )
+
+        if(scrollAnim !== null) {
+            //TODO: is negating them the right thing to do
+            texMatrix[12] = -scrollAnim.sOffset;
+            texMatrix[13] = -scrollAnim.tOffset;
+        }
+
+        return texMatrix;
+    }
+
+    public fillCombineParams(combineParams: Float32Array, combineParamsOffs: number) {
+        fillVec4v(combineParams, combineParamsOffs + 0, this.uvtx.rspState.primitiveColor);
+        fillVec4v(combineParams, combineParamsOffs + 4, this.uvtx.rspState.environmentColor);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.texel0TextureData.destroy(device);
+        if(this.hasPairedTexture) {
+            this.texel1TextureData.destroy(device);
+        }
+    }
+}
+
+//TODO: check this
+const enum TexCM {
+    WRAP = 0x00,
+    MIRROR = 0x01,
+    CLAMP = 0x02,
+}
+
+function translateCM(cm: TexCM): GfxWrapMode {
+    switch (cm) {
+        case TexCM.WRAP: return GfxWrapMode.REPEAT;
+        case TexCM.MIRROR: return GfxWrapMode.MIRROR;
+        case TexCM.CLAMP: return GfxWrapMode.CLAMP;
+    }
+}
+
+class TextureData {
+    private gfxTexture: GfxTexture;
+    private gfxSampler: GfxSampler;
+    public width: number;
+    public height: number;
+    
+    public constructor(device: GfxDevice, uvtx: UVTX) {
+        this.width = uvtx.width;
+        this.height = uvtx.height;
+
+        let rspState = uvtx.rspState;
+        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, uvtx.width, uvtx.height, 1));
+        //device.setResourceName(this.gfxTexture, texture.name);
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(this.gfxTexture, 0, [uvtx.convertedTexelData]);
+        device.submitPass(hostAccessPass);
+
+        this.gfxSampler = device.createSampler({
+            wrapS: translateCM(rspState.primitiveTile.cms),
+            wrapT: translateCM(rspState.primitiveTile.cmt),
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0, maxLOD: 0,
+        });
+    }
+
+    public getTextureMapping()  {
+        return { gfxTexture: this.gfxTexture, gfxSampler: this.gfxSampler, lateBinding: null };
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyTexture(this.gfxTexture);
+        device.destroySampler(this.gfxSampler);
     }
 }

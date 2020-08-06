@@ -5,7 +5,7 @@ import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInp
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
-import { UVTX } from "./ParsedFiles/UVTX";
+import { UVTX, UVTXRenderHelper } from "./ParsedFiles/UVTX";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 
 import * as RDP from '../Common/N64/RDP';
@@ -20,58 +20,6 @@ export interface Material {
     indexData: Uint16Array;
 }
 
-//TODO: check this
-const enum TexCM {
-    WRAP = 0x00,
-    MIRROR = 0x01,
-    CLAMP = 0x02,
-}
-
-function translateCM(cm: TexCM): GfxWrapMode {
-    switch (cm) {
-        case TexCM.WRAP: return GfxWrapMode.REPEAT;
-        case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-        case TexCM.CLAMP: return GfxWrapMode.CLAMP;
-    }
-}
-
-class TextureData {
-    private gfxTexture: GfxTexture;
-    private gfxSampler: GfxSampler;
-    public width: number;
-    public height: number;
-    
-    public constructor(device: GfxDevice, uvtx: UVTX) {
-        this.width = uvtx.width;
-        this.height = uvtx.height;
-
-        let rspState = uvtx.rspState;
-        this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, uvtx.width, uvtx.height, 1));
-        //device.setResourceName(this.gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(this.gfxTexture, 0, [uvtx.convertedTexelData]);
-        device.submitPass(hostAccessPass);
-
-        this.gfxSampler = device.createSampler({
-            wrapS: translateCM(rspState.primitiveTile.cms),
-            wrapT: translateCM(rspState.primitiveTile.cmt),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0, maxLOD: 0,
-        });
-    }
-
-    public getTextureMapping()  {
-        return { gfxTexture: this.gfxTexture, gfxSampler: this.gfxSampler, lateBinding: null };
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyTexture(this.gfxTexture);
-        device.destroySampler(this.gfxSampler);
-    }
-}
-
 export class MaterialRenderer {
     private vertexBuffer: GfxBuffer;
     private indexBuffer: GfxBuffer;
@@ -79,9 +27,7 @@ export class MaterialRenderer {
     private inputState: GfxInputState;
 
     private isTextured: boolean;
-    private hasPairedTexture: boolean;
-    private texel0TextureData: TextureData;
-    private texel1TextureData: TextureData;
+    private uvtxRenderHelper: UVTXRenderHelper;
 
     private program: DeviceProgram;
 
@@ -92,13 +38,14 @@ export class MaterialRenderer {
     
     // TODO: some models are being culled incorrectly, figure out what's
     // up with that
-    constructor(device: GfxDevice, material: Material) {
+    // TODO: what's going on with the materials that (seemingly) have no texture and are invisible?
+    // (e.g. see SS in the desert, CC by the covered cliff road, MoM by the ice wall you smash)
+    constructor(device: GfxDevice, material: Material, rendererCache: Map<any, any>) {
         this.material = material;
-        this.isTextured = material.uvtx !== null && !material.uvtx.not_supported_yet;
+        this.isTextured = material.uvtx !== null;
         if(this.isTextured) {
             this.uvtx = material.uvtx!;
         }
-        this.hasPairedTexture = this.isTextured && this.uvtx.otherUVTX !== null;
 
         //TODO: remove
         if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null && 
@@ -113,6 +60,7 @@ export class MaterialRenderer {
             // TODO: what other CC settings does BAR use that F3DEX_Program doesn't support?
             // TODO: K5 is also used, as is NOISE
 
+            //TODO: not sure if this is the correct use of the alpha variable
             this.program = new F3DEX_Program(rspState.otherModeH, 0, rspState.combineParams, this.uvtx.alpha / 0xFF, rspState.tileStates);
             this.program.setDefineBool("USE_TEXTURE", true);
 
@@ -158,18 +106,13 @@ export class MaterialRenderer {
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
         if (this.isTextured) {
-            if(this.hasPairedTexture) {
-                // TODO: smarter handling of case where other uvtx = this uvtx ?
-                if(this.uvtx.rspState.mainTextureIsFirstTexture) {
-                    this.texel0TextureData = new TextureData(device, this.uvtx);
-                    this.texel1TextureData = new TextureData(device, this.uvtx.otherUVTX!);
-                } else {
-                    this.texel0TextureData = new TextureData(device, this.uvtx.otherUVTX!);
-                    this.texel1TextureData = new TextureData(device, this.uvtx);
-                }
+            if(rendererCache.has(this.uvtx)) {
+                this.uvtxRenderHelper = rendererCache.get(this.uvtx);
             } else {
-                this.texel0TextureData = new TextureData(device, this.uvtx);
+                this.uvtxRenderHelper = new UVTXRenderHelper(this.uvtx, device);
+                rendererCache.set(this.uvtx, this.uvtxRenderHelper);
             }
+            //this.uvtxRenderHelper = new UVTXRenderHelper(this.uvtx, device);
         }
     }
 
@@ -181,6 +124,8 @@ export class MaterialRenderer {
         // TODO: figure out other processing
         // TODO: clamp/mask/shift?
         // TODO: correct texture matrices
+        // TODO: alpha of foliage is wrong
+        // TODO: skybox textures are wrong scale (at least in CC)
 
         if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null && 
             (!this.isTextured || (this.uvtx.flagsAndIndex & 0xFFF) !== DEBUGGING_TOOLS_STATE.singleUVTXToRender)) {
@@ -216,24 +161,9 @@ export class MaterialRenderer {
         const combineParams = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
 
         if(this.isTextured) {
-
-            
-            let textureMappings = [this.texel0TextureData.getTextureMapping()];
-
-            let texMatrix = mat4.create();
-            mat4.fromScaling(texMatrix, [1 / this.texel0TextureData.width, 1 / this.texel0TextureData.height, 1]);
-            drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, texMatrix);
-
-            if(this.hasPairedTexture) {
-                mat4.fromScaling(texMatrix, [1 / this.texel1TextureData.width, 1 / this.texel1TextureData.height, 1]);
-                drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, texMatrix);
-                textureMappings.push(this.texel1TextureData.getTextureMapping());
-            }
-
-            renderInst.setSamplerBindingsFromTextureMappings(textureMappings);
-
-            fillVec4v(combineParams, combineParamsOffs, this.uvtx.rspState.primitiveColor);
-            fillVec4v(combineParams, combineParamsOffs + 4, this.uvtx.rspState.environmentColor);
+            renderInst.setSamplerBindingsFromTextureMappings(this.uvtxRenderHelper.getTextureMappings());
+            this.uvtxRenderHelper.fillTexMatrices(drawParams, drawParamsOffs);
+            this.uvtxRenderHelper.fillCombineParams(combineParams, combineParamsOffs);
         }
 
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
@@ -268,10 +198,7 @@ export class MaterialRenderer {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         if(this.isTextured) {
-            this.texel0TextureData.destroy(device);
-            if(this.hasPairedTexture) {
-                this.texel1TextureData.destroy(device);
-            }
+            this.uvtxRenderHelper.destroy(device);
         }
     }
 }
