@@ -2192,7 +2192,7 @@ class StudioPanel extends FloatingPanel {
         this.matchPrevSpeedBtn.onclick = () => {
             if (this.selectedKeyframeListItem) {
                 const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
-                const duration = this.animationManager.getMatchedSpeedDuration(index);
+                const duration = this.animationManager.getMatchedSpeedDuration(index, this.loopAnimationCheckbox.checked);
                 this.selectedKeyframe.interpDuration = duration;
                 this.keyframeDurationInput.value = duration.toString();
             }

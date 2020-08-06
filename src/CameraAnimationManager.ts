@@ -340,7 +340,7 @@ export class CameraAnimationManager {
         return false;
     }
 
-    public getMatchedSpeedDuration(index: number): number {
+    public getMatchedSpeedDuration(index: number, loopEnabled: boolean): number {
         let curKf = this.animation.keyframes[index];
         let duration = curKf.interpDuration;
         if (this.animation.keyframes.length < 3)
@@ -357,16 +357,41 @@ export class CameraAnimationManager {
             prevKf = this.animation.keyframes[this.animation.keyframes.length - 1];
             beforePrevKf = this.animation.keyframes[this.animation.keyframes.length - 2];
         }
-        mat4.getTranslation(this.prevPos, prevKf.endPos);
-        mat4.getTranslation(this.beforePrevPos, beforePrevKf.endPos);
-        const prevDistance = vec3.distance(this.prevPos, this.beforePrevPos);
-        if (prevKf.interpDuration > 0 && prevDistance > 0) {
-            const ratio = prevKf.interpDuration / prevDistance;
-            mat4.getTranslation(this.nextPos, curKf.endPos);
-            const distance = vec3.distance(this.prevPos, this.nextPos);
-            duration = distance * ratio;
+        if (prevKf.interpDuration > 0) {
+            this.loopAnimation = loopEnabled;
+            this.calculateTangents();
+            const prevLength = this.estimateHermiteCurveLength(beforePrevKf, prevKf);
+            if (prevLength === 0)
+                return 0;
+            const ratio = prevKf.interpDuration / prevLength;
+            const curLength = this.estimateHermiteCurveLength(prevKf, curKf);
+            if (curLength > 0)
+                duration = ratio * curLength;
         }
         return duration;
+    }
+
+    /**
+     * Estimates the length of the hermite curve segment between two keyframes.
+     *
+     * @param fromKeyframe the keyframe describing the start position
+     * @param toKeyframe the keyframe describing the end position
+     */
+    private estimateHermiteCurveLength(fromKeyframe: Keyframe, toKeyframe: Keyframe): number {
+        mat4.getTranslation(this.prevPos, fromKeyframe.endPos);
+        mat4.getTranslation(this.nextPos, toKeyframe.endPos);
+        let length = 0;
+        if (!vec3.exactEquals(this.prevPos, this.nextPos)) {
+            vec3.copy(this.scratchVec1, this.prevPos);
+            for (let t = 0.0001; t <= 1; t += 0.0001) {
+                for (let j = 0; j < 3; j++) {
+                    this.scratchVec2[j] = getPointHermite(this.prevPos[j], this.nextPos[j], toKeyframe.posTangentIn[j], toKeyframe.posTangentOut[j], t);
+                }
+                length += vec3.distance(this.scratchVec1, this.scratchVec2);
+                vec3.copy(this.scratchVec1, this.scratchVec2);
+            }
+        }
+        return length;
     }
 
     public isAnimation(a: Keyframe[]): boolean {
