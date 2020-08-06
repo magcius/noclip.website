@@ -2272,7 +2272,7 @@ class StudioPanel extends FloatingPanel {
                 this.stopPreviewKeyframeBtn.classList.remove('disabled');
                 this.stopAnimationBtn.removeAttribute('hidden');
                 this.stopAnimationBtn.removeAttribute('disabled');
-                this.animationManager.previewKeyframe(parseInt(this.selectedKeyframeListItem.dataset.index as string));
+                this.animationManager.previewKeyframe(parseInt(this.selectedKeyframeListItem.dataset.index as string), this.loopAnimationCheckbox.checked);
             }
         }
 
