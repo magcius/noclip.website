@@ -111,6 +111,16 @@ export class Filesystem {
         return this.fileTypeToFileLocations.get(type)!.length;
     }
 
+    public getAllLoadedFilesOfType<T>(type: string): T[] {
+        const files = [];
+        for(let [key, val] of this.parsedFilesCache) {
+            if(key.startsWith(type)) {
+                files.push(val);
+            }
+        }
+        return files;
+    }
+
 
     private parseChunks(fileBuffer: ArrayBufferSlice): UVFileChunk[] {
         const fileDataView = fileBuffer.createDataView();

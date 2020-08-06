@@ -13,7 +13,8 @@ import * as UI from '../ui';
 import { UVEN } from "./ParsedFiles/UVEN";
 import { UVMDRenderer } from "./ParsedFiles/UVMD";
 import { mat4 } from "gl-matrix";
-import { UVTX, UVTXRenderHelper } from "./ParsedFiles/UVTX";
+import { UVTX, TexScrollAnim, TexSeqAnim } from "./ParsedFiles/UVTX";
+import { UVTS } from "./ParsedFiles/UVTS";
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2 },
@@ -32,12 +33,14 @@ class BARRenderer implements SceneGfx {
     private uvtrRenderer: UVTRRenderer;
     
     private uvenModelRenderers: UVMDRenderer[] | null = null;
-    private uvtxHelpers: UVTXRenderHelper[];
+    private texScrollAnims: TexScrollAnim[];
+    private texSeqAnims: TexSeqAnim[];
 
     constructor(device: GfxDevice, uvtr: UVTR, uven: UVEN | null) {
         this.renderHelper = new GfxRenderHelper(device);
 
         // TODO: this is a kind of hacky solution?
+        // TODO: this causes a lot of duplicate destruction warnings
         let rendererCache = new Map<any, any>();
         
         this.uvtrRenderer = new UVTRRenderer(uvtr, device, rendererCache);
@@ -47,15 +50,21 @@ class BARRenderer implements SceneGfx {
             this.uvenModelRenderers = uven.uvmds.map(md => new UVMDRenderer(md, device, rendererCache));
         }
 
-        // TODO: this is a kind of hacky solution?
-        this.uvtxHelpers = [];
-        for(let renderer of rendererCache.values()) {
-            if(renderer instanceof UVTXRenderHelper) {
-                this.uvtxHelpers.push(renderer);
+        // TODO: this is maybe a hacky solution?
+        // TODO: Reset animations
+        this.texScrollAnims = [];
+        this.texSeqAnims = [];
+        for(let uvFile of rendererCache.keys()) {
+            if(uvFile instanceof UVTX) {
+                if(uvFile.scrollAnim1 !== null)
+                    this.texScrollAnims.push(uvFile.scrollAnim1);
+                if(uvFile.scrollAnim2 !== null)
+                    this.texScrollAnims.push(uvFile.scrollAnim2);
+                if(uvFile.seqAnim !== null) {
+                    this.texSeqAnims.push(uvFile.seqAnim);
+                }
             }
         }
-
-        console.log(this.uvtxHelpers);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -79,8 +88,12 @@ class BARRenderer implements SceneGfx {
 
     // TODO-ASK: what is a render inst?
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
-        for(let uvtxRenderHelper of this.uvtxHelpers) {
-            uvtxRenderHelper.updateAnimations(viewerInput);
+        let deltaTimeSecs = viewerInput.deltaTime / 1000;
+        for(let texScrollAnim of this.texScrollAnims) {
+            texScrollAnim.update(deltaTimeSecs);
+        }
+        for(let texSeqAnim of this.texSeqAnims) {
+            texSeqAnim.update(deltaTimeSecs);
         }
 
         const topTemplate = this.renderHelper.pushTemplateRenderInst();
@@ -152,6 +165,12 @@ class BARSceneDesc implements SceneDesc {
         if (this.uvenIndex !== null) {
             uven = filesystem.getParsedFile(UVEN, "UVEN", this.uvenIndex)
         }
+
+        //TODO: better solution
+        for(let uvts of filesystem.getAllLoadedFilesOfType<UVTS>("UVTS")) {
+            uvts.loadUVTXs(filesystem);
+        }
+
         return new BARRenderer(device, uvtr, uven);
 
 

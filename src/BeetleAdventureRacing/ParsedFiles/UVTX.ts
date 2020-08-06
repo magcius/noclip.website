@@ -19,7 +19,7 @@ enum TexScrollAnimMode {
     NeverStop = 3 // no bounds check
 }
 
-class TexScrollAnim {
+export class TexScrollAnim {
     // TODO: are these first two ever used
     public unusedFloat1: number;
     public unusedFloat2: number;
@@ -46,7 +46,6 @@ class TexScrollAnim {
     }
 
     public update(deltaTime: number) {
-        // TODO: these are too fast!
         if(this.playing) {
             assert(this.sMode === TexScrollAnimMode.Loop);
             assert(this.tMode === TexScrollAnimMode.Loop);
@@ -66,7 +65,7 @@ export enum TexSeqAnimMode {
     Bounce = 2
 }
 
-class TexSeqAnim {
+export class TexSeqAnim {
     public playing: boolean; // set to false to pause animation
     //public thisSlotIsAllocated: boolean; // table is inited with a bunch of entries where this is 0, it's set to 1 when the slot is chosen to be used
     public curFrameIndex: number;
@@ -489,26 +488,6 @@ export class UVTXRenderHelper {
             }
         } else {
             this.texel0TextureData = new TextureData(device, this.uvtx);
-        }
-
-        // TODO: Reset animations
-    }
-
-    public updateAnimations(viewerInput: ViewerRenderInput) {
-        let deltaTimeSecs = viewerInput.deltaTime / 1000;
-
-        if(this.uvtx.seqAnim !== null) {
-            this.uvtx.seqAnim.update(deltaTimeSecs);
-        }
-        if(this.uvtx.scrollAnim1 !== null) {
-            if(this.uvtx.flagsAndIndex === 4399)
-                console.log("Updating 1 for " + this.uvtx.flagsAndIndex);
-            this.uvtx.scrollAnim1.update(deltaTimeSecs);
-        }
-        if(this.uvtx.scrollAnim2 !== null) {
-            if(this.uvtx.flagsAndIndex === 4399)
-                console.log("Updating 2 for " + this.uvtx.flagsAndIndex);
-            this.uvtx.scrollAnim2.update(deltaTimeSecs);
         }
     }
 

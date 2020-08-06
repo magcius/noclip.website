@@ -1,9 +1,10 @@
 import { UVFile, Filesystem } from "../Filesystem";
 import { assert } from "../../util";
-import { TexSeqAnimMode } from "./UVTX";
+import { TexSeqAnimMode, UVTX } from "./UVTX";
 
 class UVTSFrame {
-    public uvtxIndex: number; // Loading UVTX directly causes infinite recursion. TODO: better solution?
+    public uvtx: UVTX | null;
+    public uvtxIndex: number; // Loading UVTX directly causes infinite recursion. We load this now and load the uvtx later. TODO: better solution?
     public unk_sbyte: number;
     public frameLengthUnits: number;
 }
@@ -25,7 +26,7 @@ export class UVTS {
         let curPos = 0;
 
         // This seems to be a byte that tells the UVTS parser whether to load the UVTXs
-        // or not. I assume it's not important?
+        // or not. I assume it's not important otherwise?
         let unk_loadImmediately = view.getUint8(0);
         let frameCount = view.getUint8(1);
         curPos += 2;
@@ -36,7 +37,7 @@ export class UVTS {
             
             //let uvtx = filesystem.getParsedFile(UVTX, "UVTX", uvtxIndex);
 
-            this.frames.push({uvtxIndex, unk_sbyte: -1, frameLengthUnits});
+            this.frames.push({uvtx: null, uvtxIndex, unk_sbyte: -1, frameLengthUnits});
             curPos += 6;
         }
 
@@ -44,5 +45,13 @@ export class UVTS {
         assert(this.animationMode !== TexSeqAnimMode.Bounce);
         this.playAnimationInReverse = view.getUint8(curPos + 1) !== 0;
         this.unitsPerSecond = view.getFloat32(curPos + 2);
+    }
+
+    public loadUVTXs(filesystem: Filesystem) {
+        for(let frame of this.frames) {
+            if(frame.uvtx === null) {
+                frame.uvtx = filesystem.getParsedFile(UVTX, "UVTX", frame.uvtxIndex);
+            }
+        }
     }
 }

@@ -29,6 +29,9 @@ export class MaterialRenderer {
     private isTextured: boolean;
     private uvtxRenderHelper: UVTXRenderHelper;
 
+    private isTextureSequence: boolean;
+    private uvtxRenderHelpers: Map<UVTX, UVTXRenderHelper>;
+
     private program: DeviceProgram;
 
     private indexCount: number;
@@ -45,6 +48,7 @@ export class MaterialRenderer {
         this.isTextured = material.uvtx !== null;
         if(this.isTextured) {
             this.uvtx = material.uvtx!;
+            this.isTextureSequence = this.uvtx.seqAnim !== null;
         }
 
         //TODO: remove
@@ -105,14 +109,28 @@ export class MaterialRenderer {
             { buffer: this.vertexBuffer, byteOffset: 0 },
         ], { buffer: this.indexBuffer, byteOffset: 0 });
 
+        // oh god i get why people use factories now
         if (this.isTextured) {
-            if(rendererCache.has(this.uvtx)) {
-                this.uvtxRenderHelper = rendererCache.get(this.uvtx);
+            if(this.isTextureSequence) {
+                this.uvtxRenderHelpers = new Map();
+                for(let frame of this.uvtx.seqAnim!.uvts.frames) {
+                    this.uvtxRenderHelpers.set(frame.uvtx!, this.getOrMakeRenderHelper(device, frame.uvtx!, rendererCache));
+                }
             } else {
-                this.uvtxRenderHelper = new UVTXRenderHelper(this.uvtx, device);
-                rendererCache.set(this.uvtx, this.uvtxRenderHelper);
+                this.uvtxRenderHelper = this.getOrMakeRenderHelper(device, this.uvtx, rendererCache);
             }
             //this.uvtxRenderHelper = new UVTXRenderHelper(this.uvtx, device);
+        }
+    }
+
+    private getOrMakeRenderHelper(device: GfxDevice, uvtx: UVTX, rendererCache: Map<any, any>): UVTXRenderHelper {
+        if (rendererCache.has(uvtx)) {
+            return rendererCache.get(uvtx);
+        }
+        else {
+            let uvtxRenderHelper = new UVTXRenderHelper(uvtx, device);
+            rendererCache.set(uvtx, uvtxRenderHelper);
+            return uvtxRenderHelper;
         }
     }
 
@@ -161,9 +179,17 @@ export class MaterialRenderer {
         const combineParams = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
 
         if(this.isTextured) {
-            renderInst.setSamplerBindingsFromTextureMappings(this.uvtxRenderHelper.getTextureMappings());
-            this.uvtxRenderHelper.fillTexMatrices(drawParams, drawParamsOffs);
-            this.uvtxRenderHelper.fillCombineParams(combineParams, combineParamsOffs);
+            let uvtxRenderHelper: UVTXRenderHelper;
+            if(this.isTextureSequence) {
+                let curUVTX = this.uvtx.seqAnim!.uvts.frames[this.uvtx.seqAnim!.curFrameIndex].uvtx;
+                uvtxRenderHelper = this.uvtxRenderHelpers.get(curUVTX!)!;          
+            } else {
+                uvtxRenderHelper = this.uvtxRenderHelper;
+            }
+
+            renderInst.setSamplerBindingsFromTextureMappings(uvtxRenderHelper.getTextureMappings());
+            uvtxRenderHelper.fillTexMatrices(drawParams, drawParamsOffs);
+            uvtxRenderHelper.fillCombineParams(combineParams, combineParamsOffs);
         }
 
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
@@ -198,7 +224,11 @@ export class MaterialRenderer {
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
         if(this.isTextured) {
-            this.uvtxRenderHelper.destroy(device);
+            if(this.isTextureSequence) {
+                this.uvtxRenderHelpers.forEach(v => v.destroy(device));
+            } else {
+                this.uvtxRenderHelper.destroy(device);
+            }
         }
     }
 }
