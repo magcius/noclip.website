@@ -2,7 +2,7 @@
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController, OrbitCameraController } from '../Camera';
-import { colorFromHSL, colorNewCopy, White } from '../Color';
+import { colorFromHSL, colorNewCopy, White, colorToCSS } from '../Color';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
@@ -66,7 +66,7 @@ class GalleryCircleRenderer {
     private program = new GalleryCircleProgram();
     private gfxProgram: GfxProgram;
     private textureMappings = nArray(1, () => new TextureMapping());
-    private colors = nArray(2, () => colorNewCopy(White));
+    public colors = nArray(2, () => colorNewCopy(White));
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.gfxProgram = cache.createProgram(device, this.program);
@@ -118,10 +118,12 @@ export class GallerySceneRenderer implements SceneGfx {
     public modelSectorData: BINModelSectorData[] = [];
     public objectRenderers: ObjectRenderer[] = [];
     public framebufferTextureMapping = new TextureMapping();
+
     private circle: GalleryCircleRenderer;
     private label: HTMLElement;
+    private rareBadge: HTMLElement;
 
-    constructor(private context: SceneContext, private galleryObjects: GalleryObject[], private transformBuffer: ArrayBufferSlice) {
+    constructor(private context: SceneContext, private galleryObjects: GalleryObject[], private transformBuffer: ArrayBufferSlice, private objectBuffer: ArrayBufferSlice, private collectionBuffer: ArrayBufferSlice) {
         const device = context.device;
         this.renderHelper = new GfxRenderHelper(device);
 
@@ -131,22 +133,52 @@ export class GallerySceneRenderer implements SceneGfx {
         const labelContainer = document.createElement('div');
         labelContainer.style.pointerEvents = 'none';
         labelContainer.style.display = 'flex';
+        labelContainer.style.flexDirection = 'column';
         labelContainer.style.position = 'absolute';
-        labelContainer.style.bottom = '15%';
+        labelContainer.style.bottom = '10%';
         labelContainer.style.left = '0%';
         labelContainer.style.right = '0%';
-        labelContainer.style.justifyContent = 'center';
+        labelContainer.style.alignItems = 'center';
 
         this.label = document.createElement('div');
-        this.label.style.background = 'rgba(0, 0, 0, 0.4)';
+        this.label.style.background = `rgba(0, 0, 0, 0.2)`;
         this.label.style.padding = '1em';
         this.label.style.borderRadius = '999em';
         this.label.style.font = '16pt sans-serif';
         this.label.style.color = 'white';
+        this.label.style.textShadow = `0px 0px 12px rgba(0, 0, 0, 0.4)`;
         this.label.style.userSelect = 'none';
         labelContainer.appendChild(this.label);
 
+        const instr = document.createElement('div');
+        instr.style.background = `rgba(0, 0, 0, 0.2)`;
+        instr.style.marginTop = '1em';
+        instr.style.padding = '0.6em';
+        instr.style.borderRadius = '1em';
+        instr.style.font = '12pt sans-serif';
+        instr.style.color = 'white';
+        instr.style.textShadow = `0px 0px 12px rgba(0, 0, 0, 0.4)`;
+        instr.style.userSelect = 'none';
+        instr.textContent = 'Press Space for another Object';
+        labelContainer.appendChild(instr);
+
         this.context.uiContainer.appendChild(labelContainer);
+
+        this.rareBadge = document.createElement('div');
+        this.rareBadge.style.background = 'red';
+        this.rareBadge.style.borderRadius = '1em';
+        this.rareBadge.style.position = 'absolute';
+        this.rareBadge.style.padding = '0.4em 0.6em';
+        this.rareBadge.style.top = '10%';
+        this.rareBadge.style.right = '25%';
+        this.rareBadge.style.font = 'bold italic 28pt sans-serif';
+        this.rareBadge.style.color = 'white';
+        this.rareBadge.style.boxShadow = '0px 0px 12px rgba(0, 0, 0, 0.6)';
+        this.rareBadge.style.textShadow = `0px 0px 12px rgba(0, 0, 0, 0.4)`;
+        this.rareBadge.style.visibility = 'hidden';
+        this.rareBadge.textContent = 'RARE!';
+
+        this.context.uiContainer.appendChild(this.rareBadge);
     }
 
     public async setObjectID(objectId: number) {
@@ -169,10 +201,13 @@ export class GallerySceneRenderer implements SceneGfx {
         };
 
         const objectRenderer = new ObjectRenderer(device, cache, objectModel, sectorData, objectSpawn);
+        this.objectRenderers[0] = objectRenderer;
 
         this.circle.randomColor();
-        this.objectRenderers[0] = objectRenderer;
         this.label.textContent = galleryObject.Name;
+
+        const objectDef = BIN.parseObjectDefinition(this.objectBuffer, this.collectionBuffer, objectId);
+        this.rareBadge.style.visibility = objectDef.isRare ? '' : 'hidden';
 
         // XXX(jstpierre): Hax!
         if (window.main.viewer.cameraController instanceof OrbitCameraController) {
@@ -189,6 +224,7 @@ export class GallerySceneRenderer implements SceneGfx {
     public createCameraController(): CameraController {
         const orbit = new OrbitCameraController();
         orbit.shouldOrbit = true;
+        orbit.orbitSpeed = -0.4;
         return orbit;
     }
 

@@ -447,6 +447,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                 }
             }
         }
+
         // init motion
         const motionCache = new Map<number, BIN.MotionParameters | null>();
         renderer.motionCache = motionCache;
@@ -465,6 +466,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             const objectDef = objectCache.get(objectSpawn.objectId)!;
             renderer.objectRenderers[i].initMotion(objectDef, motion, missionSetupBin.zones, renderer.areaCollision[0], renderer.objectRenderers);
         }
+
         return renderer;
     }
 }
@@ -478,8 +480,10 @@ class KatamariGallerySceneDesc implements Viewer.SceneDesc {
         const galleryObjects = JSON.parse(decodeString(galleryData));
 
         const transformBuffer = await context.dataFetcher.fetchData(`${pathBase}/transformBlock.bin`);
+        const objectData = await context.dataFetcher.fetchData(`${pathBase}/objectBlock.bin`);
+        const collectionData = await context.dataFetcher.fetchData(`${pathBase}/collectionBlock.bin`);
 
-        const renderer = new GallerySceneRenderer(context, galleryObjects, transformBuffer);
+        const renderer = new GallerySceneRenderer(context, galleryObjects, transformBuffer, objectData, collectionData);
         renderer.setObjectRandom();
         return renderer;
     }
