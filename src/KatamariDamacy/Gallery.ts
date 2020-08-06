@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController, OrbitCameraController } from '../Camera';
 import { colorFromHSL, colorNewCopy, White, colorToCSS } from '../Color';
@@ -20,6 +20,7 @@ import * as BIN from "./bin";
 import { ObjectRenderer } from './objects';
 import { BINModelSectorData, KatamariDamacyProgram } from './render';
 import { fillSceneParamsData } from './scenes';
+import { setMatrixTranslation } from '../MathHelpers';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -111,6 +112,7 @@ interface GalleryObject {
     Filename: string;
 }
 
+const scratchVec = vec3.create();
 export class GallerySceneRenderer implements SceneGfx {
     private sceneTexture = new ColorTexture();
     public renderTarget = new BasicRenderTarget();
@@ -199,6 +201,10 @@ export class GallerySceneRenderer implements SceneGfx {
             objectId, modelMatrix: mat4.create(),
             dispOffAreaNo: -1, dispOnAreaNo: -1, linkAction: 0, moveType: 0, modelIndex: 0, tableIndex: -1,
         };
+        // recenter based on bounding box
+        objectModel.bbox.centerPoint(scratchVec);
+        vec3.scale(scratchVec, scratchVec, -1);
+        setMatrixTranslation(objectSpawn.modelMatrix, scratchVec);
 
         const objectRenderer = new ObjectRenderer(device, cache, objectModel, sectorData, objectSpawn);
         this.objectRenderers[0] = objectRenderer;
@@ -217,7 +223,9 @@ export class GallerySceneRenderer implements SceneGfx {
     }
 
     public setObjectRandom(): void {
-        const objectId: number = (Math.random() * this.galleryObjects.length) | 0;
+        let objectId = 0;
+        while (this.galleryObjects[objectId].Name === "")
+             objectId = (Math.random() * this.galleryObjects.length) | 0;
         this.setObjectID(objectId);
     }
 
