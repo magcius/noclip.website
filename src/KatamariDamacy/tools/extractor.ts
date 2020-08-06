@@ -256,6 +256,7 @@ function main() {
 
     writeBufferSync(`${pathBaseOut}/levelBlock.bin`,        elf.slice(0xBF1A0, 0xC0034));
     writeBufferSync(`${pathBaseOut}/objectBlock.bin`,       elf.slice(0xCDF70, 0xDD108));
+    writeBufferSync(`${pathBaseOut}/collectionBlock.bin`,   elf.slice(0xDD108, 0xE06B8));
     writeBufferSync(`${pathBaseOut}/transformBlock.bin`,    elf.slice(0x111260, 0x112FFC));
     writeBufferSync(`${pathBaseOut}/randomBlock.bin`,       elf.slice(0x116980, 0x117238));
     writeBufferSync(`${pathBaseOut}/pathBlock.bin`,         elf.slice(0x117290, 0X1607B0)); // maybe split this up?

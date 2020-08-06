@@ -1,15 +1,15 @@
 
-import { BINModelInstance, BINModelSectorData } from "./render";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { ViewerRenderInput } from "../viewer";
-import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition, MotionActionID, MotionID, CollisionList, ObjectModel } from "./bin";
 import { mat4, vec3 } from "gl-matrix";
-import { clamp, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR, Vec3UnitZ, Vec3Zero, Vec3UnitY, Vec3NegY, transformVec3Mat4w1, float32AsBits, getMatrixAxisY } from "../MathHelpers";
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceText, drawWorldSpaceLine } from "../DebugJunk";
+import { Green, Magenta, Red } from "../Color";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D, drawWorldSpaceAABB } from "../DebugJunk";
 import { AABB } from "../Geometry";
-import { Red, Green, Magenta } from "../Color";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, Vec3Zero } from "../MathHelpers";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
-import { hexzero, assert, nArray } from "../util";
+import { assert, hexzero, nArray } from "../util";
+import { ViewerRenderInput } from "../viewer";
+import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel } from "./bin";
+import { BINModelInstance, BINModelSectorData } from "./render";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
@@ -45,6 +45,9 @@ interface MotionState {
 
     timer: number;
     state: number;
+
+    supporter?: ObjectRenderer;
+    g: number;
 }
 
 interface ParentState {
@@ -76,6 +79,7 @@ export class ObjectRenderer {
     public modelMatrix = mat4.create();
     public position = vec3.create();
     public bbox: AABB;
+    public partBBox: AABB;
 
     private dummyParent = false;
 
@@ -92,9 +96,10 @@ export class ObjectRenderer {
             this.modelInstances.push(binModelInstance);
         }
 
-        this.bbox = objectModel.bbox;
-
         this.animFunc = animFuncSelect(this.objectSpawn.objectId);
+
+        this.bbox = objectModel.bbox;
+        this.partBBox = this.modelInstances[0].binModelData.binModel.bbox;
         mat4.copy(this.modelMatrix, objectSpawn.modelMatrix);
         mat4.getTranslation(this.position, this.modelMatrix);
     }
@@ -111,57 +116,63 @@ export class ObjectRenderer {
         };
     }
 
-    public setObjectSpawn(def: ObjectDefinition, motion: MotionParameters | null): void {
+    public initMotion(def: ObjectDefinition, motion: MotionParameters | null, zones: CollisionList[], levelCollision: CollisionList[][], allObjects: ObjectRenderer[]): void {
         const objectSpawn = this.objectSpawn;
-
-        if (motion !== null && !stationaryObjects.has(objectSpawn.objectId)) {
-            // common speed logic, there may be others
-            let speed = motion.speed; // from the path
-            if (speed < 0) {
-                if (def.speedIndex >= 0)
-                    speed = speedTable[def.speedIndex];
-                else
-                    speed = 0;
-            }
-
-            const pos = vec3.create();
-            mat4.getTranslation(pos, objectSpawn.modelMatrix);
-            const isTall = motion.motionID === MotionID.PathRoll && this.modelInstances.length > 0 &&
-                (this.modelInstances[0].binModelData.binModel.bbox.maxY > this.modelInstances[0].binModelData.binModel.bbox.maxX);
-            this.motionState = {
-                parameters: motion,
-                useAltMotion: false,
-                speed,
-                pathIndex: -1,
-                adjustPitch: !def.stayLevel,
-                isTall,
-                composeEuler: true, // inverted from game
-
-                pos,
-                target: vec3.create(),
-                velocity: vec3.create(),
-
-                euler: vec3.create(), // relative to base, not absolute
-                eulerStep: vec3.create(),
-                eulerTarget: vec3.create(),
-                euler2: vec3.create(),
-
-                angle: 0,
-                angleStep: 0,
-                angleTarget: 0,
-
-                base: mat4.clone(objectSpawn.modelMatrix),
-                reference: mat4.clone(objectSpawn.modelMatrix),
-                axis: vec3.create(),
-
-                timer: -1,
-                state: -1,
-            };
-        }
         this.dummyParent = def.dummyParent;
+
+        if (motion === null || stationaryObjects.has(objectSpawn.objectId))
+            return;
+        // common speed logic, there may be others
+        let speed = motion.speed; // from the path
+        if (speed < 0) {
+            if (def.speedIndex >= 0)
+                speed = speedTable[def.speedIndex];
+            else
+                speed = 0;
+        }
+
+        const pos = vec3.create();
+        mat4.getTranslation(pos, objectSpawn.modelMatrix);
+        const isTall = motion.motionID === MotionID.PathRoll && this.modelInstances.length > 0 &&
+            (this.partBBox.maxY > this.partBBox.maxX);
+        this.motionState = {
+            parameters: motion,
+            useAltMotion: false,
+            speed,
+            pathIndex: -1,
+            adjustPitch: !def.stayLevel,
+            isTall,
+            composeEuler: true, // inverted from game
+
+            pos,
+            target: vec3.create(),
+            velocity: vec3.create(),
+
+            euler: vec3.create(), // relative to base, not absolute
+            eulerStep: vec3.create(),
+            eulerTarget: vec3.create(),
+            euler2: vec3.create(),
+
+            angle: 0,
+            angleStep: 0,
+            angleTarget: 0,
+
+            base: mat4.clone(objectSpawn.modelMatrix),
+            reference: mat4.clone(objectSpawn.modelMatrix),
+            axis: vec3.create(),
+
+            timer: -1,
+            state: -1,
+            g: 0,
+        };
+
+        // motion-specific setup
+        if (this.motionState.parameters.motionID === MotionID.Hop) {
+            motion_MiscHop_Init(this, this.motionState, def, allObjects);
+        }
     }
 
-    private runMotion(deltaTimeInFrames: number, zones: CollisionList[], levelCollision: CollisionList[][] ): boolean {
+    private runMotion(deltaTimeInFrames: number, zones: CollisionList[], levelCollision: CollisionList[][]): boolean {
         const motionState = this.motionState!;
         const motionID = (motionState.useAltMotion && motionState.parameters.altMotionActionID !== 0) ? motionState.parameters.altMotionActionID : motionState.parameters.motionActionID;
         return runMotionFunc(this, motionState, motionID, deltaTimeInFrames, zones, levelCollision);
@@ -247,6 +258,7 @@ export class ObjectRenderer {
         const debugMotion = false;
         if (debugMotion) {
             mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
 
             if (hasMotionImplementation && this.motionState !== null) {
                 drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.position, Green, 4);
@@ -254,16 +266,15 @@ export class ObjectRenderer {
 
                 const m = mat4.create();
 
-                mat4.fromYRotation(m, this.motionState.euler[1]);
-                transformVec3Mat4w0(swayScratch, m, Vec3UnitZ);
-                drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 100, Red);
+                // mat4.fromYRotation(m, this.motionState.euler[1]);
+                // transformVec3Mat4w0(swayScratch, m, Vec3UnitZ);
+                // drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 100, Red);
 
-                mat4.fromYRotation(m, this.motionState.eulerTarget[1]);
-                transformVec3Mat4w0(swayScratch, m, Vec3UnitZ);
-                drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 100, Green);
+                // mat4.fromYRotation(m, this.motionState.eulerTarget[1]);
+                // transformVec3Mat4w0(swayScratch, m, Vec3UnitZ);
+                // drawWorldSpaceVector(getDebugOverlayCanvas2D(), scratchMatrix, this.motionState.pos, swayScratch, 100, Green);
             } else {
                 drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.position, Red, 4);
-                drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
                 if (this.motionState !== null) {
                     drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Motion 1 ${hexzero(this.motionState.parameters.motionActionID, 2)}`, 45, Magenta, { outline: 2, shadowBlur: 2 });
                     drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.position, `Motion 2 ${hexzero(this.motionState.parameters.altMotionActionID, 2)}`, 65, Magenta, { outline: 2, shadowBlur: 2 });
@@ -306,9 +317,10 @@ function computeKatamariRotation(dst: mat4, euler: vec3): void {
 interface TriangleInfo {
     normal: vec3;
     zone: number;
+    depth: number;
 }
 
-const scratchTri: TriangleInfo = { normal: vec3.create(), zone: -1 };
+const scratchTri: TriangleInfo = { normal: vec3.create(), zone: -1, depth: 0 };
 const scratchAABB = new AABB();
 const groundScratch = nArray(3, () => vec3.create());
 const normalScratch = nArray(4, () => vec3.create());
@@ -320,8 +332,7 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
     mat4.identity(groundMatrices[0]);
     if (pos[0] !== target[0] || pos[2] !== target[2])
         mat4.lookAt(groundMatrices[0], pos, target, Vec3NegY);
-    else if (pos[1] !== target[1]) {
-        // vertical separation, common case
+    else if (pos[1] <= target[1]) {
         groundMatrices[0][5] = 0;
         groundMatrices[0][6] = 1;
         groundMatrices[0][9] = -1;
@@ -331,7 +342,6 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
         groundMatrices[0][13] = pos[2];
         groundMatrices[0][14] = -pos[1];
     } else {
-        // pos and target identical, shouldn't happen
         groundMatrices[0][5] = 0;
         groundMatrices[0][6] = -1;
         groundMatrices[0][9] = 1;
@@ -361,7 +371,7 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
                 vec3.copy(groundScratch[0], groundScratch[1]);
                 vec3.copy(groundScratch[1], groundScratch[2]);
                 vec3.set(groundScratch[2], verts[k], verts[k + 1], verts[k + 2])
-                transformVec3Mat4w1(groundScratch[2], scratchMatrix, groundScratch[2]);
+                transformVec3Mat4w1(groundScratch[2], groundMatrices[0], groundScratch[2]);
                 if (k < 8 || (!collision[i].groups[j].isTriStrip && k % 0xC !== 0x8))
                     continue;
 
@@ -396,6 +406,7 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
                         minDepth = depth;
                         transformVec3Mat4w0(out.normal, groundMatrices[1], normalScratch[3]);
                         out.zone = float32AsBits(verts[k + 3]);
+                        out.depth = depth;
                     }
                 }
                 if (collision[i].groups[j].isTriStrip)
@@ -404,6 +415,26 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
         }
     }
     return foundAny;
+}
+
+const landingAABB = new AABB();
+const landingScratch = vec3.create();
+function landOnObject(object: ObjectRenderer, newPos: vec3, target: ObjectRenderer, depthMultiplier = 1): boolean {
+    computeMatrixWithoutTranslation(scratchMatrix, object.modelMatrix);
+    landingAABB.transform(object.bbox, scratchMatrix);
+    const objectBottom = landingAABB.maxY;
+
+    // this should be a bug - the transformation of the target isn't considered
+    // however, the one case where it would matter so far (knives on rocks in the beginning of MAS3) isn't affected
+    if (target.position[1] + target.bbox.minY >= object.position[1] && target.position[1] + target.bbox.minY < newPos[1] + depthMultiplier * objectBottom) {
+        vec3.sub(landingScratch, object.position, target.position);
+        landingScratch[1] = target.bbox.minY;
+        if (target.bbox.containsPoint(landingScratch)) {
+            newPos[1] = target.position[1] + target.bbox.minY - objectBottom;
+            return true;
+        }
+    }
+    return false;
 }
 
 const enum Axis { X, Y, Z }
@@ -807,6 +838,8 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionAction
             motion_MiscSpin_Update(object, deltaTimeInFrames, motion);
         else if (motionID === MotionID.Bob)
             motion_MiscBob_Update(object, deltaTimeInFrames, motion);
+        else if (motionID === MotionID.Hop)
+            motion_MiscHop_Update(object, deltaTimeInFrames, motion, levelCollision[0]);
         else if (motionID === MotionID.Flip)
             motion_MiscFlip_Update(object, deltaTimeInFrames, motion);
         else if (motionID === MotionID.Sway)
@@ -1064,6 +1097,59 @@ function motion_MiscBob_Update(object: ObjectRenderer, deltaTimeInFrames: number
     }
 }
 
+const hopIndices: number[] = [0, 0, 0, 1, 2, 3, 3, 4, 4, 4, 4, 4];
+const hopSpeeds: number[] = [4, 6, 7, 12, 15];
+
+function motion_MiscHop_Init(object: ObjectRenderer, motion: MotionState, def: ObjectDefinition, allObjects: ObjectRenderer[]): void {
+    for (let i = 0; i < allObjects.length; i++) {
+        if (allObjects[i] === object)
+            continue;
+        if (allObjects[i].objectSpawn.dispOnAreaNo !== object.objectSpawn.dispOnAreaNo)
+            continue; // assume we only rest on objects in the same area
+        if (vec3.dist(allObjects[i].position, object.position) > object.bbox.maxCornerRadius() + allObjects[i].bbox.maxCornerRadius())
+            continue;
+        // game has an optimization (?) to check at successive depths from 1 to 5 - should get same result
+        if (landOnObject(object, motion.pos, allObjects[i], 5)) {
+            motion.supporter = allObjects[i];
+            break;
+        }
+    }
+    motion.speed = hopSpeeds[hopIndices[def.size]];
+}
+
+
+
+const hopScratch = vec3.create();
+function motion_MiscHop_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState, level: CollisionList[]): void {
+    if (motion.timer === -1) {
+        motion.velocity[1] = -motion.speed;
+        motion.g = 1;
+        // the code looks like they wanted to make a 20-frame minimum, but doesn't actually do that
+        motion.timer = 255 * Math.random();
+    }
+    if (motion.timer > deltaTimeInFrames) {
+        motion.timer -= deltaTimeInFrames;
+        return;
+    }
+    motion.timer = 0;
+    motion.velocity[1] += motion.g * deltaTimeInFrames;
+    motion.pos[1] += motion.velocity[1] * deltaTimeInFrames;
+    if (motion.supporter) {
+        if (landOnObject(object, motion.pos, motion.supporter))
+            motion.timer = -1;
+    } else {
+        vec3.sub(hopScratch, motion.pos, object.position);
+        normToLength(hopScratch, object.bbox.maxCornerRadius());
+        vec3.add(hopScratch, object.position, hopScratch);
+        if (findGround(level, scratchTri, object.position, hopScratch)) {
+            if (object.position[1] + scratchTri.depth < motion.pos[1] + object.partBBox.maxY) {
+                motion.pos[1] = object.position[1] + scratchTri.depth - object.partBBox.maxY;
+                motion.timer = -1;
+            }
+        }
+    }
+}
+
 function motion_MiscFlip_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     motion.euler[0] -= .05 * deltaTimeInFrames;
 }
@@ -1077,7 +1163,7 @@ function motion_MiscSway_Update(object: ObjectRenderer, deltaTimeInFrames: numbe
     if (object.objectSpawn.objectId !== ObjectId.BALANCEDOLL01_C) {
         vec3.set(swayScratch, Math.sin(motion.euler[2]), -Math.cos(motion.euler[2]), 0);
         transformVec3Mat4w0(swayScratch, object.modelMatrix, swayScratch);
-        const bottomOffset = object.modelInstances[0].binModelData.binModel.bbox.maxY;
+        const bottomOffset = object.partBBox.maxY;
         vec3.scale(swayScratch, swayScratch, bottomOffset);
         motion.pos[0] = object.objectSpawn.modelMatrix[12] + swayScratch[0];
         motion.pos[1] = object.objectSpawn.modelMatrix[13] + swayScratch[1] + bottomOffset;
@@ -1098,8 +1184,7 @@ function motion_MiscWhackAMole_Update(object: ObjectRenderer, deltaTimeInFrames:
             motion.angle = 0;
             motion.timer = -1;
         }
-        const firstBBox = object.modelInstances[0].binModelData.binModel.bbox;
-        const buriedDepth = firstBBox.maxY + (firstBBox.maxY - firstBBox.minY);
+        const buriedDepth = object.partBBox.maxY + (object.partBBox.maxY - object.partBBox.minY);
         motion.pos[1] = object.objectSpawn.modelMatrix[13] + buriedDepth * (motion.state === 0 ? (1 - Math.sin(motion.angle)) : Math.sin(motion.angle));
     } else {
         motion.timer -= deltaTimeInFrames;

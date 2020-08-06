@@ -341,6 +341,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         cache.fetchFileData(`${pathBase}/pathBlock.bin`);
         cache.fetchFileData(`${pathBase}/movementBlock.bin`);
         cache.fetchFileData(`${pathBase}/objectBlock.bin`);
+        cache.fetchFileData(`${pathBase}/collectionBlock.bin`);
         cache.fetchFileData(`${pathBase}/parentBlock.bin`);
 
         await cache.waitForLoad();
@@ -372,6 +373,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         const motionData = cache.getFileData(`${pathBase}/movementBlock.bin`);
         const pathData = cache.getFileData(`${pathBase}/pathBlock.bin`);
         const objectData = cache.getFileData(`${pathBase}/objectBlock.bin`);
+        const collectionData = cache.getFileData(`${pathBase}/collectionBlock.bin`);
         const parentData = cache.getFileData(`${pathBase}/parentBlock.bin`);
 
         const gsMemoryMap = gsMemoryMapNew();
@@ -419,31 +421,16 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             renderer.modelSectorData.push(binModelSectorData);
         }
 
-        const motionCache = new Map<number, BIN.MotionParameters | null>();
-        renderer.motionCache = motionCache;
-        const objectCache = new Map<number, BIN.ObjectDefinition | null>();
         for (let area = 0; area < missionSetupBin.objectSpawns.length; area++) {
             const areaStartIndex = renderer.objectRenderers.length;
             if (missionSetupBin.objectSpawns[area].length === 0)
                 continue;
             for (let i = 0; i < missionSetupBin.objectSpawns[area].length; i++) {
                 const objectSpawn = missionSetupBin.objectSpawns[area][i];
-                let motion: BIN.MotionParameters | null = null;
-                if (objectSpawn.moveType >= 0) { // level 27 has a bunch of negative indices that aren't -1
-                    if (!motionCache.has(objectSpawn.moveType))
-                        motionCache.set(objectSpawn.moveType, BIN.parseMotion(pathData, motionData, this.index, objectSpawn.moveType));
-                    motion = motionCache.get(objectSpawn.moveType)!;
-                }
-
-                if (!objectCache.has(objectSpawn.objectId))
-                    objectCache.set(objectSpawn.objectId, BIN.parseObjectDefinition(objectData, objectSpawn.objectId));
-                const objectDef = objectCache.get(objectSpawn.objectId)!;
-
                 const binModelSectorData = objectDatas[objectSpawn.modelIndex];
                 const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
 
                 const objectRenderer = new ObjectRenderer(device, gfxCache, objectModel, binModelSectorData, objectSpawn);
-                objectRenderer.setObjectSpawn(objectDef, motion);
                 renderer.objectRenderers.push(objectRenderer);
             }
             const parentList = BIN.getParentList(parentData, this.index, area);
@@ -459,6 +446,24 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     renderer.objectRenderers[areaStartIndex + childIdx].setParent(renderer.objectRenderers[areaStartIndex + parentIdx]);
                 }
             }
+        }
+        // init motion
+        const motionCache = new Map<number, BIN.MotionParameters | null>();
+        renderer.motionCache = motionCache;
+        const objectCache = new Map<number, BIN.ObjectDefinition | null>();
+        for (let i = 0; i < renderer.objectRenderers.length; i++) {
+            const objectSpawn = renderer.objectRenderers[i].objectSpawn;
+            let motion: BIN.MotionParameters | null = null;
+            if (objectSpawn.moveType >= 0) { // level 27 has a bunch of negative indices that aren't -1
+                if (!motionCache.has(objectSpawn.moveType))
+                    motionCache.set(objectSpawn.moveType, BIN.parseMotion(pathData, motionData, this.index, objectSpawn.moveType));
+                motion = motionCache.get(objectSpawn.moveType)!;
+            }
+
+            if (!objectCache.has(objectSpawn.objectId))
+                objectCache.set(objectSpawn.objectId, BIN.parseObjectDefinition(objectData, collectionData, objectSpawn.objectId));
+            const objectDef = objectCache.get(objectSpawn.objectId)!;
+            renderer.objectRenderers[i].initMotion(objectDef, motion, missionSetupBin.zones, renderer.areaCollision[0], renderer.objectRenderers);
         }
         return renderer;
     }

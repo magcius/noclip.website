@@ -930,6 +930,7 @@ export const enum MotionID {
     PathRoll      = 0x14,
     Spin          = 0x15,
     Bob           = 0x16,
+    Hop           = 0x19,
     Flip          = 0x1E,
     Sway          = 0x20,
     WhackAMole    = 0x22,
@@ -1051,20 +1052,36 @@ export interface ObjectDefinition {
     speedIndex: number;
     altUpdate: number;
     dummyParent: boolean;
+
+    map: number;
+    mapRegion: number;
+    size: number;
+    category: number;
+    sortKey: number;
+    isRare: boolean;
 }
 
-export function parseObjectDefinition(data: ArrayBufferSlice, id: number): ObjectDefinition {
-    const view = data.createDataView();
-    const offs = id * 0x24;
+export function parseObjectDefinition(object: ArrayBufferSlice, collection: ArrayBufferSlice, id: number): ObjectDefinition {
+    const objView = object.createDataView();
+    const objOffs = id * 0x24;
+    const collView = collection.createDataView();
+    const collOffs = id * 0x08;
 
     // internal name pointer
     // two volume-related floats
-    const stayLevel = view.getUint8(offs + 0x0C) !== 0;
-    const speedIndex = view.getInt8(offs + 0x13);
-    const altUpdate = view.getInt8(offs + 0x14);
-    const dummyParent = view.getUint8(offs + 0x21) !== 0;
+    const stayLevel = objView.getUint8(objOffs + 0x0C) !== 0;
+    const speedIndex = objView.getInt8(objOffs + 0x13);
+    const altUpdate = objView.getInt8(objOffs + 0x14);
+    const dummyParent = objView.getUint8(objOffs + 0x21) !== 0;
 
-    return { stayLevel, speedIndex, altUpdate, dummyParent};
+    const map = collView.getInt8(collOffs + 0x00);
+    const mapRegion = collView.getInt8(collOffs + 0x01);
+    const size = collView.getInt8(collOffs + 0x02);
+    const category = collView.getInt8(collOffs + 0x03);
+    const sortKey = collView.getInt16(collOffs + 0x04, true);
+    const isRare = collView.getInt8(collOffs + 0x06) !== 0;
+
+    return { stayLevel, speedIndex, altUpdate, dummyParent, map, mapRegion, size, category, sortKey, isRare };
 }
 
 export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIndex: number): Int16Array | null {
@@ -1184,6 +1201,11 @@ export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBuffer
         parseDIRECT(gsMemoryMap[0], buffer.slice(clutAOffs));
         parseDIRECT(gsMemoryMap[1], buffer.slice(clutBOffs));
     }
+
+    // currently isn't needed
+    // let collision: CollisionList[] = [];
+    // if (!sectorIsNIL(buffer, collisionOffs))
+    //     collision = parseCollisionLists(buffer, collisionOffs);
 
     // Load in LOD 0.
     const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
