@@ -99,6 +99,34 @@ function dumpObjectNames(elf: ArrayBufferSlice): void {
     }
 }
 
+function extractGalleryIndex(pathOutBase: string, elf: ArrayBufferSlice): void {
+    const view = elf.createDataView();
+
+    const nametableOffs = 0xE06B8;
+    const objectDescTableOffs = 0xCDF70;
+    const objectFileTableOffs = 0x180E50;
+    const objectBaseLBA = 0x136B8D;
+    const galleryObjects: any[] = [];
+
+    let nameIdx = nametableOffs, objectDescIdx = objectDescTableOffs, objectFileIdx = objectFileTableOffs;
+    for (let i = 0; i < 1718; i++) {
+        const internalNamePtr = view.getUint32(objectDescIdx + 0x00, true);
+        const internalName = readString(elf, internalNamePtr - 0xFF000);
+        const lba = objectBaseLBA + view.getUint32(objectFileIdx + 0x08, true);
+        const filename = `${objectFileTableOffs.toString(16)}/${lba.toString(16)}.bin`;
+
+        const objectName = parseName(view, nameIdx, 0x50);
+        nameIdx += 0x50;
+        objectDescIdx += 0x24;
+        objectFileIdx += 0x10;
+
+        galleryObjects.push({ Name: objectName, InternalName: internalName, Filename: filename });
+    }
+
+    const data = JSON.stringify(galleryObjects);
+    writeFileSync(`${pathBaseOut}/gallery.json`, data);
+}
+
 class BitStream {
     public r = 0;
     public buf: bigint = 0n;
@@ -159,39 +187,50 @@ function extractCompressedFile(buffer: ArrayBufferSlice, rlparam: number, uncomp
     return dst.buffer as ArrayBuffer;
 }
 
-function extractFileTable(outPath: string, isoFilename: string, elf: ArrayBufferSlice, fileTableOffs: number, count: number, baseLBA: number = 0x00): void {
+interface ExtractedFile {
+    lba: number;
+    buffer: ArrayBuffer;
+}
+
+function extractFile(isoFilename: string, elf: ArrayBufferSlice, fileTableOffs: number, baseLBA: number = 0): ExtractedFile {
     const view = elf.createDataView();
 
+    const rlparam = view.getUint32(fileTableOffs + 0x00, true);
+    const uncompressedSizeAndFlags = view.getUint32(fileTableOffs + 0x04, true);
+    const lba = baseLBA + view.getUint32(fileTableOffs + 0x08, true);
+    const compressedSize = view.getUint32(fileTableOffs + 0x0C, true);
+
+    const isCompressed = !!(uncompressedSizeAndFlags & 0x01);
+    const enforceChecksum = !!(uncompressedSizeAndFlags & 0x04);
+    const uncompressedSize = uncompressedSizeAndFlags >>> 4;
+
+    // Make sure to include space for the 0x10-byte header
+    const headerSize = 0x10;
+
+    let buffer: ArrayBuffer;
+    if (isCompressed) {
+        const compressedData = iso9660GetDataLBA(isoFilename, lba, headerSize + compressedSize).slice(headerSize);
+        buffer = extractCompressedFile(compressedData, rlparam, uncompressedSize);
+    } else {
+        buffer = iso9660GetDataLBA(isoFilename, lba, headerSize + uncompressedSize).copyToBuffer(headerSize);
+    }
+
+    return { lba, buffer };
+}
+
+function extractFileTable(outPath: string, isoFilename: string, elf: ArrayBufferSlice, fileTableOffs: number, count: number, baseLBA: number = 0x00): void {
     const outFolderPath = `${outPath}/${fileTableOffs.toString(16)}`;
     mkdirSync(outFolderPath, { recursive: true });
 
     let idx = fileTableOffs;
     for (let i = 0; i < count; i++, idx += 0x10) {
-        const rlparam = view.getUint32(idx + 0x00, true);
-        const uncompressedSizeAndFlags = view.getUint32(idx + 0x04, true);
-        const lba = baseLBA + view.getUint32(idx + 0x08, true);
-        const compressedSize = view.getUint32(idx + 0x0C, true);
+        const file = extractFile(isoFilename, elf, idx, baseLBA);
 
-        const isCompressed = !!(uncompressedSizeAndFlags & 0x01);
-        const enforceChecksum = !!(uncompressedSizeAndFlags & 0x04);
-        const uncompressedSize = uncompressedSizeAndFlags >>> 4;
-
-        // Make sure to include space for the 0x10-byte header
-        const headerSize = 0x10;
-
-        let buffer: ArrayBuffer;
-        if (isCompressed) {
-            const compressedData = iso9660GetDataLBA(isoFilename, lba, headerSize + compressedSize).slice(headerSize);
-            buffer = extractCompressedFile(compressedData, rlparam, uncompressedSize);
-        } else {
-            buffer = iso9660GetDataLBA(isoFilename, lba, headerSize + uncompressedSize).copyToBuffer(headerSize);
-        }
-
-        const filename = `${lba.toString(16)}.bin`;
+        const filename = `${file.lba.toString(16)}.bin`;
         const outFilePath = `${outFolderPath}/${filename}`;
 
         console.log('Extracted', outFilePath);
-        writeFileSync(outFilePath, Buffer.from(buffer));
+        writeFileSync(outFilePath, Buffer.from(file.buffer));
     }
 }
 
@@ -202,6 +241,7 @@ function main() {
     const isoFilename = `${pathBaseIn}/KatamariDamacy.iso`;
 
     const elf = iso9660GetDataFilename(isoFilename, `SLUS_210.08;1`);
+    extractGalleryIndex(pathBaseOut, elf);
     // dumpObjectNames(elf);
 
     extractFileTable(pathBaseOut, isoFilename, elf, 0x17C340, 0x4);

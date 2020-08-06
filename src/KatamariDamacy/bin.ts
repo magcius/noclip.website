@@ -1156,6 +1156,43 @@ export interface PartTransform {
     rotation: vec3;
 }
 
+export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBufferSlice, firstSectorIndex: number, transformBuffer: ArrayBufferSlice, objectId: number): ObjectModel | null {
+    const view = buffer.createDataView();
+
+    const firstSectorOffs = 0x04 + firstSectorIndex * 0x04;
+    const lod0Offs = view.getUint32(firstSectorOffs + 0x00, true);
+    const lod1Offs = view.getUint32(firstSectorOffs + 0x04, true);
+    const lod2Offs = view.getUint32(firstSectorOffs + 0x08, true);
+    const texDataOffs = view.getUint32(firstSectorOffs + 0x0C, true);
+    const unk10Offs = view.getUint32(firstSectorOffs + 0x10, true);
+    const clutAOffs = view.getUint32(firstSectorOffs + 0x14, true);
+    const clutBOffs = view.getUint32(firstSectorOffs + 0x18, true);
+    const collisionOffs = view.getUint32(firstSectorOffs + 0x1C, true);
+    const unk20Offs = view.getUint32(firstSectorOffs + 0x20, true);
+    const descriptionOffs = view.getUint32(firstSectorOffs + 0x24, true);
+    const audioOffs = view.getUint32(firstSectorOffs + 0x28, true);
+
+    // Missing object?
+    if (sectorIsNIL(buffer, lod0Offs))
+        return null;
+
+    if (!sectorIsNIL(buffer, texDataOffs)) {
+        // Parse texture data.
+        parseDIRECT(gsMemoryMap[0], buffer.slice(texDataOffs));
+        parseDIRECT(gsMemoryMap[1], buffer.slice(texDataOffs));
+
+        parseDIRECT(gsMemoryMap[0], buffer.slice(clutAOffs));
+        parseDIRECT(gsMemoryMap[1], buffer.slice(clutBOffs));
+    }
+
+    // Load in LOD 0.
+    const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
+    if (sector === null)
+        return null;
+    const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
+    return { id: objectId, sector, transforms, bbox: computeObjectAABB(sector, transforms) };
+}
+
 export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
@@ -1171,38 +1208,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
         const firstSectorIndex = 0x09 + objectId * 0x0B;
         assert(firstSectorIndex + 0x0B <= numSectors);
 
-        const firstSectorOffs = 0x04 + firstSectorIndex * 0x04;
-        const lod0Offs = view.getUint32(firstSectorOffs + 0x00, true);
-        const lod1Offs = view.getUint32(firstSectorOffs + 0x04, true);
-        const lod2Offs = view.getUint32(firstSectorOffs + 0x08, true);
-        const texDataOffs = view.getUint32(firstSectorOffs + 0x0C, true);
-        const unk10Offs = view.getUint32(firstSectorOffs + 0x10, true);
-        const clutAOffs = view.getUint32(firstSectorOffs + 0x14, true);
-        const clutBOffs = view.getUint32(firstSectorOffs + 0x18, true);
-        const collisionOffs = view.getUint32(firstSectorOffs + 0x1C, true);
-        const unk20Offs = view.getUint32(firstSectorOffs + 0x20, true);
-        const descriptionOffs = view.getUint32(firstSectorOffs + 0x24, true);
-        const audioOffs = view.getUint32(firstSectorOffs + 0x28, true);
-
-        // Missing object?
-        if (sectorIsNIL(buffer, lod0Offs))
-            return null;
-
-        if (!sectorIsNIL(buffer, texDataOffs)) {
-            // Parse texture data.
-            parseDIRECT(gsMemoryMap[0], buffer.slice(texDataOffs));
-            parseDIRECT(gsMemoryMap[1], buffer.slice(texDataOffs));
-
-            parseDIRECT(gsMemoryMap[0], buffer.slice(clutAOffs));
-            parseDIRECT(gsMemoryMap[1], buffer.slice(clutBOffs));
-        }
-
-        // Load in LOD 0.
-        const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
-        if (sector === null)
-            return null;
-        const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
-        return {id: objectId, sector, transforms, bbox: computeObjectAABB(sector, transforms)};
+        return parseObjectModel(gsMemoryMap, buffer, firstSectorIndex, transformBuffer, objectId);
     }
 
     const objectModels: ObjectModel[] = [];

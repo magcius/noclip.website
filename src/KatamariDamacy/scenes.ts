@@ -1,27 +1,29 @@
 
-import * as Viewer from '../viewer';
-import { GfxDevice, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
-import { DataFetcher } from "../DataFetcher";
-import * as BIN from "./bin";
-import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './render';
 import { mat4, vec3 } from 'gl-matrix';
-import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, assertExists } from '../util';
-import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { Camera, CameraController } from '../Camera';
-import { ColorTexture, BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { TextureMapping, FakeTextureHolder } from '../TextureHolder';
-import { SceneContext } from '../SceneBase';
+import { gsMemoryMapNew } from '../Common/PS2/GS';
+import { DataFetcher } from "../DataFetcher";
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { gsMemoryMapNew } from '../Common/PS2/GS';
 import { Vec3Zero } from '../MathHelpers';
+import { SceneContext } from '../SceneBase';
+import { FakeTextureHolder, TextureMapping } from '../TextureHolder';
+import * as UI from '../ui';
+import { assert, assertExists, decodeString } from '../util';
+import * as Viewer from '../viewer';
+import * as BIN from "./bin";
+import { GallerySceneRenderer } from './Gallery';
 import { ObjectRenderer } from './objects';
-import { drawWorldSpaceLine, getDebugOverlayCanvas2D, drawWorldSpaceText } from '../DebugJunk';
-import { Magenta } from '../Color';
+import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './render';
 
 const pathBase = `katamari_damacy`;
+const katamariWorldSpaceToNoclipSpace = mat4.create();
+mat4.rotateX(katamariWorldSpaceToNoclipSpace, katamariWorldSpaceToNoclipSpace, Math.PI);
 
 class LevelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
@@ -140,7 +142,7 @@ const lightingData: LightingConfiguration[] = [
 const lightingSetupList: number[] = [0, 0, 1, 2, 0, 0, 0, 0, 0, 3, 4, 0, 0];
 
 const lightDirScratch = vec3.create();
-function fillSceneParamsData(d: Float32Array, camera: Camera, lightingIndex: number = -1, offs: number = 0): void {
+export function fillSceneParamsData(d: Float32Array, camera: Camera, lightingIndex: number = -1, offs: number = 0): void {
     offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
     if (lightingIndex === -1) {
         for (let i = 0; i < 5; i++)
@@ -158,9 +160,7 @@ function fillSceneParamsData(d: Float32Array, camera: Camera, lightingIndex: num
     }
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 1 },
-];
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 1 }];
 
 function mod(a: number, b: number) {
     return (a + b) % b;
@@ -232,7 +232,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         renderInstManager.resetRenderInsts();
 
         if (this.motionCache !== null && this.drawPaths) {
-            for (const [k, v] of this.motionCache.entries()) {
+            for (const [, v] of this.motionCache.entries()) {
                 if (v === null)
                     continue;
                 this.drawPath(viewerInput, v.pathPoints);
@@ -325,9 +325,6 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
             this.modelSectorData[i].destroy(device);
     }
 }
-
-const katamariWorldSpaceToNoclipSpace = mat4.create();
-mat4.rotateX(katamariWorldSpaceToNoclipSpace, katamariWorldSpaceToNoclipSpace, Math.PI);
 
 class KatamariLevelSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, private index: number, public name: string, public cameraSpeedMult: number = 1) {
@@ -442,21 +439,11 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     objectCache.set(objectSpawn.objectId, BIN.parseObjectDefinition(objectData, objectSpawn.objectId));
                 const objectDef = objectCache.get(objectSpawn.objectId)!;
 
-                const modelInstances: BINModelInstance[] = [];
                 const binModelSectorData = objectDatas[objectSpawn.modelIndex];
                 const objectModel = missionSetupBin.objectModels[objectSpawn.modelIndex];
-                for (let j = 0; j < binModelSectorData.modelData.length; j++) {
-                    const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j]);
-                    mat4.copy(binModelInstance.modelMatrix, objectSpawn.modelMatrix);
-                    if (objectModel.transforms.length > 0) {
-                        mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j].matrix);
-                        vec3.copy(binModelInstance.euler, objectModel.transforms[j].rotation);
-                        vec3.copy(binModelInstance.translation, objectModel.transforms[j].translation);
-                    }
-                    modelInstances.push(binModelInstance);
-                }
 
-                const objectRenderer = new ObjectRenderer(objectSpawn, missionSetupBin.objectModels[objectSpawn.modelIndex].bbox, objectDef, modelInstances, motion);
+                const objectRenderer = new ObjectRenderer(device, gfxCache, objectModel, binModelSectorData, objectSpawn);
+                objectRenderer.setObjectSpawn(objectDef, motion);
                 renderer.objectRenderers.push(objectRenderer);
             }
             const parentList = BIN.getParentList(parentData, this.index, area);
@@ -473,6 +460,22 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                 }
             }
         }
+        return renderer;
+    }
+}
+
+class KatamariGallerySceneDesc implements Viewer.SceneDesc {
+    constructor(public id: string, public name: string, public cameraSpeedMult: number = 1) {
+    }
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const galleryData = await context.dataFetcher.fetchData(`${pathBase}/gallery.json`);
+        const galleryObjects = JSON.parse(decodeString(galleryData));
+
+        const transformBuffer = await context.dataFetcher.fetchData(`${pathBase}/transformBlock.bin`);
+
+        const renderer = new GallerySceneRenderer(context, galleryObjects, transformBuffer);
+        renderer.setObjectRandom();
         return renderer;
     }
 }
@@ -557,6 +560,9 @@ const sceneDescs = [
     new KatamariLevelSceneDesc('ulvl41', 41, "Test 1"),
     new KatamariLevelSceneDesc('ulvl42', 42, "Test 2"),
     new KatamariLevelSceneDesc('ulvl43', 43, "Test 3"),
+
+    "???",
+    new KatamariGallerySceneDesc('gallery', "Object Gallery"),
 ];
 const sceneIdMap = new Map<string, string>();
 // When I first was testing Katamari, I was testing the Tutorial Level. At some point

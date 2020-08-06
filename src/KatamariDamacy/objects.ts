@@ -1,8 +1,8 @@
 
-import { BINModelInstance } from "./render";
+import { BINModelInstance, BINModelSectorData } from "./render";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition, MotionActionID, MotionID, CollisionList } from "./bin";
+import { MissionSetupObjectSpawn, MotionParameters, ObjectDefinition, MotionActionID, MotionID, CollisionList, ObjectModel } from "./bin";
 import { mat4, vec3 } from "gl-matrix";
 import { clamp, angleDist, getMatrixAxisZ, setMatrixTranslation, MathConstants, transformVec3Mat4w0, normToLength, computeModelMatrixR, Vec3UnitZ, Vec3Zero, Vec3UnitY, Vec3NegY, transformVec3Mat4w1, float32AsBits, getMatrixAxisY } from "../MathHelpers";
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceText, drawWorldSpaceLine } from "../DebugJunk";
@@ -10,6 +10,8 @@ import { AABB } from "../Geometry";
 import { Red, Green, Magenta } from "../Color";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
 import { hexzero, assert, nArray } from "../util";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => void;
 
@@ -65,6 +67,7 @@ const speedTable: number[] = [0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0];
 const scratchMatrix = mat4.create();
 export class ObjectRenderer {
     public visible = true;
+    public modelInstances: BINModelInstance[] = [];
 
     private animFunc: AnimFunc | null = null;
     public motionState: MotionState | null = null;
@@ -72,13 +75,45 @@ export class ObjectRenderer {
     private parentState: ParentState | null = null;
     public modelMatrix = mat4.create();
     public position = vec3.create();
+    public bbox: AABB;
 
     private dummyParent = false;
 
-    constructor(public objectSpawn: MissionSetupObjectSpawn, public bbox: AABB, def: ObjectDefinition, public modelInstances: BINModelInstance[], motion: MotionParameters | null) {
+    constructor(device: GfxDevice, gfxCache: GfxRenderCache, objectModel: ObjectModel, binModelSectorData: BINModelSectorData, public objectSpawn: MissionSetupObjectSpawn) {
+        for (let j = 0; j < binModelSectorData.modelData.length; j++) {
+            const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j]);
+            mat4.copy(binModelInstance.modelMatrix, objectSpawn.modelMatrix);
+            if (objectModel.transforms.length > 0) {
+                mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j].matrix);
+                vec3.copy(binModelInstance.euler, objectModel.transforms[j].rotation);
+                vec3.copy(binModelInstance.translation, objectModel.transforms[j].translation);
+            }
+
+            this.modelInstances.push(binModelInstance);
+        }
+
+        this.bbox = objectModel.bbox;
+
         this.animFunc = animFuncSelect(this.objectSpawn.objectId);
         mat4.copy(this.modelMatrix, objectSpawn.modelMatrix);
         mat4.getTranslation(this.position, this.modelMatrix);
+    }
+
+    public setParent(parent: ObjectRenderer): void {
+        const parentOffset = vec3.create();
+        vec3.sub(parentOffset, this.position, parent.position);
+        mat4.transpose(scratchMatrix, parent.modelMatrix);
+        transformVec3Mat4w0(parentOffset, scratchMatrix, parentOffset);
+        this.parentState = {
+            parent,
+            parentOffset,
+            inheritedEuler: vec3.create(),
+        };
+    }
+
+    public setObjectSpawn(def: ObjectDefinition, motion: MotionParameters | null): void {
+        const objectSpawn = this.objectSpawn;
+
         if (motion !== null && !stationaryObjects.has(objectSpawn.objectId)) {
             // common speed logic, there may be others
             let speed = motion.speed; // from the path
@@ -91,8 +126,8 @@ export class ObjectRenderer {
 
             const pos = vec3.create();
             mat4.getTranslation(pos, objectSpawn.modelMatrix);
-            const isTall = motion.motionID === MotionID.PathRoll && modelInstances.length > 0 &&
-                (modelInstances[0].binModelData.binModel.bbox.maxY > modelInstances[0].binModelData.binModel.bbox.maxX);
+            const isTall = motion.motionID === MotionID.PathRoll && this.modelInstances.length > 0 &&
+                (this.modelInstances[0].binModelData.binModel.bbox.maxY > this.modelInstances[0].binModelData.binModel.bbox.maxX);
             this.motionState = {
                 parameters: motion,
                 useAltMotion: false,
@@ -126,25 +161,13 @@ export class ObjectRenderer {
         this.dummyParent = def.dummyParent;
     }
 
-    public setParent(parent: ObjectRenderer): void {
-        const parentOffset = vec3.create();
-        vec3.sub(parentOffset, this.position, parent.position);
-        mat4.transpose(scratchMatrix, parent.modelMatrix);
-        transformVec3Mat4w0(parentOffset, scratchMatrix, parentOffset);
-        this.parentState = {
-            parent,
-            parentOffset,
-            inheritedEuler: vec3.create(),
-        };
-    }
-
     private runMotion(deltaTimeInFrames: number, zones: CollisionList[], levelCollision: CollisionList[][] ): boolean {
         const motionState = this.motionState!;
         const motionID = (motionState.useAltMotion && motionState.parameters.altMotionActionID !== 0) ? motionState.parameters.altMotionActionID : motionState.parameters.motionActionID;
         return runMotionFunc(this, motionState, motionID, deltaTimeInFrames, zones, levelCollision);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, toNoclip: mat4, currentPalette: number, zones: CollisionList[], levelCollision: CollisionList[][]): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, toNoclip: mat4, currentPalette: number, zones: CollisionList[] | null, levelCollision: CollisionList[][] | null): void {
         if (!this.visible)
             return;
 
@@ -154,7 +177,7 @@ export class ObjectRenderer {
         let updateInstances = false;
         let hasMotionImplementation = false;
         if (this.motionState !== null) {
-            hasMotionImplementation = this.runMotion(deltaTimeInFrames, zones, levelCollision);
+            hasMotionImplementation = this.runMotion(deltaTimeInFrames, zones!, levelCollision!);
             updateInstances = true;
             vec3.copy(this.position, this.motionState.pos);
             computeKatamariRotation(this.modelMatrix, this.motionState.euler);
