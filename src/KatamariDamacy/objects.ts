@@ -1,7 +1,7 @@
 
 import { mat4, vec3 } from "gl-matrix";
 import { Green, Magenta, Red } from "../Color";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D, drawWorldSpaceAABB } from "../DebugJunk";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, Vec3Zero } from "../MathHelpers";
@@ -30,7 +30,6 @@ interface MotionState {
     pathIndex: number;
     speed: number;
 
-    euler: vec3;
     eulerStep: vec3;
     eulerTarget: vec3;
     euler2: vec3;
@@ -78,6 +77,7 @@ export class ObjectRenderer {
     private parentState: ParentState | null = null;
     public modelMatrix = mat4.create();
     public position = vec3.create();
+    public euler = vec3.create();
     public bbox: AABB;
     public partBBox: AABB;
 
@@ -148,7 +148,6 @@ export class ObjectRenderer {
             target: vec3.create(),
             velocity: vec3.create(),
 
-            euler: vec3.create(), // relative to base, not absolute
             eulerStep: vec3.create(),
             eulerTarget: vec3.create(),
             euler2: vec3.create(),
@@ -191,12 +190,17 @@ export class ObjectRenderer {
             hasMotionImplementation = this.runMotion(deltaTimeInFrames, zones!, levelCollision!);
             updateInstances = true;
             vec3.copy(this.position, this.motionState.pos);
-            computeKatamariRotation(this.modelMatrix, this.motionState.euler);
-            mat4.mul(this.modelMatrix, this.motionState.base, this.modelMatrix);
+            mat4.copy(this.modelMatrix, this.motionState.base)
         } else {
             // before the parent logic, we want the model matrix to be the composition of base and euler
             // objects without motion won't have changed it themselves, but might have been affected by parents
             mat4.copy(this.modelMatrix, this.objectSpawn.modelMatrix);
+        }
+
+        if (!vec3.equals(this.euler, Vec3Zero)) {
+            updateInstances = true;
+            computeKatamariRotation(scratchMatrix, this.euler);
+            mat4.mul(this.modelMatrix, this.modelMatrix, scratchMatrix);
         }
 
         if (this.parentState) {
@@ -212,25 +216,17 @@ export class ObjectRenderer {
 
                 if (ancestor.motionState === null || ancestor.motionState.composeEuler) {
                     // nonsense euler angle transformation
-                    let parentEuler: vec3 | null = null;
-                    if (parent.parentState)
-                        parentEuler = parent.parentState.inheritedEuler;
-                    else if (parent.motionState)
-                        parentEuler = parent.motionState.euler;
-                    if (parentEuler) {
-                        transformVec3Mat4w0(this.parentState.inheritedEuler, parent.modelMatrix, parentEuler);
-                        for (let i = 0; i < 3; i++)
-                            this.parentState.inheritedEuler[i] = reduceAngle(this.parentState.inheritedEuler[i]);
-                        computeKatamariRotation(scratchMatrix, this.parentState.inheritedEuler);
-                        mat4.mul(this.modelMatrix, scratchMatrix, this.modelMatrix);
-                    } else
-                        vec3.copy(this.parentState.inheritedEuler, Vec3Zero);
-                    // add on our own rotation, if any
-                    if (this.motionState)
-                        vec3.add(this.parentState.inheritedEuler, this.parentState.inheritedEuler, this.motionState.euler);
+                    const parentEuler = parent.parentState ? parent.parentState.inheritedEuler : parent.euler;
+                    transformVec3Mat4w0(this.parentState.inheritedEuler, parent.modelMatrix, parentEuler);
+                    for (let i = 0; i < 3; i++)
+                        this.parentState.inheritedEuler[i] = reduceAngle(this.parentState.inheritedEuler[i]);
+                    computeKatamariRotation(scratchMatrix, this.parentState.inheritedEuler);
+                    mat4.mul(this.modelMatrix, scratchMatrix, this.modelMatrix);
+                    // add on our own rotation
+                    vec3.add(this.parentState.inheritedEuler, this.parentState.inheritedEuler, this.euler);
                 } else {
                     // the game stores the base and euler separately for each, but doesn't modify it in this case
-                    computeKatamariRotation(scratchMatrix, ancestor.motionState.euler);
+                    computeKatamariRotation(scratchMatrix, ancestor.euler);
                     mat4.mul(this.modelMatrix, scratchMatrix, this.modelMatrix);
                     mat4.mul(this.modelMatrix, ancestor.motionState.base, this.modelMatrix);
                 }
@@ -502,6 +498,7 @@ const enum ObjectId {
     TANK01_F        = 0x01B0,
     BIKE04_E        = 0x01B2,
     BIKE05_E        = 0x01B3,
+    GSWING01_B      = 0x0206,
     RADICON02_E     = 0x0220,
     BIKE06_E        = 0x02B0,
     WINDMILL01_G    = 0x02C6,
@@ -552,6 +549,7 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     case ObjectId.FARMCAR02_E:  return animFunc_FARMCAR02_E;
     case ObjectId.WORKCAR04_F:  return animFunc_WORKCAR04_F;
     case ObjectId.TANK01_F:     return animFunc_TANK01_F;
+    case ObjectId.GSWING01_B:   return animFunc_GSWING01_B;
     case ObjectId.TORNADO_G:    return animFunc_TORNADO_G;
     case ObjectId.SPINWAVE_G:   return animFunc_SPINWAVE_G;
     case ObjectId.SIGNAL01_E:   return animFunc_SIGNAL01_E;
@@ -657,14 +655,18 @@ function animFunc_TANK01_F(object: ObjectRenderer, deltaTimeInFrames: number): v
     scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/120.0);
 }
 
+function animFunc_GSWING01_B(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    object.euler[1] += 0.14 * deltaTimeInFrames;
+}
+
 // these show up without motion in a test level, should probably worry about that
 function animFunc_TORNADO_G(object: ObjectRenderer, deltaTimeInFrames: number): void {
     scrollTexture(object.modelInstances[0], deltaTimeInFrames, Axis.X, 1/30.0);
-    object.motionState!.euler[1] -= Math.PI/30.0 * deltaTimeInFrames;
+    object.euler[1] -= Math.PI/30.0 * deltaTimeInFrames;
 }
 
 function animFunc_SPINWAVE_G(object: ObjectRenderer, deltaTimeInFrames: number): void {
-    object.motionState!.euler[1] -= Math.PI/75.0 * deltaTimeInFrames;
+    object.euler[1] -= Math.PI/75.0 * deltaTimeInFrames;
 }
 
 function animFunc_BOOTH02_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
@@ -939,7 +941,7 @@ function motion_PathSpin_Follow(object: ObjectRenderer, motion: MotionState, del
 }
 
 function motion_PathSpin_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
-    motion.euler[1] += 0.05 * deltaTimeInFrames;
+    object.euler[1] += 0.05 * deltaTimeInFrames;
     motion_PathSpin_Follow(object, motion, deltaTimeInFrames);
 }
 
@@ -988,11 +990,11 @@ function motion_PathSimple_Follow(object: ObjectRenderer, motion: MotionState, d
         getMatrixAxisZ(pathScratch, object.modelMatrix);
 
         // compute angles based on forward vector, not current euler angle
-        motion.euler[1] = Math.atan2(pathScratch[0], pathScratch[2]);
+        object.euler[1] = Math.atan2(pathScratch[0], pathScratch[2]);
 
         motion.eulerTarget[1] = Math.PI + Math.atan2(motion.velocity[0], motion.velocity[2]);
         const framesUntilYaw = distToTarget / (motion.speed === 0 ? 30 : motion.speed);
-        motion.eulerStep[1] = angleDist(motion.euler[1], motion.eulerTarget[1]) / framesUntilYaw;
+        motion.eulerStep[1] = angleDist(object.euler[1], motion.eulerTarget[1]) / framesUntilYaw;
 
         if (motion.adjustPitch) {
             mat4.copy(motion.reference, motion.base);
@@ -1027,13 +1029,13 @@ function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, d
 
         pathGetPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
         motion.target[1] -= object.bbox.maxY; // adjust target to object center height, kind of weird because of the coordinate system
-        motion.euler[1] = Math.PI + Math.atan2(motion.target[0] - motion.pos[0], motion.target[2] - motion.pos[2]);
+        object.euler[1] = Math.PI + Math.atan2(motion.target[0] - motion.pos[0], motion.target[2] - motion.pos[2]);
 
         vec3.sub(motion.velocity, motion.target, motion.pos);
         normToLength(motion.velocity, motion.speed);
     }
 
-    motionPathAngleStep(motion.euler, motion, deltaTimeInFrames);
+    motionPathAngleStep(object.euler, motion, deltaTimeInFrames);
     motion_PathSimple_Follow(object, motion, deltaTimeInFrames, collision);
 
     if (motion.adjustPitch)
@@ -1083,7 +1085,7 @@ function pathSimpleSetPitchTarget(object: ObjectRenderer, motion: MotionState): 
 }
 
 function motion_MiscSpin_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
-    motion.euler[1] += .05 * deltaTimeInFrames;
+    object.euler[1] += .05 * deltaTimeInFrames;
 }
 
 function motion_MiscBob_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
@@ -1151,17 +1153,17 @@ function motion_MiscHop_Update(object: ObjectRenderer, deltaTimeInFrames: number
 }
 
 function motion_MiscFlip_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
-    motion.euler[0] -= .05 * deltaTimeInFrames;
+    object.euler[0] -= .05 * deltaTimeInFrames;
 }
 
 const swayScratch = vec3.create();
 function motion_MiscSway_Update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState): void {
     motion.angle += deltaTimeInFrames * Math.PI / 45;
-    motion.euler[2] = Math.sin(motion.angle) * MathConstants.TAU / 36;
+    object.euler[2] = Math.sin(motion.angle) * MathConstants.TAU / 36;
 
     // translate by new up vector
     if (object.objectSpawn.objectId !== ObjectId.BALANCEDOLL01_C) {
-        vec3.set(swayScratch, Math.sin(motion.euler[2]), -Math.cos(motion.euler[2]), 0);
+        vec3.set(swayScratch, Math.sin(object.euler[2]), -Math.cos(object.euler[2]), 0);
         transformVec3Mat4w0(swayScratch, object.modelMatrix, swayScratch);
         const bottomOffset = object.partBBox.maxY;
         vec3.scale(swayScratch, swayScratch, bottomOffset);
