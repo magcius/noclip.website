@@ -14,6 +14,7 @@ import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
 import { ModelRenderContext } from './models';
+import { getDebugOverlayCanvas2D, drawScreenSpaceText } from '../DebugJunk';
 
 export interface BlockInfo {
     mod: number;
@@ -134,23 +135,21 @@ export class MapInstance {
     public iterateBlocksFrontToBack(blx: number, blz: number): BlockIter[] {
         const result = Array.from(this.iterateBlocks());
         // Sort blocks by Manhattan distance
-        result.sort((a: BlockIter, b: BlockIter) => {
-            const da = (a.x - blx) + (a.z - blz);
-            const db = (b.x - blx) + (b.z - blz);
+        return result.sort((a: BlockIter, b: BlockIter) => {
+            const da = Math.abs(a.x - blx) + Math.abs(a.z - blz);
+            const db = Math.abs(b.x - blx) + Math.abs(b.z - blz);
             return da - db;
         });
-        return result;
     }
 
     public iterateBlocksBackToFront(blx: number, blz: number): BlockIter[] {
         const result = Array.from(this.iterateBlocks());
         // Sort blocks by reverse Manhattan distance
-        result.sort((a: BlockIter, b: BlockIter) => {
-            const da = (a.x - blx) + (a.z - blz);
-            const db = (b.x - blx) + (b.z - blz);
+        return result.sort((a: BlockIter, b: BlockIter) => {
+            const da = Math.abs(a.x - blx) + Math.abs(a.z - blz);
+            const db = Math.abs(b.x - blx) + Math.abs(b.z - blz);
             return db - da;
         });
-        return result;
     }
 
     public getBlockAtPosition(x: number, z: number): BlockRenderer | null {
@@ -167,15 +166,15 @@ export class MapInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
 
-        const camPos = vec3.create(modelCtx.viewerInput.camera.worldMatrix[12],
-            modelCtx.viewerInput.camera.worldMatrix[13],
-            modelCtx.viewerInput.camera.worldMatrix[14]);
+        const camPos = vec3.create(0, 0, 0);
+        vec3.transformMat4(camPos, camPos, modelCtx.viewerInput.camera.worldMatrix);
         vec3.transformMat4(camPos, camPos, this.invMatrix);
         const blx = Math.floor(camPos[0] / 640);
         const blz = Math.floor(camPos[2] / 640);
 
         const matrix = mat4.create();
-        for (let b of drawStep === 0 ? this.iterateBlocksFrontToBack(blx, blz) : this.iterateBlocksBackToFront(blx, blz)) {
+        const blockIter = drawStep === 0 ? this.iterateBlocksFrontToBack(blx, blz) : this.iterateBlocksBackToFront(blx, blz);
+        for (let b of blockIter) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
             b.block.prepareToRender(device, renderInstManager, modelCtx, matrix, drawStep);
@@ -188,9 +187,8 @@ export class MapInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
 
-        const camPos = vec3.create(modelCtx.viewerInput.camera.worldMatrix[12],
-            modelCtx.viewerInput.camera.worldMatrix[13],
-            modelCtx.viewerInput.camera.worldMatrix[14]);
+        const camPos = vec3.create(0, 0, 0);
+        vec3.transformMat4(camPos, camPos, modelCtx.viewerInput.camera.worldMatrix);
         vec3.transformMat4(camPos, camPos, this.invMatrix);
         const blx = Math.floor(camPos[0] / 640);
         const blz = Math.floor(camPos[2] / 640);
@@ -209,9 +207,8 @@ export class MapInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
 
-        const camPos = vec3.create(modelCtx.viewerInput.camera.worldMatrix[12],
-            modelCtx.viewerInput.camera.worldMatrix[13],
-            modelCtx.viewerInput.camera.worldMatrix[14]);
+        const camPos = vec3.create(0, 0, 0);
+        vec3.transformMat4(camPos, camPos, modelCtx.viewerInput.camera.worldMatrix);
         vec3.transformMat4(camPos, camPos, this.invMatrix);
         const blx = Math.floor(camPos[0] / 640);
         const blz = Math.floor(camPos[2] / 640);
