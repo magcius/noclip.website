@@ -334,12 +334,14 @@ class GfxRenderPassP_GL implements GfxRenderPass {
 }
 
 enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
+let g0 = 0;
 class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public gfxr: (GfxResource | null)[] = [];
     public bufr: ArrayBufferView[] = [];
 
-    public reset() { this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
+    public g0 = 0;
+    public reset() { this.g0 = ++g0; this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
 
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
@@ -347,16 +349,17 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     public pbufr(r: ArrayBufferView) { this.bufr.push(r); }
 
     public end() { this.pcmd(HostAccessPassCmd.end); }
-    public uploadBufferData(r: GfxBuffer, dstWordOffset: number, data: Uint8Array, srcWordOffset?: number, wordCount?: number) {
+    public uploadBufferData(r: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteSize?: number) {
         assert(!!r);
         this.pcmd(HostAccessPassCmd.uploadBufferData); this.pgfxr(r);
-        const dstByteOffset = dstWordOffset * 4;
-        const srcByteOffset = (srcWordOffset !== undefined) ? (srcWordOffset * 4) : 0;
-        const byteCount = (wordCount !== undefined) ? (wordCount * 4) : (data.byteLength - srcByteOffset);
+        if (srcByteOffset === undefined)
+            srcByteOffset = 0;
+        if (byteSize === undefined)
+            byteSize = data.byteLength - srcByteOffset;
         this.pu32(dstByteOffset);
         this.pbufr(data);
         this.pu32(srcByteOffset);
-        this.pu32(byteCount);
+        this.pu32(byteSize);
     }
 
     public uploadTextureData(r: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]) {
@@ -1493,10 +1496,11 @@ void main() {
         this._debugGroupStack.pop();
     }
 
-    public programPatched(o: GfxProgram): void {
+    public programPatched(o: GfxProgram, descriptor: GfxProgramDescriptorSimple): void {
         const program = o as GfxProgramP_GL;
         const gl = this.gl;
         gl.deleteProgram(program.gl_program);
+        program.descriptor = descriptor;
         program.gl_program = this.ensureResourceExists(gl.createProgram());
         program.compileState = GfxProgramCompileStateP_GL.NeedsCompile;
         this._tryCompileProgram(program);

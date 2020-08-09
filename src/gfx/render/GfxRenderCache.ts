@@ -79,15 +79,15 @@ export class GfxRenderCache {
         if (program === null) {
             const descriptorCopy = gfxProgramDescriptorSimpleCopy(gfxProgramDescriptorSimple);
             program = device.createProgramSimple(descriptorCopy);
-
-            // TODO(jstpierre): Ugliness
-            if ('associate' in (gfxProgramDescriptorSimple as any)) {
-                const gfxProgramDescriptor = gfxProgramDescriptorSimple as GfxProgramDescriptor;
-                gfxProgramDescriptor.associate(device, descriptorCopy, program);
-            }
-
             this.gfxProgramCache.add(descriptorCopy, program);
         }
+
+        // TODO(jstpierre): Ugliness
+        if ('associate' in (gfxProgramDescriptorSimple as any)) {
+            const gfxProgramDescriptor = gfxProgramDescriptorSimple as GfxProgramDescriptor;
+            gfxProgramDescriptor.associate(device, program);
+        }
+
         return program;
     }
 
