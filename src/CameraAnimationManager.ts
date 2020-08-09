@@ -511,137 +511,65 @@ export class CameraAnimationManager {
     private calculateAllTangents(): void {
         this.calculateBankRotationValues();
         const keyframes = this.animation.keyframes;
-        // scratchVec1 is used for pos tangent, scratchVec2 is used for lookAtPos tangent
 
         if (keyframes.length < 4) {
-            mat4.getTranslation(this.prevPos, keyframes[0].endPos);
-            mat4.getTranslation(this.nextPos, keyframes[1].endPos);
-            vec3.sub(this.scratchVec1, this.nextPos, this.prevPos);
-            vec3.scale(this.scratchVec1, this.scratchVec1, 0.5);
-
-            getMatrixAxisZ(this.forwardVecFrom, keyframes[0].endPos);
-            getMatrixAxisZ(this.forwardVecTo, keyframes[1].endPos);
-            vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
-            vec3.normalize(this.forwardVecTo, this.forwardVecTo);
-            vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
-            vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
-            vec3.sub(this.scratchVec2, this.nextLookAtPos, this.prevLookAtPos);
-            vec3.scale(this.scratchVec2, this.scratchVec2, 0.5);
-
-            vec3.copy(keyframes[0].posTangentIn, this.scratchVec1);
-            vec3.copy(keyframes[0].lookAtPosTangentIn, this.scratchVec2);
-            vec3.copy(keyframes[0].posTangentOut, this.scratchVec1);
-            vec3.copy(keyframes[0].lookAtPosTangentOut, this.scratchVec2);
-
+            this.calculateTangents(keyframes[0], keyframes[0], keyframes[1]);
             if (keyframes.length === 2) {
-                vec3.sub(this.scratchVec1, this.prevPos, this.nextPos);
-                vec3.scale(this.scratchVec1, this.scratchVec1, 0.5);
-
-                vec3.sub(this.scratchVec2, this.prevLookAtPos, this.nextLookAtPos);
-                vec3.scale(this.scratchVec2, this.scratchVec2, 0.5);
-
-                vec3.copy(keyframes[1].posTangentIn, this.scratchVec1);
-                vec3.copy(keyframes[1].lookAtPosTangentIn, this.scratchVec2);
-                vec3.copy(keyframes[1].posTangentOut, this.scratchVec1);
-                vec3.copy(keyframes[1].lookAtPosTangentOut, this.scratchVec2);
+                if (this.loopAnimation)
+                    this.zeroEndpointTangents();
+                else
+                    this.calculateTangents(keyframes[0], keyframes[1], keyframes[1]);
                 return;
             }
-            mat4.getTranslation(this.nextPos, keyframes[2].endPos);
-            vec3.sub(this.scratchVec1, this.nextPos, this.prevPos);
-            vec3.scale(this.scratchVec1, this.scratchVec1, 0.5);
-
-            getMatrixAxisZ(this.forwardVecTo, keyframes[2].endPos);
-            vec3.normalize(this.forwardVecTo, this.forwardVecTo);
-            vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
-            vec3.sub(this.scratchVec2, this.nextLookAtPos, this.prevLookAtPos);
-            vec3.scale(this.scratchVec2, this.scratchVec2, 0.5);
-
-            vec3.copy(keyframes[1].posTangentIn, this.scratchVec1);
-            vec3.copy(keyframes[1].lookAtPosTangentIn, this.scratchVec2);
-            vec3.copy(keyframes[1].posTangentOut, this.scratchVec1);
-            vec3.copy(keyframes[1].lookAtPosTangentOut, this.scratchVec2);
-
-            mat4.getTranslation(this.prevPos, keyframes[1].endPos);
-            vec3.sub(this.scratchVec1, this.nextPos, this.prevPos);
-            vec3.scale(this.scratchVec1, this.scratchVec1, 0.5);
-
-            getMatrixAxisZ(this.forwardVecFrom, keyframes[1].endPos);
-            vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
-            vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
-            vec3.sub(this.scratchVec2, this.nextLookAtPos, this.prevLookAtPos);
-            vec3.scale(this.scratchVec2, this.scratchVec2, 0.5);
-
-            vec3.copy(keyframes[2].posTangentIn, this.scratchVec1);
-            vec3.copy(keyframes[2].lookAtPosTangentIn, this.scratchVec2);
-            vec3.copy(keyframes[2].posTangentOut, this.scratchVec1);
-            vec3.copy(keyframes[2].lookAtPosTangentOut, this.scratchVec2);
+            this.calculateTangents(keyframes[0], keyframes[1], keyframes[2]);
+            if (this.loopAnimation)
+                this.calculateTangents(keyframes[1], keyframes[2], keyframes[0]);
+            else 
+                this.zeroEndpointTangents();
             return;
         }
 
-        mat4.getTranslation(this.prevPos, keyframes[keyframes.length - 1].endPos);
-        mat4.getTranslation(this.nextPos, keyframes[1].endPos);
+        this.calculateTangents(keyframes[keyframes.length - 1], keyframes[0], keyframes[1]);
+
+        for (let i = 1; i < keyframes.length - 1; i++) {
+            this.calculateTangents(keyframes[i - 1], keyframes[i], keyframes[i + 1]);
+        }
+
+        if (this.loopAnimation)
+            this.calculateTangents(keyframes[keyframes.length - 2], keyframes[keyframes.length - 1], keyframes[0]);
+        else
+            this.zeroEndpointTangents();
+    }
+
+    private calculateTangents(prevKf: Keyframe, curKf: Keyframe, nextKf: Keyframe): void {
+        mat4.getTranslation(this.prevPos, prevKf.endPos);
+        mat4.getTranslation(this.nextPos, nextKf.endPos);
         vec3.sub(this.scratchVec1, this.nextPos, this.prevPos);
         vec3.scale(this.scratchVec1, this.scratchVec1, 0.5);
+        vec3.copy(curKf.posTangentOut, this.scratchVec1);
+        vec3.copy(nextKf.posTangentIn, this.scratchVec1);
 
-        getMatrixAxisZ(this.forwardVecFrom, keyframes[keyframes.length - 1].endPos);
-        getMatrixAxisZ(this.forwardVecTo, keyframes[1].endPos);
+        getMatrixAxisZ(this.forwardVecFrom, prevKf.endPos);
+        getMatrixAxisZ(this.forwardVecTo, nextKf.endPos);
         vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
         vec3.normalize(this.forwardVecTo, this.forwardVecTo);
         vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
         vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
         vec3.sub(this.scratchVec2, this.nextLookAtPos, this.prevLookAtPos);
         vec3.scale(this.scratchVec2, this.scratchVec2, 0.5);
+        vec3.copy(curKf.lookAtPosTangentOut, this.scratchVec2);
+        vec3.copy(nextKf.lookAtPosTangentIn, this.scratchVec2);
 
-        vec3.copy(keyframes[0].posTangentOut, this.scratchVec1);
-        vec3.copy(keyframes[0].lookAtPosTangentOut, this.scratchVec2);
-        vec3.copy(keyframes[1].posTangentIn, this.scratchVec1);
-        vec3.copy(keyframes[1].lookAtPosTangentIn, this.scratchVec2);
+        curKf.bankTangentOut = (nextKf.bank - prevKf.bank) / 2;
+        nextKf.bankTangentIn = (nextKf.bank - prevKf.bank) / 2;
+    }
 
-        for (let i = 1; i < keyframes.length - 1; i++) {
-            mat4.getTranslation(this.prevPos, keyframes[i - 1].endPos);
-            mat4.getTranslation(this.nextPos, keyframes[i + 1].endPos);
-            vec3.sub(this.scratchVec1, this.nextPos, this.prevPos);
-            vec3.scale(this.scratchVec1, this.scratchVec1, 0.5);
-
-            getMatrixAxisZ(this.forwardVecFrom, keyframes[i - 1].endPos);
-            getMatrixAxisZ(this.forwardVecTo, keyframes[i + 1].endPos);
-            vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
-            vec3.normalize(this.forwardVecTo, this.forwardVecTo);
-            vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
-            vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
-            vec3.sub(this.scratchVec2, this.nextLookAtPos, this.prevLookAtPos);
-            vec3.scale(this.scratchVec2, this.scratchVec2, 0.5);
-
-            vec3.copy(keyframes[i].posTangentOut, this.scratchVec1);
-            vec3.copy(keyframes[i].lookAtPosTangentOut, this.scratchVec2);
-            vec3.copy(keyframes[i + 1].posTangentIn, this.scratchVec1);
-            vec3.copy(keyframes[i + 1].lookAtPosTangentOut, this.scratchVec2);
-        }
-
-        if (this.loopAnimation) {
-            mat4.getTranslation(this.prevPos, keyframes[keyframes.length - 2].endPos);
-            mat4.getTranslation(this.nextPos, keyframes[0].endPos);
-            vec3.sub(this.scratchVec1, this.nextPos, this.prevPos);
-            vec3.scale(this.scratchVec1, this.scratchVec1, 0.5);
-
-            getMatrixAxisZ(this.forwardVecFrom, keyframes[keyframes.length - 2].endPos);
-            getMatrixAxisZ(this.forwardVecTo, keyframes[0].endPos);
-            vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
-            vec3.normalize(this.forwardVecTo, this.forwardVecTo);
-            vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
-            vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
-            vec3.sub(this.scratchVec2, this.nextLookAtPos, this.prevLookAtPos);
-            vec3.scale(this.scratchVec2, this.scratchVec2, 0.5);
-
-            vec3.copy(keyframes[keyframes.length - 1].posTangentOut, this.scratchVec1);
-            vec3.copy(keyframes[keyframes.length - 1].lookAtPosTangentOut, this.scratchVec2);
-            vec3.copy(keyframes[0].posTangentIn, this.scratchVec1);
-            vec3.copy(keyframes[0].lookAtPosTangentIn, this.scratchVec2);
-        } else {
-            vec3.zero(keyframes[keyframes.length - 1].posTangentOut);
-            vec3.zero(keyframes[keyframes.length - 1].lookAtPosTangentOut);
-            vec3.zero(keyframes[0].posTangentIn);
-            vec3.zero(keyframes[0].lookAtPosTangentIn);
-        }
+    private zeroEndpointTangents(): void {
+        vec3.zero(this.animation.keyframes[this.animation.keyframes.length - 1].posTangentOut);
+        vec3.zero(this.animation.keyframes[this.animation.keyframes.length - 1].lookAtPosTangentOut);
+        this.animation.keyframes[this.animation.keyframes.length - 1].bankTangentOut = 0;
+        vec3.zero(this.animation.keyframes[0].posTangentIn);
+        vec3.zero(this.animation.keyframes[0].lookAtPosTangentIn);
+        this.animation.keyframes[0].bankTangentIn = 0;
     }
 }
