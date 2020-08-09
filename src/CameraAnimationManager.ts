@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { Viewer } from './viewer';
 import { StudioCameraController } from './Camera';
 import { getPointHermite, getPointBezier } from './Spline';
-import { getMatrixAxisZ } from './MathHelpers';
+import { getMatrixAxisZ, computeEulerAngleRotationFromSRTMatrix, Vec3UnitY, Vec3Zero, lerp } from './MathHelpers';
 
 const MILLISECONDS_IN_SECOND = 1000.0;
 
@@ -45,7 +45,10 @@ export interface Keyframe {
     posTangentOut: vec3;
     lookAtPosTangentIn: vec3;
     lookAtPosTangentOut: vec3;
+    bankTangentIn: number;
+    bankTangentOut: number;
     endPos: mat4;
+    bank: number;
     name?: string;
 }
 
@@ -75,6 +78,9 @@ export class CameraAnimation {
             posTangentOut: vec3.create(),
             lookAtPosTangentIn: vec3.create(),
             lookAtPosTangentOut: vec3.create(),
+            bankTangentIn: 0,
+            bankTangentOut: 0,
+            bank: 0,
             endPos: keyframeEndPos,
             name: name
         }
@@ -94,20 +100,17 @@ export class CameraAnimation {
 export class CameraAnimationManager {
     private animation: CameraAnimation;
     private studioCameraController: StudioCameraController;
-    /**
-     * The translation vector components of the keyframes following and preceding the current keyframe.
-     * Used for calculating tangents.
-     */
-    private beforePrevPos: vec3 = vec3.create();
+
+    // The translation vector components of the keyframes following and preceding the current keyframe.
+    // Used for calculating tangents.
     private prevPos: vec3 = vec3.create();
     private nextPos: vec3 = vec3.create();
     private prevLookAtPos: vec3 = vec3.create();
     private nextLookAtPos: vec3 = vec3.create();
     private scratchVec1: vec3 = vec3.create();
     private scratchVec2: vec3 = vec3.create();
-    /**
-     * Variables for animation playback.
-     */
+
+    // Variables for animation playback.
     private currentKeyframeIndex: number;
     private currentKeyframe: Keyframe;
     private currentKeyframeProgressMs: number = 0;
@@ -116,20 +119,23 @@ export class CameraAnimationManager {
     private currentKeyframeTotalDurationMs: number = 0;
     private loopAnimation: boolean = false;
     private previewingKeyframe: boolean = false;
-    /**
-     * Interpolation variables.
-     */
-    private interpolatingFrom: mat4 = mat4.create();
+
+    // Interpolation variables.
+    private previousKeyframe: Keyframe;
+
     private posFrom: vec3 = vec3.create();
     private forwardVecFrom: vec3 = vec3.create();
+    private lookAtPosFrom: vec3 = vec3.create();
+    private bankRotFrom: number = 0;
+
     private posTo: vec3 = vec3.create();
     private forwardVecTo: vec3 = vec3.create();
-    private lookAtPosFrom: vec3 = vec3.create();
     private lookAtPosTo: vec3 = vec3.create();
-    /**
-     * Flags to indicate whether the position and lookAt position should be interpolated for the current keyframe.
-     */
+    private bankRotTo: number = 0;
+
+    // Flags to indicate whether the position and bank position need to be interpolated for the current keyframe.
     private interpPos: boolean = true;
+    private interpBank: boolean = false;
 
     constructor(private uiKeyframeList: HTMLElement, private uiStudioControls: HTMLElement) {
         this.studioCameraController = new StudioCameraController(this);
@@ -165,7 +171,7 @@ export class CameraAnimationManager {
     }
 
     public serializeAnimation(): string {
-        const exclude = ['posTangentIn', 'posTangentOut', 'lookAtPosTangentIn', 'lookAtPosTangentOut'];
+        const exclude = ['posTangentIn', 'posTangentOut', 'lookAtPosTangentIn', 'lookAtPosTangentOut, bankTangentIn, bankTangentOut, bank'];
         return JSON.stringify(this.animation.keyframes, (key, value) => {
             if (exclude.includes(key))
                 return undefined;
@@ -228,7 +234,7 @@ export class CameraAnimationManager {
         this.currentKeyframeIndex = index - 1;
         this.playbackNextKeyframe();
         this.loopAnimation = loopEnabled;
-        this.calculateTangents();
+        this.calculateAllTangents();
         this.previewingKeyframe = true;
         this.studioCameraController.playAnimation(startPos);
     }
@@ -238,7 +244,7 @@ export class CameraAnimationManager {
             this.loopAnimation = loop;
             this.currentKeyframeIndex = -1;
             this.playbackNextKeyframe();
-            this.calculateTangents();
+            this.calculateAllTangents();
             // Skip interpolation for the first keyframe.
             this.currentKeyframeProgressMs = this.currentKeyframeInterpDurationMs;
             const startPos: mat4 = this.animation.keyframes[0].endPos;
@@ -283,7 +289,7 @@ export class CameraAnimationManager {
                 interpAmount = easeFunc(interpAmount);
             vec3.lerp(outInterpStep.pos, this.posFrom, this.posTo, interpAmount);
             vec3.lerp(outInterpStep.lookAtPos, this.lookAtPosFrom, this.lookAtPosTo, interpAmount);
-            // TODO(Veegie) Interpolate bank rotation.
+            outInterpStep.bank = lerp(this.bankRotFrom, this.bankRotTo, interpAmount);
         } else {
             for (let i = 0; i < 3; i++) {
                 if (this.interpPos)
@@ -292,7 +298,10 @@ export class CameraAnimationManager {
                     outInterpStep.pos[i] = this.posTo[i];
                 outInterpStep.lookAtPos[i] = getPointHermite(this.lookAtPosFrom[i], this.lookAtPosTo[i], this.currentKeyframe.posTangentIn[i], this.currentKeyframe.posTangentOut[i], interpAmount);
             }
-            // TODO(Veegie) Interpolate bank rotation.
+            if (this.interpBank)
+                outInterpStep.bank = getPointHermite(this.bankRotFrom, this.bankRotTo, this.currentKeyframe.bankTangentIn, this.currentKeyframe.bankTangentOut, interpAmount);
+            else
+                outInterpStep.bank = this.bankRotTo;
         }
     }
 
@@ -371,7 +380,7 @@ export class CameraAnimationManager {
         }
         if (prevKf.interpDuration > 0) {
             this.loopAnimation = loopEnabled;
-            this.calculateTangents();
+            this.calculateAllTangents();
             const prevLength = this.estimateHermiteCurveLength(beforePrevKf, prevKf);
             if (prevLength === 0)
                 return 0;
@@ -443,24 +452,64 @@ export class CameraAnimationManager {
 
     private setInterpolationVectors() {
         if (this.currentKeyframeIndex > 0)
-            mat4.copy(this.interpolatingFrom, this.animation.keyframes[this.currentKeyframeIndex - 1].endPos);
+            this.previousKeyframe = this.animation.keyframes[this.currentKeyframeIndex - 1];
         else
-            mat4.copy(this.interpolatingFrom, this.animation.keyframes[this.animation.keyframes.length - 1].endPos);
-        mat4.getTranslation(this.posFrom, this.interpolatingFrom);
+            this.previousKeyframe = this.animation.keyframes[this.animation.keyframes.length - 1];
+        mat4.getTranslation(this.posFrom, this.previousKeyframe.endPos);
         mat4.getTranslation(this.posTo, this.currentKeyframe.endPos);
-        getMatrixAxisZ(this.forwardVecFrom, this.interpolatingFrom);
+        getMatrixAxisZ(this.forwardVecFrom, this.previousKeyframe.endPos);
         getMatrixAxisZ(this.forwardVecTo, this.currentKeyframe.endPos);
         vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
         vec3.normalize(this.forwardVecTo, this.forwardVecTo);
         vec3.scaleAndAdd(this.lookAtPosFrom, this.posFrom, this.forwardVecFrom, -100);
         vec3.scaleAndAdd(this.lookAtPosTo, this.posTo, this.forwardVecTo, -100);
         this.interpPos = !vec3.exactEquals(this.posFrom, this.posTo);
+        this.bankRotFrom = this.previousKeyframe.bank;
+        this.bankRotTo = this.currentKeyframe.bank;
+        this.interpBank = Math.round(this.bankRotFrom * 1000000) != Math.round(this.bankRotTo * 1000000);
+    }
+
+    private calculateBankRotationValues() {
+        let previousBank = 0;
+        let fullRotations = 0;
+        let kf: Keyframe;
+        for (let i = 0; i < this.animation.keyframes.length; i++) {
+            kf = this.animation.keyframes[i];
+            computeEulerAngleRotationFromSRTMatrix(this.scratchVec1, kf.endPos);
+            vec3.copy(this.scratchVec2, Vec3UnitY);
+            vec3.rotateZ(this.scratchVec2, this.scratchVec2, Vec3Zero, -this.scratchVec1[2]);
+            vec3.rotateY(this.scratchVec2, this.scratchVec2, Vec3Zero, -this.scratchVec1[1]);
+            vec3.rotateX(this.scratchVec2, this.scratchVec2, Vec3Zero, -this.scratchVec1[0]);
+            this.scratchVec2[2] = 0;
+            vec3.normalize(this.scratchVec2, this.scratchVec2);
+            kf.bank = vec3.angle(this.scratchVec2, Vec3UnitY);
+            if (this.scratchVec2[0] < 0) {
+                kf.bank *= -1;
+            }
+            kf.bank += fullRotations * (2 * Math.PI);
+
+            if (Math.abs(kf.bank - previousBank) > Math.PI) {
+                // Closest rotation is in same direction, add or subtract a full rotation to the new bank
+                if (previousBank < 0)
+                    kf.bank -= 2 * Math.PI;
+                else
+                    kf.bank += 2 * Math.PI;
+            }
+
+            if (kf.bank > 0) {
+                fullRotations = Math.floor(kf.bank / (2 * Math.PI));
+            } else {
+                fullRotations = Math.ceil(kf.bank / (2 * Math.PI));
+            }
+            previousBank = kf.bank;
+        }
     }
 
     /**
      * Called before playing or previewing an animation, calculates and assigns tangent values for hermite interpolation.
      */
-    private calculateTangents(): void {
+    private calculateAllTangents(): void {
+        this.calculateBankRotationValues();
         const keyframes = this.animation.keyframes;
         // scratchVec1 is used for pos tangent, scratchVec2 is used for lookAtPos tangent
 

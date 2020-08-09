@@ -554,8 +554,7 @@ export class StudioCameraController extends FPSCameraController {
             this.animationManager.update(dt);
             this.animationManager.playbackInterpolationStep(this.interpStep);
             mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
-            // TODO(Veegie): Someday, we will figure out bank rotation. And we will do sweet corkscrews all day long.
-            // mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
+            mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
             return CameraUpdateResult.Changed;
         }
     }
