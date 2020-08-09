@@ -3,7 +3,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { nArray } from '../util';
 
 import { SFARenderer, SceneRenderContext } from './render';
@@ -87,6 +87,7 @@ interface BlockIter {
 
 export class MapInstance {
     private matrix: mat4 = mat4.create();
+    private invMatrix: mat4 = mat4.create();
     private numRows: number;
     private numCols: number;
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
@@ -110,9 +111,9 @@ export class MapInstance {
         this.blocks = [];
     }
 
-    // Caution: Matrix will be referenced, not copied.
     public setMatrix(matrix: mat4) {
-        this.matrix = matrix;
+        mat4.copy(this.matrix, matrix);
+        mat4.invert(this.invMatrix, matrix);
     }
 
     public getNumDrawSteps(): number {
@@ -130,6 +131,28 @@ export class MapInstance {
         }
     }
 
+    public iterateBlocksFrontToBack(blx: number, blz: number): BlockIter[] {
+        const result = Array.from(this.iterateBlocks());
+        // Sort blocks by Manhattan distance
+        result.sort((a: BlockIter, b: BlockIter) => {
+            const da = (a.x - blx) + (a.z - blz);
+            const db = (b.x - blx) + (b.z - blz);
+            return da - db;
+        });
+        return result;
+    }
+
+    public iterateBlocksBackToFront(blx: number, blz: number): BlockIter[] {
+        const result = Array.from(this.iterateBlocks());
+        // Sort blocks by reverse Manhattan distance
+        result.sort((a: BlockIter, b: BlockIter) => {
+            const da = (a.x - blx) + (a.z - blz);
+            const db = (b.x - blx) + (b.z - blz);
+            return db - da;
+        });
+        return result;
+    }
+
     public getBlockAtPosition(x: number, z: number): BlockRenderer | null {
         const bx = Math.floor(x / 640);
         const bz = Math.floor(z / 640);
@@ -144,8 +167,15 @@ export class MapInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
 
+        const camPos = vec3.create(modelCtx.viewerInput.camera.worldMatrix[12],
+            modelCtx.viewerInput.camera.worldMatrix[13],
+            modelCtx.viewerInput.camera.worldMatrix[14]);
+        vec3.transformMat4(camPos, camPos, this.invMatrix);
+        const blx = Math.floor(camPos[0] / 640);
+        const blz = Math.floor(camPos[2] / 640);
+
         const matrix = mat4.create();
-        for (let b of this.iterateBlocks()) {
+        for (let b of drawStep === 0 ? this.iterateBlocksFrontToBack(blx, blz) : this.iterateBlocksBackToFront(blx, blz)) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
             b.block.prepareToRender(device, renderInstManager, modelCtx, matrix, drawStep);
@@ -158,8 +188,15 @@ export class MapInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
 
+        const camPos = vec3.create(modelCtx.viewerInput.camera.worldMatrix[12],
+            modelCtx.viewerInput.camera.worldMatrix[13],
+            modelCtx.viewerInput.camera.worldMatrix[14]);
+        vec3.transformMat4(camPos, camPos, this.invMatrix);
+        const blx = Math.floor(camPos[0] / 640);
+        const blz = Math.floor(camPos[2] / 640);
+
         const matrix = mat4.create();
-        for (let b of this.iterateBlocks()) {
+        for (let b of this.iterateBlocksBackToFront(blx, blz)) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
             b.block.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix);
@@ -172,8 +209,15 @@ export class MapInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
 
+        const camPos = vec3.create(modelCtx.viewerInput.camera.worldMatrix[12],
+            modelCtx.viewerInput.camera.worldMatrix[13],
+            modelCtx.viewerInput.camera.worldMatrix[14]);
+        vec3.transformMat4(camPos, camPos, this.invMatrix);
+        const blx = Math.floor(camPos[0] / 640);
+        const blz = Math.floor(camPos[2] / 640);
+
         const matrix = mat4.create();
-        for (let b of this.iterateBlocks()) {
+        for (let b of this.iterateBlocksBackToFront(blx, blz)) {
             mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(matrix, this.matrix, matrix);
             b.block.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix);
