@@ -471,7 +471,9 @@ export function parse(buffer: ArrayBufferSlice): AnimGroup {
             let visUpdIdx = visUpdOffs + visUpdStart * 0x02;
             for (let k = 0; k < visUpdCount; k++, visUpdIdx += 0x02) {
                 const indexDelta = view.getUint8(visUpdIdx + 0x00);
-                const value = !!view.getUint8(visUpdIdx + 0x01);
+                const rawValue = view.getUint8(visUpdIdx + 0x01);
+                assert(rawValue === 0x01 || rawValue === 0xFF);
+                const value = rawValue === 0x01 ? true : false;
                 visUpd.push({ indexDelta, value });
             }
 
@@ -761,7 +763,6 @@ export class AnimGroupInstance {
     private animNode: Float32Array;
     private anim: AnimGroupData_Animation | null = null;
     private animTime: number = 0;
-    private extraVis: BitMap;
 
     public modelMatrix = mat4.create();
 
@@ -781,9 +782,6 @@ export class AnimGroupInstance {
         this.animVis = new BitMap(animGroup.vis.numBits);
         this.animNode = new Float32Array(animGroup.node.length);
         this.animReset();
-
-        this.extraVis = new BitMap(animGroup.vis.numBits);
-        this.extraVis.fill(true);
     }
 
     public playAnimation(s: string): void {
@@ -898,7 +896,7 @@ export class AnimGroupInstance {
         const groups = this.animGroupData.animGroup.groups;
         const group = groups[groupIndex];
 
-        if (this.animVis.getBit(group.visIdx) && this.extraVis.getBit(group.visIdx)) {
+        if (this.animVis.getBit(group.visIdx)) {
             const m = this.nodeMatrixStack.push();
 
             const parentNodeIdx = (group.ssc && parentIndex >= 0) ? groups[parentIndex].nodeIdx : -1;
