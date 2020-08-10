@@ -5367,7 +5367,6 @@ export class ElectricRailHolder extends NameObj {
                 const railTemplate = renderInstManager.pushTemplateRenderInst();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
                 rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper);
-                materialInstance.materialHelper.allocateMaterialParamsDataOnInst(railTemplate, materialParams);
                 renderInstManager.popTemplateRenderInst();
             }
 
@@ -5592,6 +5591,9 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
 
     public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx): void {
         const renderInst = renderInstManager.newRenderInst();
+        const mtx = materialParams.u_TexMtx[1];
+        mat4.identity(mtx);
+        materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.ddraw.setOnRenderInst(renderInst);
         renderInstManager.submitRenderInst(renderInst);
     }

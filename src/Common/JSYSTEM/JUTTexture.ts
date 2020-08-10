@@ -7,13 +7,9 @@ import { Texture } from "../../viewer";
 import { TextureMapping } from "../../TextureHolder";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain } from "../../gx/gx_render";
-import { calcMipChain } from "../../gx/gx_texture";
+import { calcMipChain, TextureInputGX } from "../../gx/gx_texture";
 
-export interface BTI_Texture {
-    name: string;
-    format: GX.TexFormat;
-    width: number;
-    height: number;
+export interface BTI_Texture extends TextureInputGX {
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
     minFilter: GX.TexFilter;
@@ -21,12 +17,6 @@ export interface BTI_Texture {
     minLOD: number;
     maxLOD: number;
     lodBias: number;
-    mipCount: number;
-    data: ArrayBufferSlice | null;
-
-    // Palette data
-    paletteFormat: GX.TexPalette;
-    paletteData: ArrayBufferSlice | null;
 }
 
 export function readBTI_Texture(buffer: ArrayBufferSlice, name: string, copyData: boolean = false): BTI_Texture {

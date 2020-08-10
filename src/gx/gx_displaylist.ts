@@ -166,6 +166,7 @@ export interface LoadOptions {
 export interface VtxLoader {
     loadedVertexLayout: LoadedVertexLayout;
     parseDisplayList: (srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions) => LoadedVertexData;
+    loadVertexDataInto: (dst: DataView, dstOffs: number, loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]) => void;
     loadVertexData: (loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]) => void;
 
     // Quick helper.
@@ -581,7 +582,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
 
 //#region Vertex Loader JIT
 type SingleVtxLoaderFunc = (dstVertexDataView: DataView, dstVertexDataOffs: number, dlView: DataView, dlOffs: number, vtxArrayViews: DataView[], vtxArrayStrides: number[]) => number;
-type SingleVatLoaderFunc = (dst: LoadedVertexData, loadedVertexLayout: LoadedVertexLayout, dstVertexDataView: DataView, dstVertexDataOffs: number, dlView: DataView, vtxArrayViews: DataView[], vtxArrayStrides: number[]) => number;
+type SingleVatLoaderFunc = (dstVertexDataView: DataView, dstVertexDataOffs: number, loadedVertexLayout: LoadedVertexLayout, dlView: DataView, drawCalls: DrawCall[], vtxArrayViews: DataView[], vtxArrayStrides: number[]) => number;
 
 function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: VatLayout): string {
     function compileVtxArrayViewName(vtxAttrib: GX.Attr): string {
@@ -851,9 +852,9 @@ function runVertices(dstVertexDataView, dstVertexDataOffs, dlView, drawCallIdx, 
 function compileSingleVatLoader(loadedVertexLayout: LoadedVertexLayout, vatLayout: VatLayout): SingleVatLoaderFunc {
     const runVertices = generateRunVertices(loadedVertexLayout, vatLayout);
     const source = `
-function runVertices(dst, loadedVertexLayout, dstVertexDataView, dstVertexDataOffs, dlView, vtxArrayViews, vtxArrayStrides) {
-    for (let i = 0; i < dst.drawCalls.length; i++) {
-        const drawCall = dst.drawCalls[i];
+function runVertices(dstVertexDataView, dstVertexDataOffs, loadedVertexLayout, dlView, drawCalls, vtxArrayViews, vtxArrayStrides) {
+    for (let i = 0; i < drawCalls.length; i++) {
+        const drawCall = drawCalls[i];
 
         let drawCallIdx = drawCall.srcOffs;
         for (let j = 0; j < drawCall.vertexCount; j++) {
@@ -1107,7 +1108,7 @@ class VtxLoaderImpl implements VtxLoader {
         return { indexData, totalIndexCount, totalVertexCount, draws: draws, vertexId, vertexBuffers, dlView, drawCalls };
     }
 
-    public loadVertexData(dst: LoadedVertexData, vtxArrays: GX_Array[]): void {
+    public loadVertexDataInto(dst: DataView, dstOffs: number, loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]): void {
         const vtxArrayViews: DataView[] = [];
         const vtxArrayStrides: number[] = [];
         for (let i = 0; i < GX.Attr.MAX; i++) {
@@ -1117,30 +1118,34 @@ class VtxLoaderImpl implements VtxLoader {
             }
         }
 
-        const dlView = assertExists(dst.dlView);
-        const drawCalls = assertExists(dst.drawCalls);
+        const dlView = assertExists(loadedVertexData.dlView);
+        const drawCalls = assertExists(loadedVertexData.drawCalls);
 
-        const dstVertexData = assertExists(dst.vertexBuffers[0]);
-        const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * dst.totalVertexCount;
-        assert(dstVertexData.byteLength >= dstVertexDataSize);
-        const dstVertexDataView = new DataView(dstVertexData);
-        let dstVertexDataOffs = 0;
+        const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * loadedVertexData.totalVertexCount;
+        assert(dst.byteLength >= dstVertexDataSize);
+        let dstVertexDataOffs = dstOffs;
 
         // Now make the data.
 
         if (this.singleVatLoader !== null) {
-            this.singleVatLoader(dst, this.loadedVertexLayout, dstVertexDataView, dstVertexDataOffs, dlView, vtxArrayViews, vtxArrayStrides);
+            this.singleVatLoader(dst, dstVertexDataOffs, this.loadedVertexLayout, dlView, drawCalls, vtxArrayViews, vtxArrayStrides);
         } else {
             for (let i = 0; i < drawCalls.length; i++) {
                 const drawCall = drawCalls[i];
 
                 let drawCallIdx = drawCall.srcOffs;
                 for (let j = 0; j < drawCall.vertexCount; j++) {
-                    drawCallIdx = this.vtxLoaders[drawCall.vertexFormat](dstVertexDataView, dstVertexDataOffs, dlView, drawCallIdx, vtxArrayViews, vtxArrayStrides);
+                    drawCallIdx = this.vtxLoaders[drawCall.vertexFormat](dst, dstVertexDataOffs, dlView, drawCallIdx, vtxArrayViews, vtxArrayStrides);
                     dstVertexDataOffs += this.loadedVertexLayout.vertexBufferStrides[0];
                 }
             }
         }
+    }
+
+    public loadVertexData(loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]): void {
+        const dstVertexData = assertExists(loadedVertexData.vertexBuffers[0]);
+        const dstVertexDataView = new DataView(dstVertexData);
+        return this.loadVertexDataInto(dstVertexDataView, 0, loadedVertexData, vtxArrays);
     }
 
     public runVertices(vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions): LoadedVertexData {

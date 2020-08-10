@@ -71,10 +71,10 @@ export class ShapeData {
             const mtxGroup = this.shape.mtxGroups[i];
 
             assert(mtxGroup.loadedVertexData.draws.length === 1);
-            const packet = mtxGroup.loadedVertexData.draws[0];
-            packet.indexOffset = totalIndexCount;
-            totalIndexCount += packet.indexCount;
-            this.draws.push(packet);
+            const draw = mtxGroup.loadedVertexData.draws[0];
+            draw.indexOffset = totalIndexCount;
+            totalIndexCount += draw.indexCount;
+            this.draws.push(draw);
         }
     }
 

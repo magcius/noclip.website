@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { openSync, readSync, closeSync, writeFileSync, mkdirSync } from "fs";
-import { readString, hexzero } from "../../util";
+import { readString, hexzero, leftPad } from "../../util";
 import { assert } from "console";
 
 // Ported from "unpack.py" by Murugo.
@@ -85,12 +85,46 @@ function dumpObjectNames(elf: ArrayBufferSlice): void {
     const view = elf.createDataView();
 
     const nametableOffs = 0xE06B8;
-    let idx = nametableOffs;
+    const objectDescTableOffs = 0xCDF70;
+
+    let nameIdx = nametableOffs, objectDescIdx = objectDescTableOffs;
     for (let i = 0; i < 1718; i++) {
-        const objectName = parseName(view, idx, 0x50);
-        console.log(hexzero(i, 4), objectName);
-        idx += 0x50;
+        const internalNamePtr = view.getUint32(objectDescIdx + 0x00, true);
+        const internalName = readString(elf, internalNamePtr - 0xFF000);
+
+        const objectName = parseName(view, nameIdx, 0x50);
+        console.log(`${leftPad('' + i, 4)}\t${hexzero(i, 4)}\t${internalName}\t${objectName}`);
+        nameIdx += 0x50;
+        objectDescIdx += 0x24;
     }
+}
+
+function extractGalleryIndex(pathOutBase: string, elf: ArrayBufferSlice): void {
+    const view = elf.createDataView();
+
+    const nametableOffs = 0xE06B8;
+    const objectDescTableOffs = 0xCDF70;
+    const objectFileTableOffs = 0x180E50;
+    const objectBaseLBA = 0x136B8D;
+    const galleryObjects: any[] = [];
+
+    let nameIdx = nametableOffs, objectDescIdx = objectDescTableOffs, objectFileIdx = objectFileTableOffs;
+    for (let i = 0; i < 1718; i++) {
+        const internalNamePtr = view.getUint32(objectDescIdx + 0x00, true);
+        const internalName = readString(elf, internalNamePtr - 0xFF000);
+        const lba = objectBaseLBA + view.getUint32(objectFileIdx + 0x08, true);
+        const filename = `${objectFileTableOffs.toString(16)}/${lba.toString(16)}.bin`;
+
+        const objectName = parseName(view, nameIdx, 0x50);
+        nameIdx += 0x50;
+        objectDescIdx += 0x24;
+        objectFileIdx += 0x10;
+
+        galleryObjects.push({ Name: objectName, InternalName: internalName, Filename: filename });
+    }
+
+    const data = JSON.stringify(galleryObjects);
+    writeFileSync(`${pathBaseOut}/gallery.json`, data);
 }
 
 class BitStream {
@@ -153,39 +187,50 @@ function extractCompressedFile(buffer: ArrayBufferSlice, rlparam: number, uncomp
     return dst.buffer as ArrayBuffer;
 }
 
-function extractFileTable(outPath: string, isoFilename: string, elf: ArrayBufferSlice, fileTableOffs: number, count: number, baseLBA: number = 0x00): void {
+interface ExtractedFile {
+    lba: number;
+    buffer: ArrayBuffer;
+}
+
+function extractFile(isoFilename: string, elf: ArrayBufferSlice, fileTableOffs: number, baseLBA: number = 0): ExtractedFile {
     const view = elf.createDataView();
 
+    const rlparam = view.getUint32(fileTableOffs + 0x00, true);
+    const uncompressedSizeAndFlags = view.getUint32(fileTableOffs + 0x04, true);
+    const lba = baseLBA + view.getUint32(fileTableOffs + 0x08, true);
+    const compressedSize = view.getUint32(fileTableOffs + 0x0C, true);
+
+    const isCompressed = !!(uncompressedSizeAndFlags & 0x01);
+    const enforceChecksum = !!(uncompressedSizeAndFlags & 0x04);
+    const uncompressedSize = uncompressedSizeAndFlags >>> 4;
+
+    // Make sure to include space for the 0x10-byte header
+    const headerSize = 0x10;
+
+    let buffer: ArrayBuffer;
+    if (isCompressed) {
+        const compressedData = iso9660GetDataLBA(isoFilename, lba, headerSize + compressedSize).slice(headerSize);
+        buffer = extractCompressedFile(compressedData, rlparam, uncompressedSize);
+    } else {
+        buffer = iso9660GetDataLBA(isoFilename, lba, headerSize + uncompressedSize).copyToBuffer(headerSize);
+    }
+
+    return { lba, buffer };
+}
+
+function extractFileTable(outPath: string, isoFilename: string, elf: ArrayBufferSlice, fileTableOffs: number, count: number, baseLBA: number = 0x00): void {
     const outFolderPath = `${outPath}/${fileTableOffs.toString(16)}`;
     mkdirSync(outFolderPath, { recursive: true });
 
     let idx = fileTableOffs;
     for (let i = 0; i < count; i++, idx += 0x10) {
-        const rlparam = view.getUint32(idx + 0x00, true);
-        const uncompressedSizeAndFlags = view.getUint32(idx + 0x04, true);
-        const lba = baseLBA + view.getUint32(idx + 0x08, true);
-        const compressedSize = view.getUint32(idx + 0x0C, true);
+        const file = extractFile(isoFilename, elf, idx, baseLBA);
 
-        const isCompressed = !!(uncompressedSizeAndFlags & 0x01);
-        const enforceChecksum = !!(uncompressedSizeAndFlags & 0x04);
-        const uncompressedSize = uncompressedSizeAndFlags >>> 4;
-
-        // Make sure to include space for the 0x10-byte header
-        const headerSize = 0x10;
-
-        let buffer: ArrayBuffer;
-        if (isCompressed) {
-            const compressedData = iso9660GetDataLBA(isoFilename, lba, headerSize + compressedSize).slice(headerSize);
-            buffer = extractCompressedFile(compressedData, rlparam, uncompressedSize);
-        } else {
-            buffer = iso9660GetDataLBA(isoFilename, lba, headerSize + uncompressedSize).copyToBuffer(headerSize);
-        }
-
-        const filename = `${lba.toString(16)}.bin`;
+        const filename = `${file.lba.toString(16)}.bin`;
         const outFilePath = `${outFolderPath}/${filename}`;
 
         console.log('Extracted', outFilePath);
-        writeFileSync(outFilePath, Buffer.from(buffer));
+        writeFileSync(outFilePath, Buffer.from(file.buffer));
     }
 }
 
@@ -196,6 +241,7 @@ function main() {
     const isoFilename = `${pathBaseIn}/KatamariDamacy.iso`;
 
     const elf = iso9660GetDataFilename(isoFilename, `SLUS_210.08;1`);
+    extractGalleryIndex(pathBaseOut, elf);
     // dumpObjectNames(elf);
 
     extractFileTable(pathBaseOut, isoFilename, elf, 0x17C340, 0x4);
@@ -208,8 +254,9 @@ function main() {
     const objectCount = 1718;
     extractFileTable(pathBaseOut, isoFilename, elf, objectFileTableOffs, objectCount, objectBaseLBA);
 
-    writeBufferSync(`${pathBaseOut}/levelBlock.bin`,        elf.slice(0XBF1A0, 0XC0034));
-    writeBufferSync(`${pathBaseOut}/objectBlock.bin`,       elf.slice(0xCDF70, 0XDD108));
+    writeBufferSync(`${pathBaseOut}/levelBlock.bin`,        elf.slice(0xBF1A0, 0xC0034));
+    writeBufferSync(`${pathBaseOut}/objectBlock.bin`,       elf.slice(0xCDF70, 0xDD108));
+    writeBufferSync(`${pathBaseOut}/collectionBlock.bin`,   elf.slice(0xDD108, 0xE06B8));
     writeBufferSync(`${pathBaseOut}/transformBlock.bin`,    elf.slice(0x111260, 0x112FFC));
     writeBufferSync(`${pathBaseOut}/randomBlock.bin`,       elf.slice(0x116980, 0x117238));
     writeBufferSync(`${pathBaseOut}/pathBlock.bin`,         elf.slice(0x117290, 0X1607B0)); // maybe split this up?

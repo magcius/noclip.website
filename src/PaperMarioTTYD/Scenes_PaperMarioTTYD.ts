@@ -9,6 +9,9 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController } from '../Camera';
 import { linkREL } from './REL';
 import { evt_disasm_ctx } from './evt';
+import * as AnimGroup from './AnimGroup';
+import { computeModelMatrixS } from '../MathHelpers';
+import { mat4 } from 'gl-matrix';
 
 const pathBase = `PaperMarioTTYD`;
 
@@ -25,12 +28,13 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
 
-        const [dBuffer, tBuffer, bgBuffer] = await Promise.all([
+        const [dBuffer, tBuffer, bgBuffer, ag2tg] = await Promise.all([
             // The ".blob" names are unfortunate. It's a workaround for Parcel being dumb as a bag of rocks
             // and not allowing files without extensions to be served... sigh...
             dataFetcher.fetchData(`${pathBase}/m/${this.id}/d.blob`),
             dataFetcher.fetchData(`${pathBase}/m/${this.id}/t.blob`),
             dataFetcher.fetchData(`${pathBase}/b/${this.id}.tpl`, { allow404: true }),
+            dataFetcher.fetchData(`${pathBase}/a/ag2tg.bin`),
         ]);
 
         let rel: ArrayBufferSlice | null = null;
@@ -41,7 +45,7 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             const mapFile = await dataFetcher.fetchData(`${pathBase}/G8ME01.map`, { allow404: true });
 
             const scriptExec = new evt_disasm_ctx(rel, this.relBaseAddress!, this.relEntry!, mapFile);
-            scriptExec.disasm();
+            // scriptExec.disasm();
         }
 
         const d = World.parse(dBuffer);
@@ -66,7 +70,32 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             textureHolder.setTextureOverride('tou_k_dummy', { width: 1, height: 1, flipY: false, gfxTexture });
         }
 
-        return new TTYDRenderer(device, d, textureHolder, backgroundTextureName);
+        const renderer = new TTYDRenderer(device, d, textureHolder, backgroundTextureName);
+        renderer.animGroupCache = new AnimGroup.AnimGroupDataCache(device, dataFetcher, pathBase, ag2tg);
+
+        /*
+        ['c_kurio', 'c_kameki', 'c_pinky', 'c_akarin', 'c_opuku', 'c_pokopi'].forEach(async (g, i) => {
+            const agd = await renderer.animGroupCache!.requestAnimGroupData(g);
+            const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd);
+            computeModelMatrixS(agi1.modelMatrix, 100);
+            mat4.translate(agi1.modelMatrix, agi1.modelMatrix, [i * 20, 0, 0]);
+            agi1.playAnimation('S_1');
+            renderer.animGroupInstances.push(agi1);
+
+            const agi2 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd);
+            computeModelMatrixS(agi2.modelMatrix, 100);
+            mat4.translate(agi2.modelMatrix, agi2.modelMatrix, [i * 20, 20, 0]);
+            agi2.playAnimation('T_1');
+            renderer.animGroupInstances.push(agi2);
+        });
+
+        const agd = await renderer.animGroupCache!.requestAnimGroupData('c_nagehone');
+        const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd);
+        computeModelMatrixS(agi1.modelMatrix, 100);
+        renderer.animGroupInstances.push(agi1);
+        */
+
+        return renderer;
     }
 }
 

@@ -926,10 +926,12 @@ export interface MotionParameters {
 }
 
 export const enum MotionID {
+    ScaredBird    = 0x06,
     PathSpin      = 0x13,
     PathRoll      = 0x14,
     Spin          = 0x15,
     Bob           = 0x16,
+    Hop           = 0x19,
     Flip          = 0x1E,
     Sway          = 0x20,
     WhackAMole    = 0x22,
@@ -938,6 +940,8 @@ export const enum MotionID {
 export const enum MotionActionID {
     None          = 0x00,
     PathCollision = 0x02,
+    WaitForPlayer = 0x04,
+    FlyInCircles  = 0x0D,
     PathSpin      = 0x14,
     PathRoll      = 0x15,
     Misc          = 0x16,
@@ -951,14 +955,14 @@ interface MotionActionTableEntry {
 }
 
 const motionActionTable: MotionActionTableEntry[] = [
-    /* 0x00 */ { main: 0x04,                         alt: 0x05 },
+    /* 0x00 */ { main: MotionActionID.WaitForPlayer, alt: 0x05 },
     /* 0x01 */ { main: 0x03,                         alt: 0x05 },
     /* 0x02 */ { main: MotionActionID.PathCollision, alt: 0x06 },
     /* 0x03 */ { main: 0x03,                         alt: 0x07 },
-    /* 0x04 */ { main: 0x04,                         alt: 0x08 },
+    /* 0x04 */ { main: MotionActionID.WaitForPlayer, alt: 0x08 },
     /* 0x05 */ { main: 0x0C,                         alt: 0x09 },
-    /* 0x06 */ { main: 0x04,                         alt: 0x0D },
-    /* 0x07 */ { main: 0x04,                         alt: 0x0A },
+    /* 0x06 */ { main: MotionActionID.WaitForPlayer, alt: MotionActionID.FlyInCircles },
+    /* 0x07 */ { main: MotionActionID.WaitForPlayer, alt: 0x0A },
     /* 0x08 */ { main: MotionActionID.PathCollision, alt: 0x0B },
     /* 0x09 */ { main: 0x03,                         alt: 0x0A },
     /* 0x0A */ { main: 0x01,                         alt: 0x0E },
@@ -966,7 +970,7 @@ const motionActionTable: MotionActionTableEntry[] = [
     /* 0x0C */ { main: 0x0F,                         alt: 0x05 },
     /* 0x0D */ { main: 0x0C,                         alt: 0x10 },
     /* 0x0E */ { main: 0x11,                         alt: 0x12 },
-    /* 0x0F */ { main: 0x04,                         alt: 0x12 },
+    /* 0x0F */ { main: MotionActionID.WaitForPlayer, alt: 0x12 },
     /* 0x10 */ { main: 0x13,                         alt: 0x09 },
     /* 0x11 */ { main: 0x13,                         alt: 0x09 },
     /* 0x12 */ { main: 0x0C,                         alt: 0x09 },
@@ -982,7 +986,7 @@ const motionActionTable: MotionActionTableEntry[] = [
     /* 0x1C */ { main: MotionActionID.PathSetup,     alt: 0x1A },
     /* 0x1D */ { main: MotionActionID.PathSetup,     alt: 0x1A },
     /* 0x1E */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
-    /* 0x1F */ { main: 0x04,                         alt: 0x03 },
+    /* 0x1F */ { main: MotionActionID.WaitForPlayer, alt: 0x03 },
     /* 0x20 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
     /* 0x21 */ { main: 0x0C,                         alt: 0x09 },
     /* 0x22 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
@@ -1051,20 +1055,36 @@ export interface ObjectDefinition {
     speedIndex: number;
     altUpdate: number;
     dummyParent: boolean;
+
+    map: number;
+    mapRegion: number;
+    size: number;
+    category: number;
+    sortKey: number;
+    isRare: boolean;
 }
 
-export function parseObjectDefinition(data: ArrayBufferSlice, id: number): ObjectDefinition {
-    const view = data.createDataView();
-    const offs = id * 0x24;
+export function parseObjectDefinition(object: ArrayBufferSlice, collection: ArrayBufferSlice, id: number): ObjectDefinition {
+    const objView = object.createDataView();
+    const objOffs = id * 0x24;
+    const collView = collection.createDataView();
+    const collOffs = id * 0x08;
 
     // internal name pointer
     // two volume-related floats
-    const stayLevel = view.getUint8(offs + 0x0C) !== 0;
-    const speedIndex = view.getInt8(offs + 0x13);
-    const altUpdate = view.getInt8(offs + 0x14);
-    const dummyParent = view.getUint8(offs + 0x21) !== 0;
+    const stayLevel = objView.getUint8(objOffs + 0x0C) !== 0;
+    const speedIndex = objView.getInt8(objOffs + 0x13);
+    const altUpdate = objView.getInt8(objOffs + 0x14);
+    const dummyParent = objView.getUint8(objOffs + 0x21) !== 0;
 
-    return { stayLevel, speedIndex, altUpdate, dummyParent};
+    const map = collView.getInt8(collOffs + 0x00);
+    const mapRegion = collView.getInt8(collOffs + 0x01);
+    const size = collView.getInt8(collOffs + 0x02);
+    const category = collView.getInt8(collOffs + 0x03);
+    const sortKey = collView.getInt16(collOffs + 0x04, true);
+    const isRare = collView.getInt8(collOffs + 0x06) !== 0;
+
+    return { stayLevel, speedIndex, altUpdate, dummyParent, map, mapRegion, size, category, sortKey, isRare };
 }
 
 export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIndex: number): Int16Array | null {
@@ -1156,6 +1176,48 @@ export interface PartTransform {
     rotation: vec3;
 }
 
+export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBufferSlice, firstSectorIndex: number, transformBuffer: ArrayBufferSlice, objectId: number): ObjectModel | null {
+    const view = buffer.createDataView();
+
+    const firstSectorOffs = 0x04 + firstSectorIndex * 0x04;
+    const lod0Offs = view.getUint32(firstSectorOffs + 0x00, true);
+    const lod1Offs = view.getUint32(firstSectorOffs + 0x04, true);
+    const lod2Offs = view.getUint32(firstSectorOffs + 0x08, true);
+    const texDataOffs = view.getUint32(firstSectorOffs + 0x0C, true);
+    const unk10Offs = view.getUint32(firstSectorOffs + 0x10, true);
+    const clutAOffs = view.getUint32(firstSectorOffs + 0x14, true);
+    const clutBOffs = view.getUint32(firstSectorOffs + 0x18, true);
+    const collisionOffs = view.getUint32(firstSectorOffs + 0x1C, true);
+    const unk20Offs = view.getUint32(firstSectorOffs + 0x20, true);
+    const descriptionOffs = view.getUint32(firstSectorOffs + 0x24, true);
+    const audioOffs = view.getUint32(firstSectorOffs + 0x28, true);
+
+    // Missing object?
+    if (sectorIsNIL(buffer, lod0Offs))
+        return null;
+
+    if (!sectorIsNIL(buffer, texDataOffs)) {
+        // Parse texture data.
+        parseDIRECT(gsMemoryMap[0], buffer.slice(texDataOffs));
+        parseDIRECT(gsMemoryMap[1], buffer.slice(texDataOffs));
+
+        parseDIRECT(gsMemoryMap[0], buffer.slice(clutAOffs));
+        parseDIRECT(gsMemoryMap[1], buffer.slice(clutBOffs));
+    }
+
+    // currently isn't needed
+    // let collision: CollisionList[] = [];
+    // if (!sectorIsNIL(buffer, collisionOffs))
+    //     collision = parseCollisionLists(buffer, collisionOffs);
+
+    // Load in LOD 0.
+    const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
+    if (sector === null)
+        return null;
+    const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
+    return { id: objectId, sector, transforms, bbox: computeObjectAABB(sector, transforms) };
+}
+
 export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
@@ -1171,38 +1233,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
         const firstSectorIndex = 0x09 + objectId * 0x0B;
         assert(firstSectorIndex + 0x0B <= numSectors);
 
-        const firstSectorOffs = 0x04 + firstSectorIndex * 0x04;
-        const lod0Offs = view.getUint32(firstSectorOffs + 0x00, true);
-        const lod1Offs = view.getUint32(firstSectorOffs + 0x04, true);
-        const lod2Offs = view.getUint32(firstSectorOffs + 0x08, true);
-        const texDataOffs = view.getUint32(firstSectorOffs + 0x0C, true);
-        const unk10Offs = view.getUint32(firstSectorOffs + 0x10, true);
-        const clutAOffs = view.getUint32(firstSectorOffs + 0x14, true);
-        const clutBOffs = view.getUint32(firstSectorOffs + 0x18, true);
-        const collisionOffs = view.getUint32(firstSectorOffs + 0x1C, true);
-        const unk20Offs = view.getUint32(firstSectorOffs + 0x20, true);
-        const descriptionOffs = view.getUint32(firstSectorOffs + 0x24, true);
-        const audioOffs = view.getUint32(firstSectorOffs + 0x28, true);
-
-        // Missing object?
-        if (sectorIsNIL(buffer, lod0Offs))
-            return null;
-
-        if (!sectorIsNIL(buffer, texDataOffs)) {
-            // Parse texture data.
-            parseDIRECT(gsMemoryMap[0], buffer.slice(texDataOffs));
-            parseDIRECT(gsMemoryMap[1], buffer.slice(texDataOffs));
-
-            parseDIRECT(gsMemoryMap[0], buffer.slice(clutAOffs));
-            parseDIRECT(gsMemoryMap[1], buffer.slice(clutBOffs));
-        }
-
-        // Load in LOD 0.
-        const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
-        if (sector === null)
-            return null;
-        const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
-        return {id: objectId, sector, transforms, bbox: computeObjectAABB(sector, transforms)};
+        return parseObjectModel(gsMemoryMap, buffer, firstSectorIndex, transformBuffer, objectId);
     }
 
     const objectModels: ObjectModel[] = [];
