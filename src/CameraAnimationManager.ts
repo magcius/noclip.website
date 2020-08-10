@@ -529,7 +529,10 @@ export class CameraAnimationManager {
             return;
         }
 
-        this.calculateTangents(keyframes[keyframes.length - 1], keyframes[0], keyframes[1]);
+        if (this.loopAnimation)
+            this.calculateTangents(keyframes[keyframes.length - 1], keyframes[0], keyframes[1]);
+        else
+            this.calculateTangents(keyframes[0], keyframes[0], keyframes[1]);
 
         for (let i = 1; i < keyframes.length - 1; i++) {
             this.calculateTangents(keyframes[i - 1], keyframes[i], keyframes[i + 1]);
