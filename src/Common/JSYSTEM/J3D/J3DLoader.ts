@@ -1175,8 +1175,8 @@ function readTEX1Chunk(buffer: ArrayBufferSlice): TEX1 {
                 format: btiTexture.format,
                 mipCount: btiTexture.mipCount,
                 data: btiTexture.data,
-                paletteFormat: btiTexture.paletteFormat,
-                paletteData: btiTexture.paletteData,
+                paletteFormat: btiTexture.paletteFormat!,
+                paletteData: btiTexture.paletteData!,
             };
             textureDatas.push(textureData);
             textureDataIndex = textureDatas.length - 1;
