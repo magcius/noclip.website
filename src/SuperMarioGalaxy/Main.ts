@@ -48,7 +48,7 @@ import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
-import { GravityExplainer2 } from './Actors/GravityExplainer';
+import { GravityExplainer2, GravityExplainer } from './Actors/GravityExplainer';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -1276,7 +1276,7 @@ class SMGSpawner {
         this.placeStageData(stageDataHolder, true);
         this.placeStageData(stageDataHolder, false);
 
-        this.sceneObjHolder.gravityExplainer = new GravityExplainer2(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
+        // this.sceneObjHolder.gravityExplainer = new GravityExplainer(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
 
         // We trigger "after placement" here because legacy objects should not require it,
         // and nothing should depend on legacy objects being placed. Since legacy objects

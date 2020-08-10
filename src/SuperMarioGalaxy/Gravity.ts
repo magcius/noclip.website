@@ -176,13 +176,15 @@ export abstract class PlanetGravity {
     // This is a noclip special, and is basically a hack for GravityExplainer.
     protected abstract generateOwnRandomPoint(dst: vec3): void;
 
-    public generateRandomPoint(dst: vec3): void {
-        while (true) {
+    public generateRandomPoint(dst: vec3): boolean {
+        for (let i = 0; i < 1000; i++) {
             this.generateOwnRandomPoint(dst);
 
             if (this.calcOwnGravityVector(scratchVec3a, dst) >= 0)
-                break;
+                return true;
         }
+
+        return false;
     }
 
     public drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
@@ -766,7 +768,7 @@ export class CubeGravity extends PlanetGravity {
     }
 
     protected generateOwnRandomPoint(dst: vec3): void {
-        const range = this.range >= 0.0 ? this.range : 6.0;
+        const range = this.range >= 0.0 ? this.range / 1000.0 : 6.0;
         generateRandomPointInMatrix(dst, this.mtx, range);
     }
 }

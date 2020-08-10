@@ -47,6 +47,7 @@ class GravityExplainerArrow {
     public time: number = 0.0;
     public lifetime = 360.0;
     public color = colorNewCopy(White);
+    public alpha: number = 1.0;
     public scale: number = 1.0;
 }
 
@@ -72,7 +73,7 @@ export class GravityExplainer extends LiveActor {
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
         this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
 
-        const mb = new GXMaterialBuilder('GravityExplainer');
+        const mb = new GXMaterialBuilder('GravityExplainerArrow');
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
@@ -81,7 +82,7 @@ export class GravityExplainer extends LiveActor {
         mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
         mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
@@ -108,14 +109,12 @@ export class GravityExplainer extends LiveActor {
                 const arrow = new GravityExplainerArrow();
                 arrow.scale = 0.5;
 
-                grav.generateRandomPoint(arrow.coord);
+                if (!grav.generateRandomPoint(arrow.coord))
+                    continue;
                 vec3.copy(arrow.pos, arrow.coord);
 
-                // Red/green color.
-                const hue = getRandomFloat(0.0, 0.2);
-                colorFromHSL(arrow.color, hue, 1.0, 0.5);
-
                 arrow.time = Math.random() * arrow.lifetime;
+                arrow.alpha = lerp(0.4, 0.8, Math.random());
 
                 this.arrows.push(arrow);
             }
@@ -164,6 +163,7 @@ export class GravityExplainer extends LiveActor {
                 arrow.color.a = 1.0;
 
             arrow.color.a *= this.globalFade;
+            arrow.color.a *= arrow.alpha;
         }
     }
 
@@ -950,10 +950,13 @@ class GravityExplainer2_CubeGravity extends LiveActor {
 
         getMatrixTranslation(scratchVec3, scratchMatrix);
         const aabb = new AABB(-1, -1, -1, 1, 1, 1);
-        drawWorldSpaceAABB(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, aabb, this.gravity.mtx);
+        // drawWorldSpaceAABB(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, aabb, this.gravity.mtx);
         // mat4.scale(scratchMatrix, this.gravity.mtx, [this.gravity.range, this.gravity.range, this.gravity.range]);
         // drawWorldSpaceAABB(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, aabb, scratchMatrix);
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, scratchVec3);
+
+        if (this.gravity.inverse)
+            t = 1.0 - t;
 
         for (let i = 0; i < 4; i++) {
             mat4.copy(scratchMatrix, this.gravity.mtx!);
@@ -1060,12 +1063,11 @@ export class GravityExplainer2 extends LiveActor {
         for (let i = 0; i < gravities.length; i++) {
             const gravity = gravities[i];
 
-            /*
             if (gravity instanceof PointGravity)
                 this.models.push(new GravityExplainer2_PointGravity(this.zoneAndLayer, sceneObjHolder, gravity));
             else if (gravity instanceof ParallelGravity)
                 this.models.push(new GravityExplainer2_ParallelGravity(this.zoneAndLayer, sceneObjHolder, gravity));
-            else if (gravity instanceof CubeGravity) {
+            else if (gravity instanceof CubeGravity)
                 this.models.push(new GravityExplainer2_CubeGravity(this.zoneAndLayer, sceneObjHolder, gravity));
 
                 /*
@@ -1079,7 +1081,7 @@ export class GravityExplainer2 extends LiveActor {
             }
             */
 
-            const numParticles = 500;
+            const numParticles = 0;
             for (let j = 0; j < numParticles; j++) {
                 const particle = new GravityExplainerParticle(this.zoneAndLayer, sceneObjHolder, gravity, scratchVec3);
             }
