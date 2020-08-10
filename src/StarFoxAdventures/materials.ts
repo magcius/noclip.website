@@ -1121,6 +1121,7 @@ class FurMaterial extends MaterialBase {
         const indStage0 = this.genIndTexStage();
         this.setIndTexOrder(indStage0, texCoord2, texMap2);
         this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
+
     
         // Stage 1: Fur map
         const texMap1 = this.genTexMap(makeFurMapMaterialTexture(this.factory));
@@ -1164,15 +1165,15 @@ class FurMaterial extends MaterialBase {
     
         if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
             this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
             this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
             this.ambColors[0] = (dst: Color, viewState: ViewState) => {
                 colorCopy(dst, viewState.outdoorAmbientColor);
             };
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
         // FIXME: Objects have different rules for color-channels than map blocks
         if (this.isMapBlock) {

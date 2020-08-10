@@ -153,10 +153,7 @@ export class MapInstance {
 
     private scratchMtx = mat4.create();
 
-    private prepareToRenderSortedBlocks(renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, frontToBack: boolean, fn: (mtx: mat4, b: BlockIter) => void) {
-        const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
-
+    private prepareToRenderSortedBlocks(modelCtx: ModelRenderContext, frontToBack: boolean, fn: (mtx: mat4, b: BlockIter) => void) {
         const mapPos = vec3.create(0, 0, 0);
         vec3.transformMat4(mapPos, mapPos, modelCtx.viewerInput.camera.worldMatrix);
         vec3.transformMat4(mapPos, mapPos, this.invMatrix);
@@ -168,24 +165,22 @@ export class MapInstance {
             mat4.mul(this.scratchMtx, this.matrix, this.scratchMtx);
             fn(this.scratchMtx, b);
         }
-
-        renderInstManager.popTemplateRenderInst();
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, drawStep: number) {
-        this.prepareToRenderSortedBlocks(renderInstManager, modelCtx, drawStep === 0, (mtx, b) => {
+        this.prepareToRenderSortedBlocks(modelCtx, drawStep === 0, (mtx, b) => {
             b.block.prepareToRender(device, renderInstManager, modelCtx, mtx, drawStep);
         });
     }
 
     public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext) {
-        this.prepareToRenderSortedBlocks(renderInstManager, modelCtx, false, (mtx, b) => {
+        this.prepareToRenderSortedBlocks(modelCtx, false, (mtx, b) => {
             b.block.prepareToRenderWaters(device, renderInstManager, modelCtx, mtx);
         });
     }
 
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext) {
-        this.prepareToRenderSortedBlocks(renderInstManager, modelCtx, false, (mtx, b) => {
+        this.prepareToRenderSortedBlocks(modelCtx, false, (mtx, b) => {
             b.block.prepareToRenderFurs(device, renderInstManager, modelCtx, mtx);
         });
     }
