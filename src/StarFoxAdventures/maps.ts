@@ -154,7 +154,7 @@ export class MapInstance {
     private scratchMtx = mat4.create();
 
     private prepareToRenderSortedBlocks(modelCtx: ModelRenderContext, frontToBack: boolean, fn: (mtx: mat4, b: BlockIter) => void) {
-        const mapPos = vec3.create(0, 0, 0);
+        const mapPos = vec3.create();
         vec3.transformMat4(mapPos, mapPos, modelCtx.viewerInput.camera.worldMatrix);
         vec3.transformMat4(mapPos, mapPos, this.invMatrix);
         const blx = Math.floor(mapPos[0] / 640);
