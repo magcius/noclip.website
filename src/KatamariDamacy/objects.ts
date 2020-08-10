@@ -106,8 +106,8 @@ export class ObjectRenderer {
 
         this.bbox = objectModel.bbox;
         this.partBBox = this.modelInstances[0].binModelData.binModel.bbox;
-        mat4.copy(this.modelMatrix, objectSpawn.modelMatrix);
-        mat4.getTranslation(this.prevPosition, this.modelMatrix);
+        mat4.copy(this.baseMatrix, objectSpawn.modelMatrix);
+        mat4.getTranslation(this.prevPosition, objectSpawn.modelMatrix);
     }
 
     public setParent(parent: ObjectRenderer): void {
