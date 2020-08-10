@@ -17,7 +17,7 @@ import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConsta
 import { GfxRenderInstManager, setSortKeyLayer, GfxRendererLayer, setSortKeyDepth } from '../../gfx/render/GfxRenderer';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../../Camera';
-import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType, CubeGravity } from '../Gravity';
+import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType, CubeGravity, SegmentGravity } from '../Gravity';
 import { isFirstStep, isGreaterEqualStep } from '../Spine';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { assertExists } from '../../util';
@@ -101,9 +101,9 @@ export class GravityExplainer extends LiveActor {
 
         for (let i = 0; i < gravities.length; i++) {
             const grav = gravities[i];
+            if (!(grav instanceof SegmentGravity))
+                continue;
             let count = 50;
-            if (i === 1)
-                count = 1000;
 
             for (let j = 0; j < count; j++) {
                 const arrow = new GravityExplainerArrow();

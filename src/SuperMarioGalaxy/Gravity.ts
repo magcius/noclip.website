@@ -794,7 +794,7 @@ export class PointGravity extends PlanetGravity {
     }
 }
 
-class SegmentGravity extends PlanetGravity {
+export class SegmentGravity extends PlanetGravity {
     private gravityPoints = nArray(2, () => vec3.create());
     private sideVector = vec3.create();
     private edgeValid = nArray(2, () => true);
