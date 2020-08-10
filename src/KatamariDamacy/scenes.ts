@@ -453,7 +453,8 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         renderer.motionCache = motionCache;
         const objectCache = new Map<number, BIN.ObjectDefinition | null>();
         for (let i = 0; i < renderer.objectRenderers.length; i++) {
-            const objectSpawn = renderer.objectRenderers[i].objectSpawn;
+            const object = renderer.objectRenderers[i];
+            const objectSpawn = object.objectSpawn;
             let motion: BIN.MotionParameters | null = null;
             if (objectSpawn.moveType >= 0) { // level 27 has a bunch of negative indices that aren't -1
                 if (!motionCache.has(objectSpawn.moveType))
@@ -464,7 +465,22 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             if (!objectCache.has(objectSpawn.objectId))
                 objectCache.set(objectSpawn.objectId, BIN.parseObjectDefinition(objectData, collectionData, objectSpawn.objectId));
             const objectDef = objectCache.get(objectSpawn.objectId)!;
-            renderer.objectRenderers[i].initMotion(objectDef, motion, missionSetupBin.zones, renderer.areaCollision[0], renderer.objectRenderers);
+            object.initMotion(objectDef, motion, missionSetupBin.zones, renderer.areaCollision[0], renderer.objectRenderers);
+
+            const altID = object.altModelID();
+            if (altID >= 0) {
+                for (let area = 0; area < missionSetupBin.objectSpawns.length; area++) {
+                    const altSpawn = missionSetupBin.objectSpawns[area].find((spawn) => spawn.objectId === altID);
+                    if (altSpawn) {
+                        const binModelSectorData = objectDatas[altSpawn.modelIndex];
+                        const objectModel = missionSetupBin.objectModels[altSpawn.modelIndex];
+
+                        const altRenderer = new ObjectRenderer(device, gfxCache, objectModel, binModelSectorData, objectSpawn);
+                        object.altObject = altRenderer;
+                        break;
+                    }
+                }
+            }
         }
 
         return renderer;

@@ -926,6 +926,7 @@ export interface MotionParameters {
 }
 
 export const enum MotionID {
+    ScaredBird    = 0x06,
     PathSpin      = 0x13,
     PathRoll      = 0x14,
     Spin          = 0x15,
@@ -939,6 +940,8 @@ export const enum MotionID {
 export const enum MotionActionID {
     None          = 0x00,
     PathCollision = 0x02,
+    WaitForPlayer = 0x04,
+    FlyInCircles  = 0x0D,
     PathSpin      = 0x14,
     PathRoll      = 0x15,
     Misc          = 0x16,
@@ -952,14 +955,14 @@ interface MotionActionTableEntry {
 }
 
 const motionActionTable: MotionActionTableEntry[] = [
-    /* 0x00 */ { main: 0x04,                         alt: 0x05 },
+    /* 0x00 */ { main: MotionActionID.WaitForPlayer, alt: 0x05 },
     /* 0x01 */ { main: 0x03,                         alt: 0x05 },
     /* 0x02 */ { main: MotionActionID.PathCollision, alt: 0x06 },
     /* 0x03 */ { main: 0x03,                         alt: 0x07 },
-    /* 0x04 */ { main: 0x04,                         alt: 0x08 },
+    /* 0x04 */ { main: MotionActionID.WaitForPlayer, alt: 0x08 },
     /* 0x05 */ { main: 0x0C,                         alt: 0x09 },
-    /* 0x06 */ { main: 0x04,                         alt: 0x0D },
-    /* 0x07 */ { main: 0x04,                         alt: 0x0A },
+    /* 0x06 */ { main: MotionActionID.WaitForPlayer, alt: MotionActionID.FlyInCircles },
+    /* 0x07 */ { main: MotionActionID.WaitForPlayer, alt: 0x0A },
     /* 0x08 */ { main: MotionActionID.PathCollision, alt: 0x0B },
     /* 0x09 */ { main: 0x03,                         alt: 0x0A },
     /* 0x0A */ { main: 0x01,                         alt: 0x0E },
@@ -967,7 +970,7 @@ const motionActionTable: MotionActionTableEntry[] = [
     /* 0x0C */ { main: 0x0F,                         alt: 0x05 },
     /* 0x0D */ { main: 0x0C,                         alt: 0x10 },
     /* 0x0E */ { main: 0x11,                         alt: 0x12 },
-    /* 0x0F */ { main: 0x04,                         alt: 0x12 },
+    /* 0x0F */ { main: MotionActionID.WaitForPlayer, alt: 0x12 },
     /* 0x10 */ { main: 0x13,                         alt: 0x09 },
     /* 0x11 */ { main: 0x13,                         alt: 0x09 },
     /* 0x12 */ { main: 0x0C,                         alt: 0x09 },
@@ -983,7 +986,7 @@ const motionActionTable: MotionActionTableEntry[] = [
     /* 0x1C */ { main: MotionActionID.PathSetup,     alt: 0x1A },
     /* 0x1D */ { main: MotionActionID.PathSetup,     alt: 0x1A },
     /* 0x1E */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
-    /* 0x1F */ { main: 0x04,                         alt: 0x03 },
+    /* 0x1F */ { main: MotionActionID.WaitForPlayer, alt: 0x03 },
     /* 0x20 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
     /* 0x21 */ { main: 0x0C,                         alt: 0x09 },
     /* 0x22 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
