@@ -23,6 +23,8 @@ interface ShaderLayer {
 }
 
 export interface Shader {
+    isAncient?: boolean;
+    isBeta?: boolean;
     layers: ShaderLayer[],
     flags: number;
     attrFlags: number;
@@ -50,6 +52,7 @@ function parseShaderLayer(data: DataView, texIds: number[], isBeta: boolean): Sh
 }
 
 interface ShaderFields {
+    isAncient?: boolean;
     isBeta?: boolean;
     size: number;
     numLayers: number;
@@ -79,6 +82,13 @@ export const BETA_MODEL_SHADER_FIELDS: ShaderFields = {
     size: 0x38,
     numLayers: 0x36,
     layers: 0x20,
+};
+
+export const ANCIENT_MAP_SHADER_FIELDS: ShaderFields = {
+    isAncient: true,
+    size: 0x3c,
+    numLayers: 0x3a,
+    layers: 0x24,
 };
 
 export enum ShaderFlags {
@@ -125,7 +135,18 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.layers.push(layer);
     }
 
-    if (!fields.isBeta) {
+    if (fields.isAncient) {
+        shader.isAncient = true;
+        shader.attrFlags = ShaderAttrFlags.CLR; // FIXME: where is this field if present?
+        shader.flags = ShaderFlags.CullBackface;
+    } else if (fields.isBeta) {
+        shader.isBeta = true;
+        shader.attrFlags = data.getUint8(0x34);
+        shader.flags = 0; // TODO: where is this field?
+        shader.hasAuxTex0 = data.getUint32(0x8) === 1;
+        shader.hasAuxTex1 = data.getUint32(0x14) === 1;
+        shader.hasAuxTex2 = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
+    } else {
         shader.flags = data.getUint32(0x3c);
         shader.attrFlags = data.getUint8(0x40);
         shader.hasAuxTex0 = data.getUint32(0x8) !== 0;
@@ -133,12 +154,6 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.auxTex2Num = data.getUint32(0x34);
         shader.hasAuxTex2 = shader.auxTex2Num != 0xffffffff;
         shader.furRegionsTexId = parseTexId(data, 0x38, texIds);
-    } else {
-        shader.attrFlags = data.getUint8(0x34);
-        shader.flags = 0; // TODO: where is this field?
-        shader.hasAuxTex0 = data.getUint32(0x8) === 1;
-        shader.hasAuxTex1 = data.getUint32(0x14) === 1;
-        shader.hasAuxTex2 = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
     }
 
     // console.log(`loaded shader: ${JSON.stringify(shader, null, '\t')}`);
@@ -519,6 +534,11 @@ class StandardMaterial extends MaterialBase {
             } else {
                 // TODO
             }
+
+            if (this.shader.isAncient) {
+                // XXX: show vertex colors in ancient maps
+                this.addTevStageForMultColor0A0();
+            }
         }
         
         if ((this.shader.flags & 0x40000000) || (this.shader.flags & 0x20000000)) {
@@ -552,6 +572,11 @@ class StandardMaterial extends MaterialBase {
             // FIXME: Objects have different rules for color-channels than map blocks
             if (this.isMapBlock) {
                 this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            }
+
+            if (this.shader.isAncient) {
+                // XXX: show vertex colors in ancient maps
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
             }
         }
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
@@ -1096,6 +1121,7 @@ class FurMaterial extends MaterialBase {
         const indStage0 = this.genIndTexStage();
         this.setIndTexOrder(indStage0, texCoord2, texMap2);
         this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
+
     
         // Stage 1: Fur map
         const texMap1 = this.genTexMap(makeFurMapMaterialTexture(this.factory));
@@ -1139,15 +1165,15 @@ class FurMaterial extends MaterialBase {
     
         if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
             this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
             this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
             this.ambColors[0] = (dst: Color, viewState: ViewState) => {
                 colorCopy(dst, viewState.outdoorAmbientColor);
             };
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
         // FIXME: Objects have different rules for color-channels than map blocks
         if (this.isMapBlock) {
