@@ -404,9 +404,10 @@ export class CameraAnimationManager {
         let length = 0;
         if (!vec3.exactEquals(this.prevPos, this.nextPos)) {
             vec3.copy(this.scratchVec1, this.prevPos);
-            for (let t = 0.0001; t <= 1; t += 0.0001) {
+            const numSteps = 10000;
+            for (let i = 1; i <= numSteps; i++) {
                 for (let j = 0; j < 3; j++) {
-                    this.scratchVec2[j] = getPointHermite(this.prevPos[j], this.nextPos[j], toKeyframe.posTangentIn[j], toKeyframe.posTangentOut[j], t);
+                    this.scratchVec2[j] = getPointHermite(this.prevPos[j], this.nextPos[j], toKeyframe.posTangentIn[j], toKeyframe.posTangentOut[j], i / numSteps);
                 }
                 length += vec3.distance(this.scratchVec1, this.scratchVec2);
                 vec3.copy(this.scratchVec1, this.scratchVec2);
