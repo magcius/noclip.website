@@ -2034,7 +2034,7 @@ class StudioPanel extends FloatingPanel {
         this.keyframeDurationContainer = this.contents.querySelector('#keyframeDurationContainer') as HTMLElement;
         this.keyframeDurationInput = this.contents.querySelector('#keyframeDuration') as HTMLInputElement;
         this.matchPrevSpeedBtn = this.contents.querySelector('#matchPrevSpeedBtn') as HTMLInputElement;
-        this.matchPrevSpeedBtn.dataset.helpText = 'Attempt to auto-calculate the duration to match the previous keyframe\'s speed. Not guaranteed to work.';
+        this.matchPrevSpeedBtn.dataset.helpText = 'Attempt to auto-calculate the duration to match the previous keyframe\'s speed.';
         this.keyframeHoldDurationInput = this.contents.querySelector('#keyframeHoldDuration') as HTMLInputElement;
 
         this.interpolationSettings = this.contents.querySelector('#interpolationSettings') as HTMLElement;
