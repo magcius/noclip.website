@@ -24,10 +24,10 @@ const easeBothFunc: Function = (t: number) => {
     return getPointBezier(0, 0, 1, 1, t);
 }
 
-export interface InterpolationStep {
-    pos: vec3;
-    lookAtPos: vec3;
-    bank: number;
+export class InterpolationStep {
+    pos: vec3 = vec3.create();
+    lookAtPos: vec3 = vec3.create();
+    bank: number = 0;
 }
 
 export interface Keyframe {
