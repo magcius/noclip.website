@@ -387,12 +387,11 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         }
     }
 
-    private calcMoveSpeedDirect(): number {
-        const moveSpeed = assertExists(getMapPartsArgMoveSpeed(this.actor));
-        return moveSpeed;
+    private calcMoveSpeedDirect(): number | null {
+        return getMapPartsArgMoveSpeed(this.actor);
     }
 
-    private calcMoveSpeed(): number {
+    private calcMoveSpeed(): number | null {
         if (isNearZero(this.accel, 0.0001)) {
             const speedCalcType = fallback(getMapPartsArgSpeedCalcType(this.actor), SpeedCalcType.Direct);
             if (speedCalcType === SpeedCalcType.Time)
@@ -424,7 +423,9 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         if (currentNerve === MapPartsRailMoverNrv.Move) {
             if (isFirstStep(this)) {
                 this.updateAccel();
-                this.moveSpeed = this.calcMoveSpeed();
+                const newMoveSpeed = this.calcMoveSpeed();
+                if (newMoveSpeed !== null)
+                    this.moveSpeed = newMoveSpeed;
                 sendMsgToHost(sceneObjHolder, this, MessageType.MapPartsRailMover_TryRotateBetweenPoints);
             }
 

@@ -166,7 +166,7 @@ export class BrightObjBase {
     }
 
     public getBright(): number {
-        return this.bright;
+        return this.isFullyHidden ? 0.0 : this.bright;
     }
 
     public getCenter(): vec2 {
