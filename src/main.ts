@@ -3,8 +3,6 @@
 
 import { Viewer, SceneGfx, InitErrorCode, initializeViewer, makeErrorUI, resizeCanvas, ViewerUpdateInfo } from './viewer';
 
-import ArrayBufferSlice from './ArrayBufferSlice';
-
 import * as Scenes_BanjoKazooie from './BanjoKazooie/scenes';
 import * as Scenes_Zelda_TwilightPrincess from './j3d/ztp_scenes';
 import * as Scenes_MarioKartDoubleDash from './j3d/mkdd_scenes';
@@ -70,7 +68,6 @@ import { UI, Panel } from './ui';
 import { serializeCamera, deserializeCamera, FPSCameraController } from './Camera';
 import { assertExists, assert, fallbackUndefined } from './util';
 import { DataFetcher } from './DataFetcher';
-import { ZipFileEntry, makeZipFile } from './ZipFile';
 import { atob, btoa } from './Ascii85';
 import { mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
@@ -377,8 +374,6 @@ class Main {
         const inputManager = this.viewer.inputManager;
         if (inputManager.isKeyDownEventTriggered('KeyZ'))
             this._toggleUI();
-        if (inputManager.isKeyDownEventTriggered('Numpad9'))
-            this._downloadTextures();
         if (inputManager.isKeyDownEventTriggered('KeyT'))
             this.ui.sceneSelect.expandAndFocus();
         for (let i = 1; i <= 9; i++) {
@@ -814,37 +809,6 @@ class Main {
         const canvas = this.viewer.takeScreenshotToCanvas(opaque);
         const filename = `${this._getSceneDownloadPrefix()}.png`;
         convertCanvasToPNG(canvas).then((blob) => downloadBlob(filename, blob));
-    }
-
-    private async _makeTextureZipFile(): Promise<ZipFileEntry[]> {
-        const viewerTextures = await this.ui.textureViewer.getViewerTextureList();
-
-        const zipFileEntries: ZipFileEntry[] = [];
-        const promises: Promise<void>[] = [];
-        for (let i = 0; i < viewerTextures.length; i++) {
-            const tex = viewerTextures[i];
-            for (let j = 0; j < tex.surfaces.length; j++) {
-                const filename = `${tex.name}_${j}.png`;
-                promises.push(convertCanvasToPNG(tex.surfaces[j]).then((blob) => blobToArrayBuffer(blob)).then((buf) => {
-                    const data = new ArrayBufferSlice(buf);
-                    zipFileEntries.push({ filename, data });
-                }));
-            }
-        }
-        await Promise.all(promises);
-
-        return zipFileEntries;
-    }
-
-    private _downloadTextures() {
-        this._makeTextureZipFile().then((zipFileEntries) => {
-            if (zipFileEntries.length === 0)
-                return;
-
-            const zipBuffer = makeZipFile(zipFileEntries);
-            const filename = `${this._getSceneDownloadPrefix()}_Textures.zip`;
-            downloadBuffer(filename, zipBuffer, 'application/zip');
-        });
     }
 
     // Hooks for people who want to mess with stuff.
