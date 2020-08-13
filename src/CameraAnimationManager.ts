@@ -209,7 +209,7 @@ export class CameraAnimationManager {
     }
 
     public editKeyframePosition(pos: mat4, index: number) {
-        if (index > -1 && index < this.animation.keyframes.length)
+        if (index >= 0 && index < this.animation.keyframes.length)
             this.animation.keyframes[index].endPos = pos;
         this.endEditKeyframePosition();
     }
