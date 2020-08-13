@@ -41,14 +41,13 @@ export interface Keyframe {
     holdDuration: number;
     usesLinearInterp: boolean;
     linearEaseType: LinearEaseType;
-    posTangentIn: vec3;
-    posTangentOut: vec3;
-    lookAtPosTangentIn: vec3;
-    lookAtPosTangentOut: vec3;
-    bankTangentIn: number;
-    bankTangentOut: number;
-    endPos: mat4;
-    bank: number;
+    targetPositionX: { value: number, tangentIn: number, tangentOut: number };
+    targetPositionY: { value: number, tangentIn: number, tangentOut: number };
+    targetPositionZ: { value: number, tangentIn: number, tangentOut: number };
+    lookAtPositionX: { value: number, tangentIn: number, tangentOut: number };
+    lookAtPositionY: { value: number, tangentIn: number, tangentOut: number };
+    lookAtPositionZ: { value: number, tangentIn: number, tangentOut: number };
+    bank: { value: number, tangentIn: number, tangentOut: number };
     name?: string;
 }
 
@@ -66,29 +65,15 @@ export class CameraAnimation {
      */
     public totalKeyframesAdded: number = -1;
 
-    public insertKeyframe(after: number, keyframeEndPos: mat4) {
+    public insertKeyframe(after: number, keyframe: Keyframe) {
         this.totalKeyframesAdded++;
-        const name = this.totalKeyframesAdded === 0 ? 'Starting Position' : 'Keyframe ' + this.totalKeyframesAdded;
-        const newKeyframe: Keyframe = {
-            interpDuration: 5,
-            holdDuration: 0,
-            usesLinearInterp: false,
-            linearEaseType: LinearEaseType.EaseBoth,
-            posTangentIn: vec3.create(),
-            posTangentOut: vec3.create(),
-            lookAtPosTangentIn: vec3.create(),
-            lookAtPosTangentOut: vec3.create(),
-            bankTangentIn: 0,
-            bankTangentOut: 0,
-            bank: 0,
-            endPos: keyframeEndPos,
-            name: name
-        }
-        this.keyframes.splice(after + 1, 0, newKeyframe);
+        if (!keyframe.name || keyframe.name.trim() === '')
+            keyframe.name = this.totalKeyframesAdded === 0 ? 'Starting Position' : 'Keyframe ' + this.totalKeyframesAdded;
+        this.keyframes.splice(after + 1, 0, keyframe);
     }
 
-    public appendKeyframe(keyframeEndPos: mat4) {
-        this.insertKeyframe(this.keyframes.length - 1, keyframeEndPos);
+    public appendKeyframe(keyframe: Keyframe) {
+        this.insertKeyframe(this.keyframes.length - 1, keyframe);
     }
 
     public removeKeyframe(index: number) {
@@ -121,16 +106,17 @@ export class CameraAnimationManager {
     private previewingKeyframe: boolean = false;
 
     // Interpolation variables.
-    private previousKeyframe: Keyframe;
-
-    private posFrom: vec3 = vec3.create();
-    private forwardVecFrom: vec3 = vec3.create();
+    private targetPosFrom: vec3 = vec3.create();
     private lookAtPosFrom: vec3 = vec3.create();
     private bankRotFrom: number = 0;
 
-    private posTo: vec3 = vec3.create();
+    private targetPosTo: vec3 = vec3.create();
+    private targetPosToTangentIn: vec3 = vec3.create();
+    private targetPosToTangentOut: vec3 = vec3.create();
     private forwardVecTo: vec3 = vec3.create();
     private lookAtPosTo: vec3 = vec3.create();
+    private lookAtPosToTangentIn: vec3 = vec3.create();
+    private lookAtPosToTangentOut: vec3 = vec3.create();
     private bankRotTo: number = 0;
 
     // Flags to indicate whether the position and bank position need to be interpolated for the current keyframe.
@@ -146,19 +132,19 @@ export class CameraAnimationManager {
         viewer.setCameraController(this.studioCameraController);
     }
 
-    public loadAnimation(keyframes: Keyframe[]) {
-        if (keyframes.length === 0)
+    public loadAnimation(loadObj: any) {
+        let loadedKeyframes: Keyframe[];
+        if (!loadObj.version && Array.isArray(loadObj))
+            loadedKeyframes = this.deserializeVersion0(loadObj);
+        else if (!loadObj.keyframes || !Array.isArray(loadObj.keyframes) || loadObj.keyframes.length === 0)
             return;
-        for (let i = 0; i < keyframes.length; i++) {
-            keyframes[i].posTangentIn = vec3.create();
-            keyframes[i].posTangentOut = vec3.create();
-            keyframes[i].lookAtPosTangentIn = vec3.create();
-            keyframes[i].lookAtPosTangentOut = vec3.create();
-        }
+        else
+            loadedKeyframes = loadObj.keyframes;
+
         this.animation = new CameraAnimation();
-        this.animation.keyframes = keyframes;
+        this.animation.keyframes = loadedKeyframes;
         this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
-        for (let i = 1; i < keyframes.length; i++) {
+        for (let i = 1; i < this.animation.keyframes.length; i++) {
             if (this.animation.keyframes[i].name === undefined)
                 this.animation.keyframes[i].name = 'Keyframe ' + i;
             this.animation.totalKeyframesAdded = i;
@@ -166,22 +152,32 @@ export class CameraAnimationManager {
         }
     }
 
+    private deserializeVersion0(kfArray: any[]): Keyframe[] {
+        const kfs: Keyframe[] = [];
+        for (let i=0; i < kfArray.length; i++) {
+            const newKeyframe = this.decomposeKeyframeFromMat4(kfArray[i].endPos);
+            newKeyframe.interpDuration = kfArray[i].interpDuration;
+            newKeyframe.holdDuration = kfArray[i].holdDuration;
+            newKeyframe.usesLinearInterp = kfArray[i].usesLinearInterp;
+            newKeyframe.linearEaseType = kfArray[i].linearEaseType as LinearEaseType;
+            if (kfArray[i].name)
+                newKeyframe.name = kfArray[i].name;
+            kfs.push(newKeyframe);
+        }
+        return kfs;
+    }
+
     public newAnimation() {
         this.animation = new CameraAnimation();
     }
 
     public serializeAnimation(): string {
-        const exclude = ['posTangentIn', 'posTangentOut', 'lookAtPosTangentIn', 'lookAtPosTangentOut, bankTangentIn, bankTangentOut, bank'];
-        return JSON.stringify(this.animation.keyframes, (key, value) => {
-            if (exclude.includes(key))
-                return undefined;
-            else
-                return value;
-        });
+        const dataObj = { version: 1, keyframes: this.animation.keyframes };
+        return JSON.stringify(dataObj);
     }
 
     public getKeyframeByIndex(index: number): Keyframe {
-        this.studioCameraController.setToPosition(this.animation.keyframes[index].endPos);
+        this.studioCameraController.setToPosition(this.getStepFromKeyframe(this.animation.keyframes[index]));
         return this.animation.keyframes[index];
     }
 
@@ -191,26 +187,35 @@ export class CameraAnimationManager {
             this.editKeyframePosition(pos, afterIndex);
             return;
         }
+        const kf = this.decomposeKeyframeFromMat4(pos);
         if (afterIndex > -1) {
             // Insert new keyframe after the specified index.
-            this.animation.insertKeyframe(afterIndex, pos);
+            this.animation.insertKeyframe(afterIndex, kf);
             this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: afterIndex + 1 }));
         } else {
             // No keyframe selected
             if (this.animation.keyframes.length === 0) {
-                this.animation.appendKeyframe(pos);
+                this.animation.appendKeyframe(kf);
                 this.animation.keyframes[0].interpDuration = 0;
                 this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
             } else {
-                this.animation.appendKeyframe(pos);
+                this.animation.appendKeyframe(kf);
                 this.uiKeyframeList.dispatchEvent(new CustomEvent('newKeyframe', { detail: this.animation.keyframes.length - 1 }));
             }
         }
     }
 
     public editKeyframePosition(pos: mat4, index: number) {
-        if (index >= 0 && index < this.animation.keyframes.length)
-            this.animation.keyframes[index].endPos = pos;
+        if (index >= 0 && index < this.animation.keyframes.length) {
+            const kf = this.decomposeKeyframeFromMat4(pos);
+            this.animation.keyframes[index].targetPositionX = kf.targetPositionX;
+            this.animation.keyframes[index].targetPositionY = kf.targetPositionY;
+            this.animation.keyframes[index].targetPositionZ = kf.targetPositionZ;
+            this.animation.keyframes[index].lookAtPositionX = kf.lookAtPositionX;
+            this.animation.keyframes[index].lookAtPositionY = kf.lookAtPositionY;
+            this.animation.keyframes[index].lookAtPositionZ = kf.lookAtPositionZ;
+            this.animation.keyframes[index].bank = kf.bank;
+        }
         this.endEditKeyframePosition();
     }
 
@@ -223,32 +228,25 @@ export class CameraAnimationManager {
     }
 
     public previewKeyframe(index: number, loopEnabled: boolean) {
-        let startPos: mat4;
-        if (index > 0) {
-            startPos = this.animation.keyframes[index - 1].endPos;
-        } else if (index === 0) {
-            startPos = this.animation.keyframes[this.animation.keyframes.length - 1].endPos;
-        } else {
+        if (index < 0)
             return;
-        }
-        this.currentKeyframeIndex = index - 1;
-        this.playbackNextKeyframe();
+        this.currentKeyframeIndex = index;
+        this.setKeyframeVars();
         this.loopAnimation = loopEnabled;
         this.calculateAllTangents();
         this.previewingKeyframe = true;
-        this.studioCameraController.playAnimation(startPos);
+        this.studioCameraController.playAnimation(this.getStepFromKeyframe(this.currentKeyframe));
     }
 
     public playAnimation(loop: boolean) {
         if (this.animation.keyframes.length > 1) {
             this.loopAnimation = loop;
-            this.currentKeyframeIndex = -1;
-            this.playbackNextKeyframe();
+            this.currentKeyframeIndex = 0;
+            this.setKeyframeVars();
             this.calculateAllTangents();
             // Skip interpolation for the first keyframe.
             this.currentKeyframeProgressMs = this.currentKeyframeInterpDurationMs;
-            const startPos: mat4 = this.animation.keyframes[0].endPos;
-            this.studioCameraController.playAnimation(startPos);
+            this.studioCameraController.playAnimation(this.getStepFromKeyframe(this.currentKeyframe));
         }
     }
 
@@ -277,7 +275,8 @@ export class CameraAnimationManager {
 
     /**
      * Performs one interpolation step in the current animation, updating the provided 
-     * object with the translation and lookAt focus point of the next animation frame.
+     * object with the translation, lookAt focus point, and bank rotation of the next
+     * animation frame.
      * 
      * @param outInterpStep the next interpolation step of the animation
      */
@@ -287,19 +286,19 @@ export class CameraAnimationManager {
             const easeFunc = this.getEasingFuncForEaseType(this.currentKeyframe.linearEaseType);
             if (easeFunc)
                 interpAmount = easeFunc(interpAmount);
-            vec3.lerp(outInterpStep.pos, this.posFrom, this.posTo, interpAmount);
+            vec3.lerp(outInterpStep.pos, this.targetPosFrom, this.targetPosTo, interpAmount);
             vec3.lerp(outInterpStep.lookAtPos, this.lookAtPosFrom, this.lookAtPosTo, interpAmount);
             outInterpStep.bank = lerp(this.bankRotFrom, this.bankRotTo, interpAmount);
         } else {
             for (let i = 0; i < 3; i++) {
                 if (this.interpPos)
-                    outInterpStep.pos[i] = getPointHermite(this.posFrom[i], this.posTo[i], this.currentKeyframe.posTangentIn[i], this.currentKeyframe.posTangentOut[i], interpAmount);
+                    outInterpStep.pos[i] = getPointHermite(this.targetPosFrom[i], this.targetPosTo[i], this.targetPosToTangentIn[i], this.targetPosToTangentOut[i], interpAmount);
                 else
-                    outInterpStep.pos[i] = this.posTo[i];
-                outInterpStep.lookAtPos[i] = getPointHermite(this.lookAtPosFrom[i], this.lookAtPosTo[i], this.currentKeyframe.posTangentIn[i], this.currentKeyframe.posTangentOut[i], interpAmount);
+                    outInterpStep.pos[i] = this.targetPosTo[i];
+                outInterpStep.lookAtPos[i] = getPointHermite(this.lookAtPosFrom[i], this.lookAtPosTo[i], this.lookAtPosToTangentIn[i], this.lookAtPosToTangentOut[i], interpAmount);
             }
             if (this.interpBank)
-                outInterpStep.bank = getPointHermite(this.bankRotFrom, this.bankRotTo, this.currentKeyframe.bankTangentIn, this.currentKeyframe.bankTangentOut, interpAmount);
+                outInterpStep.bank = getPointHermite(this.bankRotFrom, this.bankRotTo, this.currentKeyframe.bank.tangentIn, this.currentKeyframe.bank.tangentOut, interpAmount);
             else
                 outInterpStep.bank = this.bankRotTo;
         }
@@ -314,7 +313,7 @@ export class CameraAnimationManager {
             return this.currentKeyframeIndex + 1 < this.animation.keyframes.length;
     }
 
-    public playbackNextKeyframe() {
+    public playbackAdvanceKeyframe() {
         if (this.currentKeyframeIndex + 1 === this.animation.keyframes.length) {
             if (this.loopAnimation)
                 this.currentKeyframeIndex = 0;
@@ -323,15 +322,21 @@ export class CameraAnimationManager {
         } else {
             this.currentKeyframeIndex++;
         }
+        this.setKeyframeVars();
+    }
+
+    private setKeyframeVars() {
         this.currentKeyframe = this.animation.keyframes[this.currentKeyframeIndex];
         this.currentKeyframeProgressMs = 0 + this.pastDurationMs;
         this.pastDurationMs = 0;
         this.currentKeyframeInterpDurationMs = this.currentKeyframe.interpDuration * MILLISECONDS_IN_SECOND;
         this.currentKeyframeTotalDurationMs = (this.currentKeyframe.interpDuration + this.currentKeyframe.holdDuration) * MILLISECONDS_IN_SECOND;
-        if (this.currentKeyframe.interpDuration === 0)
-            this.studioCameraController.setToPosition(this.currentKeyframe.endPos);
-        else
-            this.setInterpolationVectors();
+        if (this.currentKeyframe.interpDuration === 0) {
+            this.studioCameraController.setToPosition(this.getStepFromKeyframe(this.currentKeyframe));
+        } else {
+            const prevKfIndex = this.currentKeyframeIndex === 0 ? this.animation.keyframes.length - 1 : this.currentKeyframeIndex - 1;
+            this.setInterpolationVectors(this.animation.keyframes[prevKfIndex]);
+        }
     }
 
     public stopAnimation() {
@@ -399,15 +404,17 @@ export class CameraAnimationManager {
      * @param toKeyframe the keyframe describing the end position
      */
     private estimateHermiteCurveLength(fromKeyframe: Keyframe, toKeyframe: Keyframe): number {
-        mat4.getTranslation(this.prevPos, fromKeyframe.endPos);
-        mat4.getTranslation(this.nextPos, toKeyframe.endPos);
+        vec3.set(this.prevPos, fromKeyframe.targetPositionX.value, fromKeyframe.targetPositionY.value, fromKeyframe.targetPositionZ.value);
+        vec3.set(this.nextPos, toKeyframe.targetPositionX.value, toKeyframe.targetPositionY.value, toKeyframe.targetPositionZ.value);
+        vec3.set(this.targetPosToTangentIn, toKeyframe.targetPositionX.tangentIn, toKeyframe.targetPositionY.tangentIn, toKeyframe.targetPositionZ.tangentIn);
+        vec3.set(this.targetPosToTangentOut, toKeyframe.targetPositionX.tangentOut, toKeyframe.targetPositionY.tangentOut, toKeyframe.targetPositionZ.tangentOut);
         let length = 0;
         if (!vec3.exactEquals(this.prevPos, this.nextPos)) {
             vec3.copy(this.scratchVec1, this.prevPos);
             const numSteps = 10000;
             for (let i = 1; i <= numSteps; i++) {
                 for (let j = 0; j < 3; j++) {
-                    this.scratchVec2[j] = getPointHermite(this.prevPos[j], this.nextPos[j], toKeyframe.posTangentIn[j], toKeyframe.posTangentOut[j], i / numSteps);
+                    this.scratchVec2[j] = getPointHermite(this.prevPos[j], this.nextPos[j], this.targetPosToTangentIn[j], this.targetPosToTangentOut[j], i / numSteps);
                 }
                 length += vec3.distance(this.scratchVec1, this.scratchVec2);
                 vec3.copy(this.scratchVec1, this.scratchVec2);
@@ -416,28 +423,8 @@ export class CameraAnimationManager {
         return length;
     }
 
-    public isAnimation(a: Keyframe[]): boolean {
-        if (!Array.isArray(a))
-            return false;
-        try {
-            for (let i = 0; i < a.length; i++) {
-                for (let j = 0; j < 16; j++) {
-                    if (typeof a[i].endPos[j] !== 'number')
-                        return false;
-                }
-                if (typeof a[i].holdDuration !== 'number')
-                    return false;
-                if (typeof a[i].interpDuration !== 'number')
-                    return false;
-                if (typeof a[i].linearEaseType !== 'string')
-                    return false;
-                if (typeof a[i].usesLinearInterp !== 'boolean')
-                    return false;
-            }
-            return true;
-        } catch (e) {
-            return false;
-        }
+    public isAnimation(a: Object): boolean {
+        return true;
     }
 
     private getEasingFuncForEaseType(easeType: LinearEaseType): Function | null {
@@ -451,58 +438,82 @@ export class CameraAnimationManager {
             return null;
     }
 
-    private setInterpolationVectors() {
-        if (this.currentKeyframeIndex > 0)
-            this.previousKeyframe = this.animation.keyframes[this.currentKeyframeIndex - 1];
-        else
-            this.previousKeyframe = this.animation.keyframes[this.animation.keyframes.length - 1];
-        mat4.getTranslation(this.posFrom, this.previousKeyframe.endPos);
-        mat4.getTranslation(this.posTo, this.currentKeyframe.endPos);
-        getMatrixAxisZ(this.forwardVecFrom, this.previousKeyframe.endPos);
-        getMatrixAxisZ(this.forwardVecTo, this.currentKeyframe.endPos);
-        vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
+    private decomposeKeyframeFromMat4(pos: mat4): Keyframe {
+        mat4.getTranslation(this.scratchVec1, pos);
+        getMatrixAxisZ(this.forwardVecTo, pos);
         vec3.normalize(this.forwardVecTo, this.forwardVecTo);
-        vec3.scaleAndAdd(this.lookAtPosFrom, this.posFrom, this.forwardVecFrom, -100);
-        vec3.scaleAndAdd(this.lookAtPosTo, this.posTo, this.forwardVecTo, -100);
-        this.interpPos = !vec3.exactEquals(this.posFrom, this.posTo);
-        this.bankRotFrom = this.previousKeyframe.bank;
-        this.bankRotTo = this.currentKeyframe.bank;
+        vec3.scaleAndAdd(this.scratchVec2, this.scratchVec1, this.forwardVecTo, -100);
+
+        const newKeyframe: Keyframe = {
+            interpDuration: 5,
+            holdDuration: 0,
+            usesLinearInterp: false,
+            linearEaseType: LinearEaseType.EaseBoth,
+            targetPositionX: { value: this.scratchVec1[0], tangentIn: 0, tangentOut: 0 },
+            targetPositionY: { value: this.scratchVec1[1], tangentIn: 0, tangentOut: 0 },
+            targetPositionZ: { value: this.scratchVec1[2], tangentIn: 0, tangentOut: 0 },
+            lookAtPositionX: { value: this.scratchVec2[0], tangentIn: 0, tangentOut: 0 },
+            lookAtPositionY: { value: this.scratchVec2[1], tangentIn: 0, tangentOut: 0 },
+            lookAtPositionZ: { value: this.scratchVec2[2], tangentIn: 0, tangentOut: 0 },
+            bank: { value: 0, tangentIn: 0, tangentOut: 0 },
+            name: undefined
+        }
+
+        computeEulerAngleRotationFromSRTMatrix(this.scratchVec1, pos);
+        vec3.copy(this.scratchVec2, Vec3UnitY);
+        vec3.rotateZ(this.scratchVec2, this.scratchVec2, Vec3Zero, -this.scratchVec1[2]);
+        vec3.rotateY(this.scratchVec2, this.scratchVec2, Vec3Zero, -this.scratchVec1[1]);
+        vec3.rotateX(this.scratchVec2, this.scratchVec2, Vec3Zero, -this.scratchVec1[0]);
+        this.scratchVec2[2] = 0;
+        vec3.normalize(this.scratchVec2, this.scratchVec2);
+        newKeyframe.bank.value = vec3.angle(this.scratchVec2, Vec3UnitY);
+        if (this.scratchVec2[0] < 0) {
+            newKeyframe.bank.value *= -1;
+        }
+
+        return newKeyframe;
+    }
+
+    private setInterpolationVectors(prevKf: Keyframe) {
+        vec3.set(this.targetPosFrom, prevKf.targetPositionX.value, prevKf.targetPositionY.value, prevKf.targetPositionZ.value);
+        vec3.set(this.lookAtPosFrom, prevKf.lookAtPositionX.value, prevKf.lookAtPositionY.value, prevKf.lookAtPositionZ.value);
+
+        vec3.set(this.targetPosTo, this.currentKeyframe.targetPositionX.value, this.currentKeyframe.targetPositionY.value, this.currentKeyframe.targetPositionZ.value);
+        vec3.set(this.targetPosToTangentIn, this.currentKeyframe.targetPositionX.tangentIn, this.currentKeyframe.targetPositionY.tangentIn, this.currentKeyframe.targetPositionZ.tangentIn);
+        vec3.set(this.targetPosToTangentOut, this.currentKeyframe.targetPositionX.tangentOut, this.currentKeyframe.targetPositionY.tangentOut, this.currentKeyframe.targetPositionZ.tangentOut);
+        vec3.set(this.lookAtPosTo, this.currentKeyframe.lookAtPositionX.value, this.currentKeyframe.lookAtPositionY.value, this.currentKeyframe.lookAtPositionZ.value);
+        vec3.set(this.lookAtPosToTangentIn, this.currentKeyframe.lookAtPositionX.tangentIn, this.currentKeyframe.lookAtPositionY.tangentIn, this.currentKeyframe.lookAtPositionZ.tangentIn);
+        vec3.set(this.lookAtPosToTangentOut, this.currentKeyframe.lookAtPositionX.tangentOut, this.currentKeyframe.lookAtPositionY.tangentOut, this.currentKeyframe.lookAtPositionZ.tangentOut);
+
+        this.interpPos = !vec3.exactEquals(this.targetPosFrom, this.targetPosTo);
+
+        this.bankRotFrom = prevKf.bank.value;
+        this.bankRotTo = this.currentKeyframe.bank.value;
         this.interpBank = Math.round(this.bankRotFrom * 1000000) != Math.round(this.bankRotTo * 1000000);
     }
 
-    private calculateBankRotationValues() {
+    private calculateRelativeBankRotationValues() {
         let previousBank = 0;
         let fullRotations = 0;
         let kf: Keyframe;
         for (let i = 0; i < this.animation.keyframes.length; i++) {
             kf = this.animation.keyframes[i];
-            computeEulerAngleRotationFromSRTMatrix(this.scratchVec1, kf.endPos);
-            vec3.copy(this.scratchVec2, Vec3UnitY);
-            vec3.rotateZ(this.scratchVec2, this.scratchVec2, Vec3Zero, -this.scratchVec1[2]);
-            vec3.rotateY(this.scratchVec2, this.scratchVec2, Vec3Zero, -this.scratchVec1[1]);
-            vec3.rotateX(this.scratchVec2, this.scratchVec2, Vec3Zero, -this.scratchVec1[0]);
-            this.scratchVec2[2] = 0;
-            vec3.normalize(this.scratchVec2, this.scratchVec2);
-            kf.bank = vec3.angle(this.scratchVec2, Vec3UnitY);
-            if (this.scratchVec2[0] < 0) {
-                kf.bank *= -1;
-            }
-            kf.bank += fullRotations * (2 * Math.PI);
+            kf.bank.value += fullRotations * (2 * Math.PI);
 
-            if (Math.abs(kf.bank - previousBank) > Math.PI) {
+            if (Math.abs(kf.bank.value - previousBank) > Math.PI) {
                 // Closest rotation is in same direction, add or subtract a full rotation to the new bank
                 if (previousBank < 0)
-                    kf.bank -= 2 * Math.PI;
+                    kf.bank.value -= 2 * Math.PI;
                 else
-                    kf.bank += 2 * Math.PI;
+                    kf.bank.value += 2 * Math.PI;
             }
 
-            if (kf.bank > 0) {
-                fullRotations = Math.floor(kf.bank / (2 * Math.PI));
+            if (kf.bank.value > 0) {
+                fullRotations = Math.floor(kf.bank.value / (2 * Math.PI));
             } else {
-                fullRotations = Math.ceil(kf.bank / (2 * Math.PI));
+                fullRotations = Math.ceil(kf.bank.value / (2 * Math.PI));
             }
-            previousBank = kf.bank;
+            previousBank = kf.bank.value;
         }
     }
 
@@ -510,7 +521,7 @@ export class CameraAnimationManager {
      * Called before playing or previewing an animation, calculates and assigns tangent values for hermite interpolation.
      */
     private calculateAllTangents(): void {
-        this.calculateBankRotationValues();
+        this.calculateRelativeBankRotationValues();
         const keyframes = this.animation.keyframes;
 
         if (keyframes.length < 4) {
@@ -525,7 +536,7 @@ export class CameraAnimationManager {
             this.calculateTangents(keyframes[0], keyframes[1], keyframes[2]);
             if (this.loopAnimation)
                 this.calculateTangents(keyframes[1], keyframes[2], keyframes[0]);
-            else 
+            else
                 this.zeroEndpointTangents();
             return;
         }
@@ -546,34 +557,54 @@ export class CameraAnimationManager {
     }
 
     private calculateTangents(prevKf: Keyframe, curKf: Keyframe, nextKf: Keyframe): void {
-        mat4.getTranslation(this.prevPos, prevKf.endPos);
-        mat4.getTranslation(this.nextPos, nextKf.endPos);
+        vec3.set(this.prevPos, prevKf.targetPositionX.value, prevKf.targetPositionY.value, prevKf.targetPositionZ.value);
+        vec3.set(this.nextPos, nextKf.targetPositionX.value, nextKf.targetPositionY.value, nextKf.targetPositionZ.value);
         vec3.sub(this.scratchVec1, this.nextPos, this.prevPos);
         vec3.scale(this.scratchVec1, this.scratchVec1, 0.5);
-        vec3.copy(curKf.posTangentOut, this.scratchVec1);
-        vec3.copy(nextKf.posTangentIn, this.scratchVec1);
+        curKf.targetPositionX.tangentOut = this.scratchVec1[0];
+        curKf.targetPositionY.tangentOut = this.scratchVec1[1];
+        curKf.targetPositionZ.tangentOut = this.scratchVec1[2];
+        nextKf.targetPositionX.tangentIn = this.scratchVec1[0];
+        nextKf.targetPositionY.tangentIn = this.scratchVec1[1];
+        nextKf.targetPositionZ.tangentIn = this.scratchVec1[2];
 
-        getMatrixAxisZ(this.forwardVecFrom, prevKf.endPos);
-        getMatrixAxisZ(this.forwardVecTo, nextKf.endPos);
-        vec3.normalize(this.forwardVecFrom, this.forwardVecFrom);
-        vec3.normalize(this.forwardVecTo, this.forwardVecTo);
-        vec3.scaleAndAdd(this.prevLookAtPos, this.prevPos, this.forwardVecFrom, -100);
-        vec3.scaleAndAdd(this.nextLookAtPos, this.nextPos, this.forwardVecTo, -100);
+        vec3.set(this.prevLookAtPos, prevKf.lookAtPositionX.value, prevKf.lookAtPositionY.value, prevKf.lookAtPositionZ.value);
+        vec3.set(this.nextLookAtPos, nextKf.lookAtPositionX.value, nextKf.lookAtPositionY.value, nextKf.lookAtPositionZ.value);
         vec3.sub(this.scratchVec2, this.nextLookAtPos, this.prevLookAtPos);
         vec3.scale(this.scratchVec2, this.scratchVec2, 0.5);
-        vec3.copy(curKf.lookAtPosTangentOut, this.scratchVec2);
-        vec3.copy(nextKf.lookAtPosTangentIn, this.scratchVec2);
+        curKf.lookAtPositionX.tangentOut = this.scratchVec2[0];
+        curKf.lookAtPositionY.tangentOut = this.scratchVec2[1];
+        curKf.lookAtPositionZ.tangentOut = this.scratchVec2[2];
+        nextKf.lookAtPositionX.tangentIn = this.scratchVec2[0];
+        nextKf.lookAtPositionY.tangentIn = this.scratchVec2[1];
+        nextKf.lookAtPositionZ.tangentIn = this.scratchVec2[2];
 
-        curKf.bankTangentOut = (nextKf.bank - prevKf.bank) / 2;
-        nextKf.bankTangentIn = (nextKf.bank - prevKf.bank) / 2;
+        curKf.bank.tangentOut = (nextKf.bank.value - prevKf.bank.value) / 2;
+        nextKf.bank.tangentIn = (nextKf.bank.value - prevKf.bank.value) / 2;
     }
 
     private zeroEndpointTangents(): void {
-        vec3.zero(this.animation.keyframes[this.animation.keyframes.length - 1].posTangentOut);
-        vec3.zero(this.animation.keyframes[this.animation.keyframes.length - 1].lookAtPosTangentOut);
-        this.animation.keyframes[this.animation.keyframes.length - 1].bankTangentOut = 0;
-        vec3.zero(this.animation.keyframes[0].posTangentIn);
-        vec3.zero(this.animation.keyframes[0].lookAtPosTangentIn);
-        this.animation.keyframes[0].bankTangentIn = 0;
+        this.animation.keyframes[this.animation.keyframes.length - 1].targetPositionX.tangentOut = 0;
+        this.animation.keyframes[this.animation.keyframes.length - 1].targetPositionY.tangentOut = 0;
+        this.animation.keyframes[this.animation.keyframes.length - 1].targetPositionZ.tangentOut = 0;
+        this.animation.keyframes[this.animation.keyframes.length - 1].lookAtPositionX.tangentOut = 0;
+        this.animation.keyframes[this.animation.keyframes.length - 1].lookAtPositionY.tangentOut = 0;
+        this.animation.keyframes[this.animation.keyframes.length - 1].lookAtPositionZ.tangentOut = 0;
+        this.animation.keyframes[this.animation.keyframes.length - 1].bank.tangentOut = 0;
+        this.animation.keyframes[0].targetPositionX.tangentIn = 0;
+        this.animation.keyframes[0].targetPositionY.tangentIn = 0;
+        this.animation.keyframes[0].targetPositionZ.tangentIn = 0;
+        this.animation.keyframes[0].lookAtPositionX.tangentIn = 0;
+        this.animation.keyframes[0].lookAtPositionY.tangentIn = 0;
+        this.animation.keyframes[0].lookAtPositionZ.tangentIn = 0;
+        this.animation.keyframes[0].bank.tangentIn = 0;
+    }
+
+    private getStepFromKeyframe(kf: Keyframe): InterpolationStep {
+        const step = new InterpolationStep();
+        vec3.set(step.pos, kf.targetPositionX.value, kf.targetPositionY.value, kf.targetPositionZ.value);
+        vec3.set(step.lookAtPos, kf.lookAtPositionX.value, kf.lookAtPositionY.value, kf.lookAtPositionZ.value);
+        step.bank = kf.bank.value;
+        return step;
     }
 }

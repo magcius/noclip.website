@@ -540,7 +540,7 @@ export class StudioCameraController extends FPSCameraController {
     public updateAnimation(dt: number): CameraUpdateResult {
         if (this.animationManager.isKeyframeFinished()) {
             if (this.animationManager.playbackHasNextKeyframe())
-                this.animationManager.playbackNextKeyframe();
+                this.animationManager.playbackAdvanceKeyframe();
             else
                 this.stopAnimation();
             return CameraUpdateResult.Unchanged;
@@ -559,16 +559,17 @@ export class StudioCameraController extends FPSCameraController {
         }
     }
 
-    public setToPosition(pos: mat4): void {
-        mat4.copy(this.camera.worldMatrix, pos);
+    public setToPosition(setStep: InterpolationStep): void {
+        mat4.targetTo(this.camera.worldMatrix, setStep.pos, setStep.lookAtPos, Vec3UnitY);
+        mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, setStep.bank);
         mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
         this.camera.worldMatrixUpdated();
         this.isOnKeyframe = true;
     }
 
-    public playAnimation(startPos: mat4) {
+    public playAnimation(startStep: InterpolationStep) {
         this.isAnimationPlaying = true;
-        this.setToPosition(startPos);
+        this.setToPosition(startStep);
     }
 
     public stopAnimation() {
