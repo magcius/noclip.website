@@ -7,11 +7,12 @@ import * as U8 from '../rres/u8';
 import * as TPL from './tpl';
 import * as World from './world';
 import { WorldRenderer, TPLTextureHolder } from './render';
-import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { assertExists } from '../util';
 import { CameraController } from '../Camera';
+import { computeModelMatrixS } from '../MathHelpers';
+import * as AnimGroup from './AnimGroup';
 
 class SuperPaperMarioRenderer extends WorldRenderer {
     public adjustCameraController(c: CameraController) {
@@ -23,34 +24,66 @@ class SPMSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(`spm/${this.id}.bin`).then((buffer: ArrayBufferSlice) => {
-            const decompressed = CX.decompress(buffer);
-            const arc = U8.parse(decompressed);
-            const dFile = assertExists(arc.findFileData(`./dvd/map/*/map.dat`));
-            const d = World.parse(dFile);
+        const buffer = await dataFetcher.fetchData(`spm/${this.id}.bin`);
+        const decompressed = CX.decompress(buffer);
+        const arc = U8.parse(decompressed);
+        const dFile = assertExists(arc.findFileData(`./dvd/map/*/map.dat`));
+        const d = World.parse(dFile);
 
-            const textureHolder = new TPLTextureHolder();
-            const tFile = assertExists(arc.findFileData(`./dvd/map/*/texture.tpl`));
-            const tpl = TPL.parse(tFile, d.textureNameTable);
-            textureHolder.addTPLTextures(device, tpl);
+        const textureHolder = new TPLTextureHolder();
+        const tFile = assertExists(arc.findFileData(`./dvd/map/*/texture.tpl`));
+        const tpl = TPL.parse(tFile, d.textureNameTable);
+        textureHolder.addTPLTextures(device, tpl);
 
-            const bDir = arc.findDir(`./dvd/bg`);
-            let backgroundTextureName: string | null = null;
-            if (bDir !== null) {
-                for (let i = 0; i < bDir.files.length; i++) {
-                    const bFile = bDir.files[i];
-                    const bgTpl = TPL.parse(bFile.buffer, [bFile.name]);
-                    textureHolder.addTPLTextures(device, bgTpl);
-                }
-
-                // TODO(jstpierre): Figure out how the backgrounds are rendered.
-                backgroundTextureName = bDir.files[0].name;
+        const bDir = arc.findDir(`./dvd/bg`);
+        let backgroundTextureName: string | null = null;
+        if (bDir !== null) {
+            for (let i = 0; i < bDir.files.length; i++) {
+                const bFile = bDir.files[i];
+                const bgTpl = TPL.parse(bFile.buffer, [bFile.name]);
+                textureHolder.addTPLTextures(device, bgTpl);
             }
 
-            return new SuperPaperMarioRenderer(device, d, textureHolder, backgroundTextureName);
-        });
+            // TODO(jstpierre): Figure out how the backgrounds are rendered.
+            backgroundTextureName = bDir.files[0].name;
+        }
+
+        const renderer = new SuperPaperMarioRenderer(device, d, textureHolder, backgroundTextureName);
+        renderer.animGroupCache = new AnimGroup.AnimGroupDataCache(device, dataFetcher, 'spm');
+
+        /*
+        const agd1 = await renderer.animGroupCache!.requestAnimGroupData('e_3D_manera');
+        const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd1);
+        computeModelMatrixS(agi1.modelMatrix, 100);
+        renderer.animGroupInstances.push(agi1);
+
+        const label = document.createElement('div');
+        label.style.font = '32pt monospace';
+        label.style.position = 'absolute';
+        label.style.bottom = '48px';
+        label.style.right = '16px';
+        label.style.color = 'white';
+        label.style.textShadow = '0px 0px 4px black';
+        label.textContent = '(none)';
+        context.uiContainer.appendChild(label);
+        */
+
+        /*
+        let i = 0;
+        setInterval(() => {
+            let a = agd1.animGroup.anims[i++];
+            if (a === undefined) {
+                label.textContent = '(done)';
+                return;
+            }
+            agi1.playAnimation(a.name);
+            label.textContent = a.name;
+        }, 2000);
+        */
+
+        return renderer;
     }
 }
 

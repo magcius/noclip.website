@@ -28,13 +28,12 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
 
-        const [dBuffer, tBuffer, bgBuffer, ag2tg] = await Promise.all([
+        const [dBuffer, tBuffer, bgBuffer] = await Promise.all([
             // The ".blob" names are unfortunate. It's a workaround for Parcel being dumb as a bag of rocks
             // and not allowing files without extensions to be served... sigh...
             dataFetcher.fetchData(`${pathBase}/m/${this.id}/d.blob`),
             dataFetcher.fetchData(`${pathBase}/m/${this.id}/t.blob`),
             dataFetcher.fetchData(`${pathBase}/b/${this.id}.tpl`, { allow404: true }),
-            dataFetcher.fetchData(`${pathBase}/a/ag2tg.bin`),
         ]);
 
         let rel: ArrayBufferSlice | null = null;
@@ -71,28 +70,43 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
         }
 
         const renderer = new TTYDRenderer(device, d, textureHolder, backgroundTextureName);
-        renderer.animGroupCache = new AnimGroup.AnimGroupDataCache(device, dataFetcher, pathBase, ag2tg);
+        renderer.animGroupCache = new AnimGroup.AnimGroupDataCache(device, dataFetcher, pathBase);
 
         /*
-        ['c_kurio', 'c_kameki', 'c_pinky', 'c_akarin', 'c_opuku', 'c_pokopi'].forEach(async (g, i) => {
-            const agd = await renderer.animGroupCache!.requestAnimGroupData(g);
-            const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd);
-            computeModelMatrixS(agi1.modelMatrix, 100);
-            mat4.translate(agi1.modelMatrix, agi1.modelMatrix, [i * 20, 0, 0]);
-            agi1.playAnimation('S_1');
-            renderer.animGroupInstances.push(agi1);
-
-            const agi2 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd);
-            computeModelMatrixS(agi2.modelMatrix, 100);
-            mat4.translate(agi2.modelMatrix, agi2.modelMatrix, [i * 20, 20, 0]);
-            agi2.playAnimation('T_1');
-            renderer.animGroupInstances.push(agi2);
-        });
-
-        const agd = await renderer.animGroupCache!.requestAnimGroupData('c_nagehone');
-        const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd);
+        const agd1 = await renderer.animGroupCache!.requestAnimGroupData('c_bomt');
+        const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd1);
         computeModelMatrixS(agi1.modelMatrix, 100);
+        mat4.translate(agi1.modelMatrix, agi1.modelMatrix, [-20, 0, 0]);
         renderer.animGroupInstances.push(agi1);
+
+        const agd2 = await renderer.animGroupCache!.requestAnimGroupData('c_bomt_n');
+        const agi2 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd2);
+        computeModelMatrixS(agi2.modelMatrix, 100);
+        renderer.animGroupInstances.push(agi2);
+
+        const label = document.createElement('div');
+        label.style.font = '32pt monospace';
+        label.style.position = 'absolute';
+        label.style.bottom = '48px';
+        label.style.right = '16px';
+        label.style.color = 'white';
+        label.style.textShadow = '0px 0px 4px black';
+        label.textContent = '(none)';
+        context.uiContainer.appendChild(label);
+
+        let i = 0;
+        setInterval(() => {
+            let a = agd1.animGroup.anims[i++];
+            if (a === undefined) {
+                label.textContent = '(done)';
+                return;
+            }
+            while (agd2.animGroup.anims.find((g) => g.name === a.name.slice(4)) === undefined)
+                a = agd1.animGroup.anims[i++];
+            agi1.playAnimation(a.name);
+            agi2.playAnimation(a.name.slice(4));
+            label.textContent = a.name;
+        }, 2000);
         */
 
         return renderer;

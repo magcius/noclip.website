@@ -231,7 +231,7 @@ export function parse(buffer: ArrayBufferSlice): AnimGroup {
         const drawCount = view.getUint32(shapeIdx + 0x9C);
         const draws: AnimGroupData_Draw[] = [];
         for (let d = 0; d < drawCount; d++) {
-            const drawIdx = drawOffs + drawStart * 0x6C;
+            const drawIdx = drawOffs + (drawStart + d) * 0x6C;
 
             const texCount = view.getUint32(drawIdx + 0x00);
 
@@ -361,7 +361,7 @@ export function parse(buffer: ArrayBufferSlice): AnimGroup {
     for (let i = 0; i < textureCount; i++, textureIdx += 0x40) {
         const texArcIdx = view.getUint32(textureIdx + 0x04);
         const texType = view.getUint32(textureIdx + 0x08);
-        const name = readString(buffer, textureIdx + 0x10, 0x28, true);
+        const name = readString(buffer, textureIdx + 0x0C, 0x28, true);
         textures.push({ texArcIdx, texType, name });
     }
 
@@ -471,9 +471,12 @@ export function parse(buffer: ArrayBufferSlice): AnimGroup {
             let visUpdIdx = visUpdOffs + visUpdStart * 0x02;
             for (let k = 0; k < visUpdCount; k++, visUpdIdx += 0x02) {
                 const indexDelta = view.getUint8(visUpdIdx + 0x00);
-                const rawValue = view.getUint8(visUpdIdx + 0x01);
-                assert(rawValue === 0x01 || rawValue === 0xFF);
-                const value = rawValue === 0x01 ? true : false;
+                const rawValue = view.getInt8(visUpdIdx + 0x01);
+                // SPM seems to use this in some animations. Does it mean something?
+                if (rawValue === 0)
+                    continue;
+                assert(rawValue === 1 || rawValue === -1);
+                const value = rawValue === 1 ? true : false;
                 visUpd.push({ indexDelta, value });
             }
 
@@ -624,8 +627,8 @@ class AnimGroupInstance_Shape {
                 const texBase = this.animGroupData.animGroup.texBase[texId];
                 const texMtx = texMtxs[texId];
 
-                const texBind = this.animGroupData.animGroup.textures[texBase.textureIdxBase + texMtx.textureIdxAdd];
-                const texArcIdx = texBind.texArcIdx;
+                const texture = this.animGroupData.animGroup.textures[texBase.textureIdxBase + texMtx.textureIdxAdd];
+                const texArcIdx = texture.texArcIdx;
 
                 computeTexMatrix(materialParams.u_TexMtx[j], texMtx);
                 this.animGroupData.textureData[texArcIdx].fillTextureMapping(materialParams.m_TextureMapping[j]);
@@ -699,12 +702,12 @@ function computeNodeMatrix(dst: mat4, node: Float32Array, nodeIndex: number, ssc
     mat4.mul(scale, scale, scratchMatrix[2]);
 
     mat4.identity(rot);
-    mat4.rotateZ(rot, rot, MathConstants.DEG_TO_RAD * rotation1Z * 2.0);
-    mat4.rotateY(rot, rot, MathConstants.DEG_TO_RAD * rotation1Y * 2.0);
-    mat4.rotateX(rot, rot, MathConstants.DEG_TO_RAD * rotation1X * 2.0);
     mat4.rotateZ(rot, rot, MathConstants.DEG_TO_RAD * rotation2Z);
     mat4.rotateY(rot, rot, MathConstants.DEG_TO_RAD * rotation2Y);
     mat4.rotateX(rot, rot, MathConstants.DEG_TO_RAD * rotation2X);
+    mat4.rotateZ(rot, rot, MathConstants.DEG_TO_RAD * rotation1Z * 2.0);
+    mat4.rotateY(rot, rot, MathConstants.DEG_TO_RAD * rotation1Y * 2.0);
+    mat4.rotateX(rot, rot, MathConstants.DEG_TO_RAD * rotation1X * 2.0);
     computeModelMatrixT(scratchMatrix[2], rotationCenterX + rotationPivotX, rotationCenterY + rotationPivotY, rotationCenterZ + rotationPivotZ);
     mat4.mul(rot, scratchMatrix[2], rot);
     computeModelMatrixT(scratchMatrix[2], -rotationCenterX, -rotationCenterY, -rotationCenterZ);
@@ -724,7 +727,7 @@ function computeNodeMatrix(dst: mat4, node: Float32Array, nodeIndex: number, ssc
 }
 
 class NodeMatrixStack {
-    public stack: mat4[] = nArray(30, () => mat4.create());
+    public stack: mat4[] = nArray(100, () => mat4.create());
     public top: number = 0;
 
     public push(): mat4 {
@@ -863,18 +866,18 @@ export class AnimGroupInstance {
     }
 
     private animUpd(anim: Readonly<AnimGroupData_Animation>, time: number): void {
-        time = Math.max(time, anim.timeStart);
-        if (anim.loop) {
-            while (time > anim.timeEnd)
-                time -= (anim.timeEnd - anim.timeStart);
-        } else {
-            time = Math.min(time, anim.timeEnd);
-        }
         this.animReset();
-
         if (anim.keyframes.length === 1) {
             this.animUpdFrame(anim.keyframes[0], 1.0, 0.0);
             return;
+        }
+
+        time = Math.max(time, anim.timeStart);
+        if (anim.loop) {
+            while (time >= anim.timeEnd)
+                time -= (anim.timeEnd - anim.timeStart);
+        } else {
+            time = Math.min(time, anim.timeEnd - 0.01);
         }
 
         // Find our two enclosed frames.
@@ -936,34 +939,25 @@ export class AnimGroupInstance {
     }
 }
 
-function ag2tg_find(ag2tg: ArrayBufferSlice, name: string): string | null {
-    for (let idx = 0x00; idx < ag2tg.byteLength; idx += 0x20)
-        if (readString(ag2tg, idx + 0x00, 0x20, true) === name)
-            return readString(ag2tg, idx + 0x20, 0x20, true) + '-';
-    return null;
-}
-
 export class AnimGroupDataCache {
     public animGroupDataCache = new Map<string, AnimGroupData>();
     public promiseCache = new Map<string, Promise<AnimGroupData>>();
     private cache = new GfxRenderCache();
 
-    constructor(private device: GfxDevice, private dataFetcher: DataFetcher, private pathBase: string, private ag2tg: ArrayBufferSlice) {
+    constructor(private device: GfxDevice, private dataFetcher: DataFetcher, private pathBase: string) {
     }
 
     private async requestAnimGroupDataInternal(ag: string, abortedCallback: AbortedCallback): Promise<AnimGroupData> {
-        // Find the tg corresponding to the ag.
-        const tg = assertExists(ag2tg_find(this.ag2tg, ag));
-
-        const [agData, tgData] = await Promise.all([
-            this.dataFetcher.fetchData(`${this.pathBase}/a/${ag}`, { abortedCallback }),
-            this.dataFetcher.fetchData(`${this.pathBase}/a/${tg}`, { abortedCallback }),
-        ]);
+        const agData = await this.dataFetcher.fetchData(`${this.pathBase}/a/${ag}`, { abortedCallback });
 
         const animGroup = parse(agData);
         const textureNames: string[] = [];
         for (let i = 0; i < animGroup.textures.length; i++)
             textureNames[animGroup.textures[i].texArcIdx] = animGroup.textures[i].name;
+
+        const tg = animGroup.texFilename;
+        const tgData = await this.dataFetcher.fetchData(`${this.pathBase}/a/${tg}-`, { abortedCallback });
+
         const tpl = TPL.parse(tgData, textureNames);
         const animGroupData = new AnimGroupData(this.device, this.cache, animGroup, tpl);
         this.animGroupDataCache.set(ag, animGroupData);
