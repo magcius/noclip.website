@@ -503,7 +503,7 @@ export function parse(buffer: ArrayBufferSlice): AnimGroup {
         anims.push({ name, loop, timeStart, timeEnd, hasVtxAnm, keyframes });
     }
 
-    return { anmFilename, texFilename, buildTime, groups, shapes, texMtxs, texBase: texBase, textures, node, vis, anims, hasAnyVtxAnm, bufferVtxPos, bufferVtxNrm };
+    return { anmFilename, texFilename, buildTime, groups, shapes, texMtxs, texBase, textures, node, vis, anims, hasAnyVtxAnm, bufferVtxPos, bufferVtxNrm };
 }
 
 export class AnimGroupData {
@@ -826,21 +826,24 @@ export class AnimGroupInstance {
             animVtxNrm.setFloat32(vtxNrmIndex * 0x0C + 0x08, animVtxNrm.getFloat32(vtxNrmIndex * 0x0C + 0x08) + vtxNrmUpd.zDelta * t);
         }
 
-        let texMtxIndex = 0;
-        for (let i = 0; i < frame.texMtxUpd.length; i++) {
-            const texMtxUpd = frame.texMtxUpd[i];
-            texMtxIndex += texMtxUpd.indexDelta;
-            const animTexMtx = this.animTexMtx[texMtxIndex];
-            animTexMtx.textureIdxAdd += texMtxUpd.textureIdxDelta;
-            animTexMtx.transS += texMtxUpd.transSDelta * t;
-            animTexMtx.transT += texMtxUpd.transTDelta * t;
-        }
+        // Stepped animations only apply if this is frame has been passed.
+        if (t >= 1.0) {
+            let texMtxIndex = 0;
+            for (let i = 0; i < frame.texMtxUpd.length; i++) {
+                const texMtxUpd = frame.texMtxUpd[i];
+                texMtxIndex += texMtxUpd.indexDelta;
+                const animTexMtx = this.animTexMtx[texMtxIndex];
+                animTexMtx.textureIdxAdd += texMtxUpd.textureIdxDelta;
+                animTexMtx.transS += texMtxUpd.transSDelta * t;
+                animTexMtx.transT += texMtxUpd.transTDelta * t;
+            }
 
-        let visIndex = 0;
-        for (let i = 0; i < frame.visUpd.length; i++) {
-            const visUpd = frame.visUpd[i];
-            visIndex += visUpd.indexDelta;
-            this.animVis.setBit(visIndex, visUpd.value);
+            let visIndex = 0;
+            for (let i = 0; i < frame.visUpd.length; i++) {
+                const visUpd = frame.visUpd[i];
+                visIndex += visUpd.indexDelta;
+                this.animVis.setBit(visIndex, visUpd.value);
+            }
         }
 
         let nodeIndex = 0;
