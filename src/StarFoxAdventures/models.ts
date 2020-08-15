@@ -1003,6 +1003,12 @@ export class Model {
     }
 }
 
+const scratchMtx0 = mat4.create();
+const scratchMtx1 = mat4.create();
+const scratchMtx2 = mat4.create();
+const scratchMtx3 = mat4.create();
+const scratchVec0 = vec3.create();
+
 export class ModelInstance implements BlockRenderer {
     private modelShapes: ModelShapes;
 
@@ -1071,9 +1077,6 @@ export class ModelInstance implements BlockRenderer {
         this.updateBoneMatrices();
         this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.boneMatrices);
     }
-
-    private scratch0 = mat4.create();
-    private scratch1 = mat4.create();
     
     private updateBoneMatrices() {
         if (!this.skeletonDirty) {
@@ -1117,13 +1120,13 @@ export class ModelInstance implements BlockRenderer {
         for (let i = 0; i < this.model.coarseBlends.length; i++) {
             const blend = this.model.coarseBlends[i];
 
-            mat4.translate(this.scratch0, this.boneMatrices[blend.joint0], this.model.invBindTranslations[blend.joint0]);
-            mat4.multiplyScalar(this.scratch0, this.scratch0, blend.influence0);
-            mat4.translate(this.scratch1, this.boneMatrices[blend.joint1], this.model.invBindTranslations[blend.joint1]);
-            mat4.multiplyScalar(this.scratch1, this.scratch1, blend.influence1);
+            mat4.translate(scratchMtx0, this.boneMatrices[blend.joint0], this.model.invBindTranslations[blend.joint0]);
+            mat4.multiplyScalar(scratchMtx0, scratchMtx0, blend.influence0);
+            mat4.translate(scratchMtx1, this.boneMatrices[blend.joint1], this.model.invBindTranslations[blend.joint1]);
+            mat4.multiplyScalar(scratchMtx1, scratchMtx1, blend.influence1);
 
             const boneMtx = this.boneMatrices[this.model.joints.length + i];
-            mat4.add(boneMtx, this.scratch0, this.scratch1);
+            mat4.add(boneMtx, scratchMtx0, scratchMtx1);
         }
 
         this.performFineSkinning();
@@ -1140,9 +1143,9 @@ export class ModelInstance implements BlockRenderer {
             return;
         }
 
-        const boneMtx0 = mat4.create();
-        const boneMtx1 = mat4.create();
-        const pos = vec3.create();
+        const boneMtx0 = scratchMtx2;
+        const boneMtx1 = scratchMtx3;
+        const pos = scratchVec0;
 
         // The original game performs fine skinning on the CPU.
         // A more appropriate place for these calculations might be in a vertex shader.
@@ -1173,10 +1176,10 @@ export class ModelInstance implements BlockRenderer {
 
                 const weight0 = weights.getUint8(weightOffs) / 128;
                 const weight1 = weights.getUint8(weightOffs + 1) / 128;
-                mat4.multiplyScalar(this.scratch0, boneMtx0, weight0);
-                mat4.multiplyScalar(this.scratch1, boneMtx1, weight1);
-                mat4.add(this.scratch0, this.scratch0, this.scratch1);
-                vec3.transformMat4(pos, pos, this.scratch0);
+                mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
+                mat4.multiplyScalar(scratchMtx1, boneMtx1, weight1);
+                mat4.add(scratchMtx0, scratchMtx0, scratchMtx1);
+                vec3.transformMat4(pos, pos, scratchMtx0);
 
                 dst.setInt16(dstOffs, pos[0] * quant);
                 dst.setInt16(dstOffs + 2, pos[1] * quant);
