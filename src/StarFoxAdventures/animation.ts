@@ -1,4 +1,4 @@
-import { mat4 } from 'gl-matrix';
+import { mat4, quat } from 'gl-matrix';
 import { lerp, lerpAngle, scaleMatrix, computeModelMatrixT, computeModelMatrixSRT } from '../MathHelpers';
 import AnimationController from '../AnimationController';
 import { ViewerRenderInput } from '../viewer';
@@ -6,7 +6,7 @@ import { DataFetcher } from '../DataFetcher';
 import { nArray } from '../util';
 
 import { GameInfo } from './scenes';
-import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader } from './util';
+import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader, mat4FromSRT } from './util';
 import { ModelInstance } from './models';
 
 export class SFAAnimationController {
@@ -279,12 +279,17 @@ export function interpolatePoses(pose0: Pose, pose1: Pose, ratio: number, reuse?
     return result;
 }
 
+const scratchQuat = quat.create();
+
 export function getLocalTransformForPose(dst: mat4, pose: Pose) {
-    computeModelMatrixT(dst, pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation);
-    scaleMatrix(dst, dst, pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale);
-    mat4.rotateZ(dst, dst, pose.axes[2].rotation);
-    mat4.rotateY(dst, dst, pose.axes[1].rotation);
-    mat4.rotateX(dst, dst, pose.axes[0].rotation);
+    quat.identity(scratchQuat);
+    // TODO: verify correctness
+    quat.rotateZ(scratchQuat, scratchQuat, pose.axes[2].rotation);
+    quat.rotateY(scratchQuat, scratchQuat, pose.axes[1].rotation);
+    quat.rotateX(scratchQuat, scratchQuat, pose.axes[0].rotation);
+    mat4.fromRotationTranslationScale(dst, scratchQuat,
+        [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation],
+        [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
 }
 
 export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number, reuse?: Keyframe): Keyframe {
@@ -298,6 +303,8 @@ export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number
     return result;
 }
 
+const scratchMtx = mat4.create();
+
 export function applyKeyframeToModel(kf: Keyframe, modelInst: ModelInstance, amap: DataView | null) {
     modelInst.resetPose();
 
@@ -308,10 +315,9 @@ export function applyKeyframeToModel(kf: Keyframe, modelInst: ModelInstance, ama
         }
 
         const pose = kf.poses[poseNum];
-        const poseMtx = mat4.create();
-        getLocalTransformForPose(poseMtx, pose);
+        getLocalTransformForPose(scratchMtx, pose);
 
-        modelInst.setJointPose(i, poseMtx);
+        modelInst.setJointPose(i, scratchMtx);
     }
 }
 

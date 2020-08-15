@@ -1,4 +1,4 @@
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, quat } from 'gl-matrix';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
 import { ModelInstance, ModelRenderContext } from './models';
-import { dataSubarray, angle16ToRads, readVec3 } from './util';
+import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
@@ -784,6 +784,8 @@ export interface Light {
     position: vec3;
 }
 
+const scratchQuat0 = quat.create();
+
 export class ObjectInstance {
     private modelInst: ModelInstance | null = null;
 
@@ -857,11 +859,9 @@ export class ObjectInstance {
 
     public getLocalSRT(): mat4 {
         if (this.srtDirty) {
-            mat4.fromTranslation(this.srtMatrix, this.position);
-            scaleMatrix(this.srtMatrix, this.srtMatrix, this.scale);
-            mat4.rotateY(this.srtMatrix, this.srtMatrix, this.yaw);
-            mat4.rotateX(this.srtMatrix, this.srtMatrix, this.pitch);
-            mat4.rotateZ(this.srtMatrix, this.srtMatrix, this.roll);
+            mat4FromSRT(this.srtMatrix, this.scale, this.scale, this.scale,
+                this.yaw, this.pitch, this.roll,
+                this.position[0], this.position[1], this.position[2]);
             this.srtDirty = false;
         }
 

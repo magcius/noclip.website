@@ -1,7 +1,5 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { ViewerRenderInput } from '../viewer';
-import { SFAAnimationController } from './animation';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, quat } from 'gl-matrix';
 import { Color } from '../Color';
 import { Camera, computeViewMatrix } from '../Camera';
 import { getMatrixTranslation } from '../MathHelpers';
@@ -60,6 +58,23 @@ export function mat4FromRowMajor(
 
 export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
     mtx[4 * col + row] = m;
+}
+
+const scratchQuat = quat.create();
+
+// Compute model matrix from scale, rotation, and translation.
+// This version is unique to SFA: Rotations are applied in Y -> X -> Z order.
+export function mat4FromSRT(dst: mat4,
+    sx: number, sy: number, sz: number,
+    yaw: number, pitch: number, roll: number,
+    tx: number, ty: number, tz: number)
+{
+    quat.identity(scratchQuat);
+    // TODO: verify correctness
+    quat.rotateY(scratchQuat, scratchQuat, yaw);
+    quat.rotateX(scratchQuat, scratchQuat, pitch);
+    quat.rotateZ(scratchQuat, scratchQuat, roll);
+    mat4.fromRotationTranslationScale(dst, scratchQuat, [tx, ty, tz], [sx, sy, sz]);
 }
 
 // Post-translate a matrix. Note that mat4.translate pre-translates a matrix.
