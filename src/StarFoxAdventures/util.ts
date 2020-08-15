@@ -62,6 +62,13 @@ export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
     mtx[4 * col + row] = m;
 }
 
+// Post-translate a matrix. Note that mat4.translate pre-translates a matrix.
+export function mat4PostTranslate(m: mat4, v: vec3) {
+    m[12] += v[0];
+    m[13] += v[1];
+    m[14] += v[2];
+}
+
 export function readVec3(data: DataView, byteOffset: number = 0): vec3 {
     return vec3.fromValues(
         data.getFloat32(byteOffset + 0),
