@@ -235,7 +235,9 @@ export class CommonShapeMaterial implements ShapeMaterial {
             };
         }
 
+        this.viewState.sceneCtx = modelCtx;
         this.viewState.outdoorAmbientColor = this.material.factory.getAmbientColor(modelCtx.ambienceNum);
+        this.viewState.furLayer = this.furLayer;
 
         // mat4.mul(this.scratchMtx, boneMatrices[this.geom.pnMatrixMap[0]], modelMatrix);
         mat4.copy(this.scratchMtx, modelMatrix);
