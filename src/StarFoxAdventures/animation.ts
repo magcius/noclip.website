@@ -280,10 +280,11 @@ export function interpolatePoses(pose0: Pose, pose1: Pose, ratio: number, reuse?
 }
 
 export function getLocalTransformForPose(dst: mat4, pose: Pose) {
-    computeModelMatrixSRT(dst,
-        pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale,
-        pose.axes[0].rotation, pose.axes[1].rotation, pose.axes[2].rotation,
-        pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation);
+    computeModelMatrixT(dst, pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation);
+    scaleMatrix(dst, dst, pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale);
+    mat4.rotateZ(dst, dst, pose.axes[2].rotation);
+    mat4.rotateY(dst, dst, pose.axes[1].rotation);
+    mat4.rotateX(dst, dst, pose.axes[0].rotation);
 }
 
 export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number, reuse?: Keyframe): Keyframe {

@@ -12,7 +12,7 @@ import { dataSubarray, angle16ToRads, readVec3 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
-import { scaleMatrix } from '../MathHelpers';
+import { scaleMatrix, computeModelMatrixSRT } from '../MathHelpers';
 import { SceneRenderContext } from './render';
 import { colorFromRGBA8, colorNewFromRGBA8, colorNewFromRGBA } from '../Color';
 
