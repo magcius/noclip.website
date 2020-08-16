@@ -30,6 +30,12 @@ export class InterpolationStep {
     bank: number = 0;
 }
 
+interface KeyframeTrack {
+    value: number;
+    tangentIn: number;
+    tangentOut: number;
+}
+
 export interface Keyframe {
     /**
      * The length of time in seconds it should take to animate to this Keyframe's end position.
@@ -41,13 +47,13 @@ export interface Keyframe {
     holdDuration: number;
     usesLinearInterp: boolean;
     linearEaseType: LinearEaseType;
-    targetPositionX: { value: number, tangentIn: number, tangentOut: number };
-    targetPositionY: { value: number, tangentIn: number, tangentOut: number };
-    targetPositionZ: { value: number, tangentIn: number, tangentOut: number };
-    lookAtPositionX: { value: number, tangentIn: number, tangentOut: number };
-    lookAtPositionY: { value: number, tangentIn: number, tangentOut: number };
-    lookAtPositionZ: { value: number, tangentIn: number, tangentOut: number };
-    bank: { value: number, tangentIn: number, tangentOut: number };
+    targetPositionX: KeyframeTrack;
+    targetPositionY: KeyframeTrack;
+    targetPositionZ: KeyframeTrack;
+    lookAtPositionX: KeyframeTrack;
+    lookAtPositionY: KeyframeTrack;
+    lookAtPositionZ: KeyframeTrack;
+    bank: KeyframeTrack;
     name?: string;
 }
 
@@ -154,7 +160,7 @@ export class CameraAnimationManager {
 
     private deserializeVersion0(kfArray: any[]): Keyframe[] {
         const kfs: Keyframe[] = [];
-        for (let i=0; i < kfArray.length; i++) {
+        for (let i = 0; i < kfArray.length; i++) {
             const newKeyframe = this.decomposeKeyframeFromMat4(kfArray[i].endPos);
             newKeyframe.interpDuration = kfArray[i].interpDuration;
             newKeyframe.holdDuration = kfArray[i].holdDuration;
@@ -227,27 +233,28 @@ export class CameraAnimationManager {
         this.animation.removeKeyframe(toRemove);
     }
 
-    public previewKeyframe(index: number, loopEnabled: boolean) {
+    public previewKeyframe(index: number, loop: boolean) {
         if (index < 0)
             return;
-        this.currentKeyframeIndex = index;
-        this.setKeyframeVars();
-        this.loopAnimation = loopEnabled;
-        this.calculateAllTangents();
+        this.prepareAnimation(index, loop);
         this.previewingKeyframe = true;
         this.studioCameraController.playAnimation(this.getStepFromKeyframe(this.currentKeyframe));
     }
 
     public playAnimation(loop: boolean) {
         if (this.animation.keyframes.length > 1) {
-            this.loopAnimation = loop;
-            this.currentKeyframeIndex = 0;
-            this.setKeyframeVars();
-            this.calculateAllTangents();
+            this.prepareAnimation(0, loop);
             // Skip interpolation for the first keyframe.
             this.currentKeyframeProgressMs = this.currentKeyframeInterpDurationMs;
             this.studioCameraController.playAnimation(this.getStepFromKeyframe(this.currentKeyframe));
         }
+    }
+
+    private prepareAnimation(startIndex: number, loop: boolean) {
+        this.currentKeyframeIndex = startIndex;
+        this.loopAnimation = loop;
+        this.calculateAllTangents();
+        this.setKeyframeVars();
     }
 
     /**
