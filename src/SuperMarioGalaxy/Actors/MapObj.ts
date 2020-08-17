@@ -18,6 +18,7 @@ import { createIndirectPlanetModel, PartsModel } from './MiscActor';
 import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep } from '../Spine';
 import { ModelObj, createModelObjBloomModel } from './ModelObj';
+import { initMultiFur } from '../Fur';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -62,6 +63,7 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     public railMover: boolean = false;
     public initNerve: TNerve | null = null;
     public initHitSensor: boolean = false;
+    public initFur: boolean = false;
 
     public setupDefaultPos(): void {
         this.setDefaultPos = true;
@@ -169,8 +171,16 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         }
 
         const bloomObjName = `${this.objName}Bloom`;
-        if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName))
-            this.bloomModel = createModelObjBloomModel(zoneAndLayer, sceneObjHolder, this.name, bloomObjName, this.modelInstance!.modelMatrix);
+        if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName)) {
+            this.bloomModel = createModelObjBloomModel(zoneAndLayer, sceneObjHolder, bloomObjName, bloomObjName, this.modelInstance!.modelMatrix);
+            vec3.copy(this.bloomModel.scale, this.scale);
+        }
+
+        // tryCreateBreakModel
+        // makeSubModels
+
+        if (initInfo.initFur)
+            initMultiFur(sceneObjHolder, this, initInfo.lightType);
 
         this.makeActorAppeared(sceneObjHolder);
 
@@ -228,6 +238,15 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
 
     protected initCaseNoUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         this.startMapPartsFunctions(sceneObjHolder);
+    }
+
+    protected appearBloomModel(sceneObjHolder: SceneObjHolder): void {
+        this.bloomModel!.makeActorAppeared(sceneObjHolder);
+        tryStartAllAnim(this.bloomModel!, `${this.objName}Bloom`);
+    }
+
+    protected killBloomModel(sceneObjHolder: SceneObjHolder): void {
+        this.bloomModel!.makeActorDead(sceneObjHolder);
     }
 
     public isObjectName(name: string): boolean {

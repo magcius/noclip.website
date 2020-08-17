@@ -407,6 +407,11 @@ export function setBrkRate(actor: LiveActor, rate: number): void {
     ctrl.speedInFrames = rate;
 }
 
+export function setBrkFrame(actor: LiveActor, frame: number): void {
+    const ctrl = actor.modelManager!.getBrkCtrl();
+    ctrl.currentTimeInFrames = frame;
+}
+
 export function setBrkFrameAndStop(actor: LiveActor, frame: number): void {
     const ctrl = actor.modelManager!.getBrkCtrl();
     ctrl.currentTimeInFrames = frame;
