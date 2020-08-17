@@ -54,6 +54,7 @@ export interface Keyframe {
     lookAtPositionY: KeyframeTrack;
     lookAtPositionZ: KeyframeTrack;
     bank: KeyframeTrack;
+    relativeBank: number;
     name?: string;
 }
 
@@ -91,6 +92,8 @@ export class CameraAnimation {
 export class CameraAnimationManager {
     private animation: CameraAnimation;
     private studioCameraController: StudioCameraController;
+    private scratchVec1: vec3 = vec3.create();
+    private scratchVec2: vec3 = vec3.create();
 
     // The translation vector components of the keyframes following and preceding the current keyframe.
     // Used for calculating tangents.
@@ -98,8 +101,7 @@ export class CameraAnimationManager {
     private nextPos: vec3 = vec3.create();
     private prevLookAtPos: vec3 = vec3.create();
     private nextLookAtPos: vec3 = vec3.create();
-    private scratchVec1: vec3 = vec3.create();
-    private scratchVec2: vec3 = vec3.create();
+    private scaleFactor: number = 0.5;
 
     // Variables for animation playback.
     private currentKeyframeIndex: number;
@@ -463,6 +465,7 @@ export class CameraAnimationManager {
             lookAtPositionY: { value: this.scratchVec2[1], tangentIn: 0, tangentOut: 0 },
             lookAtPositionZ: { value: this.scratchVec2[2], tangentIn: 0, tangentOut: 0 },
             bank: { value: 0, tangentIn: 0, tangentOut: 0 },
+            relativeBank: 0,
             name: undefined
         }
 
@@ -494,8 +497,26 @@ export class CameraAnimationManager {
 
         this.interpPos = !vec3.exactEquals(this.targetPosFrom, this.targetPosTo);
 
-        this.bankRotFrom = prevKf.bank.value;
-        this.bankRotTo = this.currentKeyframe.bank.value;
+        this.bankRotFrom = prevKf.relativeBank;
+        this.bankRotTo = this.currentKeyframe.relativeBank;
+
+        if (this.loopAnimation
+            && this.currentKeyframeIndex === 0
+            && Math.abs(this.bankRotTo - this.bankRotFrom) > Math.PI) {
+            if (this.bankRotFrom > 0)
+                this.bankRotFrom %= Math.PI;
+            else
+                this.bankRotFrom %= -Math.PI;
+
+            let prevBank = this.animation.keyframes[this.animation.keyframes.length - 2].relativeBank;
+            if (prevBank > 0)
+                prevBank %= Math.PI;
+            else
+                prevBank %= -Math.PI
+
+            this.currentKeyframe.bank.tangentIn = (this.bankRotTo - prevBank) * this.scaleFactor;
+            this.currentKeyframe.bank.tangentOut = (this.bankRotTo - prevBank) * this.scaleFactor;
+        }
         this.interpBank = Math.round(this.bankRotFrom * 1000000) != Math.round(this.bankRotTo * 1000000);
     }
 
@@ -505,22 +526,23 @@ export class CameraAnimationManager {
         let kf: Keyframe;
         for (let i = 0; i < this.animation.keyframes.length; i++) {
             kf = this.animation.keyframes[i];
-            kf.bank.value += fullRotations * (2 * Math.PI);
+            kf.relativeBank = kf.bank.value;
+            kf.relativeBank += fullRotations * (2 * Math.PI);
 
-            if (Math.abs(kf.bank.value - previousBank) > Math.PI) {
+            if (Math.abs(kf.relativeBank - previousBank) > Math.PI) {
                 // Closest rotation is in same direction, add or subtract a full rotation to the new bank
                 if (previousBank < 0)
-                    kf.bank.value -= 2 * Math.PI;
+                    kf.relativeBank -= 2 * Math.PI;
                 else
-                    kf.bank.value += 2 * Math.PI;
+                    kf.relativeBank += 2 * Math.PI;
             }
 
-            if (kf.bank.value > 0) {
-                fullRotations = Math.floor(kf.bank.value / (2 * Math.PI));
+            if (kf.relativeBank > 0) {
+                fullRotations = Math.floor(kf.relativeBank / (2 * Math.PI));
             } else {
-                fullRotations = Math.ceil(kf.bank.value / (2 * Math.PI));
+                fullRotations = Math.ceil(kf.relativeBank / (2 * Math.PI));
             }
-            previousBank = kf.bank.value;
+            previousBank = kf.relativeBank;
         }
     }
 
@@ -564,10 +586,15 @@ export class CameraAnimationManager {
     }
 
     private calculateTangents(prevKf: Keyframe, curKf: Keyframe, nextKf: Keyframe): void {
+        if (curKf.interpDuration === 0) {
+            this.zeroTangents(curKf, nextKf);
+            return;
+        }
+
         vec3.set(this.prevPos, prevKf.targetPositionX.value, prevKf.targetPositionY.value, prevKf.targetPositionZ.value);
         vec3.set(this.nextPos, nextKf.targetPositionX.value, nextKf.targetPositionY.value, nextKf.targetPositionZ.value);
         vec3.sub(this.scratchVec1, this.nextPos, this.prevPos);
-        vec3.scale(this.scratchVec1, this.scratchVec1, 0.5);
+        vec3.scale(this.scratchVec1, this.scratchVec1, this.scaleFactor);
         curKf.targetPositionX.tangentOut = this.scratchVec1[0];
         curKf.targetPositionY.tangentOut = this.scratchVec1[1];
         curKf.targetPositionZ.tangentOut = this.scratchVec1[2];
@@ -578,7 +605,7 @@ export class CameraAnimationManager {
         vec3.set(this.prevLookAtPos, prevKf.lookAtPositionX.value, prevKf.lookAtPositionY.value, prevKf.lookAtPositionZ.value);
         vec3.set(this.nextLookAtPos, nextKf.lookAtPositionX.value, nextKf.lookAtPositionY.value, nextKf.lookAtPositionZ.value);
         vec3.sub(this.scratchVec2, this.nextLookAtPos, this.prevLookAtPos);
-        vec3.scale(this.scratchVec2, this.scratchVec2, 0.5);
+        vec3.scale(this.scratchVec2, this.scratchVec2, this.scaleFactor);
         curKf.lookAtPositionX.tangentOut = this.scratchVec2[0];
         curKf.lookAtPositionY.tangentOut = this.scratchVec2[1];
         curKf.lookAtPositionZ.tangentOut = this.scratchVec2[2];
@@ -586,25 +613,29 @@ export class CameraAnimationManager {
         nextKf.lookAtPositionY.tangentIn = this.scratchVec2[1];
         nextKf.lookAtPositionZ.tangentIn = this.scratchVec2[2];
 
-        curKf.bank.tangentOut = (nextKf.bank.value - prevKf.bank.value) / 2;
-        nextKf.bank.tangentIn = (nextKf.bank.value - prevKf.bank.value) / 2;
+        curKf.bank.tangentOut = (nextKf.relativeBank - prevKf.relativeBank) * this.scaleFactor;
+        nextKf.bank.tangentIn = (nextKf.relativeBank - prevKf.relativeBank) * this.scaleFactor;
     }
 
     private zeroEndpointTangents(): void {
-        this.animation.keyframes[this.animation.keyframes.length - 1].targetPositionX.tangentOut = 0;
-        this.animation.keyframes[this.animation.keyframes.length - 1].targetPositionY.tangentOut = 0;
-        this.animation.keyframes[this.animation.keyframes.length - 1].targetPositionZ.tangentOut = 0;
-        this.animation.keyframes[this.animation.keyframes.length - 1].lookAtPositionX.tangentOut = 0;
-        this.animation.keyframes[this.animation.keyframes.length - 1].lookAtPositionY.tangentOut = 0;
-        this.animation.keyframes[this.animation.keyframes.length - 1].lookAtPositionZ.tangentOut = 0;
-        this.animation.keyframes[this.animation.keyframes.length - 1].bank.tangentOut = 0;
-        this.animation.keyframes[0].targetPositionX.tangentIn = 0;
-        this.animation.keyframes[0].targetPositionY.tangentIn = 0;
-        this.animation.keyframes[0].targetPositionZ.tangentIn = 0;
-        this.animation.keyframes[0].lookAtPositionX.tangentIn = 0;
-        this.animation.keyframes[0].lookAtPositionY.tangentIn = 0;
-        this.animation.keyframes[0].lookAtPositionZ.tangentIn = 0;
-        this.animation.keyframes[0].bank.tangentIn = 0;
+        this.zeroTangents(this.animation.keyframes[this.animation.keyframes.length - 1], this.animation.keyframes[0]);
+    }
+
+    private zeroTangents(fromKf: Keyframe, toKf: Keyframe) {
+        fromKf.targetPositionX.tangentOut = 0;
+        fromKf.targetPositionY.tangentOut = 0;
+        fromKf.targetPositionZ.tangentOut = 0;
+        fromKf.lookAtPositionX.tangentOut = 0;
+        fromKf.lookAtPositionY.tangentOut = 0;
+        fromKf.lookAtPositionZ.tangentOut = 0;
+        fromKf.bank.tangentOut = 0;
+        toKf.targetPositionX.tangentIn = 0;
+        toKf.targetPositionY.tangentIn = 0;
+        toKf.targetPositionZ.tangentIn = 0;
+        toKf.lookAtPositionX.tangentIn = 0;
+        toKf.lookAtPositionY.tangentIn = 0;
+        toKf.lookAtPositionZ.tangentIn = 0;
+        toKf.bank.tangentIn = 0;
     }
 
     private getStepFromKeyframe(kf: Keyframe): InterpolationStep {
