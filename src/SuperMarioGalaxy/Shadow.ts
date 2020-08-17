@@ -718,6 +718,10 @@ export function setShadowDropPositionPtr(actor: LiveActor, name: string | null, 
     actor.shadowControllerList!.getController(name).setDropPosPtr(v);
 }
 
+export function onCalcShadow(actor: LiveActor, name: string | null = null): void {
+    actor.shadowControllerList!.getController(name).setCalcCollisionMode(CalcCollisionMode.On);
+}
+
 export function onCalcShadowOneTime(actor: LiveActor, name: string | null = null): void {
     actor.shadowControllerList!.getController(name).setCalcCollisionMode(CalcCollisionMode.OneTime);
 }

@@ -15,7 +15,7 @@ import { DrawBufferType } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep } from '../Spine';
 import { ViewerRenderInput } from '../../viewer';
-import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime } from '../Shadow';
+import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow } from '../Shadow';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -484,7 +484,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         connectToSceneNpc(sceneObjHolder, this);
         this.initLightCtrl(sceneObjHolder);
         this.initEffectKeeper(sceneObjHolder, null);
-        initShadowVolumeSphere(sceneObjHolder, this, 50.0)
+        initShadowVolumeSphere(sceneObjHolder, this, 50.0);
         onCalcShadowOneTime(this);
 
         this.boundingSphereRadius = 100;
@@ -552,8 +552,11 @@ export class Penguin extends NPCActor<PenguinNrv> {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === PenguinNrv.Wait) {
-            if (isFirstStep(this))
+            if (isFirstStep(this)) {
                 this.diveCounter = getRandomInt(120, 300);
+                if (isExistRail(this))
+                    onCalcShadow(this);
+            }
 
             tryTalkNearPlayerAndStartMoveTalkAction(sceneObjHolder, this, deltaTimeFrames);
 
