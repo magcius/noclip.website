@@ -18,6 +18,7 @@ import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
 import { SceneRenderContext } from './render';
+import { Skeleton, Joint as SkJoint } from './skeleton';
 
 interface Joint {
     parent: number;
@@ -1012,22 +1013,35 @@ const scratchVec0 = vec3.create();
 export class ModelInstance implements BlockRenderer {
     private modelShapes: ModelShapes;
 
-    private jointPoseMatrices: mat4[] = [];
-    public boneMatrices: mat4[] = [];
-    private skeletonDirty: boolean = true;
+    private skeleton?: Skeleton;
+
+    public matrixPalette: mat4[] = [];
+    private matrixPaletteDirty: boolean = true;
     private amap: DataView;
 
     constructor(public model: Model) {
         const numBones = this.model.joints.length + this.model.coarseBlends.length;
+
         if (numBones !== 0) {
-            this.jointPoseMatrices = nArray(this.model.joints.length, () => mat4.create());
-            this.boneMatrices = nArray(numBones, () => mat4.create());
+            const skJoints: SkJoint[] = [];
+            for (let i = 0; i < this.model.joints.length; i++) {
+                const src = this.model.joints[i];
+                skJoints.push({
+                    parent: src.parent != 0xff ? src.parent : undefined,
+                    translation: vec3.clone(src.translation),
+                });
+            }
+
+            this.skeleton = new Skeleton(skJoints);
+            
+            this.matrixPalette = nArray(numBones, () => mat4.create());
         } else {
-            this.boneMatrices = [mat4.create()];
+            this.matrixPalette = [mat4.create()];
         }
 
+        this.matrixPaletteDirty = true;
+
         this.modelShapes = model.createInstanceShapes();
-        this.updateBoneMatrices();
     }
 
     public getAmap(modelAnimNum: number): DataView {
@@ -1048,38 +1062,41 @@ export class ModelInstance implements BlockRenderer {
     }
     
     public resetPose() {
-        for (let i = 0; i < this.jointPoseMatrices.length; i++) {
-            mat4.identity(this.jointPoseMatrices[i]);
+        mat4.identity(scratchMtx0);
+
+        for (let i = 0; i < this.model.joints.length; i++) {
+            this.skeleton!.setPoseMatrix(i, scratchMtx0);
         }
-        this.skeletonDirty = true;
+
+        this.matrixPaletteDirty = true;
     }
     
     public setJointPose(jointNum: number, mtx: mat4) {
-        if (jointNum < 0 || jointNum >= this.jointPoseMatrices.length) {
+        if (jointNum < 0 || jointNum >= this.model.joints.length) {
             return;
         }
 
-        mat4.copy(this.jointPoseMatrices[jointNum], mtx);
-        this.skeletonDirty = true;
+        this.skeleton!.setPoseMatrix(jointNum, mtx);
+        this.matrixPaletteDirty = true;
     }
     
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number) {
-        this.updateBoneMatrices();
-        this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.boneMatrices, drawStep);
+        this.updateMatrixPalette();
+        this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, drawStep);
     }
     
     public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateBoneMatrices();
-        this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.boneMatrices);
+        this.updateMatrixPalette();
+        this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
     }
     
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateBoneMatrices();
-        this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.boneMatrices);
+        this.updateMatrixPalette();
+        this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
     }
     
-    private updateBoneMatrices() {
-        if (!this.skeletonDirty) {
+    private updateMatrixPalette() {
+        if (!this.matrixPaletteDirty) {
             return;
         }
 
@@ -1088,31 +1105,12 @@ export class ModelInstance implements BlockRenderer {
         for (let i = 0; i < this.model.joints.length; i++) {
             const joint = this.model.joints[i];
 
-            const boneMtx = this.boneMatrices[joint.boneNum];
-            mat4.identity(boneMtx);
-            if (this.model.hasBetaFineSkinning) {
-                mat4.translate(boneMtx, boneMtx, this.model.invBindTranslations[joint.boneNum]);
-            }
+            // For rigid bones, vertices are stored in joint-local space as an optimization.
 
-            if (!this.model.hasBetaFineSkinning) {
-                // FIXME: Use this code for beta models with fine skinning
-                mat4.mul(boneMtx, this.jointPoseMatrices[joint.boneNum], boneMtx);
-                mat4PostTranslate(boneMtx, this.model.jointTfTranslations[joint.boneNum]);
-                if (joint.parent != 0xff) {
-                    mat4.mul(boneMtx, this.boneMatrices[joint.parent], boneMtx);
-                }
-            } else {
-                // FIXME: figure out what is broken about fine-skinned beta models that the following code is needed
-                let jointWalker = joint;
-                while (true) {
-                    mat4.mul(boneMtx, this.jointPoseMatrices[jointWalker.boneNum], boneMtx);
-                    mat4PostTranslate(boneMtx, this.model.jointTfTranslations[joint.boneNum]);
-                    if (jointWalker.parent === 0xff) {
-                        break;
-                    }
-                    jointWalker = this.model.joints[jointWalker.parent];
-                }
-            }
+            const boneMtx = this.matrixPalette[joint.boneNum];
+            mat4.copy(boneMtx, this.skeleton!.getJointMatrix(joint.boneNum));
+
+            // FIXME: Check beta models
         }
 
         // Compute coarse blended bones
@@ -1120,18 +1118,20 @@ export class ModelInstance implements BlockRenderer {
         for (let i = 0; i < this.model.coarseBlends.length; i++) {
             const blend = this.model.coarseBlends[i];
 
-            mat4.translate(scratchMtx0, this.boneMatrices[blend.joint0], this.model.invBindTranslations[blend.joint0]);
+            // For blended bones, vertices are stored in model space.
+
+            mat4.translate(scratchMtx0, this.matrixPalette[blend.joint0], this.model.invBindTranslations[blend.joint0]);
             mat4.multiplyScalar(scratchMtx0, scratchMtx0, blend.influence0);
-            mat4.translate(scratchMtx1, this.boneMatrices[blend.joint1], this.model.invBindTranslations[blend.joint1]);
+            mat4.translate(scratchMtx1, this.matrixPalette[blend.joint1], this.model.invBindTranslations[blend.joint1]);
             mat4.multiplyScalar(scratchMtx1, scratchMtx1, blend.influence1);
 
-            const boneMtx = this.boneMatrices[this.model.joints.length + i];
+            const boneMtx = this.matrixPalette[this.model.joints.length + i];
             mat4.add(boneMtx, scratchMtx0, scratchMtx1);
         }
 
         this.performFineSkinning();
 
-        this.skeletonDirty = false;
+        this.matrixPaletteDirty = false;
     }
 
     private performFineSkinning() {
@@ -1154,11 +1154,11 @@ export class ModelInstance implements BlockRenderer {
         for (let i = 0; i < this.model.posFineSkinningPieces.length; i++) {
             const piece = this.model.posFineSkinningPieces[i];
 
-            mat4.copy(boneMtx0, this.boneMatrices[piece.bone0]);
+            mat4.copy(boneMtx0, this.matrixPalette[piece.bone0]);
             if (!this.model.hasBetaFineSkinning) {
                 mat4.translate(boneMtx0, boneMtx0, this.model.invBindTranslations[piece.bone0]);
             }
-            mat4.copy(boneMtx1, this.boneMatrices[piece.bone1]);
+            mat4.copy(boneMtx1, this.matrixPalette[piece.bone1]);
             if (!this.model.hasBetaFineSkinning) {
                 mat4.translate(boneMtx1, boneMtx1, this.model.invBindTranslations[piece.bone1]);
             }
