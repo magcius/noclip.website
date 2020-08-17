@@ -37,6 +37,8 @@ const scratchVec3c = vec3.create();
 const scratchMatrix = mat4.create();
 
 class GravityExplainerArrow {
+    public gravity: PlanetGravity;
+
     // Original coordinate that gravity is generated from.
     public coord = vec3.create();
     public gravityVec = vec3.create();
@@ -97,8 +99,6 @@ export class GravityExplainer extends LiveActor {
     }
 
     private spawnArrows(sceneObjHolder: SceneObjHolder): void {
-        return;
-
         const gravities = sceneObjHolder.planetGravityManager!.gravities;
 
         for (let i = 0; i < gravities.length; i++) {
@@ -110,12 +110,13 @@ export class GravityExplainer extends LiveActor {
                     continue;
                 aabb.unionPoint(v);
             }
-            const count = Math.sqrt(aabb.diagonalLengthSquared()) / 100.0;
+            const count = Math.sqrt(aabb.diagonalLengthSquared()) / 500.0;
             console.log(count);
 
             for (let j = 0; j < count; j++) {
                 const arrow = new GravityExplainerArrow();
                 arrow.scale = 0.5;
+                arrow.gravity = grav;
 
                 if (!grav.generateRandomPoint(arrow.coord))
                     continue;
@@ -182,6 +183,9 @@ export class GravityExplainer extends LiveActor {
     }
 
     private drawArrow(arrow: GravityExplainerArrow, ddraw: TDDraw, camera: Camera): void {
+        if (!arrow.gravity.alive)
+            return;
+
         // const ctx = getDebugOverlayCanvas2D();
         // drawWorldSpacePoint(ctx, camera, arrow.pos, Magenta, 10);
 
