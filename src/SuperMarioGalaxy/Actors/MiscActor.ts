@@ -996,7 +996,7 @@ export class MiniRoutePart extends LiveActor {
 }
 
 export class SimpleEffectObj extends LiveActor {
-    private isVisible: boolean = true;
+    private visibleCull: boolean = true;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -1033,22 +1033,21 @@ export class SimpleEffectObj extends LiveActor {
         this.getClippingCenterOffset(scratchVec3);
         vec3.add(scratchVec3, this.translation, scratchVec3);
 
-        const visibleScenario = this.visibleScenario && this.visibleAlive;
-        let visible = visibleScenario;
-
-        const camera = viewerInput.camera;
-        if (visible)
-            visible = camera.frustum.containsSphere(scratchVec3, this.getClippingRadius());
-
-        if (this.isVisible === visible)
+        if (!isValidDraw(this))
             return;
 
-        this.isVisible = visible;
+        const camera = viewerInput.camera;
+        const visibleCull = camera.frustum.containsSphere(scratchVec3, this.getClippingRadius());
+
+        if (this.visibleCull === visibleCull)
+            return;
+
+        this.visibleCull = visibleCull;
         if (this.effectKeeper !== null)
-            this.effectKeeper.setDrawParticle(visible);
+            this.effectKeeper.setDrawParticle(visibleCull);
 
         if (this.isSyncClipping()) {
-            if (visible)
+            if (visibleCull)
                 emitEffect(sceneObjHolder, this, this.name);
             else
                 deleteEffectAll(this);

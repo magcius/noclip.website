@@ -499,11 +499,34 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     // noclip hook for scenario changing.
     protected onScenario(sceneObjHolder: SceneObjHolder): void {
-        this.makeActorAppeared(sceneObjHolder);
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.validateBySystem();
+        // endClipped
+        if (this.collisionParts !== null)
+            validateCollisionPartsForActor(sceneObjHolder, this);
+        resetPosition(sceneObjHolder, this);
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setDrawParticle(true);
+        if (this.actorLightCtrl !== null)
+            this.actorLightCtrl.reset(sceneObjHolder);
+
+        // tryUpdateHitSensorsAll
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.update();
     }
 
     protected offScenario(sceneObjHolder: SceneObjHolder): void {
-        this.makeActorDead(sceneObjHolder);
+        vec3.set(this.velocity, 0, 0, 0);
+        if (this.hitSensorKeeper !== null) {
+            this.hitSensorKeeper.clear();
+            this.hitSensorKeeper.invalidateBySystem();
+        }
+        if (this.binder !== null)
+            this.binder.clear();
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setDrawParticle(false);
+        if (this.collisionParts !== null)
+            invalidateCollisionParts(sceneObjHolder, this.collisionParts);
     }
 
     public getBaseMtx(): mat4 | null {
