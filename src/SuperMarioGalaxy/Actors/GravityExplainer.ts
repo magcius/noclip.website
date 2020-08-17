@@ -97,13 +97,21 @@ export class GravityExplainer extends LiveActor {
     }
 
     private spawnArrows(sceneObjHolder: SceneObjHolder): void {
+        return;
+
         const gravities = sceneObjHolder.planetGravityManager!.gravities;
 
         for (let i = 0; i < gravities.length; i++) {
             const grav = gravities[i];
-            if (!(grav instanceof SegmentGravity))
-                continue;
-            let count = 50;
+
+            const aabb = new AABB(), v = vec3.create();
+            for (let j = 0; j < 1000; j++) {
+                if (!grav.generateRandomPoint(v))
+                    continue;
+                aabb.unionPoint(v);
+            }
+            const count = Math.sqrt(aabb.diagonalLengthSquared()) / 100.0;
+            console.log(count);
 
             for (let j = 0; j < count; j++) {
                 const arrow = new GravityExplainerArrow();

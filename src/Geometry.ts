@@ -187,6 +187,8 @@ export class AABB {
     }
 
     public diagonalLengthSquared(): number {
+        if (this.isEmpty())
+            return 0;
         const dx = this.maxX - this.minX;
         const dy = this.maxY - this.minY;
         const dz = this.maxZ - this.minZ;

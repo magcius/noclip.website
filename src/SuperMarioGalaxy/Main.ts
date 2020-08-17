@@ -1276,7 +1276,7 @@ class SMGSpawner {
         this.placeStageData(stageDataHolder, true);
         this.placeStageData(stageDataHolder, false);
 
-        this.sceneObjHolder.gravityExplainer = new GravityExplainer2(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
+        this.sceneObjHolder.gravityExplainer = new GravityExplainer(dynamicSpawnZoneAndLayer, this.sceneObjHolder);
 
         // We trigger "after placement" here because legacy objects should not require it,
         // and nothing should depend on legacy objects being placed. Since legacy objects
