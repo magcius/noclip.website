@@ -84,6 +84,7 @@ export interface BINModel {
     vertexData: Float32Array;
     indexData: Uint16Array;
     modelParts: BINModelPart[];
+    animationIndex: number;
 }
 
 export interface BINModelSector {
@@ -273,8 +274,6 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
 
     const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
     const modelObjType = view.getUint16(sectorOffs + 0x02, true);
-    if (modelObjType !== 0x05)
-        return null;
 
     const textures: BINTexture[] = [];
     function findOrDecodeTexture(tex0_data0: number, tex0_data1: number): number {
@@ -305,7 +304,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
         const maxX = view.getFloat32(objOffs + 0x10, true);
         const maxY = view.getFloat32(objOffs + 0x14, true);
         const maxZ = view.getFloat32(objOffs + 0x18, true);
-        assert(view.getUint32(objOffs + 0x1C, true) === 0x00);
+        const animationIndex = view.getUint8(objOffs + 0x1C);
         const bbox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
 
         const packetsBegin = objOffs + 0x20;
@@ -685,7 +684,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
             indexOffset += vertexRun.vertexRunCount;
         }
 
-        models.push({ bbox, vertexData, indexData, modelParts });
+        models.push({ bbox, vertexData, indexData, modelParts, animationIndex });
 
         modelObjTableIdx += 0x04;
     }
@@ -1054,6 +1053,7 @@ export interface ObjectDefinition {
     stayLevel: boolean;
     speedIndex: number;
     altUpdate: number;
+    animated: boolean;
     dummyParent: boolean;
 
     map: number;
@@ -1075,6 +1075,7 @@ export function parseObjectDefinition(object: ArrayBufferSlice, collection: Arra
     const stayLevel = objView.getUint8(objOffs + 0x0C) !== 0;
     const speedIndex = objView.getInt8(objOffs + 0x13);
     const altUpdate = objView.getInt8(objOffs + 0x14);
+    const animated = objView.getUint8(objOffs + 0x1A) !== 0;
     const dummyParent = objView.getUint8(objOffs + 0x21) !== 0;
 
     const map = collView.getInt8(collOffs + 0x00);
@@ -1084,7 +1085,7 @@ export function parseObjectDefinition(object: ArrayBufferSlice, collection: Arra
     const sortKey = collView.getInt16(collOffs + 0x04, true);
     const isRare = collView.getInt8(collOffs + 0x06) !== 0;
 
-    return { stayLevel, speedIndex, altUpdate, dummyParent, map, mapRegion, size, category, sortKey, isRare };
+    return { stayLevel, speedIndex, altUpdate, animated, dummyParent, map, mapRegion, size, category, sortKey, isRare };
 }
 
 export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIndex: number): Int16Array | null {
@@ -1107,13 +1108,37 @@ export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIn
 }
 
 const scratchObjectAABB = new AABB();
-const scratchAABBTransform = mat4.create();
 function computeObjectAABB(sector: BINModelSector, transforms: PartTransform[]): AABB {
     const out = new AABB();
-    mat4.identity(scratchAABBTransform);
-    out.transform(sector.models[0].bbox, transforms.length > 0 ? transforms[0].matrix : scratchAABBTransform);
-    for (let i = 1; i < transforms.length; i++) {
-        scratchObjectAABB.transform(sector.models[i].bbox, transforms.length > 0 ? transforms[i].matrix : scratchAABBTransform);
+    for (let i = 0; i < sector.models.length; i++) {
+        if (transforms.length > 0) {
+            scratchObjectAABB.transform(sector.models[i].bbox, assertExists(transforms[i].matrix));
+            out.union(out, scratchObjectAABB);
+        } else
+            out.union(out, sector.models[i].bbox);
+    }
+    return out;
+}
+
+function computeObjectAABBFromRawSector(buffer: ArrayBufferSlice, offset: number, transforms: PartTransform[]): AABB {
+    const out = new AABB();
+    const view = buffer.createDataView();
+    const modelObjCount = view.getUint16(offset + 0x00, true);
+
+    const modelObjTableIdx = offset + 0x04;
+    for (let i = 0; i < modelObjCount; i++) {
+        const objOffs = offset + view.getUint32(modelObjTableIdx + 4 * i, true);
+
+        const minX = view.getFloat32(objOffs + 0x00, true);
+        const minY = view.getFloat32(objOffs + 0x04, true);
+        const minZ = view.getFloat32(objOffs + 0x08, true);
+        const maxX = view.getFloat32(objOffs + 0x10, true);
+        const maxY = view.getFloat32(objOffs + 0x14, true);
+        const maxZ = view.getFloat32(objOffs + 0x18, true);
+        scratchObjectAABB.set(minX, minY, minZ, maxX, maxY, maxZ);
+
+        if (transforms.length > 0)
+            scratchObjectAABB.transform(scratchObjectAABB, assertExists(transforms[i].matrix));
         out.union(out, scratchObjectAABB);
     }
     return out;
@@ -1148,6 +1173,7 @@ export interface MissionSetupObjectSpawn {
 export interface LevelSetupBIN {
     activeStageAreas: number[];
     objectModels: ObjectModel[];
+    objectDefs: ObjectDefinition[];
     objectSpawns: MissionSetupObjectSpawn[][];
     zones: CollisionList[];
 }
@@ -1176,7 +1202,7 @@ export interface PartTransform {
     rotation: vec3;
 }
 
-export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBufferSlice, firstSectorIndex: number, transformBuffer: ArrayBufferSlice, objectId: number): ObjectModel | null {
+export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBufferSlice, firstSectorIndex: number, transformBuffer: ArrayBufferSlice, objectId: number, isAnimated = false): ObjectModel | null {
     const view = buffer.createDataView();
 
     const firstSectorOffs = 0x04 + firstSectorIndex * 0x04;
@@ -1210,15 +1236,31 @@ export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBuffer
     // if (!sectorIsNIL(buffer, collisionOffs))
     //     collision = parseCollisionLists(buffer, collisionOffs);
 
-    // Load in LOD 0.
-    const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
+    // Load in LOD 0 for normal objects, but use LOD 1 for animated objects; their LOD 0
+    // is a single part used for low-cost rendering, while LOD 1 holds actual part data
+    let sectorOffs = lod0Offs;
+    if (isAnimated) {
+        assert(!sectorIsNIL(buffer, lod1Offs));
+        sectorOffs = lod1Offs + view.getUint32(lod1Offs, true);
+    }
+
+    const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), sectorOffs);
+
     if (sector === null)
         return null;
     const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
-    return { id: objectId, sector, transforms, bbox: computeObjectAABB(sector, transforms) };
+
+    // animated objects don't have proper part transforms, so we need to use the unified model from LOD 0
+    let bbox: AABB;
+    if (isAnimated)
+        bbox = computeObjectAABBFromRawSector(buffer, lod0Offs, transforms);
+    else
+        bbox = computeObjectAABB(sector, transforms);
+    return { id: objectId, sector, transforms, bbox };
 }
 
-export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
+export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], defs: ArrayBufferSlice, collection: ArrayBufferSlice,
+    firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
@@ -1229,25 +1271,28 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
 
     const gsMemoryMap = nArray(2, () => gsMemoryMapNew());
 
-    function parseObject(objectId: number): ObjectModel | null {
+    function parseObject(objectId: number, animated: boolean): ObjectModel | null {
         const firstSectorIndex = 0x09 + objectId * 0x0B;
         assert(firstSectorIndex + 0x0B <= numSectors);
 
-        return parseObjectModel(gsMemoryMap, buffer, firstSectorIndex, transformBuffer, objectId);
+        return parseObjectModel(gsMemoryMap, buffer, firstSectorIndex, transformBuffer, objectId, animated);
     }
 
     const objectModels: ObjectModel[] = [];
     const objectSpawns: MissionSetupObjectSpawn[][] = [];
+    const objectDefs: ObjectDefinition[] = [];
 
     function findOrParseObjectModel(objectId: number): number {
         const existingIndex = objectModels.findIndex((model) => model.id === objectId);
         if (existingIndex >= 0) {
             return existingIndex;
         } else {
-            const newObject = parseObject(objectId);
+            const newDef = parseObjectDefinition(defs, collection, objectId);
+            const newObject = parseObject(objectId, newDef.animated);
             if (newObject === null)
                 return -1;
             objectModels.push(newObject);
+            objectDefs.push(newDef);
             return objectModels.length - 1;
         }
     }
@@ -1361,5 +1406,5 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
         }
     }
 
-    return { objectModels, objectSpawns, activeStageAreas, zones };
+    return { objectModels, objectDefs, objectSpawns, activeStageAreas, zones };
 }

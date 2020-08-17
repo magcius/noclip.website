@@ -1,10 +1,14 @@
 
 import ArrayBufferSlice from './ArrayBufferSlice';
+import { IS_DEVELOPMENT } from './BuildVersion';
 
 export function assert(b: boolean, message: string = ""): asserts b {
     if (!b) {
         console.error(new Error().stack);
-        throw new Error(`Assert fail: ${message}`);
+        if (IS_DEVELOPMENT)
+            debugger
+        else
+            throw new Error(`Assert fail: ${message}`);
     }
 }
 

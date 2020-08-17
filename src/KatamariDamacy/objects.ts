@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, quat } from "gl-matrix";
 import { Green, Magenta, Red } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
@@ -12,6 +12,8 @@ import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, Motio
 import { BINModelInstance, BINModelSectorData } from "./render";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { ObjectAnimationList, applyCurve } from "./animation";
+import { AdjustableAnimationController } from "../BanjoKazooie/render";
 
 type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => void;
 
@@ -68,7 +70,19 @@ function reduceAngle(t: number): number {
 
 const speedTable: number[] = [0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0];
 
+const enum AnimationType {
+    IDLE = 0,
+    MOVING = 1,
+    WRIGGLE = 2,
+    PANIC_A = 3,
+    PANIC_B = 4,
+}
+
 const scratchMatrix = mat4.create();
+const animationQuat = quat.create();
+const animationPos = vec3.create();
+const animationMatrix = mat4.create();
+const animationStack = nArray(15, () => mat4.create());
 export class ObjectRenderer {
     public visible = true;
     public modelInstances: BINModelInstance[] = [];
@@ -88,6 +102,10 @@ export class ObjectRenderer {
 
     public altObject: ObjectRenderer | null = null;
     public useAltObject = false;
+
+    private animations: ObjectAnimationList | null = null;
+    private animationIndex = -1;
+    private animationController = new AdjustableAnimationController(30);
 
     constructor(device: GfxDevice, gfxCache: GfxRenderCache, objectModel: ObjectModel, binModelSectorData: BINModelSectorData, public objectSpawn: MissionSetupObjectSpawn) {
         for (let j = 0; j < binModelSectorData.modelData.length; j++) {
@@ -121,6 +139,19 @@ export class ObjectRenderer {
             parentOffset,
             inheritedEuler: vec3.create(),
         };
+    }
+
+    private static animPermutation = [3, 0, 2, 1, 4, 5];
+
+    public setAnimation(anim: AnimationType): void {
+        const oldIndex = this.animationIndex;
+        this.animationIndex = ObjectRenderer.animPermutation[anim];
+
+        if (this.animations !== null && this.animationIndex !== oldIndex)
+            this.animationController.init(this.animations!.animations[this.animationIndex].fps);
+
+        if (this.altObject)
+            this.altObject.setAnimation(anim);
     }
 
     public initMotion(def: ObjectDefinition, motion: MotionParameters | null, zones: CollisionList[], levelCollision: CollisionList[][], allObjects: ObjectRenderer[]): void {
@@ -235,19 +266,23 @@ export class ObjectRenderer {
 
         setMatrixTranslation(this.modelMatrix, this.prevPosition);
 
-        // Position model instances correctly.
-            for (let i = 0; i < this.modelInstances.length; i++) {
-                const dst = this.modelInstances[i].modelMatrix;
-                computeModelMatrixPosRot(dst, this.modelInstances[i].translation, this.modelInstances[i].euler);
-                mat4.mul(dst, this.modelMatrix, dst);
-            }
-
         if (this.animFunc !== null)
             this.animFunc(this, deltaTimeInFrames);
 
         if (!this.useAltObject) {
-            for (let i = 0; i < this.modelInstances.length; i++)
+            if (this.animations !== null && this.animationIndex >= 0) {
+                this.animationController.setTimeFromViewerInput(viewerInput);
+                this.animate();
+            } else
+                for (let i = 0; i < this.modelInstances.length; i++)
+                    computeModelMatrixPosRot(this.modelInstances[i].modelMatrix, this.modelInstances[i].translation, this.modelInstances[i].euler);
+
+            // Position model instances correctly.
+            for (let i = 0; i < this.modelInstances.length; i++) {
+                const dst = this.modelInstances[i].modelMatrix;
+                mat4.mul(dst, this.modelMatrix, dst);
                 this.modelInstances[i].prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette);
+            }
         } else if (this.altObject) {
             vec3.copy(this.altObject.prevPosition, this.prevPosition);
             mat4.copy(this.altObject.baseMatrix, this.baseMatrix);
@@ -315,8 +350,47 @@ export class ObjectRenderer {
                 return ObjectId.BIRD09_D;
             if (id === ObjectId.BIRD08_B)
                 return ObjectId.BIRD10_C;
-}
+        }
         return -1;
+    }
+
+    public initAnimation(animations: ObjectAnimationList): void {
+        this.animations = animations;
+        assert(animationStack.length >= animations.bindPose.length);
+        this.partBBox = this.bbox; // first "part" is actually the whole model for animated objects
+        this.setAnimation(AnimationType.IDLE);
+    }
+
+    private animate(): void {
+        const bind = this.animations!.bindPose;
+        const animation = this.animations!.animations[this.animationIndex];
+        let curveIndex = 0;
+        const frame = this.animationController.getTimeInFrames() % (animation.frameInterval * (animation.segmentCount - 1));
+        for (let i = 0; i < bind.length; i++) {
+            if (animation.isRelative) {
+                vec3.zero(animationPos);
+                quat.identity(animationQuat);
+            } else {
+                vec3.copy(animationPos, bind[i].pos);
+                quat.copy(animationQuat, bind[i].rot);
+            }
+
+            for (; curveIndex < animation.curves.length; curveIndex++) {
+                if (animation.curves[curveIndex].part !== i)
+                    break;
+                applyCurve(animation, animation.curves[curveIndex], frame, animationPos, animationQuat);
+            }
+            const dst = animationStack[i];
+            mat4.fromRotationTranslation(dst, animationQuat, animationPos);
+            if (animation.isRelative) {
+                mat4.fromRotationTranslation(animationMatrix, bind[i].rot, bind[i].pos);
+                mat4.mul(dst, animationMatrix, dst);
+            }
+            if (bind[i].parent >= 0)
+                mat4.mul(dst, animationStack[bind[i].parent], dst);
+        }
+        for (let i = 0; i < this.modelInstances.length; i++)
+            mat4.copy(this.modelInstances[i].modelMatrix, animationStack[this.modelInstances[i].binModelData.binModel.animationIndex]);
     }
 }
 
@@ -477,6 +551,8 @@ function setZone(object: ObjectRenderer, motion: MotionState, zones: CollisionLi
     landingScratch[1] += 2 * object.bbox.maxCornerRadius();
     findGround(zones, scratchTri, motion.pos, landingScratch);
     motion.zone = scratchTri.zone;
+    if (motion.parameters.motionID === 0x25)
+        object.setAnimation(AnimationType.MOVING);
 }
 
 const enum Axis { X, Y, Z }
@@ -1088,6 +1164,7 @@ function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, d
         motion.target[1] -= object.bbox.maxY; // adjust target to object center height, kind of weird because of the coordinate system
         object.euler[1] = Math.PI + Math.atan2(motion.target[0] - motion.pos[0], motion.target[2] - motion.pos[2]);
 
+        object.setAnimation(AnimationType.MOVING);
         vec3.sub(motion.velocity, motion.target, motion.pos);
         normToLength(motion.velocity, motion.speed);
     }
@@ -1188,12 +1265,15 @@ function motion_MiscHop_Update(object: ObjectRenderer, deltaTimeInFrames: number
         motion.timer -= deltaTimeInFrames;
         return;
     }
+    object.setAnimation(AnimationType.IDLE);
     motion.timer = 0;
     motion.velocity[1] += motion.g * deltaTimeInFrames;
     motion.pos[1] += motion.velocity[1] * deltaTimeInFrames;
     if (motion.supporter) {
-        if (landOnObject(object, motion.pos, motion.supporter))
+        if (landOnObject(object, motion.pos, motion.supporter)) {
             motion.timer = -1;
+            object.setAnimation(AnimationType.IDLE);
+        }
     } else {
         vec3.sub(hopScratch, motion.pos, object.prevPosition);
         normToLength(hopScratch, object.bbox.maxCornerRadius());
@@ -1202,6 +1282,7 @@ function motion_MiscHop_Update(object: ObjectRenderer, deltaTimeInFrames: number
             if (object.prevPosition[1] + scratchTri.depth < motion.pos[1] + object.partBBox.maxY) {
                 motion.pos[1] = object.prevPosition[1] + scratchTri.depth - object.partBBox.maxY;
                 motion.timer = -1;
+                object.setAnimation(AnimationType.IDLE);
             }
         }
     }
@@ -1304,6 +1385,7 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
             if (object.altObject) {
                 motion.state = FlyInCirclesState.TAKEOFF;
                 object.useAltObject = true;
+                object.setAnimation(AnimationType.IDLE);
 
                 vec3.set(motion.velocity, Math.sin(object.euler[1]), 0, Math.cos(object.euler[1]));
                 vec3.scale(motion.velocity, motion.velocity, -8);
@@ -1371,6 +1453,7 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
                 motion.state = -1;
                 object.useAltObject = false;
                 motion.useAltMotion = false;
+                object.setAnimation(AnimationType.IDLE);
             }
             motion.pos[1] = decelY + Math.sin(motion.angle) * motion.radius;
         }

@@ -329,9 +329,7 @@ export class BINModelInstance {
         if (!this.visible)
             return;
 
-        computeModelMatrixR(scratchMatrix[0], this.euler[0], this.euler[1], this.euler[2]);
-        mat4.mul(scratchMatrix[0], this.modelMatrix, scratchMatrix[0]);
-        mat4.mul(scratchMatrix[0], toNoclip, scratchMatrix[0]);
+        mat4.mul(scratchMatrix[0], toNoclip, this.modelMatrix);
 
         scratchAABB.transform(this.binModelData.binModel.bbox, scratchMatrix[0]);
         if (!viewerInput.camera.frustum.contains(scratchAABB))
