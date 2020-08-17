@@ -591,30 +591,41 @@ export class CameraAnimationManager {
             return;
         }
 
+        // Speed scales calculated as per Nils Pipenbrinck:
+        // https://www.cubic.org/docs/hermite.htm - section "Speed Control".
+        const outScale =  (2 * curKf.interpDuration) / (curKf.interpDuration + nextKf.interpDuration);
+        const inScale = (2 * nextKf.interpDuration) / (curKf.interpDuration + nextKf.interpDuration);
+
         vec3.set(this.prevPos, prevKf.targetPositionX.value, prevKf.targetPositionY.value, prevKf.targetPositionZ.value);
         vec3.set(this.nextPos, nextKf.targetPositionX.value, nextKf.targetPositionY.value, nextKf.targetPositionZ.value);
         vec3.sub(this.scratchVec1, this.nextPos, this.prevPos);
         vec3.scale(this.scratchVec1, this.scratchVec1, this.scaleFactor);
+        vec3.copy(this.scratchVec2, this.scratchVec1);
+        vec3.scale(this.scratchVec1, this.scratchVec1, outScale);
+        vec3.scale(this.scratchVec2, this.scratchVec2, inScale);
         curKf.targetPositionX.tangentOut = this.scratchVec1[0];
         curKf.targetPositionY.tangentOut = this.scratchVec1[1];
         curKf.targetPositionZ.tangentOut = this.scratchVec1[2];
-        nextKf.targetPositionX.tangentIn = this.scratchVec1[0];
-        nextKf.targetPositionY.tangentIn = this.scratchVec1[1];
-        nextKf.targetPositionZ.tangentIn = this.scratchVec1[2];
+        nextKf.targetPositionX.tangentIn = this.scratchVec2[0];
+        nextKf.targetPositionY.tangentIn = this.scratchVec2[1];
+        nextKf.targetPositionZ.tangentIn = this.scratchVec2[2];
 
         vec3.set(this.prevLookAtPos, prevKf.lookAtPositionX.value, prevKf.lookAtPositionY.value, prevKf.lookAtPositionZ.value);
         vec3.set(this.nextLookAtPos, nextKf.lookAtPositionX.value, nextKf.lookAtPositionY.value, nextKf.lookAtPositionZ.value);
-        vec3.sub(this.scratchVec2, this.nextLookAtPos, this.prevLookAtPos);
-        vec3.scale(this.scratchVec2, this.scratchVec2, this.scaleFactor);
-        curKf.lookAtPositionX.tangentOut = this.scratchVec2[0];
-        curKf.lookAtPositionY.tangentOut = this.scratchVec2[1];
-        curKf.lookAtPositionZ.tangentOut = this.scratchVec2[2];
+        vec3.sub(this.scratchVec1, this.nextLookAtPos, this.prevLookAtPos);
+        vec3.scale(this.scratchVec1, this.scratchVec1, this.scaleFactor);
+        vec3.copy(this.scratchVec2, this.scratchVec1);
+        vec3.scale(this.scratchVec1, this.scratchVec1, outScale);
+        vec3.scale(this.scratchVec2, this.scratchVec2, inScale);
+        curKf.lookAtPositionX.tangentOut = this.scratchVec1[0];
+        curKf.lookAtPositionY.tangentOut = this.scratchVec1[1];
+        curKf.lookAtPositionZ.tangentOut = this.scratchVec1[2];
         nextKf.lookAtPositionX.tangentIn = this.scratchVec2[0];
         nextKf.lookAtPositionY.tangentIn = this.scratchVec2[1];
         nextKf.lookAtPositionZ.tangentIn = this.scratchVec2[2];
 
-        curKf.bank.tangentOut = (nextKf.relativeBank - prevKf.relativeBank) * this.scaleFactor;
-        nextKf.bank.tangentIn = (nextKf.relativeBank - prevKf.relativeBank) * this.scaleFactor;
+        curKf.bank.tangentOut = (nextKf.relativeBank - prevKf.relativeBank) * this.scaleFactor * outScale;
+        nextKf.bank.tangentIn = (nextKf.relativeBank - prevKf.relativeBank) * this.scaleFactor * inScale;
     }
 
     private zeroEndpointTangents(): void {
