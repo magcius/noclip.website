@@ -7,7 +7,7 @@ import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
-import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixAxis, getMatrixAxis } from "../MathHelpers";
+import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixAxis, getMatrixAxis, lerp } from "../MathHelpers";
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
@@ -719,6 +719,10 @@ export function getNextRailPointNo(actor: LiveActor): number {
     return actor.railRider!.getNextPointNo();
 }
 
+export function getNextRailPointArg2(actor: LiveActor): number | null {
+    return actor.railRider!.getNextPointArg('point_arg2');
+}
+
 export function getRailPartLength(actor: LiveActor, partIdx: number): number {
     return actor.railRider!.getPartLength(partIdx);
 }
@@ -832,16 +836,21 @@ export function calcGravityVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj:
     return sceneObjHolder.planetGravityManager!.calcTotalGravityVector(dst, gravityInfo, pos, gravityTypeMask, attachmentFilter);
 }
 
-export function calcGravityVector(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): void {
-    // Can't import GravityTypeMask without circular dependencies... TODO(jstpierre): Change this.
-    const GravityTypeMask_Normal = 0x01;
-    calcGravityVectorOrZero(sceneObjHolder, nameObj, coord, GravityTypeMask_Normal, dst, gravityInfo, attachmentFilter);
+// Can't import GravityTypeMask without circular dependencies... TODO(jstpierre): Change this.
+const GravityTypeMask_Normal = 0x01;
+export function calcGravityVector(sceneObjHolder: SceneObjHolder, nameObj: NameObj, coord: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any = null): boolean {
+    return calcGravityVectorOrZero(sceneObjHolder, nameObj, coord, GravityTypeMask_Normal, dst, gravityInfo, attachmentFilter);
 }
 
 export function calcGravity(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
     calcGravityVector(sceneObjHolder, actor, actor.translation, scratchVec3);
     if (!isNearZeroVec3(scratchVec3, 0.001))
         vec3.copy(actor.gravityVector, scratchVec3);
+}
+
+export function isZeroGravity(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
+    const hasGravity = calcGravityVectorOrZero(sceneObjHolder, actor, actor.translation, GravityTypeMask_Normal, scratchVec3a, null, null);
+    return !hasGravity;
 }
 
 export function makeMtxTRFromQuatVec(dst: mat4, q: ReadonlyQuat, translation: ReadonlyVec3): void {
@@ -1326,4 +1335,19 @@ export function invalidateShadowAll(actor: LiveActor): void {
 export function validateShadowAll(actor: LiveActor): void {
     for (let i = 0; i < actor.shadowControllerList!.shadowControllers.length; i++)
         actor.shadowControllerList!.shadowControllers[i].validate();
+}
+
+export function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number {
+    const t = Math.cos((v0 / v3) * Math.PI * 0.5);
+    return lerp(v1, v2, 1 - t);
+}
+
+export function getEaseOutValue(v0: number, v1: number, v2: number, v3: number): number {
+    const t = Math.sin((v0 / v3) * Math.PI * 0.5);
+    return lerp(v1, v2, t);
+}
+
+export function getEaseInOutValue(v0: number, v1: number, v2: number, v3: number): number {
+    const t = Math.cos((v0 / v3) * Math.PI);
+    return lerp(v1, v2, 0.5 * (1 - t));
 }

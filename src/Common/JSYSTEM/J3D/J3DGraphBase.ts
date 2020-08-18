@@ -410,10 +410,6 @@ export class MaterialInstance {
         setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
     }
 
-    public setAlphaWriteEnabled(v: boolean): void {
-        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, v);
-    }
-
     public setSortKeyLayer(layer: GfxRendererLayer): void {
         if (this.materialData.material.translucent)
             layer |= GfxRendererLayer.TRANSLUCENT;

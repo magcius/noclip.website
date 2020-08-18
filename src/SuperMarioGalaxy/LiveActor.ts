@@ -580,6 +580,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (groupName === null && this.modelInstance !== null)
             groupName = this.modelInstance.name;
         this.effectKeeper = new EffectKeeper(sceneObjHolder, this, assertExists(groupName));
+        if (this.binder !== null)
+            this.effectKeeper.setBinder(this.binder);
     }
 
     public initRailRider(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -597,9 +599,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public initBinder(radius: number, centerY: number, hitInfoCapacity: number): void {
         this.binder = new Binder(this.getBaseMtx()!, this.translation, this.gravityVector, centerY, radius, hitInfoCapacity);
         this.calcBinderFlag = true;
-
-        // if (this.effectKeeper !== null)
-        //     this.effectKeeper.setBinder(this.binder);
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setBinder(this.binder);
     }
 
     public initNerve(nerve: TNerve): void {
@@ -613,6 +614,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     public getCurrentNerve(): TNerve {
         return this.spine!.getCurrentNerve() as TNerve;
+    }
+
+    public isNerve(nerve: TNerve): boolean {
+        return this.spine!.getCurrentNerve() === nerve;
     }
 
     public getNerveStep(): number {
@@ -765,7 +770,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         // EffectKeeper::update()
         if (this.effectKeeper !== null)
-            this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
+            this.effectKeeper.update(sceneObjHolder, deltaTimeFrames);
 
         // ActorPadAndCameraCtrl::update()
 

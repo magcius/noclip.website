@@ -89,6 +89,9 @@ function copyRopInfo(ropInfo: RopInfo): RopInfo {
         depthTest: ropInfo.depthTest,
         depthFunc: ropInfo.depthFunc,
         depthWrite: ropInfo.depthWrite,
+        dstAlpha: ropInfo.dstAlpha,
+        colorUpdate: ropInfo.colorUpdate,
+        alphaUpdate: ropInfo.alphaUpdate,
     }
 }
 
@@ -131,6 +134,8 @@ export class GXMaterialBuilder {
         this.setFog(GX.FogType.NONE, false);
         this.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
         this.setZMode(true, GX.CompareType.LEQUAL, true);
+        this.setColorUpdate(true);
+        this.setAlphaUpdate(false);
 
         this.usePnMtxIdx = undefined;
     }
@@ -337,6 +342,18 @@ export class GXMaterialBuilder {
         this.ropInfo.depthTest = depthTest;
         this.ropInfo.depthFunc = depthFunc;
         this.ropInfo.depthWrite = depthWrite;
+    }
+
+    public setDstAlpha(v?: number): void {
+        this.ropInfo.dstAlpha = v;
+    }
+
+    public setColorUpdate(v: boolean): void {
+        this.ropInfo.colorUpdate = v;
+    }
+
+    public setAlphaUpdate(v: boolean): void {
+        this.ropInfo.alphaUpdate = v;
     }
 
     public setUsePnMtxIdx(v: boolean): void {

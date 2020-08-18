@@ -684,7 +684,7 @@ enum WallCode {
     NoAction         = 0x08,
 };
 
-enum FloorCode {                               
+export enum FloorCode {                               
     Normal         = 0x00,
     Death          = 0x01,
     Slip           = 0x02,
@@ -727,12 +727,18 @@ class CollisionCode {
         return assertExists((WallCode as any)[string]);
     }
 
-    public getWallCode(attr: JMapInfoIter): WallCode {
-        return assertExists(attr.getValueNumber('Wall_code'));
+    public getWallCode(attr: JMapInfoIter | null): WallCode {
+        if (attr !== null)
+            return assertExists(attr.getValueNumber('Wall_code'));
+        else
+            return WallCode.Normal;
     }
 
-    public getFloorCode(attr: JMapInfoIter): FloorCode {
-        return assertExists(attr.getValueNumber('Floor_code'));
+    public getFloorCode(attr: JMapInfoIter | null): FloorCode {
+        if (attr !== null)
+            return assertExists(attr.getValueNumber('Floor_code'));
+        else
+            return FloorCode.Normal;
     }
 }
 
@@ -1202,6 +1208,16 @@ export function isBindedGround(actor: LiveActor): boolean {
     return actor.binder!.floorHitInfo.distance >= 0.0;
 }
 
+export function isOnGround(actor: LiveActor): boolean {
+    if (actor.binder === null)
+        return false;
+
+    if (actor.binder.floorHitInfo.distance < 0.0)
+        return false;
+
+    return vec3.dot(actor.binder.floorHitInfo.faceNormal, actor.velocity) < 0.0;
+}
+
 export function isBindedRoof(actor: LiveActor): boolean {
     return actor.binder!.ceilingHitInfo.distance >= 0.0;
 }
@@ -1223,13 +1239,17 @@ export function getBindedFixReactionVector(actor: LiveActor): vec3 {
 }
 
 function getWallCode(sceneObjHolder: SceneObjHolder, triangle: Triangle): WallCode {
-    const attr = triangle.getAttributes()!;
+    const attr = triangle.getAttributes();
     return sceneObjHolder.collisionDirector!.collisionCode.getWallCode(attr);
 }
 
 function getGroundCode(sceneObjHolder: SceneObjHolder, triangle: Triangle): FloorCode {
-    const attr = triangle.getAttributes()!;
+    const attr = triangle.getAttributes();
     return sceneObjHolder.collisionDirector!.collisionCode.getFloorCode(attr);
+}
+
+export function getFloorCodeIndex(sceneObjHolder: SceneObjHolder, triangle: Triangle): FloorCode {
+    return getGroundCode(sceneObjHolder, triangle);
 }
 
 export function isWallCodeNoAction(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
@@ -1242,5 +1262,9 @@ export function isGroundCodeDamage(sceneObjHolder: SceneObjHolder, triangle: Tri
 
 export function isGroundCodeDamageFire(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
     return getGroundCode(sceneObjHolder, triangle) === FloorCode.DamageFire;
+}
+
+export function isBindedGroundDamageFire(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
+    return isBindedGround(actor) && isGroundCodeDamageFire(sceneObjHolder, actor.binder!.floorHitInfo);
 }
 //#endregion

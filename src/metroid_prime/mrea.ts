@@ -410,6 +410,8 @@ function parseMaterialSet_MP1_MP2(stream: InputStream, resourceSystem: ResourceS
             depthTest: true,
             depthFunc: GX.CompareType.LESS,
             depthWrite: depthWrite && !isTransparent,
+            colorUpdate: true,
+            alphaUpdate: false,
         };
 
         const gxMaterial: GX_Material.GXMaterial = {
@@ -1447,6 +1449,8 @@ function parseMaterialSet_MP3(stream: InputStream, resourceSystem: ResourceSyste
             depthTest: true,
             depthFunc: GX.CompareType.LESS,
             depthWrite: depthWrite && !isTransparent,
+            colorUpdate: true,
+            alphaUpdate: false,
         };
 
         const gxMaterial: GX_Material.GXMaterial = {

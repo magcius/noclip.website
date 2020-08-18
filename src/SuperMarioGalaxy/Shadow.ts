@@ -307,6 +307,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setZMode(true, GX.CompareType.GEQUAL, false);
         mb.setUsePnMtxIdx(false);
+        mb.setAlphaUpdate(true);
 
         mb.setCullMode(GX.CullMode.FRONT);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ONE);
@@ -314,9 +315,6 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         mb.setCullMode(GX.CullMode.BACK);
         mb.setBlendMode(GX.BlendMode.SUBTRACT, GX.BlendFactor.ZERO, GX.BlendFactor.ZERO);
         this.materialBack = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Back'));
-
-        this.materialBack.megaStateFlags.attachmentsState![0].colorWriteMask = GfxColorWriteMask.ALPHA;
-        this.materialFront.megaStateFlags.attachmentsState![0].colorWriteMask = GfxColorWriteMask.ALPHA;
 
         assert(this.materialBack.materialParamsBufferSize === this.materialFront.materialParamsBufferSize);
         assert(this.materialBack.packetParamsBufferSize === this.materialFront.packetParamsBufferSize);

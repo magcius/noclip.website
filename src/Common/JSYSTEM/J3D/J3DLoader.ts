@@ -986,11 +986,13 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         fogBlock.AdjCenter = fogAdjCenter;
 
         const translucent = !(materialMode & 0x03);
+        const colorUpdate = true, alphaUpdate = false;
 
         const ropInfo: GX_Material.RopInfo = {
             fogType, fogAdjEnabled,
             blendMode, blendSrcFactor, blendDstFactor, blendLogicOp,
             depthTest, depthFunc, depthWrite,
+            colorUpdate, alphaUpdate,
         };
 
         const gxMaterial: GX_Material.GXMaterial = {

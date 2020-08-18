@@ -47,7 +47,7 @@ import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
-import { ShadowControllerHolder, ShadowControllerList } from './Shadow';
+import { ShadowControllerHolder } from './Shadow';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -152,8 +152,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         for (let i = 0; i < this.spawner.zones.length; i++) {
             const zoneNode = this.spawner.zones[i];
-            if (zoneNode === undefined)
-                continue;
             zoneNode.layerMask = assertExists(scenarioData.getValueNumber(zoneNode.name));
         }
 
@@ -654,6 +652,16 @@ function patchBMD(bmd: BMD): void {
             if (texMtxIdxBaseOffsets[4] >= 0 || texMtxIdxBaseOffsets[5] >= 0 || texMtxIdxBaseOffsets[6] >= 0 || texMtxIdxBaseOffsets[7] >= 0)
                 shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX4567MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
         }
+    }
+
+    // Patch in GXSetDstAlpha. This should only be done on opaque objects.
+    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
+        const mat = bmd.mat3.materialEntries[i];
+        if (mat.translucent)
+            continue;
+
+        mat.gxMaterial.ropInfo.alphaUpdate = true;
+        mat.gxMaterial.ropInfo.dstAlpha = 0.0;
     }
 }
 
