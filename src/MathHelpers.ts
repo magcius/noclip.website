@@ -634,3 +634,18 @@ export function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
     else if (Math.abs(z) > Math.abs(y) && Math.abs(z) > Math.abs(x))
         vec3.set(dst, 0, 0, speed * Math.sign(z));
 }
+
+export function mat4Lerp(dst: mat4, a: mat4, b: mat4, t: number): void {
+    for (let i = 0; i < dst.length; i++)
+        dst[i] = a[i] + (b[i] - a[i]) * t;
+}
+
+// computes the inverse of an affine transform, assuming the linear part is a rotation
+export function invertOrthoMatrix(dst: mat4, src: ReadonlyMat4): void {
+    mat4.transpose(dst, src);
+    dst[3] = dst[7] = dst[11] = 0; // zero where the translation ended up
+    getMatrixTranslation(scratchVec3, src);
+    transformVec3Mat4w0(scratchVec3, dst, scratchVec3);
+    vec3.scale(scratchVec3, scratchVec3, -1);
+    setMatrixTranslation(dst, scratchVec3);
+}

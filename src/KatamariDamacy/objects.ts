@@ -4,11 +4,11 @@ import { Green, Magenta, Red } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation } from "../MathHelpers";
+import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, mat4Lerp, invertOrthoMatrix } from "../MathHelpers";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
 import { assert, hexzero, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel } from "./bin";
+import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel, SkinningMatrix } from "./bin";
 import { BINModelInstance, BINModelSectorData } from "./render";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -106,10 +106,14 @@ export class ObjectRenderer {
     private animations: ObjectAnimationList | null = null;
     private animationIndex = -1;
     private animationController = new AdjustableAnimationController(30);
+    private skinningInfo: SkinningMatrix[][] = [];
 
     constructor(device: GfxDevice, gfxCache: GfxRenderCache, objectModel: ObjectModel, binModelSectorData: BINModelSectorData, public objectSpawn: MissionSetupObjectSpawn) {
         for (let j = 0; j < binModelSectorData.modelData.length; j++) {
-            const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j]);
+            let transformCount = 0;
+            if (objectModel.skinning.length > 0)
+                transformCount = objectModel.skinning[j].length;
+            const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j], transformCount);
             mat4.copy(binModelInstance.modelMatrix, objectSpawn.modelMatrix);
             if (objectModel.transforms.length > 0) {
                 mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j].matrix);
@@ -124,6 +128,7 @@ export class ObjectRenderer {
 
         this.bbox = objectModel.bbox;
         this.partBBox = this.modelInstances[0].binModelData.binModel.bbox;
+        this.skinningInfo = objectModel.skinning;
         mat4.copy(this.modelMatrix, objectSpawn.modelMatrix);
         mat4.copy(this.baseMatrix, this.modelMatrix);
         mat4.getTranslation(this.prevPosition, this.modelMatrix);
@@ -277,12 +282,10 @@ export class ObjectRenderer {
                 for (let i = 0; i < this.modelInstances.length; i++)
                     computeModelMatrixPosRot(this.modelInstances[i].modelMatrix, this.modelInstances[i].translation, this.modelInstances[i].euler);
 
-            // Position model instances correctly.
-            for (let i = 0; i < this.modelInstances.length; i++) {
-                const dst = this.modelInstances[i].modelMatrix;
-                mat4.mul(dst, this.modelMatrix, dst);
-                this.modelInstances[i].prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette);
-            }
+            // pass in a single transform from object space to (noclip) world space
+            mat4.mul(scratchMatrix, toNoclip, this.modelMatrix);
+            for (let i = 0; i < this.modelInstances.length; i++)
+                this.modelInstances[i].prepareToRender(renderInstManager, viewerInput, scratchMatrix, currentPalette);
         } else if (this.altObject) {
             vec3.copy(this.altObject.prevPosition, this.prevPosition);
             mat4.copy(this.altObject.baseMatrix, this.baseMatrix);
@@ -389,8 +392,21 @@ export class ObjectRenderer {
             if (bind[i].parent >= 0)
                 mat4.mul(dst, animationStack[bind[i].parent], dst);
         }
-        for (let i = 0; i < this.modelInstances.length; i++)
-            mat4.copy(this.modelInstances[i].modelMatrix, animationStack[this.modelInstances[i].binModelData.binModel.animationIndex]);
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            const joint = this.modelInstances[i].binModelData.binModel.animationIndex;
+            const base = this.modelInstances[i].modelMatrix;
+            mat4.copy(base, animationStack[joint]);
+            for (let j = 0; j < this.modelInstances[i].skinningMatrices.length; j++) {
+                const dst = this.modelInstances[i].skinningMatrices[j];
+                const info = this.skinningInfo[i][j];
+                // first compute the transform between the two joints' spaces
+                invertOrthoMatrix(dst, bind[info.index].reference);
+                mat4.mul(dst, dst, bind[joint].reference);
+
+                mat4.mul(dst, animationStack[info.index], dst);
+                mat4Lerp(dst, base, dst, info.weight);
+            }
+        }
     }
 }
 

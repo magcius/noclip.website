@@ -1,4 +1,4 @@
-import { quat, vec3 } from "gl-matrix";
+import { quat, vec3, mat4 } from "gl-matrix";
 import { getPointHermite } from "../Spline";
 import { lerp } from "../MathHelpers";
 import { align, assert } from "../util";
@@ -63,6 +63,7 @@ interface PartTransform {
     parent: number;
     pos: vec3;
     rot: quat;
+    reference: mat4;
 }
 
 interface ObjectAnimation {
@@ -127,7 +128,12 @@ export function parseAnimationList(data: ArrayBufferSlice, id: number): ObjectAn
             );
             bindPoseOffset += 0x20;
 
-            bindPose.push({ parent, pos, rot });
+            const reference = mat4.create();
+            mat4.fromRotationTranslation(reference, rot, pos);
+            if (parent >= 0)
+                mat4.mul(reference, bindPose[parent].reference, reference);
+
+            bindPose.push({ parent, pos, rot, reference });
         }
     }
     return { animations, bindPose };

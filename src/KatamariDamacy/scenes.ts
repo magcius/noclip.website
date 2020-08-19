@@ -364,7 +364,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         const transformData = cache.getFileData(`${pathBase}/transformBlock.bin`);
 
         const randomGroups = BIN.initRandomGroups(this.index, cache.getFileData(`${pathBase}/randomBlock.bin?cache_bust=1`));
-        const missionSetupBin = BIN.parseMissionSetupBIN(buffers, objectData, collectionData, levelParams.startArea, randomGroups, transformData);
+        const missionSetupBin = BIN.parseMissionSetupBIN(buffers, objectData, collectionData, levelParams.startArea, randomGroups, transformData, this.index);
 
         const renderer = new KatamariDamacyRenderer(device, levelParams, missionSetupBin);
         renderer.sceneMoveSpeedMult *= this.cameraSpeedMult;

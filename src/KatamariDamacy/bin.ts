@@ -92,11 +92,17 @@ export interface BINModelSector {
     textures: BINTexture[];
 }
 
+export interface SkinningMatrix {
+    index: number;
+    weight: number;
+}
+
 export interface ObjectModel {
     id: number;
     sector: BINModelSector;
     transforms: PartTransform[];
     bbox: AABB;
+    skinning: SkinningMatrix[][];
 }
 
 export interface LevelModelBIN {
@@ -289,8 +295,8 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
 
     // 4 positions, 3 normals, 2 UV coordinates.
     const WORKING_VERTEX_STRIDE = 4+3+2;
-    // 3 positions, 3 normals, 2 UV coordinates.
-    const VERTEX_STRIDE = 3+3+2;
+    // 3 positions, 1 index, 3 normals, 2 UV coordinates.
+    const VERTEX_STRIDE = 4+3+2;
 
     let modelObjTableIdx = sectorOffs + 0x04;
     const models: BINModel[] = [];
@@ -665,7 +671,8 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
                 vertexData[vertexDataDst++] = vertexRunData[k + 0];
                 vertexData[vertexDataDst++] = vertexRunData[k + 1];
                 vertexData[vertexDataDst++] = vertexRunData[k + 2];
-                // Skip W, it was for internal use only.
+                // take lower bits to use as skinning matrix index
+                vertexData[vertexDataDst++] = (vertexRunData[k + 3] >>> 2) & 0xFF;
                 // Normal.
                 vertexData[vertexDataDst++] = vertexRunData[k + 4];
                 vertexData[vertexDataDst++] = vertexRunData[k + 5];
@@ -1239,16 +1246,35 @@ export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBuffer
     // Load in LOD 0 for normal objects, but use LOD 1 for animated objects; their LOD 0
     // is a single part used for low-cost rendering, while LOD 1 holds actual part data
     let sectorOffs = lod0Offs;
+    let skinning: SkinningMatrix[][] = [];
     if (isAnimated) {
         assert(!sectorIsNIL(buffer, lod1Offs));
         sectorOffs = lod1Offs + view.getUint32(lod1Offs, true);
+        // weights/joint indices for skinning come first
+
+        for (let skinningOffs = lod1Offs + 0x10; skinningOffs < sectorOffs; skinningOffs += 0x20) {
+            const pairCount = view.getUint8(skinningOffs + 0x0D);
+            const weights: SkinningMatrix[] = [];
+            const jointIndices = buffer.createTypedArray(Int8Array, skinningOffs, 4);
+
+            for (let i = 0; i < pairCount; i++) {
+                const matrixIndex = view.getInt8(skinningOffs + 0x04 + i);
+                assert(matrixIndex >= 0 && matrixIndex < 4 && jointIndices[matrixIndex] >= 0);
+                const weight = view.getUint16(skinningOffs + 0x0E + 2 * i, true) / (1 << 15);
+                assert(0 < weight && weight <= 1)
+                weights.push({ index: jointIndices[matrixIndex], weight });
+            }
+            skinning.push(weights);
+        }
     }
 
     const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), sectorOffs);
-
     if (sector === null)
         return null;
     const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
+
+    if (isAnimated)
+        assert(skinning.length === sector.models.length);
 
     // animated objects don't have proper part transforms, so we need to use the unified model from LOD 0
     let bbox: AABB;
@@ -1256,11 +1282,13 @@ export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBuffer
         bbox = computeObjectAABBFromRawSector(buffer, lod0Offs, transforms);
     else
         bbox = computeObjectAABB(sector, transforms);
-    return { id: objectId, sector, transforms, bbox };
+    return { id: objectId, sector, transforms, bbox, skinning };
 }
 
+const missingTestLevelAnimations = [0x235, 0x1EA, 0x1EB, 0x200, 0x2E4, 0x3FF, 0x400];
+
 export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], defs: ArrayBufferSlice, collection: ArrayBufferSlice,
-    firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
+    firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice, levelIndex: number): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
@@ -1288,6 +1316,10 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], defs: ArrayBuf
             return existingIndex;
         } else {
             const newDef = parseObjectDefinition(defs, collection, objectId);
+            // some animated objects in level 27 are missing skinning data
+            // for now, just pretend they aren't animated (we don't even display them)
+            if (levelIndex === 27 && missingTestLevelAnimations.includes(objectId))
+                newDef.animated = false;
             const newObject = parseObject(objectId, newDef.animated);
             if (newObject === null)
                 return -1;

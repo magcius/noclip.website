@@ -5,10 +5,7 @@ import { IS_DEVELOPMENT } from './BuildVersion';
 export function assert(b: boolean, message: string = ""): asserts b {
     if (!b) {
         console.error(new Error().stack);
-        if (IS_DEVELOPMENT)
-            debugger
-        else
-            throw new Error(`Assert fail: ${message}`);
+        throw new Error(`Assert fail: ${message}`);
     }
 }
 
