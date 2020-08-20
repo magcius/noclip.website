@@ -654,10 +654,11 @@ function patchBMD(bmd: BMD): void {
         }
     }
 
-    // Patch in GXSetDstAlpha. This should only be done on opaque objects.
+    // Patch in GXSetDstAlpha. This is normally done in the main loop, but we hack it in here...
+    // This should only be done on opaque objects.
     for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
         const mat = bmd.mat3.materialEntries[i];
-        if (mat.translucent)
+        if (mat.translucent || mat.gxMaterial.ropInfo.blendMode !== GX.BlendMode.NONE)
             continue;
 
         mat.gxMaterial.ropInfo.alphaUpdate = true;
