@@ -175,11 +175,13 @@ export class ActorLightCtrl {
     private zoneLightId = new ZoneLightId();
     private interpolate: number = -1;
     private blendAmount: number = -1;
+    public lightType: LightType = LightType.None;
 
-    constructor(private assocActor: LiveActor, public lightType: LightType = LightType.None) {
+    constructor(private assocActor: LiveActor) {
     }
 
-    public init(sceneObjHolder: SceneObjHolder): void {
+    public init(sceneObjHolder: SceneObjHolder, lightType: LightType): void {
+        this.lightType = lightType;
         this.initActorLightInfo(sceneObjHolder);
         this.tryFindNewAreaLight(sceneObjHolder, false);
         const areaLightInfo = sceneObjHolder.lightDirector.getAreaLightInfo(sceneObjHolder, this.zoneLightId);
@@ -455,4 +457,9 @@ export function createLightCtrlCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: 
 
 export function createLightCtrlCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
     return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+}
+
+export function initLightCtrl(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    actor.initActorLightCtrl();
+    actor.actorLightCtrl!.init(sceneObjHolder, LightType.None);
 }

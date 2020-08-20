@@ -41,6 +41,7 @@ import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreat
 import { isExistStageSwitchSleep } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
 import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder } from '../Shadow';
+import { initLightCtrl } from '../LightData';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -587,7 +588,7 @@ class Coin extends LiveActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.isPurpleCoin ? 'PurpleCoin' : 'Coin');
         connectToSceneItemStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
 
         if (infoIter !== null) {
             const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
@@ -1698,7 +1699,7 @@ export class WoodBox extends LiveActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WoodBox");
         connectToSceneMapObjStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
         this.initHitSensor();
@@ -2542,7 +2543,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         this.initHitSensor();
         addHitSensorNpc(sceneObjHolder, this, 'body', 8, 50.0, vec3.fromValues(0, 50.0, 0));
         this.hitSensorKeeper!.validateBySystem();
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         initShadowFromCSV(sceneObjHolder, this);
         this.initRailRider(sceneObjHolder, infoIter);
@@ -3437,7 +3438,7 @@ export class Shellfish extends LiveActor<ShellfishNrv> {
         this.initEffectKeeper(sceneObjHolder, null);
         this.initItem(sceneObjHolder);
         this.initNerve(ShellfishNrv.Wait);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
     }
 
     private initItem(sceneObjHolder: SceneObjHolder): void {
@@ -6021,7 +6022,7 @@ export class Dossun extends LiveActor<DossunNrv> {
         startBva(this, 'Wait');
 
         connectToSceneCollisionEnemyStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         // this.initHitSensor();
         // this.initCollisionParts();
         this.initEffectKeeper(sceneObjHolder, null);
@@ -6115,7 +6116,7 @@ class PlantMember extends LiveActor<PlantMemberNrv> {
         connectToSceneNoSilhouettedMapObjWeakLightNoMovement(sceneObjHolder, this);
 
         if (useLightCtrl)
-            this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
 
         // initSound
 
@@ -6424,7 +6425,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
         this.initFromRailPoint(sceneObjHolder);
         this.initModelManagerWithAnm(sceneObjHolder, 'Onimasu');
         connectToSceneCollisionEnemyNoShadowedMapObjStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         setEffectHostMtx(this, 'Move', this.effectHostMtx);
         // initSound
@@ -7474,7 +7475,7 @@ class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
             this.initEffectKeeper(sceneObjHolder, effectName);
 
         if (useLightCtrl)
-            this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
 
         // initSound
         this.initNerve(MogucchiHillPieceNrv.Wait);
@@ -7998,7 +7999,7 @@ export class ScrewSwitch extends LiveActor<ScrewSwitchNrv> {
 
         this.initModelManagerWithAnm(sceneObjHolder, 'ScrewSwitch');
         connectToSceneMapObjDecorationStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initHitSensor();
         addBodyMessageSensorMapObj(sceneObjHolder, this);
         // addHitSensorAtJoint(this, 'binder', 'Screw');
@@ -8118,7 +8119,7 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
 
         this.initModelManagerWithAnm(sceneObjHolder, 'ScrewSwitchReverse');
         connectToSceneMapObjDecorationStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initHitSensor();
         addBodyMessageSensorMapObj(sceneObjHolder, this);
         // addHitSensorAtJoint(this, 'binder', 'Screw');
@@ -8330,7 +8331,7 @@ export class BallBeamer extends LiveActor<BallBeamerNrv> {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.translation[1] -= 50.0;
         connectToSceneEnemy(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initHitSensor();
         // addHitSensorPush
         // initShadowVolumeSphere
@@ -8871,7 +8872,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
         this.size = 1.0;
         vec3.set(this.scale, 1.0, 1.0, 1.0);
         connectToSceneEnemy(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initHitSensor();
         vec3.set(scratchVec3, 0.0, 126.36 * this.size, 0.0);
         addHitSensor(sceneObjHolder, this, 'Body', HitSensorType.Unizo, 8, 115.2 * this.size, scratchVec3);

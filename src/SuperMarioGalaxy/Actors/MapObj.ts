@@ -20,6 +20,7 @@ import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep } from '../S
 import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } from './ModelObj';
 import { initMultiFur } from '../Fur';
 import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength } from '../Shadow';
+import { initLightCtrl } from '../LightData';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -118,7 +119,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         if (initInfo.connectToScene)
             this.connectToScene(sceneObjHolder, initInfo);
         if (initInfo.initLightControl)
-            this.initLightCtrl(sceneObjHolder);
+            initLightCtrl(sceneObjHolder, this);
         if (initInfo.initEffect !== null)
             this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
         if (initInfo.initNerve !== null)
@@ -953,7 +954,7 @@ class Rock extends LiveActor<RockNrv> {
         }
 
         connectToSceneNoShadowedMapObjStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initHitSensor();
         const hitSensorType = this.type === RockType.Rock ? HitSensorType.Rock : HitSensorType.Wanwan;
         addHitSensor(sceneObjHolder, this, 'body', hitSensorType, 16, this.bindRadius, Vec3Zero);

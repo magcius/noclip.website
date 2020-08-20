@@ -16,6 +16,7 @@ import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep } from '../Spine';
 import { ViewerRenderInput } from '../../viewer';
 import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow } from '../Shadow';
+import { initLightCtrl } from '../LightData';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -37,13 +38,13 @@ function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor
 
 function createIndirectNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
     const model = createPartsModelIndirectNpc(sceneObjHolder, parentActor, objName, jointName, localTrans);
-    model.initLightCtrl(sceneObjHolder);
+    initLightCtrl(sceneObjHolder, model);
     return model;
 }
 
 function createNPCGoods(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string) {
     const model = createPartsModelNpcAndFix(sceneObjHolder, parentActor, objName, jointName);
-    model.initLightCtrl(sceneObjHolder);
+    initLightCtrl(sceneObjHolder, model);
     return model;
 }
 
@@ -165,7 +166,7 @@ export class Butler extends NPCActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Butler');
         connectToSceneNpc(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         initShadowFromCSV(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
@@ -182,7 +183,7 @@ export class Rosetta extends NPCActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Rosetta');
         connectToSceneIndirectNpc(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         initShadowFromCSV(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
@@ -197,7 +198,7 @@ export class Tico extends NPCActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Tico');
         connectToSceneIndirectNpc(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         initShadowFromCSV(sceneObjHolder, this);
 
@@ -230,7 +231,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         vec3.set(this.scale, 1.2, 1.2, 1.2);
         this.initModelManagerWithAnm(sceneObjHolder, 'Kinopio');
         connectToSceneNpc(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         initShadowVolumeSphere(sceneObjHolder, this, 36.0);
         this.initEffectKeeper(sceneObjHolder, null);
         this.initNerve(KinopioNrv.Wait);
@@ -341,7 +342,7 @@ export class Peach extends NPCActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
 
         this.boundingSphereRadius = 100;
 
@@ -482,7 +483,7 @@ export class Penguin extends NPCActor<PenguinNrv> {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         initShadowVolumeSphere(sceneObjHolder, this, 50.0);
         onCalcShadowOneTime(this);
@@ -591,7 +592,7 @@ export class PenguinRacer extends NPCActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "Penguin");
         connectToSceneNpc(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
         this.boundingSphereRadius = 100;
@@ -620,7 +621,7 @@ export class TicoComet extends NPCActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, objName);
         connectToSceneNpc(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         initShadowFromCSV(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
