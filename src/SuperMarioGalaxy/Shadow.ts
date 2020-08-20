@@ -5,11 +5,11 @@ import { PacketParams, MaterialParams, GXMaterialHelperGfx, ColorKind, ScenePara
 import { LiveActor } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
 import { GravityInfo, GravityTypeMask } from './Gravity';
-import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport } from "./ActorUtil";
+import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos } from "./ActorUtil";
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
-import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis } from "../MathHelpers";
+import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero } from "../MathHelpers";
 import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision";
 import { JMapInfoIter, getJMapInfoBool, createCsvParser } from "./JMapInfo";
 import { assertExists, fallback, assert } from "../util";
@@ -20,6 +20,7 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { TSDraw } from "./DDraw";
 import { GX_Program } from "../gx/gx_material";
 import ArrayBufferSlice from "../ArrayBufferSlice";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
@@ -461,6 +462,36 @@ class ShadowVolumeOval extends ShadowVolumeModel {
     }
 }
 
+class ShadowVolumeCylinder extends ShadowVolumeModel {
+    public radius: number = 100.0;
+
+    constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
+        super(sceneObjHolder, 'ShadowVolumeCylinder', controller);
+        this.initVolumeModel(sceneObjHolder, 'ShadowVolumeCylinder');
+    }
+
+    public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {
+        this.calcBaseDropPosition(scratchVec3a);
+        vec3.negate(scratchVec3b, this.controller.getDropDir());
+
+        makeMtxUpNoSupportPos(scratchMat4a, scratchVec3b, scratchVec3a);
+        transformVec3Mat4w0(scratchVec3a, scratchMat4a, Vec3Zero);
+        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, scratchVec3a);
+
+        let scaleXZ = this.radius / 100.0;
+        if (this.controller.followHostScale)
+            scaleXZ *= this.controller.host.scale[0];
+        const scaleY = this.calcBaseDropLength();
+
+        scaleMatrix(scratchMat4a, scratchMat4a, scaleXZ, scaleY, scaleXZ);
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, scratchMat4a);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('ShadowVolumeCylinder');
+    }
+}
+
 // TODO(jstpierre): This is not how it's normally done. Remove when we migrate to GfxRenderInstList.
 class AlphaShadow extends NameObj {
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
@@ -553,6 +584,8 @@ export class ShadowControllerHolder extends NameObj {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         ShadowVolumeSphere.requestArchives(sceneObjHolder);
+        ShadowVolumeOval.requestArchives(sceneObjHolder);
+        ShadowVolumeCylinder.requestArchives(sceneObjHolder);
     }
 }
 
@@ -651,6 +684,18 @@ function createShadowVolumeOvalFromCSV(sceneObjHolder: SceneObjHolder, actor: Li
     return drawer;
 }
 
+function createShadowVolumeCylinderFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): ShadowVolumeCylinder {
+    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
+    controller.setDropTypeNormal();
+
+    const drawer = new ShadowVolumeCylinder(sceneObjHolder, controller);
+    setUpShadowVolumeFromCSV(drawer, infoIter);
+    drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
+
+    controller.shadowDrawer = drawer;
+    return drawer;
+}
+
 function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const shadowType = assertExists(infoIter.getValueString('Type'));
     if (shadowType === 'SurfaceCircle') {
@@ -662,6 +707,7 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
         createShadowVolumeOvalFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeOvalPole') {
     } else if (shadowType === 'VolumeCylinder') {
+        createShadowVolumeCylinderFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'VolumeBox') {
     } else if (shadowType === 'VolumeFlatModel') {
     } else if (shadowType === 'VolumeLine') {
@@ -688,7 +734,7 @@ export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveAct
     });
 }
 
-function createShadowControllerVolumeParam(sceneObjHolder: SceneObjHolder, actor: LiveActor, name = 'ShadowControllerVolumeParam'): ShadowController {
+function createShadowControllerVolumeParam(sceneObjHolder: SceneObjHolder, actor: LiveActor, name = 'default'): ShadowController {
     const controller = new ShadowController(sceneObjHolder, actor, name);
     controller.setDropPosPtr(actor.translation);
     controller.setDropDirPtr(actor.gravityVector);
@@ -698,21 +744,45 @@ function createShadowControllerVolumeParam(sceneObjHolder: SceneObjHolder, actor
     return controller;
 }
 
-export function initShadowVolumeSphere(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): void {
-    actor.shadowControllerList = new ShadowControllerList();
-
-    const controller = createShadowControllerVolumeParam(sceneObjHolder, actor);
+export function addShadowVolumeSphere(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, radius: number): void {
+    const controller = createShadowControllerVolumeParam(sceneObjHolder, actor, name);
     const drawer = new ShadowVolumeSphere(sceneObjHolder, controller);
     drawer.radius = radius;
     controller.shadowDrawer = drawer;
 }
 
-export function setShadowDropLength(actor: LiveActor, name: string | null, v: number): void {
-    actor.shadowControllerList!.getController(name).setDropLength(v);
+export function addShadowVolumeCylinder(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, radius: number): void {
+    const controller = createShadowControllerVolumeParam(sceneObjHolder, actor, name);
+    const drawer = new ShadowVolumeCylinder(sceneObjHolder, controller);
+    drawer.radius = radius;
+    controller.shadowDrawer = drawer;
+    controller.setCalcCollisionMode(CalcCollisionMode.Off);
+}
+
+export function initShadowController(actor: LiveActor): void {
+    actor.shadowControllerList = new ShadowControllerList();
+}
+
+export function initShadowVolumeSphere(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): void {
+    initShadowController(actor);
+    addShadowVolumeSphere(sceneObjHolder, actor, 'default', radius);
+}
+
+export function initShadowVolumeCylinder(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): void {
+    initShadowController(actor);
+    addShadowVolumeCylinder(sceneObjHolder, actor, 'default', radius);
 }
 
 export function setShadowDropPositionPtr(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
     actor.shadowControllerList!.getController(name).setDropPosPtr(v);
+}
+
+export function setShadowDropPosition(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
+    actor.shadowControllerList!.getController(name).setDropPosFix(v);
+}
+
+export function setShadowDropLength(actor: LiveActor, name: string | null, v: number): void {
+    actor.shadowControllerList!.getController(name).setDropLength(v);
 }
 
 export function onCalcShadow(actor: LiveActor, name: string | null = null): void {

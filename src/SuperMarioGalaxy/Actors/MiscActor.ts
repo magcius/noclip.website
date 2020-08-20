@@ -22,7 +22,7 @@ import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModel
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorNpc, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistanceVertical, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToSceneNpc, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPointPosEnd, getRailPointPosStart, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isRailGoingToEnd, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX } from '../ActorUtil';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorNpc, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistanceVertical, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToSceneNpc, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPointPosEnd, getRailPointPosStart, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isRailGoingToEnd, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos } from '../ActorUtil';
 import { calcMapGround, CollisionKeeperCategory, CollisionParts, getBindedFixReactionVector, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
@@ -40,7 +40,7 @@ import { isConnectedWithRail } from '../RailRider';
 import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
-import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV } from '../Shadow';
+import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder } from '../Shadow';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -630,10 +630,12 @@ class Coin extends LiveActor {
             shadowType = fallback(getJMapInfoArg6(infoIter), shadowType);
         }
 
-        if (shadowType < 0) {
+        if (shadowType === 1) {
+            initShadowVolumeCylinder(sceneObjHolder, this, 50.0);
+        } else if (shadowType === 0) {
+            // TODO(jstpierre): initShadowSurfaceCircle
             initShadowVolumeSphere(sceneObjHolder, this, 50.0);
         } else {
-            // TODO(jstpierre): Other shadow types
             initShadowVolumeSphere(sceneObjHolder, this, 50.0);
         }
 
@@ -1553,8 +1555,7 @@ class ChipBase extends LiveActor {
         }
 
         if (shadowType === 0) {
-            // TODO(jstpierre): initShadowVolumeCylinder
-            initShadowVolumeSphere(sceneObjHolder, this, 50.0 * this.scale[0]);
+            initShadowVolumeCylinder(sceneObjHolder, this, 50.0 * this.scale[0]);
             shadowContinuous = false;
         } else {
             initShadowVolumeSphere(sceneObjHolder, this, 50.0 * this.scale[0]);
@@ -3436,6 +3437,7 @@ export class Shellfish extends LiveActor<ShellfishNrv> {
         this.initEffectKeeper(sceneObjHolder, null);
         this.initItem(sceneObjHolder);
         this.initNerve(ShellfishNrv.Wait);
+        this.initLightCtrl(sceneObjHolder);
     }
 
     private initItem(sceneObjHolder: SceneObjHolder): void {
@@ -5411,11 +5413,19 @@ export class ElectricRailHolder extends NameObj {
 }
 
 class ElectricRailPoint extends LiveActor {
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private isRealPoint: boolean) {
         super(zoneAndLayer, sceneObjHolder, 'ElectricRailPoint');
 
         this.initModelManagerWithAnm(sceneObjHolder, 'ElectricRailPoint');
         connectToSceneMapObjDecoration(sceneObjHolder, this);
+
+        if (this.isRealPoint) {
+            initShadowVolumeSphere(sceneObjHolder, this, 35.0);
+            onCalcShadowOneTime(this, null);
+            onCalcShadowDropPrivateGravityOneTime(this, null);
+        }
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 }
 
@@ -5474,6 +5484,8 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
 
         this.initPoints(sceneObjHolder);
         this.initSeparators(sceneObjHolder);
+        // initDisplayList
+        this.initShadow(sceneObjHolder, infoIter);
 
         sceneObjHolder.create(SceneObj.ElectricRailHolder);
         sceneObjHolder.electricRailHolder!.registerRail(sceneObjHolder, this);
@@ -5498,10 +5510,12 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
                 continue;
 
             for (let j = 0; j < this.height; j++) {
-                const point = new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder);
+                const isRealPoint = j === 0;
+
+                const point = new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder, isRealPoint);
                 calcRailPointPos(point.translation, this, i);
 
-                if (j >= 1) {
+                if (!isRealPoint) {
                     this.calcGravity(sceneObjHolder, scratchVec3, point.translation);
                     vec3.scaleAndAdd(point.translation, point.translation, scratchVec3, -100.0 * j);
                 }
@@ -5534,6 +5548,31 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         }
 
         moveCoordToStartPos(this);
+    }
+
+    private initShadow(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        let railShadowDropLength = fallback(getJMapInfoArg1(infoIter), -1);
+        let pointShadowDropLength = fallback(getJMapInfoArg2(infoIter), -1);
+
+        if (railShadowDropLength > 0.0 || pointShadowDropLength > 0.0) {
+            initShadowController(this);
+
+            if (pointShadowDropLength <= 0.0)
+                pointShadowDropLength = railShadowDropLength;
+
+            addShadowVolumeCylinder(sceneObjHolder, this, 'start', 20.0);
+            addShadowVolumeCylinder(sceneObjHolder, this, 'end', 20.0);
+            calcRailStartPos(scratchVec3, this);
+            setShadowDropPosition(this, 'start', scratchVec3);
+            calcRailEndPos(scratchVec3, this);
+            setShadowDropPosition(this, 'end', scratchVec3);
+            setShadowDropLength(this, 'start', pointShadowDropLength);
+            setShadowDropLength(this, 'end', pointShadowDropLength);
+            onCalcShadowDropPrivateGravity(this, 'start');
+            onCalcShadowDropPrivateGravity(this, 'end');
+
+            // TODO(jstpierre): ElectricRailShadowDrawer / addShadowVolumeLine
+        }
     }
 
     private calcGravity(sceneObjHolder: SceneObjHolder, dst: vec3, coord: vec3): void {
@@ -5601,6 +5640,22 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
     }
 }
 
+class ElectricRailMovingPoint extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private isRealPoint: boolean) {
+        super(zoneAndLayer, sceneObjHolder, 'ElectricRailMovingPoint');
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'ElectricRailPoint');
+        connectToSceneMapObjDecoration(sceneObjHolder, this);
+
+        if (this.isRealPoint) {
+            initShadowVolumeSphere(sceneObjHolder, this, 35.0);
+            this.calcGravityFlag = true;
+        }
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+}
+
 export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     public type: ElectricRailType;
     private segmentCount: number;
@@ -5608,7 +5663,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     private height: number;
     private visibleSegmentLength: number;
     private separators: vec3[] = [];
-    private points: ElectricRailPoint[] = [];
+    private points: ElectricRailMovingPoint[] = [];
     private size = 30.0;
     private ddraw = new TSDraw();
     private coordPhaseAnim: number = 0.0;
@@ -5657,14 +5712,19 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     }
 
     private initPoints(sceneObjHolder: SceneObjHolder): void {
-        const pointCount = this.segmentCount * 2 * this.height;
+        for (let i = 0; i < this.segmentCount * 2; i++) {
+            for (let j = 0; j < this.height; j++) {
+                const isRealPoint = j === 0;
 
-        for (let i = 0; i < pointCount; i++)
-            this.points.push(new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder));
+                this.points.push(new ElectricRailMovingPoint(this.zoneAndLayer, sceneObjHolder, isRealPoint));
+            }
+        }
 
         if (!isLoopRail(this)) {
             for (let j = 0; j < this.height; j++) {
-                const startPoint = new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder);
+                const isRealPoint = j === 0;
+
+                const startPoint = new ElectricRailMovingPoint(this.zoneAndLayer, sceneObjHolder, isRealPoint);
                 this.points.push(startPoint);
                 calcRailStartPointPos(startPoint.translation, this);
                 if (j >= 1) {
@@ -5672,7 +5732,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
                     vec3.scaleAndAdd(startPoint.translation, startPoint.translation, scratchVec3, -100.0 * j);
                 }
 
-                const endPoint = new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder);
+                const endPoint = new ElectricRailMovingPoint(this.zoneAndLayer, sceneObjHolder, isRealPoint);
                 this.points.push(endPoint);
                 calcRailEndPointPos(endPoint.translation, this);
                 if (j >= 1) {
@@ -8066,7 +8126,16 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
 
         this.initEffectKeeper(sceneObjHolder, null);
 
-        // arg7 = shadow
+        const shadowDropLength = fallback(getJMapInfoArg7(infoIter), -1);
+        if (shadowDropLength > 0.0) {
+            vec3.copy(scratchVec3, this.translation);
+            this.translation[1] += 10.0;
+            initShadowVolumeCylinder(sceneObjHolder, this, 100.0);
+            setShadowDropPosition(this, null, scratchVec3);
+            setShadowDropLength(this, null, shadowDropLength);
+            calcGravity(sceneObjHolder, this);
+        }
+
         // arg0 = force jump
 
         this.initNerve(ScrewSwitchReverseNrv.Wait);

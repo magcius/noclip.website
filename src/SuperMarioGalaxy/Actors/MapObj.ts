@@ -19,7 +19,7 @@ import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep } from '../Spine';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } from './ModelObj';
 import { initMultiFur } from '../Fur';
-import { initShadowVolumeSphere } from '../Shadow';
+import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength } from '../Shadow';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -976,8 +976,8 @@ class Rock extends LiveActor<RockNrv> {
 
         const shadowDropLength = getJMapInfoArg4(infoIter);
         if (shadowDropLength !== null) {
-            // initShadowVolumeCylinder(sceneObjHolder, this, this.bindRadius);
-            // setShadowDropLength(sceneObjHolder, this, null, shadowDropLength);
+            initShadowVolumeCylinder(sceneObjHolder, this, this.bindRadius);
+            setShadowDropLength(this, null, shadowDropLength);
         } else {
             initShadowVolumeSphere(sceneObjHolder, this, this.bindRadius);
         }

@@ -606,6 +606,14 @@ export function calcRailDirectionAtCoord(dst: vec3, actor: LiveActor, coord: num
     actor.railRider!.calcDirectionAtCoord(dst, coord);
 }
 
+export function calcRailStartPos(dst: vec3, actor: LiveActor): void {
+    return calcRailPosAtCoord(dst, actor, 0.0);
+}
+
+export function calcRailEndPos(dst: vec3, actor: LiveActor): void {
+    return calcRailPosAtCoord(dst, actor, getRailTotalLength(actor));
+}
+
 export function calcRailStartPointPos(dst: vec3, actor: LiveActor): void {
     actor.railRider!.copyPointPos(dst, 0);
 }
