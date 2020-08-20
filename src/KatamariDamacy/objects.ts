@@ -4,8 +4,7 @@ import { Green, Magenta, Red } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation } from "../MathHelpers";
-import { computeModelMatrixPosRot } from "../SourceEngine/Main";
+import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, Vec3Zero } from "../MathHelpers";
 import { assert, hexzero, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel, SkinningMatrix } from "./bin";
@@ -95,6 +94,18 @@ const enum AnimationType {
     PANIC_B = 4,
 }
 
+interface OscillationState {
+    phase: number;
+    step: number;
+    amplitude: number;
+    center: number;
+}
+
+function oscillate(state: OscillationState, deltaTimeInFrames: number): number {
+    state.phase += state.step * deltaTimeInFrames;
+    return state.center + Math.sin(state.phase) * state.amplitude;
+}
+
 const scratchMatrix = mat4.create();
 const animationQuat = quat.create();
 const animationPos = vec3.create();
@@ -124,6 +135,8 @@ export class ObjectRenderer {
     private animationIndex = -1;
     private animationController = new AdjustableAnimationController(30);
     private skinningInfo: SkinningMatrix[][] = [];
+
+    public miscOscillations: OscillationState[] = [];
 
     constructor(device: GfxDevice, gfxCache: GfxRenderCache, objectModel: ObjectModel, binModelSectorData: BINModelSectorData, public objectSpawn: MissionSetupObjectSpawn) {
         for (let j = 0; j < binModelSectorData.modelData.length; j++) {
@@ -296,8 +309,11 @@ export class ObjectRenderer {
                 this.animationController.setTimeFromViewerInput(viewerInput);
                 this.animate();
             } else
-                for (let i = 0; i < this.modelInstances.length; i++)
-                    computeModelMatrixPosRot(this.modelInstances[i].modelMatrix, this.modelInstances[i].translation, this.modelInstances[i].euler);
+                for (let i = 0; i < this.modelInstances.length; i++) {
+                    const inst = this.modelInstances[i];
+                    computeModelMatrixR(inst.modelMatrix, inst.euler[0], inst.euler[1], inst.euler[2]);
+                    setMatrixTranslation(inst.modelMatrix, inst.translation);
+                }
 
             // pass in a single transform from object space to (noclip) world space
             mat4.mul(scratchMatrix, toNoclip, this.modelMatrix);
@@ -311,7 +327,7 @@ export class ObjectRenderer {
         }
 
 
-        const debugMotion = false;
+        const debugMotion = this.objectSpawn.objectId == ObjectId.SHOPYA03_C;
         if (debugMotion) {
             mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
             drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.prevPosition, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
@@ -631,6 +647,9 @@ const enum ObjectId {
     HUKUBIKI_C      = 0x0023,
     COMPASS_A       = 0x002F,
     OMEN05_B        = 0x003F,
+    PARABORA_D      = 0x0060,
+    KAKASHI_D       = 0x0067,
+    TRAFFICMAN_D    = 0x0072,
     BIRD01_C        = 0x008D,
     CAR02_F         = 0x0091,
     CAR03_F         = 0x0092,
@@ -638,8 +657,13 @@ const enum ObjectId {
     CAR05_E         = 0x0094,
     CAR06_E         = 0x0095,
     CAR07_E         = 0x0096,
+    FARMCAR01_E     = 0x0097,
     FARMCAR02_E     = 0x0098,
+    FARMCAR03_E     = 0x0099,
+    WATERMILL_F     = 0x009E,
+    DENTOWER_G      = 0x00A6,
     POLIHOUSE_E     = 0x00C6,
+    SHOPYA03_C      = 0x00D7,
     DUSTCAR_F       = 0x0133,
     TRUCK01_F       = 0x0135,
     BUS01_F         = 0x0136,
@@ -662,6 +686,9 @@ const enum ObjectId {
     BIRD07_C        = 0x020C,
     BIRD08_B        = 0x020D,
     RADICON02_E     = 0x0220,
+    GSWING02_E      = 0x023D,
+    GSWING03_E      = 0x023E,
+    GSWING04_E      = 0x023F,
     BIKE06_E        = 0x02B0,
     WINDMILL01_G    = 0x02C6,
     TORNADO_G       = 0x02D6,
@@ -677,6 +704,7 @@ const enum ObjectId {
     KAPSEL03_B	    = 0x0323,
     OMEN08_B        = 0x03FB,
     ZOKUCAR_E       = 0x0405,
+    GSWING05_G      = 0x040D,
     MAJANPAI01_A    = 0x041B,
     MAJANPAI02_A    = 0x041C,
     MAJANPAI03_A    = 0x041D,
@@ -706,12 +734,19 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     case ObjectId.HUKUBIKI_C:   return animFunc_HUKUBIKI_C;
     case ObjectId.COMPASS_A:    return animFunc_COMPASS_A;
     case ObjectId.OMEN05_B:     return animFunc_OMEN05_B;
+    case ObjectId.PARABORA_D:   return animFunc_PARABORA_D;
+    case ObjectId.KAKASHI_D:    return animFunc_KAKASHI_D;
+    case ObjectId.TRAFFICMAN_D: return animFunc_TRAFFICMAN_D;
+    case ObjectId.FARMCAR01_E:  return animFunc_FARMCAR01_E;
+    case ObjectId.FARMCAR02_E:  return animFunc_FARMCAR02_E;
+    case ObjectId.FARMCAR03_E:  return animFunc_FARMCAR03_E;
+    case ObjectId.WATERMILL_F:  return animFunc_WATERMILL_F;
+    case ObjectId.DENTOWER_G:   return animFunc_DENTOWER_G;
     case ObjectId.WINDMILL01_G: return animFunc_WINDMILL01_G;
     case ObjectId.POLIHOUSE_E:  return animFunc_POLIHOUSE_E;
-    case ObjectId.FARMCAR02_E:  return animFunc_FARMCAR02_E;
+    case ObjectId.SHOPYA03_C:   return animFunc_SHOPYA03_C;
     case ObjectId.WORKCAR04_F:  return animFunc_WORKCAR04_F;
     case ObjectId.TANK01_F:     return animFunc_TANK01_F;
-    case ObjectId.GSWING01_B:   return animFunc_GSWING01_B;
     case ObjectId.TORNADO_G:    return animFunc_TORNADO_G;
     case ObjectId.SPINWAVE_G:   return animFunc_SPINWAVE_G;
     case ObjectId.SIGNAL01_E:   return animFunc_SIGNAL01_E;
@@ -719,6 +754,12 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     case ObjectId.BOOTH02_E:    return animFunc_BOOTH02_E;
     case ObjectId.OMEN08_B:     return animFunc_OMEN08_B;
     case ObjectId.RAIN01_G:     return animFunc_RAIN01_G;
+    case ObjectId.GSWING01_B:
+    case ObjectId.GSWING02_E:
+    case ObjectId.GSWING03_E:
+    case ObjectId.GSWING04_E:
+    case ObjectId.GSWING05_G:
+        return animFunc_Swing;
     case ObjectId.CAR02_F:
     case ObjectId.CAR03_F:
     case ObjectId.CAR04_F:
@@ -796,13 +837,102 @@ function animFunc_POLIHOUSE_E(object: ObjectRenderer, deltaTimeInFrames: number)
     rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Z, 1.0);
 }
 
+function animFunc_PARABORA_D(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Y, 1.0);
+}
+
+const animScratch = nArray(2, () => vec3.create());
+function animFunc_KAKASHI_D(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.miscOscillations.length === 0)
+        object.miscOscillations.push({
+            phase: 0,
+            step: .02,
+            amplitude: MathConstants.TAU / 24,
+            center: 0,
+        });
+    const phase = oscillate(object.miscOscillations[0], deltaTimeInFrames);
+    // probably intended to tilt forward and backward, but that will only happen when the scarecrow has no y rotation
+    object.euler[0] = phase * object.baseMatrix[0];
+    vec3.rotateX(animScratch[0], Vec3NegY, Vec3Zero, phase);
+    getMatrixTranslation(animScratch[1], object.objectSpawn.modelMatrix);
+    vec3.scaleAndAdd(object.prevPosition, animScratch[1], animScratch[0], object.partBBox.maxY);
+    object.prevPosition[1] += object.partBBox.maxY;
+}
+
+function animFunc_TRAFFICMAN_D(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.miscOscillations.length === 0)
+        object.miscOscillations.push({
+            phase: 0,
+            step: MathConstants.TAU / 60,
+            amplitude: MathConstants.TAU / 4,
+            center: 0,
+        });
+    object.modelInstances[1].euler[2] = oscillate(object.miscOscillations[0], deltaTimeInFrames);
+}
+
+function animFunc_FARMCAR01_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.motionState === null)
+        return;
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.X, 2);
+}
+
 function animFunc_FARMCAR02_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
     if (object.motionState === null)
         return;
-    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.Y, -1/600.0);
+    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.Y, -1 / 600.0);
     scrollTextureWrapMin(object.modelInstances[1], Axis.Y, 0.765);
-    scrollTexture(object.modelInstances[2], deltaTimeInFrames, Axis.Y, -1/600.0);
+    scrollTexture(object.modelInstances[2], deltaTimeInFrames, Axis.Y, -1 / 600.0);
     scrollTextureWrapMin(object.modelInstances[2], Axis.Y, 0.75);
+}
+
+function animFunc_FARMCAR03_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.motionState === null)
+        return;
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.X, 2);
+    rotateObject(object.modelInstances[2], deltaTimeInFrames, Axis.X, 2);
+}
+
+function animFunc_WATERMILL_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1);
+}
+
+function animFunc_DENTOWER_G(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Y, 1);
+}
+
+function animFunc_SHOPYA03_C(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    // while both oscillations have the same phase step, the different amplitude cycles mean they don't stay in sync
+    if (object.miscOscillations.length === 0) {
+        object.miscOscillations.push({
+            phase: 0,
+            step: 2 / 15,
+            amplitude: MathConstants.TAU / 45,
+            center: 0,
+        }, {
+            phase: 0,
+            step: 2 / 15,
+            amplitude: 3,
+            center: object.modelInstances[1].translation[1],
+        });
+    }
+
+    const rot = object.miscOscillations[0];
+    object.modelInstances[1].euler[0] = oscillate(rot, deltaTimeInFrames);
+    if (rot.phase > MathConstants.TAU) {
+        rot.phase = 0;
+        rot.amplitude -= .03;
+        if (rot.amplitude < 0)
+            rot.amplitude = MathConstants.TAU / 45;
+    }
+
+    const pos = object.miscOscillations[1];
+    object.modelInstances[1].translation[1] = oscillate(pos, deltaTimeInFrames);
+    if (pos.phase > MathConstants.TAU / 2) {
+        pos.phase = 0;
+        pos.amplitude -= .5;
+        if (pos.amplitude < 0)
+            pos.amplitude = 3;
+    }
 }
 
 function animFunc_WORKCAR04_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
@@ -817,7 +947,7 @@ function animFunc_TANK01_F(object: ObjectRenderer, deltaTimeInFrames: number): v
     scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/120.0);
 }
 
-function animFunc_GSWING01_B(object: ObjectRenderer, deltaTimeInFrames: number): void {
+function animFunc_Swing(object: ObjectRenderer, deltaTimeInFrames: number): void {
     object.euler[1] += 0.14 * deltaTimeInFrames;
 }
 
