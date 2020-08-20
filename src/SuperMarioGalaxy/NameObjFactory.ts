@@ -1,6 +1,6 @@
 
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { createGlobalConeGravityObj, createGlobalCubeGravityObj, createGlobalDiskGravityObj, createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalPlaneInCylinderGravityObj, createGlobalPointGravityObj, createGlobalSegmentGravityObj, createGlobalWireGravityObj } from './Gravity';
+import { createGlobalConeGravityObj, createGlobalCubeGravityObj, createGlobalDiskGravityObj, createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalPlaneInCylinderGravityObj, createGlobalPointGravityObj, createGlobalSegmentGravityObj, createGlobalWireGravityObj, createGlobalDiskTorusGravityObj } from './Gravity';
 import { createBloomCube, createBloomCylinder, createBloomSphere } from './ImageEffect';
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
 import { createLensFlareArea, requestArchivesLensFlareArea } from './Actors/LensFlare';
@@ -710,7 +710,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("GlobalConeGravity",            createGlobalConeGravityObj),
     E("GlobalCubeGravity",            createGlobalCubeGravityObj),
     E("GlobalDiskGravity",            createGlobalDiskGravityObj),
-    N("GlobalDiskTorusGravity"),
+    E("GlobalDiskTorusGravity",       createGlobalDiskTorusGravityObj),
     E("GlobalPointGravity",           createGlobalPointGravityObj),
     E("GlobalPlaneGravity",           createGlobalPlaneGravityObj),
     E("GlobalPlaneGravityInBox",      createGlobalPlaneInBoxGravityObj),

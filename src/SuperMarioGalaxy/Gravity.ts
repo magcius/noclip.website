@@ -4,8 +4,8 @@ import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJM
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation } from "../MathHelpers";
-import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB } from "./ActorUtil";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, Vec3UnitZ, Vec3UnitX } from "../MathHelpers";
+import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -993,6 +993,105 @@ class DiskGravity extends PlanetGravity {
     }
 }
 
+class DiskTorusGravity extends PlanetGravity {
+    private bothSide = false;
+    private edgeType = 3;
+    private diskRadius = 0;
+    private radius = 2000.0;
+    private position = vec3.create();
+    private direction = vec3.create();
+    private worldRadius = 2000.0;
+    private worldPosition = vec3.create();
+    private worldDirection = vec3.create();
+
+    public setBothSide(v: boolean): void {
+        this.bothSide = v;
+    }
+
+    public setEdgeType(v: number): void {
+        this.edgeType = v;
+    }
+
+    public setDiskRadius(v: number): void {
+        this.diskRadius = v;
+    }
+
+    public setRadius(v: number): void {
+        this.radius = v;
+    }
+
+    public setPosition(v: vec3): void {
+        vec3.copy(this.position, v);
+    }
+
+    public setDirection(v: vec3): void {
+        vec3.normalize(this.direction, v);
+    }
+
+    protected updateMtx(): void {
+        vec3.copy(this.worldPosition, this.position);
+        vec3.copy(this.worldDirection, this.direction);
+        const length = vec3.length(this.worldDirection);
+        vec3.normalize(this.worldDirection, this.worldDirection);
+        this.worldRadius = this.radius * length;
+    }
+
+    protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
+        vec3.subtract(scratchVec3a, coord, this.worldPosition);
+        const dot = vec3.dot(scratchVec3a, this.worldDirection);
+
+        // Wrong side.
+        if (dot < 0.0 && !this.bothSide)
+            return -1;
+
+        vec3.scale(scratchVec3b, this.worldDirection, dot);
+        vec3.sub(scratchVec3b, scratchVec3a, scratchVec3b);
+        const length = vec3.length(scratchVec3b);
+        vec3.normalize(scratchVec3b, scratchVec3b);
+
+        if (isNearZero(length, 0.001))
+            makeAxisVerticalZX(scratchVec3b, this.worldDirection);
+
+        let dist: number;
+        if (length >= (this.worldRadius - this.diskRadius)) {
+            if (this.edgeType === 0 || this.edgeType === 2)
+                return -1;
+
+            vec3.scaleAndAdd(scratchVec3a, this.worldPosition, scratchVec3a, this.worldRadius - this.diskRadius);
+            vec3.sub(dst, coord, scratchVec3a);
+            dist = vec3.length(dst);
+            vec3.normalize(dst, dst);
+        } else if (length >= this.worldRadius) {
+            if (this.edgeType === 0 || this.edgeType === 1)
+                return -1;
+
+            vec3.scaleAndAdd(scratchVec3a, this.worldPosition, scratchVec3a, this.worldRadius);
+            vec3.sub(dst, coord, scratchVec3a);
+            dist = vec3.length(dst);
+            vec3.normalize(dst, dst);
+        } else {
+            if (dot >= 0.0) {
+                vec3.negate(dst, this.worldDirection);
+            } else {
+                vec3.copy(dst, this.worldDirection);
+            }
+
+            dist = Math.abs(dot);
+        }
+
+        if (!this.isInRangeDistance(dist))
+            return -1;
+
+        return dist;
+    }
+
+    protected generateOwnRandomPoint(dst: vec3): void {
+        dst[0] = this.worldPosition[0] + getRandomFloat(-this.range, this.range);
+        dst[1] = this.worldPosition[1] + getRandomFloat(-this.range, this.range);
+        dst[2] = this.worldPosition[2] + getRandomFloat(-this.range, this.range);
+    }
+}
+
 class ConeGravity extends PlanetGravity {
     public enableBottom: boolean = false;
     public topCutRate: number = 0.0;
@@ -1379,7 +1478,7 @@ export function createGlobalSegmentGravityObj(zoneAndLayer: ZoneAndLayer, sceneO
 export function createGlobalDiskGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
     const gravity = new DiskGravity();
 
-    // SegmentGravityCreator::settingFromSRT
+    // DiskGravityCreator::settingFromSRT
     getJMapInfoTrans(scratchVec3a, sceneObjHolder, infoIter);
     getJMapInfoRotate(scratchVec3b, sceneObjHolder, infoIter);
     getJMapInfoScale(scratchVec3c, infoIter);
@@ -1394,7 +1493,7 @@ export function createGlobalDiskGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjH
     const maxElem = Math.max(scratchVec3c[0], scratchVec3c[1], scratchVec3c[2]);
     gravity.setRadius(500.0 * maxElem);
 
-    // SegmentGravityCreator::settingFromJMapArgs
+    // DiskGravityCreator::settingFromJMapArgs
     const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
     const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
     const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
@@ -1405,6 +1504,37 @@ export function createGlobalDiskGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjH
         gravity.setValidDegree(arg2);
     else
         gravity.setValidDegree(360.0);
+
+    settingGravityParamFromJMap(gravity, infoIter);
+    gravity.updateIdentityMtx();
+    registerGravity(sceneObjHolder, gravity);
+
+    return new GlobalGravityObj(zoneAndLayer, sceneObjHolder, infoIter, gravity);
+}
+
+export function createGlobalDiskTorusGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
+    const gravity = new DiskTorusGravity();
+
+    // DiskTorusGravityCreator::settingFromSRT
+    getJMapInfoTrans(scratchVec3a, sceneObjHolder, infoIter);
+    getJMapInfoRotate(scratchVec3b, sceneObjHolder, infoIter);
+    getJMapInfoScale(scratchVec3c, infoIter);
+
+    makeMtxTR(scratchMatrix, scratchVec3a, scratchVec3b);
+    gravity.setPosition(scratchVec3a);
+    getMatrixAxisY(scratchVec3b, scratchMatrix);
+    gravity.setDirection(scratchVec3b);
+    const maxElem = Math.max(scratchVec3c[0], scratchVec3c[1], scratchVec3c[2]);
+    gravity.setRadius(500.0 * maxElem);
+
+    // DiskTorusGravityCreator::settingFromJMapArgs
+    const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
+    const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
+    const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
+
+    gravity.setBothSide(arg0 !== 0);
+    gravity.setEdgeType(arg1);
+    gravity.setDiskRadius(arg2);
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();
@@ -1442,7 +1572,7 @@ export function createGlobalConeGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjH
 export function createGlobalWireGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): GlobalGravityObj {
     const gravity = new WireGravity();
 
-    // ConeGravityCreator::settingFromJMapOtherParam
+    // WireGravityCreator::settingFromJMapOtherParam
     const railRider = new RailRider(sceneObjHolder, infoIter);
 
     const segmentCount = fallback(getJMapInfoArg0(infoIter), 20);

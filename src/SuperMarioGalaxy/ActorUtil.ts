@@ -7,7 +7,7 @@ import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
-import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixAxis, getMatrixAxis, lerp } from "../MathHelpers";
+import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixAxis, getMatrixAxis, lerp, Vec3UnitX } from "../MathHelpers";
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
@@ -900,6 +900,13 @@ export function makeQuatUpFront(dst: quat, up: ReadonlyVec3, front: ReadonlyVec3
     makeMtxUpFrontPos(scratchMatrix, up, front, Vec3Zero);
     mat4.getRotation(dst, scratchMatrix);
     quat.normalize(dst, dst);
+}
+
+export function makeAxisVerticalZX(axisRight: vec3, front: vec3): void {
+    vec3.scaleAndAdd(axisRight, Vec3UnitZ, front, -vec3.dot(front, Vec3UnitZ));
+    if (isNearZeroVec3(axisRight, 0.001))
+        vec3.scaleAndAdd(axisRight, Vec3UnitX, front, -vec3.dot(front, Vec3UnitX));
+    vec3.normalize(axisRight, axisRight);
 }
 
 export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: number = 1.0, scratch = scratchVec3): void {
