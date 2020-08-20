@@ -143,10 +143,11 @@ export class ObjectRenderer {
             let transformCount = 0;
             if (objectModel.skinning.length > 0)
                 transformCount = objectModel.skinning[j].length;
+
             const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j], transformCount);
             mat4.copy(binModelInstance.modelMatrix, objectSpawn.modelMatrix);
+
             if (objectModel.transforms.length > 0) {
-                mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j].matrix);
                 vec3.copy(binModelInstance.euler, objectModel.transforms[j].rotation);
                 vec3.copy(binModelInstance.translation, objectModel.transforms[j].translation);
             }
@@ -267,7 +268,7 @@ export class ObjectRenderer {
             hasMotionImplementation = this.runMotion(deltaTimeInFrames, viewerInput, zones!, levelCollision!);
             vec3.copy(this.prevPosition, this.motionState.pos);
         }
-            computeKatamariRotation(scratchMatrix, this.euler);
+        computeKatamariRotation(scratchMatrix, this.euler);
         mat4.mul(this.modelMatrix, this.baseMatrix, scratchMatrix);
 
         if (this.parentState) {
@@ -308,12 +309,13 @@ export class ObjectRenderer {
             if (this.animations !== null && this.animationIndex >= 0) {
                 this.animationController.setTimeFromViewerInput(viewerInput);
                 this.animate();
-            } else
+            } else {
                 for (let i = 0; i < this.modelInstances.length; i++) {
                     const inst = this.modelInstances[i];
                     computeModelMatrixR(inst.modelMatrix, inst.euler[0], inst.euler[1], inst.euler[2]);
                     setMatrixTranslation(inst.modelMatrix, inst.translation);
                 }
+            }
 
             // pass in a single transform from object space to (noclip) world space
             mat4.mul(scratchMatrix, toNoclip, this.modelMatrix);
@@ -326,8 +328,7 @@ export class ObjectRenderer {
             this.altObject.prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette, zones, levelCollision);
         }
 
-
-        const debugMotion = this.objectSpawn.objectId == ObjectId.SHOPYA03_C;
+        const debugMotion = false;
         if (debugMotion) {
             mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
             drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.prevPosition, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });

@@ -5,8 +5,8 @@ import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat, vec3 } from "gl-matrix";
 import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS";
-import { computeModelMatrixPosRot } from "../SourceEngine/Main";
 import { Endianness } from "../endian";
+import { MathConstants, computeModelMatrixSRT } from "../MathHelpers";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -911,14 +911,12 @@ function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: 
         const x = view.getFloat32(firstTransform + 0x20 * i + 0x00 - addressOffset, true);
         const y = view.getFloat32(firstTransform + 0x20 * i + 0x04 - addressOffset, true);
         const z = view.getFloat32(firstTransform + 0x20 * i + 0x08 - addressOffset, true);
-        const rx = view.getFloat32(firstTransform + 0x20 * i + 0x10 - addressOffset, true);
-        const ry = view.getFloat32(firstTransform + 0x20 * i + 0x14 - addressOffset, true);
-        const rz = view.getFloat32(firstTransform + 0x20 * i + 0x18 - addressOffset, true);
-        const transform = mat4.create();
+        const rx = view.getFloat32(firstTransform + 0x20 * i + 0x10 - addressOffset, true) * MathConstants.DEG_TO_RAD;
+        const ry = view.getFloat32(firstTransform + 0x20 * i + 0x14 - addressOffset, true) * MathConstants.DEG_TO_RAD;
+        const rz = view.getFloat32(firstTransform + 0x20 * i + 0x18 - addressOffset, true) * MathConstants.DEG_TO_RAD;
         const translation = vec3.fromValues(x, y, z);
         const rotation = vec3.fromValues(rx, ry, rz);
-        computeModelMatrixPosRot(transform, translation, rotation);
-        out.push({ translation, rotation, matrix: transform });
+        out.push({ translation, rotation });
     }
     return out;
 }
@@ -1114,15 +1112,22 @@ export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIn
     return data.createTypedArray(Int16Array, pairStart - offset, undefined, Endianness.LITTLE_ENDIAN);
 }
 
+function computePartTransformMatrix(dst: mat4, xform: Readonly<PartTransform>): void {
+    computeModelMatrixSRT(dst, 1, 1, 1, xform.rotation[0], xform.rotation[1], xform.rotation[2], xform.translation[0], xform.translation[1], xform.translation[2]);
+}
+
 const scratchObjectAABB = new AABB();
+const scratchMatrix = mat4.create();
 function computeObjectAABB(sector: BINModelSector, transforms: PartTransform[]): AABB {
     const out = new AABB();
     for (let i = 0; i < sector.models.length; i++) {
         if (transforms.length > 0) {
-            scratchObjectAABB.transform(sector.models[i].bbox, assertExists(transforms[i].matrix));
+            computePartTransformMatrix(scratchMatrix, transforms[i]);
+            scratchObjectAABB.transform(sector.models[i].bbox, scratchMatrix);
             out.union(out, scratchObjectAABB);
-        } else
+        } else {
             out.union(out, sector.models[i].bbox);
+        }
     }
     return out;
 }
@@ -1144,8 +1149,11 @@ function computeObjectAABBFromRawSector(buffer: ArrayBufferSlice, offset: number
         const maxZ = view.getFloat32(objOffs + 0x18, true);
         scratchObjectAABB.set(minX, minY, minZ, maxX, maxY, maxZ);
 
-        if (transforms.length > 0)
-            scratchObjectAABB.transform(scratchObjectAABB, assertExists(transforms[i].matrix));
+        if (transforms.length > 0) {
+            computePartTransformMatrix(scratchMatrix, transforms[i]);
+            scratchObjectAABB.transform(scratchObjectAABB, scratchMatrix);
+        }
+
         out.union(out, scratchObjectAABB);
     }
     return out;
@@ -1204,7 +1212,6 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
 }
 
 export interface PartTransform {
-    matrix: mat4;
     translation: vec3;
     rotation: vec3;
 }
