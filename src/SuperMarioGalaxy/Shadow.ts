@@ -17,7 +17,6 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import { TSDraw } from "./DDraw";
 import { GX_Program } from "../gx/gx_material";
 import ArrayBufferSlice from "../ArrayBufferSlice";

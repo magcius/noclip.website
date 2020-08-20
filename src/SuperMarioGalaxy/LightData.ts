@@ -15,12 +15,12 @@ import { NameObj } from "./NameObj";
 import { lerp } from "../MathHelpers";
 import { isHiddenModel } from "./ActorUtil";
 
-function getValueColor(color: Color, infoIter: JMapInfoIter, prefix: string): void {
+function getValueColor(dst: Color, infoIter: JMapInfoIter, prefix: string): void {
     const colorR = (fallback(infoIter.getValueNumber(`${prefix}R`), 0) & 0xFF) / 0xFF;
     const colorG = (fallback(infoIter.getValueNumber(`${prefix}G`), 0) & 0xFF) / 0xFF;
     const colorB = (fallback(infoIter.getValueNumber(`${prefix}B`), 0) & 0xFF) / 0xFF;
     const colorA = (fallback(infoIter.getValueNumber(`${prefix}A`), 0) & 0xFF) / 0xFF;
-    colorFromRGBA(color, colorR, colorG, colorB, colorA);
+    colorFromRGBA(dst, colorR, colorG, colorB, colorA);
 }
 
 class LightInfo {

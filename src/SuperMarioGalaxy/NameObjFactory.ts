@@ -725,14 +725,16 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("BloomCube",                    createBloomCube),
     E("BloomCylinder",                createBloomCylinder),
     E("BloomSphere",                  createBloomSphere),
-
     E("LensFlareArea",                createLensFlareArea,  requestArchivesLensFlareArea),
-
-    N("WaterArea"),
-    N("SwitchArea"),
+    E("LightCtrlCube",                createLightCtrlCube),
+    E("LightCtrlCylinder",            createLightCtrlCylinder),
     E("SwitchCube",                   createSwitchCube),
     E("SwitchSphere",                 createSwitchSphere),
     E("SwitchCylinder",               createSwitchCylinder),
+    E("HazeCube",                     createHazeCube, requestArchivesHazeCube),
+
+    N("WaterArea"),
+    N("SwitchArea"),
     N("ClipAreaSphere"),
     N("CameraArea"),
     N("CubeCameraBowl"),
@@ -743,7 +745,6 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("DeathArea"),
     N("SimpleBloomCube"),
     N("PostFogArea"),
-    E("HazeCube",                     createHazeCube, requestArchivesHazeCube),
     N("MessageArea"),
     N("MessageAreaCube"),
     N("MessageAreaCylinder"),
@@ -793,10 +794,6 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("ExtraWallCheckArea"),
     N("ExtraWallCheckCylinder"),
     N("DodoryuClosedCylinder"),
-
-    // Areas
-    E("LightCtrlCube",              createLightCtrlCube),
-    E("LightCtrlCylinder",          createLightCtrlCylinder),
 
     // Points
     N("IronCannonLauncherPoint"),

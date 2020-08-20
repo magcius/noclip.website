@@ -1040,9 +1040,7 @@ export function calcPerpendicFootToLineInside(dst: vec3, pos: ReadonlyVec3, p0: 
 
 export function vecKillElement(dst: vec3, a: ReadonlyVec3, b: ReadonlyVec3): number {
     const m = vec3.dot(a, b);
-    dst[0] = a[0] - b[0]*m;
-    dst[1] = a[1] - b[1]*m;
-    dst[2] = a[2] - b[2]*m;
+    vec3.scaleAndAdd(dst, a, b, -m);
     return m;
 }
 

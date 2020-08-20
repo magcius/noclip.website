@@ -4,8 +4,8 @@ import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJM
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, Vec3UnitZ, Vec3UnitX } from "../MathHelpers";
-import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX } from "./ActorUtil";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers";
+import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
@@ -233,13 +233,22 @@ function generateRandomPointInMatrix(dst: vec3, m: mat4, mag: number = 1): void 
     vec3.transformMat4(dst, dst, m);
 }
 
+function generateRandomPointInCylinder(dst: vec3, pos: ReadonlyVec3, up: ReadonlyVec3, r: number, h: number): void {
+    const theta = getRandomFloat(0, MathConstants.TAU), mag = getRandomFloat(0, r);
+    dst[0] = Math.cos(theta) * mag;
+    dst[1] = getRandomFloat(0, h);
+    dst[2] = Math.sin(theta) * mag;
+    makeMtxUpNoSupportPos(scratchMatrix, up, pos);
+    transformVec3Mat4w1(dst, scratchMatrix, dst);
+}
+
 const enum ParallelGravityRangeType { Sphere, Box, Cylinder }
 
 class ParallelGravity extends PlanetGravity {
     private rangeType = ParallelGravityRangeType.Sphere;
-    private baseDistance: number = 2000;
-    private cylinderRangeScaleX: number;
-    private cylinderRangeScaleY: number;
+    private baseDistance: number = 2000.0;
+    private cylinderRadius: number = 500.0;
+    private cylinderHeight: number = 1000.0;
     private boxMtx: mat4 | null = null;
     private boxExtentsSq: vec3 | null = null;
     private planeNormal = vec3.create();
@@ -264,8 +273,8 @@ class ParallelGravity extends PlanetGravity {
     }
 
     public setRangeCylinder(scaleX: number, scaleY: number): void {
-        this.cylinderRangeScaleX = scaleX;
-        this.cylinderRangeScaleY = scaleY;
+        this.cylinderRadius = scaleX;
+        this.cylinderHeight = scaleY;
     }
 
     public setRangeBox(mtx: mat4): void {
@@ -333,14 +342,13 @@ class ParallelGravity extends PlanetGravity {
 
     private isInCylinderRange(coord: ReadonlyVec3): number {
         vec3.subtract(scratchVec3a, coord, this.pos);
-        const dot = vec3.dot(this.planeNormal, scratchVec3a);
+        const depth = vecKillElement(scratchVec3a, scratchVec3a, this.planeNormal);
 
-        if (dot < 0 || dot > this.cylinderRangeScaleY)
+        if (depth < 0.0 || depth > this.cylinderHeight)
             return -1;
 
-        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, this.planeNormal, -dot);
         const mag = vec3.length(scratchVec3a);
-        if (mag > this.cylinderRangeScaleX)
+        if (mag > this.cylinderRadius)
             return -1;
 
         return this.baseDistance + mag;
@@ -371,11 +379,7 @@ class ParallelGravity extends PlanetGravity {
             const boxMtx = this.boxMtx!;
             generateRandomPointInMatrix(dst, boxMtx);
         } else if (this.rangeType === ParallelGravityRangeType.Cylinder) {
-            const rangeX = this.cylinderRangeScaleX;
-            const rangeY = this.cylinderRangeScaleY;
-            dst[0] = this.pos[0] + getRandomFloat(-rangeX, rangeX);
-            dst[1] = this.pos[1] + getRandomFloat(-rangeY, rangeY);
-            dst[2] = this.pos[2] + getRandomFloat(-rangeX, rangeX);
+            generateRandomPointInCylinder(dst, this.pos, this.planeNormal, this.cylinderRadius, this.cylinderHeight);
         } else {
             const range = this.range >= 0.0 ? this.range : 50000.0;
             dst[0] = this.pos[0] + getRandomFloat(-range, range);
@@ -638,7 +642,7 @@ class CubeGravity extends PlanetGravity {
         vec3.sub(scratchVec3d, scratchVec3c, coord);
 
         // Orthagonalize to axis.
-        vec3.scaleAndAdd(dst, scratchVec3d, scratchVec3b, -vec3.dot(scratchVec3b, scratchVec3d));
+        vecKillElement(dst, scratchVec3d, scratchVec3b);
 
         if (!vec3.equals(dst, Vec3Zero)) {
             const dist = vec3.length(dst);
@@ -818,8 +822,7 @@ class SegmentGravity extends PlanetGravity {
 
         // Orthonormalize sideVector.
         // NOTE(jstpierre): I'm quite sure sideVector and segmentDirection will already be orthonormal...
-        const dot = vec3.dot(this.segmentDirection, this.sideVector);
-        vec3.scaleAndAdd(scratchVec3b, this.sideVector, this.segmentDirection, -dot);
+        vecKillElement(scratchVec3b, this.sideVector, this.segmentDirection);
 
         mat4.fromRotation(scratchMatrix, theta, this.segmentDirection);
         vec3.transformMat4(this.sideVectorOrtho, scratchVec3b, scratchMatrix);
@@ -925,8 +928,7 @@ class DiskGravity extends PlanetGravity {
 
         // Orthonormalize the side direction.
         // NOTE(jstpierre): I'm quite sure sideDirection and segmentDirection will already be orthonormal...
-        const dot = vec3.dot(this.localDirection, this.sideDirection);
-        vec3.scaleAndAdd(scratchVec3b, this.sideDirection, this.localDirection, -dot);
+        vecKillElement(scratchVec3b, this.localDirection, this.sideDirection);
 
         mat4.fromRotation(scratchMatrix, theta, this.sideDirection);
         vec3.transformMat4(this.sideDirectionOrtho, scratchVec3b, scratchMatrix);
@@ -1124,8 +1126,7 @@ class ConeGravity extends PlanetGravity {
         vec3.sub(scratchVec3b, coord, scratchVec3b);
 
         // Project the position around the cone onto the cone's Y axis.
-        const dot = vec3.dot(scratchVec3a, scratchVec3b);
-        vec3.scaleAndAdd(scratchVec3d, scratchVec3b, scratchVec3a, -dot);
+        const dot = vecKillElement(scratchVec3d, scratchVec3b, scratchVec3a);
 
         if (!isNearZeroVec3(scratchVec3d, 0.001)) {
             const dist = vec3.length(scratchVec3d);
@@ -1159,8 +1160,7 @@ class ConeGravity extends PlanetGravity {
                     vec3.sub(scratchVec3b, scratchVec3b, scratchVec3c);
                     vec3.normalize(scratchVec3b, scratchVec3b);
                     vec3.negate(scratchVec3d, scratchVec3d);
-                    const dot = vec3.dot(scratchVec3b, scratchVec3d);
-                    vec3.scaleAndAdd(scratchVec3b, scratchVec3d, scratchVec3b, -dot);
+                    vecKillElement(scratchVec3b, scratchVec3d, scratchVec3b);
                     if (!isNearZeroVec3(scratchVec3b, 0.001)) {
                         vec3.normalize(dst, scratchVec3b);
                     } else {
