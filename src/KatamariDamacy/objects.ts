@@ -1,10 +1,10 @@
 
-import { mat4, vec3, quat } from "gl-matrix";
+import { mat4, vec3, quat, ReadonlyMat4 } from "gl-matrix";
 import { Green, Magenta, Red } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, mat4Lerp, invertOrthoMatrix } from "../MathHelpers";
+import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation } from "../MathHelpers";
 import { computeModelMatrixPosRot } from "../SourceEngine/Main";
 import { assert, hexzero, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
@@ -14,6 +14,23 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { ObjectAnimationList, applyCurve } from "./animation";
 import { AdjustableAnimationController } from "../BanjoKazooie/render";
+
+const scratchVec3 = vec3.create();
+
+function mat4Lerp(dst: mat4, a: mat4, b: mat4, t: number): void {
+    for (let i = 0; i < dst.length; i++)
+        dst[i] = a[i] + (b[i] - a[i]) * t;
+}
+
+// computes the inverse of an affine transform, assuming the linear part is a rotation
+function invertOrthoMatrix(dst: mat4, src: ReadonlyMat4): void {
+    mat4.transpose(dst, src);
+    dst[3] = dst[7] = dst[11] = 0; // zero where the translation ended up
+    getMatrixTranslation(scratchVec3, src);
+    transformVec3Mat4w0(scratchVec3, dst, scratchVec3);
+    vec3.scale(scratchVec3, scratchVec3, -1);
+    setMatrixTranslation(dst, scratchVec3);
+}
 
 type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => void;
 
