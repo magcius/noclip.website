@@ -9,7 +9,7 @@ import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { reverseDepthForPerspectiveProjectionMatrix, reverseDepthForOrthographicProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
 import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
-import { CameraAnimationManager } from './CameraAnimationManager';
+import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -499,8 +499,7 @@ export class FPSCameraController implements CameraController {
 
 export class StudioCameraController extends FPSCameraController {
     private isAnimationPlaying: boolean = false;
-    private stepTrs: vec3 = vec3.create();
-    private stepRotQ: quat = quat.create();
+    private interpStep: InterpolationStep = new InterpolationStep();
     /**
      * Indicates if the camera is currently positioned on a keyframe's end position.
      */
@@ -541,7 +540,7 @@ export class StudioCameraController extends FPSCameraController {
     public updateAnimation(dt: number): CameraUpdateResult {
         if (this.animationManager.isKeyframeFinished()) {
             if (this.animationManager.playbackHasNextKeyframe())
-                this.animationManager.playbackNextKeyframe();
+                this.animationManager.playbackAdvanceKeyframe();
             else
                 this.stopAnimation();
             return CameraUpdateResult.Unchanged;
@@ -553,22 +552,24 @@ export class StudioCameraController extends FPSCameraController {
             return CameraUpdateResult.Unchanged;
         } else {
             this.animationManager.update(dt);
-            this.animationManager.playbackInterpolationStep(this.stepRotQ, this.stepTrs);
-            mat4.fromRotationTranslation(this.camera.worldMatrix, this.stepRotQ, this.stepTrs);
+            this.animationManager.playbackInterpolationStep(this.interpStep);
+            mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
+            mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
             return CameraUpdateResult.Changed;
         }
     }
 
-    public setToPosition(pos: mat4): void {
-        mat4.copy(this.camera.worldMatrix, pos);
+    public setToPosition(setStep: InterpolationStep): void {
+        mat4.targetTo(this.camera.worldMatrix, setStep.pos, setStep.lookAtPos, Vec3UnitY);
+        mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, setStep.bank);
         mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
         this.camera.worldMatrixUpdated();
         this.isOnKeyframe = true;
     }
 
-    public playAnimation(startPos: mat4) {
+    public playAnimation(startStep: InterpolationStep) {
         this.isAnimationPlaying = true;
-        this.setToPosition(startPos);
+        this.setToPosition(startStep);
     }
 
     public stopAnimation() {
