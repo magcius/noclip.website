@@ -195,6 +195,75 @@ class ModelShapes {
     }
 }
 
+// Generate vertex attribute tables.
+// The game uses one table for everything. The final version of the game has a minor difference in
+// VAT 5 compared to older versions.
+function generateVat(old: boolean): GX_VtxAttrFmt[][] {
+    const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
+    for (let i = 0; i <= GX.Attr.MAX; i++) {
+        for (let j = 0; j < 8; j++) {
+            vat[j][i] = { compType: GX.CompType.U8, compShift: 0, compCnt: 0 };
+        }
+    }
+
+    vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+    vat[0][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[0][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[1][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 2, compCnt: GX.CompCnt.POS_XYZ };
+    vat[1][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[1][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[2][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+    vat[2][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[2][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[2][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+    vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+    vat[3][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[3][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[3][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+    vat[4][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[4][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[4][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
+
+    // The final version uses a 1/8 quantization factor; older versions do not use quantization.
+    vat[5][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: old ? 0 : 3, compCnt: GX.CompCnt.POS_XYZ };
+    vat[5][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[5][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[5][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+    vat[5][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+    vat[5][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+    vat[5][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[6][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+    vat[6][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[6][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[6][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[6][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[6][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[6][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[7][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+    vat[7][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[7][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[7][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[7][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+
+    return vat;
+}
+
+const VAT = generateVat(false);
+const OLD_VAT = generateVat(true);
+
 export class Model {
     private createModelShapes: CreateModelShapesFunc;
     private sharedModelShapes: ModelShapes | null = null;
@@ -512,6 +581,8 @@ export class Model {
         this.hasFineSkinning = this.posFineSkinningConfig !== undefined && this.posFineSkinningConfig.numPieces !== 0;
         this.hasBetaFineSkinning = this.hasFineSkinning && this.modelVersion === ModelVersion.Beta;
 
+        const vat = fields.oldVat ? OLD_VAT : VAT;
+
         // @0x8: data size
         // @0xc: 4x3 matrix (placeholder; always zeroed in files)
         // @0x8e: y translation (up/down)
@@ -631,64 +702,6 @@ export class Model {
 
         this.materials = [];
 
-        const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
-        for (let i = 0; i <= GX.Attr.MAX; i++) {
-            for (let j = 0; j < 8; j++) {
-                vat[j][i] = { compType: GX.CompType.U8, compShift: 0, compCnt: 0 };
-            }
-        }
-
-        vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-        vat[0][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[0][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
-    
-        vat[1][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 2, compCnt: GX.CompCnt.POS_XYZ };
-        vat[1][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[1][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
-    
-        vat[2][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-        vat[2][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[2][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[2][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
-        vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
-        vat[3][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[3][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[3][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-        vat[4][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[4][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[4][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[5][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: fields.oldVat ? 0 : 3, compCnt: GX.CompCnt.POS_XYZ };
-        vat[5][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[5][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[5][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
-        vat[5][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
-        vat[5][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
-        vat[5][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[6][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
-        vat[6][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[6][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[6][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[6][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[6][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[6][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[7][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-        vat[7][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[7][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[7][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[7][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-
         const dlInfos: DisplayListInfo[] = [];
         const dlInfoCount = blockDv.getUint8(fields.dlInfoCount);
         // console.log(`Loading ${dlInfoCount} display lists...`);
@@ -753,9 +766,7 @@ export class Model {
             return vtxArrays;
         }
 
-        const self = this;
-
-        function readVertexDesc(bits: LowBitReader, shader: Shader): GX_VtxDesc[] {
+        const readVertexDesc = (bits: LowBitReader, shader: Shader): GX_VtxDesc[] => {
             // console.log(`Setting descriptor`);
             const vcd: GX_VtxDesc[] = [];
             for (let i = 0; i <= GX.Attr.MAX; i++) {
@@ -827,7 +838,7 @@ export class Model {
             return vcd;
         }
 
-        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView): Shape {
+        const runSpecialBitstream = (bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView): Shape => {
             // console.log(`running special bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
             const bits = new LowBitReader(blockDv, bitsOffset);
@@ -855,16 +866,16 @@ export class Model {
 
             const vtxArrays = getVtxArrays(posBuffer);
 
-            const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, self.hasFineSkinning);
-            newGeom.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
+            const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
+            newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
 
-            const newMat = new CommonShapeMaterial(self.animController);
+            const newMat = new CommonShapeMaterial(this.animController);
             newMat.setMaterial(material);
 
             return new Shape(newGeom, newMat, false);
         }
 
-        function runBitstream(modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView) {
+        const runBitstream = (modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView) => {
             // console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
             modelShapes.shapes[drawStep] = [];
             const shapes = modelShapes.shapes[drawStep];
@@ -875,12 +886,13 @@ export class Model {
 
             let curShader = shaders[0];
             let curMaterial: SFAMaterial | undefined = undefined;
-            function setShader(num: number) {
+
+            const setShader = (num: number) => {
                 curShader = shaders[num];
-                if (self.materials[num] === undefined) {
-                    self.materials[num] = self.materialFactory.buildMaterial(curShader, texFetcher, fields.isMapBlock);
+                if (this.materials[num] === undefined) {
+                    this.materials[num] = this.materialFactory.buildMaterial(curShader, texFetcher, fields.isMapBlock);
                 }
-                curMaterial = self.materials[num];
+                curMaterial = this.materials[num];
             }
 
             setShader(0);
@@ -910,22 +922,22 @@ export class Model {
     
                     try {
                         if (curShader.flags & ShaderFlags.Water) {
-                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory), posBuffer);
+                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, this.materialFactory.buildWaterMaterial.bind(this.materialFactory), posBuffer);
                             modelShapes.waters.push({ shape: newShape });
                         } else {
                             const vtxArrays = getVtxArrays(posBuffer);
 
-                            const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, self.hasFineSkinning);
-                            newGeom.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
+                            const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
+                            newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
 
-                            const newMat = new CommonShapeMaterial(self.animController);
+                            const newMat = new CommonShapeMaterial(this.animController);
                             newMat.setMaterial(curMaterial!);
 
                             const newShape = new Shape(newGeom, newMat, !!(curShader.flags & ShaderFlags.DevGeometry));
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
-                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildFurMaterial.bind(self.materialFactory), posBuffer);
+                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, this.materialFactory.buildFurMaterial.bind(this.materialFactory), posBuffer);
 
                                 let numFurLayers;
                                 if (curShader.flags & ShaderFlags.ShortFur) {
