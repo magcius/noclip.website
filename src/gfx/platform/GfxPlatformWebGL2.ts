@@ -1497,6 +1497,8 @@ void main() {
     }
 
     public programPatched(o: GfxProgram, descriptor: GfxProgramDescriptorSimple): void {
+        assert(this._shaderDebug);
+
         const program = o as GfxProgramP_GL;
         const gl = this.gl;
         gl.deleteProgram(program.gl_program);
@@ -1504,6 +1506,7 @@ void main() {
         program.gl_program = this.ensureResourceExists(gl.createProgram());
         program.compileState = GfxProgramCompileStateP_GL.NeedsCompile;
         this._tryCompileProgram(program);
+        this._checkProgramCompilationForErrors(program);
     }
 
     public getBufferData(buffer: GfxBuffer, dstBuffer: ArrayBufferView, wordOffset: number = 0): void {

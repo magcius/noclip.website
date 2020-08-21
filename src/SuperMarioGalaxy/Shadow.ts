@@ -3,7 +3,7 @@ import * as GX from "../gx/gx_enum";
 import { PacketParams, MaterialParams, GXMaterialHelperGfx, ColorKind, SceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from "../gx/gx_render";
 
 import { LiveActor } from "./LiveActor";
-import { SceneObjHolder, SceneObj } from "./Main";
+import { SceneObjHolder, SceneObj, SpecialTextureType } from "./Main";
 import { GravityInfo, GravityTypeMask } from './Gravity';
 import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector, getJointMtxByName, makeMtxUpNoSupport, makeMtxUpNoSupportPos } from "./ActorUtil";
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
@@ -21,7 +21,8 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { TSDraw } from "./DDraw";
 import { GX_Program } from "../gx/gx_material";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { colorFromRGBA } from "../Color";
+import { TextureMapping } from "../TextureHolder";
 
 function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
@@ -482,7 +483,6 @@ class ShadowVolumeCylinder extends ShadowVolumeModel {
 
         makeMtxUpNoSupportPos(scratchMat4a, scratchVec3b, scratchVec3a);
         transformVec3Mat4w0(scratchVec3a, scratchMat4a, Vec3Zero);
-        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, scratchVec3a);
 
         let scaleXZ = this.radius / 100.0;
         if (this.controller.followHostScale)
@@ -567,28 +567,21 @@ class ShadowVolumeFlatModel extends ShadowVolumeModel {
         this.calcRootJoint(rootMtx, scratchVec3a);
         if (this.controller.followHostScale)
             mat4.scale(rootMtx, rootMtx, this.controller.host.scale);
-
-        transformVec3Mat4w1(scratchVec3b, rootMtx, Vec3Zero);
-        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, scratchVec3b);
-
         mat4.mul(rootMtx, viewerInput.camera.viewMatrix, rootMtx);
 
         this.calcDropJoint(dropMtx, scratchVec3a);
         if (this.controller.followHostScale)
             mat4.scale(dropMtx, dropMtx, this.controller.host.scale);
-
-        transformVec3Mat4w1(scratchVec3b, dropMtx, Vec3Zero);
-        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, scratchVec3b);
-
         mat4.mul(dropMtx, viewerInput.camera.viewMatrix, dropMtx);
     }
 }
 
-// TODO(jstpierre): This is not how it's normally done. Remove when we migrate to GfxRenderInstList.
+// TODO(jstpierre): This is not how it's normally done. fillSilhouetteColor is called directly from the main list, normally.
 class AlphaShadow extends NameObj {
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();
     private orthoQuad = new TSDraw();
+    private textureMapping = new TextureMapping();
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'AlphaShadow');
@@ -597,14 +590,16 @@ class AlphaShadow extends NameObj {
 
         connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.None, DrawBufferType.None, DrawType.AlphaShadow);
 
-        const mb = new GXMaterialBuilder(`dDlst_alphaModel_c drawAlphaBuffer`);
-        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
-        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        const mb = new GXMaterialBuilder(`fillSilhouetteColor`);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setZMode(false, GX.CompareType.ALWAYS, false);
-        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.INVDSTALPHA);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_K0_A);
+        mb.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.KONST, GX.CA.A0, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.COMP_RGB8_GT, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setZMode(true, GX.CompareType.ALWAYS, false);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
         mb.setUsePnMtxIdx(false);
         this.materialHelperDrawAlpha = new GXMaterialHelperGfx(mb.finish());
@@ -612,20 +607,32 @@ class AlphaShadow extends NameObj {
         computeProjectionMatrixFromCuboid(this.orthoSceneParams.u_Projection, 0, 1, 0, 1, 0, 10);
 
         this.orthoQuad.setVtxDesc(GX.Attr.POS, true);
+        this.orthoQuad.setVtxDesc(GX.Attr.TEX0, true);
         this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.orthoQuad.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         this.orthoQuad.beginDraw();
         this.orthoQuad.begin(GX.Command.DRAW_QUADS, 4);
         this.orthoQuad.position3f32(0, 0, 0);
+        this.orthoQuad.texCoord2f32(GX.Attr.TEX0, 0, 0);
         this.orthoQuad.position3f32(1, 0, 0);
+        this.orthoQuad.texCoord2f32(GX.Attr.TEX0, 1, 0);
         this.orthoQuad.position3f32(1, 1, 0);
+        this.orthoQuad.texCoord2f32(GX.Attr.TEX0, 1, 1);
         this.orthoQuad.position3f32(0, 1, 0);
+        this.orthoQuad.texCoord2f32(GX.Attr.TEX0, 0, 1);
         this.orthoQuad.end();
         this.orthoQuad.endDraw(device, cache);
+
+        sceneObjHolder.specialTextureBinder.registerTextureMapping(this.textureMapping, SpecialTextureType.OpaqueSceneTexture);
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        colorFromRGBA(materialParams.u_Color[ColorKind.K0], 0.0, 0.0, 0.0, 1 / 0xFF);
+        colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0.0, 0.0, 0.0, 0.5);
+        materialParams.m_TextureMapping[0].copy(this.textureMapping);
 
         // Blend onto main screen.
         const renderInst = renderInstManager.newRenderInst();
@@ -633,6 +640,7 @@ class AlphaShadow extends NameObj {
         fillSceneParamsData(renderInst.mapUniformBufferF32(GX_Program.ub_SceneParams), sceneParamsOffs, this.orthoSceneParams);
         this.materialHelperDrawAlpha.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, renderInst);
         this.materialHelperDrawAlpha.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.orthoQuad.setOnRenderInst(renderInst);
         mat4.identity(packetParams.u_PosMtx[0]);
         this.materialHelperDrawAlpha.allocatePacketParamsDataOnInst(renderInst, packetParams);

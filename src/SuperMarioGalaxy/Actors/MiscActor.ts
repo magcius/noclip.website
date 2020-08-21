@@ -1738,7 +1738,9 @@ class SuperSpinDriver extends LiveActor {
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
 
         initShadowVolumeFlatModel(sceneObjHolder, this, 'SuperSpinDriverShadow', getJointMtxByName(this, 'Outside')!);
+        // TODO(jstpierre): SpinDriverUtil::setShadowAndClipping
         onCalcShadowOneTime(this);
+        setShadowDropLength(this, null, 100.0);
 
         this.initColor(colorArg);
         startBck(this, 'Wait');

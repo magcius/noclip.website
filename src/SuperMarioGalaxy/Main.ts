@@ -391,6 +391,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
 
         // executeDrawSilhouetteAndFillShadow() / executeDrawAlphaShadow()
+
+        // Resolve the alpha buffer to a texture to use for shadows.
+        device.submitPass(passRenderer);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
         this.execute(passRenderer, DrawType.AlphaShadow);
 
         // execute(0x39);
