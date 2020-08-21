@@ -7,7 +7,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 
 import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, LoopMode, Joint, JointTransformInfo, J3DLoadFlags } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags, sampleAnimationData, calcJointAnimationTransform, calcJointMatrixFromTransform, calcJointMatrixMayaSSC } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags, calcJointAnimationTransform, calcJointMatrixMayaSSC } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ResTable } from "./Main";
@@ -207,9 +207,9 @@ export class XanimeCore implements JointMatrixCalc {
             const src = jnt1[i].transform;
             const dst = this.joints[i];
 
-            vec3.set(dst.xformFrozen.translation, src.translationX, src.translationY, src.translationZ);
-            vec3.set(dst.xformFrozen.scale, src.scaleX, src.scaleY, src.scaleZ);
-            quatFromEulerRadians(dst.xformFrozen.rotation, src.rotationX, src.rotationY, src.rotationZ);
+            vec3.copy(dst.xformFrozen.translation, src.translation);
+            vec3.copy(dst.xformFrozen.scale, src.scale);
+            quatFromEulerRadians(dst.xformFrozen.rotation, src.rotation[0], src.rotation[1], src.rotation[2]);
 
             dst.xformAnm.copy(dst.xformFrozen);
         }
@@ -242,9 +242,9 @@ export class XanimeCore implements JointMatrixCalc {
             const anmScale = scratchVec3a;
             const anmTrans = scratchVec3b;
             const anmRot = scratchQuat;
-            vec3.set(anmScale, scratchTransform.scaleX, scratchTransform.scaleY, scratchTransform.scaleZ);
-            vec3.set(anmTrans, scratchTransform.translationX, scratchTransform.translationY, scratchTransform.translationZ);
-            quatFromEulerRadians(anmRot, scratchTransform.rotationX, scratchTransform.rotationY, scratchTransform.rotationZ);
+            vec3.copy(anmScale, scratchTransform.scale);
+            vec3.copy(anmTrans, scratchTransform.translation);
+            quatFromEulerRadians(anmRot, scratchTransform.rotation[0], scratchTransform.rotation[1], scratchTransform.rotation[2]);
 
             if (this.updateFrozenJoints)
                 xj.xformFrozen.copy(xj.xformAnm);

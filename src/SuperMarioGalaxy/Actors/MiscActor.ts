@@ -5291,7 +5291,7 @@ const enum ElectricRailType {
 
 interface ElectricRailBase extends LiveActor {
     type: ElectricRailType;
-    drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx): void;
+    drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void;
 }
 
 function createAdaptorAndConnectToDrawBloomModel(sceneObjHolder: SceneObjHolder, name: string, drawCallback: (sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) => void): NameObjAdaptor {
@@ -5368,7 +5368,7 @@ export class ElectricRailHolder extends NameObj {
                 // TODO(jstpierre): Do this in one TDDraw?
                 const railTemplate = renderInstManager.pushTemplateRenderInst();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-                rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper);
+                rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper, materialParams);
                 renderInstManager.popTemplateRenderInst();
             }
 
@@ -5403,7 +5403,7 @@ export class ElectricRailHolder extends NameObj {
             startBrk(modelObj, 'ElectricRailMoving');
             setBrkFrameAndStop(modelObj, 0.0);
             this.models[type] = modelObj;
-        } else if (type === ElectricRailType.Moving1    ) {
+        } else if (type === ElectricRailType.Moving1) {
             const modelObj = new ModelObj(dynamicSpawnZoneAndLayer, sceneObjHolder, 'ElectricRailModel', 'ElectricRailMoving', null, -1, -1, -1);
             startBtk(modelObj, 'ElectricRailMoving');
             startBrk(modelObj, 'ElectricRailMoving');
@@ -5621,7 +5621,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         this.ddraw.endDraw(modelCache.device, modelCache.cache);
     }
 
-    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx): void {
+    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void {
         const renderInst = renderInstManager.newRenderInst();
         const mtx = materialParams.u_TexMtx[1];
         mat4.identity(mtx);
@@ -5873,7 +5873,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.ddraw.endDraw(modelCache.device, modelCache.cache);
     }
 
-    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx): void {
+    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void {
         materialParams.u_Color[ColorKind.C1].a = this.alpha;
         const mtx = materialParams.u_TexMtx[1];
         mat4.identity(mtx);
@@ -8779,7 +8779,7 @@ function addVelocityToGravity(actor: LiveActor, speed: number): void {
     vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
 }
 
-function reboundVelocityFromCollision(actor: LiveActor, p2: number, p3: number, reboundDrag: number): boolean {
+function reboundVelocityFromCollision(actor: LiveActor, reboundBounce: number, reboundCutoff: number, reboundDrag: number): boolean {
     if (!isBinded(actor))
         return false;
 
@@ -8789,14 +8789,14 @@ function reboundVelocityFromCollision(actor: LiveActor, p2: number, p3: number, 
 
     vec3.normalize(scratchVec3, fixReaction);
     const dot = vec3.dot(scratchVec3, actor.velocity);
-    if (dot >= -p3) {
+    if (dot >= -reboundCutoff) {
         if (dot < 0.0)
             vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
         return false;
     } else {
         vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
         vec3.scale(actor.velocity, actor.velocity, reboundDrag);
-        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot * p2);
+        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot * reboundBounce);
         return true;
     }
 }
