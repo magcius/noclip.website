@@ -4,7 +4,7 @@ import { Green, Magenta, Red } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, Vec3Zero } from "../MathHelpers";
+import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, Vec3Zero, Vec3UnitZ } from "../MathHelpers";
 import { assert, hexzero, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel, SkinningMatrix } from "./bin";
@@ -246,9 +246,10 @@ export class ObjectRenderer {
         // motion-specific setup
         if (this.motionState.parameters.motionID === MotionID.Hop)
             motion_MiscHop_Init(this, this.motionState, allObjects);
-        if (this.motionState.parameters.motionActionID === MotionActionID.WaitForPlayer)
+        const action = this.motionState.parameters.motionActionID;
+        if (action === MotionActionID.WaitForPlayer || action === MotionActionID.ZoneHop)
             setZone(this, this.motionState, zones);
-        }
+    }
 
     private runMotion(deltaTimeInFrames: number, viewerInput: ViewerRenderInput, zones: CollisionList[], levelCollision: CollisionList[][]): boolean {
         const motionState = this.motionState!;
@@ -461,9 +462,10 @@ interface TriangleInfo {
     normal: vec3;
     zone: number;
     depth: number;
+    contactOffset: vec3;
 }
 
-const scratchTri: TriangleInfo = { normal: vec3.create(), zone: -1, depth: 0 };
+const scratchTri: TriangleInfo = { normal: vec3.create(), zone: -1, depth: 0, contactOffset: vec3.create() };
 const scratchAABB = new AABB();
 const groundScratch = nArray(3, () => vec3.create());
 const normalScratch = nArray(4, () => vec3.create());
@@ -473,9 +475,13 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
     let minDepth = vec3.dist(pos, target);
     let foundAny = false;
     mat4.identity(groundMatrices[0]);
-    if (pos[0] !== target[0] || pos[2] !== target[2])
-        mat4.lookAt(groundMatrices[0], pos, target, Vec3NegY);
-    else if (pos[1] <= target[1]) {
+    if (pos[0] !== target[0] || pos[2] !== target[2]) {
+        // the game wants +z to be towards the target, while the glmatrix function uses -z
+        // we can resolve this by passing in the oppsite direction
+        vec3.sub(groundScratch[0], target, pos);
+        vec3.sub(groundScratch[0], pos, groundScratch[0]);
+        mat4.lookAt(groundMatrices[0], pos, groundScratch[0], Vec3UnitY);
+    } else if (pos[1] <= target[1]) {
         groundMatrices[0][5] = 0;
         groundMatrices[0][6] = 1;
         groundMatrices[0][9] = -1;
@@ -494,7 +500,7 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
         groundMatrices[0][13] = -pos[2];
         groundMatrices[0][14] = pos[1];
     }
-    mat4.transpose(groundMatrices[1], groundMatrices[0]);
+    invertOrthoMatrix(groundMatrices[1], groundMatrices[0]);
     vec3.min(groundScratch[0], pos, target);
     vec3.max(groundScratch[1], pos, target);
     scratchAABB.set(
@@ -547,9 +553,11 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
                     if (depth > 0 && depth < minDepth) {
                         foundAny = true;
                         minDepth = depth;
-                        transformVec3Mat4w0(out.normal, groundMatrices[1], normalScratch[3]);
                         out.zone = float32AsBits(verts[k + 3]);
                         out.depth = depth;
+                        transformVec3Mat4w0(out.normal, groundMatrices[1], normalScratch[3]);
+                        vec3.scale(out.contactOffset, Vec3UnitZ, depth);
+                        transformVec3Mat4w1(out.contactOffset, groundMatrices[1], out.contactOffset);
                     }
                 }
                 if (collision[i].groups[j].isTriStrip)
@@ -584,7 +592,7 @@ function motion_alignToGround(object: ObjectRenderer, motion: MotionState, colli
     vec3.copy(landingScratch, motion.pos);
     landingScratch[1] += object.bbox.maxCornerRadius();
     if (findGround(collision, scratchTri, motion.pos, landingScratch)) {
-        motion.pos[1] += scratchTri.depth;
+        vec3.copy(motion.pos, scratchTri.contactOffset);
         // seems like this shouldn't have the absolute value, but it probably never matters
         vec3.scaleAndAdd(motion.pos, motion.pos, scratchTri.normal, Math.abs(object.partBBox.maxY));
         if (motion.adjustPitch) {
@@ -1145,6 +1153,8 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionAction
         motion_WaitForPlayer_Update(object, motion, viewerInput);
     } else if (motionActionID === MotionActionID.FlyInCircles) {
         motion_FlyInCircles_Update(object, deltaTimeInFrames, motion, viewerInput, levelCollision[0]);
+    } else if (motionActionID === MotionActionID.ZoneHop) {
+        motion_ZoneHop_update(object, deltaTimeInFrames, motion, zones, levelCollision[0]);
     } else {
         return false;
     }
@@ -1442,12 +1452,9 @@ function motion_MiscHop_Update(object: ObjectRenderer, deltaTimeInFrames: number
         vec3.sub(hopScratch, motion.pos, object.prevPosition);
         normToLength(hopScratch, object.bbox.maxCornerRadius());
         vec3.add(hopScratch, object.prevPosition, hopScratch);
-        if (findGround(level, scratchTri, object.prevPosition, hopScratch)) {
-            if (object.prevPosition[1] + scratchTri.depth < motion.pos[1] + object.partBBox.maxY) {
-                motion.pos[1] = object.prevPosition[1] + scratchTri.depth - object.partBBox.maxY;
-                motion.timer = -1;
-                object.setAnimation(AnimationType.IDLE);
-            }
+        if (motion_landedOnGround(object, motion, level)) {
+            motion.timer = -1;
+            object.setAnimation(AnimationType.IDLE);
         }
     }
 }
@@ -1547,6 +1554,7 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
         if (motion.eulerStep[1] === 0) {
             // combining two states into one
             if (object.altObject) {
+                // in game, a bunch of the object struct gets overwritten, including its ID, model part data, and update functions
                 motion.state = FlyInCirclesState.TAKEOFF;
                 object.useAltObject = true;
                 object.setAnimation(AnimationType.IDLE);
@@ -1558,7 +1566,6 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
                 motion.angle = 0;
                 motion.angleStep = .015;
             } else {
-                // in game, a bunch of the object struct gets overwritten, including its ID, model part data, and update functions
                 motion.useAltMotion = false;
                 motion.state = -1;
             }
@@ -1620,6 +1627,108 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
                 object.setAnimation(AnimationType.IDLE);
             }
             motion.pos[1] = decelY + Math.sin(motion.angle) * motion.radius;
+        }
+    }
+}
+
+const enum ZoneHopState {
+    Hop,
+    Wait,
+    ChooseDirection,
+    Turn,
+}
+
+const hopEndScratch = vec3.create();
+function hopEndZone(motion: MotionState, zones: CollisionList[]): number {
+    const hopTime = 2 * hopSpeeds[sizeGrouping[motion.size]] / motion.g;
+    vec3.scaleAndAdd(hopScratch, motion.pos, motion.velocity, hopTime);
+    vec3.copy(hopEndScratch, hopScratch);
+    hopScratch[1] -= 100;
+    hopEndScratch[1] += 100;
+    findGround(zones, scratchTri, hopScratch, hopEndScratch);
+    return scratchTri.zone;
+}
+
+function motion_landedOnGround(object: ObjectRenderer, motion: MotionState, collision: CollisionList[]): boolean {
+    vec3.sub(hopEndScratch, motion.pos, object.prevPosition);
+    normToLength(hopEndScratch, object.bbox.maxCornerRadius());
+    vec3.add(hopEndScratch, hopEndScratch, motion.pos);
+
+    const landed = findGround(collision, scratchTri, object.prevPosition, hopEndScratch);
+    if (landed && scratchTri.contactOffset[1] <= motion.pos[1] + object.partBBox.maxY) {
+        motion.pos[1] = scratchTri.contactOffset[1] - object.partBBox.maxY;
+        return true;
+    }
+    return false;
+}
+
+const turnScratch = vec3.create();
+function motion_ZoneHop_update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState, zones: CollisionList[], collision: CollisionList[]): void {
+    if (motion.state === -1) {
+        mat4.identity(object.baseMatrix);
+        // starts jumping backwards
+        vec3.scale(motion.velocity, Vec3UnitZ, motion.speed);
+        motion.g = 0.95;
+        if (motion.zone < 0 || hopEndZone(motion, zones) !== motion.zone) {
+            motion.parameters.motionActionID = -1;
+            return;
+        }
+        motion.velocity[1] = -hopSpeeds[sizeGrouping[motion.size]];
+        object.euler[1] = MathConstants.TAU / 2;
+        motion.state = ZoneHopState.Hop;
+    } else if (motion.state === ZoneHopState.Hop) {
+        motion.velocity[1] += motion.g * deltaTimeInFrames;
+        vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
+        if (motion_landedOnGround(object, motion, collision)) {
+            motion.velocity[1] = 0;
+            motion.timer = 25;
+            motion.state = ZoneHopState.Wait;
+        }
+    } else if (motion.state === ZoneHopState.Wait) {
+        motion.timer -= deltaTimeInFrames;
+        if (motion.timer < 0) {
+            if (hopEndZone(motion, zones) === motion.zone) {
+                if (Math.random() < 0.35) {
+                    const turnAngle = (2 * Math.random() - 1) * MathConstants.TAU / 3;
+                    vec3.copy(turnScratch, motion.velocity);
+                    vec3.rotateY(motion.velocity, motion.velocity, Vec3Zero, turnAngle);
+                    if (hopEndZone(motion, zones) === motion.zone) {
+                        motion.eulerTarget[1] = (object.euler[1] + turnAngle) % MathConstants.TAU;
+                        motion.eulerStep[1] = turnAngle / 12;
+                        motion.state = ZoneHopState.Turn;
+                    } else { // choose direction the normal way
+                        vec3.copy(motion.velocity, turnScratch);
+                        motion.state = ZoneHopState.ChooseDirection;
+                    }
+                } else {
+                    motion.velocity[1] = -hopSpeeds[sizeGrouping[motion.size]];
+                    motion.state = ZoneHopState.Hop;
+                }
+            } else
+                motion.state = ZoneHopState.ChooseDirection;
+        }
+    } else if (motion.state === ZoneHopState.ChooseDirection) {
+        let angle = 0;
+        vec3.copy(turnScratch, motion.velocity);
+        // try angles at 45 degree increments, alternating clockwise and counterclockwise, 
+        // until we find a direction we can hop in
+        for (let i = 0; i < 7; i++) {
+            if (i % 2 === 0)
+                angle = -angle + MathConstants.TAU / 8;
+            else
+                angle = -angle;
+            vec3.rotateY(motion.velocity, turnScratch, Vec3Zero, angle);
+            if (hopEndZone(motion, zones) === motion.zone)
+                break;
+        }
+        motion.eulerStep[1] = angle / 12;
+        motion.eulerTarget[1] = (object.euler[1] + angle) % MathConstants.TAU;
+        motion.state = ZoneHopState.Turn;
+    } else if (motion.state === ZoneHopState.Turn) {
+        motionAngleStep(object.euler, motion, deltaTimeInFrames);
+        if (motion.eulerStep[1] === 0) {
+            motion.velocity[1] = -hopSpeeds[sizeGrouping[motion.size]];
+            motion.state = ZoneHopState.Hop;
         }
     }
 }

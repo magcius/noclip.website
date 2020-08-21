@@ -949,6 +949,7 @@ export const enum MotionActionID {
     PathSpin      = 0x14,
     PathRoll      = 0x15,
     Misc          = 0x16,
+    ZoneHop       = 0x18,
     PathSetup     = 0x19,
     PathSimple    = 0x1D,
 }
@@ -983,7 +984,7 @@ const motionActionTable: MotionActionTableEntry[] = [
     /* 0x15 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
     /* 0x16 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
     /* 0x17 */ { main: MotionActionID.PathSetup,     alt: 0x17 },
-    /* 0x18 */ { main: 0x18,                         alt: MotionActionID.None },
+    /* 0x18 */ { main: MotionActionID.ZoneHop,       alt: MotionActionID.None },
     /* 0x19 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
     /* 0x1A */ { main: 0x01,                         alt: MotionActionID.None },
     /* 0x1B */ { main: 0x01,                         alt: MotionActionID.None },
