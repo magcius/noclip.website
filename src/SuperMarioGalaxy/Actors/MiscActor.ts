@@ -40,7 +40,7 @@ import { isConnectedWithRail } from '../RailRider';
 import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
-import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder } from '../Shadow';
+import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder, initShadowVolumeFlatModel } from '../Shadow';
 import { initLightCtrl } from '../LightData';
 
 const materialParams = new MaterialParams();
@@ -1737,12 +1737,16 @@ class SuperSpinDriver extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, "SuperSpinDriver");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
 
+        initShadowVolumeFlatModel(sceneObjHolder, this, 'SuperSpinDriverShadow', getJointMtxByName(this, 'Outside')!);
+        onCalcShadowOneTime(this);
+
         this.initColor(colorArg);
         startBck(this, 'Wait');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData("SuperSpinDriver");
+        sceneObjHolder.modelCache.requestObjectData("SuperSpinDriverShadow");
     }
 
     private initColor(colorArg: number): void {
