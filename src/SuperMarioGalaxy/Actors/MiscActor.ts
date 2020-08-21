@@ -1739,8 +1739,12 @@ class SuperSpinDriver extends LiveActor {
 
         initShadowVolumeFlatModel(sceneObjHolder, this, 'SuperSpinDriverShadow', getJointMtxByName(this, 'Outside')!);
         // TODO(jstpierre): SpinDriverUtil::setShadowAndClipping
+        const shadowDropLength = fallback(getJMapInfoArg1(infoIter), -1.0);
+        if (shadowDropLength >= 0.0)
+            setShadowDropLength(this, null, shadowDropLength);
+        else
+            setShadowDropLength(this, null, 500.0);
         onCalcShadowOneTime(this);
-        setShadowDropLength(this, null, 100.0);
 
         this.initColor(colorArg);
         startBck(this, 'Wait');
