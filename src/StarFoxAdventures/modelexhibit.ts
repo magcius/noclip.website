@@ -253,12 +253,12 @@ class ModelExhibitRenderer extends SFARenderer {
             const ctx = getDebugOverlayCanvas2D();
             for (let i = 1; i < modelInst.model.joints.length; i++) {
                 const joint = modelInst.model.joints[i];
-                const jointMtx = mat4.clone(modelInst.boneMatrices[i]);
+                const jointMtx = mat4.clone(modelInst.skeletonInst!.getJointMatrix(i));
                 mat4.mul(jointMtx, jointMtx, matrix);
                 const jointPt = vec3.create();
                 mat4.getTranslation(jointPt, jointMtx);
                 if (joint.parent != 0xff) {
-                    const parentMtx = mat4.clone(modelInst.boneMatrices[joint.parent]);
+                    const parentMtx = mat4.clone(modelInst.skeletonInst!.getJointMatrix(joint.parent));
                     mat4.mul(parentMtx, parentMtx, matrix);
                     const parentPt = vec3.create();
                     mat4.getTranslation(parentPt, parentMtx);

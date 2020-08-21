@@ -18,7 +18,7 @@ import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
 import { SceneRenderContext } from './render';
-import { Skeleton, Joint as SkJoint } from './skeleton';
+import { Skeleton, SkeletonInstance } from './skeleton';
 
 interface Joint {
     parent: number;
@@ -203,7 +203,6 @@ export class Model {
 
     public joints: Joint[] = [];
     public coarseBlends: CoarseBlend[] = [];
-    public jointTfTranslations: vec3[] = [];
     public invBindTranslations: vec3[] = [];
 
     public yTranslate: number = 0;
@@ -221,6 +220,7 @@ export class Model {
 
     public hasFineSkinning: boolean = false;
     public hasBetaFineSkinning: boolean = false;
+    public skeleton?: Skeleton;
 
     constructor(device: GfxDevice,
         private materialFactory: MaterialFactory,
@@ -598,15 +598,17 @@ export class Model {
             //     console.log(`trans: ${this.modelTranslate}`);
             // }
 
-            this.jointTfTranslations = nArray(this.joints.length, () => vec3.create());
+            this.skeleton = new Skeleton();
             this.invBindTranslations = nArray(this.joints.length, () => vec3.create());
+
             for (let i = 0; i < this.joints.length; i++) {
                 const joint = this.joints[i];
+
                 if (joint.boneNum !== i) {
                     throw Error(`wtf? joint's bone number doesn't match its index!`);
                 }
 
-                vec3.copy(this.jointTfTranslations[i], joint.translation);
+                this.skeleton.addJoint(joint.parent != 0xff ? joint.parent : undefined, joint.translation);
                 vec3.negate(this.invBindTranslations[i], joint.bindTranslation);
             }
         }
@@ -616,13 +618,15 @@ export class Model {
         // console.log(`Loading ${shaderCount} shaders from offset 0x${shaderOffset.toString(16)}`);
 
         const shaders: Shader[] = [];
+
         offs = shaderOffset;
-        const shaderFields = fields.shaderFields;
         for (let i = 0; i < shaderCount; i++) {
-            const shaderBin = blockData.subarray(offs, shaderFields.size).createDataView();
-            const shader = parseShader(shaderBin, shaderFields, texIds);
+            const shaderBin = blockData.subarray(offs, fields.shaderFields.size).createDataView();
+
+            const shader = parseShader(shaderBin, fields.shaderFields, texIds);
             shaders.push(shader);
-            offs += shaderFields.size;
+
+            offs += fields.shaderFields.size;
         }
 
         this.materials = [];
@@ -1013,7 +1017,7 @@ const scratchVec0 = vec3.create();
 export class ModelInstance implements BlockRenderer {
     private modelShapes: ModelShapes;
 
-    private skeleton?: Skeleton;
+    public skeletonInst?: SkeletonInstance;
 
     public matrixPalette: mat4[] = [];
     private matrixPaletteDirty: boolean = true;
@@ -1023,17 +1027,7 @@ export class ModelInstance implements BlockRenderer {
         const numBones = this.model.joints.length + this.model.coarseBlends.length;
 
         if (numBones !== 0) {
-            const skJoints: SkJoint[] = [];
-            for (let i = 0; i < this.model.joints.length; i++) {
-                const src = this.model.joints[i];
-                skJoints.push({
-                    parent: src.parent != 0xff ? src.parent : undefined,
-                    translation: vec3.clone(src.translation),
-                });
-            }
-
-            this.skeleton = new Skeleton(skJoints);
-            
+            this.skeletonInst = new SkeletonInstance(this.model.skeleton!);
             this.matrixPalette = nArray(numBones, () => mat4.create());
         } else {
             this.matrixPalette = [mat4.create()];
@@ -1065,7 +1059,7 @@ export class ModelInstance implements BlockRenderer {
         mat4.identity(scratchMtx0);
 
         for (let i = 0; i < this.model.joints.length; i++) {
-            this.skeleton!.setPoseMatrix(i, scratchMtx0);
+            this.skeletonInst!.setPoseMatrix(i, scratchMtx0);
         }
 
         this.matrixPaletteDirty = true;
@@ -1076,7 +1070,7 @@ export class ModelInstance implements BlockRenderer {
             return;
         }
 
-        this.skeleton!.setPoseMatrix(jointNum, mtx);
+        this.skeletonInst!.setPoseMatrix(jointNum, mtx);
         this.matrixPaletteDirty = true;
     }
     
@@ -1108,7 +1102,7 @@ export class ModelInstance implements BlockRenderer {
             // For rigid bones, vertices are stored in joint-local space as an optimization.
 
             const boneMtx = this.matrixPalette[joint.boneNum];
-            mat4.copy(boneMtx, this.skeleton!.getJointMatrix(joint.boneNum));
+            mat4.copy(boneMtx, this.skeletonInst!.getJointMatrix(joint.boneNum));
 
             // FIXME: Check beta models
         }

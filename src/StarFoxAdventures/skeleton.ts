@@ -3,22 +3,35 @@ import { nArray } from '../util';
 
 import { mat4PostTranslate } from './util';
 
-export interface Joint {
+interface Joint {
     parent?: number;
     translation: vec3;
 }
 
+// Skeleton template to create instances
 export class Skeleton {
+    public joints: Joint[] = [];
+
+    public addJoint(parent: number | undefined, translation: vec3) {
+        if ((parent === undefined && this.joints.length > 0) ||
+            (parent !== undefined && parent > this.joints.length))
+        {
+            throw Error(`Invalid joint hierarchy in skeleton`);
+        }
+
+        this.joints.push({parent, translation: vec3.clone(translation)});
+    }
+}
+
+export class SkeletonInstance {
     private poseMatrices: mat4[] = []; // poses in joint-local space
 
     private jointMatrices: mat4[] = []; // joint-local space to model space
     private dirty: boolean = true;
 
-    // The joints array will never be modified. It is intended to be shared between
-    // skeleton instances.
-    constructor(private joints: Joint[]) {
-        this.poseMatrices = nArray(this.joints.length, () => mat4.create());
-        this.jointMatrices = nArray(this.joints.length, () => mat4.create());
+    constructor(private skeleton: Skeleton) {
+        this.poseMatrices = nArray(this.skeleton.joints.length, () => mat4.create());
+        this.jointMatrices = nArray(this.skeleton.joints.length, () => mat4.create());
         this.dirty = true;
     }
 
@@ -36,8 +49,8 @@ export class Skeleton {
         if (!this.dirty)
             return;
 
-        for (let i = 0; i < this.joints.length; i++) {
-            const joint = this.joints[i];
+        for (let i = 0; i < this.skeleton.joints.length; i++) {
+            const joint = this.skeleton.joints[i];
             const dst = this.jointMatrices[i];
 
             mat4.copy(dst, this.poseMatrices[i]);

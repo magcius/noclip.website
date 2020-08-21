@@ -993,12 +993,12 @@ export class ObjectInstance {
                 // TODO: Draw pyramid shapes instead of lines
                 for (let i = 1; i < this.modelInst.model.joints.length; i++) {
                     const joint = this.modelInst.model.joints[i];
-                    const jointMtx = mat4.clone(this.modelInst.boneMatrices[i]);
+                    const jointMtx = mat4.clone(this.modelInst.skeletonInst!.getJointMatrix(i));
                     mat4.mul(jointMtx, jointMtx, mtx);
                     const jointPt = vec3.create();
                     mat4.getTranslation(jointPt, jointMtx);
                     if (joint.parent != 0xff) {
-                        const parentMtx = mat4.clone(this.modelInst.boneMatrices[joint.parent]);
+                        const parentMtx = mat4.clone(this.modelInst.skeletonInst!.getJointMatrix(joint.parent));
                         mat4.mul(parentMtx, parentMtx, mtx);
                         const parentPt = vec3.create();
                         mat4.getTranslation(parentPt, parentMtx);
