@@ -4,7 +4,7 @@ import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJM
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
 import { fallback, assertExists, nArray } from "../util";
-import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers";
+import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1, lerp } from "../MathHelpers";
 import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
@@ -16,6 +16,10 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchVec3d = vec3.create();
+const scratchVec3e = vec3.create();
+const scratchVec3f = vec3.create();
+const scratchVec3g = vec3.create();
+const scratchVec3h = vec3.create();
 const scratchMatrix = mat4.create();
 
 export class GravityInfo {
@@ -1094,7 +1098,7 @@ class DiskTorusGravity extends PlanetGravity {
     }
 }
 
-class ConeGravity extends PlanetGravity {
+export class ConeGravity extends PlanetGravity {
     public enableBottom: boolean = false;
     public topCutRate: number = 0.0;
     private mtx = mat4.create();
@@ -1118,65 +1122,99 @@ class ConeGravity extends PlanetGravity {
     }
 
     protected calcOwnGravityVector(dst: vec3, coord: ReadonlyVec3): number {
+        // scratchVec3a = Normalized Y Axis (cone's direction)
         getMatrixAxisY(scratchVec3a, this.mtx);
         const height = vec3.length(scratchVec3a);
         vec3.normalize(scratchVec3a, scratchVec3a);
 
+        // scratchVec3b = Translation
         getMatrixTranslation(scratchVec3b, this.mtx);
-        vec3.sub(scratchVec3b, coord, scratchVec3b);
+        vec3.sub(scratchVec3d, coord, scratchVec3b);
 
-        // Project the position around the cone onto the cone's Y axis.
-        const dot = vecKillElement(scratchVec3d, scratchVec3b, scratchVec3a);
+        // Project the position around the cone onto the cone's Y local axis.
+        const dot = vecKillElement(scratchVec3d, scratchVec3d, scratchVec3a);
 
         if (!isNearZeroVec3(scratchVec3d, 0.001)) {
             const dist = vec3.length(scratchVec3d);
 
-            getMatrixTranslation(scratchVec3b, this.mtx);
-            vec3.scaleAndAdd(scratchVec3c, scratchVec3b, scratchVec3d, this.magX / dist);
-
-            vec3.scaleAndAdd(scratchVec3a, scratchVec3b, scratchVec3a, height);
+            // Top point in world-space
+            vec3.scaleAndAdd(scratchVec3e, scratchVec3b, scratchVec3a, height);
+            // Bottom point in world-space
+            vec3.scaleAndAdd(scratchVec3f, scratchVec3b, scratchVec3d, this.magX / dist);
 
             if (dot >= 0.0) {
                 // "Top" of the cone -- the pointy tip.
 
                 if (this.topCutRate >= 0.01) {
-                    // TODO(jstpierre): Top cut...
-                    calcPerpendicFootToLineInside(scratchVec3b, coord, scratchVec3c, scratchVec3a);
-                } else {
-                    calcPerpendicFootToLineInside(scratchVec3b, coord, scratchVec3c, scratchVec3a);
+                    // The top of the cone is a circle instead of a pointy tip, located "rate" from the top of the cone.
+
+                    // Compute the location on the circle where we're projecting. This becomes our new top point
+                    // for the purposes of the line projection.
+                    vec3.lerp(scratchVec3e, scratchVec3e, scratchVec3f, this.topCutRate);
+
+                    // Test whether we're on the surface itself.
+
+                    // Center of the top circle.
+                    vec3.scaleAndAdd(scratchVec3c, scratchVec3b, scratchVec3a, lerp(height, 0.0, this.topCutRate));
+
+                    // Test the angles to see whether we're closer to the top of the circle, or the line.
+                    vec3.sub(scratchVec3g, scratchVec3e, scratchVec3c);
+                    vec3.sub(scratchVec3h, coord, scratchVec3e);
+
+                    if (vec3.dot(scratchVec3g, scratchVec3h) <= 0.0) {
+                        // We're on the top surface! Compute the right distance.
+                        vec3.sub(scratchVec3c, coord, scratchVec3c);
+                        const dist = Math.max(0.0, vec3.dot(scratchVec3a, scratchVec3c));
+
+                        if (this.isInRangeDistance(dist)) {
+                            vec3.negate(dst, scratchVec3a);
+                            return dist;
+                        } else {
+                            return -1;
+                        }
+                    }
                 }
 
-                vec3.sub(scratchVec3a, scratchVec3b, coord);
-                if (!isNearZeroVec3(scratchVec3a, 0.001)) {
+                calcPerpendicFootToLineInside(scratchVec3c, coord, scratchVec3e, scratchVec3f);
+
+                if (!isNearZero(vec3.squaredDistance(scratchVec3c, coord), 0.001)) {
                     if (!isNearZero(height, 0.001) && !isNearZero(this.magX, 0.001) && dist < (this.magX - (dot * (this.magX / height)))) {
                         // On surface.
-                        vec3.sub(dst, coord, scratchVec3b);
+                        vec3.sub(dst, coord, scratchVec3c);
                         vec3.normalize(dst, dst);
                         return 0.0;
                     } else {
-                        return this.calcGravityFromMassPosition(dst, coord, scratchVec3a);
+                        return this.calcGravityFromMassPosition(dst, coord, scratchVec3c);
                     }
                 } else {
-                    vec3.sub(scratchVec3b, scratchVec3b, scratchVec3c);
+                    // On surface of slanted bit of cone. Align our position towards the cone's axis line.
+
+                    // Axis of top -> bottom cone point.
+                    vec3.sub(scratchVec3b, scratchVec3e, scratchVec3f);
                     vec3.normalize(scratchVec3b, scratchVec3b);
+
                     vec3.negate(scratchVec3d, scratchVec3d);
                     vecKillElement(scratchVec3b, scratchVec3d, scratchVec3b);
+
                     if (!isNearZeroVec3(scratchVec3b, 0.001)) {
                         vec3.normalize(dst, scratchVec3b);
                     } else {
+                        // If all else fails, fall back to the the cone's direction.
                         vec3.negate(dst, scratchVec3a);
                     }
+
                     return 0.0;
                 }
             } else {
                 // "Bottom" of the cone -- the flat surface.
 
+                this.enableBottom = true;
                 if (this.enableBottom) {
-                    calcPerpendicFootToLineInside(scratchVec3b, coord, scratchVec3b, scratchVec3c);
-                    vec3.sub(scratchVec3c, scratchVec3b, coord);
-                    if (!isNearZeroVec3(scratchVec3c, 0.001)) {
-                        return this.calcGravityFromMassPosition(dst, coord, scratchVec3b);
+                    calcPerpendicFootToLineInside(scratchVec3c, coord, scratchVec3b, scratchVec3f);
+                    if (!isNearZero(vec3.squaredDistance(scratchVec3c, coord), 0.001)) {
+                        return this.calcGravityFromMassPosition(dst, coord, scratchVec3c);
                     } else {
+                        // If all else fails, fall back to the the cone's direction.
                         vec3.negate(dst, scratchVec3a);
                         return 0.0;
                     }
@@ -1185,11 +1223,14 @@ class ConeGravity extends PlanetGravity {
                 }
             }
         } else {
+            // Exactly in the center of the cone. Either on the top or the bottom.
+            // Regardless, fall towards the cone's direction vector.
+
             let dist = Math.abs(dot);
 
             if (dot > 0.0) {
-                // Top of the cone.
-                dist = Math.max(0.0, dist - (height * (1.0 - this.topCutRate)));
+                // We're above the cone -- compute the distance to the top surface.
+                dist = Math.max(0.0, dist - lerp(0.0, height, this.topCutRate));
             }
 
             if (this.isInRangeDistance(dist)) {
