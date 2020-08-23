@@ -599,7 +599,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
     public initNerve(nerve: TNerve): void {
         this.spine = new Spine<TNerve>();
-        this.spine.setNerve(nerve);
+        this.spine.initNerve(nerve);
     }
 
     public setNerve(nerve: TNerve): void {

@@ -1,14 +1,14 @@
 
 // Misc actors that aren't big enough to have their own file.
 
-import { mat4, quat, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
+import { mat4, quat, ReadonlyVec3, vec2, vec3, ReadonlyQuat } from 'gl-matrix';
 import { Camera } from '../../Camera';
-import { Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow } from '../../Color';
+import { Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow, Blue } from '../../Color';
 import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { LoopMode } from '../../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
-import { drawWorldSpaceBasis, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpaceBasis, drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpaceVector } from '../../DebugJunk';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
@@ -22,8 +22,8 @@ import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModel
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorNpc, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistanceVertical, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToSceneNpc, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPointPosEnd, getRailPointPosStart, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isRailGoingToEnd, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos } from '../ActorUtil';
-import { calcMapGround, CollisionKeeperCategory, CollisionParts, getBindedFixReactionVector, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorNpc, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistanceVertical, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToSceneNpc, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPointPosEnd, getRailPointPosStart, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isRailGoingToEnd, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos, quatGetAxisZ, quatGetAxisY, blendQuatUpFront, quatGetAxisX } from '../ActorUtil';
+import { calcMapGround, CollisionKeeperCategory, CollisionParts, getBindedFixReactionVector, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isFloorPolygonAngle, isWallPolygonAngle, isOnGround, TriangleFilterFunc } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { initFur, initFurPlanet } from '../Fur';
@@ -37,11 +37,12 @@ import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType }
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
-import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
+import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
 import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowSurfaceCircle } from '../Shadow';
 import { initLightCtrl } from '../LightData';
+import { dfShow, dfRange } from '../../DebugFloaters';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -8823,7 +8824,7 @@ function addVelocityToGravity(actor: LiveActor, speed: number): void {
     vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
 }
 
-function reboundVelocityFromCollision(actor: LiveActor, reboundBounce: number, reboundCutoff: number, reboundDrag: number): boolean {
+function reboundVelocityFromEachCollision(actor: LiveActor, floorBounce: number, wallBounce: number, ceilingBounce: number, cutoff: number, drag: number = 1.0): boolean {
     if (!isBinded(actor))
         return false;
 
@@ -8833,16 +8834,22 @@ function reboundVelocityFromCollision(actor: LiveActor, reboundBounce: number, r
 
     vec3.normalize(scratchVec3, fixReaction);
     const dot = vec3.dot(scratchVec3, actor.velocity);
-    if (dot >= -reboundCutoff) {
+    if (dot >= -cutoff) {
         if (dot < 0.0)
             vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
         return false;
     } else {
         vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
-        vec3.scale(actor.velocity, actor.velocity, reboundDrag);
-        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot * reboundBounce);
+        vec3.scale(actor.velocity, actor.velocity, drag);
+        const reactionAngle = vec3.dot(scratchVec3, actor.gravityVector);
+        const bounce = isFloorPolygonAngle(reactionAngle) ? floorBounce : isWallPolygonAngle(reactionAngle) ? wallBounce : ceilingBounce;
+        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot * bounce);
         return true;
     }
+}
+
+function reboundVelocityFromCollision(actor: LiveActor, bounce: number, cutoff: number, drag: number): boolean {
+    return reboundVelocityFromEachCollision(actor, bounce, bounce, bounce, cutoff, drag);
 }
 
 function restrictVelocity(actor: LiveActor, maxSpeed: number): void {
@@ -9003,9 +9010,6 @@ export class Unizo extends LiveActor<UnizoNrv> {
         // turnMtxToYDir(this.baseMtx, scratchVec3, 1.0);
         setMatrixTranslation(this.baseMtx, this.translation);
         this.updateSurfaceEffect(sceneObjHolder);
-
-        // if (isBindedGround(this))
-        //     this.binder!.debugDrawAllFloorHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UnizoNrv, deltaTimeFrames: number): void {
@@ -9235,5 +9239,344 @@ export class Unizo extends LiveActor<UnizoNrv> {
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         sceneObjHolder.modelCache.requestObjectData(`${getObjectName(infoIter)}Break`);
+    }
+}
+
+class TerritoryMover {
+    private center = vec3.create();
+    public targetPos = vec3.create();
+
+    constructor(private radius: number) {
+    }
+
+    public setCenter(v: ReadonlyVec3): void {
+        vec3.copy(this.center, v);
+    }
+
+    public decideNextTargetPos(actor: LiveActor): void {
+        getRandomVector(scratchVec3, 1.0);
+        vec3.normalize(scratchVec3, scratchVec3);
+
+        vecKillElement(scratchVec3, scratchVec3, actor.gravityVector);
+        vec3.scaleAndAdd(this.targetPos, this.center, scratchVec3, this.radius);
+    }
+
+    public isReachedTarget(actor: LiveActor, dist: number): boolean {
+        vec3.sub(scratchVec3, actor.translation, this.targetPos);
+        vecKillElement(scratchVec3, scratchVec3, actor.gravityVector);
+        return vec3.squaredLength(scratchVec3) < dist**2.0;
+    }
+}
+
+abstract class ActorStateBaseInterface<T extends number = number> extends NerveExecutor<T> {
+    public isDead: boolean = false;
+
+    public appear(): void {
+        this.isDead = false;
+    }
+
+    public kill(): void {
+        this.isDead = true;
+    }
+
+    public control(): void {
+    }
+
+    public update(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): boolean {
+        this.updateNerveExecutor(sceneObjHolder, deltaTimeFrames);
+
+        if (!this.isDead)
+            this.control();
+
+        return this.isDead;
+    }
+}
+
+interface WalkerStateParam {
+    gravitySpeed: number;
+    velDragAir: number;
+    velDragGround: number;
+}
+
+interface WalkerStateWanderParam {
+    turnSpeedDegrees: number;
+    waitStep: number;
+    walkSpeed: number;
+    walkStep: number;
+    targetRadius: number;
+}
+
+function calcPassiveMovement(actor: LiveActor, param: Readonly<WalkerStateParam>, deltaTimeFrames: number): void {
+    reboundVelocityFromEachCollision(actor, -1.0, -1.0, 0.0, 0.0);
+    if (isOnGround(actor)) {
+        attenuateVelocity(actor, param.velDragGround ** deltaTimeFrames);
+    } else {
+        addVelocityToGravity(actor, param.gravitySpeed * deltaTimeFrames);
+        attenuateVelocity(actor, param.velDragAir ** deltaTimeFrames);
+    }
+}
+
+function turnVecToVecCos(dst: vec3, src: ReadonlyVec3, target: ReadonlyVec3, speed: number, up: ReadonlyVec3, upAmount: number): boolean {
+    if (isNearZeroVec3(src, 0.001) || isNearZeroVec3(target, 0.001))
+        return false;
+
+    const dot = vec3.dot(src, target);
+    if (dot <= speed) {
+        vecKillElement(scratchVec3a, target, src);
+        if (!isNearZeroVec3(scratchVec3a, 0.001)) {
+            vec3.normalize(scratchVec3a, scratchVec3a);
+            vec3.scale(dst, src, dot);
+            vec3.scaleAndAdd(dst, dst, scratchVec3a, Math.sqrt(1.0 - speed ** 2.0));
+            vec3.normalize(dst, dst);
+            return false;
+        } else {
+            vec3.cross(scratchVec3a, src, up);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+            vec3.scaleAndAdd(dst, src, scratchVec3a, upAmount);
+            vec3.normalize(dst, dst);
+            return false;
+        }
+    } else {
+        vec3.normalize(dst, target);
+        return true;
+    }
+}
+
+function turnVecToVecCosOnPlane(dst: vec3, src: ReadonlyVec3, targetAny: ReadonlyVec3, up: ReadonlyVec3, speed: number): boolean {
+    vecKillElement(scratchVec3a, targetAny, up);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+
+    if (isNearZeroVec3(scratchVec3a, 0.001))
+        return false;
+
+    if (speed <= -1.0) {
+        vec3.copy(dst, scratchVec3a);
+        return false;
+    }
+
+    return turnVecToVecCos(dst, src, scratchVec3a, speed, up, 0.02);
+}
+
+function turnDirectionToTargetUseGroundNormalDegree(actor: LiveActor, dst: vec3, targetPos: ReadonlyVec3, speedInDegrees: number): boolean {
+    vec3.sub(scratchVec3, targetPos, actor.translation);
+    const speed = Math.cos(MathConstants.DEG_TO_RAD * speedInDegrees);
+    const plane = isBindedGround(actor) ? (actor.binder!.floorHitInfo.faceNormal) : actor.gravityVector;
+    return turnVecToVecCosOnPlane(dst, dst, scratchVec3, plane, speed);
+}
+
+function isNearAngleVec3(a: ReadonlyVec3, b: ReadonlyVec3, cutoff: number): boolean {
+    if (isNearZeroVec3(a, 0.001) || isNearZeroVec3(b, 0.001))
+        return false;
+
+    return vec3.dot(a, b) >= cutoff;
+}
+
+function isFaceToTargetHorizontalDegree(actor: LiveActor, target: ReadonlyVec3, direction: ReadonlyVec3, degrees: number): boolean {
+    vec3.sub(scratchVec3a, target, actor.translation);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+    vecKillElement(scratchVec3a, scratchVec3a, actor.gravityVector);
+    vecKillElement(scratchVec3b, direction, actor.gravityVector);
+    return isNearAngleVec3(scratchVec3a, scratchVec3b, Math.cos(MathConstants.DEG_TO_RAD * degrees));
+}
+
+function isFallNextMoveActor(actor: Readonly<LiveActor>, a: number, b: number, c: number, filter: TriangleFilterFunc | null = null): boolean {
+    // TODO(jstpierre)
+    return false;
+}
+
+enum WalkerStateWanderNrv { Wait, Walk }
+class WalkerStateWander extends ActorStateBaseInterface<WalkerStateWanderNrv> {
+    private territoryMover = new TerritoryMover(500.0);
+
+    constructor(private actor: LiveActor, private front: vec3, private param: WalkerStateParam, private paramWander: WalkerStateWanderParam) {
+        super();
+
+        this.initNerve(WalkerStateWanderNrv.Wait);
+        this.territoryMover.setCenter(this.actor.translation);
+    }
+
+    public setWanderCenter(v: ReadonlyVec3): void {
+        this.territoryMover.setCenter(v);
+    }
+
+    public appear(): void {
+        this.isDead = false;
+        this.setNerve(WalkerStateWanderNrv.Wait);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WalkerStateWanderNrv, deltaTimeFrames: number): void {
+        if (currentNerve === WalkerStateWanderNrv.Wait) {
+            if (isFirstStep(this))
+                startAction(this.actor, 'Wait');
+
+            calcPassiveMovement(this.actor, this.param, deltaTimeFrames);
+
+            if (isGreaterStep(this, this.paramWander.waitStep)) {
+                this.territoryMover.decideNextTargetPos(this.actor);
+                this.setNerve(WalkerStateWanderNrv.Walk);
+            }
+        } else if (currentNerve === WalkerStateWanderNrv.Walk) {
+            if (isFirstStep(this))
+                startAction(this.actor, 'Walk');
+
+            turnDirectionToTargetUseGroundNormalDegree(this.actor, this.front, this.territoryMover.targetPos, this.paramWander.turnSpeedDegrees);
+            if (isFaceToTargetHorizontalDegree(this.actor, this.territoryMover.targetPos, this.front, 8.0))
+                addVelocityMoveToDirection(this.actor, this.front, this.paramWander.walkSpeed);
+
+            calcPassiveMovement(this.actor, this.param, deltaTimeFrames);
+
+            if (!isFallNextMoveActor(this.actor, 150.0, 150.0, 150.0)) {
+                if (this.territoryMover.isReachedTarget(this.actor, this.paramWander.targetRadius) || isGreaterStep(this, this.paramWander.walkStep)) {
+                    this.setNerve(WalkerStateWanderNrv.Wait);
+                }
+            } else {
+                vec3.zero(this.actor.velocity);
+                this.setNerve(WalkerStateWanderNrv.Wait);
+            }
+        }
+    }
+}
+
+function updateActorState(sceneObjHolder: SceneObjHolder, actor: LiveActor, state: ActorStateBaseInterface, deltaTimeFrames: number): void {
+    if (isFirstStep(actor))
+        state.appear();
+
+    const isDead = state.update(sceneObjHolder, deltaTimeFrames);
+    if (isDead)
+        state.kill();
+}
+
+function makeQuatAndFrontFromRotate(dstQuat: quat, dstFront: vec3, actor: Readonly<LiveActor>): void {
+    quatFromEulerRadians(dstQuat, actor.rotation[0], actor.rotation[1], actor.rotation[2]);
+    quatGetAxisZ(dstFront, dstQuat);
+}
+
+function blendQuatFromGroundAndFront(dst: quat, actor: Readonly<LiveActor>, front: ReadonlyVec3, speedUp: number, speedFront: number): void {
+    if (isBindedGround(actor)) {
+        vec3.copy(scratchVec3, actor.binder!.floorHitInfo.faceNormal);
+    } else {
+        vec3.negate(scratchVec3, actor.gravityVector);
+    }
+
+    blendQuatUpFront(dst, dst, scratchVec3, front, speedUp, speedFront);
+}
+
+function turnQuatUpToGravity(dst: quat, src: ReadonlyQuat, actor: Readonly<LiveActor>): void {
+    quatGetAxisY(scratchVec3a, src);
+    vec3.negate(scratchVec3b, actor.gravityVector);
+
+    if (vec3.dot(scratchVec3a, scratchVec3b) > -0.999) {
+        quatSetRotate(scratchQuat, scratchVec3a, scratchVec3b);
+    } else {
+        quatGetAxisX(scratchVec3a, src);
+        quat.setAxisAngle(scratchQuat, scratchVec3a, MathConstants.TAU / 4);
+    }
+    quat.mul(dst, scratchQuat, src);
+    quat.normalize(dst, dst);
+}
+
+const enum KuriboNrv { Wander }
+export class Kuribo extends LiveActor<KuriboNrv> {
+    private quat = quat.create();
+    private front = vec3.create();
+    private manualGravity: boolean = false;
+    private stateWander: WalkerStateWander;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        const l_id = infoIter.getValueNumber('l_id');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Kuribo');
+        connectToSceneEnemy(sceneObjHolder, this);
+        initLightCtrl(sceneObjHolder, this);
+        makeQuatAndFrontFromRotate(this.quat, this.front, this);
+
+        if (infoIter !== null)
+            this.manualGravity = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
+
+        if (this.manualGravity) {
+            this.calcGravityFlag = false;
+            quatGetAxisY(this.gravityVector, this.quat);
+        } else {
+            this.calcGravityFlag = true;
+        }
+
+        const radius = 70.0 * this.scale[1];
+        this.initBinder(radius, radius, 0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        initShadowVolumeSphere(sceneObjHolder, this, 60.0);
+        this.initState();
+        this.initNerve(KuriboNrv.Wander);
+
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
+
+        if (l_id !== 211)
+            this.makeActorDead(sceneObjHolder);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        turnQuatUpToGravity(this.quat, this.quat, this);
+        trySetMoveLimitCollision(sceneObjHolder, this);
+    }
+
+    public calcAndSetBaseMtx(): void {
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.quat, this.translation);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        if (this.manualGravity)
+            calcGravity(sceneObjHolder, this);
+
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        blendQuatFromGroundAndFront(this.quat, this, this.front, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
+
+        // this.binder!.debugDrawAllFloorHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix);
+
+        // calcVelocityAreaOrRailMoveOnGround
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KuriboNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === KuriboNrv.Wander) {
+            updateActorState(sceneObjHolder, this, this.stateWander, deltaTimeFrames);
+
+            // drawWorldSpaceVector(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.translation, this.front, 100.0);
+            // drawWorldSpaceVector(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.translation, this.velocity, 1.0, Green);
+
+            // drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.stateWander.territoryMover.targetPos, Green, 10);
+        }
+    }
+
+    private initState(): void {
+        const param: WalkerStateParam = {
+            gravitySpeed: 1.5,
+            velDragAir: 0.99,
+            velDragGround: 0.93,
+        };
+
+        const paramWander: WalkerStateWanderParam = {
+            walkSpeed: 0.2,
+            waitStep: 120,
+            walkStep: 120,
+            turnSpeedDegrees: 3.0,
+            targetRadius: 20.0,
+        };
+
+        this.stateWander = new WalkerStateWander(this, this.front, param, paramWander);
     }
 }

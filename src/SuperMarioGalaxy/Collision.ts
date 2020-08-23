@@ -12,7 +12,7 @@ import { connectToScene, vecKillElement } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { JMapInfoIter } from "./JMapInfo";
 import { AABB } from "../Geometry";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText } from "../DebugJunk";
+import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { Yellow, colorNewCopy, Magenta } from "../Color";
 
 export class Triangle {
@@ -892,12 +892,12 @@ export function setCollisionMtx(actor: LiveActor, collisionParts: CollisionParts
 }
 
 //#region Binder
-function isFloorPolygonAngle(v: number): boolean {
+export function isFloorPolygonAngle(v: number): boolean {
     // 70 degrees -- Math.cos(70*Math.PI/180)
     return v < -0.3420201433256688;
 }
 
-function isWallPolygonAngle(v: number): boolean {
+export function isWallPolygonAngle(v: number): boolean {
     // 70 degrees -- Math.cos(70*Math.PI/180)
     return Math.abs(v) < 0.3420201433256688;
 }
@@ -1204,7 +1204,7 @@ export class Binder {
     }
 }
 
-export function isBindedGround(actor: LiveActor): boolean {
+export function isBindedGround(actor: Readonly<LiveActor>): boolean {
     return actor.binder!.floorHitInfo.distance >= 0.0;
 }
 
@@ -1234,7 +1234,7 @@ export function setBindTriangleFilter(actor: LiveActor, triFilter: TriangleFilte
     actor.binder!.setTriangleFilter(triFilter);
 }
 
-export function getBindedFixReactionVector(actor: LiveActor): vec3 {
+export function getBindedFixReactionVector(actor: LiveActor): ReadonlyVec3 {
     return actor.binder!.fixReactionVec;
 }
 
