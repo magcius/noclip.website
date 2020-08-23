@@ -9,20 +9,21 @@ import { connectToScene, isValidDraw, calcGravityVectorOrZero, calcGravityVector
 import { NameObj, MovementType, CalcAnimType, DrawBufferType, DrawType, GameBits } from "./NameObj";
 import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { HitSensor } from "./HitSensor";
-import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY } from "../MathHelpers";
+import { getMatrixTranslation, transformVec3Mat4w1, computeModelMatrixS, setMatrixTranslation, computeProjectionMatrixFromCuboid, computeMatrixWithoutTranslation, transformVec3Mat4w0, getMatrixAxis, setMatrixAxis, scaleMatrix, Vec3Zero, getMatrixAxisY, MathConstants } from "../MathHelpers";
 import { getFirstPolyOnLineCategory, Triangle, CollisionKeeperCategory, CollisionPartsFilterFunc } from "./Collision";
 import { JMapInfoIter, getJMapInfoBool, createCsvParser } from "./JMapInfo";
 import { assertExists, fallback, assert } from "../util";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { J3DModelData } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
-import { TSDraw } from "./DDraw";
+import { TSDraw, TDDraw } from "./DDraw";
 import { GX_Program } from "../gx/gx_material";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { colorFromRGBA } from "../Color";
 import { TextureMapping } from "../TextureHolder";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 
 function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
@@ -286,6 +287,90 @@ abstract class ShadowDrawer extends NameObj {
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
+
+abstract class ShadowSurfaceDrawer extends ShadowDrawer {
+    protected material: GXMaterialHelperGfx;
+
+    constructor(sceneObjHolder: SceneObjHolder, name: string, controller: ShadowController) {
+        super(sceneObjHolder, name, controller);
+
+        connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.None, DrawBufferType.None, DrawType.ShadowVolume);
+
+        const mb = new GXMaterialBuilder();
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setCullMode(GX.CullMode.BACK);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, GX.CompareType.ALWAYS, 0);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setUsePnMtxIdx(false);
+        mb.setColorUpdate(false);
+        mb.setAlphaUpdate(true);
+
+        this.material = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Front'));
+    }
+}
+
+function drawCircle(ddraw: TDDraw, pos: ReadonlyVec3, axis: ReadonlyVec3, radius: number, pointCount: number): void {
+    mat4.identity(scratchMat4a);
+    mat4.rotate(scratchMat4a, scratchMat4a, MathConstants.TAU / pointCount, axis);
+
+    if (axis[0] === 0.0)
+        vec3.set(scratchVec3a, 0.0, -axis[2], axis[1]);
+    else
+        vec3.set(scratchVec3a, axis[1], -axis[0], 0.0);
+
+    ddraw.begin(GX.Command.DRAW_TRIANGLE_FAN);
+    ddraw.position3vec3(pos);
+    for (let i = 0; i < pointCount; i++) {
+        vec3.scaleAndAdd(scratchVec3b, pos, scratchVec3a, radius);
+        transformVec3Mat4w0(scratchVec3b, scratchMat4a, scratchVec3b);
+        ddraw.position3vec3(scratchVec3b);
+    }
+    ddraw.end();
+}
+
+class ShadowSurfaceCircle extends ShadowSurfaceDrawer {
+    // TODO(jstpierre): TSDraw and a matrix if we ever find a place this is used.
+    private ddraw: TDDraw = new TDDraw();
+    public radius: number = 100.0;
+
+    constructor(sceneObjHolder: SceneObjHolder, controller: ShadowController) {
+        super(sceneObjHolder, 'ShadowSurfaceCircle', controller);
+        debugger;
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.controller.isProjected || !this.controller.isDraw())
+            return;
+
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        materialParams.u_Color[ColorKind.C0].a = 0x80 / 0xFF;
+        this.material.allocateMaterialParamsDataOnInst(template, materialParams);
+
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.material.allocatePacketParamsDataOnInst(template, packetParams);
+
+        this.ddraw.beginDraw();
+        vec3.negate(scratchVec3a, this.controller.getProjectionNormal());
+        drawCircle(this.ddraw, this.controller.getProjectionPos(), scratchVec3a, this.radius, 20);
+        this.ddraw.endAndUpload(sceneObjHolder.modelCache.device, renderInstManager);
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
 abstract class ShadowVolumeDrawer extends ShadowDrawer {
     public startDrawShapeOffset: number = 0.0;
     public endDrawShapeOffset: number = 0.0;
@@ -760,6 +845,16 @@ function setUpShadowVolumeFromCSV(volume: ShadowVolumeDrawer, infoIter: JMapInfo
     volume.cutDropShadow = volumeCut !== 0;
 }
 
+function createShadowSurfaceCircleFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
+    const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
+    controller.setDropTypeSurface();
+
+    const drawer = new ShadowSurfaceCircle(sceneObjHolder, controller);
+    drawer.radius = fallback(infoIter.getValueNumber('Radius'), 100.0);
+
+    controller.shadowDrawer = drawer;
+}
+
 function createShadowVolumeSphereFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const controller = createShadowControlFromCSV(sceneObjHolder, actor, infoIter);
     controller.setDropTypeNormal();
@@ -797,6 +892,7 @@ function createShadowVolumeCylinderFromCSV(sceneObjHolder: SceneObjHolder, actor
 function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
     const shadowType = assertExists(infoIter.getValueString('Type'));
     if (shadowType === 'SurfaceCircle') {
+        createShadowSurfaceCircleFromCSV(sceneObjHolder, actor, infoIter);
     } else if (shadowType === 'SurfaceOval') {
     } else if (shadowType === 'SurfaceBox') {
     } else if (shadowType === 'VolumeSphere') {
@@ -830,6 +926,23 @@ export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveAct
     shadowData.mapRecords((infoIter) => {
         addShadowFromCSV(sceneObjHolder, actor, infoIter);
     });
+}
+
+function createShadowControllerSurfaceParam(sceneObjHolder: SceneObjHolder, actor: LiveActor, name = 'default'): ShadowController {
+    const controller = new ShadowController(sceneObjHolder, actor, name);
+    controller.setDropPosPtr(actor.translation);
+    controller.setDropDirPtr(actor.gravityVector);
+    controller.setDropLength(1000.0);
+    controller.setDropTypeSurface();
+    actor.shadowControllerList!.addController(controller);
+    return controller;
+}
+
+export function addShadowSurfaceCircle(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, radius: number): void {
+    const controller = createShadowControllerSurfaceParam(sceneObjHolder, actor, name);
+    const drawer = new ShadowSurfaceCircle(sceneObjHolder, controller);
+    drawer.radius = radius;
+    controller.shadowDrawer = drawer;
 }
 
 function createShadowControllerVolumeParam(sceneObjHolder: SceneObjHolder, actor: LiveActor, name = 'default'): ShadowController {
@@ -867,6 +980,11 @@ export function addShadowVolumeFlatModel(sceneObjHolder: SceneObjHolder, actor: 
 
 export function initShadowController(actor: LiveActor): void {
     actor.shadowControllerList = new ShadowControllerList();
+}
+
+export function initShadowSurfaceCircle(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): void {
+    initShadowController(actor);
+    addShadowSurfaceCircle(sceneObjHolder, actor, 'default', radius);
 }
 
 export function initShadowVolumeSphere(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): void {

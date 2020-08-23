@@ -10,7 +10,7 @@ import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, Gfx
 import { createInputLayout } from '../gx/gx_render';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers';
 import { getSystemEndianness, Endianness } from '../endian';
-import { vec3 } from 'gl-matrix';
+import { ReadonlyVec3 } from 'gl-matrix';
 import { Color } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
@@ -21,6 +21,8 @@ function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
         return GfxTopology.TRISTRIP;
     else if (cmd === GX.Command.DRAW_TRIANGLES)
         return GfxTopology.TRIANGLES;
+    else if (cmd === GX.Command.DRAW_TRIANGLE_FAN)
+        return GfxTopology.TRIFAN;
     else
         throw "whoops";
 }
@@ -184,7 +186,7 @@ export class TDDraw extends TDDrawVtxSpec {
         this.writeFloat32(offs + 0x08, z);
     }
 
-    public position3vec3(v: vec3): void {
+    public position3vec3(v: ReadonlyVec3): void {
         this.position3f32(v[0], v[1], v[2]);
     }
 
@@ -195,7 +197,7 @@ export class TDDraw extends TDDrawVtxSpec {
         this.writeFloat32(offs + 0x08, z);
     }
 
-    public normal3vec3(v: vec3): void {
+    public normal3vec3(v: ReadonlyVec3): void {
         this.normal3f32(v[0], v[1], v[2]);
     }
 
@@ -402,7 +404,7 @@ export class TSDraw extends TDDrawVtxSpec {
         this.writeFloat32(offs + 0x08, z);
     }
 
-    public position3vec3(v: vec3): void {
+    public position3vec3(v: ReadonlyVec3): void {
         this.position3f32(v[0], v[1], v[2]);
     }
 
@@ -413,7 +415,7 @@ export class TSDraw extends TDDrawVtxSpec {
         this.writeFloat32(offs + 0x08, z);
     }
 
-    public normal3vec3(v: vec3): void {
+    public normal3vec3(v: ReadonlyVec3): void {
         this.normal3f32(v[0], v[1], v[2]);
     }
 

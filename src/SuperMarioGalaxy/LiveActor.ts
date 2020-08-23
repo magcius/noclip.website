@@ -557,15 +557,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public initActorCollisionParts(sceneObjHolder: SceneObjHolder, name: string, hitSensor: HitSensor, resourceHolder: ResourceHolder | null, hostMtx: mat4 | null, scaleType: CollisionScaleType): void {
-        if (resourceHolder === null) {
-            this.collisionParts = createCollisionPartsFromLiveActor(sceneObjHolder, this, name, hitSensor, hostMtx, scaleType);
-        } else {
-            // TODO(jstpierre)
-            // makeMtxTRSFromActor(scratchMatrix, this);
-            // this.collisionParts = createCollisionPartsFromResourceHolder();
-            throw "whoops";
-        }
+        if (resourceHolder === null)
+            resourceHolder = this.resourceHolder;
 
+        this.collisionParts = createCollisionPartsFromLiveActor(sceneObjHolder, this, name, hitSensor, hostMtx, scaleType, resourceHolder);
         invalidateCollisionPartsForActor(sceneObjHolder, this);
     }
 

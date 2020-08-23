@@ -16,7 +16,7 @@ import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { HitSensor, HitSensorType } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
 import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, makeMtxTRFromActor, MsgSharedGroup } from "./LiveActor";
-import { SceneObj, SceneObjHolder } from "./Main";
+import { SceneObj, SceneObjHolder, ResourceHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
 import { RailDirection } from "./RailRider";
 import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
@@ -582,8 +582,8 @@ export function invalidateCollisionPartsForActor(sceneObjHolder: SceneObjHolder,
     invalidateCollisionParts(sceneObjHolder, parts);
 }
 
-export function initCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null = null) {
-    actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, null, hostMtx, CollisionScaleType.AutoScale);
+export function initCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null = null, resourceHolder: ResourceHolder | null = null) {
+    actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, resourceHolder, hostMtx, CollisionScaleType.AutoScale);
 }
 
 export function getRailTotalLength(actor: LiveActor): number {

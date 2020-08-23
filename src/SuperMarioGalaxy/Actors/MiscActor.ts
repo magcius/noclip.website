@@ -40,7 +40,7 @@ import { isConnectedWithRail } from '../RailRider';
 import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
-import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder, initShadowVolumeFlatModel } from '../Shadow';
+import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowSurfaceCircle } from '../Shadow';
 import { initLightCtrl } from '../LightData';
 
 const materialParams = new MaterialParams();
@@ -634,8 +634,7 @@ class Coin extends LiveActor {
         if (shadowType === 1) {
             initShadowVolumeCylinder(sceneObjHolder, this, 50.0);
         } else if (shadowType === 0) {
-            // TODO(jstpierre): initShadowSurfaceCircle
-            initShadowVolumeSphere(sceneObjHolder, this, 50.0);
+            initShadowSurfaceCircle(sceneObjHolder, this, 50.0);
         } else {
             initShadowVolumeSphere(sceneObjHolder, this, 50.0);
         }
@@ -2222,6 +2221,7 @@ class CoconutTreeLeaf extends LiveActor {
 
         this.initHitSensor();
         addBodyMessageSensorMapObj(sceneObjHolder, this);
+        initCollisionParts(sceneObjHolder, this, 'CoconutTreeLeaf', this.getSensor('body')!, this.jointMtx, sceneObjHolder.modelCache.getResourceHolder('CoconutTreeLeaf'));
 
         calcMtxAxis(this.axisX, this.axisY, this.axisZ, this.jointMtx);
         vec3.copy(this.upVec, this.axisY);
@@ -2230,6 +2230,8 @@ class CoconutTreeLeaf extends LiveActor {
 
         vec3.scaleAndAdd(this.origFrontChase, this.translation, this.axisZ, 100.0);
         vec3.copy(this.currFrontChase, this.origFrontChase);
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     public getBaseMtx(): mat4 {
@@ -2642,6 +2644,8 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        // this.railRider!.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
 
         if (currentNerve === TicoRailNrv.Wait) {
             if (isFirstStep(this)) {
@@ -6126,7 +6130,7 @@ class PlantMember extends LiveActor<PlantMemberNrv> {
         connectToSceneNoSilhouettedMapObjWeakLightNoMovement(sceneObjHolder, this);
 
         if (useLightCtrl)
-        initLightCtrl(sceneObjHolder, this);
+            initLightCtrl(sceneObjHolder, this);
 
         // initSound
 

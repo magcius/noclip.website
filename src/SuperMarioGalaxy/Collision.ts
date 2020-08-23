@@ -838,7 +838,7 @@ export function invalidateCollisionParts(sceneObjHolder: SceneObjHolder, parts: 
 }
 
 const scratchMatrix = mat4.create();
-export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null, scaleType: CollisionScaleType): CollisionParts {
+export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null, scaleType: CollisionScaleType, resourceHolder: ResourceHolder = actor.resourceHolder!): CollisionParts {
     let initialHostMtx: mat4;
     if (hostMtx !== null) {
         initialHostMtx = hostMtx;
@@ -847,7 +847,7 @@ export function createCollisionPartsFromLiveActor(sceneObjHolder: SceneObjHolder
         initialHostMtx = scratchMatrix;
     }
 
-    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, actor.resourceHolder, name, hitSensor, initialHostMtx, scaleType, CollisionKeeperCategory.Map);
+    const parts = createCollisionParts(sceneObjHolder, actor.zoneAndLayer, resourceHolder, name, hitSensor, initialHostMtx, scaleType, CollisionKeeperCategory.Map);
 
     if (hostMtx !== null)
         parts.hostMtx = hostMtx;

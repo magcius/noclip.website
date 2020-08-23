@@ -454,7 +454,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // executeDrawListXlu()
         this.drawXlu(passRenderer, 0x18);
 
-        // execute(0x26);
+        this.execute(passRenderer, DrawType.ShadowSurface);
         this.execute(passRenderer, DrawType.EffectDraw3D);
         this.execute(passRenderer, DrawType.EffectDrawForBloomEffect);
         // execute(0x2f);
