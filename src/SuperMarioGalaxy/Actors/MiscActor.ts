@@ -31,7 +31,7 @@ import { HitSensor, HitSensorType, isSensorEnemy, isSensorNpc, isSensorPlayer, i
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter, getJMapInfoArg5 } from '../JMapInfo';
 import { WorldmapPointInfo } from './LegacyActor';
 import { addBrightObj, BrightObjBase, BrightObjCheckArg } from './LensFlare';
-import { dynamicSpawnZoneAndLayer, isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
+import { dynamicSpawnZoneAndLayer, isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer, resetPosition } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, getTimeFrames, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
 import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType } from '../MapParts';
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
@@ -3344,32 +3344,44 @@ export class WaterPlant extends LiveActor {
     }
 }
 
-export class StarPieceGroup extends LiveActor {
+const enum StarPieceGroupNrv { Flow }
+export class StarPieceGroup extends LiveActor<StarPieceGroupNrv> {
     private starPieces: StarPiece[] = [];
     private isConnectedWithRail: boolean = false;
     private spawnOnRailPoints: boolean = false;
     private radius: number;
+    private flowSpeed: number;
+    private railCoords: number[] | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPos(sceneObjHolder, this, infoIter);
 
-        let starPieceCount = 6;
+        const isStarPieceGroup = getObjectName(infoIter) === 'StarPieceGroup';
+
+        let starPieceCount: number;
 
         // TODO(jstpierre): StarPieceFlow
-        starPieceCount = fallback(getJMapInfoArg0(infoIter), starPieceCount);
-        this.radius = fallback(getJMapInfoArg1(infoIter), 400);
-        const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
+        if (isStarPieceGroup) {
+            starPieceCount = fallback(getJMapInfoArg0(infoIter), 6);
+            this.radius = fallback(getJMapInfoArg1(infoIter), 400);
+            this.spawnOnRailPoints = fallback(getJMapInfoArg2(infoIter), -1) === 1;
+        } else {
+            this.flowSpeed = fallback(getJMapInfoArg0(infoIter), 10.0);
+            starPieceCount = fallback(getJMapInfoArg1(infoIter), 1);
+            this.radius = 400.0;
+            this.spawnOnRailPoints = false;
+            this.railCoords = nArray(starPieceCount, () => 0);
+            this.initNerve(StarPieceGroupNrv.Flow);
+        }
 
         if (isConnectedWithRail(infoIter)) {
             this.initRailRider(sceneObjHolder, infoIter);
             this.isConnectedWithRail = true;
 
-            if (arg2 === 1) {
+            if (this.spawnOnRailPoints)
                 starPieceCount = getRailPointNum(this);
-                this.spawnOnRailPoints = true;
-            }
         }
 
         for (let i = 0; i < starPieceCount; i++) {
@@ -3377,7 +3389,23 @@ export class StarPieceGroup extends LiveActor {
             this.starPieces.push(starPiece);
         }
 
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+
         this.placementAllPiece();
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StarPieceGroupNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === StarPieceGroupNrv.Flow) {
+            const railTotalLength = getRailTotalLength(this);
+            const railCoords = assertExists(this.railCoords);
+            for (let i = 0; i < this.starPieces.length; i++) {
+                railCoords[i] = (railTotalLength + railCoords[i] + this.flowSpeed * deltaTimeFrames) % railTotalLength;
+                calcRailPosAtCoord(this.starPieces[i].translation, this, railCoords[i]);
+                resetPosition(sceneObjHolder, this.starPieces[i]);
+            }
+        }
     }
 
     private placementAllPiece(): void {
@@ -3426,6 +3454,8 @@ export class StarPieceGroup extends LiveActor {
         let coord = 0;
         for (let i = 0; i < this.starPieces.length; i++) {
             calcRailPosAtCoord(this.starPieces[i].translation, this, coord);
+            if (this.railCoords !== null)
+                this.railCoords[i] = coord;
             coord += speed;
         }
     }

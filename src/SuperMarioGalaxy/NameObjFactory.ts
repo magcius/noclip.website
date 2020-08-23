@@ -187,6 +187,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("ShellfishYellowChip",            Shellfish),
     _("ShootingStar",                   ShootingStar),
     _("StarPiece",                      StarPiece),
+    _("StarPieceFlow",                  StarPieceGroup),
     _("StarPieceGroup",                 StarPieceGroup),
     _("SubmarineSteam",                 SubmarineSteam),
     _("SubmarineVolcano",               SubmarineSteam),

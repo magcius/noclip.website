@@ -229,9 +229,7 @@ export class NoclipLegacyActorSpawner {
                 return;
 
             case 'StarPieceFollowGroup':
-            case 'StarPieceGroup':
             case 'StarPieceSpot':
-            case 'StarPieceFlow':
             case 'WingBlockStarPiece':
             case 'YellowChipGroup':
             case 'CoinAppearSpot':
