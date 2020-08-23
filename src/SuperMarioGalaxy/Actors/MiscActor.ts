@@ -6007,7 +6007,7 @@ export class OceanFloaterLandParts extends LiveActor {
 }
 
 function isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder: SceneObjHolder): boolean {
-    return false;
+    return sceneObjHolder.scenarioData.scenarioDataIter.getValueString('Comet') === 'Quick';
 }
 
 const enum DossunNrv { Upper, FallSign, Falling, OnGround, Rising, }
