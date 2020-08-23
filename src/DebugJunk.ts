@@ -255,7 +255,7 @@ export function drawWorldSpaceAABB(ctx: CanvasRenderingContext2D, clipFromWorldM
 export function drawViewportSpacePoint(ctx: CanvasRenderingContext2D, x: number, y: number, color: Color = Magenta, size: number = 4): void {
     const rad = size >>> 1;
     ctx.fillStyle = colorToCSS(color);
-    ctx.fillRect(x - rad, ctx.canvas.height - (y - rad), size, size);
+    ctx.fillRect(x - rad, ctx.canvas.height - y - rad, size, size);
 }
 
 export function drawWorldSpacePoint(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, v: ReadonlyVec3, color: Color = Magenta, size: number = 4): void {
