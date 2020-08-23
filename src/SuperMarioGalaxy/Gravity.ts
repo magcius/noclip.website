@@ -795,14 +795,14 @@ export class PointGravity extends PlanetGravity {
 }
 
 export class SegmentGravity extends PlanetGravity {
-    private gravityPoints = nArray(2, () => vec3.create());
-    private sideVector = vec3.create();
-    private edgeValid = nArray(2, () => true);
-    private sideVectorOrtho = vec3.create();
-    private validSideDegree: number = 360.0;
-    private validSideCos: number = -1.0;
-    private segmentDirection = vec3.create();
-    private segmentLength: number = 0;
+    public gravityPoints = nArray(2, () => vec3.create());
+    public sideVector = vec3.create();
+    public edgeValid = nArray(2, () => true);
+    public sideVectorOrtho = vec3.create();
+    public validSideDegree: number = 360.0;
+    public validSideCos: number = -1.0;
+    public segmentDirection = vec3.create();
+    public segmentLength: number = 0;
 
     public setGravityPoint(i: number, v: ReadonlyVec3): void {
         vec3.copy(this.gravityPoints[i], v);

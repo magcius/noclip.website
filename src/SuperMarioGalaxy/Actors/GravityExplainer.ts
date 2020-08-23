@@ -6,22 +6,22 @@ import { LiveActor, ZoneAndLayer, makeMtxTRSFromActor, MessageType } from "../Li
 import { TDDraw, TSDraw } from "../DDraw";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
 import { vec3, mat4 } from "gl-matrix";
-import { colorNewCopy, White, colorFromHSL, colorNewFromRGBA, colorFromRGBA, colorCopy } from "../../Color";
+import { colorNewCopy, colorNewFromRGBA, colorFromRGBA, colorCopy, Magenta, Green, Red, White } from "../../Color";
 import { dfShow } from "../../DebugFloaters";
 import { SceneObjHolder, getDeltaTimeFrames } from "../Main";
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
-import { connectToScene, getRandomFloat, calcGravityVector, connectToSceneMapObjDecoration, makeMtxUpNoSupportPos, addVelocityMoveToDirection, addHitSensor, invalidateHitSensors, validateHitSensors, getRandomInt } from '../ActorUtil';
+import { connectToScene, connectToSceneMapObjDecoration, makeMtxUpNoSupportPos, addVelocityMoveToDirection, addHitSensor, invalidateHitSensors, validateHitSensors, getRandomInt, makeMtxFrontUp, makeMtxUpNoSupport } from '../ActorUtil';
 import { DrawType, MovementType } from '../NameObj';
 import { ViewerRenderInput } from '../../viewer';
-import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants, saturate, computeModelMatrixS, computeModelMatrixSRT, lerp, getMatrixTranslation, normToLength, isNearZeroVec3 } from '../../MathHelpers';
+import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConstants, saturate, computeModelMatrixS, computeModelMatrixSRT, lerp, getMatrixTranslation, normToLength, isNearZeroVec3, getMatrixAxisY, scaleMatrix, setMatrixTranslation, setMatrixAxis, Vec3UnitX } from '../../MathHelpers';
 import { GfxRenderInstManager, setSortKeyLayer, GfxRendererLayer, setSortKeyDepth } from '../../gfx/render/GfxRenderer';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../../Camera';
 import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType, CubeGravity, SegmentGravity } from '../Gravity';
-import { isFirstStep, isGreaterEqualStep } from '../Spine';
+import { isFirstStep } from '../Spine';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { assertExists } from '../../util';
-import { getDebugOverlayCanvas2D, drawWorldSpaceAABB, drawWorldSpaceText, drawWorldSpacePoint } from '../../DebugJunk';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceLine } from '../../DebugJunk';
 import { AABB } from '../../Geometry';
 import { initShadowVolumeSphere, setShadowDropLength, onCalcShadowDropGravity, setShadowVolumeSphereRadius } from '../Shadow';
 import { getBindedFixReactionVector, isBinded, isBindedGround } from '../Collision';
@@ -45,12 +45,70 @@ class GravityExplainerArrow {
 
     // Drawing.
     public pos = vec3.create();
-    public speed = 5.0;
+    public speed = 2.0;
     public time: number = 0.0;
-    public lifetime = 360.0;
-    public color = colorNewCopy(White);
+    public lifetime = 180.0;
+    public color = colorNewCopy(Red);
     public alpha: number = 1.0;
     public scale: number = 1.0;
+    // plane to be cross to
+    public cross: vec3 | null = null;
+}
+
+class GravityExplainer2_SegmentGravity extends LiveActor {
+    private materialHelper: GXMaterialHelperGfx;
+    private cylinder: CylinderModel;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, protected gravity: SegmentGravity) {
+        super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2_SegmentGravity');
+
+        const mb = new GXMaterialBuilder('GravityExplainer');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.CLAMP, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.RASA, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.A0, GX.CA.A1, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setCullMode(GX.CullMode.BACK);
+        mb.setUsePnMtxIdx(false);
+
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+        this.cylinder = new CylinderModel(sceneObjHolder.modelCache.device, sceneObjHolder.modelCache.cache, this.gravity.validSideDegree * MathConstants.DEG_TO_RAD);
+
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
+    }
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!this.gravity.alive || !this.gravity.switchActive)
+            return;
+
+        const renderInst = renderInstManager.newRenderInst();
+        this.cylinder.sdraw.setOnRenderInst(renderInst);
+        this.materialHelper.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, renderInst);
+
+        colorFromRGBA(materialParams.u_Color[ColorKind.C1], 1, 1, 1, 0.8);
+
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+
+        mat4.identity(packetParams.u_PosMtx[0]);
+        vec3.sub(scratchVec3, this.gravity.gravityPoints[1], this.gravity.gravityPoints[0]);
+        makeMtxUpNoSupport(packetParams.u_PosMtx[0], scratchVec3);
+        const scaleXZ = 5.0;
+        scaleMatrix(packetParams.u_PosMtx[0], packetParams.u_PosMtx[0], scaleXZ, vec3.length(scratchVec3), scaleXZ);
+        setMatrixTranslation(packetParams.u_PosMtx[0], this.gravity.gravityPoints[0]);
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, packetParams.u_PosMtx[0]);
+        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.cylinder.destroy(device);
+    }
 }
 
 export class GravityExplainer extends LiveActor {
@@ -59,13 +117,13 @@ export class GravityExplainer extends LiveActor {
     private arrows: GravityExplainerArrow[] = [];
 
     @dfShow()
-    private stemWidth: number = 100.0;
+    private stemWidth: number = 18.0;
     @dfShow()
-    private stemHeight = 800.0;
+    private stemHeight = 80.0;
     @dfShow()
-    private tipWidth = 400.0;
+    private tipWidth = 63.0;
     @dfShow()
-    private tipHeight = 400.0;
+    private tipHeight = 70.0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'GravityExplainer');
@@ -79,7 +137,7 @@ export class GravityExplainer extends LiveActor {
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.RASA, GX.CC.RASC);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
@@ -103,34 +161,52 @@ export class GravityExplainer extends LiveActor {
 
         for (let i = 0; i < gravities.length; i++) {
             const grav = gravities[i];
+            if (!(grav instanceof SegmentGravity))
+                continue;
+            if (grav.distant !== 310)
+                continue;
 
+            /*
             const aabb = new AABB(), v = vec3.create();
             for (let j = 0; j < 1000; j++) {
                 if (!grav.generateRandomPoint(v))
                     continue;
                 aabb.unionPoint(v);
             }
-            const count = Math.sqrt(aabb.diagonalLengthSquared()) / 500.0;
-            console.log(count);
+            */
+            const count = 5;
 
             for (let j = 0; j < count; j++) {
-                const arrow = new GravityExplainerArrow();
-                arrow.scale = 0.5;
-                arrow.gravity = grav;
+                const layers = 4;
+                for (let k = 0; k < layers; k++) {
+                    const arrow = new GravityExplainerArrow();
+                    arrow.scale = 0.5;
+                    arrow.gravity = grav;
 
-                if (!grav.generateRandomPoint(arrow.coord))
-                    continue;
-                vec3.copy(arrow.pos, arrow.coord);
+                    mat4.identity(scratchMatrix);
+                    const theta = MathConstants.DEG_TO_RAD * (grav.validSideDegree * (j / (count - 1))) * 0.99 + 0.001;
+                    mat4.rotate(scratchMatrix, scratchMatrix, theta, grav.segmentDirection);
+                    getMatrixAxisY(scratchVec3a, scratchMatrix);
 
-                arrow.time = Math.random() * arrow.lifetime;
-                arrow.alpha = lerp(0.4, 0.8, Math.random());
+                    arrow.cross = vec3.clone(grav.segmentDirection);
 
-                this.arrows.push(arrow);
+                    vec3.lerp(arrow.coord, grav.gravityPoints[0], grav.gravityPoints[1], 0.5);
+                    vec3.scaleAndAdd(arrow.coord, arrow.coord, scratchVec3a, 100);
+
+                    vec3.copy(arrow.pos, arrow.coord);
+
+                    arrow.time = arrow.lifetime * (k / layers);
+
+                    this.arrows.push(arrow);
+                }
             }
+
+            const segment = new GravityExplainer2_SegmentGravity(this.zoneAndLayer, sceneObjHolder, grav);
+            break;
         }
     }
 
-    public globalFade = 0.0;
+    public globalFade = 1.0;
     public globalFadeStartTime = -1;
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
@@ -151,7 +227,8 @@ export class GravityExplainer extends LiveActor {
         for (let i = 0; i < this.arrows.length; i++) {
             const arrow = this.arrows[i];
 
-            calcGravityVector(sceneObjHolder, this, arrow.coord, arrow.gravityVec);
+            // calcGravityVector(sceneObjHolder, this, arrow.coord, arrow.gravityVec);
+            arrow.gravity.calcGravity(arrow.gravityVec, arrow.coord);
             vec3.normalize(arrow.gravityVec, arrow.gravityVec);
 
             vec3.scaleAndAdd(arrow.pos, arrow.pos, arrow.gravityVec, arrow.speed * deltaTimeFrames);
@@ -186,48 +263,63 @@ export class GravityExplainer extends LiveActor {
         if (!arrow.gravity.alive)
             return;
 
-        // const ctx = getDebugOverlayCanvas2D();
-        // drawWorldSpacePoint(ctx, camera, arrow.pos, Magenta, 10);
+        /*
+        const ctx = getDebugOverlayCanvas2D();
+        drawWorldSpacePoint(ctx, camera.clipFromWorldMatrix, arrow.coord, Magenta, 10);
+        drawWorldSpaceVector(ctx, camera.clipFromWorldMatrix, arrow.coord, arrow.gravityVec, 25, Green, 4);
+        drawWorldSpacePoint(ctx, camera.clipFromWorldMatrix, arrow.pos, Red, 10);
+        */
 
         const mtx = scratchMatrix;
 
-        // Build our billboard matrix.
-        vec3.negate(scratchVec3a, arrow.gravityVec);
+        if (arrow.cross !== null) {
+            vec3.negate(scratchVec3a, arrow.gravityVec);
 
-        const viewMtx = camera.viewMatrix;
-        vec3.set(scratchVec3b, viewMtx[2], viewMtx[6], viewMtx[10]);
+            mat4.identity(mtx);
+            makeMtxFrontUp(mtx, arrow.cross, scratchVec3a);
+            scaleMatrix(mtx, mtx, arrow.scale);
+            setMatrixTranslation(mtx, arrow.pos);
+            mat4.mul(mtx, camera.viewMatrix, mtx);
+        } else {
+            // Build our billboard matrix.
+            vec3.negate(scratchVec3a, arrow.gravityVec);
 
-        vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
-        vec3.normalize(scratchVec3a, scratchVec3a);
+            const viewMtx = camera.viewMatrix;
+            vec3.set(scratchVec3b, viewMtx[2], viewMtx[6], viewMtx[10]);
 
-        transformVec3Mat4w0(scratchVec3a, viewMtx, scratchVec3a);
-        transformVec3Mat4w1(scratchVec3b, viewMtx, arrow.pos);
+            vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
+            vec3.normalize(scratchVec3a, scratchVec3a);
 
-        const scaleX = arrow.scale;
-        const scaleY = arrow.scale;
+            transformVec3Mat4w0(scratchVec3a, viewMtx, scratchVec3a);
+            transformVec3Mat4w1(scratchVec3b, viewMtx, arrow.pos);
 
-        mtx[0] = scratchVec3a[0] * scaleX;
-        mtx[4] = -scratchVec3a[1] * scaleY;
-        mtx[8] = 0;
-        mtx[12] = scratchVec3b[0];
+            const scaleX = arrow.scale;
+            const scaleY = arrow.scale;
 
-        mtx[1] = scratchVec3a[1] * scaleX;
-        mtx[5] = scratchVec3a[0] * scaleY;
-        mtx[9] = 0;
-        mtx[13] = scratchVec3b[1];
+            mtx[0] = scratchVec3a[0] * scaleX;
+            mtx[4] = -scratchVec3a[1] * scaleY;
+            mtx[8] = 0;
+            mtx[12] = scratchVec3b[0];
 
-        mtx[2] = 0;
-        mtx[6] = 0;
-        mtx[10] = 1;
-        mtx[14] = scratchVec3b[2];
+            mtx[1] = scratchVec3a[1] * scaleX;
+            mtx[5] = scratchVec3a[0] * scaleY;
+            mtx[9] = 0;
+            mtx[13] = scratchVec3b[1];
+
+            mtx[2] = 0;
+            mtx[6] = 0;
+            mtx[10] = 1;
+            mtx[14] = scratchVec3b[2];
+        }
 
         ddraw.begin(GX.Command.DRAW_TRIANGLES, 3);
 
-        // Arrow's tip is at the tip...
+        // Arrow's tip is at the bottom of the tip triangle...
         vec3.copy(scratchVec3, Vec3Zero);
+        scratchVec3[1] -= this.tipHeight;
         this.drawPoint(arrow, ddraw, mtx, scratchVec3);
 
-        scratchVec3[1] += this.tipHeight;
+        scratchVec3[1] = 0;
         scratchVec3[0] = -this.tipWidth;
         this.drawPoint(arrow, ddraw, mtx, scratchVec3);
 
@@ -453,7 +545,71 @@ class GravityExplainerParticle extends LiveActor<GravityExplainerParticleNrv> {
     }
 }
 
-function sphereModel(ddraw: TSDraw, numY: number = 50, numX: number = numY): void {
+function cylinderModel(ddraw: TSDraw, validAngle: number, numR: number): void {
+    ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+    for (let r = 0; r < numR + 1; r++) {
+        const theta = validAngle * (r / numR);
+        const x = Math.cos(theta), z = Math.sin(theta);
+        ddraw.position3f32(x, 1, z);
+        ddraw.position3f32(x, 0, z);
+    }
+    ddraw.end();
+
+    // draw round cap 0
+    ddraw.begin(GX.Command.DRAW_TRIANGLE_FAN);
+    ddraw.position3f32(0, 0, 0);
+    for (let r = numR + 1; r >= 0; r--) {
+        const theta = validAngle * (r / numR);
+        const x = Math.cos(theta), z = Math.sin(theta);
+        ddraw.position3f32(x, 0, z);
+    }
+    ddraw.end();
+
+    // draw round cap 1
+    ddraw.begin(GX.Command.DRAW_TRIANGLE_FAN);
+    ddraw.position3f32(0, 1, 0);
+    for (let r = 0; r < numR + 1; r++) {
+        const theta = validAngle * (r / numR);
+        const x = Math.cos(theta), z = Math.sin(theta);
+        ddraw.position3f32(x, 1, z);
+    }
+    ddraw.end();
+
+    // draw square cap 0
+    if (validAngle >= 0.0 && validAngle < MathConstants.TAU) {
+        ddraw.begin(GX.Command.DRAW_QUADS);
+        ddraw.position3f32(1, 0, 0);
+        ddraw.position3f32(1, 1, 0);
+        ddraw.position3f32(0, 1, 0);
+        ddraw.position3f32(0, 0, 0);
+
+        ddraw.position3f32(0, 0, 0);
+        ddraw.position3f32(0, 1, 0);
+        const x = Math.cos(validAngle), z = Math.sin(validAngle);
+        ddraw.position3f32(x, 1, z);
+        ddraw.position3f32(x, 0, z);
+        ddraw.end();
+    }
+}
+
+class CylinderModel {
+    public sdraw = new TSDraw();
+
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, validAngle: number = MathConstants.TAU, numR = 50) {
+        this.sdraw.setVtxDesc(GX.Attr.POS, true);
+        this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+
+        this.sdraw.beginDraw();
+        cylinderModel(this.sdraw, validAngle, numR);
+        this.sdraw.endDraw(device, renderCache);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.sdraw.destroy(device);
+    }
+}
+
+function sphereModel(ddraw: TSDraw, numY: number, numX: number = numY): void {
     function spherePoint(dst: vec3, y: number, x: number): void {
         const theta = MathConstants.TAU * (x / numX);
         const phi = MathConstants.TAU * (((1.0 - y / numY)) - 0.5) / 2;
@@ -481,7 +637,7 @@ function sphereModel(ddraw: TSDraw, numY: number = 50, numX: number = numY): voi
 class SphereModel {
     public sdraw = new TSDraw();
 
-    constructor(device: GfxDevice, renderCache: GfxRenderCache, public numY: number = 50, public numX: number = numY) {
+    constructor(device: GfxDevice, renderCache: GfxRenderCache, numY: number = 50, numX: number = numY) {
         this.sdraw.setVtxDesc(GX.Attr.POS, true);
         this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
 
@@ -489,7 +645,7 @@ class SphereModel {
         this.sdraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.NRM, GX.CompCnt.NRM_XYZ);
 
         this.sdraw.beginDraw();
-        sphereModel(this.sdraw);
+        sphereModel(this.sdraw, numY, numX);
         this.sdraw.endDraw(device, renderCache);
     }
 
