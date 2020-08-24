@@ -8,7 +8,7 @@ import * as GX_Material from '../gx/gx_material';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
 import { ModelInstance, ModelRenderContext } from './models';
-import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT } from './util';
+import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUint16 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
@@ -239,8 +239,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
                 const speedX = data.getInt8(0x1e);
                 const speedY = data.getInt8(0x1f);
 
-                const tabValue = obj.world.resColl.tablesTab.getUint32(0xe * 4);
-                const targetTexId = obj.world.resColl.tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
+                const tabValue = readUint32(obj.world.resColl.tablesTab, 0, 0xe);
+                const targetTexId = readUint32(obj.world.resColl.tablesBin, 0, tabValue + scrollableIndex) & 0x7fff;
                 // Note: & 0x7fff above is an artifact of how the game stores tex id's.
                 // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
 
@@ -760,7 +760,7 @@ export class ObjectType {
         const numModels = data.getUint8(0x55);
         const modelListOffs = data.getUint32(0x8);
         for (let i = 0; i < numModels; i++) {
-            const modelNum = data.getUint32(modelListOffs + i * 4);
+            const modelNum = readUint32(data, modelListOffs, i);
             this.modelNums.push(modelNum);
         }
 
@@ -954,7 +954,6 @@ export class ObjectInstance {
 
     public update() {
         if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
-            const poseMtx = mat4.create();
             // TODO: use time values from animation data?
             const amap = this.modelInst.getAmap(this.modelAnimNum!);
             const kfTime = (this.world.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
@@ -1041,11 +1040,11 @@ export class ObjectManager {
 
     public getObjectType(typeNum: number, skipObjindex: boolean = false): ObjectType {
         if (!this.useEarlyObjects && !skipObjindex) {
-            typeNum = this.objindexBin!.getUint16(typeNum * 2);
+            typeNum = readUint16(this.objindexBin!, 0, typeNum);
         }
 
         if (this.objectTypes[typeNum] === undefined) {
-            const offs = this.objectsTab.getUint32(typeNum * 4);
+            const offs = readUint32(this.objectsTab, 0, typeNum);
             const objType = new ObjectType(typeNum, dataSubarray(this.objectsBin, offs), this.useEarlyObjects);
             this.objectTypes[typeNum] = objType;
         }

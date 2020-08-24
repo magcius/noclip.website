@@ -10,6 +10,7 @@ import { SFAMaterial, MaterialFactory } from './materials';
 import { Model, ModelInstance, ModelVersion, ModelRenderContext } from './models';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
+import { readUint32 } from './util';
 
 export abstract class BlockFetcher {
     public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null>;
@@ -47,7 +48,7 @@ export class BlockCollection {
 
     public getBlockRenderer(num: number): BlockRenderer | null {
         if (this.blockRenderers[num] === undefined) {
-            const tabValue = this.tab.getUint32(num * 4);
+            const tabValue = readUint32(this.tab, 0, num);
             if (!(tabValue & 0x10000000)) {
                 return null;
             }
@@ -237,7 +238,7 @@ export class AncientBlockFetcher implements BlockFetcher {
             return null;
         }
 
-        const blockOffset = this.blocksTab.getUint32(num * 4);
+        const blockOffset = readUint32(this.blocksTab, 0, num);
         console.log(`Loading block ${num} from BLOCKS.bin offset 0x${blockOffset.toString(16)}`);
         const blockData = this.blocksBin.slice(blockOffset);
 

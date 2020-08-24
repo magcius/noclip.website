@@ -84,6 +84,14 @@ export function mat4PostTranslate(m: mat4, v: vec3) {
     m[14] += v[2];
 }
 
+export function readUint16(data: DataView, byteOffset: number, index: number, stride: number = 2): number {
+    return data.getUint16(byteOffset + index * stride);
+}
+
+export function readUint32(data: DataView, byteOffset: number, index: number, stride: number = 4): number {
+    return data.getUint32(byteOffset + index * stride);
+}
+
 export function readVec3(data: DataView, byteOffset: number = 0): vec3 {
     return vec3.fromValues(
         data.getFloat32(byteOffset + 0),

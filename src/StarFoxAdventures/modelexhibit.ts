@@ -11,7 +11,7 @@ import { SFARenderer, SceneRenderContext } from './render';
 import { ModelFetcher, ModelInstance, ModelVersion, ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
-import { dataSubarray, createDownloadLink } from './util';
+import { dataSubarray, createDownloadLink, readUint16 } from './util';
 import { TextureFetcher, SFATextureFetcher } from './textures';
 
 class ModelExhibitRenderer extends SFARenderer {
@@ -103,7 +103,7 @@ class ModelExhibitRenderer extends SFARenderer {
     }
 
     private getGlobalAnimNum(modelAnimNum: number): number {
-        return this.modanim!.getUint16(modelAnimNum * 2);
+        return readUint16(this.modanim!, 0, modelAnimNum);
     }
 
     private getAmapForModelAnim(modelAnimNum: number): DataView {

@@ -176,7 +176,7 @@ export class ShapeGeometry {
 }
 
 export interface ShapeMaterial {
-    setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) => void;
+    setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext) => void;
     allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void;
 }
 
@@ -222,7 +222,7 @@ export class CommonShapeMaterial implements ShapeMaterial {
         }
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext) {
         this.updateMaterialHelper();
         
         if (this.viewState === undefined) {
@@ -292,7 +292,7 @@ export class Shape {
             camera: modelCtx.viewerInput.camera,
         });
 
-        this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, boneMatrices);
+        this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {

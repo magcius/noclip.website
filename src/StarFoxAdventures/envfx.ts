@@ -4,7 +4,7 @@ import { Color, colorNewFromRGBA, colorToCSS, colorCopy, colorNewCopy } from '..
 import { nArray } from '../util';
 
 import { SFATexture } from './textures';
-import { dataSubarray } from './util';
+import { dataSubarray, readUint16 } from './util';
 import { ObjectInstance } from './objects';
 import { World } from './world';
 
@@ -85,10 +85,10 @@ export class EnvfxManager {
 
             const texIds: number[] = [];
             for (let i = 0; i < 4; i++) {
-                texIds.push(data.getUint16(0x2e + i * 2));
+                texIds.push(readUint16(data, 0x2e, i));
             }
             for (let i = 0; i < 4; i++) {
-                texIds.push(data.getUint16(0x3e + i * 2));
+                texIds.push(readUint16(data, 0x3e, i));
             }
 
             this.atmosphere.textures = [];

@@ -12,7 +12,7 @@ import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags, ANCIENT_MAP_SHADER_FIELDS } from './materials';
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './materials';
-import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, mat4PostTranslate } from './util';
+import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, readUint32, readUint16 } from './util';
 import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
@@ -592,7 +592,7 @@ export class Model {
         // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
-            const texIdFromFile = blockDv.getUint32(texOffset + i * 4);
+            const texIdFromFile = readUint32(blockDv, texOffset, i);
             texIds.push(texIdFromFile);
         }
         // console.log(`texids: ${texIds}`);
@@ -710,12 +710,9 @@ export class Model {
                 const dlOffsetsOffs = blockDv.getUint32(fields.dlOffsets);
                 const dlSizesOffs = blockDv.getUint32(fields.dlSizes);
 
-                const dlOffset = blockDv.getUint32(dlOffsetsOffs + i * 4);
-                const dlSize = blockDv.getUint16(dlSizesOffs + i * 2);
-                // console.log(`DL ${i}: offset 0x${dlOffset.toString(16)}, size 0x${dlSize.toString(16)}`);
                 dlInfos.push({
-                    offset: dlOffset,
-                    size: dlSize,
+                    offset: readUint32(blockDv, dlOffsetsOffs, i),
+                    size: readUint16(blockDv, dlSizesOffs, i),
                     specialBitAddress: -1,
                 });
             }
@@ -1032,7 +1029,7 @@ export class ModelInstance implements BlockRenderer {
     public skeletonInst?: SkeletonInstance;
 
     public matrixPalette: mat4[] = [];
-    private matrixPaletteDirty: boolean = true;
+    private skinningDirty: boolean = true;
     private amap: DataView;
 
     constructor(public model: Model) {
@@ -1045,7 +1042,7 @@ export class ModelInstance implements BlockRenderer {
             this.matrixPalette = [mat4.create()];
         }
 
-        this.matrixPaletteDirty = true;
+        this.skinningDirty = true;
 
         this.modelShapes = model.createInstanceShapes();
     }
@@ -1074,7 +1071,7 @@ export class ModelInstance implements BlockRenderer {
             this.skeletonInst!.setPoseMatrix(i, scratchMtx0);
         }
 
-        this.matrixPaletteDirty = true;
+        this.skinningDirty = true;
     }
     
     public setJointPose(jointNum: number, mtx: mat4) {
@@ -1083,61 +1080,56 @@ export class ModelInstance implements BlockRenderer {
         }
 
         this.skeletonInst!.setPoseMatrix(jointNum, mtx);
-        this.matrixPaletteDirty = true;
+        this.skinningDirty = true;
     }
     
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number) {
-        this.updateMatrixPalette();
+        this.updateSkinning();
         this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, drawStep);
     }
     
     public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateMatrixPalette();
+        this.updateSkinning();
         this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
     }
     
     public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateMatrixPalette();
+        this.updateSkinning();
         this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
     }
     
-    private updateMatrixPalette() {
-        if (!this.matrixPaletteDirty) {
+    private updateSkinning() {
+        if (!this.skinningDirty) {
             return;
         }
 
-        // Compute joint bones
-        // console.log(`computing ${this.joints.length} rigid joint bones`);
+        // Compute matrices for rigid joints (no blending)
         for (let i = 0; i < this.model.joints.length; i++) {
             const joint = this.model.joints[i];
 
-            // For rigid bones, vertices are stored in joint-local space as an optimization.
-
-            const boneMtx = this.matrixPalette[joint.boneNum];
-            mat4.copy(boneMtx, this.skeletonInst!.getJointMatrix(joint.boneNum));
+            // For vertices with only one joint-influence, positions are stored in joint-local space
+            // as an optimization.
+            mat4.copy(this.matrixPalette[joint.boneNum], this.skeletonInst!.getJointMatrix(joint.boneNum));
 
             // FIXME: Check beta models
         }
 
-        // Compute coarse blended bones
-        // console.log(`computing ${this.weights.length} blended bones`);
+        // Compute matrices for coarse blending
         for (let i = 0; i < this.model.coarseBlends.length; i++) {
             const blend = this.model.coarseBlends[i];
 
-            // For blended bones, vertices are stored in model space.
-
+            // For vertices with more than one joint-influence, positions are stored in model space.
+            // Therefore, inverse bind translations must be applied.
             mat4.translate(scratchMtx0, this.matrixPalette[blend.joint0], this.model.invBindTranslations[blend.joint0]);
             mat4.multiplyScalar(scratchMtx0, scratchMtx0, blend.influence0);
             mat4.translate(scratchMtx1, this.matrixPalette[blend.joint1], this.model.invBindTranslations[blend.joint1]);
             mat4.multiplyScalar(scratchMtx1, scratchMtx1, blend.influence1);
-
-            const boneMtx = this.matrixPalette[this.model.joints.length + i];
-            mat4.add(boneMtx, scratchMtx0, scratchMtx1);
+            mat4.add(this.matrixPalette[this.model.joints.length + i], scratchMtx0, scratchMtx1);
         }
 
         this.performFineSkinning();
 
-        this.matrixPaletteDirty = false;
+        this.skinningDirty = false;
     }
 
     private performFineSkinning() {
@@ -1231,7 +1223,8 @@ class ModelsFile {
             return false;
         }
 
-        return this.tab.getUint32(num * 4) !== 0;
+
+        return readUint32(this.tab, 0, num) !== 0;
     }
 
     public getNumModels(): number {
@@ -1242,7 +1235,7 @@ class ModelsFile {
         if (this.models[num] === undefined) {
             console.log(`Loading model #${num} ...`);
     
-            const modelTabValue = this.tab.getUint32(num * 4);
+            const modelTabValue = readUint32(this.tab, 0, num);
             if (modelTabValue === 0) {
                 throw Error(`Model #${num} not found`);
             }
