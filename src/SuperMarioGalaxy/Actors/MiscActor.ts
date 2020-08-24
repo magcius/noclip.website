@@ -9342,7 +9342,8 @@ function isNearAngleVec3(a: ReadonlyVec3, b: ReadonlyVec3, cutoff: number): bool
     if (isNearZeroVec3(a, 0.001) || isNearZeroVec3(b, 0.001))
         return false;
 
-    return vec3.dot(a, b) >= cutoff;
+    const magA = vec3.length(a), magB = vec3.length(b);
+    return (vec3.dot(a, b) / (magA * magB)) >= cutoff;
 }
 
 function isFaceToTargetHorizontalDegree(actor: LiveActor, target: ReadonlyVec3, direction: ReadonlyVec3, degrees: number): boolean {
@@ -9458,6 +9459,8 @@ export class Kuribo extends LiveActor<KuriboNrv> {
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        const l_id = infoIter.getValueNumber('l_id');
 
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Kuribo');
