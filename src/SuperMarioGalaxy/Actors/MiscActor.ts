@@ -9459,8 +9459,6 @@ export class Kuribo extends LiveActor<KuriboNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
-        const l_id = infoIter.getValueNumber('l_id');
-
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Kuribo');
         connectToSceneEnemy(sceneObjHolder, this);
@@ -9493,9 +9491,6 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         } else {
             this.makeActorAppeared(sceneObjHolder);
         }
-
-        if (l_id !== 211)
-            this.makeActorDead(sceneObjHolder);
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
