@@ -5,7 +5,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, scaleMatrix, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped } from '../ActorUtil';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos } from '../ActorUtil';
 import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall } from '../Collision';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
@@ -21,6 +21,7 @@ import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } f
 import { initMultiFur } from '../Fur';
 import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength } from '../Shadow';
 import { initLightCtrl } from '../LightData';
+import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -1043,9 +1044,12 @@ class Rock extends LiveActor<RockNrv> {
 
             // isInClippingRange
             showModel(this);
+            // drawWorldSpaceVector(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.translation, scratchVec3a, 100.0);
+
             if (isMoving) {
-                // TODO(jstpierre): turnVecToVecCos
-                // vec3.copy(this.front, scratchVec3a);
+                // TODO(jstpierre): This exposes some precision issues with our Binder.
+                // turnVecToVecCos(this.front, this.front, scratchVec3a, 0.999, this.gravityVector, 0.02);
+
                 vec3.lerp(this.front, this.front, scratchVec3a, 0.02);
                 vec3.normalize(this.front, this.front);
             }
@@ -1177,7 +1181,7 @@ class Rock extends LiveActor<RockNrv> {
 
     private calcBaseMtx(dst: mat4): void {
         vec3.negate(scratchVec3a, this.gravityVector);
-        if (isSameDirection(scratchVec3a, this.front, 0.01))
+        if (isSameDirection(scratchVec3a, this.front, 0.001))
             makeMtxFrontNoSupportPos(dst, scratchVec3a, this.translation);
         else
             makeMtxUpFrontPos(dst, scratchVec3a, this.front, this.translation);

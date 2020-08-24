@@ -953,12 +953,12 @@ export function quatGetAxisZ(dst: vec3, q: ReadonlyQuat): void {
     dst[2] = (1.0 - 2.0 * x * x) - 2.0 * y * y;
 }
 
-export function isSameDirection(v0: ReadonlyVec3, v1: ReadonlyVec3, ep: number): boolean {
-    if (Math.abs(v0[1] * v1[2] - v0[2] * v1[1]) > ep)
+export function isSameDirection(a: ReadonlyVec3, b: ReadonlyVec3, ep: number): boolean {
+    if (Math.abs(a[1] * b[2] - a[2] * b[1]) > ep)
         return false;
-    if (Math.abs(v0[2] * v1[0] - v0[0] * v1[2]) > ep)
+    if (Math.abs(a[2] * b[0] - a[0] * b[2]) > ep)
         return false;
-    if (Math.abs(v0[0] * v1[1] - v0[1] * v1[0]) > ep)
+    if (Math.abs(a[0] * b[1] - a[1] * b[0]) > ep)
         return false;
     return true;
 }
@@ -1363,4 +1363,30 @@ export function getEaseOutValue(v0: number, v1: number, v2: number, v3: number):
 export function getEaseInOutValue(v0: number, v1: number, v2: number, v3: number): number {
     const t = Math.cos((v0 / v3) * Math.PI);
     return lerp(v1, v2, 0.5 * (1 - t));
+}
+
+export function turnVecToVecCos(dst: vec3, src: ReadonlyVec3, target: ReadonlyVec3, speed: number, up: ReadonlyVec3, upAmount: number): boolean {
+    if (isNearZeroVec3(src, 0.001) || isNearZeroVec3(target, 0.001))
+        return false;
+
+    const dot = vec3.dot(src, target);
+    if (dot <= speed) {
+        vecKillElement(scratchVec3a, target, src);
+        if (!isNearZeroVec3(scratchVec3a, 0.001)) {
+            vec3.normalize(scratchVec3a, scratchVec3a);
+            vec3.scale(dst, src, dot);
+            vec3.scaleAndAdd(dst, dst, scratchVec3a, Math.sqrt(1.0 - speed ** 2.0));
+            vec3.normalize(dst, dst);
+            return false;
+        } else {
+            vec3.cross(scratchVec3a, src, up);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+            vec3.scaleAndAdd(dst, src, scratchVec3a, upAmount);
+            vec3.normalize(dst, dst);
+            return false;
+        }
+    } else {
+        vec3.normalize(dst, target);
+        return true;
+    }
 }
