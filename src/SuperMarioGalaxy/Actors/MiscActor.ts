@@ -8862,7 +8862,10 @@ function attenuateVelocity(actor: LiveActor, drag: number): void {
 }
 
 function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    const collisionDirector = sceneObjHolder.collisionDirector!;
+    const collisionDirector = sceneObjHolder.collisionDirector;
+    if (collisionDirector === null)
+        return;
+
     vec3.scaleAndAdd(scratchVec3a, actor.translation, actor.gravityVector, -150.0);
     vec3.scaleAndAdd(scratchVec3b, actor.translation, actor.gravityVector, 1000.0);
 
