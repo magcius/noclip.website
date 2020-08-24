@@ -174,7 +174,7 @@ export class ModelManager {
         }
     }
 
-    public calcAnim(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAnim(): void {
         if (this.xanimePlayer !== null)
             this.xanimePlayer.calcAnm();
 
@@ -638,6 +638,9 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visibleAlive || !this.visibleScenario)
+            return;
+
         if (!this.calcAnimFlag)
             return;
 
@@ -645,7 +648,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (this.modelManager !== null) {
             vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
             this.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
-            this.modelManager.calcAnim(viewerInput);
+            this.modelManager.calcAnim();
         }
 
         if (this.collisionParts !== null)
