@@ -814,7 +814,7 @@ class TextureListHolder {
     public addTextures(textures: Viewer.Texture[]): void {
         let changed = false;
         for (let i = 0; i < textures.length; i++) {
-            if (!this.viewerTextures.includes(textures[i])) {
+            if (this.viewerTextures.find((texture) => textures[i].name === texture.name) === undefined) {
                 spliceBisectRight(this.viewerTextures, textures[i], (a, b) => a.name.localeCompare(b.name));
                 changed = true;
             }
