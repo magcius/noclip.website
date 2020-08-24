@@ -44,7 +44,7 @@ export class HitSensor {
 
     public validate(): void {
         if (!this.sensorValidByHost) {
-            if (this.sensorValidByHost)
+            if (this.sensorValidBySystem)
                 this.group.push(this);
             this.sensorValidByHost = true;
         }
