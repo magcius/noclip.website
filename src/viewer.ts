@@ -284,7 +284,7 @@ export class Viewer {
 
         camera.newFrame();
         const aspect = this.canvas.width / this.canvas.height;
-        camera.fovY = this.fovY;
+        camera.fovY = 2 * Math.atan(Math.tan(this.fovY / 2) / (Math.min(aspect, 16 / 9) / (16 / 9)));
         camera.aspect = aspect;
         camera.setClipPlanes(5);
 
