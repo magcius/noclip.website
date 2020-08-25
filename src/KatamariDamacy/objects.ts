@@ -4,7 +4,7 @@ import { Green, Magenta, Red } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, Vec3Zero, Vec3UnitZ } from "../MathHelpers";
+import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, Vec3Zero, Vec3UnitZ, Vec3NegZ, Vec3UnitX, Vec3NegX } from "../MathHelpers";
 import { assert, hexzero, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel, SkinningMatrix } from "./bin";
@@ -38,6 +38,7 @@ type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => v
 interface MotionState {
     parameters: MotionParameters;
     useAltMotion: boolean;
+    cancelled: boolean;
     pos: vec3;
     target: vec3;
     velocity: vec3; // not actually in the game
@@ -61,6 +62,7 @@ interface MotionState {
     axis: vec3;
 
     timer: number;
+    extraTimer: number;
     state: number;
 
     supporter?: ObjectRenderer;
@@ -214,6 +216,7 @@ export class ObjectRenderer {
         this.motionState = {
             parameters: motion,
             useAltMotion: false,
+            cancelled: false,
             speed,
             size,
             pathIndex: -1,
@@ -237,6 +240,7 @@ export class ObjectRenderer {
             axis: vec3.create(),
 
             timer: -1,
+            extraTimer: -1,
             state: -1,
             g: 0,
             radius: 0,
@@ -247,12 +251,16 @@ export class ObjectRenderer {
         if (this.motionState.parameters.motionID === MotionID.Hop)
             motion_MiscHop_Init(this, this.motionState, allObjects);
         const action = this.motionState.parameters.motionActionID;
-        if (action === MotionActionID.WaitForPlayer || action === MotionActionID.ZoneHop)
-            setZone(this, this.motionState, zones);
+        if (action === MotionActionID.WaitForPlayer || action === MotionActionID.ZoneHop || action === MotionActionID.RandomWalk || action === MotionActionID.SporadicWalk || action === MotionActionID.Clouds)
+            this.motionState.zone = getZone(this, this.motionState, zones);
+        if (motion.motionID === 0x25)
+            this.setAnimation(AnimationType.MOVING);
     }
 
     private runMotion(deltaTimeInFrames: number, viewerInput: ViewerRenderInput, zones: CollisionList[], levelCollision: CollisionList[][]): boolean {
         const motionState = this.motionState!;
+        if (motionState.cancelled)
+            return true;
         const motionID = (motionState.useAltMotion && motionState.parameters.altMotionActionID !== 0) ? motionState.parameters.altMotionActionID : motionState.parameters.motionActionID;
         return runMotionFunc(this, motionState, motionID, deltaTimeInFrames, viewerInput, zones, levelCollision);
     }
@@ -588,29 +596,29 @@ function landOnObject(object: ObjectRenderer, newPos: vec3, target: ObjectRender
     return false;
 }
 
-function motion_alignToGround(object: ObjectRenderer, motion: MotionState, collision: CollisionList[]): void {
+function motion_alignmentTransform(dst: mat4, normal: vec3): void {
+    vec3.cross(landingScratch, normal, Vec3NegY);
+    const angle = -Math.acos(clamp(-normal[1], -1, 1));
+    mat4.identity(dst); // if the axis is zero, fromRotation doesn't do anything
+    mat4.fromRotation(dst, angle, landingScratch);
+}
+
+function motion_alignToGround(object: ObjectRenderer, motion: MotionState, collision: CollisionList[]): boolean {
     vec3.copy(landingScratch, motion.pos);
     landingScratch[1] += object.bbox.maxCornerRadius();
     if (findGround(collision, scratchTri, motion.pos, landingScratch)) {
-        vec3.copy(motion.pos, scratchTri.contactOffset);
         // seems like this shouldn't have the absolute value, but it probably never matters
-        vec3.scaleAndAdd(motion.pos, motion.pos, scratchTri.normal, Math.abs(object.partBBox.maxY));
-        if (motion.adjustPitch) {
-            vec3.cross(landingScratch, scratchTri.normal, Vec3NegY);
-            vec3.normalize(landingScratch, landingScratch);
-            const angle = Math.acos(vec3.dot(landingScratch, Vec3NegY));
-            mat4.fromRotation(object.baseMatrix, angle, landingScratch);
-        }
+        vec3.scaleAndAdd(motion.pos, scratchTri.contactOffset, scratchTri.normal, Math.abs(object.partBBox.maxY));
+        motion_alignmentTransform(object.baseMatrix, scratchTri.normal);
     }
+    return false;
 }
 
-function setZone(object: ObjectRenderer, motion: MotionState, zones: CollisionList[]): void {
+function getZone(object: ObjectRenderer, motion: MotionState, zones: CollisionList[], depth = 2): number {
     vec3.copy(landingScratch, motion.pos);
-    landingScratch[1] += 2 * object.bbox.maxCornerRadius();
+    landingScratch[1] += depth * object.bbox.maxCornerRadius();
     findGround(zones, scratchTri, motion.pos, landingScratch);
-    motion.zone = scratchTri.zone;
-    if (motion.parameters.motionID === 0x25)
-        object.setAnimation(AnimationType.MOVING);
+    return scratchTri.zone;
 }
 
 const enum Axis { X, Y, Z }
@@ -1155,6 +1163,10 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionAction
         motion_FlyInCircles_Update(object, deltaTimeInFrames, motion, viewerInput, levelCollision[0]);
     } else if (motionActionID === MotionActionID.ZoneHop) {
         motion_ZoneHop_update(object, deltaTimeInFrames, motion, zones, levelCollision[0]);
+    } else if (motionActionID === MotionActionID.RandomWalk || motionActionID === MotionActionID.SporadicWalk) {
+        motion_RandomWalk_update(object, deltaTimeInFrames, motion, zones);
+    } else if (motionActionID === MotionActionID.Clouds) {
+        motion_Cloud_update(object, deltaTimeInFrames, motion, zones);
     } else {
         return false;
     }
@@ -1216,13 +1228,14 @@ function pathSimpleAdjustBasePitch(dst: mat4, motion: MotionState, deltaTimeInFr
     }
 }
 
-function motionAngleStep(dst: vec3, motion: MotionState, deltaTimeInFrames: number): number {
+function motionAngleStep(dst: vec3, motion: MotionState, deltaTimeInFrames: number): boolean {
     dst[1] += motion.eulerStep[1] * deltaTimeInFrames;
     if (Math.sign(motion.eulerStep[1]) !== Math.sign(angleDist(dst[1], motion.eulerTarget[1]))) {
         dst[1] = motion.eulerTarget[1];
         motion.eulerStep[1] = 0;
+        return true;
     }
-    return dst[1];
+    return false;
 }
 
 function motionPathAdvancePoint(motion: MotionState, bbox: AABB): void {
@@ -1550,8 +1563,7 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
             motion.eulerStep[1] = angleDist(object.euler[1], motion.eulerTarget[1]) / 6;
         }
     } else if (motion.state === FlyInCirclesState.TURNING) {
-        motionAngleStep(object.euler, motion, deltaTimeInFrames);
-        if (motion.eulerStep[1] === 0) {
+        if (motionAngleStep(object.euler, motion, deltaTimeInFrames)) {
             // combining two states into one
             if (object.altObject) {
                 // in game, a bunch of the object struct gets overwritten, including its ID, model part data, and update functions
@@ -1631,6 +1643,8 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
     }
 }
 
+const turnAngles = [45, -45, 90, -90, 135, -135, 180];
+
 const enum ZoneHopState {
     Hop,
     Wait,
@@ -1639,14 +1653,19 @@ const enum ZoneHopState {
 }
 
 const hopEndScratch = vec3.create();
-function hopEndZone(motion: MotionState, zones: CollisionList[]): number {
-    const hopTime = 2 * hopSpeeds[sizeGrouping[motion.size]] / motion.g;
-    vec3.scaleAndAdd(hopScratch, motion.pos, motion.velocity, hopTime);
+function zoneAfterStep(motion: MotionState, zones: CollisionList[], time: number, depth: number): number {
+    vec3.scaleAndAdd(hopScratch, motion.pos, motion.velocity, time);
     vec3.copy(hopEndScratch, hopScratch);
-    hopScratch[1] -= 100;
-    hopEndScratch[1] += 100;
+    hopScratch[1] -= depth;
+    hopEndScratch[1] += depth;
     findGround(zones, scratchTri, hopScratch, hopEndScratch);
     return scratchTri.zone;
+}
+
+
+function hopEndZone(motion: MotionState, zones: CollisionList[]): number {
+    const hopTime = 2 * hopSpeeds[sizeGrouping[motion.size]] / motion.g;
+    return zoneAfterStep(motion, zones, hopTime, 100);
 }
 
 function motion_landedOnGround(object: ObjectRenderer, motion: MotionState, collision: CollisionList[]): boolean {
@@ -1670,7 +1689,7 @@ function motion_ZoneHop_update(object: ObjectRenderer, deltaTimeInFrames: number
         vec3.scale(motion.velocity, Vec3UnitZ, motion.speed);
         motion.g = 0.95;
         if (motion.zone < 0 || hopEndZone(motion, zones) !== motion.zone) {
-            motion.parameters.motionActionID = -1;
+            motion.cancelled = true;
             return;
         }
         motion.velocity[1] = -hopSpeeds[sizeGrouping[motion.size]];
@@ -1708,15 +1727,12 @@ function motion_ZoneHop_update(object: ObjectRenderer, deltaTimeInFrames: number
                 motion.state = ZoneHopState.ChooseDirection;
         }
     } else if (motion.state === ZoneHopState.ChooseDirection) {
-        let angle = 0;
         vec3.copy(turnScratch, motion.velocity);
+        let angle = 0;
         // try angles at 45 degree increments, alternating clockwise and counterclockwise, 
         // until we find a direction we can hop in
-        for (let i = 0; i < 7; i++) {
-            if (i % 2 === 0)
-                angle = -angle + MathConstants.TAU / 8;
-            else
-                angle = -angle;
+        for (let i = 0; i < turnAngles.length; i++) {
+            angle = turnAngles[i] * MathConstants.DEG_TO_RAD;
             vec3.rotateY(motion.velocity, turnScratch, Vec3Zero, angle);
             if (hopEndZone(motion, zones) === motion.zone)
                 break;
@@ -1725,10 +1741,194 @@ function motion_ZoneHop_update(object: ObjectRenderer, deltaTimeInFrames: number
         motion.eulerTarget[1] = (object.euler[1] + angle) % MathConstants.TAU;
         motion.state = ZoneHopState.Turn;
     } else if (motion.state === ZoneHopState.Turn) {
-        motionAngleStep(object.euler, motion, deltaTimeInFrames);
-        if (motion.eulerStep[1] === 0) {
+        if (motionAngleStep(object.euler, motion, deltaTimeInFrames)) {
             motion.velocity[1] = -hopSpeeds[sizeGrouping[motion.size]];
             motion.state = ZoneHopState.Hop;
         }
+    }
+}
+
+const alignScratch = mat4.create();
+function motion_forwardStep_alignToGround(object: ObjectRenderer, motion: MotionState, collision: CollisionList[], newVel: vec3): boolean {
+    vec3.copy(landingScratch, motion.pos);
+    landingScratch[1] += 7 * object.bbox.maxCornerRadius();
+    if (findGround(collision, scratchTri, motion.pos, landingScratch)) {
+        motion.pos[1] = scratchTri.contactOffset[1] + Math.abs(object.partBBox.maxY) * scratchTri.normal[1];
+        motion_alignmentTransform(alignScratch, scratchTri.normal);
+        transformVec3Mat4w0(newVel, alignScratch, motion.velocity);
+        if (motion.adjustPitch)
+            mat4.copy(object.baseMatrix, alignScratch);
+        return true;
+    }
+    vec3.copy(newVel, motion.velocity);
+    return false;
+}
+
+const forwardScratch = vec3.create();
+// attempt to move with currect velocity along ground, returning whether the zone boundary was crossed
+function motion_attemptForwardStep(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState, collision: CollisionList[], ignoreYaw: boolean): boolean {
+    motion_forwardStep_alignToGround(object, motion, collision, forwardScratch);
+    vec3.copy(object.prevPosition, motion.pos);
+    vec3.scaleAndAdd(motion.pos, motion.pos, forwardScratch, deltaTimeInFrames);
+    const currZone = getZone(object, motion, collision, 5);
+    let validPosition = false;
+    if (currZone === motion.zone)
+        validPosition = true
+    else if (currZone < 0) {
+        // we passed through the ground, so try to find the intersection point
+        vec3.sub(forwardScratch, motion.pos, object.prevPosition);
+        normToLength(forwardScratch, object.partBBox.maxZ);
+        vec3.add(forwardScratch, forwardScratch, motion.pos);
+        forwardScratch[1] += object.partBBox.maxY;
+        validPosition = findGround(collision, scratchTri, object.prevPosition, forwardScratch);
+    }
+
+    if (validPosition)
+        vec3.scaleAndAdd(motion.pos, scratchTri.contactOffset, Vec3NegY, object.partBBox.maxY);
+    else {
+        vec3.copy(motion.pos, object.prevPosition);
+        return true;
+    }
+
+    if (!ignoreYaw)
+        object.euler[1] = MathConstants.TAU / 2 + Math.atan2(forwardScratch[0], forwardScratch[2]);
+    return false;
+}
+
+const enum RandomWalkState {
+    Walk,
+    Pause,
+    ChooseDirection,
+    Turn,
+}
+
+function motion_RandomWalk_update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState, zones: CollisionList[]): void {
+    if (motion.state === -1) {
+        mat4.identity(object.baseMatrix);
+        if (motion.zone < 0) {
+            motion.cancelled = true;
+            return;
+        }
+        // the game sets the direction based on where the object's current transform sends "forward" (0,0,-1)
+        // but the transform is still zero, leading to a dot product of 0 with forward, ultimately interpreted as negative x
+        vec3.scale(motion.velocity, Vec3NegX, motion.speed);
+        if (motion.parameters.motionActionID === MotionActionID.SporadicWalk) {
+            motion.extraTimer = 30;
+        }
+        motion.timer = 120 + 570 * Math.random();
+        motion.state = RandomWalkState.Walk;
+    }
+    if (motion.state === RandomWalkState.Walk) {
+        object.setAnimation(AnimationType.MOVING);
+        // turn occasionally
+        if (motion.timer > 0) {
+            motion.timer -= deltaTimeInFrames;
+            if (motion.timer < 0) {
+                vec3.copy(motion.axis, motion.velocity);
+                motion.angle = 0;
+                const sign = Math.random() > .5 ? 1 : -1;
+                motion.angleStep = sign / 20;
+                motion.angleTarget = sign * MathConstants.TAU / 4;
+            }
+        } else {
+            motion.angle += motion.angleStep * deltaTimeInFrames;
+            if ((motion.angleTarget - motion.angle) * motion.angleStep <= 0) {
+                motion.timer = 90 + 600 * Math.random();
+                motion.angleStep = 0;
+                motion.angle = motion.angleTarget;
+            }
+            vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, motion.angle);
+        }
+
+        if (motion_attemptForwardStep(object, deltaTimeInFrames, motion, zones, false))
+            motion.state = RandomWalkState.ChooseDirection;
+        else if (motion.parameters.motionActionID === MotionActionID.SporadicWalk) {
+            // check pause timer for sporadic walking
+            motion.extraTimer -= deltaTimeInFrames;
+            if (motion.extraTimer < 0) {
+                motion.state = RandomWalkState.Pause;
+                motion.extraTimer = 30 + 30 * Math.random();
+            }
+        }
+    } else if (motion.state === RandomWalkState.Pause) {
+        object.setAnimation(AnimationType.IDLE);
+        motion.extraTimer -= deltaTimeInFrames;
+        if (motion.extraTimer < 0) {
+            motion.state = RandomWalkState.Walk;
+            motion.extraTimer = 120 + 60 * Math.random();
+        }
+    } else if (motion.state === RandomWalkState.ChooseDirection) {
+        vec3.copy(motion.axis, motion.velocity);
+        let angle = 0;
+        for (let i = 0; i < turnAngles.length; i++) {
+            angle = turnAngles[i] * MathConstants.DEG_TO_RAD;
+            vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, angle);
+            if (zoneAfterStep(motion, zones, 5, object.bbox.maxCornerRadius()) === motion.zone)
+                break;
+        }
+        motion.angle = 0;
+        motion.angleStep = angle / 12;
+        motion.angleTarget = angle;
+        motion.state = RandomWalkState.Turn;
+    } else if (motion.state === RandomWalkState.Turn) {
+        // this turning doesn't affect the random turning timer or state, but does share the target and progress variables
+        // so if we were in the middle of a random turn, it will immediately end and reset the timer when we resume motion
+        motion.angle += motion.angleStep * deltaTimeInFrames;
+        if ((motion.angleTarget - motion.angle) * motion.angleStep <= 0) {
+            motion.angleStep = 0;
+            motion.angle = motion.angleTarget;
+            motion.state = RandomWalkState.Walk;
+        }
+        vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, motion.angle);
+        object.euler[1] = MathConstants.TAU / 2 + Math.atan2(motion.velocity[0], motion.velocity[2]);
+    }
+}
+
+
+function motion_Cloud_update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState, zones: CollisionList[]): void {
+    if (motion.state === -1) {
+        mat4.identity(object.baseMatrix);
+        if (motion.zone < 0) {
+            motion.cancelled = true;
+            return;
+        }
+        vec3.scale(motion.velocity, Vec3NegX, motion.speed);
+        motion.timer = 90 + 600 * Math.random();
+        motion.state = RandomWalkState.Walk;
+    }
+    if (motion.state === RandomWalkState.Walk) {
+        object.setAnimation(AnimationType.MOVING);
+        // turn occasionally
+        if (motion.timer > 0) {
+            motion.timer -= deltaTimeInFrames;
+            if (motion.timer < 0) {
+                vec3.copy(motion.axis, motion.velocity);
+                motion.angle = 0;
+                const sign = Math.random() > .5 ? 1 : -1;
+                motion.angleStep = sign / 20;
+                motion.angleTarget = sign * MathConstants.TAU / 4;
+            }
+        } else {
+            motion.angle += motion.angleStep * deltaTimeInFrames;
+            if ((motion.angleTarget - motion.angle) * motion.angleStep <= 0) {
+                motion.timer = 90 + 600 * Math.random();
+                motion.angleStep = 0;
+                motion.angle = motion.angleTarget;
+            }
+            vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, motion.angle);
+        }
+
+        if (motion_attemptForwardStep(object, deltaTimeInFrames, motion, zones, true))
+            motion.state = RandomWalkState.ChooseDirection;
+    } else if (motion.state === RandomWalkState.ChooseDirection) {
+        vec3.copy(motion.axis, motion.velocity);
+        let angle = 0;
+        for (let i = 0; i < turnAngles.length; i++) {
+            angle = turnAngles[i] * MathConstants.DEG_TO_RAD;
+            vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, angle);
+            if (zoneAfterStep(motion, zones, 5, object.bbox.maxCornerRadius()) === motion.zone)
+                break;
+        }
+        motion.state = RandomWalkState.Walk;
     }
 }
