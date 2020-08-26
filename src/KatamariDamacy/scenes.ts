@@ -20,6 +20,7 @@ import * as BIN from "./bin";
 import { GallerySceneRenderer } from './Gallery';
 import { ObjectRenderer } from './objects';
 import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './render';
+import { parseAnimationList, ObjectAnimationList } from './animation';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -343,6 +344,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         cache.fetchFileData(`${pathBase}/objectBlock.bin`);
         cache.fetchFileData(`${pathBase}/collectionBlock.bin`);
         cache.fetchFileData(`${pathBase}/parentBlock.bin`);
+        cache.fetchFileData(`${pathBase}/animationBlock.bin`);
 
         await cache.waitForLoad();
 
@@ -357,8 +359,12 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         for (let i = 0; i < levelParams.missionSetupFiles.length; i++)
             buffers.push(cache.getFileData(getMissionSetupFilePath(levelParams.missionSetupFiles[i])));
 
+        const objectData = cache.getFileData(`${pathBase}/objectBlock.bin`);
+        const collectionData = cache.getFileData(`${pathBase}/collectionBlock.bin`);
+        const transformData = cache.getFileData(`${pathBase}/transformBlock.bin`);
+
         const randomGroups = BIN.initRandomGroups(this.index, cache.getFileData(`${pathBase}/randomBlock.bin?cache_bust=1`));
-        const missionSetupBin = BIN.parseMissionSetupBIN(buffers, levelParams.startArea, randomGroups, cache.getFileData(`${pathBase}/transformBlock.bin`));
+        const missionSetupBin = BIN.parseMissionSetupBIN(buffers, objectData, collectionData, levelParams.startArea, randomGroups, transformData, this.index);
 
         const renderer = new KatamariDamacyRenderer(device, levelParams, missionSetupBin);
         renderer.sceneMoveSpeedMult *= this.cameraSpeedMult;
@@ -372,9 +378,8 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
 
         const motionData = cache.getFileData(`${pathBase}/movementBlock.bin`);
         const pathData = cache.getFileData(`${pathBase}/pathBlock.bin`);
-        const objectData = cache.getFileData(`${pathBase}/objectBlock.bin`);
-        const collectionData = cache.getFileData(`${pathBase}/collectionBlock.bin`);
         const parentData = cache.getFileData(`${pathBase}/parentBlock.bin`);
+        const animationData = cache.getFileData(`${pathBase}/animationBlock.bin`);
 
         const gsMemoryMap = gsMemoryMapNew();
 
@@ -451,7 +456,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         // init motion
         const motionCache = new Map<number, BIN.MotionParameters | null>();
         renderer.motionCache = motionCache;
-        const objectCache = new Map<number, BIN.ObjectDefinition | null>();
+        const animationCache = new Map<number, ObjectAnimationList>();
         for (let i = 0; i < renderer.objectRenderers.length; i++) {
             const object = renderer.objectRenderers[i];
             const objectSpawn = object.objectSpawn;
@@ -462,10 +467,14 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                 motion = motionCache.get(objectSpawn.moveType)!;
             }
 
-            if (!objectCache.has(objectSpawn.objectId))
-                objectCache.set(objectSpawn.objectId, BIN.parseObjectDefinition(objectData, collectionData, objectSpawn.objectId));
-            const objectDef = objectCache.get(objectSpawn.objectId)!;
+            const objectDef = missionSetupBin.objectDefs[objectSpawn.modelIndex];
             object.initMotion(objectDef, motion, missionSetupBin.zones, renderer.areaCollision[0], renderer.objectRenderers);
+
+            if (objectDef.animated) {
+                if (!animationCache.has(objectSpawn.objectId))
+                    animationCache.set(objectSpawn.objectId, parseAnimationList(animationData, objectSpawn.objectId));
+                object.initAnimation(assertExists(animationCache.get(objectSpawn.objectId)));
+            }
 
             const altID = object.altModelID();
             if (altID >= 0) {
@@ -473,9 +482,15 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     const altSpawn = missionSetupBin.objectSpawns[area].find((spawn) => spawn.objectId === altID);
                     if (altSpawn) {
                         const binModelSectorData = objectDatas[altSpawn.modelIndex];
+                        const altDef = missionSetupBin.objectDefs[altSpawn.modelIndex];
                         const objectModel = missionSetupBin.objectModels[altSpawn.modelIndex];
 
                         const altRenderer = new ObjectRenderer(device, gfxCache, objectModel, binModelSectorData, objectSpawn);
+                        if (altDef.animated) {
+                            if (!animationCache.has(altID))
+                                animationCache.set(altID, parseAnimationList(animationData, altID));
+                            altRenderer.initAnimation(assertExists(animationCache.get(altID)));
+                        }
                         object.altObject = altRenderer;
                         break;
                     }

@@ -13,6 +13,7 @@ import { initMultiFur } from "../Fur";
 import { LightType } from "../DrawBuffer";
 import { emitEffect } from "../EffectSystem";
 import { createModelObjMapObj } from "./ModelObj";
+import { initLightCtrl } from "../LightData";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -210,7 +211,7 @@ export class NoclipLegacyActorSpawner {
         switch (name) {
             case 'HoneyQueen': {
                 const actor = await spawnGraph('HoneyQueen');
-                actor.initLightCtrl(this.sceneObjHolder);
+                initLightCtrl(this.sceneObjHolder, actor);
                 initMultiFur(this.sceneObjHolder, actor, LightType.None);
             } break;
 
@@ -228,9 +229,7 @@ export class NoclipLegacyActorSpawner {
                 return;
 
             case 'StarPieceFollowGroup':
-            case 'StarPieceGroup':
             case 'StarPieceSpot':
-            case 'StarPieceFlow':
             case 'WingBlockStarPiece':
             case 'YellowChipGroup':
             case 'CoinAppearSpot':

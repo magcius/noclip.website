@@ -534,7 +534,7 @@ export function isNearZero(v: number, min: number): boolean {
     return v > -min && v < min;
 }
 
-export function isNearZeroVec3(v: vec3, min: number): boolean {
+export function isNearZeroVec3(v: ReadonlyVec3, min: number): boolean {
     return (
         v[0] > -min && v[0] < min &&
         v[1] > -min && v[1] < min &&

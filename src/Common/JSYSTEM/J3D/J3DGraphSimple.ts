@@ -59,7 +59,7 @@ class JointMatrixCalcANK1 {
         const loadFlags = modelData.bmd.inf1.loadFlags;
         calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
 
-        vec3.set(shapeInstanceState.parentScale, transform.scaleX, transform.scaleY, transform.scaleZ);
+        vec3.copy(shapeInstanceState.parentScale, transform.scale);
     }
 }
 

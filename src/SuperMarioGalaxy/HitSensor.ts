@@ -16,6 +16,8 @@ export const enum HitSensorType {
     Player              = 0x01,
     Npc                 = 0x05,
     Unizo               = 0x24,
+    Rock                = 0x2A,
+    Wanwan              = 0x2B,
     MapObj              = 0x46,
     MapObjMoveCollision = 0x48,
     WoodBox             = 0x55,
@@ -41,10 +43,10 @@ export class HitSensor {
     }
 
     public validate(): void {
-        if (!this.sensorValidBySystem) {
-            if (this.sensorValidByHost)
+        if (!this.sensorValidByHost) {
+            if (this.sensorValidBySystem)
                 this.group.push(this);
-            this.sensorValidBySystem = true;
+            this.sensorValidByHost = true;
         }
     }
 

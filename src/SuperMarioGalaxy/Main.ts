@@ -47,7 +47,7 @@ import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
-import { ShadowControllerHolder, ShadowControllerList } from './Shadow';
+import { ShadowControllerHolder } from './Shadow';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -152,8 +152,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         for (let i = 0; i < this.spawner.zones.length; i++) {
             const zoneNode = this.spawner.zones[i];
-            if (zoneNode === undefined)
-                continue;
             zoneNode.layerMask = assertExists(scenarioData.getValueNumber(zoneNode.name));
         }
 
@@ -393,6 +391,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
 
         // executeDrawSilhouetteAndFillShadow() / executeDrawAlphaShadow()
+
+        // Resolve the alpha buffer to a texture to use for shadows.
+        device.submitPass(passRenderer);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
         this.execute(passRenderer, DrawType.AlphaShadow);
 
         // execute(0x39);
@@ -452,7 +454,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // executeDrawListXlu()
         this.drawXlu(passRenderer, 0x18);
 
-        // execute(0x26);
+        this.execute(passRenderer, DrawType.ShadowSurface);
         this.execute(passRenderer, DrawType.EffectDraw3D);
         this.execute(passRenderer, DrawType.EffectDrawForBloomEffect);
         // execute(0x2f);
@@ -655,6 +657,17 @@ function patchBMD(bmd: BMD): void {
                 shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX4567MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
         }
     }
+
+    // Patch in GXSetDstAlpha. This is normally done in the main loop, but we hack it in here...
+    // This should only be done on opaque objects.
+    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
+        const mat = bmd.mat3.materialEntries[i];
+        if (mat.translucent || mat.gxMaterial.ropInfo.blendMode !== GX.BlendMode.NONE)
+            continue;
+
+        mat.gxMaterial.ropInfo.alphaUpdate = true;
+        mat.gxMaterial.ropInfo.dstAlpha = 0.0;
+    }
 }
 
 const scratchMatrix = mat4.create();
@@ -801,7 +814,7 @@ class TextureListHolder {
     public addTextures(textures: Viewer.Texture[]): void {
         let changed = false;
         for (let i = 0; i < textures.length; i++) {
-            if (!this.viewerTextures.includes(textures[i])) {
+            if (this.viewerTextures.find((texture) => textures[i].name === texture.name) === undefined) {
                 spliceBisectRight(this.viewerTextures, textures[i], (a, b) => a.name.localeCompare(b.name));
                 changed = true;
             }

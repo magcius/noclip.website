@@ -2,25 +2,31 @@
 // Misc MapObj actors.
 
 import { mat4, vec3 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation } from '../../MathHelpers';
-import { assertExists, fallback } from '../../util';
+import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, scaleMatrix, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero } from '../../MathHelpers';
+import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB } from '../ActorUtil';
-import { tryCreateCollisionMoveLimit } from '../Collision';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos } from '../ActorUtil';
+import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall } from '../Collision';
 import { LightType } from '../DrawBuffer';
-import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT } from '../EffectSystem';
-import { HitSensor } from '../HitSensor';
-import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter } from '../JMapInfo';
-import { LiveActor, MessageType, ZoneAndLayer } from '../LiveActor';
+import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
+import { HitSensor, HitSensorType } from '../HitSensor';
+import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter, getJMapInfoArg2, getJMapInfoArg5, getJMapInfoBool, getJMapInfoArg3, getJMapInfoArg4 } from '../JMapInfo';
+import { LiveActor, MessageType, ZoneAndLayer, isDead, makeMtxTRFromActor } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { getMapPartsArgMoveConditionType, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRotator, MoveConditionType, RailGuideType } from '../MapParts';
 import { createIndirectPlanetModel, PartsModel } from './MiscActor';
 import { isConnectedWithRail } from '../RailRider';
-import { isFirstStep, isGreaterStep } from '../Spine';
-import { ModelObj, createModelObjBloomModel } from './ModelObj';
+import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep } from '../Spine';
+import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } from './ModelObj';
+import { initMultiFur } from '../Fur';
+import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength } from '../Shadow';
+import { initLightCtrl } from '../LightData';
+import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 
 // Scratchpad
-const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchMatrix = mat4.create();
 
 function setupInitInfoSimpleMapObj(initInfo: MapObjActorInitInfo): void {
     initInfo.setDefaultPos = true;
@@ -62,6 +68,7 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     public railMover: boolean = false;
     public initNerve: TNerve | null = null;
     public initHitSensor: boolean = false;
+    public initFur: boolean = false;
 
     public setupDefaultPos(): void {
         this.setDefaultPos = true;
@@ -113,7 +120,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         if (initInfo.connectToScene)
             this.connectToScene(sceneObjHolder, initInfo);
         if (initInfo.initLightControl)
-            this.initLightCtrl(sceneObjHolder);
+            initLightCtrl(sceneObjHolder, this);
         if (initInfo.initEffect !== null)
             this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
         if (initInfo.initNerve !== null)
@@ -169,8 +176,16 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         }
 
         const bloomObjName = `${this.objName}Bloom`;
-        if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName))
-            this.bloomModel = createModelObjBloomModel(zoneAndLayer, sceneObjHolder, this.name, bloomObjName, this.modelInstance!.modelMatrix);
+        if (sceneObjHolder.modelCache.isObjectDataExist(bloomObjName)) {
+            this.bloomModel = createModelObjBloomModel(zoneAndLayer, sceneObjHolder, bloomObjName, bloomObjName, this.modelInstance!.modelMatrix);
+            vec3.copy(this.bloomModel.scale, this.scale);
+        }
+
+        // tryCreateBreakModel
+        // makeSubModels
+
+        if (initInfo.initFur)
+            initMultiFur(sceneObjHolder, this, initInfo.lightType);
 
         this.makeActorAppeared(sceneObjHolder);
 
@@ -228,6 +243,15 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
 
     protected initCaseNoUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         this.startMapPartsFunctions(sceneObjHolder);
+    }
+
+    protected appearBloomModel(sceneObjHolder: SceneObjHolder): void {
+        this.bloomModel!.makeActorAppeared(sceneObjHolder);
+        tryStartAllAnim(this.bloomModel!, `${this.objName}Bloom`);
+    }
+
+    protected killBloomModel(sceneObjHolder: SceneObjHolder): void {
+        this.bloomModel!.makeActorDead(sceneObjHolder);
     }
 
     public isObjectName(name: string): boolean {
@@ -631,16 +655,16 @@ export class OceanWaveFloater extends MapObjActor {
     }
 
     private getCurrentSinkDepth(): number {
-        mat4.getTranslation(scratchVec3, this.getBaseMtx()!);
-        vec3.subtract(scratchVec3, this.translation, scratchVec3);
-        return vec3.length(scratchVec3) * Math.sign(vec3.dot(scratchVec3, this.gravityVector));
+        mat4.getTranslation(scratchVec3a, this.getBaseMtx()!);
+        vec3.subtract(scratchVec3a, this.translation, scratchVec3a);
+        return vec3.length(scratchVec3a) * Math.sign(vec3.dot(scratchVec3a, this.gravityVector));
     }
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
 
-        vec3.scale(scratchVec3, this.gravityVector, this.waveForce.getCurrentValue());
-        mat4.translate(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchVec3);
+        vec3.scale(scratchVec3a, this.gravityVector, this.waveForce.getCurrentValue());
+        mat4.translate(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchVec3a);
     }
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -859,5 +883,575 @@ export class AstroDome extends MapObjActor<AstroDomeNrv> {
         const domeId = assertExists(getJMapInfoArg0(infoIter));
         const domeModelName = AstroMapObj.getModelName('AstroDome', domeId);
         sceneObjHolder.modelCache.requestObjectData(domeModelName);
+    }
+}
+
+const enum RockNrv { Appear, AppearMoveInvalidBind, Move, MoveInvalidBind, Break }
+const enum RockType { Rock, WanwanRolling, WanwanRollingMini, WanwanRollingGold }
+class Rock extends LiveActor<RockNrv> {
+    public useBreak: boolean = false;
+    private type: RockType;
+    private breakModel: ModelObj | null = null;
+    private appearStep: number;
+    private origTranslation = vec3.create();
+    private lastTranslation = vec3.create();
+    private speed: number;
+    private bindRadius: number;
+    private rotateSpeed: number;
+    private fallSpeed: number;
+    private falling: boolean = false;
+    private fallVelocity = vec3.create();
+    private rotatePhaseRandom: number = 0;
+    private moveAirTimer: number = 0;
+    private moveTimer: number = 0;
+    private currentRailPointNo: number = -1;
+    private effectHostMtx = mat4.create();
+    private front = vec3.clone(Vec3UnitZ);
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        this.type = Rock.getType(infoIter);
+        if (this.type === RockType.Rock)
+            this.appearStep = 8;
+        else
+            this.appearStep = 45;
+        this.appearStep = fallback(getJMapInfoArg3(infoIter), this.appearStep);
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        vec3.copy(this.origTranslation, this.translation);
+
+        const scaleX = this.getScale();
+        this.bindRadius = 225.0 * scaleX;
+        this.speed = 10.0;
+        const perim = this.bindRadius * (MathConstants.TAU / 2);
+        this.rotateSpeed = (1.1 * (MathConstants.TAU / 2) * this.speed) / perim;
+
+        if (isZeroGravity(sceneObjHolder, this)) {
+            makeMtxTRFromActor(scratchMatrix, this);
+            getMatrixAxisY(this.gravityVector, scratchMatrix);
+            vec3.negate(this.gravityVector, this.gravityVector);
+        } else {
+            this.calcGravityFlag = true;
+        }
+
+        if (this.type === RockType.Rock) {
+            this.initModelManagerWithAnm(sceneObjHolder, 'Rock');
+            this.breakModel = createModelObjMapObjStrongLight(zoneAndLayer, sceneObjHolder, 'RockBreak', 'RockBreak', null);
+            vec3.copy(this.breakModel.scale, this.scale);
+            this.breakModel.makeActorDead(sceneObjHolder);
+        } else if (this.type === RockType.WanwanRolling) {
+            this.initModelManagerWithAnm(sceneObjHolder, 'WanwanRolling');
+            this.breakModel = createModelObjMapObjStrongLight(zoneAndLayer, sceneObjHolder, 'WanwanRollingBreak', 'WanwanRollingBreak', null);
+            vec3.copy(this.breakModel.scale, this.scale);
+            this.breakModel.makeActorDead(sceneObjHolder);
+        } else if (this.type === RockType.WanwanRollingMini) {
+            this.initModelManagerWithAnm(sceneObjHolder, 'WanwanRollingMini');
+        } else if (this.type === RockType.WanwanRollingGold) {
+            this.initModelManagerWithAnm(sceneObjHolder, 'WanwanRollingGold');
+            this.breakModel = createModelObjMapObjStrongLight(zoneAndLayer, sceneObjHolder, 'WanwanRollingGoldBreak', 'WanwanRollingGoldBreak', null);
+            vec3.copy(this.breakModel.scale, this.scale);
+            this.breakModel.makeActorDead(sceneObjHolder);
+        }
+
+        connectToSceneNoShadowedMapObjStrongLight(sceneObjHolder, this);
+        initLightCtrl(sceneObjHolder, this);
+        this.initHitSensor();
+        const hitSensorType = this.type === RockType.Rock ? HitSensorType.Rock : HitSensorType.Wanwan;
+        addHitSensor(sceneObjHolder, this, 'body', hitSensorType, 16, this.bindRadius, Vec3Zero);
+        if (this.type === RockType.Rock) {
+            vec3.set(scratchVec3a, 0.0, 0.0, -150.0);
+            vec3.scale(scratchVec3a, scratchVec3a, this.scale[0]);
+            addHitSensor(sceneObjHolder, this, 'weak', hitSensorType, 16, 125.0 * this.scale[0], scratchVec3a);
+        }
+        this.initBinder(this.bindRadius, 0.0, 0);
+        this.initRailRider(sceneObjHolder, infoIter);
+
+        if (this.type === RockType.WanwanRollingMini)
+            this.initEffectKeeper(sceneObjHolder, 'WanwanRolling');
+        else
+            this.initEffectKeeper(sceneObjHolder, null);
+        setEffectHostMtx(this, 'Smoke', this.effectHostMtx);
+        setEffectHostMtx(this, 'Land', this.effectHostMtx);
+        // initStarPointerTarget
+        // initSound
+
+        const shadowDropLength = getJMapInfoArg4(infoIter);
+        if (shadowDropLength !== null) {
+            initShadowVolumeCylinder(sceneObjHolder, this, this.bindRadius);
+            setShadowDropLength(this, null, shadowDropLength);
+        } else {
+            initShadowVolumeSphere(sceneObjHolder, this, this.bindRadius);
+        }
+
+        this.initNerve(RockNrv.Appear);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        this.moveAirTimer = 0;
+        this.fallSpeed = 1.5;
+        this.currentRailPointNo = -1;
+        vec3.copy(this.translation, this.origTranslation);
+        vec3.copy(this.lastTranslation, this.origTranslation);
+        vec3.zero(this.rotation);
+
+        if (isZeroGravity(sceneObjHolder, this))
+            calcGravity(sceneObjHolder, this);
+
+        moveCoordAndTransToNearestRailPos(this);
+        showModel(this);
+        // invalidateClipping
+        validateHitSensors(this);
+        getRailDirection(scratchVec3a, this);
+        vecKillElement(this.front, scratchVec3a, this.gravityVector);
+        vec3.normalize(this.front, this.front);
+
+        if (this.type === RockType.Rock)
+            this.setBtkForEnvironmentMap(this, 'Size');
+        else if (this.type === RockType.WanwanRolling)
+            this.setBtkForEnvironmentMap(this, 'WanwanRolling');
+
+        super.makeActorAppeared(sceneObjHolder);
+
+        if (isLoopRail(this)) {
+            this.calcBinderFlag = true;
+            this.setNerve(RockNrv.Move);
+        } else {
+            this.calcBinderFlag = false;
+            this.setNerve(RockNrv.Appear);
+        }
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+
+        if (this.type === RockType.WanwanRollingMini)
+            emitEffect(sceneObjHolder, this, 'MiniBreak');
+    }
+
+    public control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        if (!this.isNerve(RockNrv.Break)) {
+            vec3.sub(scratchVec3a, this.translation, this.lastTranslation);
+            if (!isNearZeroVec3(scratchVec3a, 0.001)) {
+                vec3.normalize(scratchVec3a, scratchVec3a);
+                vec3.copy(this.lastTranslation, this.translation);
+            }
+
+            const isMoving = this.isNerve(RockNrv.Appear) || this.isNerve(RockNrv.AppearMoveInvalidBind) || this.isNerve(RockNrv.Move) || this.isNerve(RockNrv.MoveInvalidBind);
+
+            // isInClippingRange
+            showModel(this);
+            // drawWorldSpaceVector(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.translation, scratchVec3a, 100.0);
+
+            if (isMoving) {
+                // TODO(jstpierre): This exposes some precision issues with our Binder.
+                // turnVecToVecCos(this.front, this.front, scratchVec3a, 0.999, this.gravityVector, 0.02);
+
+                vec3.lerp(this.front, this.front, scratchVec3a, 0.02);
+                vec3.normalize(this.front, this.front);
+            }
+
+            if (isOnGround(this))
+                vec3.zero(this.fallVelocity);
+
+            if (this.isNerve(RockNrv.Move)) {
+                getRailPos(scratchVec3a, this);
+                vec3.sub(scratchVec3a, scratchVec3a, this.translation);
+                vecKillElement(this.velocity, scratchVec3a, this.gravityVector);
+                vec3.scaleAndAdd(this.fallVelocity, this.fallVelocity, this.gravityVector, this.fallSpeed);
+
+                vec3.add(this.velocity, this.velocity, this.fallVelocity);
+                if (vec3.length(this.velocity) > 30.0)
+                    normToLength(this.velocity, 30.0);
+            }
+        }
+    }
+
+    public calcAndSetBaseMtx(): void {
+        this.calcBaseMtx(this.modelInstance!.modelMatrix);
+
+        if (this.isNerve(RockNrv.AppearMoveInvalidBind) || this.isNerve(RockNrv.MoveInvalidBind) || (this.isNerve(RockNrv.Move) && isOnGround(this))) {
+            if (this.isNerve(RockNrv.Move))
+                vec3.copy(scratchVec3a, this.binder!.floorHitInfo.faceNormal);
+            else
+                vec3.negate(scratchVec3a, this.gravityVector);
+
+            vec3.scaleAndAdd(scratchVec3b, this.translation, scratchVec3a, -this.bindRadius);
+            if (isSameDirection(scratchVec3a, this.front, 0.01))
+                makeMtxUpNoSupportPos(this.effectHostMtx, scratchVec3a, scratchVec3b);
+            else
+                makeMtxUpFrontPos(this.effectHostMtx, scratchVec3a, this.front, scratchVec3b);
+
+            // const scale = this.getScale();
+            // scaleMatrix(this.effectHostMtx, this.effectHostMtx, scale);
+        }
+    }
+
+    private setBtkForEnvironmentMap(actor: LiveActor, name: string): void {
+        const scaleX = this.scale[0];
+        let frame = 0.0;
+        if (this.type === RockType.Rock) {
+            if (isNearZero(scaleX - 0.5, 0.001))
+                frame = 0.0;
+            else if (isNearZero(scaleX - 2.0, 0.001))
+                frame = 2.0;
+            else
+                frame = 1.0;
+        } else if (this.type === RockType.WanwanRolling) {
+            if (isNearZero(scaleX - 0.9, 0.001))
+                frame = 1.0;
+            else if (isNearZero(scaleX - 0.5, 0.001))
+                frame = 2.0;
+            else
+                frame = 0.0;
+        }
+
+        startBtk(actor, name);
+        setBtkFrameAndStop(actor, frame);
+    }
+
+    private updateRotateX(n: number): void {
+        this.rotation[0] = n % MathConstants.TAU;
+    }
+
+    private moveOnRail(sceneObjHolder: SceneObjHolder, speed: number, rotateSpeed: number, bindGround: boolean): void {
+        moveCoordAndFollowTrans(this, speed);
+        this.updateRotateX(this.rotation[0] + rotateSpeed);
+
+        if (bindGround) {
+            vec3.scale(scratchVec3a, this.gravityVector, this.bindRadius * 2.0);
+            if (getFirstPolyOnLineToMap(sceneObjHolder, scratchVec3b, null, this.translation, scratchVec3a))
+                vec3.scaleAndAdd(this.translation, scratchVec3b, this.gravityVector, -this.bindRadius);
+        }
+    }
+
+    private move(speed: number): boolean {
+        moveCoord(this, speed);
+        const railPointNo = getCurrentRailPointNo(this);
+        if (this.currentRailPointNo !== railPointNo) {
+            this.currentRailPointNo = railPointNo;
+
+            const slowFall = getJMapInfoBool(fallback(getCurrentRailPointArg0(this), -1));
+            if (slowFall) {
+                this.falling = false;
+                this.fallSpeed = 0.2;
+            }
+
+            const invalidBindSection = getJMapInfoBool(fallback(getCurrentRailPointArg1(this), -1));
+            if (invalidBindSection) {
+                this.setNerve(RockNrv.MoveInvalidBind);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private isForceInvalidBindSection(): boolean {
+        return getJMapInfoBool(fallback(getNextRailPointArg2(this), -1));
+    }
+
+    private tryFreeze(nrv: RockNrv): boolean {
+        return false;
+    }
+
+    private isBreakByWall(): boolean {
+        if (isBindedWall(this)) {
+            getRailDirection(scratchVec3a, this);
+            return vec3.dot(this.binder!.floorHitInfo.faceNormal, scratchVec3a) < -0.5;
+        } else {
+            return false;
+        }
+    }
+
+    private tryBreakReachedGoal(sceneObjHolder: SceneObjHolder): boolean {
+        if (isRailReachedGoal(this)) {
+            if (this.useBreak)
+                this.setNerve(RockNrv.Break);
+            else
+                this.makeActorDead(sceneObjHolder);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private calcBaseMtx(dst: mat4): void {
+        vec3.negate(scratchVec3a, this.gravityVector);
+        if (isSameDirection(scratchVec3a, this.front, 0.001))
+            makeMtxFrontNoSupportPos(dst, scratchVec3a, this.translation);
+        else
+            makeMtxUpFrontPos(dst, scratchVec3a, this.front, this.translation);
+        mat4.rotateX(dst, dst, this.rotation[0]);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RockNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === RockNrv.Appear) {
+            const perim = this.bindRadius * (MathConstants.TAU / 2);
+            const rotateSpeed = (MathConstants.DEG_TO_RAD * 1386.0) / perim;
+
+            if (isFirstStep(this) && this.type === RockType.WanwanRollingMini) {
+                this.rotatePhaseRandom = getRandomFloat(0, MathConstants.TAU);
+                this.updateRotateX(this.rotatePhaseRandom - rotateSpeed * this.appearStep);
+            }
+
+            if (isLessStep(this, this.appearStep))
+                this.moveOnRail(sceneObjHolder, 7.0, rotateSpeed, false);
+
+            if (isGreaterEqualStep(this, this.appearStep) && isLessStep(this, this.appearStep + 15)) {
+                const t = this.getNerveStep() - this.appearStep;
+                const rotateAnim = MathConstants.DEG_TO_RAD * ((15.0 - t) * (5.0 * Math.sin(MathConstants.DEG_TO_RAD * 100.0 * t)) / 15.0);
+                this.updateRotateX(this.rotatePhaseRandom + rotateAnim);
+            }
+
+            const pauseStep = this.type === RockType.Rock ? 4 : 25;
+            if (isGreaterEqualStep(this, this.appearStep + 15 + pauseStep)) {
+                this.setNerve(RockNrv.AppearMoveInvalidBind);
+            }
+        } else if (currentNerve === RockNrv.AppearMoveInvalidBind) {
+            if (!isHiddenModel(this)) {
+                emitEffect(sceneObjHolder, this, 'Smoke');
+                if (this.type === RockType.WanwanRollingGold)
+                    emitEffect(sceneObjHolder, this, 'Light');
+            }
+
+            // startRollLevelSound
+            // startSoundWanwanVoice
+
+            if (!this.tryFreeze(RockNrv.AppearMoveInvalidBind)) {
+                const forceInvalidBind = this.isForceInvalidBindSection();
+                this.moveOnRail(sceneObjHolder, this.speed, this.rotateSpeed, forceInvalidBind);
+                if (!forceInvalidBind && isGreaterEqualStep(this, 45)) {
+                    this.calcBinderFlag = true;
+                    this.setNerve(RockNrv.Move);
+                }
+            }
+        } else if (currentNerve === RockNrv.Move) {
+            if (isOnGround(this)) {
+                if (this.type === RockType.Rock && isBindedGroundDamageFire(sceneObjHolder, this))
+                    this.setNerve(RockNrv.Break);
+
+                if (!isHiddenModel(this)) {
+                    emitEffect(sceneObjHolder, this, 'Smoke');
+                    if (this.type === RockType.WanwanRollingGold)
+                        emitEffect(sceneObjHolder, this, 'Light');
+                }
+
+                if (this.moveAirTimer >= 20) {
+                    if (!isHiddenModel(this)) {
+                        emitEffect(sceneObjHolder, this, 'Land');
+                        // rumblePadAndCamera
+                    }
+
+                    // startSound
+                }
+
+                this.moveAirTimer = 0;
+            } else {
+                if (this.moveAirTimer < 20)
+                    this.moveAirTimer += deltaTimeFrames;
+                else
+                    deleteEffect(sceneObjHolder, this, 'Smoke');
+            }
+
+            if (isOnGround(this)) {
+                if (this.falling)
+                    this.fallSpeed = 1.5;
+            } else {
+                this.falling = true;
+            }
+
+            if (this.isBreakByWall()) {
+                if (this.type === RockType.Rock)
+                    this.setNerve(RockNrv.Break);
+                else
+                    this.makeActorDead(sceneObjHolder);
+            } else if (this.tryBreakReachedGoal(sceneObjHolder)) {
+                // Don't bother doing anything; we're broken.
+            } else {
+                let speed = this.speed;
+                if (this.moveTimer > 0) {
+                    speed = getEaseOutValue(this.moveTimer, this.speed, 0.0, 150.0);
+                    this.moveTimer -= deltaTimeFrames;
+                    this.moveTimer = Math.max(this.moveTimer, 0.0);
+                }
+
+                this.move(speed * deltaTimeFrames);
+
+                let rotateSpeed = this.rotateSpeed * (speed / this.speed);
+                if (this.moveTimer > 130) {
+                    const t = 150 - this.moveTimer;
+                    rotateSpeed = rotateSpeed + (20 - t) * (5.0 * Math.sin(MathConstants.DEG_TO_RAD * 100.0 * t) / 2.0) * MathConstants.DEG_TO_RAD;
+                }
+                this.updateRotateX(this.rotation[0] + rotateSpeed * deltaTimeFrames);
+                this.tryFreeze(RockNrv.Move);
+            }
+        } else if (currentNerve === RockNrv.MoveInvalidBind) {
+            if (isFirstStep(this)) {
+                moveCoordAndTransToNearestRailPos(this);
+                vec3.zero(this.velocity);
+                this.calcBinderFlag = false;
+                deleteEffect(sceneObjHolder, this, 'Smoke');
+            }
+
+            // startRollLevelSound
+            // startSoundWanwanVoice
+            if (!this.tryBreakReachedGoal(sceneObjHolder))
+                this.moveOnRail(sceneObjHolder, this.speed, this.rotateSpeed, false);
+        } else if (currentNerve === RockNrv.Break) {
+            if (isFirstStep(this)) {
+                // isInClippingRange
+                hideModel(this);
+                invalidateHitSensors(this);
+                vec3.zero(this.rotation);
+                vec3.zero(this.velocity);
+                deleteEffectAll(this);
+
+                vec3.copy(this.breakModel!.translation, this.translation);
+                this.calcBaseMtx(scratchMatrix);
+
+                // rotate break model
+
+                this.breakModel!.makeActorAppeared(sceneObjHolder);
+                startBck(this.breakModel!, 'Break');
+
+                if (this.type === RockType.WanwanRolling)
+                    this.setBtkForEnvironmentMap(this.breakModel!, 'WanwanRollingBreak');
+
+                // rumblePadAndCamera
+            }
+
+            if (this.type === RockType.WanwanRollingGold) {
+                // stopSceneAtStep
+                // requestAppearPowerStar
+            }
+
+            if (isBckStopped(this.breakModel!)) {
+                this.makeActorDead(sceneObjHolder);
+                this.breakModel!.makeActorDead(sceneObjHolder);
+            }
+        }
+    }
+
+    private getScale(): number {
+        if (this.type === RockType.WanwanRollingMini)
+            return 0.3;
+        else
+            return this.scale[0];
+    }
+
+    public static getType(infoIter: JMapInfoIter): RockType {
+        const objectName = getObjectName(infoIter);
+        if (objectName === 'WanwanRolling')
+            return RockType.WanwanRolling;
+        else if (objectName === 'WanwanRollingMini')
+            return RockType.WanwanRollingMini;
+        else if (objectName === 'WanwanRollingGold')
+            return RockType.WanwanRollingGold;
+        else
+            return RockType.Rock;
+    }
+
+    public static getAppearFrame() {
+        return 55;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        const type = Rock.getType(infoIter);
+
+        if (type === RockType.Rock) {
+            sceneObjHolder.modelCache.requestObjectData('Rock');
+            sceneObjHolder.modelCache.requestObjectData('RockBreak');
+        } else if (type === RockType.WanwanRolling) {
+            sceneObjHolder.modelCache.requestObjectData('WanwanRolling');
+            sceneObjHolder.modelCache.requestObjectData('WanwanRollingBreak');
+        } else if (type === RockType.WanwanRollingMini) {
+            sceneObjHolder.modelCache.requestObjectData('WanwanRollingMini');
+        } else if (type === RockType.WanwanRollingGold) {
+            sceneObjHolder.modelCache.requestObjectData('WanwanRollingGold');
+            sceneObjHolder.modelCache.requestObjectData('WanwanRollingGoldBreak');
+        }
+    }
+}
+
+const enum RockCreatorNrv { Active, Deactive }
+export class RockCreator extends LiveActor<RockCreatorNrv> {
+    private arg0: number;
+    private framesBetweenRocks: number;
+    private rockCount: number;
+    private useBreak: boolean;
+    private rocks: Rock[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.arg0 = fallback(getJMapInfoArg0(infoIter), 10.0);
+
+        const type = Rock.getType(infoIter);
+        if (type === RockType.Rock)
+            this.useBreak = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
+        else
+            this.useBreak = getJMapInfoBool(fallback(getJMapInfoArg5(infoIter), -1));
+
+        this.initRailRider(sceneObjHolder, infoIter);
+        this.initNerve(RockCreatorNrv.Active);
+
+        useStageSwitchReadAppear(sceneObjHolder, this, infoIter);
+        syncStageSwitchAppear(sceneObjHolder, this);
+
+        // invalidate on switch A
+
+        const arg1 = getJMapInfoArg1(infoIter);
+        if (arg1 !== null && arg1 > 0) {
+            this.framesBetweenRocks = 60 * arg1;
+            this.rockCount = (Rock.getAppearFrame() + ((getRailTotalLength(this) / this.arg0) | 0)) / this.framesBetweenRocks + 2;
+        } else {
+            this.framesBetweenRocks = -1;
+            this.rockCount = 1;
+        }
+
+        for (let i = 0; i < this.rockCount; i++) {
+            const rock = new Rock(zoneAndLayer, sceneObjHolder, infoIter);
+            rock.useBreak = this.useBreak;
+            this.rocks.push(rock);
+        }
+
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    private create(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.rocks.length; i++) {
+            if (isDead(this.rocks[i])) {
+                this.rocks[i].makeActorAppeared(sceneObjHolder);
+                return;
+            }
+        }
+        assert(false);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RockCreatorNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === RockCreatorNrv.Active) {
+            if (this.framesBetweenRocks < 0 || isGreaterEqualStep(this, this.framesBetweenRocks)) {
+                this.create(sceneObjHolder);
+
+                if (this.framesBetweenRocks < 0)
+                    this.setNerve(RockCreatorNrv.Deactive);
+                else
+                    this.setNerve(RockCreatorNrv.Active);
+            }
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        Rock.requestArchives(sceneObjHolder, infoIter);
     }
 }

@@ -2153,7 +2153,7 @@ class dCloth_packet_c {
                 const idx = this.getIndex(fly, hoist);
                 this.getFactor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, distFly, distHoist, distBoth, fly, hoist, deltaTimeInFrames);
                 vec3.add(this.speedArr[idx], this.speedArr[idx], scratchVec3c);
-                vec3.scale(this.speedArr[idx], this.speedArr[idx], this.drag ** deltaTimeInFrames);
+                vec3.scale(this.speedArr[idx], this.speedArr[idx], this.drag);
                 vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], clamp(deltaTimeInFrames, 0, 1));
             }
         }
@@ -2694,6 +2694,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.tevStr.colorC0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.tevStr.colorK0);
         colorCopy(materialParams.u_Color[ColorKind.C2], this.tevStr.colorK1);
+        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, this.mtx);
         this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
         const ddraw = this.ddraw;
@@ -2798,7 +2799,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         for (let idx = 0; idx < this.pointCount; idx++) {
             this.get_cloth_anim_factor(scratchVec3c, posArrOld, this.nrmArr, scratchVec3a, idx, deltaTimeInFrames);
             vec3.add(this.speedArr[idx], this.speedArr[idx], scratchVec3c);
-            vec3.scale(this.speedArr[idx], this.speedArr[idx], this.drag ** deltaTimeInFrames);
+            vec3.scale(this.speedArr[idx], this.speedArr[idx], this.drag);
             vec3.scaleAndAdd(posArrNew[idx], posArrOld[idx], this.speedArr[idx], clamp(deltaTimeInFrames, 0, 1));
         }
 

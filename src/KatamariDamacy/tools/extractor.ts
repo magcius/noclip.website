@@ -263,6 +263,7 @@ function main() {
     writeBufferSync(`${pathBaseOut}/movementBlock.bin`,     elf.slice(0x161D90, 0X162CF4));
     writeBufferSync(`${pathBaseOut}/parentBlock.bin`,       elf.slice(0x162EC0, 0X168850));
     writeBufferSync(`${pathBaseOut}/missionBlock.bin`,      elf.slice(0x180340, 0X180E50));
+    writeBufferSync(`${pathBaseOut}/animationBlock.bin`,    elf.slice(0x30DC00, 0X386C54));
 }
 
 main();

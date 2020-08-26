@@ -112,6 +112,7 @@ export const enum DrawType {
     AstroDomeSkyClear              = 0x1E,
     AstroDomeOrbit                 = 0x1F,
     OceanBowlBloomDrawer           = 0x21,
+    ShadowSurface                  = 0x26,
     ShadowVolume                   = 0x27,
     AlphaShadow                    = 0x29,
     Fur                            = 0x31,

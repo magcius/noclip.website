@@ -1,17 +1,35 @@
 
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, quat, ReadonlyMat4 } from "gl-matrix";
 import { Green, Magenta, Red } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation } from "../MathHelpers";
-import { computeModelMatrixPosRot } from "../SourceEngine/Main";
+import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, Vec3Zero, Vec3UnitZ, Vec3NegZ, Vec3UnitX, Vec3NegX } from "../MathHelpers";
 import { assert, hexzero, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
-import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel } from "./bin";
+import { CollisionList, MissionSetupObjectSpawn, MotionActionID, MotionID, MotionParameters, ObjectDefinition, ObjectModel, SkinningMatrix } from "./bin";
 import { BINModelInstance, BINModelSectorData } from "./render";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { ObjectAnimationList, applyCurve } from "./animation";
+import { AdjustableAnimationController } from "../BanjoKazooie/render";
+
+const scratchVec3 = vec3.create();
+
+function mat4Lerp(dst: mat4, a: mat4, b: mat4, t: number): void {
+    for (let i = 0; i < dst.length; i++)
+        dst[i] = a[i] + (b[i] - a[i]) * t;
+}
+
+// computes the inverse of an affine transform, assuming the linear part is a rotation
+function invertOrthoMatrix(dst: mat4, src: ReadonlyMat4): void {
+    mat4.transpose(dst, src);
+    dst[3] = dst[7] = dst[11] = 0; // zero where the translation ended up
+    getMatrixTranslation(scratchVec3, src);
+    transformVec3Mat4w0(scratchVec3, dst, scratchVec3);
+    vec3.scale(scratchVec3, scratchVec3, -1);
+    setMatrixTranslation(dst, scratchVec3);
+}
 
 type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => void;
 
@@ -20,6 +38,7 @@ type AnimFunc = (objectRenderer: ObjectRenderer, deltaTimeInFrames: number) => v
 interface MotionState {
     parameters: MotionParameters;
     useAltMotion: boolean;
+    cancelled: boolean;
     pos: vec3;
     target: vec3;
     velocity: vec3; // not actually in the game
@@ -43,6 +62,7 @@ interface MotionState {
     axis: vec3;
 
     timer: number;
+    extraTimer: number;
     state: number;
 
     supporter?: ObjectRenderer;
@@ -68,7 +88,31 @@ function reduceAngle(t: number): number {
 
 const speedTable: number[] = [0.3, 1, 2, 4, 6, 8, 10, 15, 20, 40, 200, 0];
 
+const enum AnimationType {
+    IDLE = 0,
+    MOVING = 1,
+    WRIGGLE = 2,
+    PANIC_A = 3,
+    PANIC_B = 4,
+}
+
+interface OscillationState {
+    phase: number;
+    step: number;
+    amplitude: number;
+    center: number;
+}
+
+function oscillate(state: OscillationState, deltaTimeInFrames: number): number {
+    state.phase += state.step * deltaTimeInFrames;
+    return state.center + Math.sin(state.phase) * state.amplitude;
+}
+
 const scratchMatrix = mat4.create();
+const animationQuat = quat.create();
+const animationPos = vec3.create();
+const animationMatrix = mat4.create();
+const animationStack = nArray(15, () => mat4.create());
 export class ObjectRenderer {
     public visible = true;
     public modelInstances: BINModelInstance[] = [];
@@ -89,12 +133,23 @@ export class ObjectRenderer {
     public altObject: ObjectRenderer | null = null;
     public useAltObject = false;
 
+    private animations: ObjectAnimationList | null = null;
+    private animationIndex = -1;
+    private animationController = new AdjustableAnimationController(30);
+    private skinningInfo: SkinningMatrix[][] = [];
+
+    public miscOscillations: OscillationState[] = [];
+
     constructor(device: GfxDevice, gfxCache: GfxRenderCache, objectModel: ObjectModel, binModelSectorData: BINModelSectorData, public objectSpawn: MissionSetupObjectSpawn) {
         for (let j = 0; j < binModelSectorData.modelData.length; j++) {
-            const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j]);
+            let transformCount = 0;
+            if (objectModel.skinning.length > 0)
+                transformCount = objectModel.skinning[j].length;
+
+            const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j], transformCount);
             mat4.copy(binModelInstance.modelMatrix, objectSpawn.modelMatrix);
+
             if (objectModel.transforms.length > 0) {
-                mat4.mul(binModelInstance.modelMatrix, binModelInstance.modelMatrix, objectModel.transforms[j].matrix);
                 vec3.copy(binModelInstance.euler, objectModel.transforms[j].rotation);
                 vec3.copy(binModelInstance.translation, objectModel.transforms[j].translation);
             }
@@ -106,6 +161,7 @@ export class ObjectRenderer {
 
         this.bbox = objectModel.bbox;
         this.partBBox = this.modelInstances[0].binModelData.binModel.bbox;
+        this.skinningInfo = objectModel.skinning;
         mat4.copy(this.modelMatrix, objectSpawn.modelMatrix);
         mat4.copy(this.baseMatrix, this.modelMatrix);
         mat4.getTranslation(this.prevPosition, this.modelMatrix);
@@ -121,6 +177,19 @@ export class ObjectRenderer {
             parentOffset,
             inheritedEuler: vec3.create(),
         };
+    }
+
+    private static animPermutation = [3, 0, 2, 1, 4, 5];
+
+    public setAnimation(anim: AnimationType): void {
+        const oldIndex = this.animationIndex;
+        this.animationIndex = ObjectRenderer.animPermutation[anim];
+
+        if (this.animations !== null && this.animationIndex !== oldIndex)
+            this.animationController.init(this.animations!.animations[this.animationIndex].fps);
+
+        if (this.altObject)
+            this.altObject.setAnimation(anim);
     }
 
     public initMotion(def: ObjectDefinition, motion: MotionParameters | null, zones: CollisionList[], levelCollision: CollisionList[][], allObjects: ObjectRenderer[]): void {
@@ -147,6 +216,7 @@ export class ObjectRenderer {
         this.motionState = {
             parameters: motion,
             useAltMotion: false,
+            cancelled: false,
             speed,
             size,
             pathIndex: -1,
@@ -170,6 +240,7 @@ export class ObjectRenderer {
             axis: vec3.create(),
 
             timer: -1,
+            extraTimer: -1,
             state: -1,
             g: 0,
             radius: 0,
@@ -179,12 +250,17 @@ export class ObjectRenderer {
         // motion-specific setup
         if (this.motionState.parameters.motionID === MotionID.Hop)
             motion_MiscHop_Init(this, this.motionState, allObjects);
-        if (this.motionState.parameters.motionActionID === MotionActionID.WaitForPlayer)
-            setZone(this, this.motionState, zones);
-        }
+        const action = this.motionState.parameters.motionActionID;
+        if (action === MotionActionID.WaitForPlayer || action === MotionActionID.ZoneHop || action === MotionActionID.RandomWalk || action === MotionActionID.SporadicWalk || action === MotionActionID.Clouds)
+            this.motionState.zone = getZone(this, this.motionState, zones);
+        if (motion.motionID === 0x25)
+            this.setAnimation(AnimationType.MOVING);
+    }
 
     private runMotion(deltaTimeInFrames: number, viewerInput: ViewerRenderInput, zones: CollisionList[], levelCollision: CollisionList[][]): boolean {
         const motionState = this.motionState!;
+        if (motionState.cancelled)
+            return true;
         const motionID = (motionState.useAltMotion && motionState.parameters.altMotionActionID !== 0) ? motionState.parameters.altMotionActionID : motionState.parameters.motionActionID;
         return runMotionFunc(this, motionState, motionID, deltaTimeInFrames, viewerInput, zones, levelCollision);
     }
@@ -201,7 +277,7 @@ export class ObjectRenderer {
             hasMotionImplementation = this.runMotion(deltaTimeInFrames, viewerInput, zones!, levelCollision!);
             vec3.copy(this.prevPosition, this.motionState.pos);
         }
-            computeKatamariRotation(scratchMatrix, this.euler);
+        computeKatamariRotation(scratchMatrix, this.euler);
         mat4.mul(this.modelMatrix, this.baseMatrix, scratchMatrix);
 
         if (this.parentState) {
@@ -235,26 +311,31 @@ export class ObjectRenderer {
 
         setMatrixTranslation(this.modelMatrix, this.prevPosition);
 
-        // Position model instances correctly.
-            for (let i = 0; i < this.modelInstances.length; i++) {
-                const dst = this.modelInstances[i].modelMatrix;
-                computeModelMatrixPosRot(dst, this.modelInstances[i].translation, this.modelInstances[i].euler);
-                mat4.mul(dst, this.modelMatrix, dst);
-            }
-
         if (this.animFunc !== null)
             this.animFunc(this, deltaTimeInFrames);
 
         if (!this.useAltObject) {
+            if (this.animations !== null && this.animationIndex >= 0) {
+                this.animationController.setTimeFromViewerInput(viewerInput);
+                this.animate();
+            } else {
+                for (let i = 0; i < this.modelInstances.length; i++) {
+                    const inst = this.modelInstances[i];
+                    computeModelMatrixR(inst.modelMatrix, inst.euler[0], inst.euler[1], inst.euler[2]);
+                    setMatrixTranslation(inst.modelMatrix, inst.translation);
+                }
+            }
+
+            // pass in a single transform from object space to (noclip) world space
+            mat4.mul(scratchMatrix, toNoclip, this.modelMatrix);
             for (let i = 0; i < this.modelInstances.length; i++)
-                this.modelInstances[i].prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette);
+                this.modelInstances[i].prepareToRender(renderInstManager, viewerInput, scratchMatrix, currentPalette);
         } else if (this.altObject) {
             vec3.copy(this.altObject.prevPosition, this.prevPosition);
             mat4.copy(this.altObject.baseMatrix, this.baseMatrix);
             vec3.copy(this.altObject.euler, this.euler);
             this.altObject.prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette, zones, levelCollision);
         }
-
 
         const debugMotion = false;
         if (debugMotion) {
@@ -315,8 +396,60 @@ export class ObjectRenderer {
                 return ObjectId.BIRD09_D;
             if (id === ObjectId.BIRD08_B)
                 return ObjectId.BIRD10_C;
-}
+        }
         return -1;
+    }
+
+    public initAnimation(animations: ObjectAnimationList): void {
+        this.animations = animations;
+        assert(animationStack.length >= animations.bindPose.length);
+        this.partBBox = this.bbox; // first "part" is actually the whole model for animated objects
+        this.setAnimation(AnimationType.IDLE);
+    }
+
+    private animate(): void {
+        const bind = this.animations!.bindPose;
+        const animation = this.animations!.animations[this.animationIndex];
+        let curveIndex = 0;
+        const frame = this.animationController.getTimeInFrames() % (animation.frameInterval * (animation.segmentCount - 1));
+        for (let i = 0; i < bind.length; i++) {
+            if (animation.isRelative) {
+                vec3.zero(animationPos);
+                quat.identity(animationQuat);
+            } else {
+                vec3.copy(animationPos, bind[i].pos);
+                quat.copy(animationQuat, bind[i].rot);
+            }
+
+            for (; curveIndex < animation.curves.length; curveIndex++) {
+                if (animation.curves[curveIndex].part !== i)
+                    break;
+                applyCurve(animation, animation.curves[curveIndex], frame, animationPos, animationQuat);
+            }
+            const dst = animationStack[i];
+            mat4.fromRotationTranslation(dst, animationQuat, animationPos);
+            if (animation.isRelative) {
+                mat4.fromRotationTranslation(animationMatrix, bind[i].rot, bind[i].pos);
+                mat4.mul(dst, animationMatrix, dst);
+            }
+            if (bind[i].parent >= 0)
+                mat4.mul(dst, animationStack[bind[i].parent], dst);
+        }
+        for (let i = 0; i < this.modelInstances.length; i++) {
+            const joint = this.modelInstances[i].binModelData.binModel.animationIndex;
+            const base = this.modelInstances[i].modelMatrix;
+            mat4.copy(base, animationStack[joint]);
+            for (let j = 0; j < this.modelInstances[i].skinningMatrices.length; j++) {
+                const dst = this.modelInstances[i].skinningMatrices[j];
+                const info = this.skinningInfo[i][j];
+                // first compute the transform between the two joints' spaces
+                invertOrthoMatrix(dst, bind[info.index].reference);
+                mat4.mul(dst, dst, bind[joint].reference);
+
+                mat4.mul(dst, animationStack[info.index], dst);
+                mat4Lerp(dst, base, dst, info.weight);
+            }
+        }
     }
 }
 
@@ -337,9 +470,10 @@ interface TriangleInfo {
     normal: vec3;
     zone: number;
     depth: number;
+    contactOffset: vec3;
 }
 
-const scratchTri: TriangleInfo = { normal: vec3.create(), zone: -1, depth: 0 };
+const scratchTri: TriangleInfo = { normal: vec3.create(), zone: -1, depth: 0, contactOffset: vec3.create() };
 const scratchAABB = new AABB();
 const groundScratch = nArray(3, () => vec3.create());
 const normalScratch = nArray(4, () => vec3.create());
@@ -349,9 +483,13 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
     let minDepth = vec3.dist(pos, target);
     let foundAny = false;
     mat4.identity(groundMatrices[0]);
-    if (pos[0] !== target[0] || pos[2] !== target[2])
-        mat4.lookAt(groundMatrices[0], pos, target, Vec3NegY);
-    else if (pos[1] <= target[1]) {
+    if (pos[0] !== target[0] || pos[2] !== target[2]) {
+        // the game wants +z to be towards the target, while the glmatrix function uses -z
+        // we can resolve this by passing in the oppsite direction
+        vec3.sub(groundScratch[0], target, pos);
+        vec3.sub(groundScratch[0], pos, groundScratch[0]);
+        mat4.lookAt(groundMatrices[0], pos, groundScratch[0], Vec3UnitY);
+    } else if (pos[1] <= target[1]) {
         groundMatrices[0][5] = 0;
         groundMatrices[0][6] = 1;
         groundMatrices[0][9] = -1;
@@ -370,7 +508,7 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
         groundMatrices[0][13] = -pos[2];
         groundMatrices[0][14] = pos[1];
     }
-    mat4.transpose(groundMatrices[1], groundMatrices[0]);
+    invertOrthoMatrix(groundMatrices[1], groundMatrices[0]);
     vec3.min(groundScratch[0], pos, target);
     vec3.max(groundScratch[1], pos, target);
     scratchAABB.set(
@@ -423,9 +561,11 @@ function findGround(collision: CollisionList[], out: TriangleInfo, pos: vec3, ta
                     if (depth > 0 && depth < minDepth) {
                         foundAny = true;
                         minDepth = depth;
-                        transformVec3Mat4w0(out.normal, groundMatrices[1], normalScratch[3]);
                         out.zone = float32AsBits(verts[k + 3]);
                         out.depth = depth;
+                        transformVec3Mat4w0(out.normal, groundMatrices[1], normalScratch[3]);
+                        vec3.scale(out.contactOffset, Vec3UnitZ, depth);
+                        transformVec3Mat4w1(out.contactOffset, groundMatrices[1], out.contactOffset);
                     }
                 }
                 if (collision[i].groups[j].isTriStrip)
@@ -456,27 +596,29 @@ function landOnObject(object: ObjectRenderer, newPos: vec3, target: ObjectRender
     return false;
 }
 
-function motion_alignToGround(object: ObjectRenderer, motion: MotionState, collision: CollisionList[]): void {
+function motion_alignmentTransform(dst: mat4, normal: vec3): void {
+    vec3.cross(landingScratch, normal, Vec3NegY);
+    const angle = -Math.acos(clamp(-normal[1], -1, 1));
+    mat4.identity(dst); // if the axis is zero, fromRotation doesn't do anything
+    mat4.fromRotation(dst, angle, landingScratch);
+}
+
+function motion_alignToGround(object: ObjectRenderer, motion: MotionState, collision: CollisionList[]): boolean {
     vec3.copy(landingScratch, motion.pos);
     landingScratch[1] += object.bbox.maxCornerRadius();
     if (findGround(collision, scratchTri, motion.pos, landingScratch)) {
-        motion.pos[1] += scratchTri.depth;
         // seems like this shouldn't have the absolute value, but it probably never matters
-        vec3.scaleAndAdd(motion.pos, motion.pos, scratchTri.normal, Math.abs(object.partBBox.maxY));
-        if (motion.adjustPitch) {
-            vec3.cross(landingScratch, scratchTri.normal, Vec3NegY);
-            vec3.normalize(landingScratch, landingScratch);
-            const angle = Math.acos(vec3.dot(landingScratch, Vec3NegY));
-            mat4.fromRotation(object.baseMatrix, angle, landingScratch);
-        }
+        vec3.scaleAndAdd(motion.pos, scratchTri.contactOffset, scratchTri.normal, Math.abs(object.partBBox.maxY));
+        motion_alignmentTransform(object.baseMatrix, scratchTri.normal);
     }
+    return false;
 }
 
-function setZone(object: ObjectRenderer, motion: MotionState, zones: CollisionList[]): void {
+function getZone(object: ObjectRenderer, motion: MotionState, zones: CollisionList[], depth = 2): number {
     vec3.copy(landingScratch, motion.pos);
-    landingScratch[1] += 2 * object.bbox.maxCornerRadius();
+    landingScratch[1] += depth * object.bbox.maxCornerRadius();
     findGround(zones, scratchTri, motion.pos, landingScratch);
-    motion.zone = scratchTri.zone;
+    return scratchTri.zone;
 }
 
 const enum Axis { X, Y, Z }
@@ -522,6 +664,9 @@ const enum ObjectId {
     HUKUBIKI_C      = 0x0023,
     COMPASS_A       = 0x002F,
     OMEN05_B        = 0x003F,
+    PARABORA_D      = 0x0060,
+    KAKASHI_D       = 0x0067,
+    TRAFFICMAN_D    = 0x0072,
     BIRD01_C        = 0x008D,
     CAR02_F         = 0x0091,
     CAR03_F         = 0x0092,
@@ -529,8 +674,13 @@ const enum ObjectId {
     CAR05_E         = 0x0094,
     CAR06_E         = 0x0095,
     CAR07_E         = 0x0096,
+    FARMCAR01_E     = 0x0097,
     FARMCAR02_E     = 0x0098,
+    FARMCAR03_E     = 0x0099,
+    WATERMILL_F     = 0x009E,
+    DENTOWER_G      = 0x00A6,
     POLIHOUSE_E     = 0x00C6,
+    SHOPYA03_C      = 0x00D7,
     DUSTCAR_F       = 0x0133,
     TRUCK01_F       = 0x0135,
     BUS01_F         = 0x0136,
@@ -553,6 +703,9 @@ const enum ObjectId {
     BIRD07_C        = 0x020C,
     BIRD08_B        = 0x020D,
     RADICON02_E     = 0x0220,
+    GSWING02_E      = 0x023D,
+    GSWING03_E      = 0x023E,
+    GSWING04_E      = 0x023F,
     BIKE06_E        = 0x02B0,
     WINDMILL01_G    = 0x02C6,
     TORNADO_G       = 0x02D6,
@@ -568,6 +721,7 @@ const enum ObjectId {
     KAPSEL03_B	    = 0x0323,
     OMEN08_B        = 0x03FB,
     ZOKUCAR_E       = 0x0405,
+    GSWING05_G      = 0x040D,
     MAJANPAI01_A    = 0x041B,
     MAJANPAI02_A    = 0x041C,
     MAJANPAI03_A    = 0x041D,
@@ -597,12 +751,19 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     case ObjectId.HUKUBIKI_C:   return animFunc_HUKUBIKI_C;
     case ObjectId.COMPASS_A:    return animFunc_COMPASS_A;
     case ObjectId.OMEN05_B:     return animFunc_OMEN05_B;
+    case ObjectId.PARABORA_D:   return animFunc_PARABORA_D;
+    case ObjectId.KAKASHI_D:    return animFunc_KAKASHI_D;
+    case ObjectId.TRAFFICMAN_D: return animFunc_TRAFFICMAN_D;
+    case ObjectId.FARMCAR01_E:  return animFunc_FARMCAR01_E;
+    case ObjectId.FARMCAR02_E:  return animFunc_FARMCAR02_E;
+    case ObjectId.FARMCAR03_E:  return animFunc_FARMCAR03_E;
+    case ObjectId.WATERMILL_F:  return animFunc_WATERMILL_F;
+    case ObjectId.DENTOWER_G:   return animFunc_DENTOWER_G;
     case ObjectId.WINDMILL01_G: return animFunc_WINDMILL01_G;
     case ObjectId.POLIHOUSE_E:  return animFunc_POLIHOUSE_E;
-    case ObjectId.FARMCAR02_E:  return animFunc_FARMCAR02_E;
+    case ObjectId.SHOPYA03_C:   return animFunc_SHOPYA03_C;
     case ObjectId.WORKCAR04_F:  return animFunc_WORKCAR04_F;
     case ObjectId.TANK01_F:     return animFunc_TANK01_F;
-    case ObjectId.GSWING01_B:   return animFunc_GSWING01_B;
     case ObjectId.TORNADO_G:    return animFunc_TORNADO_G;
     case ObjectId.SPINWAVE_G:   return animFunc_SPINWAVE_G;
     case ObjectId.SIGNAL01_E:   return animFunc_SIGNAL01_E;
@@ -610,6 +771,12 @@ function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     case ObjectId.BOOTH02_E:    return animFunc_BOOTH02_E;
     case ObjectId.OMEN08_B:     return animFunc_OMEN08_B;
     case ObjectId.RAIN01_G:     return animFunc_RAIN01_G;
+    case ObjectId.GSWING01_B:
+    case ObjectId.GSWING02_E:
+    case ObjectId.GSWING03_E:
+    case ObjectId.GSWING04_E:
+    case ObjectId.GSWING05_G:
+        return animFunc_Swing;
     case ObjectId.CAR02_F:
     case ObjectId.CAR03_F:
     case ObjectId.CAR04_F:
@@ -687,13 +854,102 @@ function animFunc_POLIHOUSE_E(object: ObjectRenderer, deltaTimeInFrames: number)
     rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Z, 1.0);
 }
 
+function animFunc_PARABORA_D(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Y, 1.0);
+}
+
+const animScratch = nArray(2, () => vec3.create());
+function animFunc_KAKASHI_D(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.miscOscillations.length === 0)
+        object.miscOscillations.push({
+            phase: 0,
+            step: .02,
+            amplitude: MathConstants.TAU / 24,
+            center: 0,
+        });
+    const phase = oscillate(object.miscOscillations[0], deltaTimeInFrames);
+    // probably intended to tilt forward and backward, but that will only happen when the scarecrow has no y rotation
+    object.euler[0] = phase * object.baseMatrix[0];
+    vec3.rotateX(animScratch[0], Vec3NegY, Vec3Zero, phase);
+    getMatrixTranslation(animScratch[1], object.objectSpawn.modelMatrix);
+    vec3.scaleAndAdd(object.prevPosition, animScratch[1], animScratch[0], object.partBBox.maxY);
+    object.prevPosition[1] += object.partBBox.maxY;
+}
+
+function animFunc_TRAFFICMAN_D(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.miscOscillations.length === 0)
+        object.miscOscillations.push({
+            phase: 0,
+            step: MathConstants.TAU / 60,
+            amplitude: MathConstants.TAU / 4,
+            center: 0,
+        });
+    object.modelInstances[1].euler[2] = oscillate(object.miscOscillations[0], deltaTimeInFrames);
+}
+
+function animFunc_FARMCAR01_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.motionState === null)
+        return;
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.X, 2);
+}
+
 function animFunc_FARMCAR02_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
     if (object.motionState === null)
         return;
-    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.Y, -1/600.0);
+    scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.Y, -1 / 600.0);
     scrollTextureWrapMin(object.modelInstances[1], Axis.Y, 0.765);
-    scrollTexture(object.modelInstances[2], deltaTimeInFrames, Axis.Y, -1/600.0);
+    scrollTexture(object.modelInstances[2], deltaTimeInFrames, Axis.Y, -1 / 600.0);
     scrollTextureWrapMin(object.modelInstances[2], Axis.Y, 0.75);
+}
+
+function animFunc_FARMCAR03_E(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    if (object.motionState === null)
+        return;
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.X, 2);
+    rotateObject(object.modelInstances[2], deltaTimeInFrames, Axis.X, 2);
+}
+
+function animFunc_WATERMILL_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1);
+}
+
+function animFunc_DENTOWER_G(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    rotateObject(object.modelInstances[1], deltaTimeInFrames, Axis.Y, 1);
+}
+
+function animFunc_SHOPYA03_C(object: ObjectRenderer, deltaTimeInFrames: number): void {
+    // while both oscillations have the same phase step, the different amplitude cycles mean they don't stay in sync
+    if (object.miscOscillations.length === 0) {
+        object.miscOscillations.push({
+            phase: 0,
+            step: 2 / 15,
+            amplitude: MathConstants.TAU / 45,
+            center: 0,
+        }, {
+            phase: 0,
+            step: 2 / 15,
+            amplitude: 3,
+            center: object.modelInstances[1].translation[1],
+        });
+    }
+
+    const rot = object.miscOscillations[0];
+    object.modelInstances[1].euler[0] = oscillate(rot, deltaTimeInFrames);
+    if (rot.phase > MathConstants.TAU) {
+        rot.phase = 0;
+        rot.amplitude -= .03;
+        if (rot.amplitude < 0)
+            rot.amplitude = MathConstants.TAU / 45;
+    }
+
+    const pos = object.miscOscillations[1];
+    object.modelInstances[1].translation[1] = oscillate(pos, deltaTimeInFrames);
+    if (pos.phase > MathConstants.TAU / 2) {
+        pos.phase = 0;
+        pos.amplitude -= .5;
+        if (pos.amplitude < 0)
+            pos.amplitude = 3;
+    }
 }
 
 function animFunc_WORKCAR04_F(object: ObjectRenderer, deltaTimeInFrames: number): void {
@@ -708,7 +964,7 @@ function animFunc_TANK01_F(object: ObjectRenderer, deltaTimeInFrames: number): v
     scrollTexture(object.modelInstances[1], deltaTimeInFrames, Axis.X, 1/120.0);
 }
 
-function animFunc_GSWING01_B(object: ObjectRenderer, deltaTimeInFrames: number): void {
+function animFunc_Swing(object: ObjectRenderer, deltaTimeInFrames: number): void {
     object.euler[1] += 0.14 * deltaTimeInFrames;
 }
 
@@ -905,6 +1161,12 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionAction
         motion_WaitForPlayer_Update(object, motion, viewerInput);
     } else if (motionActionID === MotionActionID.FlyInCircles) {
         motion_FlyInCircles_Update(object, deltaTimeInFrames, motion, viewerInput, levelCollision[0]);
+    } else if (motionActionID === MotionActionID.ZoneHop) {
+        motion_ZoneHop_update(object, deltaTimeInFrames, motion, zones, levelCollision[0]);
+    } else if (motionActionID === MotionActionID.RandomWalk || motionActionID === MotionActionID.SporadicWalk) {
+        motion_RandomWalk_update(object, deltaTimeInFrames, motion, zones);
+    } else if (motionActionID === MotionActionID.Clouds) {
+        motion_Cloud_update(object, deltaTimeInFrames, motion, zones);
     } else {
         return false;
     }
@@ -966,13 +1228,14 @@ function pathSimpleAdjustBasePitch(dst: mat4, motion: MotionState, deltaTimeInFr
     }
 }
 
-function motionAngleStep(dst: vec3, motion: MotionState, deltaTimeInFrames: number): number {
+function motionAngleStep(dst: vec3, motion: MotionState, deltaTimeInFrames: number): boolean {
     dst[1] += motion.eulerStep[1] * deltaTimeInFrames;
     if (Math.sign(motion.eulerStep[1]) !== Math.sign(angleDist(dst[1], motion.eulerTarget[1]))) {
         dst[1] = motion.eulerTarget[1];
         motion.eulerStep[1] = 0;
+        return true;
     }
-    return dst[1];
+    return false;
 }
 
 function motionPathAdvancePoint(motion: MotionState, bbox: AABB): void {
@@ -1088,6 +1351,7 @@ function motion_PathSimple_Update(object: ObjectRenderer, motion: MotionState, d
         motion.target[1] -= object.bbox.maxY; // adjust target to object center height, kind of weird because of the coordinate system
         object.euler[1] = Math.PI + Math.atan2(motion.target[0] - motion.pos[0], motion.target[2] - motion.pos[2]);
 
+        object.setAnimation(AnimationType.MOVING);
         vec3.sub(motion.velocity, motion.target, motion.pos);
         normToLength(motion.velocity, motion.speed);
     }
@@ -1188,21 +1452,22 @@ function motion_MiscHop_Update(object: ObjectRenderer, deltaTimeInFrames: number
         motion.timer -= deltaTimeInFrames;
         return;
     }
+    object.setAnimation(AnimationType.IDLE);
     motion.timer = 0;
     motion.velocity[1] += motion.g * deltaTimeInFrames;
     motion.pos[1] += motion.velocity[1] * deltaTimeInFrames;
     if (motion.supporter) {
-        if (landOnObject(object, motion.pos, motion.supporter))
+        if (landOnObject(object, motion.pos, motion.supporter)) {
             motion.timer = -1;
+            object.setAnimation(AnimationType.IDLE);
+        }
     } else {
         vec3.sub(hopScratch, motion.pos, object.prevPosition);
         normToLength(hopScratch, object.bbox.maxCornerRadius());
         vec3.add(hopScratch, object.prevPosition, hopScratch);
-        if (findGround(level, scratchTri, object.prevPosition, hopScratch)) {
-            if (object.prevPosition[1] + scratchTri.depth < motion.pos[1] + object.partBBox.maxY) {
-                motion.pos[1] = object.prevPosition[1] + scratchTri.depth - object.partBBox.maxY;
-                motion.timer = -1;
-            }
+        if (motion_landedOnGround(object, motion, level)) {
+            motion.timer = -1;
+            object.setAnimation(AnimationType.IDLE);
         }
     }
 }
@@ -1298,12 +1563,13 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
             motion.eulerStep[1] = angleDist(object.euler[1], motion.eulerTarget[1]) / 6;
         }
     } else if (motion.state === FlyInCirclesState.TURNING) {
-        motionAngleStep(object.euler, motion, deltaTimeInFrames);
-        if (motion.eulerStep[1] === 0) {
+        if (motionAngleStep(object.euler, motion, deltaTimeInFrames)) {
             // combining two states into one
             if (object.altObject) {
+                // in game, a bunch of the object struct gets overwritten, including its ID, model part data, and update functions
                 motion.state = FlyInCirclesState.TAKEOFF;
                 object.useAltObject = true;
+                object.setAnimation(AnimationType.IDLE);
 
                 vec3.set(motion.velocity, Math.sin(object.euler[1]), 0, Math.cos(object.euler[1]));
                 vec3.scale(motion.velocity, motion.velocity, -8);
@@ -1312,7 +1578,6 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
                 motion.angle = 0;
                 motion.angleStep = .015;
             } else {
-                // in game, a bunch of the object struct gets overwritten, including its ID, model part data, and update functions
                 motion.useAltMotion = false;
                 motion.state = -1;
             }
@@ -1371,8 +1636,299 @@ function motion_FlyInCircles_Update(object: ObjectRenderer, deltaTimeInFrames: n
                 motion.state = -1;
                 object.useAltObject = false;
                 motion.useAltMotion = false;
+                object.setAnimation(AnimationType.IDLE);
             }
             motion.pos[1] = decelY + Math.sin(motion.angle) * motion.radius;
         }
+    }
+}
+
+const turnAngles = [45, -45, 90, -90, 135, -135, 180];
+
+const enum ZoneHopState {
+    Hop,
+    Wait,
+    ChooseDirection,
+    Turn,
+}
+
+const hopEndScratch = vec3.create();
+function zoneAfterStep(motion: MotionState, zones: CollisionList[], time: number, depth: number): number {
+    vec3.scaleAndAdd(hopScratch, motion.pos, motion.velocity, time);
+    vec3.copy(hopEndScratch, hopScratch);
+    hopScratch[1] -= depth;
+    hopEndScratch[1] += depth;
+    findGround(zones, scratchTri, hopScratch, hopEndScratch);
+    return scratchTri.zone;
+}
+
+
+function hopEndZone(motion: MotionState, zones: CollisionList[]): number {
+    const hopTime = 2 * hopSpeeds[sizeGrouping[motion.size]] / motion.g;
+    return zoneAfterStep(motion, zones, hopTime, 100);
+}
+
+function motion_landedOnGround(object: ObjectRenderer, motion: MotionState, collision: CollisionList[]): boolean {
+    vec3.sub(hopEndScratch, motion.pos, object.prevPosition);
+    normToLength(hopEndScratch, object.bbox.maxCornerRadius());
+    vec3.add(hopEndScratch, hopEndScratch, motion.pos);
+
+    const landed = findGround(collision, scratchTri, object.prevPosition, hopEndScratch);
+    if (landed && scratchTri.contactOffset[1] <= motion.pos[1] + object.partBBox.maxY) {
+        motion.pos[1] = scratchTri.contactOffset[1] - object.partBBox.maxY;
+        return true;
+    }
+    return false;
+}
+
+const turnScratch = vec3.create();
+function motion_ZoneHop_update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState, zones: CollisionList[], collision: CollisionList[]): void {
+    if (motion.state === -1) {
+        mat4.identity(object.baseMatrix);
+        // starts jumping backwards
+        vec3.scale(motion.velocity, Vec3UnitZ, motion.speed);
+        motion.g = 0.95;
+        if (motion.zone < 0 || hopEndZone(motion, zones) !== motion.zone) {
+            motion.cancelled = true;
+            return;
+        }
+        motion.velocity[1] = -hopSpeeds[sizeGrouping[motion.size]];
+        object.euler[1] = MathConstants.TAU / 2;
+        motion.state = ZoneHopState.Hop;
+    } else if (motion.state === ZoneHopState.Hop) {
+        motion.velocity[1] += motion.g * deltaTimeInFrames;
+        vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
+        if (motion_landedOnGround(object, motion, collision)) {
+            motion.velocity[1] = 0;
+            motion.timer = 25;
+            motion.state = ZoneHopState.Wait;
+        }
+    } else if (motion.state === ZoneHopState.Wait) {
+        motion.timer -= deltaTimeInFrames;
+        if (motion.timer < 0) {
+            if (hopEndZone(motion, zones) === motion.zone) {
+                if (Math.random() < 0.35) {
+                    const turnAngle = (2 * Math.random() - 1) * MathConstants.TAU / 3;
+                    vec3.copy(turnScratch, motion.velocity);
+                    vec3.rotateY(motion.velocity, motion.velocity, Vec3Zero, turnAngle);
+                    if (hopEndZone(motion, zones) === motion.zone) {
+                        motion.eulerTarget[1] = (object.euler[1] + turnAngle) % MathConstants.TAU;
+                        motion.eulerStep[1] = turnAngle / 12;
+                        motion.state = ZoneHopState.Turn;
+                    } else { // choose direction the normal way
+                        vec3.copy(motion.velocity, turnScratch);
+                        motion.state = ZoneHopState.ChooseDirection;
+                    }
+                } else {
+                    motion.velocity[1] = -hopSpeeds[sizeGrouping[motion.size]];
+                    motion.state = ZoneHopState.Hop;
+                }
+            } else
+                motion.state = ZoneHopState.ChooseDirection;
+        }
+    } else if (motion.state === ZoneHopState.ChooseDirection) {
+        vec3.copy(turnScratch, motion.velocity);
+        let angle = 0;
+        // try angles at 45 degree increments, alternating clockwise and counterclockwise, 
+        // until we find a direction we can hop in
+        for (let i = 0; i < turnAngles.length; i++) {
+            angle = turnAngles[i] * MathConstants.DEG_TO_RAD;
+            vec3.rotateY(motion.velocity, turnScratch, Vec3Zero, angle);
+            if (hopEndZone(motion, zones) === motion.zone)
+                break;
+        }
+        motion.eulerStep[1] = angle / 12;
+        motion.eulerTarget[1] = (object.euler[1] + angle) % MathConstants.TAU;
+        motion.state = ZoneHopState.Turn;
+    } else if (motion.state === ZoneHopState.Turn) {
+        if (motionAngleStep(object.euler, motion, deltaTimeInFrames)) {
+            motion.velocity[1] = -hopSpeeds[sizeGrouping[motion.size]];
+            motion.state = ZoneHopState.Hop;
+        }
+    }
+}
+
+const alignScratch = mat4.create();
+function motion_forwardStep_alignToGround(object: ObjectRenderer, motion: MotionState, collision: CollisionList[], newVel: vec3): boolean {
+    vec3.copy(landingScratch, motion.pos);
+    landingScratch[1] += 7 * object.bbox.maxCornerRadius();
+    if (findGround(collision, scratchTri, motion.pos, landingScratch)) {
+        motion.pos[1] = scratchTri.contactOffset[1] + Math.abs(object.partBBox.maxY) * scratchTri.normal[1];
+        motion_alignmentTransform(alignScratch, scratchTri.normal);
+        transformVec3Mat4w0(newVel, alignScratch, motion.velocity);
+        if (motion.adjustPitch)
+            mat4.copy(object.baseMatrix, alignScratch);
+        return true;
+    }
+    vec3.copy(newVel, motion.velocity);
+    return false;
+}
+
+const forwardScratch = vec3.create();
+// attempt to move with currect velocity along ground, returning whether the zone boundary was crossed
+function motion_attemptForwardStep(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState, collision: CollisionList[], ignoreYaw: boolean): boolean {
+    motion_forwardStep_alignToGround(object, motion, collision, forwardScratch);
+    vec3.copy(object.prevPosition, motion.pos);
+    vec3.scaleAndAdd(motion.pos, motion.pos, forwardScratch, deltaTimeInFrames);
+    const currZone = getZone(object, motion, collision, 5);
+    let validPosition = false;
+    if (currZone === motion.zone)
+        validPosition = true
+    else if (currZone < 0) {
+        // we passed through the ground, so try to find the intersection point
+        vec3.sub(forwardScratch, motion.pos, object.prevPosition);
+        normToLength(forwardScratch, object.partBBox.maxZ);
+        vec3.add(forwardScratch, forwardScratch, motion.pos);
+        forwardScratch[1] += object.partBBox.maxY;
+        validPosition = findGround(collision, scratchTri, object.prevPosition, forwardScratch);
+    }
+
+    if (validPosition)
+        vec3.scaleAndAdd(motion.pos, scratchTri.contactOffset, Vec3NegY, object.partBBox.maxY);
+    else {
+        vec3.copy(motion.pos, object.prevPosition);
+        return true;
+    }
+
+    if (!ignoreYaw)
+        object.euler[1] = MathConstants.TAU / 2 + Math.atan2(forwardScratch[0], forwardScratch[2]);
+    return false;
+}
+
+const enum RandomWalkState {
+    Walk,
+    Pause,
+    ChooseDirection,
+    Turn,
+}
+
+function motion_RandomWalk_update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState, zones: CollisionList[]): void {
+    if (motion.state === -1) {
+        mat4.identity(object.baseMatrix);
+        if (motion.zone < 0) {
+            motion.cancelled = true;
+            return;
+        }
+        // the game sets the direction based on where the object's current transform sends "forward" (0,0,-1)
+        // but the transform is still zero, leading to a dot product of 0 with forward, ultimately interpreted as negative x
+        vec3.scale(motion.velocity, Vec3NegX, motion.speed);
+        if (motion.parameters.motionActionID === MotionActionID.SporadicWalk) {
+            motion.extraTimer = 30;
+        }
+        motion.timer = 120 + 570 * Math.random();
+        motion.state = RandomWalkState.Walk;
+    }
+    if (motion.state === RandomWalkState.Walk) {
+        object.setAnimation(AnimationType.MOVING);
+        // turn occasionally
+        if (motion.timer > 0) {
+            motion.timer -= deltaTimeInFrames;
+            if (motion.timer < 0) {
+                vec3.copy(motion.axis, motion.velocity);
+                motion.angle = 0;
+                const sign = Math.random() > .5 ? 1 : -1;
+                motion.angleStep = sign / 20;
+                motion.angleTarget = sign * MathConstants.TAU / 4;
+            }
+        } else {
+            motion.angle += motion.angleStep * deltaTimeInFrames;
+            if ((motion.angleTarget - motion.angle) * motion.angleStep <= 0) {
+                motion.timer = 90 + 600 * Math.random();
+                motion.angleStep = 0;
+                motion.angle = motion.angleTarget;
+            }
+            vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, motion.angle);
+        }
+
+        if (motion_attemptForwardStep(object, deltaTimeInFrames, motion, zones, false))
+            motion.state = RandomWalkState.ChooseDirection;
+        else if (motion.parameters.motionActionID === MotionActionID.SporadicWalk) {
+            // check pause timer for sporadic walking
+            motion.extraTimer -= deltaTimeInFrames;
+            if (motion.extraTimer < 0) {
+                motion.state = RandomWalkState.Pause;
+                motion.extraTimer = 30 + 30 * Math.random();
+            }
+        }
+    } else if (motion.state === RandomWalkState.Pause) {
+        object.setAnimation(AnimationType.IDLE);
+        motion.extraTimer -= deltaTimeInFrames;
+        if (motion.extraTimer < 0) {
+            motion.state = RandomWalkState.Walk;
+            motion.extraTimer = 120 + 60 * Math.random();
+        }
+    } else if (motion.state === RandomWalkState.ChooseDirection) {
+        vec3.copy(motion.axis, motion.velocity);
+        let angle = 0;
+        for (let i = 0; i < turnAngles.length; i++) {
+            angle = turnAngles[i] * MathConstants.DEG_TO_RAD;
+            vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, angle);
+            if (zoneAfterStep(motion, zones, 5, object.bbox.maxCornerRadius()) === motion.zone)
+                break;
+        }
+        motion.angle = 0;
+        motion.angleStep = angle / 12;
+        motion.angleTarget = angle;
+        motion.state = RandomWalkState.Turn;
+    } else if (motion.state === RandomWalkState.Turn) {
+        // this turning doesn't affect the random turning timer or state, but does share the target and progress variables
+        // so if we were in the middle of a random turn, it will immediately end and reset the timer when we resume motion
+        motion.angle += motion.angleStep * deltaTimeInFrames;
+        if ((motion.angleTarget - motion.angle) * motion.angleStep <= 0) {
+            motion.angleStep = 0;
+            motion.angle = motion.angleTarget;
+            motion.state = RandomWalkState.Walk;
+        }
+        vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, motion.angle);
+        object.euler[1] = MathConstants.TAU / 2 + Math.atan2(motion.velocity[0], motion.velocity[2]);
+    }
+}
+
+
+function motion_Cloud_update(object: ObjectRenderer, deltaTimeInFrames: number, motion: MotionState, zones: CollisionList[]): void {
+    if (motion.state === -1) {
+        mat4.identity(object.baseMatrix);
+        if (motion.zone < 0) {
+            motion.cancelled = true;
+            return;
+        }
+        vec3.scale(motion.velocity, Vec3NegX, motion.speed);
+        motion.timer = 90 + 600 * Math.random();
+        motion.state = RandomWalkState.Walk;
+    }
+    if (motion.state === RandomWalkState.Walk) {
+        object.setAnimation(AnimationType.MOVING);
+        // turn occasionally
+        if (motion.timer > 0) {
+            motion.timer -= deltaTimeInFrames;
+            if (motion.timer < 0) {
+                vec3.copy(motion.axis, motion.velocity);
+                motion.angle = 0;
+                const sign = Math.random() > .5 ? 1 : -1;
+                motion.angleStep = sign / 20;
+                motion.angleTarget = sign * MathConstants.TAU / 4;
+            }
+        } else {
+            motion.angle += motion.angleStep * deltaTimeInFrames;
+            if ((motion.angleTarget - motion.angle) * motion.angleStep <= 0) {
+                motion.timer = 90 + 600 * Math.random();
+                motion.angleStep = 0;
+                motion.angle = motion.angleTarget;
+            }
+            vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, motion.angle);
+        }
+
+        if (motion_attemptForwardStep(object, deltaTimeInFrames, motion, zones, true))
+            motion.state = RandomWalkState.ChooseDirection;
+    } else if (motion.state === RandomWalkState.ChooseDirection) {
+        vec3.copy(motion.axis, motion.velocity);
+        let angle = 0;
+        for (let i = 0; i < turnAngles.length; i++) {
+            angle = turnAngles[i] * MathConstants.DEG_TO_RAD;
+            vec3.rotateY(motion.velocity, motion.axis, Vec3Zero, angle);
+            if (zoneAfterStep(motion, zones, 5, object.bbox.maxCornerRadius()) === motion.zone)
+                break;
+        }
+        motion.state = RandomWalkState.Walk;
     }
 }

@@ -5,7 +5,7 @@ import * as GX from './gx_enum';
 
 import { colorCopy, colorFromRGBA, TransparentBlack, colorNewCopy } from '../Color';
 import { GfxFormat } from '../gfx/platform/GfxPlatformFormat';
-import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxCompareMode, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
 import { vec3, mat4 } from 'gl-matrix';
 import { Camera } from '../Camera';
 import { assert } from '../util';
@@ -204,6 +204,9 @@ export interface RopInfo {
     blendSrcFactor: GX.BlendFactor;
     blendDstFactor: GX.BlendFactor;
     blendLogicOp: GX.LogicOp;
+    dstAlpha?: number;
+    colorUpdate: boolean;
+    alphaUpdate: boolean;
 }
 // #endregion
 
@@ -1199,6 +1202,16 @@ ${this.generateFogFunc(`t_Fog`)}
 `;
     }
 
+    private generateDstAlpha() {
+        const ropInfo = this.material.ropInfo;
+        if (ropInfo.dstAlpha === undefined)
+            return "";
+
+        return `
+    t_PixelOut.a = ${this.generateFloat(ropInfo.dstAlpha)};
+`;
+    }
+
     private generateAttributeStorageType(fmt: GfxFormat): string {
         switch (fmt) {
         case GfxFormat.F32_R:    return 'float';
@@ -1329,6 +1342,7 @@ ${this.generateTevStagesLastMinuteFixup()}
     vec4 t_PixelOut = TevOverflow(t_TevOutput);
 ${this.generateAlphaTest()}
 ${this.generateFog()}
+${this.generateDstAlpha()}
     gl_FragColor = t_PixelOut;
 }`;
     }
@@ -1438,6 +1452,13 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
         attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
         console.warn(`Unimplemented LOGIC blend mode`);
     }
+
+    attachmentStateSimple.colorWriteMask = GfxColorWriteMask.NONE;
+
+    if (material.ropInfo.colorUpdate)
+        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.COLOR;
+    if (material.ropInfo.alphaUpdate)
+        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.ALPHA;
 
     setAttachmentStateSimple(megaState, attachmentStateSimple);
 }
@@ -1723,8 +1744,13 @@ export function parseRopInfo(r: DisplayListRegisters): RopInfo {
     const depthFunc = (zm >>> 1) & 0x07;
     const depthWrite = !!((zm >>> 4) & 0x01);
 
+    const colorUpdate = true, alphaUpdate = false;
+
     const ropInfo: RopInfo = {
-        fogType, fogAdjEnabled, blendMode, blendDstFactor, blendSrcFactor, blendLogicOp, depthFunc, depthTest, depthWrite,
+        fogType, fogAdjEnabled,
+        blendMode, blendDstFactor, blendSrcFactor, blendLogicOp,
+        depthFunc, depthTest, depthWrite,
+        colorUpdate, alphaUpdate,
     };
 
     return ropInfo;

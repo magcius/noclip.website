@@ -5,8 +5,8 @@ import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat, vec3 } from "gl-matrix";
 import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS";
-import { computeModelMatrixPosRot } from "../SourceEngine/Main";
 import { Endianness } from "../endian";
+import { MathConstants, computeModelMatrixSRT } from "../MathHelpers";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -84,6 +84,7 @@ export interface BINModel {
     vertexData: Float32Array;
     indexData: Uint16Array;
     modelParts: BINModelPart[];
+    animationIndex: number;
 }
 
 export interface BINModelSector {
@@ -91,11 +92,17 @@ export interface BINModelSector {
     textures: BINTexture[];
 }
 
+export interface SkinningMatrix {
+    index: number;
+    weight: number;
+}
+
 export interface ObjectModel {
     id: number;
     sector: BINModelSector;
     transforms: PartTransform[];
     bbox: AABB;
+    skinning: SkinningMatrix[][];
 }
 
 export interface LevelModelBIN {
@@ -273,8 +280,6 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
 
     const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
     const modelObjType = view.getUint16(sectorOffs + 0x02, true);
-    if (modelObjType !== 0x05)
-        return null;
 
     const textures: BINTexture[] = [];
     function findOrDecodeTexture(tex0_data0: number, tex0_data1: number): number {
@@ -290,8 +295,8 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
 
     // 4 positions, 3 normals, 2 UV coordinates.
     const WORKING_VERTEX_STRIDE = 4+3+2;
-    // 3 positions, 3 normals, 2 UV coordinates.
-    const VERTEX_STRIDE = 3+3+2;
+    // 3 positions, 1 index, 3 normals, 2 UV coordinates.
+    const VERTEX_STRIDE = 4+3+2;
 
     let modelObjTableIdx = sectorOffs + 0x04;
     const models: BINModel[] = [];
@@ -305,7 +310,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
         const maxX = view.getFloat32(objOffs + 0x10, true);
         const maxY = view.getFloat32(objOffs + 0x14, true);
         const maxZ = view.getFloat32(objOffs + 0x18, true);
-        assert(view.getUint32(objOffs + 0x1C, true) === 0x00);
+        const animationIndex = view.getUint8(objOffs + 0x1C);
         const bbox = new AABB(minX, minY, minZ, maxX, maxY, maxZ);
 
         const packetsBegin = objOffs + 0x20;
@@ -666,7 +671,8 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
                 vertexData[vertexDataDst++] = vertexRunData[k + 0];
                 vertexData[vertexDataDst++] = vertexRunData[k + 1];
                 vertexData[vertexDataDst++] = vertexRunData[k + 2];
-                // Skip W, it was for internal use only.
+                // take lower bits to use as skinning matrix index
+                vertexData[vertexDataDst++] = (vertexRunData[k + 3] >>> 2) & 0xFF;
                 // Normal.
                 vertexData[vertexDataDst++] = vertexRunData[k + 4];
                 vertexData[vertexDataDst++] = vertexRunData[k + 5];
@@ -685,7 +691,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
             indexOffset += vertexRun.vertexRunCount;
         }
 
-        models.push({ bbox, vertexData, indexData, modelParts });
+        models.push({ bbox, vertexData, indexData, modelParts, animationIndex });
 
         modelObjTableIdx += 0x04;
     }
@@ -905,14 +911,12 @@ function getPartTransforms(data: ArrayBufferSlice, objectID: number, partCount: 
         const x = view.getFloat32(firstTransform + 0x20 * i + 0x00 - addressOffset, true);
         const y = view.getFloat32(firstTransform + 0x20 * i + 0x04 - addressOffset, true);
         const z = view.getFloat32(firstTransform + 0x20 * i + 0x08 - addressOffset, true);
-        const rx = view.getFloat32(firstTransform + 0x20 * i + 0x10 - addressOffset, true);
-        const ry = view.getFloat32(firstTransform + 0x20 * i + 0x14 - addressOffset, true);
-        const rz = view.getFloat32(firstTransform + 0x20 * i + 0x18 - addressOffset, true);
-        const transform = mat4.create();
+        const rx = view.getFloat32(firstTransform + 0x20 * i + 0x10 - addressOffset, true) * MathConstants.DEG_TO_RAD;
+        const ry = view.getFloat32(firstTransform + 0x20 * i + 0x14 - addressOffset, true) * MathConstants.DEG_TO_RAD;
+        const rz = view.getFloat32(firstTransform + 0x20 * i + 0x18 - addressOffset, true) * MathConstants.DEG_TO_RAD;
         const translation = vec3.fromValues(x, y, z);
         const rotation = vec3.fromValues(rx, ry, rz);
-        computeModelMatrixPosRot(transform, translation, rotation);
-        out.push({ translation, rotation, matrix: transform });
+        out.push({ translation, rotation });
     }
     return out;
 }
@@ -939,13 +943,18 @@ export const enum MotionID {
 
 export const enum MotionActionID {
     None          = 0x00,
+    SetZone       = 0x01,
+    RandomWalk    = 0x03,
     PathCollision = 0x02,
     WaitForPlayer = 0x04,
     FlyInCircles  = 0x0D,
+    SporadicWalk  = 0x0F,
     PathSpin      = 0x14,
     PathRoll      = 0x15,
     Misc          = 0x16,
+    ZoneHop       = 0x18,
     PathSetup     = 0x19,
+    Clouds        = 0x1B,
     PathSimple    = 0x1D,
 }
 
@@ -956,18 +965,18 @@ interface MotionActionTableEntry {
 
 const motionActionTable: MotionActionTableEntry[] = [
     /* 0x00 */ { main: MotionActionID.WaitForPlayer, alt: 0x05 },
-    /* 0x01 */ { main: 0x03,                         alt: 0x05 },
+    /* 0x01 */ { main: MotionActionID.RandomWalk,    alt: 0x05 },
     /* 0x02 */ { main: MotionActionID.PathCollision, alt: 0x06 },
-    /* 0x03 */ { main: 0x03,                         alt: 0x07 },
+    /* 0x03 */ { main: MotionActionID.RandomWalk,    alt: 0x07 },
     /* 0x04 */ { main: MotionActionID.WaitForPlayer, alt: 0x08 },
     /* 0x05 */ { main: 0x0C,                         alt: 0x09 },
     /* 0x06 */ { main: MotionActionID.WaitForPlayer, alt: MotionActionID.FlyInCircles },
     /* 0x07 */ { main: MotionActionID.WaitForPlayer, alt: 0x0A },
     /* 0x08 */ { main: MotionActionID.PathCollision, alt: 0x0B },
-    /* 0x09 */ { main: 0x03,                         alt: 0x0A },
-    /* 0x0A */ { main: 0x01,                         alt: 0x0E },
-    /* 0x0B */ { main: 0x0F,                         alt: MotionActionID.None },
-    /* 0x0C */ { main: 0x0F,                         alt: 0x05 },
+    /* 0x09 */ { main: MotionActionID.RandomWalk,    alt: 0x0A },
+    /* 0x0A */ { main: MotionActionID.SetZone,       alt: 0x0E },
+    /* 0x0B */ { main: MotionActionID.SporadicWalk,  alt: MotionActionID.None },
+    /* 0x0C */ { main: MotionActionID.SporadicWalk,  alt: 0x05 },
     /* 0x0D */ { main: 0x0C,                         alt: 0x10 },
     /* 0x0E */ { main: 0x11,                         alt: 0x12 },
     /* 0x0F */ { main: MotionActionID.WaitForPlayer, alt: 0x12 },
@@ -979,27 +988,27 @@ const motionActionTable: MotionActionTableEntry[] = [
     /* 0x15 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
     /* 0x16 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
     /* 0x17 */ { main: MotionActionID.PathSetup,     alt: 0x17 },
-    /* 0x18 */ { main: 0x18,                         alt: MotionActionID.None },
+    /* 0x18 */ { main: MotionActionID.ZoneHop,       alt: MotionActionID.None },
     /* 0x19 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
-    /* 0x1A */ { main: 0x01,                         alt: MotionActionID.None },
-    /* 0x1B */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x1A */ { main: MotionActionID.SetZone,       alt: MotionActionID.None },
+    /* 0x1B */ { main: MotionActionID.SetZone,       alt: MotionActionID.None },
     /* 0x1C */ { main: MotionActionID.PathSetup,     alt: 0x1A },
     /* 0x1D */ { main: MotionActionID.PathSetup,     alt: 0x1A },
     /* 0x1E */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
-    /* 0x1F */ { main: MotionActionID.WaitForPlayer, alt: 0x03 },
+    /* 0x1F */ { main: MotionActionID.WaitForPlayer, alt: MotionActionID.RandomWalk },
     /* 0x20 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
     /* 0x21 */ { main: 0x0C,                         alt: 0x09 },
     /* 0x22 */ { main: MotionActionID.Misc,          alt: MotionActionID.None },
-    /* 0x23 */ { main: 0x1B,                         alt: MotionActionID.None },
+    /* 0x23 */ { main: MotionActionID.Clouds,        alt: MotionActionID.None },
     /* 0x24 */ { main: 0x1C,                         alt: MotionActionID.None },
-    /* 0x25 */ { main: 0x01,                         alt: MotionActionID.None },
-    /* 0x26 */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x25 */ { main: MotionActionID.SetZone,       alt: MotionActionID.None },
+    /* 0x26 */ { main: MotionActionID.SetZone,       alt: MotionActionID.None },
     /* 0x27 */ { main: MotionActionID.PathSimple,    alt: MotionActionID.None },
-    /* 0x28 */ { main: 0x01,                         alt: MotionActionID.None },
-    /* 0x29 */ { main: 0x01,                         alt: MotionActionID.None },
-    /* 0x2A */ { main: 0x01,                         alt: MotionActionID.None },
-    /* 0x2B */ { main: 0x01,                         alt: MotionActionID.None },
-    /* 0x2C */ { main: 0x01,                         alt: MotionActionID.None },
+    /* 0x28 */ { main: MotionActionID.SetZone,       alt: MotionActionID.None },
+    /* 0x29 */ { main: MotionActionID.SetZone,       alt: MotionActionID.None },
+    /* 0x2A */ { main: MotionActionID.SetZone,       alt: MotionActionID.None },
+    /* 0x2B */ { main: MotionActionID.SetZone,       alt: MotionActionID.None },
+    /* 0x2C */ { main: MotionActionID.SetZone,       alt: MotionActionID.None },
 ];
 
 export function parseMotion(pathData: ArrayBufferSlice, motionData: ArrayBufferSlice, levelIndex: number, moveType: number): MotionParameters | null {
@@ -1054,6 +1063,7 @@ export interface ObjectDefinition {
     stayLevel: boolean;
     speedIndex: number;
     altUpdate: number;
+    animated: boolean;
     dummyParent: boolean;
 
     map: number;
@@ -1075,6 +1085,7 @@ export function parseObjectDefinition(object: ArrayBufferSlice, collection: Arra
     const stayLevel = objView.getUint8(objOffs + 0x0C) !== 0;
     const speedIndex = objView.getInt8(objOffs + 0x13);
     const altUpdate = objView.getInt8(objOffs + 0x14);
+    const animated = objView.getUint8(objOffs + 0x1A) !== 0;
     const dummyParent = objView.getUint8(objOffs + 0x21) !== 0;
 
     const map = collView.getInt8(collOffs + 0x00);
@@ -1084,7 +1095,7 @@ export function parseObjectDefinition(object: ArrayBufferSlice, collection: Arra
     const sortKey = collView.getInt16(collOffs + 0x04, true);
     const isRare = collView.getInt8(collOffs + 0x06) !== 0;
 
-    return { stayLevel, speedIndex, altUpdate, dummyParent, map, mapRegion, size, category, sortKey, isRare };
+    return { stayLevel, speedIndex, altUpdate, animated, dummyParent, map, mapRegion, size, category, sortKey, isRare };
 }
 
 export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIndex: number): Int16Array | null {
@@ -1106,14 +1117,48 @@ export function getParentList(data: ArrayBufferSlice, levelIndex: number, areaIn
     return data.createTypedArray(Int16Array, pairStart - offset, undefined, Endianness.LITTLE_ENDIAN);
 }
 
+function computePartTransformMatrix(dst: mat4, xform: Readonly<PartTransform>): void {
+    computeModelMatrixSRT(dst, 1, 1, 1, xform.rotation[0], xform.rotation[1], xform.rotation[2], xform.translation[0], xform.translation[1], xform.translation[2]);
+}
+
 const scratchObjectAABB = new AABB();
-const scratchAABBTransform = mat4.create();
+const scratchMatrix = mat4.create();
 function computeObjectAABB(sector: BINModelSector, transforms: PartTransform[]): AABB {
     const out = new AABB();
-    mat4.identity(scratchAABBTransform);
-    out.transform(sector.models[0].bbox, transforms.length > 0 ? transforms[0].matrix : scratchAABBTransform);
-    for (let i = 1; i < transforms.length; i++) {
-        scratchObjectAABB.transform(sector.models[i].bbox, transforms.length > 0 ? transforms[i].matrix : scratchAABBTransform);
+    for (let i = 0; i < sector.models.length; i++) {
+        if (transforms.length > 0) {
+            computePartTransformMatrix(scratchMatrix, transforms[i]);
+            scratchObjectAABB.transform(sector.models[i].bbox, scratchMatrix);
+            out.union(out, scratchObjectAABB);
+        } else {
+            out.union(out, sector.models[i].bbox);
+        }
+    }
+    return out;
+}
+
+function computeObjectAABBFromRawSector(buffer: ArrayBufferSlice, offset: number, transforms: PartTransform[]): AABB {
+    const out = new AABB();
+    const view = buffer.createDataView();
+    const modelObjCount = view.getUint16(offset + 0x00, true);
+
+    const modelObjTableIdx = offset + 0x04;
+    for (let i = 0; i < modelObjCount; i++) {
+        const objOffs = offset + view.getUint32(modelObjTableIdx + 4 * i, true);
+
+        const minX = view.getFloat32(objOffs + 0x00, true);
+        const minY = view.getFloat32(objOffs + 0x04, true);
+        const minZ = view.getFloat32(objOffs + 0x08, true);
+        const maxX = view.getFloat32(objOffs + 0x10, true);
+        const maxY = view.getFloat32(objOffs + 0x14, true);
+        const maxZ = view.getFloat32(objOffs + 0x18, true);
+        scratchObjectAABB.set(minX, minY, minZ, maxX, maxY, maxZ);
+
+        if (transforms.length > 0) {
+            computePartTransformMatrix(scratchMatrix, transforms[i]);
+            scratchObjectAABB.transform(scratchObjectAABB, scratchMatrix);
+        }
+
         out.union(out, scratchObjectAABB);
     }
     return out;
@@ -1148,6 +1193,7 @@ export interface MissionSetupObjectSpawn {
 export interface LevelSetupBIN {
     activeStageAreas: number[];
     objectModels: ObjectModel[];
+    objectDefs: ObjectDefinition[];
     objectSpawns: MissionSetupObjectSpawn[][];
     zones: CollisionList[];
 }
@@ -1171,12 +1217,11 @@ function combineSlices(buffers: ArrayBufferSlice[]): ArrayBufferSlice {
 }
 
 export interface PartTransform {
-    matrix: mat4;
     translation: vec3;
     rotation: vec3;
 }
 
-export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBufferSlice, firstSectorIndex: number, transformBuffer: ArrayBufferSlice, objectId: number): ObjectModel | null {
+export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBufferSlice, firstSectorIndex: number, transformBuffer: ArrayBufferSlice, objectId: number, isAnimated = false): ObjectModel | null {
     const view = buffer.createDataView();
 
     const firstSectorOffs = 0x04 + firstSectorIndex * 0x04;
@@ -1210,15 +1255,52 @@ export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBuffer
     // if (!sectorIsNIL(buffer, collisionOffs))
     //     collision = parseCollisionLists(buffer, collisionOffs);
 
-    // Load in LOD 0.
-    const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), lod0Offs);
+    // Load in LOD 0 for normal objects, but use LOD 1 for animated objects; their LOD 0
+    // is a single part used for low-cost rendering, while LOD 1 holds actual part data
+    let sectorOffs = lod0Offs;
+    let skinning: SkinningMatrix[][] = [];
+    if (isAnimated) {
+        assert(!sectorIsNIL(buffer, lod1Offs));
+        sectorOffs = lod1Offs + view.getUint32(lod1Offs, true);
+        // weights/joint indices for skinning come first
+
+        for (let skinningOffs = lod1Offs + 0x10; skinningOffs < sectorOffs; skinningOffs += 0x20) {
+            const pairCount = view.getUint8(skinningOffs + 0x0D);
+            const weights: SkinningMatrix[] = [];
+            const jointIndices = buffer.createTypedArray(Int8Array, skinningOffs, 4);
+
+            for (let i = 0; i < pairCount; i++) {
+                const matrixIndex = view.getInt8(skinningOffs + 0x04 + i);
+                assert(matrixIndex >= 0 && matrixIndex < 4 && jointIndices[matrixIndex] >= 0);
+                const weight = view.getUint16(skinningOffs + 0x0E + 2 * i, true) / (1 << 15);
+                assert(0 < weight && weight <= 1)
+                weights.push({ index: jointIndices[matrixIndex], weight });
+            }
+            skinning.push(weights);
+        }
+    }
+
+    const sector = parseModelSector(buffer, gsMemoryMap, hexzero(objectId, 4), sectorOffs);
     if (sector === null)
         return null;
     const transforms = getPartTransforms(transformBuffer, objectId, sector.models.length);
-    return { id: objectId, sector, transforms, bbox: computeObjectAABB(sector, transforms) };
+
+    if (isAnimated)
+        assert(skinning.length === sector.models.length);
+
+    // animated objects don't have proper part transforms, so we need to use the unified model from LOD 0
+    let bbox: AABB;
+    if (isAnimated)
+        bbox = computeObjectAABBFromRawSector(buffer, lod0Offs, transforms);
+    else
+        bbox = computeObjectAABB(sector, transforms);
+    return { id: objectId, sector, transforms, bbox, skinning };
 }
 
-export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice): LevelSetupBIN {
+const missingTestLevelAnimations = [0x235, 0x1EA, 0x1EB, 0x200, 0x2E4, 0x3FF, 0x400];
+
+export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], defs: ArrayBufferSlice, collection: ArrayBufferSlice,
+    firstArea: number, randomGroups: RandomGroup[], transformBuffer: ArrayBufferSlice, levelIndex: number): LevelSetupBIN {
     // Contains object data inside it.
     const buffer = combineSlices(buffers);
     const view = buffer.createDataView();
@@ -1229,25 +1311,32 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
 
     const gsMemoryMap = nArray(2, () => gsMemoryMapNew());
 
-    function parseObject(objectId: number): ObjectModel | null {
+    function parseObject(objectId: number, animated: boolean): ObjectModel | null {
         const firstSectorIndex = 0x09 + objectId * 0x0B;
         assert(firstSectorIndex + 0x0B <= numSectors);
 
-        return parseObjectModel(gsMemoryMap, buffer, firstSectorIndex, transformBuffer, objectId);
+        return parseObjectModel(gsMemoryMap, buffer, firstSectorIndex, transformBuffer, objectId, animated);
     }
 
     const objectModels: ObjectModel[] = [];
     const objectSpawns: MissionSetupObjectSpawn[][] = [];
+    const objectDefs: ObjectDefinition[] = [];
 
     function findOrParseObjectModel(objectId: number): number {
         const existingIndex = objectModels.findIndex((model) => model.id === objectId);
         if (existingIndex >= 0) {
             return existingIndex;
         } else {
-            const newObject = parseObject(objectId);
+            const newDef = parseObjectDefinition(defs, collection, objectId);
+            // some animated objects in level 27 are missing skinning data
+            // for now, just pretend they aren't animated (we don't even display them)
+            if (levelIndex === 27 && missingTestLevelAnimations.includes(objectId))
+                newDef.animated = false;
+            const newObject = parseObject(objectId, newDef.animated);
             if (newObject === null)
                 return -1;
             objectModels.push(newObject);
+            objectDefs.push(newDef);
             return objectModels.length - 1;
         }
     }
@@ -1361,5 +1450,5 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], firstArea: num
         }
     }
 
-    return { objectModels, objectSpawns, activeStageAreas, zones };
+    return { objectModels, objectDefs, objectSpawns, activeStageAreas, zones };
 }

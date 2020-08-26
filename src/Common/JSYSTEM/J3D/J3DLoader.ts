@@ -1,7 +1,7 @@
 
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
 
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../../ArrayBufferSlice';
 import { Endianness } from '../../../endian';
@@ -310,15 +310,9 @@ function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
 //#endregion
 //#region JNT1
 export class JointTransformInfo {
-    public scaleX: number = 1.0;
-    public scaleY: number = 1.0;
-    public scaleZ: number = 1.0;
-    public rotationX: number = 0.0;
-    public rotationY: number = 0.0;
-    public rotationZ: number = 0.0;
-    public translationX: number = 0.0;
-    public translationY: number = 0.0;
-    public translationZ: number = 0.0;
+    public scale = vec3.fromValues(1.0, 1.0, 1.0);
+    public rotation = vec3.create();
+    public translation = vec3.create();
 }
 
 export interface Joint {
@@ -375,15 +369,15 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         const bbox = new AABB(bboxMinX, bboxMinY, bboxMinZ, bboxMaxX, bboxMaxY, bboxMaxZ);
 
         const transform = new JointTransformInfo();
-        transform.scaleX = scaleX;
-        transform.scaleY = scaleY;
-        transform.scaleZ = scaleZ;
-        transform.rotationX = rotationX;
-        transform.rotationY = rotationY;
-        transform.rotationZ = rotationZ;
-        transform.translationX = translationX;
-        transform.translationY = translationY;
-        transform.translationZ = translationZ;
+        transform.scale[0] = scaleX;
+        transform.scale[1] = scaleY;
+        transform.scale[2] = scaleZ;
+        transform.rotation[0] = rotationX;
+        transform.rotation[1] = rotationY;
+        transform.rotation[2] = rotationZ;
+        transform.translation[0] = translationX;
+        transform.translation[1] = translationY;
+        transform.translation[2] = translationZ;
 
         joints.push({ name, calcFlags, transform, boundingSphereRadius, bbox });
     }
@@ -986,11 +980,13 @@ function readMAT3Chunk(buffer: ArrayBufferSlice): MAT3 {
         fogBlock.AdjCenter = fogAdjCenter;
 
         const translucent = !(materialMode & 0x03);
+        const colorUpdate = true, alphaUpdate = false;
 
         const ropInfo: GX_Material.RopInfo = {
             fogType, fogAdjEnabled,
             blendMode, blendSrcFactor, blendDstFactor, blendLogicOp,
             depthTest, depthFunc, depthWrite,
+            colorUpdate, alphaUpdate,
         };
 
         const gxMaterial: GX_Material.GXMaterial = {
@@ -1319,7 +1315,7 @@ const enum TangentType {
     InOut = 1,
 }
 
-function translateAnimationTrack(data: Float32Array | Int16Array, duration: number, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
+function translateAnimationTrack(data: Float32Array | Int16Array, scale: number, count: number, index: number, tangent: TangentType): AnimationTrack {
     // Special exception.
     if (count === 1) {
         const value = data[index];
@@ -1339,10 +1335,6 @@ function translateAnimationTrack(data: Float32Array | Int16Array, duration: numb
                 frames.push({ time, value, tangentIn, tangentOut });
             }
         }
-
-        // Check for an unnecessary reset frame at the duration, as it can have messed up tangents.
-        if (frames[frames.length - 2].time === duration - 1 && frames[frames.length - 1].time === duration)
-            frames.pop();
 
         return { frames };
     }
@@ -1406,7 +1398,7 @@ function readTTK1Chunk(buffer: ArrayBufferSlice): TTK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, duration, scale, count, index, tangent);
+        return translateAnimationTrack(data, scale, count, index, tangent);
     }
 
     const uvAnimationEntries: TTK1AnimationEntry[] = [];
@@ -1500,7 +1492,7 @@ function readTRK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, duration, 1 / 0xFF, count, index, tangent);
+        return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
     }
 
     const animationEntries: TRK1AnimationEntry[] = [];
@@ -1580,7 +1572,7 @@ function readPAK1Chunk(buffer: ArrayBufferSlice): TRK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, duration, 1 / 0xFF, count, index, tangent);
+        return translateAnimationTrack(data, 1 / 0xFF, count, index, tangent);
     }
 
     const animationEntries: TRK1AnimationEntry[] = [];
@@ -1645,7 +1637,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
     const rTableOffs = view.getUint32(0x1C);
     const tTableOffs = view.getUint32(0x20);
 
-    const rotationScale = Math.pow(2, rotationDecimal) / 32767;
+    const rotationScale = Math.pow(2, rotationDecimal) / 0x7FFF * Math.PI;
 
     const sTable = buffer.createTypedArray(Float32Array, sTableOffs, sCount, Endianness.BIG_ENDIAN);
     const rTable = buffer.createTypedArray(Int16Array, rTableOffs, rCount, Endianness.BIG_ENDIAN);
@@ -1657,7 +1649,7 @@ function readANK1Chunk(buffer: ArrayBufferSlice): ANK1 {
         const index = view.getUint16(animationTableIdx + 0x02);
         const tangent: TangentType = view.getUint16(animationTableIdx + 0x04);
         animationTableIdx += 0x06;
-        return translateAnimationTrack(data, duration, scale, count, index, tangent);
+        return translateAnimationTrack(data, scale, count, index, tangent);
     }
 
     const jointAnimationEntries: ANK1JointAnimationEntry[] = [];

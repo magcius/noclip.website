@@ -1,14 +1,14 @@
 
 // Misc actors that aren't big enough to have their own file.
 
-import { mat4, quat, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
+import { mat4, quat, ReadonlyVec3, vec2, vec3, ReadonlyQuat } from 'gl-matrix';
 import { Camera } from '../../Camera';
-import { Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow } from '../../Color';
+import { Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow, Blue } from '../../Color';
 import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { LoopMode } from '../../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
-import { drawWorldSpaceBasis, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpaceBasis, drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpaceVector } from '../../DebugJunk';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
@@ -22,8 +22,8 @@ import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModel
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorNpc, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistanceVertical, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToSceneNpc, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPointPosEnd, getRailPointPosStart, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isRailGoingToEnd, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos } from '../ActorUtil';
-import { calcMapGround, CollisionKeeperCategory, CollisionParts, getBindedFixReactionVector, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorNpc, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistanceVertical, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToSceneNpc, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPointPosEnd, getRailPointPosStart, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isRailGoingToEnd, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, tryStartBck, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos, quatGetAxisZ, quatGetAxisY, blendQuatUpFront, quatGetAxisX, turnVecToVecCos } from '../ActorUtil';
+import { calcMapGround, CollisionKeeperCategory, CollisionParts, getBindedFixReactionVector, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isFloorPolygonAngle, isWallPolygonAngle, isOnGround, TriangleFilterFunc } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { initFur, initFurPlanet } from '../Fur';
@@ -31,16 +31,18 @@ import { HitSensor, HitSensorType, isSensorEnemy, isSensorNpc, isSensorPlayer, i
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter, getJMapInfoArg5 } from '../JMapInfo';
 import { WorldmapPointInfo } from './LegacyActor';
 import { addBrightObj, BrightObjBase, BrightObjCheckArg } from './LensFlare';
-import { dynamicSpawnZoneAndLayer, isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
+import { dynamicSpawnZoneAndLayer, isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer, resetPosition } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, getTimeFrames, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
 import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType } from '../MapParts';
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
-import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
+import { calcNerveRate, calcNerveValue, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
-import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV } from '../Shadow';
+import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowSurfaceCircle } from '../Shadow';
+import { initLightCtrl } from '../LightData';
+import { dfShow, dfRange } from '../../DebugFloaters';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -587,7 +589,7 @@ class Coin extends LiveActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.isPurpleCoin ? 'PurpleCoin' : 'Coin');
         connectToSceneItemStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
 
         if (infoIter !== null) {
             const isNeedBubble = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
@@ -630,10 +632,11 @@ class Coin extends LiveActor {
             shadowType = fallback(getJMapInfoArg6(infoIter), shadowType);
         }
 
-        if (shadowType < 0) {
-            initShadowVolumeSphere(sceneObjHolder, this, 50.0);
+        if (shadowType === 1) {
+            initShadowVolumeCylinder(sceneObjHolder, this, 50.0);
+        } else if (shadowType === 0) {
+            initShadowSurfaceCircle(sceneObjHolder, this, 50.0);
         } else {
-            // TODO(jstpierre): Other shadow types
             initShadowVolumeSphere(sceneObjHolder, this, 50.0);
         }
 
@@ -996,7 +999,7 @@ export class MiniRoutePart extends LiveActor {
 }
 
 export class SimpleEffectObj extends LiveActor {
-    private isVisible: boolean = true;
+    private visibleCull: boolean = true;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -1033,22 +1036,21 @@ export class SimpleEffectObj extends LiveActor {
         this.getClippingCenterOffset(scratchVec3);
         vec3.add(scratchVec3, this.translation, scratchVec3);
 
-        const visibleScenario = this.visibleScenario && this.visibleAlive;
-        let visible = visibleScenario;
-
-        const camera = viewerInput.camera;
-        if (visible)
-            visible = camera.frustum.containsSphere(scratchVec3, this.getClippingRadius());
-
-        if (this.isVisible === visible)
+        if (!isValidDraw(this))
             return;
 
-        this.isVisible = visible;
+        const camera = viewerInput.camera;
+        const visibleCull = camera.frustum.containsSphere(scratchVec3, this.getClippingRadius());
+
+        if (this.visibleCull === visibleCull)
+            return;
+
+        this.visibleCull = visibleCull;
         if (this.effectKeeper !== null)
-            this.effectKeeper.setDrawParticle(visible);
+            this.effectKeeper.setDrawParticle(visibleCull);
 
         if (this.isSyncClipping()) {
-            if (visible)
+            if (visibleCull)
                 emitEffect(sceneObjHolder, this, this.name);
             else
                 deleteEffectAll(this);
@@ -1554,8 +1556,7 @@ class ChipBase extends LiveActor {
         }
 
         if (shadowType === 0) {
-            // TODO(jstpierre): initShadowVolumeCylinder
-            initShadowVolumeSphere(sceneObjHolder, this, 50.0 * this.scale[0]);
+            initShadowVolumeCylinder(sceneObjHolder, this, 50.0 * this.scale[0]);
             shadowContinuous = false;
         } else {
             initShadowVolumeSphere(sceneObjHolder, this, 50.0 * this.scale[0]);
@@ -1698,7 +1699,7 @@ export class WoodBox extends LiveActor {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "WoodBox");
         connectToSceneMapObjStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
         this.initHitSensor();
@@ -1736,12 +1737,22 @@ class SuperSpinDriver extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, "SuperSpinDriver");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
 
+        initShadowVolumeFlatModel(sceneObjHolder, this, 'SuperSpinDriverShadow', getJointMtxByName(this, 'Outside')!);
+        // TODO(jstpierre): SpinDriverUtil::setShadowAndClipping
+        const shadowDropLength = fallback(getJMapInfoArg1(infoIter), -1.0);
+        if (shadowDropLength >= 0.0)
+            setShadowDropLength(this, null, shadowDropLength);
+        else
+            setShadowDropLength(this, null, 500.0);
+        onCalcShadowOneTime(this);
+
         this.initColor(colorArg);
         startBck(this, 'Wait');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData("SuperSpinDriver");
+        sceneObjHolder.modelCache.requestObjectData("SuperSpinDriverShadow");
     }
 
     private initColor(colorArg: number): void {
@@ -2211,6 +2222,7 @@ class CoconutTreeLeaf extends LiveActor {
 
         this.initHitSensor();
         addBodyMessageSensorMapObj(sceneObjHolder, this);
+        initCollisionParts(sceneObjHolder, this, 'CoconutTreeLeaf', this.getSensor('body')!, this.jointMtx, sceneObjHolder.modelCache.getResourceHolder('CoconutTreeLeaf'));
 
         calcMtxAxis(this.axisX, this.axisY, this.axisZ, this.jointMtx);
         vec3.copy(this.upVec, this.axisY);
@@ -2219,6 +2231,8 @@ class CoconutTreeLeaf extends LiveActor {
 
         vec3.scaleAndAdd(this.origFrontChase, this.translation, this.axisZ, 100.0);
         vec3.copy(this.currFrontChase, this.origFrontChase);
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 
     public getBaseMtx(): mat4 {
@@ -2542,7 +2556,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         this.initHitSensor();
         addHitSensorNpc(sceneObjHolder, this, 'body', 8, 50.0, vec3.fromValues(0, 50.0, 0));
         this.hitSensorKeeper!.validateBySystem();
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         initShadowFromCSV(sceneObjHolder, this);
         this.initRailRider(sceneObjHolder, infoIter);
@@ -2631,6 +2645,8 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TicoRailNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        // this.railRider!.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
 
         if (currentNerve === TicoRailNrv.Wait) {
             if (isFirstStep(this)) {
@@ -3329,32 +3345,44 @@ export class WaterPlant extends LiveActor {
     }
 }
 
-export class StarPieceGroup extends LiveActor {
+const enum StarPieceGroupNrv { Flow }
+export class StarPieceGroup extends LiveActor<StarPieceGroupNrv> {
     private starPieces: StarPiece[] = [];
     private isConnectedWithRail: boolean = false;
     private spawnOnRailPoints: boolean = false;
     private radius: number;
+    private flowSpeed: number;
+    private railCoords: number[] | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPos(sceneObjHolder, this, infoIter);
 
-        let starPieceCount = 6;
+        const isStarPieceGroup = getObjectName(infoIter) === 'StarPieceGroup';
+
+        let starPieceCount: number;
 
         // TODO(jstpierre): StarPieceFlow
-        starPieceCount = fallback(getJMapInfoArg0(infoIter), starPieceCount);
-        this.radius = fallback(getJMapInfoArg1(infoIter), 400);
-        const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
+        if (isStarPieceGroup) {
+            starPieceCount = fallback(getJMapInfoArg0(infoIter), 6);
+            this.radius = fallback(getJMapInfoArg1(infoIter), 400);
+            this.spawnOnRailPoints = fallback(getJMapInfoArg2(infoIter), -1) === 1;
+        } else {
+            this.flowSpeed = fallback(getJMapInfoArg0(infoIter), 10.0);
+            starPieceCount = fallback(getJMapInfoArg1(infoIter), 1);
+            this.radius = 400.0;
+            this.spawnOnRailPoints = false;
+            this.railCoords = nArray(starPieceCount, () => 0);
+            this.initNerve(StarPieceGroupNrv.Flow);
+        }
 
         if (isConnectedWithRail(infoIter)) {
             this.initRailRider(sceneObjHolder, infoIter);
             this.isConnectedWithRail = true;
 
-            if (arg2 === 1) {
+            if (this.spawnOnRailPoints)
                 starPieceCount = getRailPointNum(this);
-                this.spawnOnRailPoints = true;
-            }
         }
 
         for (let i = 0; i < starPieceCount; i++) {
@@ -3362,7 +3390,23 @@ export class StarPieceGroup extends LiveActor {
             this.starPieces.push(starPiece);
         }
 
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+
         this.placementAllPiece();
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StarPieceGroupNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === StarPieceGroupNrv.Flow) {
+            const railTotalLength = getRailTotalLength(this);
+            const railCoords = assertExists(this.railCoords);
+            for (let i = 0; i < this.starPieces.length; i++) {
+                railCoords[i] = (railTotalLength + railCoords[i] + this.flowSpeed * deltaTimeFrames) % railTotalLength;
+                calcRailPosAtCoord(this.starPieces[i].translation, this, railCoords[i]);
+                resetPosition(sceneObjHolder, this.starPieces[i]);
+            }
+        }
     }
 
     private placementAllPiece(): void {
@@ -3411,6 +3455,8 @@ export class StarPieceGroup extends LiveActor {
         let coord = 0;
         for (let i = 0; i < this.starPieces.length; i++) {
             calcRailPosAtCoord(this.starPieces[i].translation, this, coord);
+            if (this.railCoords !== null)
+                this.railCoords[i] = coord;
             coord += speed;
         }
     }
@@ -3437,6 +3483,7 @@ export class Shellfish extends LiveActor<ShellfishNrv> {
         this.initEffectKeeper(sceneObjHolder, null);
         this.initItem(sceneObjHolder);
         this.initNerve(ShellfishNrv.Wait);
+        initLightCtrl(sceneObjHolder, this);
     }
 
     private initItem(sceneObjHolder: SceneObjHolder): void {
@@ -5289,7 +5336,7 @@ const enum ElectricRailType {
 
 interface ElectricRailBase extends LiveActor {
     type: ElectricRailType;
-    drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx): void;
+    drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void;
 }
 
 function createAdaptorAndConnectToDrawBloomModel(sceneObjHolder: SceneObjHolder, name: string, drawCallback: (sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) => void): NameObjAdaptor {
@@ -5366,7 +5413,7 @@ export class ElectricRailHolder extends NameObj {
                 // TODO(jstpierre): Do this in one TDDraw?
                 const railTemplate = renderInstManager.pushTemplateRenderInst();
                 railTemplate.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-                rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper);
+                rail.drawRail(sceneObjHolder, renderInstManager, materialInstance.materialHelper, materialParams);
                 renderInstManager.popTemplateRenderInst();
             }
 
@@ -5401,7 +5448,7 @@ export class ElectricRailHolder extends NameObj {
             startBrk(modelObj, 'ElectricRailMoving');
             setBrkFrameAndStop(modelObj, 0.0);
             this.models[type] = modelObj;
-        } else if (type === ElectricRailType.Moving1    ) {
+        } else if (type === ElectricRailType.Moving1) {
             const modelObj = new ModelObj(dynamicSpawnZoneAndLayer, sceneObjHolder, 'ElectricRailModel', 'ElectricRailMoving', null, -1, -1, -1);
             startBtk(modelObj, 'ElectricRailMoving');
             startBrk(modelObj, 'ElectricRailMoving');
@@ -5412,11 +5459,19 @@ export class ElectricRailHolder extends NameObj {
 }
 
 class ElectricRailPoint extends LiveActor {
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private isRealPoint: boolean) {
         super(zoneAndLayer, sceneObjHolder, 'ElectricRailPoint');
 
         this.initModelManagerWithAnm(sceneObjHolder, 'ElectricRailPoint');
         connectToSceneMapObjDecoration(sceneObjHolder, this);
+
+        if (this.isRealPoint) {
+            initShadowVolumeSphere(sceneObjHolder, this, 35.0);
+            onCalcShadowOneTime(this, null);
+            onCalcShadowDropPrivateGravityOneTime(this, null);
+        }
+
+        this.makeActorAppeared(sceneObjHolder);
     }
 }
 
@@ -5424,13 +5479,6 @@ function makeAxisFrontUp(axisRight: vec3, axisUp: vec3, front: vec3, up: vec3): 
     vec3.cross(axisRight, up, front);
     vec3.normalize(axisRight, axisRight);
     vec3.cross(axisUp, front, axisRight);
-}
-
-function makeAxisVerticalZX(axisRight: vec3, front: vec3): void {
-    vec3.scaleAndAdd(axisRight, Vec3UnitZ, front, -vec3.dot(front, Vec3UnitZ));
-    if (isNearZeroVec3(axisRight, 0.001))
-        vec3.scaleAndAdd(axisRight, Vec3UnitX, front, -vec3.dot(front, Vec3UnitX));
-    vec3.normalize(axisRight, axisRight);
 }
 
 function makeAxisCrossPlane(axisRight: vec3, axisUp: vec3, front: vec3): void {
@@ -5482,6 +5530,8 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
 
         this.initPoints(sceneObjHolder);
         this.initSeparators(sceneObjHolder);
+        // initDisplayList
+        this.initShadow(sceneObjHolder, infoIter);
 
         sceneObjHolder.create(SceneObj.ElectricRailHolder);
         sceneObjHolder.electricRailHolder!.registerRail(sceneObjHolder, this);
@@ -5506,10 +5556,12 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
                 continue;
 
             for (let j = 0; j < this.height; j++) {
-                const point = new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder);
+                const isRealPoint = j === 0;
+
+                const point = new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder, isRealPoint);
                 calcRailPointPos(point.translation, this, i);
 
-                if (j >= 1) {
+                if (!isRealPoint) {
                     this.calcGravity(sceneObjHolder, scratchVec3, point.translation);
                     vec3.scaleAndAdd(point.translation, point.translation, scratchVec3, -100.0 * j);
                 }
@@ -5542,6 +5594,31 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         }
 
         moveCoordToStartPos(this);
+    }
+
+    private initShadow(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        let railShadowDropLength = fallback(getJMapInfoArg1(infoIter), -1);
+        let pointShadowDropLength = fallback(getJMapInfoArg2(infoIter), -1);
+
+        if (railShadowDropLength > 0.0 || pointShadowDropLength > 0.0) {
+            initShadowController(this);
+
+            if (pointShadowDropLength <= 0.0)
+                pointShadowDropLength = railShadowDropLength;
+
+            addShadowVolumeCylinder(sceneObjHolder, this, 'start', 20.0);
+            addShadowVolumeCylinder(sceneObjHolder, this, 'end', 20.0);
+            calcRailStartPos(scratchVec3, this);
+            setShadowDropPosition(this, 'start', scratchVec3);
+            calcRailEndPos(scratchVec3, this);
+            setShadowDropPosition(this, 'end', scratchVec3);
+            setShadowDropLength(this, 'start', pointShadowDropLength);
+            setShadowDropLength(this, 'end', pointShadowDropLength);
+            onCalcShadowDropPrivateGravity(this, 'start');
+            onCalcShadowDropPrivateGravity(this, 'end');
+
+            // TODO(jstpierre): ElectricRailShadowDrawer / addShadowVolumeLine
+        }
     }
 
     private calcGravity(sceneObjHolder: SceneObjHolder, dst: vec3, coord: vec3): void {
@@ -5589,7 +5666,7 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
         this.ddraw.endDraw(modelCache.device, modelCache.cache);
     }
 
-    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx): void {
+    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void {
         const renderInst = renderInstManager.newRenderInst();
         const mtx = materialParams.u_TexMtx[1];
         mat4.identity(mtx);
@@ -5609,6 +5686,22 @@ export class ElectricRail extends LiveActor implements ElectricRailBase {
     }
 }
 
+class ElectricRailMovingPoint extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private isRealPoint: boolean) {
+        super(zoneAndLayer, sceneObjHolder, 'ElectricRailMovingPoint');
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'ElectricRailPoint');
+        connectToSceneMapObjDecoration(sceneObjHolder, this);
+
+        if (this.isRealPoint) {
+            initShadowVolumeSphere(sceneObjHolder, this, 35.0);
+            this.calcGravityFlag = true;
+        }
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+}
+
 export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     public type: ElectricRailType;
     private segmentCount: number;
@@ -5616,7 +5709,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     private height: number;
     private visibleSegmentLength: number;
     private separators: vec3[] = [];
-    private points: ElectricRailPoint[] = [];
+    private points: ElectricRailMovingPoint[] = [];
     private size = 30.0;
     private ddraw = new TSDraw();
     private coordPhaseAnim: number = 0.0;
@@ -5665,14 +5758,19 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
     }
 
     private initPoints(sceneObjHolder: SceneObjHolder): void {
-        const pointCount = this.segmentCount * 2 * this.height;
+        for (let i = 0; i < this.segmentCount * 2; i++) {
+            for (let j = 0; j < this.height; j++) {
+                const isRealPoint = j === 0;
 
-        for (let i = 0; i < pointCount; i++)
-            this.points.push(new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder));
+                this.points.push(new ElectricRailMovingPoint(this.zoneAndLayer, sceneObjHolder, isRealPoint));
+            }
+        }
 
         if (!isLoopRail(this)) {
             for (let j = 0; j < this.height; j++) {
-                const startPoint = new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder);
+                const isRealPoint = j === 0;
+
+                const startPoint = new ElectricRailMovingPoint(this.zoneAndLayer, sceneObjHolder, isRealPoint);
                 this.points.push(startPoint);
                 calcRailStartPointPos(startPoint.translation, this);
                 if (j >= 1) {
@@ -5680,7 +5778,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
                     vec3.scaleAndAdd(startPoint.translation, startPoint.translation, scratchVec3, -100.0 * j);
                 }
 
-                const endPoint = new ElectricRailPoint(this.zoneAndLayer, sceneObjHolder);
+                const endPoint = new ElectricRailMovingPoint(this.zoneAndLayer, sceneObjHolder, isRealPoint);
                 this.points.push(endPoint);
                 calcRailEndPointPos(endPoint.translation, this);
                 if (j >= 1) {
@@ -5820,7 +5918,7 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
         this.ddraw.endDraw(modelCache.device, modelCache.cache);
     }
 
-    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx): void {
+    public drawRail(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, materialParams: MaterialParams): void {
         materialParams.u_Color[ColorKind.C1].a = this.alpha;
         const mtx = materialParams.u_TexMtx[1];
         mat4.identity(mtx);
@@ -5944,7 +6042,7 @@ export class OceanFloaterLandParts extends LiveActor {
 }
 
 function isGalaxyQuickCometAppearInCurrentStage(sceneObjHolder: SceneObjHolder): boolean {
-    return false;
+    return sceneObjHolder.scenarioData.scenarioDataIter.getValueString('Comet') === 'Quick';
 }
 
 const enum DossunNrv { Upper, FallSign, Falling, OnGround, Rising, }
@@ -5969,7 +6067,7 @@ export class Dossun extends LiveActor<DossunNrv> {
         startBva(this, 'Wait');
 
         connectToSceneCollisionEnemyStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         // this.initHitSensor();
         // this.initCollisionParts();
         this.initEffectKeeper(sceneObjHolder, null);
@@ -6063,7 +6161,7 @@ class PlantMember extends LiveActor<PlantMemberNrv> {
         connectToSceneNoSilhouettedMapObjWeakLightNoMovement(sceneObjHolder, this);
 
         if (useLightCtrl)
-            this.initLightCtrl(sceneObjHolder);
+            initLightCtrl(sceneObjHolder, this);
 
         // initSound
 
@@ -6372,7 +6470,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
         this.initFromRailPoint(sceneObjHolder);
         this.initModelManagerWithAnm(sceneObjHolder, 'Onimasu');
         connectToSceneCollisionEnemyNoShadowedMapObjStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
         setEffectHostMtx(this, 'Move', this.effectHostMtx);
         // initSound
@@ -7422,7 +7520,7 @@ class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
             this.initEffectKeeper(sceneObjHolder, effectName);
 
         if (useLightCtrl)
-            this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
 
         // initSound
         this.initNerve(MogucchiHillPieceNrv.Wait);
@@ -7946,7 +8044,7 @@ export class ScrewSwitch extends LiveActor<ScrewSwitchNrv> {
 
         this.initModelManagerWithAnm(sceneObjHolder, 'ScrewSwitch');
         connectToSceneMapObjDecorationStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initHitSensor();
         addBodyMessageSensorMapObj(sceneObjHolder, this);
         // addHitSensorAtJoint(this, 'binder', 'Screw');
@@ -8066,7 +8164,7 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
 
         this.initModelManagerWithAnm(sceneObjHolder, 'ScrewSwitchReverse');
         connectToSceneMapObjDecorationStrongLight(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initHitSensor();
         addBodyMessageSensorMapObj(sceneObjHolder, this);
         // addHitSensorAtJoint(this, 'binder', 'Screw');
@@ -8074,7 +8172,16 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
 
         this.initEffectKeeper(sceneObjHolder, null);
 
-        // arg7 = shadow
+        const shadowDropLength = fallback(getJMapInfoArg7(infoIter), -1);
+        if (shadowDropLength > 0.0) {
+            vec3.copy(scratchVec3, this.translation);
+            this.translation[1] += 10.0;
+            initShadowVolumeCylinder(sceneObjHolder, this, 100.0);
+            setShadowDropPosition(this, null, scratchVec3);
+            setShadowDropLength(this, null, shadowDropLength);
+            calcGravity(sceneObjHolder, this);
+        }
+
         // arg0 = force jump
 
         this.initNerve(ScrewSwitchReverseNrv.Wait);
@@ -8269,7 +8376,7 @@ export class BallBeamer extends LiveActor<BallBeamerNrv> {
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.translation[1] -= 50.0;
         connectToSceneEnemy(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initHitSensor();
         // addHitSensorPush
         // initShadowVolumeSphere
@@ -8717,7 +8824,7 @@ function addVelocityToGravity(actor: LiveActor, speed: number): void {
     vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
 }
 
-function reboundVelocityFromCollision(actor: LiveActor, p2: number, p3: number, reboundDrag: number): boolean {
+function reboundVelocityFromEachCollision(actor: LiveActor, floorBounce: number, wallBounce: number, ceilingBounce: number, cutoff: number, drag: number = 1.0): boolean {
     if (!isBinded(actor))
         return false;
 
@@ -8727,16 +8834,22 @@ function reboundVelocityFromCollision(actor: LiveActor, p2: number, p3: number, 
 
     vec3.normalize(scratchVec3, fixReaction);
     const dot = vec3.dot(scratchVec3, actor.velocity);
-    if (dot >= -p3) {
+    if (dot >= -cutoff) {
         if (dot < 0.0)
             vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
         return false;
     } else {
         vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
-        vec3.scale(actor.velocity, actor.velocity, reboundDrag);
-        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot * p2);
+        vec3.scale(actor.velocity, actor.velocity, drag);
+        const reactionAngle = vec3.dot(scratchVec3, actor.gravityVector);
+        const bounce = isFloorPolygonAngle(reactionAngle) ? floorBounce : isWallPolygonAngle(reactionAngle) ? wallBounce : ceilingBounce;
+        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot * bounce);
         return true;
     }
+}
+
+function reboundVelocityFromCollision(actor: LiveActor, bounce: number, cutoff: number, drag: number): boolean {
+    return reboundVelocityFromEachCollision(actor, bounce, bounce, bounce, cutoff, drag);
 }
 
 function restrictVelocity(actor: LiveActor, maxSpeed: number): void {
@@ -8749,7 +8862,10 @@ function attenuateVelocity(actor: LiveActor, drag: number): void {
 }
 
 function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    const collisionDirector = sceneObjHolder.collisionDirector!;
+    const collisionDirector = sceneObjHolder.collisionDirector;
+    if (collisionDirector === null)
+        return;
+
     vec3.scaleAndAdd(scratchVec3a, actor.translation, actor.gravityVector, -150.0);
     vec3.scaleAndAdd(scratchVec3b, actor.translation, actor.gravityVector, 1000.0);
 
@@ -8810,7 +8926,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
         this.size = 1.0;
         vec3.set(this.scale, 1.0, 1.0, 1.0);
         connectToSceneEnemy(sceneObjHolder, this);
-        this.initLightCtrl(sceneObjHolder);
+        initLightCtrl(sceneObjHolder, this);
         this.initHitSensor();
         vec3.set(scratchVec3, 0.0, 126.36 * this.size, 0.0);
         addHitSensor(sceneObjHolder, this, 'Body', HitSensorType.Unizo, 8, 115.2 * this.size, scratchVec3);
@@ -8897,9 +9013,6 @@ export class Unizo extends LiveActor<UnizoNrv> {
         // turnMtxToYDir(this.baseMtx, scratchVec3, 1.0);
         setMatrixTranslation(this.baseMtx, this.translation);
         this.updateSurfaceEffect(sceneObjHolder);
-
-        // if (isBindedGround(this))
-        //     this.binder!.debugDrawAllFloorHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UnizoNrv, deltaTimeFrames: number): void {
@@ -9129,5 +9242,316 @@ export class Unizo extends LiveActor<UnizoNrv> {
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         sceneObjHolder.modelCache.requestObjectData(`${getObjectName(infoIter)}Break`);
+    }
+}
+
+class TerritoryMover {
+    private center = vec3.create();
+    public targetPos = vec3.create();
+
+    constructor(private radius: number) {
+    }
+
+    public setCenter(v: ReadonlyVec3): void {
+        vec3.copy(this.center, v);
+    }
+
+    public decideNextTargetPos(actor: LiveActor): void {
+        getRandomVector(scratchVec3, 1.0);
+        vec3.normalize(scratchVec3, scratchVec3);
+
+        vecKillElement(scratchVec3, scratchVec3, actor.gravityVector);
+        vec3.scaleAndAdd(this.targetPos, this.center, scratchVec3, this.radius);
+    }
+
+    public isReachedTarget(actor: LiveActor, dist: number): boolean {
+        vec3.sub(scratchVec3, actor.translation, this.targetPos);
+        vecKillElement(scratchVec3, scratchVec3, actor.gravityVector);
+        return vec3.squaredLength(scratchVec3) < dist**2.0;
+    }
+}
+
+abstract class ActorStateBaseInterface<T extends number = number> extends NerveExecutor<T> {
+    public isDead: boolean = false;
+
+    public appear(): void {
+        this.isDead = false;
+    }
+
+    public kill(): void {
+        this.isDead = true;
+    }
+
+    public control(): void {
+    }
+
+    public update(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): boolean {
+        this.updateNerveExecutor(sceneObjHolder, deltaTimeFrames);
+
+        if (!this.isDead)
+            this.control();
+
+        return this.isDead;
+    }
+}
+
+interface WalkerStateParam {
+    gravitySpeed: number;
+    velDragAir: number;
+    velDragGround: number;
+}
+
+interface WalkerStateWanderParam {
+    turnSpeedDegrees: number;
+    waitStep: number;
+    walkSpeed: number;
+    walkStep: number;
+    targetRadius: number;
+}
+
+function calcPassiveMovement(actor: LiveActor, param: Readonly<WalkerStateParam>, deltaTimeFrames: number): void {
+    reboundVelocityFromEachCollision(actor, -1.0, -1.0, 0.0, 0.0);
+    if (isOnGround(actor)) {
+        attenuateVelocity(actor, param.velDragGround ** deltaTimeFrames);
+    } else {
+        addVelocityToGravity(actor, param.gravitySpeed * deltaTimeFrames);
+        attenuateVelocity(actor, param.velDragAir ** deltaTimeFrames);
+    }
+}
+
+function turnVecToVecCosOnPlane(dst: vec3, src: ReadonlyVec3, targetAny: ReadonlyVec3, up: ReadonlyVec3, speed: number): boolean {
+    vecKillElement(scratchVec3a, targetAny, up);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+
+    if (isNearZeroVec3(scratchVec3a, 0.001))
+        return false;
+
+    if (speed <= -1.0) {
+        vec3.copy(dst, scratchVec3a);
+        return false;
+    }
+
+    return turnVecToVecCos(dst, src, scratchVec3a, speed, up, 0.02);
+}
+
+function turnDirectionToTargetUseGroundNormalDegree(actor: LiveActor, dst: vec3, targetPos: ReadonlyVec3, speedInDegrees: number): boolean {
+    vec3.sub(scratchVec3, targetPos, actor.translation);
+    const speed = Math.cos(MathConstants.DEG_TO_RAD * speedInDegrees);
+    const plane = isBindedGround(actor) ? (actor.binder!.floorHitInfo.faceNormal) : actor.gravityVector;
+    return turnVecToVecCosOnPlane(dst, dst, scratchVec3, plane, speed);
+}
+
+function isNearAngleVec3(a: ReadonlyVec3, b: ReadonlyVec3, cutoff: number): boolean {
+    if (isNearZeroVec3(a, 0.001) || isNearZeroVec3(b, 0.001))
+        return false;
+
+    const magA = vec3.length(a), magB = vec3.length(b);
+    return (vec3.dot(a, b) / (magA * magB)) >= cutoff;
+}
+
+function isFaceToTargetHorizontalDegree(actor: LiveActor, target: ReadonlyVec3, direction: ReadonlyVec3, degrees: number): boolean {
+    vec3.sub(scratchVec3a, target, actor.translation);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+    vecKillElement(scratchVec3a, scratchVec3a, actor.gravityVector);
+    vecKillElement(scratchVec3b, direction, actor.gravityVector);
+    return isNearAngleVec3(scratchVec3a, scratchVec3b, Math.cos(MathConstants.DEG_TO_RAD * degrees));
+}
+
+function isFallNextMoveActor(actor: Readonly<LiveActor>, a: number, b: number, c: number, filter: TriangleFilterFunc | null = null): boolean {
+    // TODO(jstpierre)
+    return false;
+}
+
+enum WalkerStateWanderNrv { Wait, Walk }
+class WalkerStateWander extends ActorStateBaseInterface<WalkerStateWanderNrv> {
+    private territoryMover = new TerritoryMover(500.0);
+
+    constructor(private actor: LiveActor, private front: vec3, private param: WalkerStateParam, private paramWander: WalkerStateWanderParam) {
+        super();
+
+        this.initNerve(WalkerStateWanderNrv.Wait);
+        this.territoryMover.setCenter(this.actor.translation);
+    }
+
+    public setWanderCenter(v: ReadonlyVec3): void {
+        this.territoryMover.setCenter(v);
+    }
+
+    public appear(): void {
+        this.isDead = false;
+        this.setNerve(WalkerStateWanderNrv.Wait);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WalkerStateWanderNrv, deltaTimeFrames: number): void {
+        if (currentNerve === WalkerStateWanderNrv.Wait) {
+            if (isFirstStep(this))
+                startAction(this.actor, 'Wait');
+
+            calcPassiveMovement(this.actor, this.param, deltaTimeFrames);
+
+            if (isGreaterStep(this, this.paramWander.waitStep)) {
+                this.territoryMover.decideNextTargetPos(this.actor);
+                this.setNerve(WalkerStateWanderNrv.Walk);
+            }
+        } else if (currentNerve === WalkerStateWanderNrv.Walk) {
+            if (isFirstStep(this))
+                startAction(this.actor, 'Walk');
+
+            turnDirectionToTargetUseGroundNormalDegree(this.actor, this.front, this.territoryMover.targetPos, this.paramWander.turnSpeedDegrees);
+            if (isFaceToTargetHorizontalDegree(this.actor, this.territoryMover.targetPos, this.front, 8.0))
+                addVelocityMoveToDirection(this.actor, this.front, this.paramWander.walkSpeed);
+
+            calcPassiveMovement(this.actor, this.param, deltaTimeFrames);
+
+            if (!isFallNextMoveActor(this.actor, 150.0, 150.0, 150.0)) {
+                if (this.territoryMover.isReachedTarget(this.actor, this.paramWander.targetRadius) || isGreaterStep(this, this.paramWander.walkStep)) {
+                    this.setNerve(WalkerStateWanderNrv.Wait);
+                }
+            } else {
+                vec3.zero(this.actor.velocity);
+                this.setNerve(WalkerStateWanderNrv.Wait);
+            }
+        }
+    }
+}
+
+function updateActorState(sceneObjHolder: SceneObjHolder, actor: LiveActor, state: ActorStateBaseInterface, deltaTimeFrames: number): void {
+    if (isFirstStep(actor))
+        state.appear();
+
+    const isDead = state.update(sceneObjHolder, deltaTimeFrames);
+    if (isDead)
+        state.kill();
+}
+
+function makeQuatAndFrontFromRotate(dstQuat: quat, dstFront: vec3, actor: Readonly<LiveActor>): void {
+    quatFromEulerRadians(dstQuat, actor.rotation[0], actor.rotation[1], actor.rotation[2]);
+    quatGetAxisZ(dstFront, dstQuat);
+}
+
+function blendQuatFromGroundAndFront(dst: quat, actor: Readonly<LiveActor>, front: ReadonlyVec3, speedUp: number, speedFront: number): void {
+    if (isBindedGround(actor)) {
+        vec3.copy(scratchVec3, actor.binder!.floorHitInfo.faceNormal);
+    } else {
+        vec3.negate(scratchVec3, actor.gravityVector);
+    }
+
+    blendQuatUpFront(dst, dst, scratchVec3, front, speedUp, speedFront);
+}
+
+function turnQuatUpToGravity(dst: quat, src: ReadonlyQuat, actor: Readonly<LiveActor>): void {
+    quatGetAxisY(scratchVec3a, src);
+    vec3.negate(scratchVec3b, actor.gravityVector);
+
+    if (vec3.dot(scratchVec3a, scratchVec3b) > -0.999) {
+        quatSetRotate(scratchQuat, scratchVec3a, scratchVec3b);
+    } else {
+        quatGetAxisX(scratchVec3a, src);
+        quat.setAxisAngle(scratchQuat, scratchVec3a, MathConstants.TAU / 4);
+    }
+    quat.mul(dst, scratchQuat, src);
+    quat.normalize(dst, dst);
+}
+
+const enum KuriboNrv { Wander }
+export class Kuribo extends LiveActor<KuriboNrv> {
+    private quat = quat.create();
+    private front = vec3.create();
+    private manualGravity: boolean = false;
+    private stateWander: WalkerStateWander;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        const l_id = infoIter.getValueNumber('l_id');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Kuribo');
+        connectToSceneEnemy(sceneObjHolder, this);
+        initLightCtrl(sceneObjHolder, this);
+        makeQuatAndFrontFromRotate(this.quat, this.front, this);
+
+        if (infoIter !== null)
+            this.manualGravity = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
+
+        if (this.manualGravity) {
+            this.calcGravityFlag = false;
+            quatGetAxisY(this.gravityVector, this.quat);
+        } else {
+            this.calcGravityFlag = true;
+        }
+
+        const radius = 70.0 * this.scale[1];
+        this.initBinder(radius, radius, 0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        initShadowVolumeSphere(sceneObjHolder, this, 60.0);
+        this.initState();
+        this.initNerve(KuriboNrv.Wander);
+
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        turnQuatUpToGravity(this.quat, this.quat, this);
+        trySetMoveLimitCollision(sceneObjHolder, this);
+    }
+
+    public calcAndSetBaseMtx(): void {
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.quat, this.translation);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        if (this.manualGravity)
+            calcGravity(sceneObjHolder, this);
+
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        blendQuatFromGroundAndFront(this.quat, this, this.front, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
+
+        // this.binder!.debugDrawAllFloorHitInfo(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix);
+
+        // calcVelocityAreaOrRailMoveOnGround
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KuriboNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === KuriboNrv.Wander) {
+            updateActorState(sceneObjHolder, this, this.stateWander, deltaTimeFrames);
+
+            // drawWorldSpaceVector(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.translation, this.front, 100.0);
+            // drawWorldSpaceVector(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.translation, this.velocity, 1.0, Green);
+
+            // drawWorldSpacePoint(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.stateWander.territoryMover.targetPos, Green, 10);
+        }
+    }
+
+    private initState(): void {
+        const param: WalkerStateParam = {
+            gravitySpeed: 1.5,
+            velDragAir: 0.99,
+            velDragGround: 0.93,
+        };
+
+        const paramWander: WalkerStateWanderParam = {
+            walkSpeed: 0.2,
+            waitStep: 120,
+            walkStep: 120,
+            turnSpeedDegrees: 3.0,
+            targetRadius: 20.0,
+        };
+
+        this.stateWander = new WalkerStateWander(this, this.front, param, paramWander);
     }
 }
