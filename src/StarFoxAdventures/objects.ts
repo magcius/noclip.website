@@ -1,4 +1,4 @@
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, vec3, quat } from 'gl-matrix';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -8,11 +8,11 @@ import * as GX_Material from '../gx/gx_material';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
 import { ModelInstance, ModelRenderContext } from './models';
-import { dataSubarray, angle16ToRads, readVec3 } from './util';
+import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUint16 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
-import { scaleMatrix } from '../MathHelpers';
+import { scaleMatrix, computeModelMatrixSRT } from '../MathHelpers';
 import { SceneRenderContext } from './render';
 import { colorFromRGBA8, colorNewFromRGBA8, colorNewFromRGBA } from '../Color';
 
@@ -239,8 +239,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
                 const speedX = data.getInt8(0x1e);
                 const speedY = data.getInt8(0x1f);
 
-                const tabValue = obj.world.resColl.tablesTab.getUint32(0xe * 4);
-                const targetTexId = obj.world.resColl.tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
+                const tabValue = readUint32(obj.world.resColl.tablesTab, 0, 0xe);
+                const targetTexId = readUint32(obj.world.resColl.tablesBin, 0, tabValue + scrollableIndex) & 0x7fff;
                 // Note: & 0x7fff above is an artifact of how the game stores tex id's.
                 // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
 
@@ -760,7 +760,7 @@ export class ObjectType {
         const numModels = data.getUint8(0x55);
         const modelListOffs = data.getUint32(0x8);
         for (let i = 0; i < numModels; i++) {
-            const modelNum = data.getUint32(modelListOffs + i * 4);
+            const modelNum = readUint32(data, modelListOffs, i);
             this.modelNums.push(modelNum);
         }
 
@@ -783,6 +783,8 @@ export interface ObjectRenderContext extends SceneRenderContext {
 export interface Light {
     position: vec3;
 }
+
+const scratchQuat0 = quat.create();
 
 export class ObjectInstance {
     private modelInst: ModelInstance | null = null;
@@ -857,11 +859,9 @@ export class ObjectInstance {
 
     public getLocalSRT(): mat4 {
         if (this.srtDirty) {
-            mat4.fromTranslation(this.srtMatrix, this.position);
-            scaleMatrix(this.srtMatrix, this.srtMatrix, this.scale);
-            mat4.rotateY(this.srtMatrix, this.srtMatrix, this.yaw);
-            mat4.rotateX(this.srtMatrix, this.srtMatrix, this.pitch);
-            mat4.rotateZ(this.srtMatrix, this.srtMatrix, this.roll);
+            mat4FromSRT(this.srtMatrix, this.scale, this.scale, this.scale,
+                this.yaw, this.pitch, this.roll,
+                this.position[0], this.position[1], this.position[2]);
             this.srtDirty = false;
         }
 
@@ -954,7 +954,6 @@ export class ObjectInstance {
 
     public update() {
         if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
-            const poseMtx = mat4.create();
             // TODO: use time values from animation data?
             const amap = this.modelInst.getAmap(this.modelAnimNum!);
             const kfTime = (this.world.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
@@ -993,12 +992,12 @@ export class ObjectInstance {
                 // TODO: Draw pyramid shapes instead of lines
                 for (let i = 1; i < this.modelInst.model.joints.length; i++) {
                     const joint = this.modelInst.model.joints[i];
-                    const jointMtx = mat4.clone(this.modelInst.boneMatrices[i]);
+                    const jointMtx = mat4.clone(this.modelInst.skeletonInst!.getJointMatrix(i));
                     mat4.mul(jointMtx, jointMtx, mtx);
                     const jointPt = vec3.create();
                     mat4.getTranslation(jointPt, jointMtx);
                     if (joint.parent != 0xff) {
-                        const parentMtx = mat4.clone(this.modelInst.boneMatrices[joint.parent]);
+                        const parentMtx = mat4.clone(this.modelInst.skeletonInst!.getJointMatrix(joint.parent));
                         mat4.mul(parentMtx, parentMtx, mtx);
                         const parentPt = vec3.create();
                         mat4.getTranslation(parentPt, parentMtx);
@@ -1041,11 +1040,11 @@ export class ObjectManager {
 
     public getObjectType(typeNum: number, skipObjindex: boolean = false): ObjectType {
         if (!this.useEarlyObjects && !skipObjindex) {
-            typeNum = this.objindexBin!.getUint16(typeNum * 2);
+            typeNum = readUint16(this.objindexBin!, 0, typeNum);
         }
 
         if (this.objectTypes[typeNum] === undefined) {
-            const offs = this.objectsTab.getUint32(typeNum * 4);
+            const offs = readUint32(this.objectsTab, 0, typeNum);
             const objType = new ObjectType(typeNum, dataSubarray(this.objectsBin, offs), this.useEarlyObjects);
             this.objectTypes[typeNum] = objType;
         }

@@ -1199,11 +1199,11 @@ export class MaterialFactory {
     constructor(private device: GfxDevice, private envfxMan?: EnvfxManager) {
     }
 
-    public getAmbientColor(ambienceNum: number): Color {
+    public getAmbientColor(out: Color, ambienceNum: number) {
         if (this.envfxMan !== undefined) {
-            return this.envfxMan.getAmbientColor(ambienceNum);
+            this.envfxMan.getAmbientColor(out, ambienceNum);
         } else {
-            return colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
+            colorFromRGBA(out, 1.0, 1.0, 1.0, 1.0);
         }
     }
 

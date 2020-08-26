@@ -1,12 +1,12 @@
-import { mat4 } from 'gl-matrix';
-import { lerp, lerpAngle, scaleMatrix, computeModelMatrixT } from '../MathHelpers';
+import { mat4, quat } from 'gl-matrix';
+import { lerp, lerpAngle } from '../MathHelpers';
 import AnimationController from '../AnimationController';
 import { ViewerRenderInput } from '../viewer';
 import { DataFetcher } from '../DataFetcher';
 import { nArray } from '../util';
 
 import { GameInfo } from './scenes';
-import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader } from './util';
+import { dataSubarray, interpS16, signExtend, angle16ToRads, HighBitReader, readUint32, readUint16 } from './util';
 import { ModelInstance } from './models';
 
 export class SFAAnimationController {
@@ -47,8 +47,8 @@ export class AnimCurvFile {
     }
 
     public getAnimCurve(num: number): AnimCurve {
-        const offs = this.animcurvTab.getUint32(num * 4) & 0x7fffffff;
-        const nextOffs = this.animcurvTab.getUint32((num + 1) * 4) & 0x7fffffff;
+        const offs = readUint32(this.animcurvTab, 0, num) & 0x7fffffff;
+        const nextOffs = readUint32(this.animcurvTab, 0, num + 1) & 0x7fffffff;
         const byteLength = nextOffs - offs;
 
         const data = dataSubarray(this.animcurvBin, offs, byteLength);
@@ -117,12 +117,12 @@ export class AnimFile {
             return false;
         }
         
-        return (this.tab.getUint32(num * 4) & 0xff000000) === 0x10000000;
+        return (readUint32(this.tab, 0, num) & 0xff000000) === 0x10000000;
     }
 
     public getAnim(num: number): Anim {
-        const offs = this.tab.getUint32(num * 4) & 0x0fffffff;
-        const nextOffs = this.tab.getUint32((num + 1) * 4) & 0x0fffffff;
+        const offs = readUint32(this.tab, 0, num) & 0x0fffffff;
+        const nextOffs = readUint32(this.tab, 0, num + 1) & 0x0fffffff;
         const byteLength = nextOffs - offs;
 
         const data = dataSubarray(this.bin, offs, byteLength);
@@ -279,12 +279,18 @@ export function interpolatePoses(pose0: Pose, pose1: Pose, ratio: number, reuse?
     return result;
 }
 
+const scratchQuat = quat.create();
+
+// Applies rotations in Z -> Y -> X order.
 export function getLocalTransformForPose(dst: mat4, pose: Pose) {
-    computeModelMatrixT(dst, pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation);
-    scaleMatrix(dst, dst, pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale);
-    mat4.rotateZ(dst, dst, pose.axes[2].rotation);
-    mat4.rotateY(dst, dst, pose.axes[1].rotation);
-    mat4.rotateX(dst, dst, pose.axes[0].rotation);
+    quat.identity(scratchQuat);
+    // TODO: verify correctness
+    quat.rotateZ(scratchQuat, scratchQuat, pose.axes[2].rotation);
+    quat.rotateY(scratchQuat, scratchQuat, pose.axes[1].rotation);
+    quat.rotateX(scratchQuat, scratchQuat, pose.axes[0].rotation);
+    mat4.fromRotationTranslationScale(dst, scratchQuat,
+        [pose.axes[0].translation, pose.axes[1].translation, pose.axes[2].translation],
+        [pose.axes[0].scale, pose.axes[1].scale, pose.axes[2].scale]);
 }
 
 export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number, reuse?: Keyframe): Keyframe {
@@ -298,6 +304,8 @@ export function interpolateKeyframes(kf0: Keyframe, kf1: Keyframe, ratio: number
     return result;
 }
 
+const scratchMtx = mat4.create();
+
 export function applyKeyframeToModel(kf: Keyframe, modelInst: ModelInstance, amap: DataView | null) {
     modelInst.resetPose();
 
@@ -308,10 +316,9 @@ export function applyKeyframeToModel(kf: Keyframe, modelInst: ModelInstance, ama
         }
 
         const pose = kf.poses[poseNum];
-        const poseMtx = mat4.create();
-        getLocalTransformForPose(poseMtx, pose);
+        getLocalTransformForPose(scratchMtx, pose);
 
-        modelInst.setJointPose(i, poseMtx);
+        modelInst.setJointPose(i, scratchMtx);
     }
 }
 
@@ -337,8 +344,8 @@ export class AmapCollection {
     }
 
     public getAmap(modelNum: number): DataView {
-        const offs = this.amapTab.getUint32(modelNum * 4);
-        const nextOffs = this.amapTab.getUint32((modelNum + 1) * 4);
+        const offs = readUint32(this.amapTab, 0, modelNum);
+        const nextOffs = readUint32(this.amapTab, 0, modelNum + 1);
         // console.log(`loading amap for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
         return dataSubarray(this.amapBin, offs, nextOffs - offs);
     }
@@ -366,8 +373,8 @@ export class ModanimCollection {
     }
 
     public getModanim(modelNum: number): DataView {
-        const offs = this.modanimTab.getUint16(modelNum * 2);
-        const nextOffs = this.modanimTab.getUint16((modelNum + 1) * 2);
+        const offs = readUint16(this.modanimTab, 0, modelNum);
+        const nextOffs = readUint16(this.modanimTab, 0, modelNum + 1);
         // console.log(`loading modanim for model ${modelNum} from 0x${offs.toString(16)}, size 0x${(nextOffs - offs).toString(16)}`);
         return dataSubarray(this.modanimBin, offs, nextOffs - offs);
     }

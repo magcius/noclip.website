@@ -137,6 +137,8 @@ export class World {
     }
 }
 
+const scratchMtx0 = mat4.create();
+
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
@@ -322,35 +324,13 @@ class WorldRenderer extends SFARenderer {
         };
 
         modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix, 0);
-
-        // Draw bones
-        const drawBones = false;
-        if (drawBones) {
-            const ctx = getDebugOverlayCanvas2D();
-            for (let i = 1; i < modelInst.model.joints.length; i++) {
-                const joint = modelInst.model.joints[i];
-                const jointMtx = mat4.clone(modelInst.boneMatrices[i]);
-                mat4.mul(jointMtx, jointMtx, matrix);
-                const jointPt = vec3.create();
-                mat4.getTranslation(jointPt, jointMtx);
-                if (joint.parent != 0xff) {
-                    const parentMtx = mat4.clone(modelInst.boneMatrices[joint.parent]);
-                    mat4.mul(parentMtx, parentMtx, matrix);
-                    const parentPt = vec3.create();
-                    mat4.getTranslation(parentPt, parentMtx);
-                    drawWorldSpaceLine(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, parentPt, jointPt);
-                } else {
-                    drawWorldSpacePoint(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
-                }
-            }
-        }
     }
 
     private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
         let i = 0;
 
         if (this.enableLights) {
-            const worldView = mat4.create();
+            const worldView = scratchMtx0;
             computeViewMatrix(worldView, modelCtx.viewerInput.camera);
     
             // const ctx = getDebugOverlayCanvas2D();
@@ -363,7 +343,7 @@ class WorldRenderer extends SFARenderer {
                 // drawWorldSpacePoint(ctx, modelCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
                 // TODO: use correct parameters
                 colorCopy(lights[i].Color, light.color);
-                lights[i].CosAtten = vec3.fromValues(1.0, 0.0, 0.0); // TODO
+                vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
                 vec3.copy(lights[i].DistAtten, light.distAtten);
     
                 i++;
