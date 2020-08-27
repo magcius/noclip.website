@@ -1,7 +1,7 @@
 
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { BasicRenderTarget, makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
 import { executeOnPass } from "../gfx/render/GfxRenderer";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
@@ -15,6 +15,7 @@ import { UVMDRenderer } from "./ParsedFiles/UVMD";
 import { mat4 } from "gl-matrix";
 import { UVTX, TexScrollAnim, TexSeqAnim } from "./ParsedFiles/UVTX";
 import { UVTS } from "./ParsedFiles/UVTS";
+import { colorNewFromRGBA } from "../Color";
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2 },
@@ -35,6 +36,8 @@ class BARRenderer implements SceneGfx {
     private uvenModelRenderers: UVMDRenderer[] | null = null;
     private texScrollAnims: TexScrollAnim[];
     private texSeqAnims: TexSeqAnim[];
+
+    private renderPassDescriptor: GfxRenderPassDescriptor;
 
     constructor(device: GfxDevice, uvtr: UVTR, uven: UVEN | null) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -64,6 +67,11 @@ class BARRenderer implements SceneGfx {
                     this.texSeqAnims.push(uvFile.seqAnim);
                 }
             }
+        }
+
+        this.renderPassDescriptor = standardFullClearRenderPassDescriptor;
+        if (uven !== null) {
+            this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
         }
     }
 
@@ -129,7 +137,7 @@ class BARRenderer implements SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.renderPassDescriptor);
         executeOnPass(renderInstManager, device, passRenderer, 0);
         // executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
 
