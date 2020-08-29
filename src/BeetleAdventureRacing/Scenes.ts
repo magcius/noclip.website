@@ -69,7 +69,8 @@ class BARRenderer implements SceneGfx {
             }
         }
 
-        this.renderPassDescriptor = standardFullClearRenderPassDescriptor;
+        // TODO: we use purple as a default just so i know when it's not loading; in the future switch to something else
+        this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(1, 0, 1));
         if (uven !== null) {
             this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
         }
@@ -108,6 +109,7 @@ class BARRenderer implements SceneGfx {
         
         topTemplate.setBindingLayouts(bindingLayouts);
 
+        // TODO TODO TODO: use translateRenderMode from RDP file!
         topTemplate.setMegaStateFlags(setAttachmentStateSimple({}, {
             blendMode: GfxBlendMode.ADD,
             blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
@@ -115,9 +117,9 @@ class BARRenderer implements SceneGfx {
         }));
         topTemplate.setMegaStateFlags({cullMode: GfxCullMode.BACK});
 
-        // TODO-ASK
         const renderInstManager = this.renderHelper.renderInstManager;
 
+        //TODO: figure out what's going on with the weird env textures
         if(this.uvenModelRenderers !== null) {
             this.uvenModelRenderers.forEach(r => r.prepareToRender(device, renderInstManager, viewerInput, mat4.create()))
         }
@@ -139,6 +141,9 @@ class BARRenderer implements SceneGfx {
 
         const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.renderPassDescriptor);
         executeOnPass(renderInstManager, device, passRenderer, 0);
+
+        //TODO: snow
+
         // executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
 
         renderInstManager.resetRenderInsts();
@@ -155,8 +160,8 @@ class BARRenderer implements SceneGfx {
 export const pathBase = `BeetleAdventureRacing`;
 class BARSceneDesc implements SceneDesc {
     public id: string;
-    constructor(public uvtrIndex: number, public name: string, public uvenIndex: number | null = null) {
-        this.id = uvtrIndex.toString();
+    constructor(public sceneIndex: number, public name: string) {
+        this.id = sceneIndex.toString();
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
@@ -164,17 +169,24 @@ class BARSceneDesc implements SceneDesc {
             return await loadFilesystem(context.dataFetcher, device);
         });
 
-        const uvtr = filesystem.getParsedFile(UVTR, "UVTR", this.uvtrIndex);
+        // Get scene descriptions
+        let sceneModuleCodeChunkBuffer = filesystem.getFile("UVMO", 0x32).chunks[1].buffer;
+        let sceneDescriptionsDataView = sceneModuleCodeChunkBuffer.subarray(0x1840, 0x9c * 0x22).createDataView();
+
+        let uvtrIndex = sceneDescriptionsDataView.getInt16(0x9c * this.sceneIndex + 0x0);
+        let uvenIndex = sceneDescriptionsDataView.getInt16(0x9c * this.sceneIndex + 0x2);
+
+        const uvtr = filesystem.getParsedFile(UVTR, "UVTR", uvtrIndex);
         console.log(uvtr);
 
         // TODO: II env contains pyramid duplicates?
         // (maybe so that they always appear even when contour is unloaded?)
         let uven = null;
-        if (this.uvenIndex !== null) {
-            uven = filesystem.getParsedFile(UVEN, "UVEN", this.uvenIndex)
+        if (uvenIndex !== -1) {
+            uven = filesystem.getParsedFile(UVEN, "UVEN", uvenIndex)
         }
 
-        //TODO: better solution
+        //TODO: better solution?
         for(let uvts of filesystem.getAllLoadedFilesOfType<UVTS>("UVTS")) {
             uvts.loadUVTXs(filesystem);
         }
@@ -189,38 +201,61 @@ const id = 'BeetleAdventureRacing';
 const name = "Beetle Adventure Racing!";
 const sceneDescs = [
     'Tracks',
-    // TODO: these are just guesses. Figure out the actual pairings
-    new BARSceneDesc(19, 'Coventry Cove', 14),
-    new BARSceneDesc(34, 'Mount Mayhem', 16),
-    new BARSceneDesc(22, 'Inferno Isle'),
-    new BARSceneDesc(20, 'Sunset Sands', 17),
-    new BARSceneDesc(21, '[thing under sunset sands]'),
-    new BARSceneDesc(35, 'Metro Madness', 10),
-    new BARSceneDesc(23, 'Wicked Woods', 15),
-    'Beetle Battle',
-    new BARSceneDesc(24, 'Airport'),
-    new BARSceneDesc(26, 'Castle'),
-    new BARSceneDesc(27, 'Stadium'),
-    new BARSceneDesc(28, 'Volcano'),
-    new BARSceneDesc(29, 'Dunes'),
-    new BARSceneDesc(30, 'Rooftops'),
-    new BARSceneDesc(31, 'Ice Flows'),
-    new BARSceneDesc(32, 'Parkade'),
-    new BARSceneDesc(33, 'Woods'),
-    'Unused',
-    new BARSceneDesc(36, 'Stunt O\'Rama'), // Stunt O Rama (unused)
-    new BARSceneDesc(25, 'Unused Beetle Battle arena'),
-    'Not Sure',
-    new BARSceneDesc(0, '0'),
-    new BARSceneDesc(2, 'Parkade duplicate??'),
-    new BARSceneDesc(12, '12'),
-    new BARSceneDesc(13, '13'),
-    new BARSceneDesc(14, '14'),
-    new BARSceneDesc(15, '15'), // bridge test level
-    new BARSceneDesc(16, '16'), // big ring test level
-    new BARSceneDesc(17, '17'), // checkerboard test level
-    new BARSceneDesc(18, '18'),
-    new BARSceneDesc(37, '37'),
+    new BARSceneDesc(0x5, 'Coventry Cove'),
+    new BARSceneDesc(0x7, 'Mount Mayhem'),
+    new BARSceneDesc(0x9, 'Inferno Isle'),
+    new BARSceneDesc(0x8, 'Sunset Sands'),
+    new BARSceneDesc(0xA, 'Metro Madness'),
+    new BARSceneDesc(0x6, 'Wicked Woods'),
+    '~~Tracks',
+    new BARSceneDesc(0xB, 'Stunt O\'Rama'),
+    //new BARSceneDesc(0xC, 'TRACK 8'),
+    //new BARSceneDesc(0xD, 'TRACK 9'),
+    //new BARSceneDesc(0xE, 'TRACK 10'),
+    'Multiplayer',
+    new BARSceneDesc(0x11, 'Airport'),
+    new BARSceneDesc(0x12, 'Castle'),
+    new BARSceneDesc(0x13, 'Stadium'),
+    new BARSceneDesc(0x14, 'Volcano'),
+    new BARSceneDesc(0x15, 'Dunes'),
+    new BARSceneDesc(0x16, 'Rooftops'),
+    new BARSceneDesc(0x17, 'Ice Flows'),
+    new BARSceneDesc(0x18, 'Parkade'),
+    new BARSceneDesc(0x19, 'Woods'),
+    new BARSceneDesc(0x1A, '[Unused]'),
+    // 'INTRO',
+    // new BARSceneDesc(0x1B, 'INTRO1'),
+    // new BARSceneDesc(0x1C, 'INTRO2'),
+    // new BARSceneDesc(0x1D, 'INTRO3'),
+    // new BARSceneDesc(0x1E, 'INTRO4'),
+    // new BARSceneDesc(0x1F, 'INTRO5'),
+    // new BARSceneDesc(0x20, 'INTRO6'),
+    'Other',
+    //new BARSceneDesc(0x0, 'NONE'),
+    //new BARSceneDesc(0x1, 'TEST ROAD'),
+    new BARSceneDesc(0x2, 'TEST GRID'),
+    new BARSceneDesc(0x3, 'CHECKER BOARD'),
+    new BARSceneDesc(0x4, 'ROUND TRACK'),
+
+    //new BARSceneDesc(0xF, 'DRAGSTRIP'),
+    //new BARSceneDesc(0x10, 'DERBY'),
+
+    new BARSceneDesc(0x21, 'FINISH'),
+
+    //TODO?: There are other UVTRs that aren't part of a scene, are any of them interesting enough to include?
+    //TODO: [thing under sunset sands]
+
+    // 'Not Sure',
+    // new BARSceneDesc(0, '0'),
+    // new BARSceneDesc(2, 'Parkade duplicate??'),
+    // new BARSceneDesc(12, '12'),
+    // new BARSceneDesc(13, '13'),
+    // new BARSceneDesc(14, '14'),
+    // new BARSceneDesc(15, '15'), // bridge test level
+    // new BARSceneDesc(16, '16'), // big ring test level
+    // new BARSceneDesc(17, '17'), // checkerboard test level
+    // new BARSceneDesc(18, '18'),
+    // new BARSceneDesc(37, '37'),
     // new BARSceneDesc(1, '1'), // blue tint
     // new BARSceneDesc(3, '3'), // blue tint
     // new BARSceneDesc(8, '8'), // blue tint
@@ -232,7 +267,7 @@ const sceneDescs = [
     // new BARSceneDesc(6, '6'), advertise segment
     // new BARSceneDesc(7, '7'), advertise segment
     // new BARSceneDesc(38, '38'), advertise segment
-    // new BARSceneDesc(39, '39'), advertise segment
+    // new BARSceneDesc(39, '39'), advertise segment */
 
 ];
 
