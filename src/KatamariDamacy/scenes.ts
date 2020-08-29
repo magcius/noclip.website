@@ -18,7 +18,7 @@ import { assert, assertExists, decodeString } from '../util';
 import * as Viewer from '../viewer';
 import * as BIN from "./bin";
 import { GallerySceneRenderer } from './Gallery';
-import { ObjectRenderer } from './objects';
+import { ObjectRenderer, CameraGameState, updateCameraGameState } from './objects';
 import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './render';
 import { parseAnimationList, ObjectAnimationList } from './animation';
 
@@ -185,6 +185,8 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public motionCache: Map<number, BIN.MotionParameters | null> | null;
     private drawPaths = false;
 
+    private cameraGameState: CameraGameState = {zones: [], level: [], currZone: -1, area: -1, pos: vec3.create()};
+
     constructor(device: GfxDevice, public levelParams: BIN.LevelParameters, public missionSetupBin: BIN.LevelSetupBIN) {
         this.renderHelper = new GfxRenderHelper(device);
     }
@@ -263,18 +265,13 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         const sceneParamsMapped = template.mapUniformBufferF32(KatamariDamacyProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, this.levelParams.lightingIndex, offs);
 
-        let activeArea = 0;
-        for (let i = 0; i < this.missionSetupBin.activeStageAreas.length; i++)
-            if (this.missionSetupBin.activeStageAreas[i] === this.currentAreaNo) {
-                activeArea = i;
-                break;
-            }
+        updateCameraGameState(this.cameraGameState, this.currentAreaNo, this.missionSetupBin.activeStageAreas, this.missionSetupBin.zones, this.areaCollision, viewerInput);
 
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
             this.stageAreaRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, katamariWorldSpaceToNoclipSpace,
-                this.currentPalette, this.missionSetupBin.zones, this.areaCollision[activeArea]);
+                this.currentPalette, this.cameraGameState);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -468,13 +465,13 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             }
 
             const objectDef = missionSetupBin.objectDefs[objectSpawn.modelIndex];
-            object.initMotion(objectDef, motion, missionSetupBin.zones, renderer.areaCollision[0], renderer.objectRenderers);
-
             if (objectDef.animated) {
                 if (!animationCache.has(objectSpawn.objectId))
                     animationCache.set(objectSpawn.objectId, parseAnimationList(animationData, objectSpawn.objectId));
                 object.initAnimation(assertExists(animationCache.get(objectSpawn.objectId)));
             }
+            // motion can affect animation, so initialize it afterwards
+            object.initMotion(objectDef, motion, missionSetupBin.zones, renderer.areaCollision[0], renderer.objectRenderers);
 
             const altID = object.altModelID();
             if (altID >= 0) {
