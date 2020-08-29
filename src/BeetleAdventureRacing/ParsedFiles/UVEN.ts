@@ -39,9 +39,11 @@ export class UVEN {
         for(let i = 0; i < uvmdCt; i++) {
             let uvmdIndex = view.getUint16(curPos);
             let unkByte = view.getUint8(curPos + 2); // this is some flags
-            // & 2  - render model?
-            // & 4  - enable fog?
-            // & 8  - something to do with a matrix gen?
+            // & 0x01 - seems to disable z check?
+            // & 0x02 - render model?
+            // & 0x04 - enable fog?
+            // & 0x08 - something to do with a matrix gen?
+            // & 0x10 - disables ENABLE_TEXTURE_GEN?
 
             this.uvmds.push(filesystem.getParsedFile(UVMD, "UVMD", uvmdIndex));
 

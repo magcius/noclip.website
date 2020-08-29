@@ -1,9 +1,7 @@
 import { Filesystem, UVFile } from "../Filesystem";
 import { assert, leftPad } from "../../util";
 import { mat4, vec3 } from "gl-matrix";
-import { UVTX } from "./UVTX";
-import { parseVertices, parseTriangles, parseMatrix, parseMaterial, Material } from "./Common";
-import { clamp } from "../../MathHelpers";
+import { parseMatrix, parseMaterial, Material, RenderOptionsFlags } from "./Common";
 import { MaterialRenderer } from "../MaterialRenderer";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
@@ -117,7 +115,11 @@ export class UVMD {
 
                 for (let k = 0; k < materialCount; k++) {
                     let material: Material;
-                    ({ material, curPos, unknownBool } = parseMaterial(view, curPos, filesystem, unknownBool));
+                    ({ material, curPos } = parseMaterial(view, curPos, filesystem));
+
+                    if ((material.renderOptions & RenderOptionsFlags.ENABLE_TEX_GEN_SPHERICAL) != 0) {
+                        unknownBool = true;
+                    }
 
                     materials.push(material);
                 }
@@ -134,20 +136,6 @@ export class UVMD {
             ({ mat, curPos } = parseMatrix(view, curPos));
             this.matrices.push(mat);
         }
-    }
-
-    private unpackVec3(v: number): vec3 {
-        return vec3.fromValues(
-            ((v >>> 0x18) & 0xff) / 0xff,
-            ((v >>> 0x10) & 0xff) / 0xff,
-            ((v >>> 0x08) & 0xff) / 0xff,
-        );
-    }
-
-    private packVec3(v: vec3): number {
-        return (clamp((v[0] * 255) | 0, 0, 255) << 0x18) |
-            (clamp((v[1] * 255) | 0, 0, 255) << 0x10) |
-            (clamp((v[2] * 255) | 0, 0, 255) << 0x08);
     }
 }
 

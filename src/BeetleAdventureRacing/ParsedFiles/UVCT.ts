@@ -1,9 +1,8 @@
 import { Filesystem, UVFile } from "../Filesystem";
 import { assert } from "../../util";
 import { mat4 } from "gl-matrix";
-import { UVTX } from "./UVTX";
 import { UVMD, UVMDRenderer } from "./UVMD";
-import { parseVertices, parseTriangles, Material, parseMaterial } from "./Common";
+import { Material, parseMaterial } from "./Common";
 import { MaterialRenderer } from "../MaterialRenderer";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
@@ -109,8 +108,7 @@ export class UVCT {
 
         for (let i = 0; i < materialCount; i++) {
             let material: Material;
-            let unknownBool: boolean = false;
-            ({ material, curPos, unknownBool } = parseMaterial(view, curPos, filesystem, unknownBool));
+            ({ material, curPos } = parseMaterial(view, curPos, filesystem));
 
             //TODO: what do these mean???
             const aaa1 = view.getUint16(curPos + 0);

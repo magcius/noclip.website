@@ -5,25 +5,24 @@ import { clamp } from "../../MathHelpers";
 import { Filesystem } from "../Filesystem";
 
 // TODO: all of these names may be too specific
-export const enum RenderOptionMasks
+export const enum RenderOptionsFlags
 {
+    ENABLE_TEX_GEN_SPHERICAL  = 1 << 0x1B,
+    UNK_1A                    = 1 << 0x1A,
+    UNK_19                    = 1 << 0x19,
+    UNK_18                    = 1 << 0x18,
+    UNK_17                    = 1 << 0x17,
+    UNK_16                    = 1 << 0x16,
     ENABLE_DEPTH_CALCULATIONS = 1 << 0x15,
-    ENABLE_BACKFACE_CULLING  = 1 << 0x14,
-    ENABLE_FRONTFACE_CULLING = 1 << 0x13,
+    ENABLE_BACKFACE_CULLING   = 1 << 0x14,
+    ENABLE_FRONTFACE_CULLING  = 1 << 0x13,
+    USES_LIGHTING             = 1 << 0x12,
+    UNK_11                    = 1 << 0x11,
 }
 
-export class Material {
-    public vertexData: Float32Array; //obviously in BAR these are not turned into floats
-    public renderOptions: number; //32-bit
-    public indexData: Uint16Array; // again, in BAR this is a pointer to the displaylist commands
-    public lightColors: LightColors | null; // again again, in BAR this is an index into a global array of lights
-    public vertCount: number; //16-bit
-    public almostAlwaysVertCount: number; //16-bit
-    public triangleCount: number; //16-bit
-    public loadCommandCount: number; //16-bit
 
 // BREAKDOWN OF MATERIAL RENDER OPTIONS
-// ____ SXXU VWZB FLX_ ____ tttt tttt tttt
+// ____ G??U VWZB FL?_ ____ tttt tttt tttt
 //
 // _ - never set in a file, so probably never used? (could be dynamically set)
 //
@@ -32,14 +31,14 @@ export class Material {
 // V - another thing that selects one or more sets of rendering options?
 // WZ - render options associated with V?
 //
-// S - geometry mode - G_TEXTURE_GEN (possibly other things)
+// G - geometry mode - G_TEXTURE_GEN (possibly other things)
 // Z - geometry mode - G_ZBUFFER (possibly other things)
 // B - geometry mode - G_CULL_BACK (possibly other things)
 // F - geometry mode - G_CULL_FRONT (possibly other things)
 // L - something light related (lighting enabled?)
 // tttttttttttt = uvtx index
 //
-// (S || L) -> geometry mode - G_LIGHTING
+// (G || L) -> geometry mode - G_LIGHTING (which i think in reality just controls whether the last 4 bytes are interpreted as colors or normals)
 //
 //
 //
@@ -53,30 +52,75 @@ export class Material {
 // For UVTX these are the only bits that are ever stored in a file: 000c97ff
 // For Materials these are the only bits that are ever stored in a file: 0ff60fff
 
+// TODO: remove properties that aren't needed for noclip
+export class Material {
+    public vertexData: Float32Array; //obviously in BAR these are not turned into floats
+    public renderOptions: number; //32-bit
+    public indexData: Uint16Array; // again, in BAR this is a pointer to the displaylist commands
+    public lightColors: LightColors | null; // again again, in BAR this is an index into a global array of lights
+    public vertCount: number; //16-bit
+    public almostAlwaysVertCount: number; //16-bit
+    public triangleCount: number; //16-bit
+    public loadCommandCount: number; //16-bit
 
-
-
-
-    // This is NOT in the original struct. unk_someinfo contains the uvtx's index so I assume that's how it's
-    // referenced?
+    // This is not quite in the original struct, renderOptions just contains the uvtx's index.
     public uvtx: UVTX | null;
 }
 
-class LightColors {
-    public vecColor1: vec3;
-    public vecColor2: vec3;
-    public vecColor3: vec3;
-    public packedColor1: number;
-    public packedColor2: number;
-    public packedColor3: number;
+export function parseMaterial(view: DataView, curPos: number, filesystem: Filesystem) {
+    const renderOptions = view.getUint32(curPos);
 
-    // these are stored in separate arrays: TODO figure out what they mean
-    // premultiplied color?
-    public unk_packedVec31: number;
-    public unk_packedVec32: number;
+    const lightPackedColor1 = view.getUint32(curPos + 4);
+    const lightPackedColor2 = view.getUint32(curPos + 8);
+    const lightPackedColor3 = view.getUint32(curPos + 12);
+
+    curPos += 16;
+    const vertCount = view.getUint16(curPos);
+    const triangleCount = view.getUint16(curPos + 2);
+    // This is always equal to vertCount except for a few materials
+    // Not sure what it means, probably not that important?
+    const almostAlwaysVertCount = view.getUint16(curPos + 4);
+    if(almostAlwaysVertCount !== vertCount) console.log(almostAlwaysVertCount + " " + vertCount);
+    // Number of G_VTX commands that will be generated
+    // (ofc we will not actually generate these)
+    const loadCommandCount = view.getUint16(curPos + 6);
+
+    const shortCount = view.getUint16(curPos + 8);
+    const commandCount = view.getUint16(curPos + 10);
+    curPos += 12;
+
+    const uvtxIndex = (renderOptions & 0xFFF);
+    let uvtx: UVTX | null = null;
+    if (uvtxIndex !== 0xFFF) {
+        uvtx = filesystem.getParsedFile(UVTX, "UVTX", uvtxIndex);
+    }
+    let lightColors = null;
+    if (((renderOptions << 13) & 0x80000000) !== 0) {
+        lightColors = buildLightColors(lightPackedColor1, lightPackedColor2, lightPackedColor3);
+    }
+
+    let vertexData;
+    ({ vertexData, curPos } = parseVertices(view, curPos, vertCount));
+
+    let indexData;
+    ({ indexData, curPos } = parseTriangles(view, curPos, shortCount, triangleCount));
+
+
+    let material: Material = {
+        vertexData,
+        renderOptions,
+        indexData,
+        lightColors,
+        vertCount,
+        almostAlwaysVertCount,
+        triangleCount,
+        loadCommandCount,
+        uvtx
+    };
+    return { material, curPos };
 }
 
-export function parseVertices(view: DataView, curPos: number, vertCount: number) {
+function parseVertices(view: DataView, curPos: number, vertCount: number) {
     // (copied w/ modifications from PW64)
     const vertexData = new Float32Array(9 * vertCount);
     for (let j = 0; j < vertexData.length;) {
@@ -100,7 +144,7 @@ export function parseVertices(view: DataView, curPos: number, vertCount: number)
     return { vertexData, curPos };
 }
 
-export function parseTriangles(view: DataView, curPos: number, shortCount: number, triangleCount: number) {
+function parseTriangles(view: DataView, curPos: number, shortCount: number, triangleCount: number) {
     // BAR stores triangles as a series of shorts (as in 2-byte units)
     // which it transforms into display list commands.
     // These commands either draw triangles or load vertices into
@@ -151,61 +195,18 @@ export function parseTriangles(view: DataView, curPos: number, shortCount: numbe
     return { indexData, curPos };
 }
 
-export function parseMaterial(view: DataView, curPos: number, filesystem: Filesystem, unknownBool: boolean) {
-    const unk_someinfo = view.getUint32(curPos);
+class LightColors {
+    public vecColor1: vec3;
+    public vecColor2: vec3;
+    public vecColor3: vec3;
+    public packedColor1: number;
+    public packedColor2: number;
+    public packedColor3: number;
 
-    const lightPackedColor1 = view.getUint32(curPos + 4);
-    const lightPackedColor2 = view.getUint32(curPos + 8);
-    const lightPackedColor3 = view.getUint32(curPos + 12);
-
-    curPos += 16;
-    const vertCount = view.getUint16(curPos);
-    const triangleCount = view.getUint16(curPos + 2);
-    // This is always equal to vertCount except for two materials.
-    // Not sure what it means, probably not important
-    const almostAlwaysVertCount = view.getUint16(curPos + 4);
-    if(almostAlwaysVertCount !== vertCount) console.log(almostAlwaysVertCount + " " + vertCount);
-    // Number of G_VTX commands that will be generated
-    // (ofc we will not actually generate these)
-    const loadCommandCount = view.getUint16(curPos + 6);
-
-    const shortCount = view.getUint16(curPos + 8);
-    const commandCount = view.getUint16(curPos + 10);
-    curPos += 12;
-
-    const uvtxIndex = (unk_someinfo & 0xFFF);
-    let uvtx: UVTX | null = null;
-    if (uvtxIndex !== 0xFFF) {
-        uvtx = filesystem.getParsedFile(UVTX, "UVTX", uvtxIndex);
-    }
-    let lights = null;
-    if (((unk_someinfo << 13) & 0x80000000) !== 0) {
-        lights = buildLightColors(lightPackedColor1, lightPackedColor2, lightPackedColor3);
-    }
-    //TODO: what is this
-    if ((unk_someinfo & 0x08000000) != 0) {
-        unknownBool = true;
-    }
-
-    let vertexData;
-    ({ vertexData, curPos } = parseVertices(view, curPos, vertCount));
-
-    let indexData;
-    ({ indexData, curPos } = parseTriangles(view, curPos, shortCount, triangleCount));
-
-
-    let material: Material = {
-        vertexData,
-        renderOptions: unk_someinfo,
-        indexData,
-        lightColors: lights,
-        vertCount,
-        almostAlwaysVertCount,
-        triangleCount,
-        loadCommandCount,
-        uvtx
-    };
-    return { material, curPos, unknownBool };
+    // these are stored in separate arrays: TODO figure out what they mean
+    // premultiplied color?
+    public unk_packedVec31: number;
+    public unk_packedVec32: number;
 }
 
 function buildLightColors(packedColor1: number, packedColor2: number, packedColor3: number): LightColors {

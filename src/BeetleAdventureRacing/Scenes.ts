@@ -80,6 +80,11 @@ class BARRenderer implements SceneGfx {
         c.setSceneMoveSpeedMult(0.02);
     }
 
+    // TODO: enable/disable textures and vertex colors
+    // TODO: some sort of checkbox to always use the lowest LOD just for funsies?
+    // TODO: show collision data (if that's easy to find)
+    // TODO: Differences between last lap and other laps?
+    // TODO: Option to hide the boxes
     public createPanels(): UI.Panel[] {
         const debuggingToolsPanel = new UI.Panel();
 
@@ -150,6 +155,7 @@ class BARRenderer implements SceneGfx {
         return passRenderer;
     }
 
+    // TODO: destroy setup right now is pretty bad, destroys a lot of things multiple times
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
