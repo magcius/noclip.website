@@ -3,8 +3,8 @@ import { assert } from "../../util";
 import { mat4 } from "gl-matrix";
 import { UVTX } from "./UVTX";
 import { UVMD, UVMDRenderer } from "./UVMD";
-import { parseVertices, parseTriangles } from "./Common";
-import { Material, MaterialRenderer } from "../MaterialRenderer";
+import { parseVertices, parseTriangles, Material, parseMaterial } from "./Common";
+import { MaterialRenderer } from "../MaterialRenderer";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../viewer";
@@ -108,34 +108,9 @@ export class UVCT {
         }
 
         for (let i = 0; i < materialCount; i++) {
-            // TODO: what does the upper half of this mean
-            // (from PW64, might be RSP mode info?)
-            const someinfo = view.getUint32(curPos + 0);
-            const unk_material_1 = view.getUint32(curPos + 4);
-            const unk_material_2 = view.getUint32(curPos + 8);
-            const unk_material_3 = view.getUint32(curPos + 12);
-            curPos += 16;
-            const vertCount = view.getUint16(curPos + 0);
-            const triangleCount = view.getUint16(curPos + 2);
-            const unk_material_5 = view.getUint16(curPos + 4);
-            const unk_material_6 = view.getUint16(curPos + 6);
-            curPos += 8;
-
-            const uvtxIndex = (someinfo & 0xFFF);
-            let uvtx: UVTX | null = null;
-            if (uvtxIndex !== 0xFFF) {
-                uvtx = filesystem.getParsedFile(UVTX, "UVTX", uvtxIndex);
-            }
-
-            const shortCount = view.getUint16(curPos + 0);
-            const commandCount = view.getUint16(curPos + 2);
-            curPos += 4;
-
-            let vertexData;
-            ({ vertexData, curPos } = parseVertices(view, curPos, vertCount));
-
-            let indexData;
-            ({ indexData, curPos } = parseTriangles(view, curPos, shortCount, triangleCount));
+            let material: Material;
+            let unknownBool: boolean = false;
+            ({ material, curPos, unknownBool } = parseMaterial(view, curPos, filesystem, unknownBool));
 
             //TODO: what do these mean???
             const aaa1 = view.getUint16(curPos + 0);
@@ -150,7 +125,7 @@ export class UVCT {
             curPos += 16;
 
 
-            this.materials.push({ uvtx, vertexData, indexData });
+            this.materials.push(material);
         }
 
         //TODO TODO TODO

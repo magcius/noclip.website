@@ -12,13 +12,7 @@ import * as RDP from '../Common/N64/RDP';
 import { humanReadableCombineParams } from './Util';
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { DEBUGGING_TOOLS_STATE } from "./Scenes";
-
-export interface Material {
-    uvtx: UVTX | null;
-    // XYZ ST RGBA
-    vertexData: Float32Array;
-    indexData: Uint16Array;
-}
+import { Material } from "./ParsedFiles/Common";
 
 export class MaterialRenderer {
     private vertexBuffer: GfxBuffer;
@@ -39,10 +33,9 @@ export class MaterialRenderer {
     private material: Material;
     private uvtx: UVTX;
     
-    // TODO: some models are being culled incorrectly, figure out what's
-    // up with that
+    // TODO: some models are being culled incorrectly, figure out what's up with that
     // TODO: what's going on with the materials that (seemingly) have no texture and are invisible?
-    // (e.g. see SS in the desert, CC by the covered cliff road, MoM by the ice wall you smash)
+    // (e.g. see SS in the desert, MoM by the ice wall you smash)
     constructor(device: GfxDevice, material: Material, rendererCache: Map<any, any>) {
         this.material = material;
         this.isTextured = material.uvtx !== null;
@@ -58,14 +51,19 @@ export class MaterialRenderer {
             return;
         }
 
+        //TODO: proper lighting support
+
         if(this.isTextured) {
             let rspState = this.uvtx.rspState;
             // TODO: K4 is used, though it's not supported by F3DEX_Program - is it important?
             // TODO: what other CC settings does BAR use that F3DEX_Program doesn't support?
             // TODO: K5 is also used, as is NOISE
 
-            //TODO: not sure if this is the correct use of the alpha variable
-            this.program = new F3DEX_Program(rspState.otherModeH, 0, rspState.combineParams, this.uvtx.alpha / 0xFF, rspState.tileStates);
+            let otherModeL = 0;
+            if(this.uvtx.blendAlpha !== 0xFF) {
+                otherModeL |= 1; // set G_MDSFT_ALPHACOMPARE to 0b01 (compare to blend color register) 
+            }
+            this.program = new F3DEX_Program(rspState.otherModeH, otherModeL, rspState.combineParams, this.uvtx.blendAlpha / 0xFF, rspState.tileStates);
             this.program.setDefineBool("USE_TEXTURE", true);
 
             if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null) {
@@ -140,10 +138,6 @@ export class MaterialRenderer {
         // TODO: scale
         // TODO: properly handle other modes
         // TODO: figure out other processing
-        // TODO: clamp/mask/shift?
-        // TODO: correct texture matrices
-        // TODO: alpha of foliage is wrong
-        // TODO: skybox textures are wrong scale (at least in CC)
 
         if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null && 
             (!this.isTextured || (this.uvtx.flagsAndIndex & 0xFFF) !== DEBUGGING_TOOLS_STATE.singleUVTXToRender)) {
@@ -214,7 +208,14 @@ export class MaterialRenderer {
 
             let centerWorldSpace = vec3.create();
             vec3.transformMat4(centerWorldSpace, centerModelSpace, adjmodelToWorldMatrix);
-            drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, centerWorldSpace, (this.uvtx.flagsAndIndex & 0xfff).toString(16));
+
+            let debugStr = (this.uvtx.flagsAndIndex & 0xfff).toString(16);
+            if(this.uvtx.otherUVTX !== null) {
+                debugStr += " | " + (this.uvtx.otherUVTX.flagsAndIndex & 0xfff).toString(16);
+            }
+            debugStr += "\n";
+            debugStr += humanReadableCombineParams(this.uvtx.rspState.combineParams);
+            drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, centerWorldSpace, debugStr);
         }
     }
 

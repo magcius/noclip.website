@@ -1,5 +1,80 @@
 import { assert } from "../../util";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
+import { UVTX } from "./UVTX";
+import { clamp } from "../../MathHelpers";
+import { Filesystem } from "../Filesystem";
+
+// TODO: all of these names may be too specific
+export const enum RenderOptionMasks
+{
+    ENABLE_DEPTH_CALCULATIONS = 1 << 0x15,
+    ENABLE_BACKFACE_CULLING  = 1 << 0x14,
+    ENABLE_FRONTFACE_CULLING = 1 << 0x13,
+}
+
+export class Material {
+    public vertexData: Float32Array; //obviously in BAR these are not turned into floats
+    public renderOptions: number; //32-bit
+    public indexData: Uint16Array; // again, in BAR this is a pointer to the displaylist commands
+    public lightColors: LightColors | null; // again again, in BAR this is an index into a global array of lights
+    public vertCount: number; //16-bit
+    public almostAlwaysVertCount: number; //16-bit
+    public triangleCount: number; //16-bit
+    public loadCommandCount: number; //16-bit
+
+// BREAKDOWN OF MATERIAL RENDER OPTIONS
+// ____ SXXU VWZB FLX_ ____ tttt tttt tttt
+//
+// _ - never set in a file, so probably never used? (could be dynamically set)
+//
+// U - seems to select one set of rendering options
+// VW - rendering options associated with U?
+// V - another thing that selects one or more sets of rendering options?
+// WZ - render options associated with V?
+//
+// S - geometry mode - G_TEXTURE_GEN (possibly other things)
+// Z - geometry mode - G_ZBUFFER (possibly other things)
+// B - geometry mode - G_CULL_BACK (possibly other things)
+// F - geometry mode - G_CULL_FRONT (possibly other things)
+// L - something light related (lighting enabled?)
+// tttttttttttt = uvtx index
+//
+// (S || L) -> geometry mode - G_LIGHTING
+//
+//
+//
+//
+// BREAKDOWN OF UVTX RENDER OPTIONS
+// 0000 0000 0000 XX00 X00X tttt tttt tttt
+//
+// 0 - never set in a file, so probably never used?
+// tttttttttttt = uvtx index
+
+// For UVTX these are the only bits that are ever stored in a file: 000c97ff
+// For Materials these are the only bits that are ever stored in a file: 0ff60fff
+
+
+
+
+
+    // This is NOT in the original struct. unk_someinfo contains the uvtx's index so I assume that's how it's
+    // referenced?
+    public uvtx: UVTX | null;
+}
+
+class LightColors {
+    public vecColor1: vec3;
+    public vecColor2: vec3;
+    public vecColor3: vec3;
+    public packedColor1: number;
+    public packedColor2: number;
+    public packedColor3: number;
+
+    // these are stored in separate arrays: TODO figure out what they mean
+    // premultiplied color?
+    public unk_packedVec31: number;
+    public unk_packedVec32: number;
+}
 
 export function parseVertices(view: DataView, curPos: number, vertCount: number) {
     // (copied w/ modifications from PW64)
@@ -74,6 +149,113 @@ export function parseTriangles(view: DataView, curPos: number, shortCount: numbe
 
     assert(indexData.length === triangleCount * 3);
     return { indexData, curPos };
+}
+
+export function parseMaterial(view: DataView, curPos: number, filesystem: Filesystem, unknownBool: boolean) {
+    const unk_someinfo = view.getUint32(curPos);
+
+    const lightPackedColor1 = view.getUint32(curPos + 4);
+    const lightPackedColor2 = view.getUint32(curPos + 8);
+    const lightPackedColor3 = view.getUint32(curPos + 12);
+
+    curPos += 16;
+    const vertCount = view.getUint16(curPos);
+    const triangleCount = view.getUint16(curPos + 2);
+    // This is always equal to vertCount except for two materials.
+    // Not sure what it means, probably not important
+    const almostAlwaysVertCount = view.getUint16(curPos + 4);
+    if(almostAlwaysVertCount !== vertCount) console.log(almostAlwaysVertCount + " " + vertCount);
+    // Number of G_VTX commands that will be generated
+    // (ofc we will not actually generate these)
+    const loadCommandCount = view.getUint16(curPos + 6);
+
+    const shortCount = view.getUint16(curPos + 8);
+    const commandCount = view.getUint16(curPos + 10);
+    curPos += 12;
+
+    const uvtxIndex = (unk_someinfo & 0xFFF);
+    let uvtx: UVTX | null = null;
+    if (uvtxIndex !== 0xFFF) {
+        uvtx = filesystem.getParsedFile(UVTX, "UVTX", uvtxIndex);
+    }
+    let lights = null;
+    if (((unk_someinfo << 13) & 0x80000000) !== 0) {
+        lights = buildLightColors(lightPackedColor1, lightPackedColor2, lightPackedColor3);
+    }
+    //TODO: what is this
+    if ((unk_someinfo & 0x08000000) != 0) {
+        unknownBool = true;
+    }
+
+    let vertexData;
+    ({ vertexData, curPos } = parseVertices(view, curPos, vertCount));
+
+    let indexData;
+    ({ indexData, curPos } = parseTriangles(view, curPos, shortCount, triangleCount));
+
+
+    let material: Material = {
+        vertexData,
+        renderOptions: unk_someinfo,
+        indexData,
+        lightColors: lights,
+        vertCount,
+        almostAlwaysVertCount,
+        triangleCount,
+        loadCommandCount,
+        uvtx
+    };
+    return { material, curPos, unknownBool };
+}
+
+function buildLightColors(packedColor1: number, packedColor2: number, packedColor3: number): LightColors {
+    if(packedColor1 === 0x10101000) {
+        //TODO
+        assert(false);
+    }
+
+    // TODO
+    // these are probably global environment colors
+    const unkGlobalVec31: vec3 = vec3.fromValues(NaN, NaN, NaN);
+    const unkGlobalVec32: vec3 = vec3.fromValues(NaN, NaN, NaN);
+    
+
+    let vecColor1 = unpackVec3(packedColor1);
+    let vecColor2 = unpackVec3(packedColor2);
+    let vecColor3 = unpackVec3(packedColor3);
+
+    let asd = vec3.create();
+    vec3.mul(asd, unkGlobalVec31, vecColor2);
+
+    let asd2 = vec3.create();
+    let asd3 = vec3.create();
+    vec3.mul(asd2, unkGlobalVec32, vecColor3);
+    vec3.add(asd3, vecColor1, asd2);
+
+    return {
+        vecColor1,
+        vecColor2,
+        vecColor3,
+        packedColor1,
+        packedColor2,
+        packedColor3,
+        unk_packedVec31: packVec3(asd),
+        unk_packedVec32: packVec3(asd3)
+    }
+}
+
+function unpackVec3(v: number): vec3 {
+    return vec3.fromValues(
+        ((v >>> 0x18) & 0xff) / 0xff,
+        ((v >>> 0x10) & 0xff) / 0xff,
+        ((v >>> 0x08) & 0xff) / 0xff,
+    );
+}
+
+function packVec3(v: vec3): number {
+    return (clamp((v[0] * 255) | 0, 0, 255) << 0x18) |
+        (clamp((v[1] * 255) | 0, 0, 255) << 0x10) |
+        (clamp((v[2] * 255) | 0, 0, 255) << 0x08);
 }
 
 export function parseMatrix(view: DataView, curPos: number) {

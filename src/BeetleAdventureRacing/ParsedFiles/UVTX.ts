@@ -9,7 +9,6 @@ import * as RDP from '../../Common/N64/RDP';
 import { vec4, mat4 } from "gl-matrix";
 import { GfxDevice, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, makeTextureDescriptor2D, GfxFormat } from "../../gfx/platform/GfxPlatform";
 import { fillVec4v, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
-import { ViewerRenderInput } from "../../viewer";
 
 // TODO: figure out if any mode other than Loop is used
 enum TexScrollAnimMode {
@@ -87,6 +86,7 @@ export class TexSeqAnim {
             this.curFrameIndex += this.uvts.playAnimationInReverse ? -1 : 1;
 
             if(this.uvts.animationMode === TexSeqAnimMode.PlayOnce) {
+                // TODO: which animations use this mode?
                 if(this.curFrameIndex === -1 || this.curFrameIndex === frameCount)  {
                     this.playing = false;
                     return;
@@ -111,7 +111,7 @@ export class UVTX {
     public scrollAnim1: TexScrollAnim | null = null; // both originally pointers
     public scrollAnim2: TexScrollAnim | null = null;
     // pTexelData
-    // pPalettes (TODO: it seems like the UVTX stores 4 copies of each palette. Why?)
+    // pPalettes
     public flagsAndIndex: number; //uint
     public otherUVTX: UVTX | null = null; // originally ushort otherUVTXIndex
     // texelDataSize
@@ -120,7 +120,7 @@ export class UVTX {
     public seqAnim: TexSeqAnim | null = null; // originally animationStateIndex
     public unkByte1: number;
     public levelCount: number; // 1 if no mipmapping, +1 for each mipmap level, etc.
-    public alpha: number;
+    public blendAlpha: number;
     public unkByte3: number;
     public unkByte4: number;
     public unkByte5: number;
@@ -194,7 +194,7 @@ export class UVTX {
         const unk11 = view.getUint8(curPos + 19);
         const unk12 = view.getUint32(curPos + 20);
         //TODO: this is used to set BLEND alpha
-        this.alpha = view.getUint8(curPos + 24);
+        this.blendAlpha = view.getUint8(curPos + 24);
         this.levelCount = view.getUint8(curPos + 25);
         curPos += 26;
 
@@ -398,8 +398,8 @@ export class UVTX {
         assert(uvtxJustLoaded === 0 || uvtxJustLoaded === 1);
         if(this.otherUVTX !== null) {
             assert(thisTextureIsTheFirstTexture !== null);
-            console.log(thisTextureIsTheFirstTexture);
         }
+
         // Assumption doesn't hold
         // if(this.levelCount === 6 && this.otherUVTX !== null) {
         //     assert(rspState.textureState.tile === 0);
@@ -468,12 +468,21 @@ class UVTXRSPState {
     get primitiveTile() {
         return this.tileStates[this.textureState.tile];
     }
+    get tileAfterPrimitiveTile() {
+        return this.tileStates[this.textureState.tile+1];
+    }
 }
 
 export class UVTXRenderHelper {
     private hasPairedTexture: boolean;
     private texel0TextureData: TextureData;
     private texel1TextureData: TextureData;
+
+    //TODO: better
+    private shiftS1: number;
+    private shiftT1: number;
+    private shiftS2: number;
+    private shiftT2: number;
 
     constructor(public uvtx: UVTX, device: GfxDevice) {
         this.hasPairedTexture = this.uvtx.otherUVTX !== null;
@@ -489,6 +498,11 @@ export class UVTXRenderHelper {
         } else {
             this.texel0TextureData = new TextureData(device, this.uvtx);
         }
+
+        this.shiftS1 = uvtx.rspState.primitiveTile.shifts;
+        this.shiftT1 = uvtx.rspState.primitiveTile.shiftt;
+        this.shiftS2 = uvtx.rspState.tileAfterPrimitiveTile.shifts;
+        this.shiftT2 = uvtx.rspState.tileAfterPrimitiveTile.shiftt;
     }
 
     public getTextureMappings() {
@@ -500,20 +514,35 @@ export class UVTXRenderHelper {
     }
 
     public fillTexMatrices(drawParams: Float32Array, drawParamsOffs: number) {
-        drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, this.makeMat(this.texel0TextureData, this.uvtx.scrollAnim1));
+        drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, this.makeMat(this.texel0TextureData, this.uvtx.scrollAnim1, this.shiftS1, this.shiftT1));
 
         if(this.hasPairedTexture) {
-            drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, this.makeMat(this.texel1TextureData, this.uvtx.scrollAnim2));
+            drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, this.makeMat(this.texel1TextureData, this.uvtx.scrollAnim2, this.shiftS2, this.shiftT2));
         }
     }
 
-    private makeMat(texData: TextureData, scrollAnim: TexScrollAnim | null) {
+    private makeMat(texData: TextureData, scrollAnim: TexScrollAnim | null, shiftS: number, shiftT: number) {
+        // TODO: mask s,t?
+
+        // TODO: double check that this is the correct way of implementing the shift values
+        let shiftSMult = 1 << shiftS;
+        if(shiftS > 10) {
+            shiftSMult = Math.pow(2, shiftS - 16);
+        }
+
+        let shiftTMult = 1 << shiftT;
+        if(shiftT > 10) {
+            shiftTMult = Math.pow(2, shiftT - 16);
+        }
+        
+        // TODO: implement scale
+        // TODO: adjust for the 0.5 (if necessary)
         let texMatrix = mat4.fromValues(
-            1 / texData.width, 0, 0, 0,
-            0, 1 / texData.height, 0, 0,
+            1 / (shiftSMult * texData.width), 0, 0, 0,
+            0, 1 / (shiftTMult * texData.height), 0, 0,
             0, 0, 1, 0,
             0, 0, 0, 1
-        )
+        );
 
         if(scrollAnim !== null) {
             //TODO: is negating them the right thing to do
