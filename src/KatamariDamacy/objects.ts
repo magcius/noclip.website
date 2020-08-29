@@ -268,7 +268,7 @@ export class ObjectRenderer {
         return runMotionFunc(this, motionState, motionID, deltaTimeInFrames, gameState);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, toNoclip: mat4, currentPalette: number, gameState: CameraGameState): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, toNoclip: mat4, currentPalette: number, gameState?: CameraGameState): void {
         if (!this.visible)
             return;
 
@@ -276,7 +276,7 @@ export class ObjectRenderer {
         const deltaTimeInFrames = clamp(viewerInput.deltaTime / 33.0, 0.0, 2.0);
 
         let hasMotionImplementation = false;
-        if (this.motionState !== null) {
+        if (this.motionState !== null && gameState) {
             hasMotionImplementation = this.runMotion(deltaTimeInFrames, gameState);
             vec3.copy(this.prevPosition, this.motionState.pos);
         }
