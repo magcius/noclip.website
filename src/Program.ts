@@ -1,33 +1,8 @@
 
 import CodeEditor from "./CodeEditor";
 import { assertExists } from "./util";
-import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform";
 import { preprocessShader_GLSL } from "./gfx/shaderc/GfxShaderCompiler";
-
-type DefineMap = Map<string, string>;
-
-function definesEqual(a: DefineMap, b: DefineMap): boolean {
-    if (a.size !== b.size)
-        return false;
-
-    for (const [k, v] of a.entries())
-        if (b.get(k) !== v)
-            return false;
-
-    return true;
-}
-
-export function deviceProgramEqual(a: DeviceProgram, b: DeviceProgram): boolean {
-    if (a.both !== b.both)
-        return false;
-    if (a.vert !== b.vert)
-        return false;
-    if (a.frag !== b.frag)
-        return false;
-    if (!definesEqual(a.defines, b.defines))
-        return false;
-    return true;
-}
 
 export class DeviceProgram {
     public name: string = '(unnamed)';

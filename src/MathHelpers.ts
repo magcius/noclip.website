@@ -55,37 +55,6 @@ export function computeModelMatrixSRT(dst: mat4, scaleX: number, scaleY: number,
 }
 
 /**
- * Computes a model matrix {@param dst} from given SRT parameters. Rotation is assumed
- * to be in radians. This is similar to {@link computeModelMatrixSRT}, except it also
- * has support for Maya's Segment Scale Compensation (SSC).
- */
-export function computeModelMatrixSRT_MayaSSC(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number, parentScaleX: number, parentScaleY: number, parentScaleZ: number): void {
-    const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
-    const sinY = Math.sin(rotationY), cosY = Math.cos(rotationY);
-    const sinZ = Math.sin(rotationZ), cosZ = Math.cos(rotationZ);
-
-    dst[0] =  scaleX * (cosY * cosZ);
-    dst[1] =  scaleX * (sinZ * cosY)                      * (parentScaleX / parentScaleY);
-    dst[2] =  scaleX * (-sinY)                            * (parentScaleX / parentScaleZ);
-    dst[3] =  0.0;
-
-    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ) * (parentScaleY / parentScaleX);
-    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
-    dst[6] =  scaleY * (sinX * cosY)                      * (parentScaleY / parentScaleZ);
-    dst[7] =  0.0;
-
-    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ) * (parentScaleZ / parentScaleX);
-    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ) * (parentScaleZ / parentScaleY);
-    dst[10] = scaleZ * (cosY * cosX);
-    dst[11] = 0.0;
-
-    dst[12] = translationX;
-    dst[13] = translationY;
-    dst[14] = translationZ;
-    dst[15] = 1.0;
-}
-
-/**
  * Computes a model matrix {@param dst} from given scale parameters.
  * 
  * This is equivalent to {@link computeModelMatrixSRT} with the rotation parameters set to 0 and the translation set to 0.
@@ -348,13 +317,6 @@ export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: num
     dst[7] = 9999.0;
     dst[11] = 9999.0;
     dst[15] = 9999.0;
-}
-
-export function computeTranslationMatrixFromSRTMatrix(dst: mat4, m: mat4): void {
-    mat4.identity(dst);
-    dst[12] = m[12];
-    dst[13] = m[13];
-    dst[14] = m[14];
 }
 
 export function computeRotationMatrixFromSRTMatrix(dst: mat4, m: mat4): void {

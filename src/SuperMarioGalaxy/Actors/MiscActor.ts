@@ -1786,7 +1786,6 @@ export function createSuperSpinDriverPink(zoneAndLayer: ZoneAndLayer, sceneObjHo
 }
 
 const enum FishNrv { Approach, Wander }
-
 class Fish extends LiveActor<FishNrv> {
     private followPointPos = vec3.create();
     private offset = vec3.create();
@@ -1797,7 +1796,7 @@ class Fish extends LiveActor<FishNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private fishGroup: FishGroup, modelName: string) {
         super(zoneAndLayer, sceneObjHolder, modelName);
 
-        vec3.set(this.offset, getRandomFloat(-150, 150), getRandomFloat(-150, 150), getRandomFloat(-150, 150));
+        getRandomVector(this.offset, 150);
         this.approachThreshold = getRandomFloat(100, 500);
 
         this.updateFollowPointPos();
@@ -1839,7 +1838,7 @@ class Fish extends LiveActor<FishNrv> {
                 this.counter = getRandomInt(5, 30);
             }
 
-            if (vec3.squaredDistance(this.followPointPos, this.translation) < (this.approachThreshold * this.approachThreshold))
+            if (vec3.squaredDistance(this.followPointPos, this.translation) < (this.approachThreshold ** 2.0))
                 this.setNerve(FishNrv.Wander);
         } else if (currentNerve === FishNrv.Wander) {
             if (isFirstStep(this))
@@ -1851,7 +1850,7 @@ class Fish extends LiveActor<FishNrv> {
                 this.counter = getRandomInt(60, 180);
             }
 
-            if (vec3.squaredDistance(this.followPointPos, this.translation) > (this.approachThreshold * this.approachThreshold))
+            if (vec3.squaredDistance(this.followPointPos, this.translation) > (this.approachThreshold ** 2.0))
                 this.setNerve(FishNrv.Approach);
         }
     }
@@ -1872,6 +1871,8 @@ class Fish extends LiveActor<FishNrv> {
         }
 
         this.updateFollowPointPos();
+
+        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.followPointPos);
     }
 
     public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1914,7 +1915,7 @@ export class FishGroup extends LiveActor {
 
         moveCoordAndFollowTrans(this, this.railSpeed * getDeltaTimeFrames(viewerInput));
 
-        // this.railRider!.debugDrawRail(viewerInput.camera, 50);
+        // this.railRider!.debugDrawRailLine(viewerInput.camera, 200);
     }
 
     private static getArchiveName(infoIter: JMapInfoIter): string {

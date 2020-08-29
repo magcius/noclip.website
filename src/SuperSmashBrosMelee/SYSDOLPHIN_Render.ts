@@ -8,7 +8,7 @@ import { LoadedVertexData } from "../gx/gx_displaylist";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput, Texture } from "../viewer";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { computeModelMatrixSRT, lerp, saturate, MathConstants, computeModelMatrixSRT_MayaSSC, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
+import { computeModelMatrixSRT, lerp, saturate, MathConstants, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
 import { TextureMapping } from "../TextureHolder";
@@ -1184,6 +1184,15 @@ class HSD_DObj_Instance {
     }
 }
 
+function applyMayaSSC(dst: mat4, parentScaleX: number, parentScaleY: number, parentScaleZ: number): void {
+    dst[1] *= (parentScaleX / parentScaleY);
+    dst[2] *= (parentScaleX / parentScaleZ);
+    dst[4] *= (parentScaleY / parentScaleX);
+    dst[6] *= (parentScaleY / parentScaleZ);
+    dst[8] *= (parentScaleZ / parentScaleX);
+    dst[9] *= (parentScaleZ / parentScaleY);
+}
+
 class HSD_JObj_Instance {
     private dobj: HSD_DObj_Instance[] = [];
     public aobj: HSD_AObj_Instance | null = null;
@@ -1293,11 +1302,11 @@ class HSD_JObj_Instance {
         else
             vec3.mul(this.parentScale, this.scale, parentScale);
 
-        computeModelMatrixSRT_MayaSSC(this.jointMtx,
+        computeModelMatrixSRT(this.jointMtx,
             this.scale[0], this.scale[1], this.scale[2],
             this.rotation[0], this.rotation[1], this.rotation[2],
-            this.translation[0], this.translation[1], this.translation[2],
-            parentScale[0], parentScale[1], parentScale[2]);
+            this.translation[0], this.translation[1], this.translation[2]);
+        applyMayaSSC(this.jointMtx, this.parentScale[0], this.parentScale[1], this.parentScale[2]);
 
         if (parentJointMtx !== null)
             mat4.mul(this.jointMtx, parentJointMtx, this.jointMtx);
