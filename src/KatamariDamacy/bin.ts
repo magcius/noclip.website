@@ -1238,8 +1238,11 @@ export interface PartTransform {
     rotation: vec3;
 }
 
-export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBufferSlice, firstSectorIndex: number, transformBuffer: ArrayBufferSlice, objectId: number, isAnimated = false): ObjectModel | null {
+export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBufferSlice, firstSectorIndex: number, transformBuffer: ArrayBufferSlice, objectId: number, def?: ObjectDefinition): ObjectModel | null {
     const view = buffer.createDataView();
+
+    const isAnimated = def !== undefined && def.animated;
+    const noModel = def !== undefined && def.dummyParent;
 
     const firstSectorOffs = 0x04 + firstSectorIndex * 0x04;
     const lod0Offs = view.getUint32(firstSectorOffs + 0x00, true);
@@ -1307,7 +1310,18 @@ export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBuffer
 
     // animated objects don't have proper part transforms, so we need to use the unified model from LOD 0
     let bbox: AABB;
-    if (isAnimated)
+    if (noModel) { // construct explicitly from collision
+        assert(!sectorIsNIL(buffer, collisionOffs));
+        const bboxOffs = collisionOffs + view.getUint32(collisionOffs + 0x04, true) + 0x08;
+        bbox = new AABB(
+            view.getFloat32(bboxOffs + 0x00, true),
+            view.getFloat32(bboxOffs + 0x04, true),
+            view.getFloat32(bboxOffs + 0x08, true),
+            view.getFloat32(bboxOffs + 0x0C, true),
+            view.getFloat32(bboxOffs + 0x10, true),
+            view.getFloat32(bboxOffs + 0x14, true),
+        );
+    } else if (isAnimated)
         bbox = computeObjectAABBFromRawSector(buffer, lod0Offs, transforms);
     else
         bbox = computeObjectAABB(sector, transforms);
@@ -1328,11 +1342,11 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], defs: ArrayBuf
 
     const gsMemoryMap = nArray(2, () => gsMemoryMapNew());
 
-    function parseObject(objectId: number, animated: boolean): ObjectModel | null {
+    function parseObject(objectId: number, def: ObjectDefinition): ObjectModel | null {
         const firstSectorIndex = 0x09 + objectId * 0x0B;
         assert(firstSectorIndex + 0x0B <= numSectors);
 
-        return parseObjectModel(gsMemoryMap, buffer, firstSectorIndex, transformBuffer, objectId, animated);
+        return parseObjectModel(gsMemoryMap, buffer, firstSectorIndex, transformBuffer, objectId, def);
     }
 
     const objectModels: ObjectModel[] = [];
@@ -1349,7 +1363,7 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], defs: ArrayBuf
             // for now, just pretend they aren't animated (we don't even display them)
             if (levelIndex === 27 && missingTestLevelAnimations.includes(objectId))
                 newDef.animated = false;
-            const newObject = parseObject(objectId, newDef.animated);
+            const newObject = parseObject(objectId, newDef);
             if (newObject === null)
                 return -1;
             objectModels.push(newObject);
