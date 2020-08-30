@@ -23,9 +23,10 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 export const DEBUGGING_TOOLS_STATE = {
     showTextureIndices: false,
-    singleUVTXToRender: null
+    singleUVTXToRender: null //0x210
 };
 
+// TODO: what's with the "GL_INVALID_OPERATION: It is undefined behaviour to use a uniform buffer that is too small" errors?
 class BARRenderer implements SceneGfx {
 
     public renderHelper: GfxRenderHelper;
@@ -113,14 +114,6 @@ class BARRenderer implements SceneGfx {
         const topTemplate = this.renderHelper.pushTemplateRenderInst();
         
         topTemplate.setBindingLayouts(bindingLayouts);
-
-        // TODO TODO TODO: use translateRenderMode from RDP file!
-        topTemplate.setMegaStateFlags(setAttachmentStateSimple({}, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-            blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-        }));
-        topTemplate.setMegaStateFlags({cullMode: GfxCullMode.BACK});
 
         const renderInstManager = this.renderHelper.renderInstManager;
 
