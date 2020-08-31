@@ -15,7 +15,7 @@ export function getJMapInfoArg6(infoIter: JMapInfoIter) { return infoIter.getVal
 export function getJMapInfoArg7(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg7'); }
 
 export function getJMapInfoBool(v: number): boolean {
-    return v !== -1;
+    return v !== -1 && v !== 0;
 }
 
 export function getJMapInfoTransLocal(dst: vec3, infoIter: JMapInfoIter): void {

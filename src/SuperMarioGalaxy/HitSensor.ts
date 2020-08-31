@@ -21,6 +21,7 @@ export const enum HitSensorType {
     MapObj              = 0x46,
     MapObjMoveCollision = 0x48,
     WoodBox             = 0x55,
+    MapObjPress         = 0x76,
 }
 
 export class HitSensor {
@@ -123,11 +124,12 @@ export class HitSensorInfo {
 export class HitSensorKeeper {
     public sensorInfos: HitSensorInfo[] = [];
 
-    public add(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor, offset: ReadonlyVec3): void {
+    public add(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor, offset: ReadonlyVec3): HitSensor {
         const sensor = new HitSensor(sceneObjHolder, sensorType, pairwiseCapacity, radius, actor);
         const sensorInfo = new HitSensorInfo(name, sensor, null, null, radius, offset, false);
         this.sensorInfos.push(sensorInfo);
         sensorInfo.update();
+        return sensor;
     }
 
     public getSensor(name: string): HitSensor | null {

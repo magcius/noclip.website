@@ -397,7 +397,9 @@ export class XanimePlayer {
 
     public update(deltaTimeFrames: number): void {
         if (!(this.frameCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped) && this.currentRes !== null) {
-            assert(!this.updatedFrameCtrl);
+            // If something kills an actor in movement() / updateSpine(), then this isn't guaranteed to be
+            // cleared correctly. Just let it remain toggled on for the first frame it comes back at...
+            // assert(!this.updatedFrameCtrl);
             this.oldTimeInFrames = this.frameCtrl.currentTimeInFrames;
             this.oldSpeedInFrames = this.frameCtrl.speedInFrames;
             this.frameCtrl.update(deltaTimeFrames);

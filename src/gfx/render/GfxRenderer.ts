@@ -193,7 +193,7 @@ export class GfxRenderInst {
     private _bindingDescriptors: GfxBindingsDescriptor[] = nArray(1, () => ({ bindingLayout: null!, samplerBindings: [], uniformBufferBindings: [] }));
     private _dynamicUniformBufferByteOffsets: number[] = nArray(4, () => 0);
 
-    public _flags: number = 0;
+    public _flags: GfxRenderInstFlags = 0;
     private _lateSamplerBindings: string[] = [];
     private _inputState: GfxInputState | null = null;
     private _drawStart: number = 0;

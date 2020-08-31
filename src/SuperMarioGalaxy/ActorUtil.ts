@@ -11,7 +11,7 @@ import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNea
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
-import { CollisionScaleType, invalidateCollisionParts, validateCollisionParts } from "./Collision";
+import { CollisionScaleType, invalidateCollisionParts, validateCollisionParts, CollisionPartsFilterFunc } from "./Collision";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { HitSensor, HitSensorType } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
@@ -530,20 +530,24 @@ export function getRandomInt(min: number, max: number): number {
     return getRandomFloat(min, max) | 0;
 }
 
-export function addHitSensor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensorType: HitSensorType, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3): void {
-    actor.hitSensorKeeper!.add(sceneObjHolder, name, hitSensorType, pairwiseCapacity, radius, actor, offset);
+export function addHitSensor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensorType: HitSensorType, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, name, hitSensorType, pairwiseCapacity, radius, actor, offset);
 }
 
-export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
+export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
 }
 
-export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3): void {
-    actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
+export function addBodyMessageSensorMapObjPress(sceneObjHolder: SceneObjHolder, actor: LiveActor) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObjPress, 0, 0.0, actor, Vec3Zero);
 }
 
-export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3): void {
-    actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
+export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
+}
+
+export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
 export function invalidateHitSensors(actor: LiveActor): void {
@@ -1389,4 +1393,21 @@ export function turnVecToVecCos(dst: vec3, src: ReadonlyVec3, target: ReadonlyVe
         vec3.normalize(dst, target);
         return true;
     }
+}
+
+function excludeCalcShadowToSensorAll(actor: LiveActor, hitSensor: HitSensor): void {
+    const partsFilter: CollisionPartsFilterFunc = (sceneObjHolder, parts) => {
+        return parts.hitSensor === hitSensor;
+    };
+
+    for (let i = 0; i < actor.shadowControllerList!.shadowControllers.length; i++) {
+        actor.shadowControllerList!.shadowControllers[i].partsFilter = partsFilter;
+    }
+}
+
+export function excludeCalcShadowToMyCollision(actor: LiveActor, collisionName: string | null = null): void {
+    if (collisionName !== null)
+        throw "whoops";
+    else
+        excludeCalcShadowToSensorAll(actor, actor.collisionParts!.hitSensor);
 }
