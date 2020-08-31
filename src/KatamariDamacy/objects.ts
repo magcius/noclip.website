@@ -3,7 +3,7 @@ import { mat4, vec3, quat, ReadonlyMat4 } from "gl-matrix";
 import { Green, Magenta, Red } from "../Color";
 import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { angleDist, clamp, computeMatrixWithoutTranslation, computeModelMatrixR, float32AsBits, getMatrixAxisY, getMatrixAxisZ, MathConstants, normToLength, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitY, getMatrixTranslation, Vec3Zero, Vec3UnitZ, Vec3NegX } from "../MathHelpers";
 import { assert, hexzero, nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
@@ -109,6 +109,17 @@ function oscillate(state: OscillationState, deltaTimeInFrames: number): number {
     return state.center + Math.sin(state.phase) * state.amplitude;
 }
 
+function objectDist(viewerInput: ViewerRenderInput, objectToWorld: mat4): number {
+    const cameraMat = viewerInput.camera.worldMatrix;
+    return Math.hypot(cameraMat[12] - objectToWorld[12], cameraMat[13] - objectToWorld[13], cameraMat[14] - objectToWorld[14]);
+}
+
+export const enum KDLayer {
+    OBJECTS,
+    TRANSLUCENT_OBJECTS,
+    TRANSLUCENT_LEVEL,
+}
+
 const scratchMatrix = mat4.create();
 const animationQuat = quat.create();
 const animationPos = vec3.create();
@@ -143,6 +154,7 @@ export class ObjectRenderer {
     public miscVectors: vec3[] = [];
 
     constructor(device: GfxDevice, gfxCache: GfxRenderCache, objectModel: ObjectModel, binModelSectorData: BINModelSectorData, public objectSpawn: MissionSetupObjectSpawn) {
+        const objectLayer = transparentObjects.has(objectSpawn.objectId) ? KDLayer.TRANSLUCENT_OBJECTS : KDLayer.OBJECTS;
         for (let j = 0; j < binModelSectorData.modelData.length; j++) {
             let transformCount = 0;
             if (objectModel.skinning.length > 0)
@@ -150,6 +162,7 @@ export class ObjectRenderer {
 
             const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[j], transformCount);
             mat4.copy(binModelInstance.modelMatrix, objectSpawn.modelMatrix);
+            binModelInstance.layer = GfxRendererLayer.TRANSLUCENT + objectLayer;
 
             if (objectModel.transforms.length > 0) {
                 vec3.copy(binModelInstance.euler, objectModel.transforms[j].rotation);
@@ -332,8 +345,9 @@ export class ObjectRenderer {
 
             // pass in a single transform from object space to (noclip) world space
             mat4.mul(scratchMatrix, toNoclip, this.modelMatrix);
+            const dist = objectDist(viewerInput, scratchMatrix);
             for (let i = 0; i < this.modelInstances.length; i++)
-                this.modelInstances[i].prepareToRender(renderInstManager, viewerInput, scratchMatrix, currentPalette);
+                this.modelInstances[i].prepareToRender(renderInstManager, viewerInput, scratchMatrix, currentPalette, dist);
         } else if (this.altObject) {
             vec3.copy(this.altObject.prevPosition, this.prevPosition);
             mat4.copy(this.altObject.baseMatrix, this.baseMatrix);
@@ -693,6 +707,7 @@ function oscillateTexture(modelInstance: BINModelInstance, deltaTimeInFrames: nu
 }
 
 const enum ObjectId {
+    DENQ_B          = 0x0016,
     BARBER_D        = 0x001E,
     HUKUBIKI_C      = 0x0023,
     COMPASS_A       = 0x002F,
@@ -790,6 +805,7 @@ const enum ObjectId {
 }
 
 const stationaryObjects: Set<ObjectId> = new Set([ObjectId.KAPSEL01_B, ObjectId.KAPSEL02_B, ObjectId.KAPSEL03_B]);
+const transparentObjects: Set<ObjectId> = new Set([ObjectId.DENQ_B, ObjectId.KAPSEL01_B, ObjectId.KAPSEL02_B, ObjectId.KAPSEL03_B, ObjectId.FISHBOWL01_C]);
 
 function animFuncSelect(objectId: ObjectId): AnimFunc | null {
     switch (objectId) {

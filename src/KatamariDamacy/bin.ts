@@ -275,7 +275,7 @@ export function parseStageTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     assert(offs === buffer.byteLength);
 }
 
-function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], namePrefix: string, sectorOffs: number): BINModelSector | null {
+function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], namePrefix: string, sectorOffs: number, initialAlphaBlend = 0x44): BINModelSector | null {
     const view = buffer.createDataView();
 
     const modelObjCount = view.getUint16(sectorOffs + 0x00, true);
@@ -343,8 +343,8 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
             tex0_1_data0: -1, tex0_1_data1: -1,
             tex1_1_data0: -1, tex1_1_data1: -1,
             clamp_1_data0: -1, clamp_1_data1: -1,
-            alpha_1_data0: -1, alpha_1_data1: -1,
-            test_1_data0: -1, test_1_data1: -1,
+            alpha_1_data0: initialAlphaBlend, alpha_1_data1: -1,
+            test_1_data0: 0x5000F, test_1_data1: -1,
         };
 
         const expectedPositionsOffs = 0x8000;
@@ -724,6 +724,7 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
         if (sectorIsNIL(buffer, sectorOffs))
             continue;
         const sectorModel = assertExists(parseModelSector(buffer, [gsMemoryMap], namePrefix, sectorOffs));
+        assert(sectors.length === i); // no skipped sectors
         sectors.push(sectorModel);
     }
 

@@ -8,7 +8,7 @@ import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { Vec3Zero } from '../MathHelpers';
 import { SceneContext } from '../SceneBase';
@@ -18,7 +18,7 @@ import { assert, assertExists, decodeString } from '../util';
 import * as Viewer from '../viewer';
 import * as BIN from "./bin";
 import { GallerySceneRenderer } from './Gallery';
-import { ObjectRenderer, CameraGameState, updateCameraGameState } from './objects';
+import { ObjectRenderer, CameraGameState, updateCameraGameState, KDLayer } from './objects';
 import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './render';
 import { parseAnimationList, ObjectAnimationList } from './animation';
 
@@ -405,6 +405,9 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     const binModelInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[k]);
                     stageAreaRenderer.modelInstance.push(binModelInstance);
                     stageAreaSector.modelInstance.push(binModelInstance);
+                    // house windows
+                    if (levelParams.lightingIndex === 1 && j === 2)
+                        binModelInstance.layer = GfxRendererLayer.TRANSLUCENT + KDLayer.TRANSLUCENT_LEVEL;
                 }
 
                 stageAreaRenderer.stageAreaSector.push(stageAreaSector);

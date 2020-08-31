@@ -4,18 +4,16 @@ import { BINModel, BINTexture, BINModelSector, BINModelPart, GSConfiguration } f
 import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { computeViewMatrix } from "../Camera";
 import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxRenderInstManager, GfxRendererLayer, setSortKeyLayer } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepth, makeSortKey } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { AABB } from "../Geometry";
-import { computeModelMatrixR } from "../MathHelpers";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -235,9 +233,7 @@ export class BINModelPartInstance {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
         };
 
-        if (gsConfiguration.alpha_1_data0 === -1) {
-            // TODO(jstpierre): What does this mean?
-        } else if (gsConfiguration.alpha_1_data0 === 0x44) {
+        if (gsConfiguration.alpha_1_data0 === 0x44) {
             setAttachmentStateSimple(this.megaStateFlags, {
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
@@ -252,10 +248,6 @@ export class BINModelPartInstance {
         } else {
             throw "whoops";
         }
-
-        const ate = !!((gsConfiguration.test_1_data0 >>> 0) & 0x01);
-        if (!ate)
-            this.layer = GfxRendererLayer.TRANSLUCENT;
 
         // Katamari should not have any mipmaps.
         const lcm = (gsConfiguration.tex1_1_data0 >>> 0) & 0x01;
@@ -284,7 +276,6 @@ export class BINModelPartInstance {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
-        renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, this.layer);
 
         mat4.copy(scratchTextureMatrix, textureMatrix);
         if (this.binModelPart.textureIndex !== null)
@@ -318,6 +309,7 @@ export class BINModelInstance {
     public textureMatrix = mat4.create();
     public uvState = 0;
     public visible = true;
+    public layer = GfxRendererLayer.BACKGROUND;
 
     public translation = vec3.create();
     public euler = vec3.create();
@@ -335,7 +327,7 @@ export class BINModelInstance {
         this.visible = visible;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, toNoclip: mat4, currentPalette: number): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, toNoclip: mat4, currentPalette: number, depth = 0): void {
         if (!this.visible)
             return;
 
@@ -348,6 +340,8 @@ export class BINModelInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.binModelData.inputLayout, this.binModelData.inputState);
         template.setMegaStateFlags(cullModeFlags);
+        template.sortKey = makeSortKey(this.layer)
+        template.sortKey = setSortKeyDepth(template.sortKey, depth);
 
         mat4.mul(scratchModelViews[0], viewerInput.camera.viewMatrix, scratchModelMatrices[0]);
         for (let i = 0; i < this.skinningMatrices.length; i++) {
