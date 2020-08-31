@@ -1428,19 +1428,7 @@ function runMotionFunc(object: ObjectRenderer, motion: MotionState, motionAction
     } else if (motionActionID === MotionActionID.SlopingPath || motionActionID === MotionActionID.PathCollision) {
         motion_SlopingPath_Update(object, motion, deltaTimeInFrames, gameState.level[0]);
     } else if (motionActionID === MotionActionID.PathSetup) {
-        if (motion.isTall) {
-            // Submotion 0x14 seems to suggest we'll transition to PathRoll after.
-            assert(motion.parameters.altMotionActionID === MotionActionID.PathRoll);
-
-            // If it's taller than it is wide, roll it on its side. Normally, this is implemented
-            // by setting a bitflag, and the setup code for PathRoll does the rotation. But since
-            // we don't have setup funcs for the states (yet), just do it here in the PathSetup.
-            motion.euler2[2] = MathConstants.TAU / 4;
-        }
-
-        // TODO(jstpierre): Implement PathSetup properly.
-        motion.useAltMotion = true;
-        motion_SlopingPath_Update(object, motion, deltaTimeInFrames, gameState.level[0]);
+        motion_PathSetup_update(object, motion);
     } else if (motionActionID === MotionActionID.Misc) {
         const motionID = motion.parameters.motionID;
         if (motionID === MotionID.Spin)
@@ -1557,10 +1545,35 @@ function motionPathAdvancePoint(motion: MotionState, bbox: AABB): void {
     motion.target[1] -= motion.isTall ? bbox.maxX : bbox.maxY;
 }
 
+function motion_PathSetup_update(object: ObjectRenderer, motion: MotionState): void {
+    motion.pathIndex = 0;
+    const id = motion.parameters.motionID;
+    if (id === MotionID.BackAndForth || id === MotionID.BackAndForthNoYaw) {
+        pathGetPoint(motion.target, motion.parameters.pathPoints, 0);
+        motion.target[1] -= object.bbox.maxY; // maybe doesn't happen in game?
+    } else
+        motion_SlopingPath_init(object, motion);
+    // no guarantee velocity is adjusted after this?
+    if (motion.speed === 0)
+        motion.speed = 4;
+    motionPathAdvancePoint(motion, object.bbox);
+
+    if (id !== MotionID.BackAndForthNoYaw) {
+        mat4.identity(object.baseMatrix);
+        object.euler[1] = Math.PI + Math.atan2(motion.target[0] - motion.pos[0], motion.target[2] - motion.pos[2]);
+    }
+
+    if (motion.isTall) {
+        // If it's taller than it is wide, roll it on its side. Normally, this is implemented
+        // by setting a bitflag, and the setup code for PathRoll does the rotation. But since
+        // we don't have setup funcs for the states (yet), just do it here in the PathSetup.
+        motion.euler2[2] = MathConstants.TAU / 4;
+    }
+    motion.useAltMotion = true;
+}
+
 function motion_SimplePath_Follow(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number): void {
     if (motionPathHasReachedTarget(motion, deltaTimeInFrames)) {
-        vec3.copy(motion.pos, motion.target);
-
         motionPathAdvancePoint(motion, object.bbox);
     }
 
@@ -1644,26 +1657,29 @@ function motion_SlopingPath_Follow(object: ObjectRenderer, motion: MotionState, 
     vec3.scaleAndAdd(motion.pos, motion.pos, motion.velocity, deltaTimeInFrames);
 }
 
+function motion_SlopingPath_init(object: ObjectRenderer, motion: MotionState): void {
+    motion.pathIndex = pathFindStartIndex(motion.pos, motion.parameters.pathPoints);
+
+    // snapping to the first point only happens for COLLISION_PATH, but it fixes some weirdness with starting simple paths
+    // which might not be visible in game
+    pathGetPoint(motion.pos, motion.parameters.pathPoints, motion.pathIndex);
+    motion.pos[1] -= object.bbox.maxY;
+    motion.pathIndex++;
+
+    pathGetPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
+    motion.target[1] -= object.bbox.maxY; // adjust target to object center height, kind of weird because of the coordinate system
+    object.euler[1] = Math.PI + Math.atan2(motion.target[0] - motion.pos[0], motion.target[2] - motion.pos[2]);
+    vec3.sub(motion.velocity, motion.target, motion.pos);
+    normToLength(motion.velocity, motion.speed);
+}
+
 function motion_SlopingPath_Update(object: ObjectRenderer, motion: MotionState, deltaTimeInFrames: number, collision: CollisionList[]): void {
     if (motion.pathIndex < 0) {
         motion.composeEuler = false;
         mat4.identity(object.baseMatrix);
         mat4.identity(motion.reference);
-        motion.pathIndex = pathFindStartIndex(motion.pos, motion.parameters.pathPoints);
-
-        // snapping to the first point only happens for COLLISION_PATH, but it fixes some weirdness with starting simple paths
-        // which might not be visible in game
-        pathGetPoint(motion.pos, motion.parameters.pathPoints, motion.pathIndex);
-        motion.pos[1] -= object.bbox.maxY;
-        motion.pathIndex++;
-
-        pathGetPoint(motion.target, motion.parameters.pathPoints, motion.pathIndex);
-        motion.target[1] -= object.bbox.maxY; // adjust target to object center height, kind of weird because of the coordinate system
-        object.euler[1] = Math.PI + Math.atan2(motion.target[0] - motion.pos[0], motion.target[2] - motion.pos[2]);
-
+        motion_SlopingPath_init(object, motion);
         object.setAnimation(AnimationType.MOVING);
-        vec3.sub(motion.velocity, motion.target, motion.pos);
-        normToLength(motion.velocity, motion.speed);
     }
 
     motionAngleStep(object.euler, motion, deltaTimeInFrames);
@@ -2489,7 +2505,7 @@ function motion_BackAndForth_update(object: ObjectRenderer, motion: MotionState,
     }
     if (motion.state === BackAndForthState.Move) {
         let canMove = false;
-        if (motion.parameters.motionID === 0x1D)
+        if (motion.parameters.motionID === MotionID.BackAndForthNoYaw)
             canMove = motion_noRotationPath_follow(object, motion, deltaTimeInFrames);
         else
             canMove = motion_ZonePath_follow(object, motion, deltaTimeInFrames, gameState);
@@ -2502,7 +2518,7 @@ function motion_BackAndForth_update(object: ObjectRenderer, motion: MotionState,
         motion_tryAdvancePoint(object, motion);
         vec3.sub(motion.velocity, motion.target, motion.pos);
         normToLength(motion.velocity, motion.speed);
-        if (motion.parameters.motionID === 0x1D) {
+        if (motion.parameters.motionID === MotionID.BackAndForthNoYaw) {
             object.setAnimation(AnimationType.MOVING);
             motion.state = BackAndForthState.Move;
         } else {

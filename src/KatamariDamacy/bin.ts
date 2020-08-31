@@ -943,6 +943,8 @@ export const enum MotionID {
     Spin              = 0x15,
     Bob               = 0x16,
     Hop               = 0x19,
+    BackAndForth      = 0x1C,
+    BackAndForthNoYaw = 0x1D,
     Flip              = 0x1E,
     ScatterFromParent = 0x1F,
     Sway              = 0x20,
