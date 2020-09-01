@@ -10,7 +10,7 @@ import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { Vec3Zero } from '../MathHelpers';
+import { Vec3Zero, MathConstants, setMatrixTranslation } from '../MathHelpers';
 import { SceneContext } from '../SceneBase';
 import { FakeTextureHolder, TextureMapping } from '../TextureHolder';
 import * as UI from '../ui';
@@ -167,6 +167,7 @@ function mod(a: number, b: number) {
     return (a + b) % b;
 }
 
+const tutorialScratch = vec3.create();
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
     private currentAreaNo: number = 0;
     private sceneTexture = new ColorTexture();
@@ -187,7 +188,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
 
     private cameraGameState: CameraGameState = {zones: [], level: [], currZone: -1, area: -1, pos: vec3.create()};
 
-    constructor(device: GfxDevice, public levelParams: BIN.LevelParameters, public missionSetupBin: BIN.LevelSetupBIN) {
+    constructor(device: GfxDevice, public levelParams: BIN.LevelParameters, public missionSetupBin: BIN.LevelSetupBIN, private isTutorial: boolean) {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
@@ -266,6 +267,8 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, this.levelParams.lightingIndex, offs);
 
         updateCameraGameState(this.cameraGameState, this.currentAreaNo, this.missionSetupBin.activeStageAreas, this.missionSetupBin.zones, this.areaCollision, viewerInput);
+        if (this.isTutorial)
+            this.tutorialUpdate(viewerInput.time / 33.0);
 
         for (let i = 0; i < this.stageAreaRenderers.length; i++)
             this.stageAreaRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
@@ -286,6 +289,10 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     }
 
     public createPanels(): UI.Panel[] {
+        // no palette or areas in tutorial
+        if (this.isTutorial)
+            return [];
+
         const areasPanel = new UI.Panel();
         areasPanel.setTitle(UI.LAYER_ICON, 'Areas');
         areasPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
@@ -322,6 +329,29 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         for (let i = 0; i < this.modelSectorData.length; i++)
             this.modelSectorData[i].destroy(device);
     }
+
+    private tutorialUpdate(frames: number): void {
+        const rotationAngle = MathConstants.TAU / 900 * frames;
+        for (let i = 4; i < this.stageAreaRenderers[0].modelInstance.length; i++) {
+            const dst = this.stageAreaRenderers[0].modelInstance[i].modelMatrix;
+            mat4.getTranslation(tutorialScratch, dst);
+            if (i < this.stageAreaRenderers[0].modelInstance.length - 1)
+                mat4.fromYRotation(dst, rotationAngle);
+            else
+                mat4.fromZRotation(dst, rotationAngle * 3 / 2);
+            setMatrixTranslation(dst, tutorialScratch);
+        }
+        const kingLights = this.stageAreaRenderers[0].modelInstance[2];
+        // triangle wave
+        const pulseAlpha = 1 - Math.abs((frames % 16) - 8) / 8;
+        kingLights.setAlphaMultiplier(pulseAlpha);
+        const offsetIndex = (frames >>> 4) % 3;
+        kingLights.textureMatrix[12] = offsetIndex / 4;
+        // move back and forth
+        const kingPhase = frames * MathConstants.TAU / 120;
+        kingLights.modelMatrix[12] = 5 * Math.sin(kingPhase);
+        this.stageAreaRenderers[0].modelInstance[3].modelMatrix[12] = 5 * Math.sin(kingPhase);
+    }
 }
 
 class KatamariLevelSceneDesc implements Viewer.SceneDesc {
@@ -342,6 +372,12 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         cache.fetchFileData(`${pathBase}/collectionBlock.bin`);
         cache.fetchFileData(`${pathBase}/parentBlock.bin`);
         cache.fetchFileData(`${pathBase}/animationBlock.bin`);
+        const isTutorial = this.index === 28;
+        if (isTutorial) {
+            // tutorial level
+            cache.fetchFileData(`${pathBase}/tutorialBlock.bin`);
+            cache.fetchFileData(getMissionSetupFilePath('134b68'));
+        }
 
         await cache.waitForLoad();
 
@@ -363,7 +399,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
         const randomGroups = BIN.initRandomGroups(this.index, cache.getFileData(`${pathBase}/randomBlock.bin?cache_bust=1`));
         const missionSetupBin = BIN.parseMissionSetupBIN(buffers, objectData, collectionData, levelParams.startArea, randomGroups, transformData, this.index);
 
-        const renderer = new KatamariDamacyRenderer(device, levelParams, missionSetupBin);
+        const renderer = new KatamariDamacyRenderer(device, levelParams, missionSetupBin, isTutorial);
         renderer.sceneMoveSpeedMult *= this.cameraSpeedMult;
         const gfxCache = renderer.renderHelper.getCache();
 
@@ -387,7 +423,7 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
             const stageTexBinData = cache.getFileData(getStageAreaFilePath(stageTextures[levelParams.stageAreaIndex + i]));
             const stageModelBinData = cache.getFileData(getStageAreaFilePath(stageModels[levelParams.stageAreaIndex + i]));
             BIN.parseStageTextureBIN(stageTexBinData, gsMemoryMap);
-            const stageModelBin = BIN.parseLevelModelBIN(stageModelBinData, gsMemoryMap, this.id);
+            const stageModelBin = BIN.parseLevelModelBIN(stageModelBinData, gsMemoryMap, isTutorial, this.id);
             renderer.areaCollision.push(stageModelBin.collision);
 
             const stageAreaRenderer = new StageAreaRenderer(stageAreaIndex);
@@ -406,13 +442,31 @@ class KatamariLevelSceneDesc implements Viewer.SceneDesc {
                     stageAreaRenderer.modelInstance.push(binModelInstance);
                     stageAreaSector.modelInstance.push(binModelInstance);
                     // house windows
-                    if (levelParams.lightingIndex === 1 && j === 2)
+                    if ((levelParams.lightingIndex === 1 && j === 2) || (isTutorial && j === 1))
                         binModelInstance.layer = GfxRendererLayer.TRANSLUCENT + KDLayer.TRANSLUCENT_LEVEL;
                 }
 
                 stageAreaRenderer.stageAreaSector.push(stageAreaSector);
             }
 
+            if (isTutorial) {
+                const spawns = cache.getFileData(`${pathBase}/tutorialBlock.bin`);
+                const data = cache.getFileData(getMissionSetupFilePath('134b68'));
+                const planets = BIN.parseTutorialModels(gsMemoryMap, data, spawns);
+                for (let i = 0; i < planets.length; i++) {
+                    const binModelSectorData = new BINModelSectorData(device, gfxCache, planets[i].sector);
+                    assert(planets[i].sector.models.length === 1);
+                    renderer.modelSectorData.push(binModelSectorData);
+                    // only add one copy of the planet texture to the viewer
+                    // though each model is using its own copy
+                    if (i === 0)
+                        renderer.addTextureData(binModelSectorData);
+
+                    const planetInstance = new BINModelInstance(device, gfxCache, binModelSectorData.modelData[0]);
+                    mat4.fromTranslation(planetInstance.modelMatrix, planets[i].pos);
+                    stageAreaRenderer.modelInstance.push(planetInstance);
+                }
+            }
             renderer.stageAreaRenderers.push(stageAreaRenderer);
         }
 

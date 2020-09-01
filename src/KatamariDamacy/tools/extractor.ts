@@ -254,6 +254,7 @@ function main() {
     const objectCount = 1718;
     extractFileTable(pathBaseOut, isoFilename, elf, objectFileTableOffs, objectCount, objectBaseLBA);
 
+    writeBufferSync(`${pathBaseOut}/tutorialBlock.bin`,     elf.slice(0xB8470, 0xB85B0));
     writeBufferSync(`${pathBaseOut}/levelBlock.bin`,        elf.slice(0xBF1A0, 0xC0034));
     writeBufferSync(`${pathBaseOut}/objectBlock.bin`,       elf.slice(0xCDF70, 0xDD108));
     writeBufferSync(`${pathBaseOut}/collectionBlock.bin`,   elf.slice(0xDD108, 0xE06B8));

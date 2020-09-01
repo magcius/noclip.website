@@ -703,7 +703,7 @@ function sectorIsNIL(buffer: ArrayBufferSlice, sectorOffs: number): boolean {
     return readString(buffer, sectorOffs, 0x04) === 'NIL ';
 }
 
-export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string = ''): LevelModelBIN {
+export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, isTutorial: boolean, namePrefix: string = ''): LevelModelBIN {
     const view = buffer.createDataView();
 
     const numSectors = view.getUint32(0x00, true);
@@ -723,7 +723,8 @@ export function parseLevelModelBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
         sectorTableIdx += 0x04;
         if (sectorIsNIL(buffer, sectorOffs))
             continue;
-        const sectorModel = assertExists(parseModelSector(buffer, [gsMemoryMap], namePrefix, sectorOffs));
+        const blend = isTutorial && i === 1 ? 0x48 : 0x44;
+        const sectorModel = assertExists(parseModelSector(buffer, [gsMemoryMap], namePrefix, sectorOffs, blend));
         assert(sectors.length === i); // no skipped sectors
         sectors.push(sectorModel);
     }
@@ -1485,4 +1486,35 @@ export function parseMissionSetupBIN(buffers: ArrayBufferSlice[], defs: ArrayBuf
     }
 
     return { objectModels, objectDefs, objectSpawns, activeStageAreas, zones };
+}
+
+interface TutorialModel {
+    pos: vec3;
+    sector: BINModelSector;
+}
+
+export function parseTutorialModels(map: GSMemoryMap, data: ArrayBufferSlice, spawns: ArrayBufferSlice): TutorialModel[] {
+    const models: TutorialModel[] = [];
+    const dataView = data.createDataView();
+    const spawnView = spawns.createDataView();
+
+    for (let offs = 0; offs < spawnView.byteLength; offs += 0x20) {
+        const index = spawnView.getUint16(offs + 0x00, true);
+        const pos = vec3.fromValues(
+            spawnView.getFloat32(offs + 0x10, true),
+            spawnView.getFloat32(offs + 0x14, true),
+            spawnView.getFloat32(offs + 0x18, true),
+        );
+        const dataOffs = dataView.getUint32(4 + 4 * index, true);
+        const model = assertExists(parseModelSector(data, [map], `planet`, dataOffs));
+        models.push({ pos, sector: model });
+    }
+
+    // special jupiter orbs
+    const pos = vec3.fromValues(0, -106, 207);
+    const dataOffs = dataView.getUint32(4 + 4 * 0x25, true);
+    const model = assertExists(parseModelSector(data, [map], `planet`, dataOffs, 0x48));
+    models.push({ pos, sector: model });
+
+    return models;
 }

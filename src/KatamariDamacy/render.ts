@@ -38,6 +38,7 @@ layout(row_major, std140) uniform ub_ModelParams {
     Mat4x3 u_NormalMatrix[SKINNING_MATRIX_COUNT];
     Mat4x2 u_TextureMatrix[1];
     vec4 u_Color;
+    float u_alphaMult;
 };
 
 uniform sampler2D u_Texture[1];
@@ -123,6 +124,8 @@ void main() {
 
     t_Color.rgb *= clamp(t_CombinedIntensity, 0.0, 1.0);
 #endif
+
+    t_Color.a *= u_alphaMult;
 
 ${this.generateAlphaTest(ate, atst, aref, afail)}
 
@@ -214,7 +217,7 @@ export class BINModelPartInstance {
     private gfxProgram: GfxProgram;
     private textureMapping = nArray(1, () => new TextureMapping());
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
-    private layer: GfxRendererLayer;
+    public alphaMultiplier = 1;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public sectorData: BINModelSectorData, public binModelPart: BINModelPart, public transformCount = 1) {
         const gsConfiguration = this.binModelPart.gsConfiguration!;
@@ -284,7 +287,7 @@ export class BINModelPartInstance {
 
         renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
 
-        let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12*2*this.transformCount+8+4);
+        let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12*2*this.transformCount+8+4+1);
         const mapped = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
         for (let i = 0; i < this.transformCount; i++)
             offs += fillMatrix4x3(mapped, offs, modelViewMatrices[i]);
@@ -292,6 +295,7 @@ export class BINModelPartInstance {
             offs += fillMatrix4x3(mapped, offs, modelMatrices[i]);
         offs += fillMatrix4x2(mapped, offs, scratchTextureMatrix);
         offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
+        mapped[offs++] = this.alphaMultiplier;
         renderInstManager.submitRenderInst(renderInst);
     }
 }
@@ -353,6 +357,11 @@ export class BINModelInstance {
             this.modelParts[i].prepareToRender(renderInstManager, scratchModelViews, scratchModelMatrices, this.textureMatrix, currentPalette);
 
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public setAlphaMultiplier(alpha: number): void {
+        for (let i = 0; i < this.modelParts.length; i++)
+            this.modelParts[i].alphaMultiplier = alpha;
     }
 }
 
