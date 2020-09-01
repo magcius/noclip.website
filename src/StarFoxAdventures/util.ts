@@ -56,6 +56,20 @@ export function mat4FromRowMajor(
     )
 }
 
+export function mat4SetRowMajor(
+    out: mat4,
+    m00: number, m01: number, m02: number, m03: number,
+    m10: number, m11: number, m12: number, m13: number,
+    m20: number, m21: number, m22: number, m23: number,
+    m30: number, m31: number, m32: number, m33: number) {
+    return mat4.set(out,
+        m00, m10, m20, m30,
+        m01, m11, m21, m31,
+        m02, m12, m22, m32,
+        m03, m13, m23, m33,
+    )
+}
+
 export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
     mtx[4 * col + row] = m;
 }
