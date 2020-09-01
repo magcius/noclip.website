@@ -1127,7 +1127,7 @@ export class ModelInstance implements BlockRenderer {
             mat4.add(this.matrixPalette[this.model.joints.length + i], scratchMtx0, scratchMtx1);
         }
 
-        this.performFineSkinning();
+        // this.performFineSkinning();
 
         this.skinningDirty = false;
     }
@@ -1175,8 +1175,7 @@ export class ModelInstance implements BlockRenderer {
                 const weight0 = weights.getUint8(weightOffs) / 128;
                 const weight1 = weights.getUint8(weightOffs + 1) / 128;
                 mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
-                mat4.multiplyScalar(scratchMtx1, boneMtx1, weight1);
-                mat4.add(scratchMtx0, scratchMtx0, scratchMtx1);
+                mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
                 vec3.transformMat4(pos, pos, scratchMtx0);
 
                 dst.setInt16(dstOffs, pos[0] * quant);

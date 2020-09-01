@@ -444,19 +444,19 @@ abstract class MaterialBase implements SFAMaterial {
     }
     
     public setupMaterialParams(params: MaterialParams, viewState: ViewState) {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < this.texMtx.length; i++) {
             if (this.texMtx[i] !== undefined) {
                 this.texMtx[i]!(params.u_TexMtx[i], viewState);
             }
         }
         
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < this.indTexMtxs.length; i++) {
             if (this.indTexMtxs[i] !== undefined) {
                 this.indTexMtxs[i]!(params.u_IndTexMtx[i], viewState);
             }
         }
 
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < this.postTexMtxs.length; i++) {
             if (this.postTexMtxs[i] !== undefined) {
                 this.postTexMtxs[i]!(params.u_PostTexMtx[i], viewState);
             }
