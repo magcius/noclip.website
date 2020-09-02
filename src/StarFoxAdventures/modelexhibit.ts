@@ -240,7 +240,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
     private renderModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelInst: ModelInstance) {
         const modelCtx: ModelRenderContext = {
-            ...sceneCtx,
+            sceneCtx,
             showDevGeometry: true,
             ambienceNum: 0,
             setupLights: () => {},

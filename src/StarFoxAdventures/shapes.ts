@@ -222,7 +222,7 @@ export class CommonShapeMaterial implements ShapeMaterial {
         
         if (this.viewState === undefined) {
             this.viewState = {
-                sceneCtx: modelCtx,
+                sceneCtx: modelCtx.sceneCtx,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
                 outdoorAmbientColor: colorNewFromRGBA(1.0, 1.0, 1.0, 1.0),
@@ -230,11 +230,11 @@ export class CommonShapeMaterial implements ShapeMaterial {
             };
         }
 
-        this.viewState.sceneCtx = modelCtx;
+        this.viewState.sceneCtx = modelCtx.sceneCtx;
         this.material.factory.getAmbientColor(this.viewState.outdoorAmbientColor, modelCtx.ambienceNum);
         this.viewState.furLayer = this.furLayer;
 
-        computeModelView(this.viewState.modelViewMtx, modelCtx.viewerInput.camera, modelMatrix);
+        computeModelView(this.viewState.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
         mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
 
         for (let i = 0; i < 8; i++) {
@@ -279,7 +279,7 @@ export class Shape {
     }
 
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
-        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, boneMatrices, modelCtx.viewerInput.camera);
+        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, boneMatrices, modelCtx.sceneCtx.viewerInput.camera);
         this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx);
     }
 

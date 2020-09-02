@@ -155,7 +155,7 @@ export class MapInstance {
 
     private prepareToRenderSortedBlocks(modelCtx: ModelRenderContext, frontToBack: boolean, fn: (mtx: mat4, b: BlockIter) => void) {
         const mapPos = vec3.create();
-        vec3.transformMat4(mapPos, mapPos, modelCtx.viewerInput.camera.worldMatrix);
+        vec3.transformMat4(mapPos, mapPos, modelCtx.sceneCtx.viewerInput.camera.worldMatrix);
         vec3.transformMat4(mapPos, mapPos, this.invMatrix);
         const blx = Math.floor(mapPos[0] / 640);
         const blz = Math.floor(mapPos[2] / 640);
@@ -257,7 +257,7 @@ class MapSceneRenderer extends SFARenderer {
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         const modelCtx: ModelRenderContext = {
-            ...sceneCtx,
+            sceneCtx,
             showDevGeometry: false,
             ambienceNum: 0,
             setupLights: () => {},

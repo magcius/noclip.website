@@ -106,7 +106,8 @@ interface Water {
     shape: Shape;
 }
 
-export interface ModelRenderContext extends SceneRenderContext {
+export interface ModelRenderContext {
+    sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
     ambienceNum: number;
     setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;

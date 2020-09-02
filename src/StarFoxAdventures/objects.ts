@@ -1,8 +1,6 @@
 import { mat4, vec3, quat } from 'gl-matrix';
 import { DataFetcher } from '../DataFetcher';
-import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import * as GX_Material from '../gx/gx_material';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
@@ -12,9 +10,8 @@ import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUin
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
-import { scaleMatrix, computeModelMatrixSRT } from '../MathHelpers';
 import { SceneRenderContext } from './render';
-import { colorFromRGBA8, colorNewFromRGBA8, colorNewFromRGBA } from '../Color';
+import { colorNewFromRGBA } from '../Color';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
@@ -775,7 +772,8 @@ export class ObjectType {
     }
 }
 
-export interface ObjectRenderContext extends SceneRenderContext {
+export interface ObjectRenderContext {
+    sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
     setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
 }
@@ -1001,9 +999,9 @@ export class ObjectInstance {
                         mat4.mul(parentMtx, parentMtx, mtx);
                         const parentPt = vec3.create();
                         mat4.getTranslation(parentPt, parentMtx);
-                        drawWorldSpaceLine(ctx, objectCtx.viewerInput.camera.clipFromWorldMatrix, parentPt, jointPt);
+                        drawWorldSpaceLine(ctx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, parentPt, jointPt);
                     } else {
-                        drawWorldSpacePoint(ctx, objectCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
+                        drawWorldSpacePoint(ctx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
                     }
                 }
             }

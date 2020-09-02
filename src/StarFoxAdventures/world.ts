@@ -299,7 +299,7 @@ class WorldRenderer extends SFARenderer {
         this.beginPass(sceneCtx.viewerInput);
 
         const objectCtx: ObjectRenderContext = {
-            ...sceneCtx,
+            sceneCtx,
             showDevGeometry: this.showDevGeometry,
             setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
         }
@@ -317,7 +317,7 @@ class WorldRenderer extends SFARenderer {
 
     private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelInst: ModelInstance) {
         const modelCtx: ModelRenderContext = {
-            ...sceneCtx,
+            sceneCtx,
             showDevGeometry: true,
             ambienceNum: 0,
             setupLights: this.setupLights.bind(this),
@@ -331,7 +331,7 @@ class WorldRenderer extends SFARenderer {
 
         if (this.enableLights) {
             const worldView = scratchMtx0;
-            computeViewMatrix(worldView, modelCtx.viewerInput.camera);
+            computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
     
             // const ctx = getDebugOverlayCanvas2D();
             for (let light of this.world.lights) {
@@ -361,7 +361,7 @@ class WorldRenderer extends SFARenderer {
         // Render opaques
 
         const modelCtx: ModelRenderContext = {
-            ...sceneCtx,
+            sceneCtx,
             showDevGeometry: this.showDevGeometry,
             ambienceNum: 0, // Always use ambience 0 when rendering the map,
             setupLights: this.setupLights.bind(this),
