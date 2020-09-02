@@ -15,6 +15,7 @@ import { SFAAnimationController } from './animation';
 import { SFAMaterial } from './materials';
 import { ModelRenderContext } from './models';
 import { computeModelView, ViewState } from './util';
+import { Viewer } from '../viewer';
 
 
 class MyShapeHelper {
@@ -100,12 +101,6 @@ class MyShapeHelper {
     }
 }
 
-interface ShapeConfig {
-    matrix: mat4;
-    boneMatrices: mat4[];
-    camera: Camera;
-}
-
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
 const scratchMtx2 = mat4.create();
@@ -142,7 +137,9 @@ export class ShapeGeometry {
         this.hasFineSkinning = hasFineSkinning;
     }
 
-    public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, config: ShapeConfig) {
+    public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
+        matrix: mat4, boneMatrices: mat4[], camera: Camera)
+    {
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
                 this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic, false);
@@ -157,9 +154,9 @@ export class ShapeGeometry {
         this.packetParams.clear();
 
         const viewMtx = scratchMtx0;
-        computeViewMatrix(viewMtx, config.camera);
+        computeViewMatrix(viewMtx, camera);
         const modelViewMtx = scratchMtx1;
-        mat4.mul(modelViewMtx, viewMtx, config.matrix);
+        mat4.mul(modelViewMtx, viewMtx, matrix);
         const boneMtx = scratchMtx2;
 
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
@@ -167,7 +164,7 @@ export class ShapeGeometry {
             if (this.hasFineSkinning && i === 9) {
                 mat4.identity(boneMtx);
             } else {
-                mat4.copy(boneMtx, config.boneMatrices[this.pnMatrixMap[i]]);
+                mat4.copy(boneMtx, boneMatrices[this.pnMatrixMap[i]]);
             }
 
             mat4.mul(this.packetParams.u_PosMtx[i], modelViewMtx, boneMtx);
@@ -282,12 +279,7 @@ export class Shape {
     }
 
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
-        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, {
-            matrix: modelMatrix,
-            boneMatrices: boneMatrices,
-            camera: modelCtx.viewerInput.camera,
-        });
-
+        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, boneMatrices, modelCtx.viewerInput.camera);
         this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx);
     }
 
