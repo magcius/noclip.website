@@ -191,9 +191,6 @@ export class CommonShapeMaterial implements ShapeMaterial {
     private overrideIndMtx: (mat4 | undefined)[] = [];
     private viewState: ViewState | undefined;
 
-    public constructor(private animController: SFAAnimationController) {
-    }
-
     // Caution: Material is referenced, not copied.
     public setMaterial(material: SFAMaterial) {
         this.material = material;
