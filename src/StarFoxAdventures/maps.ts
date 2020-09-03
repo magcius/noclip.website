@@ -7,13 +7,13 @@ import { mat4, vec3 } from 'gl-matrix';
 import { nArray } from '../util';
 
 import { SFARenderer, SceneRenderContext } from './render';
-import { BlockRenderer, BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
+import { BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
-import { ModelRenderContext } from './models';
+import { ModelRenderContext, ModelInstance } from './models';
 
 export interface BlockInfo {
     mod: number;
@@ -82,7 +82,7 @@ interface MapSceneInfo {
 interface BlockIter {
     x: number;
     z: number;
-    block: BlockRenderer;
+    block: ModelInstance;
 }
 
 export class MapInstance {
@@ -91,7 +91,7 @@ export class MapInstance {
     private numRows: number;
     private numCols: number;
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
-    private blocks: (BlockRenderer | null)[][] = []; // Addressed by blocks[z][x]
+    private blocks: (ModelInstance | null)[][] = []; // Addressed by blocks[z][x]
 
     constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher) {
         this.numRows = info.getNumRows();
@@ -141,7 +141,7 @@ export class MapInstance {
         });
     }
 
-    public getBlockAtPosition(x: number, z: number): BlockRenderer | null {
+    public getBlockAtPosition(x: number, z: number): ModelInstance | null {
         const bx = Math.floor(x / 640);
         const bz = Math.floor(z / 640);
         const block = this.blocks[bz][bx];
@@ -188,7 +188,7 @@ export class MapInstance {
     public async reloadBlocks(dataFetcher: DataFetcher) {
         this.clearBlocks();
         for (let z = 0; z < this.numRows; z++) {
-            const row: (BlockRenderer | null)[] = [];
+            const row: (ModelInstance | null)[] = [];
             this.blocks.push(row);
             for (let x = 0; x < this.numCols; x++) {
                 const blockInfo = this.blockInfoTable[z][x];

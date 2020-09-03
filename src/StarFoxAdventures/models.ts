@@ -13,7 +13,6 @@ import { SFAMaterial, ShaderAttrFlags, ANCIENT_MAP_SHADER_FIELDS } from './mater
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './materials';
 import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, readUint32, readUint16, mat4SetRowMajor } from './util';
-import { BlockRenderer } from './blocks';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
@@ -289,11 +288,10 @@ export class Model {
     public hasBetaFineSkinning: boolean = false;
     public skeleton?: Skeleton;
 
-    constructor(device: GfxDevice,
+    constructor(
         private materialFactory: MaterialFactory,
         blockData: ArrayBufferSlice,
         texFetcher: TextureFetcher,
-        private animController: SFAAnimationController,
         public modelVersion: ModelVersion = ModelVersion.Final
     ) {
         let offs = 0;
@@ -1021,7 +1019,7 @@ const scratchMtx2 = mat4.create();
 const scratchMtx3 = mat4.create();
 const scratchVec0 = vec3.create();
 
-export class ModelInstance implements BlockRenderer {
+export class ModelInstance {
     private modelShapes: ModelShapes;
 
     public skeletonInst?: SkeletonInstance;
@@ -1239,7 +1237,7 @@ class ModelsFile {
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.bin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(this.device, this.materialFactory, modelData, this.texFetcher, this.animController, this.modelVersion);
+            this.models[num] = new Model(this.materialFactory, modelData, this.texFetcher, this.modelVersion);
         }
 
         return this.models[num];

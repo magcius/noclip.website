@@ -1,33 +1,23 @@
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import { TextureFetcher, FakeTextureFetcher } from './textures';
 import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
-import { SFAMaterial, MaterialFactory } from './materials';
-import { Model, ModelInstance, ModelVersion, ModelRenderContext } from './models';
+import { MaterialFactory } from './materials';
+import { Model, ModelInstance, ModelVersion } from './models';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { readUint32 } from './util';
 
 export abstract class BlockFetcher {
-    public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null>;
-}
-
-export abstract class BlockRenderer {
-    public abstract getMaterials(): (SFAMaterial | undefined)[];
-    public abstract getNumDrawSteps(): number;
-    public abstract prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number): void;
-    public abstract prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4): void;
-    public abstract prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, moelCtx: ModelRenderContext, matrix: mat4): void;
+    public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<ModelInstance | null>;
 }
 
 export class BlockCollection {
     private tab: DataView;
     private bin: ArrayBufferSlice;
-    private blockRenderers: BlockRenderer[] = [];
+    private blockModels: ModelInstance[] = [];
 
     private constructor(private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texFetcher: TextureFetcher, private modelVersion: ModelVersion, private isCompressed: boolean) {
     }
@@ -46,8 +36,8 @@ export class BlockCollection {
         return self;
     }
 
-    public getBlockRenderer(num: number): BlockRenderer | null {
-        if (this.blockRenderers[num] === undefined) {
+    public getBlockModel(num: number): ModelInstance | null {
+        if (this.blockModels[num] === undefined) {
             const tabValue = readUint32(this.tab, 0, num);
             if (!(tabValue & 0x10000000)) {
                 return null;
@@ -60,10 +50,10 @@ export class BlockCollection {
             if (uncomp === null)
                 return null;
 
-            this.blockRenderers[num] = new ModelInstance(new Model(this.device, this.materialFactory, uncomp, this.texFetcher, this.animController, this.modelVersion));
+            this.blockModels[num] = new ModelInstance(new Model(this.materialFactory, uncomp, this.texFetcher, this.modelVersion));
         }
 
-        return this.blockRenderers[num];
+        return this.blockModels[num];
     }
 }
 
@@ -99,7 +89,7 @@ export class SFABlockFetcher implements BlockFetcher {
         return self;
     }
 
-    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null> {
+    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<ModelInstance | null> {
         if (mod < 0 || mod * 2 >= this.trkblkTab.byteLength) {
             return null;
         }
@@ -107,7 +97,7 @@ export class SFABlockFetcher implements BlockFetcher {
         const blockColl = await this.fetchBlockCollection(mod, dataFetcher);
         const trkblk = this.trkblkTab.getUint16(mod * 2);
         const blockNum = trkblk + sub;
-        return blockColl.getBlockRenderer(blockNum);
+        return blockColl.getBlockModel(blockNum);
     }
 
     private async fetchBlockCollection(mod: number, dataFetcher: DataFetcher): Promise<BlockCollection> {
@@ -144,9 +134,9 @@ export class SwapcircleBlockFetcher implements BlockFetcher {
         return self;
     }
 
-    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null> {
+    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<ModelInstance | null> {
         console.log(`fetching swapcircle block ${mod}.${sub}`);
-        return this.blockColl.getBlockRenderer(0x21c + sub);
+        return this.blockColl.getBlockModel(0x21c + sub);
     }
 }
 
@@ -232,7 +222,7 @@ export class AncientBlockFetcher implements BlockFetcher {
         return self;
     }
 
-    public async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<BlockRenderer | null> {
+    public async fetchBlock(mod: number, sub: number): Promise<ModelInstance | null> {
         const num = ANCIENT_TRKBLK[mod] + sub;
         if (num < 0 || num * 4 >= this.blocksTab.byteLength) {
             return null;
@@ -242,6 +232,6 @@ export class AncientBlockFetcher implements BlockFetcher {
         console.log(`Loading block ${num} from BLOCKS.bin offset 0x${blockOffset.toString(16)}`);
         const blockData = this.blocksBin.slice(blockOffset);
 
-        return new ModelInstance(new Model(this.device, this.materialFactory, blockData, this.texFetcher, this.animController, ModelVersion.AncientMap));
+        return new ModelInstance(new Model(this.materialFactory, blockData, this.texFetcher, ModelVersion.AncientMap));
     }
 }

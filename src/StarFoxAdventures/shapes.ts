@@ -138,7 +138,7 @@ export class ShapeGeometry {
     }
 
     public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
-        matrix: mat4, boneMatrices: mat4[], camera: Camera)
+        matrix: mat4, matrixPalette: mat4[], camera: Camera)
     {
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
@@ -164,7 +164,7 @@ export class ShapeGeometry {
             if (this.hasFineSkinning && i === 9) {
                 mat4.identity(boneMtx);
             } else {
-                mat4.copy(boneMtx, boneMatrices[this.pnMatrixMap[i]]);
+                mat4.copy(boneMtx, matrixPalette[this.pnMatrixMap[i]]);
             }
 
             mat4.mul(this.packetParams.u_PosMtx[i], modelViewMtx, boneMtx);
@@ -278,14 +278,14 @@ export class Shape {
         this.geom.reloadVertices();
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
-        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, boneMatrices, modelCtx.sceneCtx.viewerInput.camera);
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, matrixPalette: mat4[]) {
+        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera);
         this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, modelCtx: ModelRenderContext, matrixPalette: mat4[]) {
         const renderInst = renderInstManager.newRenderInst();
-        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, boneMatrices);
+        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matrixPalette);
         renderInstManager.submitRenderInst(renderInst);
     }
 }
