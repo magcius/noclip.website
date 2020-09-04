@@ -103,7 +103,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public turnBckRate = 1.0;
     public railGrounded: boolean = false;
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         if (!vec3.equals(this.rotation, this.lastRotation)) {
             quatFromEulerRadians(this.poseQuat, this.rotation[0], this.rotation[1], this.rotation[2]);
             vec3.copy(this.lastRotation, this.rotation);

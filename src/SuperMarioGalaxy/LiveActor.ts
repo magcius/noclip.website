@@ -622,7 +622,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         this.calcAndSetBaseMtxBase();
     }
 

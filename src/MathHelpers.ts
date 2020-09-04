@@ -337,7 +337,7 @@ export function computeRotationMatrixFromSRTMatrix(dst: mat4, m: mat4): void {
     dst[14] = 0;
 }
 
-export function computeMatrixWithoutTranslation(dst: mat4, m: mat4): void {
+export function computeMatrixWithoutTranslation(dst: mat4, m: ReadonlyMat4): void {
     mat4.copy(dst, m);
     dst[12] = 0;
     dst[13] = 0;

@@ -107,7 +107,7 @@ export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
         }
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         const time = viewerInput.time / 1000;
         super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         this.updateMapPartsRotation(this.modelInstance!.modelMatrix, time);

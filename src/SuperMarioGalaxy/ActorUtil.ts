@@ -1338,9 +1338,9 @@ export function getRandomVector(dst: vec3, range: number): void {
     vec3.set(dst, getRandomFloat(-range, range), getRandomFloat(-range, range), getRandomFloat(-range, range));
 }
 
-export function rotateVecDegree(dst: vec3, upVec: vec3, degrees: number, m: mat4 = scratchMatrix): void {
+export function rotateVecDegree(dst: vec3, axis: ReadonlyVec3, degrees: number, m: mat4 = scratchMatrix): void {
     const theta = degrees * MathConstants.DEG_TO_RAD;
-    mat4.fromRotation(m, theta, upVec);
+    mat4.fromRotation(m, theta, axis);
     vec3.transformMat4(dst, dst, m);
 }
 

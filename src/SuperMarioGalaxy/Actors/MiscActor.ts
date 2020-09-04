@@ -158,6 +158,7 @@ class FixedPosition {
 export class PartsModel extends LiveActor {
     public fixedPosition: FixedPosition | null = null;
     public hostMtx: mat4 | null = null;
+    public useParentMatrix: boolean = true;
 
     constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType, transformMatrix: mat4 | null = null) {
         super(parentActor.zoneAndLayer, sceneObjHolder, objName);
@@ -166,6 +167,10 @@ export class PartsModel extends LiveActor {
 
         let movementType = MovementType.Parts;
         let calcAnimType = CalcAnimType.MapObjDecoration;
+
+        if (drawBufferType < 0)
+            drawBufferType = DrawBufferType.MapObj;
+
         if (drawBufferType >= 0x15 && drawBufferType <= 0x18) {
             movementType = 0x26;
             calcAnimType = 0x0A;
@@ -203,8 +208,8 @@ export class PartsModel extends LiveActor {
         super.calcAnim(sceneObjHolder, viewerInput);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.hostMtx !== null) {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (this.hostMtx !== null && this.useParentMatrix) {
             getMatrixTranslation(this.translation, this.hostMtx);
             mat4.copy(this.modelInstance!.modelMatrix, this.hostMtx);
         } else {
@@ -353,6 +358,15 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
         this.modelInstance!.setColorOverride(ColorKind.MAT0, color);
         this.initEffectKeeper(sceneObjHolder, 'StarPiece');
 
+        // initSound
+        // initHitSensor
+        // addHitSensorEye
+        // addHitSensor
+
+        // TODO(jstpierre): Add shadows, but this might be a bit much. Probably want to add clipping before turning this on.
+        // initShadowVolumeSphere(sceneObjHolder, this, 30.0);
+        // onCalcShadowDropPrivateGravityOneTime(this);
+
         if (this.type === 2) {
             this.initNerve(StarPieceNrv.RailMove);
         } else {
@@ -493,7 +507,7 @@ export class BlackHole extends LiveActor {
         this.updateModelScale(rangeScale, rangeScale);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
 
         if (this.effectKeeper !== null) {
@@ -663,7 +677,7 @@ class Coin extends LiveActor {
         this.isInWater = isInWater(sceneObjHolder, this.translation);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         vec3.scaleAndAdd(this.shadowDropPos, this.translation, this.gravityVector, -70.0);
 
         if (this.useLocalGravity) {
@@ -880,7 +894,7 @@ export class QuestionCoin extends LiveActor {
         }
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         sceneObjHolder.create(SceneObj.CoinRotater);
         const rotateMtx = sceneObjHolder.coinRotater!.coinInWaterRotateMtx;
         mat4.mul(this.modelInstance!.modelMatrix, this.mtx, rotateMtx);
@@ -954,7 +968,7 @@ export class MiniRouteGalaxy extends LiveActor {
         emitEffect(sceneObjHolder, this, miniatureName);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
 
         const rotateY = getTimeFrames(viewerInput) * this.rotateSpeed;
@@ -1875,7 +1889,7 @@ class Fish extends LiveActor<FishNrv> {
         // drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.followPointPos);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         makeMtxFrontUpPos(this.modelInstance!.modelMatrix, this.direction, this.fishGroup.upVec, this.translation);
     }
 
@@ -2166,7 +2180,7 @@ class SeaGull extends LiveActor<SeaGullNrv> {
         */
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         setMtxAxisXYZ(this.modelInstance!.modelMatrix, this.axisX, this.axisY, this.axisZ);
         setMatrixTranslation(this.modelInstance!.modelMatrix, this.translation);
     }
@@ -2543,7 +2557,6 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
 }
 
 const enum TicoRailNrv { Wait, LookAround, MoveSignAndTurn, MoveSign, Move, Stop, TalkStart, Talk, TalkCancel, GoodBye }
-
 export class TicoRail extends LiveActor<TicoRailNrv> {
     public direction = vec3.create();
     private talkingActor: LiveActor | null = null;
@@ -2627,7 +2640,7 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
         }
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         // Gravity vector
         calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.direction);
     }
@@ -6498,7 +6511,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public calcAndSetBaseMtx(): void {
+    protected calcAndSetBaseMtx(): void {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
@@ -6823,7 +6836,7 @@ class UFOBase extends LiveActor<UFOBaseNrv> {
         }
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         calcUpVec(scratchVec3, this);
         makeMtxUpFrontPos(this.modelInstance!.modelMatrix, scratchVec3, this.front, this.translation);
     }
@@ -7582,7 +7595,7 @@ class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
         vec3.set(this.scale, size, size, size);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         mat4.copy(this.modelInstance!.modelMatrix, this.baseMtx);
     }
 
@@ -7619,7 +7632,7 @@ export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         // calcHandledRotateMtx
 
         getCamPos(scratchVec3, viewerInput.camera);
@@ -7951,7 +7964,7 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
             emitEffect(sceneObjHolder, this, 'EyeLight');
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
 
         vec3.scaleAndAdd(scratchVec3, this.translation, Vec3UnitY, -7000.0);
@@ -8067,7 +8080,7 @@ export class ScrewSwitch extends LiveActor<ScrewSwitchNrv> {
         this.mapObjConnector.attachToUnder(sceneObjHolder);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
         this.mapObjConnector.connect();
     }
@@ -8720,7 +8733,7 @@ export class LavaProminence extends LiveActor<LavaProminenceNrv> {
         makeMtxUpNoSupportPos(this.endEffectMtx, scratchVec3, this.railEndPos);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         makeMtxFrontNoSupportPos(this.modelInstance!.modelMatrix, this.curRailDirection, this.translation);
         mat4.copy(this.bloomModelMtx, this.modelInstance!.modelMatrix);
     }
@@ -8963,7 +8976,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
         return this.baseMtx;
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         mat4.fromQuat(scratchMatrix, this.rollRotation);
         getMatrixAxisY(scratchVec3a, scratchMatrix);
         vec3.scaleAndAdd(scratchVec3, this.translation, scratchVec3a, -126.36 * this.size);
@@ -9513,7 +9526,7 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         trySetMoveLimitCollision(sceneObjHolder, this);
     }
 
-    public calcAndSetBaseMtx(): void {
+    protected calcAndSetBaseMtx(): void {
         makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.quat, this.translation);
     }
 
