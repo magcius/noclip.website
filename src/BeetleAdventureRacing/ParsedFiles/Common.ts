@@ -21,6 +21,7 @@ export const enum RenderOptionsFlags
 }
 
 
+// TODO: there is definitely code in the game to dynamically change the render opts
 // BREAKDOWN OF MATERIAL RENDER OPTIONS
 // ____ G??U VWZB FL?_ ____ tttt tttt tttt
 //
@@ -39,14 +40,26 @@ export const enum RenderOptionsFlags
 // tttttttttttt = uvtx index
 //
 // (G || L) -> geometry mode - G_LIGHTING (which i think in reality just controls whether the last 4 bytes are interpreted as colors or normals)
+
+
+
+
+// some uvtx render notes:
+// checks against materialRenderOptions 0x80000000 - is this ever set? (still need to look into model render code)
+//      theres code that depends on this check, if you figure this out then look into that code
 //
+
+// BREAKDOWN OF UVTX RENDER STATE
+// ____ ____ ____ XXPA XTQX tttt tttt tttt
 //
-//
-//
-// BREAKDOWN OF UVTX RENDER OPTIONS
-// 0000 0000 0000 XX00 X00X tttt tttt tttt
-//
-// 0 - never set in a file, so probably never used?
+// _ - never set in a file, so probably never used?
+// Q - never set in a file; set to true if U bit is set in material render opts (<< 7)
+//      then later if true, is used to set an unknown parameter of G_TEXTURE
+// A - never set in a file; set to true if texture's blendAlpha != 0xff
+// P - never set in a file; seems like it's set if texure uses palettes? 
+// T - never set in a file. = !((is untextured) || (uvtx.unkB1 != 1))
+//                          = (is textured) && (uvtx.unkB1 == 1) 
+
 // tttttttttttt = uvtx index
 
 // For UVTX these are the only bits that are ever stored in a file: 000c97ff

@@ -23,10 +23,9 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 export const DEBUGGING_TOOLS_STATE = {
     showTextureIndices: false,
-    singleUVTXToRender: null //0x210
+    singleUVTXToRender: null//0x270
 };
 
-// TODO: what's with the "GL_INVALID_OPERATION: It is undefined behaviour to use a uniform buffer that is too small" errors?
 class BARRenderer implements SceneGfx {
 
     public renderHelper: GfxRenderHelper;
@@ -43,8 +42,6 @@ class BARRenderer implements SceneGfx {
     constructor(device: GfxDevice, uvtr: UVTR, uven: UVEN | null) {
         this.renderHelper = new GfxRenderHelper(device);
 
-        // TODO: this is a kind of hacky solution?
-        // TODO: this causes a lot of duplicate destruction warnings
         let rendererCache = new Map<any, any>();
         
         this.uvtrRenderer = new UVTRRenderer(uvtr, device, rendererCache);
@@ -117,7 +114,7 @@ class BARRenderer implements SceneGfx {
 
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        //TODO: figure out what's going on with the weird env textures
+        //TODO: figure out some way to hide the bits of the enviroment that are meant to only be shown from a distance
         if(this.uvenModelRenderers !== null) {
             this.uvenModelRenderers.forEach(r => r.prepareToRender(device, renderInstManager, viewerInput, mat4.create()))
         }
@@ -148,6 +145,7 @@ class BARRenderer implements SceneGfx {
         return passRenderer;
     }
 
+    // TODO: set loadSceneDelta to 1 in main.ts to test for leaks
     // TODO: destroy setup right now is pretty bad, destroys a lot of things multiple times
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
@@ -206,8 +204,7 @@ const sceneDescs = [
     new BARSceneDesc(0x8, 'Sunset Sands'),
     new BARSceneDesc(0xA, 'Metro Madness'),
     new BARSceneDesc(0x6, 'Wicked Woods'),
-    '~~Tracks',
-    new BARSceneDesc(0xB, 'Stunt O\'Rama'),
+    new BARSceneDesc(0xB, '[Unused] Stunt O\'Rama'),
     //new BARSceneDesc(0xC, 'TRACK 8'),
     //new BARSceneDesc(0xD, 'TRACK 9'),
     //new BARSceneDesc(0xE, 'TRACK 10'),

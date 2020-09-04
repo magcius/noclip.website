@@ -2,7 +2,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
 import { UVTX, UVTXRenderHelper } from "./ParsedFiles/UVTX";
@@ -144,29 +144,11 @@ export class MaterialRenderer {
         }
     }
 
+    //TODO: figure out whats up with the UVEN rendering code that modified the render options
     private translateGeomAndBlenderSettings(): Partial<GfxMegaStateDescriptor> {
         let out: Partial<GfxMegaStateDescriptor> = {};
     
-        const renderOpts = this.material.renderOptions;
-
-        if (renderOpts & RenderOptionsFlags.ENABLE_BACKFACE_CULLING) {
-            if (renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING) {
-                out.cullMode = GfxCullMode.FRONT_AND_BACK;
-            } else {
-                out.cullMode = GfxCullMode.BACK;
-            }
-        } else if (renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING) {
-            out.cullMode = GfxCullMode.FRONT;
-        } else {
-            out.cullMode = GfxCullMode.NONE;
-        }
-
-        // TODO: what is the correct behavior here? (both of this flag, and of the game)
-        if (!(renderOpts & RenderOptionsFlags.ENABLE_DEPTH_CALCULATIONS)) {
-            //out.depthCompare = GfxCompareMode.ALWAYS;
-            //out.depthWrite = false;
-        }
-    
+        const renderOpts = this.material.renderOptions; 
         
         // TODO: there's some sort of logic involving texture indices equal to 0xffe - might need to figure out what that does
 
@@ -194,7 +176,7 @@ export class MaterialRenderer {
             if (m == 0x200000) {
                 if (!this.isTextured)
                     otherModeLRenderMode = 0x00104b50;
-                else if (/* TODO: [unk_LastTexturingState << 0xf] */ false)
+                else if (this.uvtx.usesAlphaBlending)
                     otherModeLRenderMode = 0x00105278;
                 else
                     otherModeLRenderMode = 0x00104a50;
@@ -210,7 +192,7 @@ export class MaterialRenderer {
             if (m == 0x600000) {
                 if (!this.isTextured)
                     otherModeLRenderMode = 0x001045d8;
-                else if (/* TODO: [unk_LastTexturingState << 0xf] */ false)
+                else if (this.uvtx.usesAlphaBlending)
                     otherModeLRenderMode = 0x00105278;
                 else if (/* TODO: complicated flag checks */ false)
                     otherModeLRenderMode = 0x00103078
@@ -282,18 +264,35 @@ export class MaterialRenderer {
             });
         }
 
+        out = RDP.translateRenderMode(otherModeLRenderMode);
+
+        // TODO: what is the correct behavior here? (both of this flag, and of the game)
+        if (!(renderOpts & RenderOptionsFlags.ENABLE_DEPTH_CALCULATIONS)) {
+            //out.depthCompare = GfxCompareMode.ALWAYS;
+            //out.depthWrite = false;
+        }
+
         // TODO other bits of otherModeLRenderMode (maybe use translateRenderMode from RDP file?)
+
+        if (renderOpts & RenderOptionsFlags.ENABLE_BACKFACE_CULLING) {
+            if (renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING) {
+                out.cullMode = GfxCullMode.FRONT_AND_BACK;
+            } else {
+                out.cullMode = GfxCullMode.BACK;
+            }
+        } else if (renderOpts & RenderOptionsFlags.ENABLE_FRONTFACE_CULLING) {
+            out.cullMode = GfxCullMode.FRONT;
+        } else {
+            out.cullMode = GfxCullMode.NONE;
+        }
 
         return out;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelToWorldMatrix: mat4) {        
-        //TODO: a lot
-
-        // TODO: scale
-        // TODO: properly handle other modes
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, modelToWorldMatrix: mat4) {            
         // TODO: figure out other processing
 
+        // TODO: what's causing the "GL_INVALID_OPERATION: It is undefined behaviour to use a uniform buffer that is too small" errors?
         if(DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null && 
             (!this.isTextured || (this.uvtx.flagsAndIndex & 0xFFF) !== DEBUGGING_TOOLS_STATE.singleUVTXToRender)) {
             return;
@@ -301,7 +300,7 @@ export class MaterialRenderer {
 
         const renderInst = renderInstManager.newRenderInst();
         // TODO: this doesn't need to be recreated every time
-        renderInst.setMegaStateFlags(this.translateGeomAndBlenderSettings()!);
+        renderInst.setMegaStateFlags(this.translateGeomAndBlenderSettings());
 
         // TODO: move this to template, it only needs to be set once
         let sceneParamsOffset = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
@@ -320,6 +319,12 @@ export class MaterialRenderer {
             0, 0, 0, 1
         )
         mat4.mul(adjmodelToWorldMatrix, shiftMatrix, modelToWorldMatrix);
+
+        //TODO TODO: I am almost certain that this is inaccurate, figure out how the game really works
+        renderInst.sortKey = makeSortKey((this.isTextured && this.uvtx.usesAlphaBlending) ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
+        if(renderInst.sortKey & GfxRendererLayer.TRANSLUCENT) {
+            setSortKeyDepth(renderInst.sortKey, -adjmodelToWorldMatrix[14]);
+        }
 
         let modelToViewMatrix = mat4.create();
         mat4.mul(modelToViewMatrix, viewerInput.camera.viewMatrix, adjmodelToWorldMatrix);

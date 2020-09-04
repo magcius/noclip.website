@@ -130,6 +130,11 @@ export class UVTX {
     public convertedTexelData: Uint8Array;
     public rspState: UVTXRSPState;
 
+    public get usesAlphaBlending() {
+        return this.blendAlpha !== 0xff;
+    }
+    
+
     constructor(uvFile: UVFile, filesystem: Filesystem) {
         assert(uvFile.chunks.length === 1);
         assert(uvFile.chunks[0].tag === 'COMM');
