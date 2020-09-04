@@ -103,7 +103,6 @@ class MyShapeHelper {
 
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
-const scratchMtx2 = mat4.create();
 
 // The vertices and polygons of a shape.
 export class ShapeGeometry {
@@ -157,17 +156,13 @@ export class ShapeGeometry {
         computeViewMatrix(viewMtx, camera);
         const modelViewMtx = scratchMtx1;
         mat4.mul(modelViewMtx, viewMtx, matrix);
-        const boneMtx = scratchMtx2;
 
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
             // PNMTX 9 is used for fine-skinned vertices in models with fine-skinning enabled.
-            if (this.hasFineSkinning && i === 9) {
-                mat4.identity(boneMtx);
-            } else {
-                mat4.copy(boneMtx, matrixPalette[this.pnMatrixMap[i]]);
-            }
-
-            mat4.mul(this.packetParams.u_PosMtx[i], modelViewMtx, boneMtx);
+            if (this.hasFineSkinning && i === 9)
+                mat4.copy(this.packetParams.u_PosMtx[i], modelViewMtx);
+            else
+                mat4.mul(this.packetParams.u_PosMtx[i], modelViewMtx, matrixPalette[this.pnMatrixMap[i]]);
         }
 
         material.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
