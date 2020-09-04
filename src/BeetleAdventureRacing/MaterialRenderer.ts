@@ -11,7 +11,7 @@ import { F3DEX_Program } from "../BanjoKazooie/render";
 import * as RDP from '../Common/N64/RDP';
 import { humanReadableCombineParams, generateCycleDependentBlenderSettingsString } from './Util';
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { DEBUGGING_TOOLS_STATE } from "./Scenes";
+import { DEBUGGING_TOOLS_STATE, RendererStore } from "./Scenes";
 import { Material, RenderOptionsFlags } from "./ParsedFiles/Common";
 import { assert } from "../util";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -38,7 +38,7 @@ export class MaterialRenderer {
     // TODO: some models are being culled incorrectly, figure out what's up with that
     // TODO: what's going on with the materials that (seemingly) have no texture and are invisible?
     // (e.g. see SS in the desert, MoM by the ice wall you smash)
-    constructor(device: GfxDevice, material: Material, rendererCache: Map<any, any>) {
+    constructor(material: Material, device: GfxDevice, rendererStore: RendererStore) {
         this.material = material;
         this.isTextured = material.uvtx !== null;
         if(this.isTextured) {
@@ -124,23 +124,12 @@ export class MaterialRenderer {
             if(this.isTextureSequence) {
                 this.uvtxRenderHelpers = new Map();
                 for(let frame of this.uvtx.seqAnim!.uvts.frames) {
-                    this.uvtxRenderHelpers.set(frame.uvtx!, this.getOrMakeRenderHelper(device, frame.uvtx!, rendererCache));
+                    this.uvtxRenderHelpers.set(frame.uvtx!, rendererStore.getOrCreateRenderer(frame.uvtx!, ()=>new UVTXRenderHelper(frame.uvtx!, device)));
                 }
             } else {
-                this.uvtxRenderHelper = this.getOrMakeRenderHelper(device, this.uvtx, rendererCache);
+                this.uvtxRenderHelper = rendererStore.getOrCreateRenderer(this.uvtx, ()=>new UVTXRenderHelper(this.uvtx, device));
             }
             //this.uvtxRenderHelper = new UVTXRenderHelper(this.uvtx, device);
-        }
-    }
-
-    private getOrMakeRenderHelper(device: GfxDevice, uvtx: UVTX, rendererCache: Map<any, any>): UVTXRenderHelper {
-        if (rendererCache.has(uvtx)) {
-            return rendererCache.get(uvtx);
-        }
-        else {
-            let uvtxRenderHelper = new UVTXRenderHelper(uvtx, device);
-            rendererCache.set(uvtx, uvtxRenderHelper);
-            return uvtxRenderHelper;
         }
     }
 
@@ -320,12 +309,6 @@ export class MaterialRenderer {
         )
         mat4.mul(adjmodelToWorldMatrix, shiftMatrix, modelToWorldMatrix);
 
-        //TODO TODO: I am almost certain that this is inaccurate, figure out how the game really works
-        renderInst.sortKey = makeSortKey((this.isTextured && this.uvtx.usesAlphaBlending) ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
-        if(renderInst.sortKey & GfxRendererLayer.TRANSLUCENT) {
-            setSortKeyDepth(renderInst.sortKey, -adjmodelToWorldMatrix[14]);
-        }
-
         let modelToViewMatrix = mat4.create();
         mat4.mul(modelToViewMatrix, viewerInput.camera.viewMatrix, adjmodelToWorldMatrix);
 
@@ -386,12 +369,5 @@ export class MaterialRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
-        if(this.isTextured) {
-            if(this.isTextureSequence) {
-                this.uvtxRenderHelpers.forEach(v => v.destroy(device));
-            } else {
-                this.uvtxRenderHelper.destroy(device);
-            }
-        }
     }
 }

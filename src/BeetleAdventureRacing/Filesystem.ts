@@ -65,7 +65,7 @@ export class Filesystem {
     }
 
     // what's the point of a powerful type system if you can't have a little fun with it
-    public getParsedFile<T>(returnClass: new(uvFile: UVFile, filesystem: Filesystem) => T, type: string, index: number): T {
+    public getOrLoadFile<T>(returnClass: new(uvFile: UVFile, filesystem: Filesystem) => T, type: string, index: number): T {
         let key: string = type + index.toString();
         
         if(this.parsedFilesCache.has(key)) {

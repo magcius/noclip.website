@@ -6,6 +6,7 @@ import { parseMatrix } from "./Common";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../viewer";
+import { RendererStore } from "../Scenes";
 
 // UVTR aka "terra"
 export class UVTR {
@@ -49,7 +50,7 @@ export class UVTR {
             const contourIndex = view.getUint16(offs + 1);
             offs += 3;
 
-            const uvct = filesystem.getParsedFile(UVCT, "UVCT", contourIndex);
+            const uvct = filesystem.getOrLoadFile(UVCT, "UVCT", contourIndex);
 
             this.uvcts.push([uvct, mat]);
         }
@@ -60,16 +61,10 @@ export class UVTR {
 
 export class UVTRRenderer {
     public uvctRenderers: Map<UVCT, UVCTRenderer> = new Map();
-    constructor(public uvtr: UVTR, device: GfxDevice, rendererCache: Map<any, any>) {
-        rendererCache.set(uvtr, this);
+    constructor(public uvtr: UVTR, device: GfxDevice, rendererStore: RendererStore) {
 
         for(let [uvct, placementMat] of uvtr.uvcts) {
-            let uvctRenderer;
-            if(rendererCache.has(uvct)) {
-                uvctRenderer = rendererCache.get(uvct);
-            } else {
-                uvctRenderer = new UVCTRenderer(uvct, device, rendererCache);
-            }
+            let uvctRenderer = rendererStore.getOrCreateRenderer(uvct, ()=>new UVCTRenderer(uvct, device, rendererStore))
             this.uvctRenderers.set(uvct, uvctRenderer);
         }
     }
@@ -79,9 +74,5 @@ export class UVTRRenderer {
             const uvctRenderer = this.uvctRenderers.get(uvct)!;
             uvctRenderer.prepareToRender(device, renderInstManager, viewerInput, placementMat);
         }
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.uvctRenderers.forEach(r => r.destroy(device));
     }
 }

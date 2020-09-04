@@ -50,7 +50,7 @@ export class UVTS {
     public loadUVTXs(filesystem: Filesystem) {
         for(let frame of this.frames) {
             if(frame.uvtx === null) {
-                frame.uvtx = filesystem.getParsedFile(UVTX, "UVTX", frame.uvtxIndex);
+                frame.uvtx = filesystem.getOrLoadFile(UVTX, "UVTX", frame.uvtxIndex);
             }
         }
     }

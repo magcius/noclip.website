@@ -105,7 +105,7 @@ export function parseMaterial(view: DataView, curPos: number, filesystem: Filesy
     const uvtxIndex = (renderOptions & 0xFFF);
     let uvtx: UVTX | null = null;
     if (uvtxIndex !== 0xFFF) {
-        uvtx = filesystem.getParsedFile(UVTX, "UVTX", uvtxIndex);
+        uvtx = filesystem.getOrLoadFile(UVTX, "UVTX", uvtxIndex);
     }
     let lightColors = null;
     if (((renderOptions << 13) & 0x80000000) !== 0) {

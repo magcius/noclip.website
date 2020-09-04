@@ -7,6 +7,7 @@ import { MaterialRenderer } from "../MaterialRenderer";
 import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../viewer";
+import { RendererStore } from "../Scenes";
 
 export class UVCT {
     public uvmds: [UVMD, mat4][] = [];
@@ -102,7 +103,7 @@ export class UVCT {
 
             curPos += 22;
 
-            let uvmd = filesystem.getParsedFile(UVMD, "UVMD", modelIndex);
+            let uvmd = filesystem.getOrLoadFile(UVMD, "UVMD", modelIndex);
             this.uvmds.push([uvmd, placement]);
         }
 
@@ -138,19 +139,14 @@ export class UVCT {
 export class UVCTRenderer {
     public materialRenderers: MaterialRenderer[] = [];
     public uvmdRenderers: Map<UVMD, UVMDRenderer> = new Map();
-    constructor(public uvct: UVCT, device: GfxDevice, rendererCache: Map<any, any>) {
-        rendererCache.set(uvct, this);
+    constructor(public uvct: UVCT, device: GfxDevice, rendererStore: RendererStore) {
 
         for(let material of uvct.materials) {
-            this.materialRenderers.push(new MaterialRenderer(device, material, rendererCache));
+            let materialRenderer = rendererStore.getOrCreateRenderer(material, ()=>new MaterialRenderer(material, device, rendererStore))
+            this.materialRenderers.push(materialRenderer);
         }
         for(let [uvmd, placementMat] of uvct.uvmds) {
-            let uvmdRenderer;
-            if(rendererCache.has(uvmd)) {
-                uvmdRenderer = rendererCache.get(uvmd);
-            } else {
-                uvmdRenderer = new UVMDRenderer(uvmd, device, rendererCache);
-            }
+            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, device, rendererStore))
             this.uvmdRenderers.set(uvmd, uvmdRenderer);
         }
     }
@@ -170,11 +166,5 @@ export class UVCTRenderer {
 
             uvmdRenderer.prepareToRender(device, renderInstManager, viewerInput, combinedPlacementMatrix);
         }
-    }
-
-
-    public destroy(device: GfxDevice): void {
-        this.uvmdRenderers.forEach(r => r.destroy(device));
-        this.materialRenderers.forEach(r => r.destroy(device));
     }
 }

@@ -186,7 +186,7 @@ export class UVTX {
             if(otherUVTXIndex === (this.flagsAndIndex & 0xFFF)) {
                 this.otherUVTX = this;
             } else {
-                this.otherUVTX = filesystem.getParsedFile(UVTX, "UVTX", otherUVTXIndex);
+                this.otherUVTX = filesystem.getOrLoadFile(UVTX, "UVTX", otherUVTXIndex);
             }
         } 
         const unk6 = view.getUint16(curPos + 13); // 2
@@ -209,7 +209,7 @@ export class UVTX {
             let foundMatch = false;
             for(let i = 0; i < uvtsCt; i++) {
                 // I checked, there are no null UVTSs
-                let uvts = filesystem.getParsedFile(UVTS, "UVTS", i);               
+                let uvts = filesystem.getOrLoadFile(UVTS, "UVTS", i);               
                 if(uvts.frames[0].uvtxIndex === (this.flagsAndIndex & 0xFFF)) {
                     this.seqAnim = new TexSeqAnim(uvts);
                     foundMatch = true;

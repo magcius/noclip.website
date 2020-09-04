@@ -4,18 +4,19 @@ import { BasicRenderTarget, makeClearRenderPassDescriptor, standardFullClearRend
 import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
 import { executeOnPass } from "../gfx/render/GfxRenderer";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
+import { SceneContext, SceneDesc, SceneGroup, Destroyable } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { Filesystem, loadFilesystem } from "./Filesystem";
 import { UVTR, UVTRRenderer } from "./ParsedFiles/UVTR";
 import { CameraController } from "../Camera";
 import * as UI from '../ui';
-import { UVEN } from "./ParsedFiles/UVEN";
+import { UVEN, UVENRenderer } from "./ParsedFiles/UVEN";
 import { UVMDRenderer } from "./ParsedFiles/UVMD";
 import { mat4 } from "gl-matrix";
 import { UVTX, TexScrollAnim, TexSeqAnim } from "./ParsedFiles/UVTX";
 import { UVTS } from "./ParsedFiles/UVTS";
 import { colorNewFromRGBA } from "../Color";
+import { assert } from "../util";
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2 },
@@ -26,36 +27,52 @@ export const DEBUGGING_TOOLS_STATE = {
     singleUVTXToRender: null//0x270
 };
 
-class BARRenderer implements SceneGfx {
+export class RendererStore implements Destroyable {
+    public objToRendererMap: Map<any, any> = new Map();
 
+    public getOrCreateRenderer<TObj, TRenderer>(obj: TObj, createLambda: () => TRenderer): TRenderer {
+        let cachedRenderer = this.objToRendererMap.get(obj);
+        if(cachedRenderer !== undefined) {
+            return <TRenderer> cachedRenderer;
+        } else {
+            let newRenderer = createLambda();
+            this.objToRendererMap.set(obj, newRenderer);
+            return newRenderer;
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for(let renderer of this.objToRendererMap.values()) {
+            if(renderer.destroy) 
+                renderer.destroy(device);
+        }
+    }
+}
+
+class BARRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
     private renderTarget = new BasicRenderTarget();
 
     private uvtrRenderer: UVTRRenderer;
+    private uvenRenderer: UVENRenderer | null;
     
-    private uvenModelRenderers: UVMDRenderer[] | null = null;
     private texScrollAnims: TexScrollAnim[];
     private texSeqAnims: TexSeqAnim[];
 
     private renderPassDescriptor: GfxRenderPassDescriptor;
 
-    constructor(device: GfxDevice, uvtr: UVTR, uven: UVEN | null) {
+    constructor(device: GfxDevice, rendererStore: RendererStore, uvtr: UVTR, uven: UVEN | null) {
         this.renderHelper = new GfxRenderHelper(device);
 
-        let rendererCache = new Map<any, any>();
-        
-        this.uvtrRenderer = new UVTRRenderer(uvtr, device, rendererCache);
+        this.uvtrRenderer = rendererStore.getOrCreateRenderer(uvtr, ()=>new UVTRRenderer(uvtr, device, rendererStore))
 
-        // TODO: less sketchy uven setup
-        if(uven !== null) {
-            this.uvenModelRenderers = uven.uvmds.map(md => new UVMDRenderer(md, device, rendererCache));
-        }
+        this.uvenRenderer = null;
+        if(uven !== null)
+            this.uvenRenderer = rendererStore.getOrCreateRenderer(uven, ()=>new UVENRenderer(uven, device, rendererStore));
 
-        // TODO: this is maybe a hacky solution?
-        // TODO: Reset animations
         this.texScrollAnims = [];
         this.texSeqAnims = [];
-        for(let uvFile of rendererCache.keys()) {
+        for(let uvFile of rendererStore.objToRendererMap.keys()) {
             if(uvFile instanceof UVTX) {
                 if(uvFile.scrollAnim1 !== null)
                     this.texScrollAnims.push(uvFile.scrollAnim1);
@@ -98,8 +115,8 @@ class BARRenderer implements SceneGfx {
         return [debuggingToolsPanel];
     }
 
-    // TODO-ASK: what is a render inst?
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+        // Update animations
         let deltaTimeSecs = viewerInput.deltaTime / 1000;
         for(let texScrollAnim of this.texScrollAnims) {
             texScrollAnim.update(deltaTimeSecs);
@@ -108,19 +125,18 @@ class BARRenderer implements SceneGfx {
             texSeqAnim.update(deltaTimeSecs);
         }
 
-        const topTemplate = this.renderHelper.pushTemplateRenderInst();
-        
+        // Do a little render setup
+        const topTemplate = this.renderHelper.pushTemplateRenderInst();   
         topTemplate.setBindingLayouts(bindingLayouts);
-
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        //TODO: figure out some way to hide the bits of the enviroment that are meant to only be shown from a distance
-        if(this.uvenModelRenderers !== null) {
-            this.uvenModelRenderers.forEach(r => r.prepareToRender(device, renderInstManager, viewerInput, mat4.create()))
-        }
+        // Render
+        if(this.uvenRenderer !== null)
+            this.uvenRenderer.prepareToRender(device, renderInstManager, viewerInput);
 
         this.uvtrRenderer.prepareToRender(device, renderInstManager, viewerInput);
 
+        // Final setup
         this.renderHelper.renderInstManager.popTemplateRenderInst();       
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -139,26 +155,27 @@ class BARRenderer implements SceneGfx {
 
         //TODO: snow
 
-        // executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
-
         renderInstManager.resetRenderInsts();
         return passRenderer;
     }
 
-    // TODO: set loadSceneDelta to 1 in main.ts to test for leaks
-    // TODO: destroy setup right now is pretty bad, destroys a lot of things multiple times
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        this.uvtrRenderer.destroy(device);
     }
 }
 
 export const pathBase = `BeetleAdventureRacing`;
 class BARSceneDesc implements SceneDesc {
     public id: string;
-    constructor(public sceneIndex: number, public name: string) {
-        this.id = sceneIndex.toString();
+
+    // uvtrIndex is there for when we want to load a UVTR that's not part of a scene.
+    constructor(public sceneIndex: number | null, public name: string, public uvtrIndex: number | null = null) {
+        if (this.sceneIndex !== null) {
+            this.id = "sc" + this.sceneIndex.toString();
+        } else {
+            this.id = "tr" + this.uvtrIndex;
+        }       
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
@@ -166,31 +183,44 @@ class BARSceneDesc implements SceneDesc {
             return await loadFilesystem(context.dataFetcher, device);
         });
 
-        // Get scene descriptions
-        let sceneModuleCodeChunkBuffer = filesystem.getFile("UVMO", 0x32).chunks[1].buffer;
-        let sceneDescriptionsDataView = sceneModuleCodeChunkBuffer.subarray(0x1840, 0x9c * 0x22).createDataView();
+        let uvtrIndex: number;
+        let uvenIndex: number | null = null;
 
-        let uvtrIndex = sceneDescriptionsDataView.getInt16(0x9c * this.sceneIndex + 0x0);
-        let uvenIndex = sceneDescriptionsDataView.getInt16(0x9c * this.sceneIndex + 0x2);
+        if(this.sceneIndex !== null) {
+            // Scene descriptions are stored in a big array in the data section of the "scene" module's code.
+            let sceneModuleCodeChunkBuffer = filesystem.getFile("UVMO", 0x32).chunks[1].buffer;
+            // Each description is 0x9c bytes long
+            let sceneDescriptionsDataView = sceneModuleCodeChunkBuffer.subarray(0x1840, 0x9c * 0x22).createDataView();
 
-        const uvtr = filesystem.getParsedFile(UVTR, "UVTR", uvtrIndex);
-        console.log(uvtr);
-
-        // TODO: II env contains pyramid duplicates?
-        // (maybe so that they always appear even when contour is unloaded?)
-        let uven = null;
-        if (uvenIndex !== -1) {
-            uven = filesystem.getParsedFile(UVEN, "UVEN", uvenIndex)
+            uvtrIndex = sceneDescriptionsDataView.getInt16(0x9c * this.sceneIndex + 0x0);
+            uvenIndex = sceneDescriptionsDataView.getInt16(0x9c * this.sceneIndex + 0x2);
+        } else if (this.uvtrIndex !== null) {
+            uvtrIndex = this.uvtrIndex;
+        } else {
+            assert(false);
         }
 
-        //TODO: better solution?
+        // This loads the UVTR and UVEN as well as all files needed by them.
+        // (Unless they've already been loaded and are cached)
+        const uvtr = filesystem.getOrLoadFile(UVTR, "UVTR", uvtrIndex);
+        let uven: UVEN | null = null;
+        if (uvenIndex !== null) {
+            uven = filesystem.getOrLoadFile(UVEN, "UVEN", uvenIndex)
+        }
+
+        // UVTS files reference UVTX files but are themselves referenced by UVTX files
+        // so loading their references immediately would cause infinite recursion.
+        // Instead we have to do it after.
+        // TODO: should I come up with a better solution for this?
         for(let uvts of filesystem.getAllLoadedFilesOfType<UVTS>("UVTS")) {
             uvts.loadUVTXs(filesystem);
         }
 
-        return new BARRenderer(device, uvtr, uven);
+        const rendererStore = await context.dataShare.ensureObject<RendererStore>(`${pathBase}/RendererStore`, async () => {
+            return await new RendererStore();
+        });
 
-
+        return new BARRenderer(device, rendererStore, uvtr, uven);
     }
 }
 
@@ -202,6 +232,7 @@ const sceneDescs = [
     new BARSceneDesc(0x7, 'Mount Mayhem'),
     new BARSceneDesc(0x9, 'Inferno Isle'),
     new BARSceneDesc(0x8, 'Sunset Sands'),
+    new BARSceneDesc(null, '(chamber under sunset sands)', 0x15),
     new BARSceneDesc(0xA, 'Metro Madness'),
     new BARSceneDesc(0x6, 'Wicked Woods'),
     new BARSceneDesc(0xB, '[Unused] Stunt O\'Rama'),
@@ -232,14 +263,11 @@ const sceneDescs = [
     new BARSceneDesc(0x2, 'TEST GRID'),
     new BARSceneDesc(0x3, 'CHECKER BOARD'),
     new BARSceneDesc(0x4, 'ROUND TRACK'),
-
     //new BARSceneDesc(0xF, 'DRAGSTRIP'),
     //new BARSceneDesc(0x10, 'DERBY'),
-
     new BARSceneDesc(0x21, 'FINISH'),
 
     //TODO?: There are other UVTRs that aren't part of a scene, are any of them interesting enough to include?
-    //TODO: [thing under sunset sands]
 
     // 'Not Sure',
     // new BARSceneDesc(0, '0'),
@@ -258,12 +286,6 @@ const sceneDescs = [
     // new BARSceneDesc(9, '9'), // blue tint
     // new BARSceneDesc(10, '10'), // blue tint
     // new BARSceneDesc(11, '11'), // blue tint
-    // new BARSceneDesc(4, '4'), advertise segment
-    // new BARSceneDesc(5, '5'), advertise segment
-    // new BARSceneDesc(6, '6'), advertise segment
-    // new BARSceneDesc(7, '7'), advertise segment
-    // new BARSceneDesc(38, '38'), advertise segment
-    // new BARSceneDesc(39, '39'), advertise segment */
 
 ];
 

@@ -1,6 +1,11 @@
 import { Filesystem, UVFile } from "../Filesystem";
 import { assert } from "../../util";
-import { UVMD } from "./UVMD";
+import { UVMD, UVMDRenderer } from "./UVMD";
+import { GfxDevice } from "../../gfx/platform/GfxPlatform";
+import { mat4 } from "gl-matrix";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
+import { ViewerRenderInput } from "../../viewer";
+import { RendererStore } from "../Scenes";
 
 export class UVEN {
     public clearR: number;
@@ -45,9 +50,26 @@ export class UVEN {
             // & 0x08 - something to do with a matrix gen?
             // & 0x10 - disables ENABLE_TEXTURE_GEN?
 
-            this.uvmds.push(filesystem.getParsedFile(UVMD, "UVMD", uvmdIndex));
+            this.uvmds.push(filesystem.getOrLoadFile(UVMD, "UVMD", uvmdIndex));
 
             curPos += 3;
+        }
+    }
+}
+
+export class UVENRenderer {
+    public uvmdRenderers: UVMDRenderer[] = [];
+    constructor(public uven: UVEN, device: GfxDevice, rendererStore: RendererStore) {
+        for(let uvmd of uven.uvmds) {
+            let uvmdRenderer = rendererStore.getOrCreateRenderer(uvmd, ()=>new UVMDRenderer(uvmd, device, rendererStore))
+            this.uvmdRenderers.push(uvmdRenderer);
+        }
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {      
+        //TODO: figure out some way to hide the bits of the enviroment that are meant to only be shown from a distance 
+        for(let uvmdRenderer of this.uvmdRenderers) {
+            uvmdRenderer.prepareToRender(device, renderInstManager, viewerInput, mat4.create());
         }
     }
 }
