@@ -311,6 +311,7 @@ export class FPSCameraController implements CameraController {
 
     private keyMoveSpeed = 60;
     private keyMoveShiftMult = 5;
+    private keyMoveCtrlMult = 0.1;
     private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
     private keyAngleChangeVelFast = 0.1;
@@ -352,10 +353,14 @@ export class FPSCameraController implements CameraController {
 
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
         const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
+        const isControlPressed = inputManager.isKeyDown('ControlLeft') || inputManager.isKeyDown('ControlRight');
 
         let keyMoveMult = 1;
         if (isShiftPressed)
             keyMoveMult = this.keyMoveShiftMult;
+
+        if (isControlPressed)
+            keyMoveMult = this.keyMoveCtrlMult;
 
         if (inputManager.isKeyDownEventTriggered('Numpad4') || inputManager.isKeyDownEventTriggered('Numpad1')) {
             // Save world forward vector from current position.
