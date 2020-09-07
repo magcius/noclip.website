@@ -932,7 +932,7 @@ class DiskGravity extends PlanetGravity {
 
         // Orthonormalize the side direction.
         // NOTE(jstpierre): I'm quite sure sideDirection and segmentDirection will already be orthonormal...
-        vecKillElement(scratchVec3b, this.localDirection, this.sideDirection);
+        vecKillElement(scratchVec3b, this.sideDirection, this.localDirection);
 
         mat4.fromRotation(scratchMatrix, theta, this.sideDirection);
         vec3.transformMat4(this.sideDirectionOrtho, scratchVec3b, scratchMatrix);
@@ -1059,23 +1059,15 @@ class DiskTorusGravity extends PlanetGravity {
             makeAxisVerticalZX(scratchVec3b, this.worldDirection);
 
         let dist: number;
-        if (length >= (this.worldRadius - this.diskRadius)) {
-            if (this.edgeType === 0 || this.edgeType === 2)
-                return -1;
-
-            vec3.scaleAndAdd(scratchVec3a, this.worldPosition, scratchVec3a, this.worldRadius - this.diskRadius);
-            vec3.sub(dst, coord, scratchVec3a);
-            dist = vec3.length(dst);
-            vec3.normalize(dst, dst);
-        } else if (length >= this.worldRadius) {
+        if (length >= this.worldRadius) {
             if (this.edgeType === 0 || this.edgeType === 1)
                 return -1;
 
-            vec3.scaleAndAdd(scratchVec3a, this.worldPosition, scratchVec3a, this.worldRadius);
-            vec3.sub(dst, coord, scratchVec3a);
+            vec3.scaleAndAdd(scratchVec3a, this.worldPosition, scratchVec3b, this.worldRadius);
+            vec3.sub(dst, scratchVec3a, coord);
             dist = vec3.length(dst);
             vec3.normalize(dst, dst);
-        } else {
+        } else if (length >= (this.worldRadius - this.diskRadius)) {
             if (dot >= 0.0) {
                 vec3.negate(dst, this.worldDirection);
             } else {
@@ -1083,6 +1075,14 @@ class DiskTorusGravity extends PlanetGravity {
             }
 
             dist = Math.abs(dot);
+        } else {
+            if (this.edgeType === 0 || this.edgeType === 2)
+                return -1;
+
+            vec3.scaleAndAdd(scratchVec3a, this.worldPosition, scratchVec3b, this.worldRadius - this.diskRadius);
+            vec3.sub(dst, scratchVec3a, coord);
+            dist = vec3.length(dst);
+            vec3.normalize(dst, dst);
         }
 
         if (!this.isInRangeDistance(dist))
