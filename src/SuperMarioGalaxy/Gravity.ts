@@ -1,5 +1,5 @@
 
-import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
@@ -259,7 +259,7 @@ class ParallelGravity extends PlanetGravity {
     private pos = vec3.create();
     private distanceCalcType: number = -1;
 
-    public setPlane(normal: vec3, translation: vec3): void {
+    public setPlane(normal: ReadonlyVec3, translation: ReadonlyVec3): void {
         vec3.normalize(this.planeNormal, normal);
         vec3.copy(this.pos, translation);
     }
@@ -281,7 +281,7 @@ class ParallelGravity extends PlanetGravity {
         this.cylinderHeight = scaleY;
     }
 
-    public setRangeBox(mtx: mat4): void {
+    public setRangeBox(mtx: ReadonlyMat4): void {
         this.boxMtx = mat4.clone(mtx);
     }
 
@@ -419,13 +419,11 @@ class CubeGravity extends PlanetGravity {
     private extents = vec3.create();
     public validAreaFlags: CubeGravityValidAreaFlags = 0x3F;
 
-    public setCube(mtx: mat4): void {
-        this.mtx = mat4.clone(mtx);
+    public setCube(mtx: ReadonlyMat4): void {
+        mat4.copy(this.mtx, mtx);
     }
 
     protected updateMtx(): void {
-        this.extents = vec3.create();
-
         calcMtxAxis(scratchVec3a, scratchVec3b, scratchVec3c, this.mtx);
         this.extents[0] = vec3.length(scratchVec3a);
         this.extents[1] = vec3.length(scratchVec3b);
@@ -800,11 +798,11 @@ class SegmentGravity extends PlanetGravity {
     private segmentDirection = vec3.create();
     private segmentLength: number = 0;
 
-    public setGravityPoint(i: number, v: vec3): void {
+    public setGravityPoint(i: number, v: ReadonlyVec3): void {
         vec3.copy(this.gravityPoints[i], v);
     }
 
-    public setSideVector(v: vec3): void {
+    public setSideVector(v: ReadonlyVec3): void {
         vec3.normalize(this.sideVector, v);
     }
 
@@ -910,15 +908,15 @@ class DiskGravity extends PlanetGravity {
         this.validDegree = v;
     }
 
-    public setLocalPosition(v: vec3): void {
+    public setLocalPosition(v: ReadonlyVec3): void {
         vec3.copy(this.localPosition, v);
     }
 
-    public setLocalDirection(v: vec3): void {
+    public setLocalDirection(v: ReadonlyVec3): void {
         vec3.normalize(this.localDirection, v);
     }
 
-    public setSideDirection(v: vec3): void {
+    public setSideDirection(v: ReadonlyVec3): void {
         vec3.copy(this.sideDirection, v);
     }
 
@@ -1026,11 +1024,11 @@ class DiskTorusGravity extends PlanetGravity {
         this.radius = v;
     }
 
-    public setPosition(v: vec3): void {
+    public setPosition(v: ReadonlyVec3): void {
         vec3.copy(this.position, v);
     }
 
-    public setDirection(v: vec3): void {
+    public setDirection(v: ReadonlyVec3): void {
         vec3.normalize(this.direction, v);
     }
 
@@ -1250,7 +1248,7 @@ export class ConeGravity extends PlanetGravity {
 class WireGravity extends PlanetGravity {
     public points: vec3[] = [];
 
-    public addPoint(point: vec3): void {
+    public addPoint(point: ReadonlyVec3): void {
         this.points.push(vec3.clone(point));
     }
 
@@ -1327,14 +1325,14 @@ export class GlobalGravityObj extends LiveActor {
     }
 }
 
-function makeMtxTR(dst: mat4, translation: vec3, rotation: vec3): void {
+function makeMtxTR(dst: mat4, translation: ReadonlyVec3, rotation: ReadonlyVec3): void {
     computeModelMatrixSRT(dst,
         1, 1, 1,
         rotation[0], rotation[1], rotation[2],
         translation[0], translation[1], translation[2]);
 }
 
-function makeMtxTRS(dst: mat4, translation: vec3, rotation: vec3, scale: vec3): void {
+function makeMtxTRS(dst: mat4, translation: ReadonlyVec3, rotation: ReadonlyVec3, scale: ReadonlyVec3): void {
     computeModelMatrixSRT(dst,
         scale[0], scale[1], scale[2],
         rotation[0], rotation[1], rotation[2],
