@@ -138,6 +138,7 @@ export class World {
 }
 
 const scratchMtx0 = mat4.create();
+const scratchVec0 = vec3.create();
 
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
@@ -150,7 +151,7 @@ class WorldRenderer extends SFARenderer {
     private showDevObjects: boolean = false;
     private enableLights: boolean = true;
 
-    constructor(private world: World, private models: (ModelInstance | null)[]) {
+    constructor(private world: World) {
         super(world.device, world.animController);
 
         packetParams.clear();
@@ -260,7 +261,7 @@ class WorldRenderer extends SFARenderer {
             mat4.identity(materialParams.u_TexMtx[0]);
 
             // Extract pitch
-            const cameraFwd = vec3.create();
+            const cameraFwd = scratchVec0;
             getMatrixAxisZ(cameraFwd, sceneCtx.viewerInput.camera.worldMatrix);
             vec3.negate(cameraFwd, cameraFwd);
             const camPitch = vecPitch(cameraFwd);
@@ -304,7 +305,7 @@ class WorldRenderer extends SFARenderer {
             setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
         }
 
-        const eyePos = vec3.create();
+        const eyePos = scratchVec0;
         getCamPos(eyePos, sceneCtx.viewerInput.camera);
         for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
             const obj = this.world.envfxMan.skyscape.objects[i];
@@ -313,17 +314,6 @@ class WorldRenderer extends SFARenderer {
         }
 
         this.endPass(device);
-    }
-
-    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelInst: ModelInstance) {
-        const modelCtx: ModelRenderContext = {
-            sceneCtx,
-            showDevGeometry: true,
-            ambienceNum: 0,
-            setupLights: this.setupLights.bind(this),
-        };
-
-        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix, 0);
     }
 
     private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
@@ -371,8 +361,6 @@ class WorldRenderer extends SFARenderer {
         if (this.world.mapInstance !== null) {
             this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx, 0);
         }
-        
-        const mtx = mat4.create();
 
         if (this.showObjects) {
             const ctx = getDebugOverlayCanvas2D();
@@ -390,21 +378,6 @@ class WorldRenderer extends SFARenderer {
                     if (drawLabels) {
                         drawWorldSpaceText(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
                     }
-                }
-            }
-        }
-        
-        const testCols = Math.ceil(Math.sqrt(this.models.length));
-        let col = 0;
-        let row = 0;
-        for (let i = 0; i < this.models.length; i++) {
-            if (this.models[i] !== null) {
-                mat4.fromTranslation(mtx, [col * 60, row * 60, 0]);
-                this.renderTestModel(device, renderInstManager, sceneCtx, mtx, this.models[i]!);
-                col++;
-                if (col >= testCols) {
-                    col = 0;
-                    row++;
                 }
             }
         }
@@ -499,7 +472,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
-        const renderer = new WorldRenderer(world, []);
+        const renderer = new WorldRenderer(world);
         return renderer;
     }
 }
