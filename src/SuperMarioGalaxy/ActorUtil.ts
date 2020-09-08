@@ -915,9 +915,9 @@ export function makeQuatUpFront(dst: quat, up: ReadonlyVec3, front: ReadonlyVec3
 }
 
 export function makeAxisVerticalZX(axisRight: vec3, front: vec3): void {
-    vec3.scaleAndAdd(axisRight, Vec3UnitZ, front, -vec3.dot(front, Vec3UnitZ));
+    vecKillElement(axisRight, Vec3UnitZ, front);
     if (isNearZeroVec3(axisRight, 0.001))
-        vec3.scaleAndAdd(axisRight, Vec3UnitX, front, -vec3.dot(front, Vec3UnitX));
+        vecKillElement(axisRight, Vec3UnitX, front);
     vec3.normalize(axisRight, axisRight);
 }
 
@@ -994,7 +994,7 @@ export function blendQuatUpFront(dst: quat, q: ReadonlyQuat, up: ReadonlyVec3, f
     quat.mul(dst, scratchQuat, q);
 
     quatGetAxisY(axisY, dst);
-    vec3.scaleAndAdd(axisY, front, axisY, -vec3.dot(axisY, front));
+    vecKillElement(axisY, front, axisY);
     vec3.normalize(axisY, axisY);
 
     quatGetAxisZ(axisZ, dst);

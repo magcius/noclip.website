@@ -168,7 +168,7 @@ export class NameObj {
         // Default implementation; nothing.
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
         // Default implementation; nothing.
     }
 
@@ -290,10 +290,10 @@ export class SceneNameObjListExecutor {
                 this.nameObjExecuteInfos[i].nameObj.movement(sceneObjHolder, viewerInput);
     }
 
-    public executeCalcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public executeCalcAnim(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
             if (this.nameObjExecuteInfos[i].calcAnimType !== -1)
-                this.nameObjExecuteInfos[i].nameObj.calcAnim(sceneObjHolder, viewerInput);
+                this.nameObjExecuteInfos[i].nameObj.calcAnim(sceneObjHolder);
     }
 
     public calcViewAndEntry(sceneObjHolder: SceneObjHolder, drawCameraType: DrawCameraType, viewerInput: ViewerRenderInput): void {
@@ -347,14 +347,14 @@ export class SceneNameObjListExecutor {
 }
 
 export class NameObjAdaptor extends NameObj {
-    public calcAnimCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
+    public calcAnimCallback: ((sceneObjHolder: SceneObjHolder) => void) | null = null;
     public calcViewAndEntryCallback: ((sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null) => void) | null = null;
     public movementCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
     public drawCallback: ((sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) => void) | null = null;
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.calcAnimCallback !== null)
-            this.calcAnimCallback(sceneObjHolder, viewerInput);
+            this.calcAnimCallback(sceneObjHolder);
     }
 
     public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {

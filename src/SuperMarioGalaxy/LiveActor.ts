@@ -338,7 +338,7 @@ export function resetPosition(sceneObjHolder: SceneObjHolder, actor: LiveActor):
         actor.hitSensorKeeper.clear();
     if (actor.calcGravityFlag)
         calcGravity(sceneObjHolder, actor);
-    // calcAnimDirect
+    actor.calcAnim(sceneObjHolder);
     if (actor.collisionParts !== null)
         resetAllCollisionMtx(actor);
     // requestCalcActorShadowAppear
@@ -622,7 +622,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         this.calcAndSetBaseMtxBase();
     }
 
@@ -637,7 +637,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (!this.visibleAlive || !this.visibleScenario)
             return;
 
@@ -647,7 +647,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // calcAnmMtx
         if (this.modelManager !== null) {
             vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
-            this.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+            this.calcAndSetBaseMtx(sceneObjHolder);
             this.modelManager.calcAnim();
         }
 

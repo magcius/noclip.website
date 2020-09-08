@@ -279,7 +279,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.railGuideDrawer.movement(sceneObjHolder, viewerInput);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         const hasAnyMapFunction = (
             (this.rotator !== null && this.rotator.isWorking())
         );
@@ -295,7 +295,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
 
             setMatrixTranslation(m, this.translation);
         } else {
-            super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+            super.calcAndSetBaseMtx(sceneObjHolder);
         }
     }
 
@@ -661,8 +661,8 @@ export class OceanWaveFloater extends MapObjActor {
         return vec3.length(scratchVec3a) * Math.sign(vec3.dot(scratchVec3a, this.gravityVector));
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        super.calcAndSetBaseMtx(sceneObjHolder);
 
         vec3.scale(scratchVec3a, this.gravityVector, this.waveForce.getCurrentValue());
         mat4.translate(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchVec3a);

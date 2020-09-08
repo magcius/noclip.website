@@ -21,12 +21,12 @@ export class ModelObj extends LiveActor {
         this.initEffectKeeper(sceneObjHolder, null);
     }
 
-    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         if (this.transformMatrix !== null) {
             mat4.getTranslation(this.translation, this.transformMatrix);
             mat4.copy(this.modelInstance!.modelMatrix, this.transformMatrix);
         } else {
-            super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+            super.calcAndSetBaseMtx(sceneObjHolder);
         }
     }
 }

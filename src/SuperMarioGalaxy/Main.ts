@@ -281,7 +281,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.sceneObjHolder.drawSyncManager.beginFrame(device, this.mainRenderTarget.depthStencilAttachment);
 
         executor.executeMovement(this.sceneObjHolder, viewerInput);
-        executor.executeCalcAnim(this.sceneObjHolder, viewerInput);
+        executor.executeCalcAnim(this.sceneObjHolder);
 
         // Prepare our two scene params buffers.
         const sceneParamsOffs3D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
@@ -1046,14 +1046,13 @@ export class SceneObjHolder {
     // Noclip-specific stuff.
     public specialTextureBinder: SpecialTextureBinder;
     public renderParams = new RenderParams();
+    public viewerInput: Viewer.ViewerRenderInput;
+    public uiContainer: HTMLElement;
 
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
-
-    public viewerInput: Viewer.ViewerRenderInput;
-    public uiContainer: HTMLElement;
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
@@ -1605,6 +1604,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.sceneDesc = this;
         sceneObjHolder.modelCache = modelCache;
         sceneObjHolder.uiContainer = context.uiContainer;
+        // TODO(jstpierre): This is ugly.
+        sceneObjHolder.viewerInput = window.main.viewer.viewerRenderInput;
         sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.getCache());
         sceneObjHolder.requestArchives();
         context.destroyablePool.push(sceneObjHolder);

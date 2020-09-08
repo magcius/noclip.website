@@ -205,6 +205,8 @@ class ShadowController {
             this.updateDirection(sceneObjHolder);
             this.updateProjection(sceneObjHolder);
         }
+
+        this.calcRequested = false;
     }
 
     private isCalcGravity(): boolean {
