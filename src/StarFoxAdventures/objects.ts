@@ -968,11 +968,7 @@ export class ObjectInstance {
         }
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, objectCtx: ObjectRenderContext, drawStep: number) {
-        if (drawStep !== 0) {
-            return; // TODO: Implement additional draw steps
-        }
-
+    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, objectCtx: ObjectRenderContext) {
         // TODO: don't update in render function?
         this.update();
 
@@ -981,7 +977,7 @@ export class ObjectInstance {
             this.modelInst.prepareToRender(device, renderInstManager, {
                 ...objectCtx,
                 ambienceNum: this.ambienceNum,
-            }, mtx, drawStep);
+            }, mtx);
 
             // Draw bones
             const drawBones = false;

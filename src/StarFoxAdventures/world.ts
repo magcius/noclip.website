@@ -21,13 +21,14 @@ import { SFARenderer, SceneRenderContext } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
-import { ModelInstance, ModelRenderContext } from './models';
+import { ModelInstance, ModelRenderContext, DrawStep } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
 import { colorNewFromRGBA, Color, colorCopy } from '../Color';
 import { getCamPos } from './util';
 import { computeViewMatrix } from '../Camera';
+import { noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -310,7 +311,7 @@ class WorldRenderer extends SFARenderer {
         for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
             const obj = this.world.envfxMan.skyscape.objects[i];
             obj.setPosition(eyePos);
-            obj.render(device, renderInstManager, objectCtx, 0); // TODO: additional draw steps?
+            obj.render(device, renderInstManager, objectCtx);
         }
 
         this.endPass(device);
@@ -359,7 +360,7 @@ class WorldRenderer extends SFARenderer {
 
         this.beginPass(sceneCtx.viewerInput);
         if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx, 0);
+            this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx);
         }
 
         if (this.showObjects) {
@@ -371,8 +372,7 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    obj.render(device, renderInstManager, modelCtx, 0);
-                    // TODO: additional draw steps; object furs and translucents
+                    obj.render(device, renderInstManager, modelCtx);
         
                     const drawLabels = false;
                     if (drawLabels) {
@@ -381,25 +381,27 @@ class WorldRenderer extends SFARenderer {
                 }
             }
         }
+
+        // Custom version of this.endPass(device)
+        this.renderInstManager.popTemplateRenderInst();
+
+        let hostAccessPass = device.createHostAccessPass();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        device.submitPass(hostAccessPass);
         
-        this.endPass(device);
-
-        // Render waters, furs and translucents
-        this.beginPass(sceneCtx.viewerInput);
-        if (this.world.mapInstance !== null) {
-            this.world.mapInstance.prepareToRenderWaters(device, renderInstManager, modelCtx);
-            this.world.mapInstance.prepareToRenderFurs(device, renderInstManager, modelCtx);
-        }
-        this.endPass(device);
-
-        const NUM_DRAW_STEPS = 3;
-        for (let drawStep = 1; drawStep < NUM_DRAW_STEPS; drawStep++) {
-            this.beginPass(sceneCtx.viewerInput);
-            if (this.world.mapInstance !== null) {
-                this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx, drawStep);
+        const renderIntoPass = (keys: number[]) => {
+            this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
+            for (let i = 0; i < keys.length; i++) {
+                this.renderInstManager.setVisibleByFilterKeyExact(keys[i]);
+                this.renderInstManager.drawOnPassRenderer(device, this.renderPass);
             }
-            this.endPass(device);
-        }    
+            device.submitPass(this.renderPass);
+        };
+
+        renderIntoPass([0, DrawStep.Furs]);
+        renderIntoPass([DrawStep.Waters, 1, 2]);
+
+        this.renderInstManager.resetRenderInsts();
     }
 }
 

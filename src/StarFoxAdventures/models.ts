@@ -1019,6 +1019,14 @@ const scratchMtx2 = mat4.create();
 const scratchMtx3 = mat4.create();
 const scratchVec0 = vec3.create();
 
+export enum DrawStep {
+    Waters = -2,
+    Furs = -1,
+    Solids = 0,
+    Translucents1 = 1,
+    Translucents2 = 2,
+}
+
 export class ModelInstance {
     private modelShapes: ModelShapes;
 
@@ -1079,19 +1087,31 @@ export class ModelInstance {
         this.skinningDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
         this.updateSkinning();
-        this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, drawStep);
-    }
-    
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateSkinning();
-        this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
-    }
-    
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateSkinning();
-        this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+
+        if (this.modelShapes.shapes.length !== 0) {
+            for (let i = 0; i < 3; i++) {
+                const template = renderInstManager.pushTemplateRenderInst();
+                template.filterKey = i;
+                this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i);
+                renderInstManager.popTemplateRenderInst();
+            }
+        }
+
+        if (this.modelShapes.waters.length !== 0) {
+            const template = renderInstManager.pushTemplateRenderInst();
+            template.filterKey = DrawStep.Waters;
+            this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+            renderInstManager.popTemplateRenderInst();
+        }
+
+        if (this.modelShapes.furs.length !== 0) {
+            const template = renderInstManager.pushTemplateRenderInst();
+            template.filterKey = DrawStep.Furs;
+            this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+            renderInstManager.popTemplateRenderInst();
+        }
     }
     
     private updateSkinning() {
@@ -1119,8 +1139,7 @@ export class ModelInstance {
             mat4.translate(scratchMtx0, this.matrixPalette[blend.joint0], this.model.invBindTranslations[blend.joint0]);
             mat4.multiplyScalar(scratchMtx0, scratchMtx0, blend.influence0);
             mat4.translate(scratchMtx1, this.matrixPalette[blend.joint1], this.model.invBindTranslations[blend.joint1]);
-            mat4.multiplyScalar(scratchMtx1, scratchMtx1, blend.influence1);
-            mat4.add(this.matrixPalette[this.model.joints.length + i], scratchMtx0, scratchMtx1);
+            mat4.multiplyScalarAndAdd(this.matrixPalette[this.model.joints.length + i], scratchMtx0, scratchMtx1, blend.influence1)
         }
 
         this.performFineSkinning();
