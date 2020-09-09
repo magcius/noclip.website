@@ -6,12 +6,12 @@ import { MaterialParams, ColorKind } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import { SFATexture, TextureFetcher } from './textures';
-import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState, mat4SetValue } from './util';
+import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState, mat4SetValue, mat4SetRowMajor } from './util';
 import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, colorNewFromRGBA } from '../Color';
+import { colorFromRGBA, Color, colorCopy } from '../Color';
 import { EnvfxManager } from './envfx';
 import { TextureMapping } from '../TextureHolder';
 
@@ -444,19 +444,19 @@ abstract class MaterialBase implements SFAMaterial {
     }
     
     public setupMaterialParams(params: MaterialParams, viewState: ViewState) {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < this.texMtx.length; i++) {
             if (this.texMtx[i] !== undefined) {
                 this.texMtx[i]!(params.u_TexMtx[i], viewState);
             }
         }
         
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < this.indTexMtxs.length; i++) {
             if (this.indTexMtxs[i] !== undefined) {
                 this.indTexMtxs[i]!(params.u_IndTexMtx[i], viewState);
             }
         }
 
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < this.postTexMtxs.length; i++) {
             if (this.postTexMtxs[i] !== undefined) {
                 this.postTexMtxs[i]!(params.u_PostTexMtx[i], viewState);
             }
@@ -726,12 +726,13 @@ class StandardMaterial extends MaterialBase {
     private addTevStagesForLava() {
         const warpParam = 1.0; // TODO: is this animated?
 
+        const itm0 = mat4.create();
         const indTexMtx0 = this.genIndTexMtx((dst: mat4, viewState: ViewState) => {
             const animSin = Math.sin(3.142 * viewState.sceneCtx.animController.envAnimValue1);
             const scale = (0.125 * animSin + 0.75) * warpParam;
             const cs = scale * Math.cos(3.142 * viewState.sceneCtx.animController.envAnimValue0);
             const sn = scale * Math.sin(3.142 * viewState.sceneCtx.animController.envAnimValue0);
-            const itm0 = mat4FromRowMajor(
+            mat4SetRowMajor(itm0,
                 cs,  sn,  0.0, 0.0,
                 -sn, cs,  0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
@@ -740,12 +741,13 @@ class StandardMaterial extends MaterialBase {
             mat4.copy(dst, itm0);
         });
 
+        const itm1 = mat4.create();
         const indTexMtx1 = this.genIndTexMtx((dst: mat4, viewState: ViewState) => {
             const animSin = Math.sin(3.142 * viewState.sceneCtx.animController.envAnimValue0);
             const scale = (0.125 * animSin + 0.75) * warpParam;
             const cs = scale * Math.cos(3.142 * -viewState.sceneCtx.animController.envAnimValue1);
             const sn = scale * Math.sin(3.142 * -viewState.sceneCtx.animController.envAnimValue1);
-            const itm1 = mat4FromRowMajor(
+            mat4SetRowMajor(itm1,
                 cs,  sn,  0.0, 0.0,
                 -sn, cs,  0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
@@ -779,10 +781,10 @@ class StandardMaterial extends MaterialBase {
             mat4SetValue(dst, 1, 3, v);
         });
 
-        const pttexmtx2 = mat4.create();
         const postTexMtx2 = this.genPostTexMtx((dst: mat4) => {
-            mat4.copy(dst, pttexmtx2);
+            mat4.identity(dst); // TODO?
         });
+
         const texCoord0 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx2));
 
         const texCoord1 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx0));
@@ -865,8 +867,9 @@ class StandardMaterial extends MaterialBase {
         mat4.fromYRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
         const postRotate2 = mat4.create();
         mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
+        const pttexmtx2 = mat4.create();
         const postTexMtx2 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
-            const pttexmtx2 = mat4FromRowMajor(
+            mat4SetRowMajor(pttexmtx2,
                 0.01, 0.0,  0.0,  0.01 * mapOriginX + viewState.sceneCtx.animController.envAnimValue0,
                 0.0,  0.01, 0.0,  0.0,
                 0.0,  0.0,  0.01, 0.01 * mapOriginZ,
@@ -895,8 +898,9 @@ class StandardMaterial extends MaterialBase {
 
         const postRotate3 = mat4.create();
         mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
+        const pttexmtx3 = mat4.create();
         const postTexMtx3 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
-            const pttexmtx3 = mat4FromRowMajor(
+            mat4SetRowMajor(pttexmtx3,
                 0.01, 0.0,  0.0,  0.01 * mapOriginX,
                 0.0,  0.01, 0.0,  0.0,
                 0.0,  0.0,  0.01, 0.01 * mapOriginZ + viewState.sceneCtx.animController.envAnimValue1,
@@ -989,9 +993,8 @@ class WaterMaterial extends MaterialBase {
             mat4.mul(dst, dst, viewState.modelViewMtx);
         };
 
-        const texmtx3 = mat4.create();
         this.texMtx[3] = (dst: mat4, viewState: ViewState) => {
-            mat4.copy(dst, texmtx3);
+            mat4.identity(dst);
             mat4SetValue(dst, 1, 3, viewState.sceneCtx.animController.envAnimValue0);
         }
 

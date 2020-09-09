@@ -240,13 +240,13 @@ class ModelExhibitRenderer extends SFARenderer {
 
     private renderModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext, matrix: mat4, modelInst: ModelInstance) {
         const modelCtx: ModelRenderContext = {
-            ...sceneCtx,
+            sceneCtx,
             showDevGeometry: true,
             ambienceNum: 0,
             setupLights: () => {},
         };
 
-        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix, 0);
+        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix);
 
         if (this.displayBones) {
             // TODO: display bones as cones instead of lines

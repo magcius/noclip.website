@@ -12,8 +12,7 @@ import { GameInfo } from './scenes';
 import { SFAMaterial, ShaderAttrFlags, ANCIENT_MAP_SHADER_FIELDS } from './materials';
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './materials';
-import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, readUint32, readUint16 } from './util';
-import { BlockRenderer } from './blocks';
+import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, readUint32, readUint16, mat4SetRowMajor } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
@@ -106,7 +105,8 @@ interface Water {
     shape: Shape;
 }
 
-export interface ModelRenderContext extends SceneRenderContext {
+export interface ModelRenderContext {
+    sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
     ambienceNum: number;
     setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
@@ -135,9 +135,6 @@ class ModelShapes {
         return this.shapes.length;
     }
 
-    private scratchMtx = mat4.create();
-    private scratchMtx2 = mat4.create();
-
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number) {
         if (drawStep < 0 || drawStep >= this.shapes.length) {
             return;
@@ -149,10 +146,10 @@ class ModelShapes {
                 continue;
             }
 
-            mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
-            mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
-            mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            shapes[i].prepareToRender(device, renderInstManager, this.scratchMtx, modelCtx, boneMatrices);
+            mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
+            mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
+            mat4.mul(scratchMtx0, matrix, scratchMtx0);
+            shapes[i].prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
         }
     }
     
@@ -160,10 +157,10 @@ class ModelShapes {
         for (let i = 0; i < this.waters.length; i++) {
             const water = this.waters[i];
 
-            mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
-            mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
-            mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            water.shape.prepareToRender(device, renderInstManager, this.scratchMtx, modelCtx, boneMatrices);
+            mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
+            mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
+            mat4.mul(scratchMtx0, matrix, scratchMtx0);
+            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
         }
     }
 
@@ -172,23 +169,23 @@ class ModelShapes {
             const fur = this.furs[i];
 
             for (let j = 0; j < fur.numLayers; j++) {
-                mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
-                mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
-                mat4.translate(this.scratchMtx, this.scratchMtx, [0, 0.4 * (j + 1), 0]);
-                mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
+                mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
+                mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
+                mat4.translate(scratchMtx0, scratchMtx0, [0, 0.4 * (j + 1), 0]);
+                mat4.mul(scratchMtx0, matrix, scratchMtx0);
 
                 const mat = fur.shape.material as CommonShapeMaterial;
                 mat.setFurLayer(j);
                 const m00 = (j + 1) / 16 * 0.5;
                 const m11 = m00;
-                this.scratchMtx2 = mat4.fromValues(
+                mat4SetRowMajor(scratchMtx1,
                     m00, 0.0, 0.0, 0.0,
                     0.0, m11, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0
                 );
-                mat.setOverrideIndMtx(0, this.scratchMtx2);
-                fur.shape.prepareToRender(device, renderInstManager, this.scratchMtx, modelCtx, boneMatrices);
+                mat.setOverrideIndMtx(0, scratchMtx1);
+                fur.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
                 mat.setOverrideIndMtx(0, undefined);
             }
         }
@@ -291,11 +288,10 @@ export class Model {
     public hasBetaFineSkinning: boolean = false;
     public skeleton?: Skeleton;
 
-    constructor(device: GfxDevice,
+    constructor(
         private materialFactory: MaterialFactory,
         blockData: ArrayBufferSlice,
         texFetcher: TextureFetcher,
-        private animController: SFAAnimationController,
         public modelVersion: ModelVersion = ModelVersion.Final
     ) {
         let offs = 0;
@@ -866,7 +862,7 @@ export class Model {
             const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
             newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
 
-            const newMat = new CommonShapeMaterial(this.animController);
+            const newMat = new CommonShapeMaterial();
             newMat.setMaterial(material);
 
             return new Shape(newGeom, newMat, false);
@@ -927,7 +923,7 @@ export class Model {
                             const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
                             newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
 
-                            const newMat = new CommonShapeMaterial(this.animController);
+                            const newMat = new CommonShapeMaterial();
                             newMat.setMaterial(curMaterial!);
 
                             const newShape = new Shape(newGeom, newMat, !!(curShader.flags & ShaderFlags.DevGeometry));
@@ -1023,7 +1019,15 @@ const scratchMtx2 = mat4.create();
 const scratchMtx3 = mat4.create();
 const scratchVec0 = vec3.create();
 
-export class ModelInstance implements BlockRenderer {
+export enum DrawStep {
+    Waters = -2,
+    Furs = -1,
+    Solids = 0,
+    Translucents1 = 1,
+    Translucents2 = 2,
+}
+
+export class ModelInstance {
     private modelShapes: ModelShapes;
 
     public skeletonInst?: SkeletonInstance;
@@ -1083,19 +1087,31 @@ export class ModelInstance implements BlockRenderer {
         this.skinningDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
         this.updateSkinning();
-        this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, drawStep);
-    }
-    
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateSkinning();
-        this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
-    }
-    
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateSkinning();
-        this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+
+        if (this.modelShapes.shapes.length !== 0) {
+            for (let i = 0; i < 3; i++) {
+                const template = renderInstManager.pushTemplateRenderInst();
+                template.filterKey = i;
+                this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i);
+                renderInstManager.popTemplateRenderInst();
+            }
+        }
+
+        if (this.modelShapes.waters.length !== 0) {
+            const template = renderInstManager.pushTemplateRenderInst();
+            template.filterKey = DrawStep.Waters;
+            this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+            renderInstManager.popTemplateRenderInst();
+        }
+
+        if (this.modelShapes.furs.length !== 0) {
+            const template = renderInstManager.pushTemplateRenderInst();
+            template.filterKey = DrawStep.Furs;
+            this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+            renderInstManager.popTemplateRenderInst();
+        }
     }
     
     private updateSkinning() {
@@ -1123,8 +1139,7 @@ export class ModelInstance implements BlockRenderer {
             mat4.translate(scratchMtx0, this.matrixPalette[blend.joint0], this.model.invBindTranslations[blend.joint0]);
             mat4.multiplyScalar(scratchMtx0, scratchMtx0, blend.influence0);
             mat4.translate(scratchMtx1, this.matrixPalette[blend.joint1], this.model.invBindTranslations[blend.joint1]);
-            mat4.multiplyScalar(scratchMtx1, scratchMtx1, blend.influence1);
-            mat4.add(this.matrixPalette[this.model.joints.length + i], scratchMtx0, scratchMtx1);
+            mat4.multiplyScalarAndAdd(this.matrixPalette[this.model.joints.length + i], scratchMtx0, scratchMtx1, blend.influence1)
         }
 
         this.performFineSkinning();
@@ -1175,8 +1190,7 @@ export class ModelInstance implements BlockRenderer {
                 const weight0 = weights.getUint8(weightOffs) / 128;
                 const weight1 = weights.getUint8(weightOffs + 1) / 128;
                 mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
-                mat4.multiplyScalar(scratchMtx1, boneMtx1, weight1);
-                mat4.add(scratchMtx0, scratchMtx0, scratchMtx1);
+                mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
                 vec3.transformMat4(pos, pos, scratchMtx0);
 
                 dst.setInt16(dstOffs, pos[0] * quant);
@@ -1242,7 +1256,7 @@ class ModelsFile {
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.bin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(this.device, this.materialFactory, modelData, this.texFetcher, this.animController, this.modelVersion);
+            this.models[num] = new Model(this.materialFactory, modelData, this.texFetcher, this.modelVersion);
         }
 
         return this.models[num];

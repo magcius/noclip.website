@@ -56,11 +56,27 @@ export function mat4FromRowMajor(
     )
 }
 
+export function mat4SetRowMajor(
+    out: mat4,
+    m00: number, m01: number, m02: number, m03: number,
+    m10: number, m11: number, m12: number, m13: number,
+    m20: number, m21: number, m22: number, m23: number,
+    m30: number, m31: number, m32: number, m33: number) {
+    return mat4.set(out,
+        m00, m10, m20, m30,
+        m01, m11, m21, m31,
+        m02, m12, m22, m32,
+        m03, m13, m23, m33,
+    )
+}
+
 export function mat4SetValue(mtx: mat4, row: number, col: number, m: number) {
     mtx[4 * col + row] = m;
 }
 
 const scratchQuat = quat.create();
+const scratchVec0 = vec3.create();
+const scratchVec1 = vec3.create();
 
 // Compute model matrix from scale, rotation, and translation.
 // This version is unique to SFA: Rotations are applied in Y -> X -> Z order.
@@ -74,7 +90,9 @@ export function mat4FromSRT(dst: mat4,
     quat.rotateY(scratchQuat, scratchQuat, yaw);
     quat.rotateX(scratchQuat, scratchQuat, pitch);
     quat.rotateZ(scratchQuat, scratchQuat, roll);
-    mat4.fromRotationTranslationScale(dst, scratchQuat, [tx, ty, tz], [sx, sy, sz]);
+    vec3.set(scratchVec0, tx, ty, tz);
+    vec3.set(scratchVec1, sx, sy, sz);
+    mat4.fromRotationTranslationScale(dst, scratchQuat, scratchVec0, scratchVec1);
 }
 
 // Post-translate a matrix. Note that mat4.translate pre-translates a matrix.
