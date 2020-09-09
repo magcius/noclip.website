@@ -101,7 +101,7 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     }
 }
 
-class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
+abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
     private bloomModel: ModelObj | null = null;
     private objName: string;
     protected rotator: MapPartsRotator | null = null;
@@ -188,6 +188,12 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         if (initInfo.initFur)
             initMultiFur(sceneObjHolder, this, initInfo.lightType);
 
+        // Normally, makeActorAppeared / makeActorDead would be in here. However, due to TypeScript
+        // constraints, the parent constructor has to be called first. So we split this into two stages.
+        // Call initFinish.
+    }
+
+    protected initFinish(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         this.makeActorAppeared(sceneObjHolder);
 
         if (useStageSwitchWriteA(sceneObjHolder, this, infoIter))
@@ -317,6 +323,7 @@ export class SimpleMapObj extends MapObjActor {
         setupInitInfoColorChangeArg0(initInfo, infoIter);
         setupInitInfoTextureChangeArg1(initInfo, infoIter);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 }
 
@@ -325,6 +332,7 @@ export class SimpleEnvironmentObj extends MapObjActor {
         const initInfo = new MapObjActorInitInfo();
         setupInitInfoSimpleMapObj(initInfo);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected connectToScene(sceneObjHolder: SceneObjHolder, initInfo: MapObjActorInitInfo): void {
@@ -352,6 +360,8 @@ export class RotateMoveObj extends MapObjActor {
 
         if (startRotating)
             this.startMapPartsFunctions(sceneObjHolder);
+
+        this.initFinish(sceneObjHolder, infoIter);
     }
 }
 
@@ -381,6 +391,8 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
         const moveConditionType = getMapPartsArgMoveConditionType(infoIter);
         if (moveConditionType === MoveConditionType.WaitForPlayerOn)
             this.setNerve(RailMoveObjNrv.WaitForPlayerOn);
+
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     private startMoveInner(): void {
@@ -455,6 +467,8 @@ export class PeachCastleGardenPlanet extends MapObjActor<PeachCastleGardenPlanet
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
         this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
+
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected initCaseUseSwitchA(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -509,6 +523,8 @@ export class AstroMapObj extends MapObjActor {
             this.startMapPartsFunctions(sceneObjHolder);
 
         this.setStateAlive(sceneObjHolder);
+
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     private tryStartAllAnimAndEffect(sceneObjHolder: SceneObjHolder, name: string): void {
@@ -589,6 +605,7 @@ export class UFOKinokoUnderConstruction extends MapObjActor {
         // to determine which model to show. Here, we assume the player has unlocked the relevant flag...
         initInfo.setupModelName('UFOKinokoLandingAstro');
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -653,6 +670,7 @@ export class OceanWaveFloater extends MapObjActor {
         vec3.negate(this.gravityVector, this.upVec);
 
         this.isRippling = false;
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     private getCurrentSinkDepth(): number {
@@ -706,6 +724,7 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         this.speed = fallback(getJMapInfoArg0(infoIter), 10.0);
         this.waitStep = fallback(getJMapInfoArg0(infoIter), 120);
         moveCoordToNearestPos(this);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TsukidashikunNrv, deltaTimeFrames: number): void {
@@ -769,6 +788,7 @@ export class DriftWood extends MapObjActor<DriftWoodNrv> {
         moveCoordAndTransToNearestRailPos(this);
         this.front = vec3.create();
         getRailDirection(this.front, this);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected connectToScene(sceneObjHolder: SceneObjHolder): void {
@@ -808,6 +828,7 @@ export class UFOKinoko extends MapObjActor<UFOKinokoNrv> {
         // setupNoUseLodCtrl
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
         this.rotator!.start();
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     public initCaseUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -840,6 +861,7 @@ export class SideSpikeMoveStep extends MapObjActor<SideSpikeMoveStepNrv> {
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
         this.initEffectKeeper(sceneObjHolder, null);
         // StarPointerTarget / AnimScaleController / WalkerStateBindStarPointer
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SideSpikeMoveStepNrv, deltaTimeFrames: number): void {
@@ -865,6 +887,7 @@ export class AstroDome extends MapObjActor<AstroDomeNrv> {
         // setupNoAppearRiddleSE
 
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
 
         // invalidateClipping
         // registerTarget
