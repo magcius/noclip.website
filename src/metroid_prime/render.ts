@@ -377,12 +377,12 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         packedVertexDataOffs += surface.loadedVertexData.vertexBuffers[0].byteLength;
     }
 
-    // Merge into one giant packet. We know it doesn't use a posNrmMatrixTable or texMatrixTable.
-    const srcPacket = surfaces[0].loadedVertexData.draws[0];
+    // Merge into one giant draw. We know it doesn't use a posNrmMatrixTable or texMatrixTable.
+    const srcDraw = surfaces[0].loadedVertexData.draws[0];
     const indexOffset = 0;
     const indexCount = totalIndexCount;
-    const posNrmMatrixTable = srcPacket.posNrmMatrixTable;
-    const texMatrixTable = srcPacket.texMatrixTable;
+    const posNrmMatrixTable = srcDraw.posNrmMatrixTable;
+    const texMatrixTable = srcDraw.texMatrixTable;
     draws.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
 
     const newLoadedVertexData: LoadedVertexData = {
@@ -487,13 +487,11 @@ export class MREARenderer {
 
             // Transparent objects should not be merged.
             const canMerge = !materialCommand.material.isTransparent;
-            if (canMerge) {
-                while (i < surfaces.length && surfaces[i].materialIndex === materialIndex)
-                    i++;
-                mergedSurfaces.push(mergeSurfaces(surfaces.slice(firstSurfaceIndex, i)));
-            } else {
-                mergedSurfaces.push(surfaces[i++]);
-            }
+            i++;
+            while (i < surfaces.length && surfaces[i].materialIndex === materialIndex && canMerge)
+                i++;
+
+            mergedSurfaces.push(mergeSurfaces(surfaces.slice(firstSurfaceIndex, i)));
         }
 
         for (let i = 0; i < mergedSurfaces.length; i++) {

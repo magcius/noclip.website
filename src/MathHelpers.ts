@@ -5,9 +5,9 @@ import { mat4, vec3, quat, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 
 // Basic scalar constants.
 export const enum MathConstants {
-    DEG_TO_RAD = 0.01745, // Math.PI / 180,
-    RAD_TO_DEG = 57.2947, // 180 / Math.PI,
-    TAU = 6.283, // Math.PI * 2
+    DEG_TO_RAD = 0.017453292519943295, // Math.PI / 180,
+    RAD_TO_DEG = 57.29577951308232, // 180 / Math.PI,
+    TAU = 6.283185307179586, // Math.PI * 2
     EPSILON = 0.000001,
 }
 
@@ -337,7 +337,7 @@ export function computeRotationMatrixFromSRTMatrix(dst: mat4, m: mat4): void {
     dst[14] = 0;
 }
 
-export function computeMatrixWithoutTranslation(dst: mat4, m: mat4): void {
+export function computeMatrixWithoutTranslation(dst: mat4, m: ReadonlyMat4): void {
     mat4.copy(dst, m);
     dst[12] = 0;
     dst[13] = 0;

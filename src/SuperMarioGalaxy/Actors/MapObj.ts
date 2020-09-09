@@ -2,10 +2,10 @@
 // Misc MapObj actors.
 
 import { mat4, vec3 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, scaleMatrix, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero } from '../../MathHelpers';
+import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, scaleMatrix, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation } from '../../MathHelpers';
 import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos } from '../ActorUtil';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos } from '../ActorUtil';
 import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall } from '../Collision';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
@@ -19,9 +19,10 @@ import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep } from '../Spine';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } from './ModelObj';
 import { initMultiFur } from '../Fur';
-import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength } from '../Shadow';
+import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength, initShadowVolumeBox, setShadowVolumeStartDropOffset } from '../Shadow';
 import { initLightCtrl } from '../LightData';
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { DrawBufferType } from '../NameObj';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -100,7 +101,7 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     }
 }
 
-class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
+abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
     private bloomModel: ModelObj | null = null;
     private objName: string;
     protected rotator: MapPartsRotator | null = null;
@@ -187,6 +188,12 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
         if (initInfo.initFur)
             initMultiFur(sceneObjHolder, this, initInfo.lightType);
 
+        // Normally, makeActorAppeared / makeActorDead would be in here. However, due to TypeScript
+        // constraints, the parent constructor has to be called first. So we split this into two stages.
+        // Call initFinish.
+    }
+
+    protected initFinish(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         this.makeActorAppeared(sceneObjHolder);
 
         if (useStageSwitchWriteA(sceneObjHolder, this, infoIter))
@@ -278,7 +285,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
             this.railGuideDrawer.movement(sceneObjHolder, viewerInput);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         const hasAnyMapFunction = (
             (this.rotator !== null && this.rotator.isWorking())
         );
@@ -294,7 +301,7 @@ class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
 
             setMatrixTranslation(m, this.translation);
         } else {
-            super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+            super.calcAndSetBaseMtx(sceneObjHolder);
         }
     }
 
@@ -316,6 +323,7 @@ export class SimpleMapObj extends MapObjActor {
         setupInitInfoColorChangeArg0(initInfo, infoIter);
         setupInitInfoTextureChangeArg1(initInfo, infoIter);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 }
 
@@ -324,6 +332,7 @@ export class SimpleEnvironmentObj extends MapObjActor {
         const initInfo = new MapObjActorInitInfo();
         setupInitInfoSimpleMapObj(initInfo);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected connectToScene(sceneObjHolder: SceneObjHolder, initInfo: MapObjActorInitInfo): void {
@@ -351,6 +360,8 @@ export class RotateMoveObj extends MapObjActor {
 
         if (startRotating)
             this.startMapPartsFunctions(sceneObjHolder);
+
+        this.initFinish(sceneObjHolder, infoIter);
     }
 }
 
@@ -380,6 +391,8 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
         const moveConditionType = getMapPartsArgMoveConditionType(infoIter);
         if (moveConditionType === MoveConditionType.WaitForPlayerOn)
             this.setNerve(RailMoveObjNrv.WaitForPlayerOn);
+
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     private startMoveInner(): void {
@@ -454,6 +467,8 @@ export class PeachCastleGardenPlanet extends MapObjActor<PeachCastleGardenPlanet
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
 
         this.indirectModel = createIndirectPlanetModel(sceneObjHolder, this);
+
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected initCaseUseSwitchA(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -508,6 +523,8 @@ export class AstroMapObj extends MapObjActor {
             this.startMapPartsFunctions(sceneObjHolder);
 
         this.setStateAlive(sceneObjHolder);
+
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     private tryStartAllAnimAndEffect(sceneObjHolder: SceneObjHolder, name: string): void {
@@ -588,6 +605,7 @@ export class UFOKinokoUnderConstruction extends MapObjActor {
         // to determine which model to show. Here, we assume the player has unlocked the relevant flag...
         initInfo.setupModelName('UFOKinokoLandingAstro');
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -652,6 +670,7 @@ export class OceanWaveFloater extends MapObjActor {
         vec3.negate(this.gravityVector, this.upVec);
 
         this.isRippling = false;
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     private getCurrentSinkDepth(): number {
@@ -660,8 +679,8 @@ export class OceanWaveFloater extends MapObjActor {
         return vec3.length(scratchVec3a) * Math.sign(vec3.dot(scratchVec3a, this.gravityVector));
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        super.calcAndSetBaseMtx(sceneObjHolder);
 
         vec3.scale(scratchVec3a, this.gravityVector, this.waveForce.getCurrentValue());
         mat4.translate(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchVec3a);
@@ -705,6 +724,7 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         this.speed = fallback(getJMapInfoArg0(infoIter), 10.0);
         this.waitStep = fallback(getJMapInfoArg0(infoIter), 120);
         moveCoordToNearestPos(this);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TsukidashikunNrv, deltaTimeFrames: number): void {
@@ -768,13 +788,14 @@ export class DriftWood extends MapObjActor<DriftWoodNrv> {
         moveCoordAndTransToNearestRailPos(this);
         this.front = vec3.create();
         getRailDirection(this.front, this);
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected connectToScene(sceneObjHolder: SceneObjHolder): void {
         connectToSceneCollisionMapObj(sceneObjHolder, this);
     }
 
-    public calcAndSetBaseMtx(): void {
+    protected calcAndSetBaseMtx(): void {
         calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.front);
     }
 
@@ -807,6 +828,7 @@ export class UFOKinoko extends MapObjActor<UFOKinokoNrv> {
         // setupNoUseLodCtrl
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
         this.rotator!.start();
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     public initCaseUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -839,6 +861,7 @@ export class SideSpikeMoveStep extends MapObjActor<SideSpikeMoveStepNrv> {
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
         this.initEffectKeeper(sceneObjHolder, null);
         // StarPointerTarget / AnimScaleController / WalkerStateBindStarPointer
+        this.initFinish(sceneObjHolder, infoIter);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SideSpikeMoveStepNrv, deltaTimeFrames: number): void {
@@ -864,6 +887,7 @@ export class AstroDome extends MapObjActor<AstroDomeNrv> {
         // setupNoAppearRiddleSE
 
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.initFinish(sceneObjHolder, infoIter);
 
         // invalidateClipping
         // registerTarget
@@ -1070,7 +1094,7 @@ class Rock extends LiveActor<RockNrv> {
         }
     }
 
-    public calcAndSetBaseMtx(): void {
+    protected calcAndSetBaseMtx(): void {
         this.calcBaseMtx(this.modelInstance!.modelMatrix);
 
         if (this.isNerve(RockNrv.AppearMoveInvalidBind) || this.isNerve(RockNrv.MoveInvalidBind) || (this.isNerve(RockNrv.Move) && isOnGround(this))) {
@@ -1453,5 +1477,68 @@ export class RockCreator extends LiveActor<RockCreatorNrv> {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         Rock.requestArchives(sceneObjHolder, infoIter);
+    }
+}
+
+const enum WatchTowerRotateStepNrv { Move }
+export class WatchTowerRotateStep extends LiveActor<WatchTowerRotateStepNrv> {
+    private upVec = vec3.create();
+    private lifts: PartsModel[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'WatchTowerRotateStep');
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initHitSensor();
+        const bodySensor = addBodyMessageSensorMapObj(sceneObjHolder, this);
+        initCollisionParts(sceneObjHolder, this, 'WatchTowerRotateStep', bodySensor, null);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound
+        // setClippingTypeSphereContainsModelBoundingBox
+        // tryRegisterDemoCast
+        calcUpVec(this.upVec, this);
+        this.initLift(sceneObjHolder);
+        this.initNerve(WatchTowerRotateStepNrv.Move);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected calcAndSetBaseMtx(): void {
+        calcFrontVec(scratchVec3a, this);
+        makeMtxFrontUpPos(this.modelInstance!.modelMatrix, scratchVec3a, this.upVec, this.translation);
+    }
+
+    private attachLift(): void {
+        for (let i = 0; i < 4; i++)
+            getMatrixTranslation(this.lifts[i].translation, getJointMtx(this, i + 1));
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WatchTowerRotateStepNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === WatchTowerRotateStepNrv.Move) {
+            calcFrontVec(scratchVec3a, this);
+            rotateVecDegree(this.upVec, scratchVec3a, 0.3 * deltaTimeFrames);
+            this.attachLift();
+        }
+    }
+
+    private initLift(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < 4; i++) {
+            const lift = new PartsModel(sceneObjHolder, 'WatchTowerRotateStepLift', 'WatchTowerRotateStepLift', this, DrawBufferType.None, getJointMtx(this, i + 1));
+            lift.useParentMatrix = false;
+            initCollisionParts(sceneObjHolder, lift, 'WatchTowerRotateStepLift', this.getSensor('body')!);
+            vec3.set(scratchVec3a, 600.0, 200.0, 400.0);
+            initShadowVolumeBox(sceneObjHolder, lift, scratchVec3a, lift.getBaseMtx()!);
+            setShadowVolumeStartDropOffset(lift, null, 300.0);
+            setShadowDropLength(lift, null, 370.0);
+            this.lifts.push(lift);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        sceneObjHolder.modelCache.requestObjectData('WatchTowerRotateStepLift');
     }
 }

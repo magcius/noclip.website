@@ -135,79 +135,87 @@ function gsConfigurationEqual(a: GSConfiguration, b: GSConfiguration) {
 function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
     const view = buffer.createDataView();
 
-    const texDataOffs = 0;
+    let texDataIdx = 0;
+    let lastPacket = false;
+    // the buffer holds a series of packets to send via GIF
+    // the first quadword of each packet is a DMAtag followed by an UNPACK VIFcode command
+    // the ID field of the DMAtag determines whether we should continue
 
-    // Not sure what the first three words are. Sometimes they're FLUSH (level textures),
-    // sometimes it appears like a dummy UNPACK (0x60, seen in model object binaries) ?
-
-    const tag2 = view.getUint8(texDataOffs + 0x0F);
-    if (tag2 !== 0x50)
-        return 0; // TODO: fix credits
-    assert(tag2 === 0x50, "TAG"); // DIRECT
-    const texDataSize = view.getUint16(texDataOffs + 0x0C, true) * 0x10;
-    const texDataEnd = texDataOffs + texDataSize;
-    let texDataIdx = texDataOffs + 0x10;
-
-    let dpsm = -1;
-    let dbw = -1;
-    let dbp = -1;
-    let rrw = -1;
-    let rrh = -1;
-    let dsax = -1;
-    let dsay = -1;
-
-    while (texDataIdx < texDataEnd) {
-        // These should all be GIFtags here.
-        const w0 = view.getUint32(texDataIdx + 0x00, true);
-        const w1 = view.getUint32(texDataIdx + 0x04, true);
-        const w2 = view.getUint32(texDataIdx + 0x08, true);
-        const w3 = view.getUint32(texDataIdx + 0x0C, true);
+    while (!lastPacket) {
+        const id = view.getUint8(texDataIdx + 0x03) >>> 4;
+        if (id === 1) // cnt
+            lastPacket = false;
+        else if (id === 6) // ret
+            lastPacket = true;
+        else
+            throw `unknown DMAtag ID ${id}`;
+        const tag2 = view.getUint8(texDataIdx + 0x0F);
+        assert(tag2 === 0x50, "TAG"); // DIRECT
+        const texDataSize = view.getUint16(texDataIdx + 0x0C, true) * 0x10;
         texDataIdx += 0x10;
+        const texDataEnd = texDataIdx + texDataSize;
 
-        // NLOOP is the repeat count.
-        const nloop = w0 & 0x7FFF;
-        if (nloop === 0)
-            continue;
+        let dpsm = -1;
+        let dbw = -1;
+        let dbp = -1;
+        let rrw = -1;
+        let rrh = -1;
+        let dsax = -1;
+        let dsay = -1;
 
-        // FLG determines the format for the upcoming data.
-        const flg = (w1 >>> 26) & 0x03;
-        if (flg === 0x00) {
-            // DIRECT. We should have one A+D register set.
+        while (texDataIdx < texDataEnd) {
+            // These should all be GIFtags here.
+            const w0 = view.getUint32(texDataIdx + 0x00, true);
+            const w1 = view.getUint32(texDataIdx + 0x04, true);
+            const w2 = view.getUint32(texDataIdx + 0x08, true);
+            const w3 = view.getUint32(texDataIdx + 0x0C, true);
+            texDataIdx += 0x10;
 
-            const nreg = (w1 >>> 28) & 0x07;
-            assert(nreg === 0x01, "nreg");
-            const reg = (w2 & 0x000F);
-            assert(reg === 0x0E, "reg");
+            // NLOOP is the repeat count.
+            const nloop = w0 & 0x7FFF;
+            if (nloop === 0)
+                continue;
 
-            for (let j = 0; j < nloop; j++) {
-                const data0 = view.getUint32(texDataIdx + 0x00, true);
-                const data1 = view.getUint32(texDataIdx + 0x04, true);
-                const addr = view.getUint8(texDataIdx + 0x08) & 0x7F;
+            // FLG determines the format for the upcoming data.
+            const flg = (w1 >>> 26) & 0x03;
+            if (flg === 0x00) {
+                // DIRECT. We should have one A+D register set.
 
-                // addr contains the register to set. Unpack these registers.
-                if (addr === 0x50) {
-                    // BITBLTBUF
-                    dbp = (data1 >>> 0) & 0x3FFF;
-                    dbw = (data1 >>> 16) & 0x3F;
-                    dpsm = (data1 >>> 24) & 0x3F;
-                    // TODO(jstpierre): Support upload modes other than PSCMT32
-                    assert(dpsm === GSPixelStorageFormat.PSMCT32, "dpsm");
-                } else if (addr === 0x51) {
-                    // TRXPOS
-                    dsax = (data1 >>> 0) & 0x7FF;
-                    dsay = (data1 >>> 16) & 0x7FF;
-                } else if (addr === 0x52) {
-                    // TRXREG
-                    rrw = (data0 >>> 0) & 0xFFF;
-                    rrh = (data1 >>> 0) & 0xFFF;
+                const nreg = (w1 >>> 28) & 0x07;
+                assert(nreg === 0x01, "nreg");
+                const reg = (w2 & 0x000F);
+                assert(reg === 0x0E, "reg");
+
+                for (let j = 0; j < nloop; j++) {
+                    const data0 = view.getUint32(texDataIdx + 0x00, true);
+                    const data1 = view.getUint32(texDataIdx + 0x04, true);
+                    const addr = view.getUint8(texDataIdx + 0x08) & 0x7F;
+
+                    // addr contains the register to set. Unpack these registers.
+                    if (addr === 0x50) {
+                        // BITBLTBUF
+                        dbp = (data1 >>> 0) & 0x3FFF;
+                        dbw = (data1 >>> 16) & 0x3F;
+                        dpsm = (data1 >>> 24) & 0x3F;
+                        // TODO(jstpierre): Support upload modes other than PSCMT32
+                        assert(dpsm === GSPixelStorageFormat.PSMCT32, "dpsm");
+                    } else if (addr === 0x51) {
+                        // TRXPOS
+                        dsax = (data1 >>> 0) & 0x7FF;
+                        dsay = (data1 >>> 16) & 0x7FF;
+                    } else if (addr === 0x52) {
+                        // TRXREG
+                        rrw = (data0 >>> 0) & 0xFFF;
+                        rrh = (data1 >>> 0) & 0xFFF;
+                    }
+
+                    texDataIdx += 0x10;
                 }
-
-                texDataIdx += 0x10;
+            } else if (flg === 0x02) {
+                // IMAGE. Followed by data to upload.
+                gsMemoryMapUploadImage(map, dpsm, dbp, dbw, dsax, dsay, rrw, rrh, buffer.subarray(texDataIdx, nloop * 0x10));
+                texDataIdx += nloop * 0x10;
             }
-        } else if (flg === 0x02) {
-            // IMAGE. Followed by data to upload.
-            gsMemoryMapUploadImage(map, dpsm, dbp, dbw, dsax, dsay, rrw, rrh, buffer.subarray(texDataIdx, nloop * 0x10));
-            texDataIdx += nloop * 0x10;
         }
     }
 
@@ -265,14 +273,13 @@ export function parseStageTextureBIN(buffer: ArrayBufferSlice, gsMemoryMap: GSMe
     const view = buffer.createDataView();
 
     const numSectors = view.getUint32(0x00, true);
-    // Number of sectors seems to be inconsistent. Make a Star 1 (135049) has one sector defined
-    // but two uploads, but Make a Star 3 (135231) has two... Just run until the end of the file...
-
-    const firstSectorOffs = view.getUint32(0x04, true);
-    let offs = firstSectorOffs;
-    while (offs < buffer.byteLength)
-        offs += parseDIRECT(gsMemoryMap, buffer.slice(offs));
-    assert(offs === buffer.byteLength);
+    let prevEnd = view.getUint32(0x04, true);;
+    for (let i = 0; i < numSectors; i++) {
+        const sectorOffs = view.getUint32(0x04 + 0x04 * i, true);
+        assert(prevEnd === sectorOffs);
+        prevEnd = sectorOffs + parseDIRECT(gsMemoryMap, buffer.slice(sectorOffs));
+    }
+    assert(prevEnd === buffer.byteLength);
 }
 
 function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], namePrefix: string, sectorOffs: number, initialAlphaBlend = 0x44): BINModelSector | null {
@@ -353,6 +360,7 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
         let expectedDiffuseColorOffs = -1;
         let skipVertices = false;
         let lit = false;
+        let vertexColored = false;
 
         const newVertexRun = () => {
             // Parse out the header.
@@ -363,13 +371,10 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
             vertexRunData = new Float32Array(vertexRunCount * WORKING_VERTEX_STRIDE);
             skipVertices = false;
 
-            const lightingFlags = vertexRunFlags1 & 3;
-            if (lightingFlags === 2)
-                lit = false;
-            else if (lightingFlags === 0)
-                lit = true;
-            else
-                throw(`bad lighting flags ${lightingFlags}`)
+            lit = (vertexRunFlags1 & 2) === 0;
+            vertexColored = (vertexRunFlags1 & 1) !== 0;
+            if (vertexColored)
+                assert(!lit);
 
             // Seems to be some sort of format code.
             if (vertexRunFlags2 === 0x0412) {
@@ -486,19 +491,25 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
                 } else if (format === VifUnpackFormat.V4_8) {
                     // unlit color
                     assert((imm & (~0x4000)) === expectedNormalsOffs && !lit);
-                    assert(qwd === 0x01);
+                    assert(qwd === 0x01 || vertexColored);
 
-                    const diffuseColorR = view.getUint8(packetsIdx + 0x00) / 0x80;
-                    const diffuseColorG = view.getUint8(packetsIdx + 0x01) / 0x80;
-                    const diffuseColorB = view.getUint8(packetsIdx + 0x02) / 0x80;
-                    const diffuseColorA = view.getUint8(packetsIdx + 0x03) / 0x80;
+                    for (let j = 0; j < qwd; j++) {
+                        const diffuseColorR = view.getUint8(packetsIdx + 0x00) / 0x80;
+                        const diffuseColorG = view.getUint8(packetsIdx + 0x01) / 0x80;
+                        const diffuseColorB = view.getUint8(packetsIdx + 0x02) / 0x80;
+                        const diffuseColorA = view.getUint8(packetsIdx + 0x03) / 0x80;
 
-                    const signExtend = (imm & 0x4000) === 0;
-                    if (signExtend)
-                        assert(diffuseColorR < 1 && diffuseColorG < 1 && diffuseColorB < 1 && diffuseColorA < 1)
-
-                    colorFromRGBA(vertexRunColor, diffuseColorR, diffuseColorG, diffuseColorB, diffuseColorA);
-                    packetsIdx += 0x04;
+                        const signExtend = (imm & 0x4000) === 0;
+                        if (signExtend)
+                            assert(diffuseColorR < 1 && diffuseColorG < 1 && diffuseColorB < 1 && diffuseColorA < 1)
+                        if (vertexColored) {
+                            // the format supports actual vertex colors, but doesn't really seem to be used
+                            assert(diffuseColorR === 1 && diffuseColorB === 1 && diffuseColorG === 1 && diffuseColorA > .95);
+                            colorFromRGBA(vertexRunColor, 1, 1, 1, 1);
+                        } else
+                            colorFromRGBA(vertexRunColor, diffuseColorR, diffuseColorG, diffuseColorB, diffuseColorA);
+                        packetsIdx += 0x04;
+                    }
                 } else {
                     console.error(`Unsupported format ${hexzero(format, 2)}`);
                     throw "whoops";
@@ -1270,8 +1281,10 @@ export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBuffer
         parseDIRECT(gsMemoryMap[0], buffer.slice(texDataOffs));
         parseDIRECT(gsMemoryMap[1], buffer.slice(texDataOffs));
 
-        parseDIRECT(gsMemoryMap[0], buffer.slice(clutAOffs));
-        parseDIRECT(gsMemoryMap[1], buffer.slice(clutBOffs));
+        if (!sectorIsNIL(buffer, clutAOffs))
+            parseDIRECT(gsMemoryMap[0], buffer.slice(clutAOffs));
+        if (!sectorIsNIL(buffer, clutBOffs))
+            parseDIRECT(gsMemoryMap[1], buffer.slice(clutBOffs));
     }
 
     // currently isn't needed
@@ -1315,16 +1328,19 @@ export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBuffer
     // animated objects don't have proper part transforms, so we need to use the unified model from LOD 0
     let bbox: AABB;
     if (noModel) { // construct explicitly from collision
-        assert(!sectorIsNIL(buffer, collisionOffs));
-        const bboxOffs = collisionOffs + view.getUint32(collisionOffs + 0x04, true) + 0x08;
-        bbox = new AABB(
-            view.getFloat32(bboxOffs + 0x00, true),
-            view.getFloat32(bboxOffs + 0x04, true),
-            view.getFloat32(bboxOffs + 0x08, true),
-            view.getFloat32(bboxOffs + 0x0C, true),
-            view.getFloat32(bboxOffs + 0x10, true),
-            view.getFloat32(bboxOffs + 0x14, true),
-        );
+        if (sectorIsNIL(buffer, collisionOffs))
+            bbox = new AABB(); // level 27 is missing some of these
+        else {
+            const bboxOffs = collisionOffs + view.getUint32(collisionOffs + 0x04, true) + 0x08;
+            bbox = new AABB(
+                view.getFloat32(bboxOffs + 0x00, true),
+                view.getFloat32(bboxOffs + 0x04, true),
+                view.getFloat32(bboxOffs + 0x08, true),
+                view.getFloat32(bboxOffs + 0x0C, true),
+                view.getFloat32(bboxOffs + 0x10, true),
+                view.getFloat32(bboxOffs + 0x14, true),
+            );
+        }
     } else if (isAnimated)
         bbox = computeObjectAABBFromRawSector(buffer, lod0Offs, transforms);
     else

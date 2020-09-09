@@ -61,7 +61,7 @@ class ShadowController {
     private calcCollisionTimer = 0;
     private calcDropGravityMode = CalcDropGravityMode.Off;
 
-    private dropPosMtxRef: mat4 | null = null;
+    private dropPosMtxRef: ReadonlyMat4 | null = null;
     private dropPosRef: ReadonlyVec3 | null = null;
     private dropPosFix = vec3.create();
     private dropDirRef: ReadonlyVec3 | null = null;
@@ -119,12 +119,12 @@ class ShadowController {
             return 0.0;
     }
 
-    public setDropPosMtxPtr(mtx: mat4 | null, offs: vec3): void {
+    public setDropPosMtxPtr(mtx: ReadonlyMat4 | null, offs: ReadonlyVec3): void {
         this.dropPosMtxRef = mtx;
         vec3.copy(this.dropPosFix, offs);
     }
 
-    public getDropPosMtxPtr(): mat4 | null {
+    public getDropPosMtxPtr(): ReadonlyMat4 | null {
         return this.dropPosMtxRef;
     }
 
@@ -205,6 +205,8 @@ class ShadowController {
             this.updateDirection(sceneObjHolder);
             this.updateProjection(sceneObjHolder);
         }
+
+        this.calcRequested = false;
     }
 
     private isCalcGravity(): boolean {
@@ -1188,6 +1190,14 @@ export function addShadowVolumeCylinder(sceneObjHolder: SceneObjHolder, actor: L
     controller.setCalcCollisionMode(CalcCollisionMode.Off);
 }
 
+export function addShadowVolumeBox(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, size: ReadonlyVec3, dropMtxPtr: ReadonlyMat4): void {
+    const controller = createShadowControllerVolumeParam(sceneObjHolder, actor, name);
+    const drawer = new ShadowVolumeBox(sceneObjHolder, controller);
+    vec3.copy(drawer.size, size);
+    controller.setDropPosMtxPtr(dropMtxPtr, Vec3Zero);
+    controller.shadowDrawer = drawer;
+}
+
 export function addShadowVolumeFlatModel(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, modelName: string, baseMtxPtr: mat4 = actor.getBaseMtx()!): void {
     const controller = createShadowControllerVolumeParam(sceneObjHolder, actor, name);
     const drawer = new ShadowVolumeFlatModel(sceneObjHolder, controller, modelName);
@@ -1213,6 +1223,11 @@ export function initShadowVolumeSphere(sceneObjHolder: SceneObjHolder, actor: Li
 export function initShadowVolumeCylinder(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): void {
     initShadowController(actor);
     addShadowVolumeCylinder(sceneObjHolder, actor, 'default', radius);
+}
+
+export function initShadowVolumeBox(sceneObjHolder: SceneObjHolder, actor: LiveActor, size: ReadonlyVec3, dropMtxPtr: ReadonlyMat4): void {
+    initShadowController(actor);
+    addShadowVolumeBox(sceneObjHolder, actor, 'default', size, dropMtxPtr);
 }
 
 export function initShadowVolumeFlatModel(sceneObjHolder: SceneObjHolder, actor: LiveActor, modelName: string, baseMtxPtr: mat4 = actor.getBaseMtx()!): void {
@@ -1256,10 +1271,18 @@ export function onCalcShadowDropGravity(actor: LiveActor, name: string | null = 
     actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.On);
 }
 
+function getShadowVolumeDrawer(actor: LiveActor, name: string | null): ShadowVolumeDrawer {
+    return actor.shadowControllerList!.getController(name).shadowDrawer as ShadowVolumeDrawer;
+}
+
 function getShadowVolumeSphere(actor: LiveActor, name: string | null): ShadowVolumeSphere {
-    return actor.shadowControllerList!.getController(name).shadowDrawer as ShadowVolumeSphere;
+    return getShadowVolumeDrawer(actor, name) as ShadowVolumeSphere;
 }
 
 export function setShadowVolumeSphereRadius(actor: LiveActor, name: string | null, v: number): void {
     getShadowVolumeSphere(actor, name).radius = v;
+}
+
+export function setShadowVolumeStartDropOffset(actor: LiveActor, name: string | null, v: number): void {
+    getShadowVolumeDrawer(actor, name).startDrawShapeOffset = v;
 }

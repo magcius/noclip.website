@@ -915,9 +915,9 @@ export function makeQuatUpFront(dst: quat, up: ReadonlyVec3, front: ReadonlyVec3
 }
 
 export function makeAxisVerticalZX(axisRight: vec3, front: vec3): void {
-    vec3.scaleAndAdd(axisRight, Vec3UnitZ, front, -vec3.dot(front, Vec3UnitZ));
+    vecKillElement(axisRight, Vec3UnitZ, front);
     if (isNearZeroVec3(axisRight, 0.001))
-        vec3.scaleAndAdd(axisRight, Vec3UnitX, front, -vec3.dot(front, Vec3UnitX));
+        vecKillElement(axisRight, Vec3UnitX, front);
     vec3.normalize(axisRight, axisRight);
 }
 
@@ -994,7 +994,7 @@ export function blendQuatUpFront(dst: quat, q: ReadonlyQuat, up: ReadonlyVec3, f
     quat.mul(dst, scratchQuat, q);
 
     quatGetAxisY(axisY, dst);
-    vec3.scaleAndAdd(axisY, front, axisY, -vec3.dot(axisY, front));
+    vecKillElement(axisY, front, axisY);
     vec3.normalize(axisY, axisY);
 
     quatGetAxisZ(axisZ, dst);
@@ -1338,9 +1338,9 @@ export function getRandomVector(dst: vec3, range: number): void {
     vec3.set(dst, getRandomFloat(-range, range), getRandomFloat(-range, range), getRandomFloat(-range, range));
 }
 
-export function rotateVecDegree(dst: vec3, upVec: vec3, degrees: number, m: mat4 = scratchMatrix): void {
+export function rotateVecDegree(dst: vec3, axis: ReadonlyVec3, degrees: number, m: mat4 = scratchMatrix): void {
     const theta = degrees * MathConstants.DEG_TO_RAD;
-    mat4.fromRotation(m, theta, upVec);
+    mat4.fromRotation(m, theta, axis);
     vec3.transformMat4(dst, dst, m);
 }
 

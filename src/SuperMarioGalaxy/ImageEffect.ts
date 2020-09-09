@@ -353,8 +353,8 @@ abstract class ImageEffectBase extends NameObj {
     public visible = false;
     public strength = 0.0;
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        const strengthAdj = getDeltaTimeFrames(viewerInput) / 30.0;
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+        const strengthAdj = getDeltaTimeFrames(sceneObjHolder.viewerInput) / 30.0;
 
         if (this.active) {
             this.visible = true;

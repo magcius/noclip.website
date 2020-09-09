@@ -2,7 +2,7 @@
 import { mat4, vec3 } from "gl-matrix";
 import { assertExists, hexzero } from "../../util";
 import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "../LiveActor";
-import { SceneObjHolder, getObjectName } from "../Main";
+import { SceneObjHolder, getObjectName, getTimeFrames } from "../Main";
 import { JMapInfoIter, createCsvParser } from "../JMapInfo";
 import { ViewerRenderInput } from "../../viewer";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, startBtk, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckFrameAtRandom, getCamPos } from "../ActorUtil";
@@ -14,6 +14,7 @@ import { LightType } from "../DrawBuffer";
 import { emitEffect } from "../EffectSystem";
 import { createModelObjMapObj } from "./ModelObj";
 import { initLightCtrl } from "../LightData";
+import { getTimeInFrames } from "../../AnimationController";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -107,16 +108,17 @@ export class NoclipLegacyActor extends LiveActor<NoclipLegacyActorNrv> {
         }
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
-        const time = viewerInput.time / 1000;
-        super.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        super.calcAndSetBaseMtx(sceneObjHolder);
+
+        const time = sceneObjHolder.viewerInput.time / 1000;
         this.updateMapPartsRotation(this.modelInstance!.modelMatrix, time);
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.isSkybox)
-            getCamPos(this.translation, viewerInput.camera);
-        super.calcAnim(sceneObjHolder, viewerInput);
+            getCamPos(this.translation, sceneObjHolder.viewerInput.camera);
+        super.calcAnim(sceneObjHolder);
     }
 
     public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: NoclipLegacyActorNrv, deltaTimeFrames: number): void {
