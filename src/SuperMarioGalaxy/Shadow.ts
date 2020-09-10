@@ -990,7 +990,7 @@ export class ShadowControllerList {
         this.shadowControllers.push(controller);
     }
 
-    public getController(name: string | null): ShadowController {
+    public getController(name: string | null): ShadowController | null {
         if (this.shadowControllers.length === 1)
             return this.shadowControllers[0];
         else
@@ -1236,43 +1236,43 @@ export function initShadowVolumeFlatModel(sceneObjHolder: SceneObjHolder, actor:
 }
 
 export function setShadowDropPositionPtr(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
-    actor.shadowControllerList!.getController(name).setDropPosPtr(v);
+    actor.shadowControllerList!.getController(name)!.setDropPosPtr(v);
 }
 
 export function setShadowDropPosition(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
-    actor.shadowControllerList!.getController(name).setDropPosFix(v);
+    actor.shadowControllerList!.getController(name)!.setDropPosFix(v);
 }
 
 export function setShadowDropLength(actor: LiveActor, name: string | null, v: number): void {
-    actor.shadowControllerList!.getController(name).setDropLength(v);
+    actor.shadowControllerList!.getController(name)!.setDropLength(v);
 }
 
 export function onCalcShadow(actor: LiveActor, name: string | null = null): void {
-    actor.shadowControllerList!.getController(name).setCalcCollisionMode(CalcCollisionMode.On);
+    actor.shadowControllerList!.getController(name)!.setCalcCollisionMode(CalcCollisionMode.On);
 }
 
 export function onCalcShadowOneTime(actor: LiveActor, name: string | null = null): void {
-    actor.shadowControllerList!.getController(name).setCalcCollisionMode(CalcCollisionMode.OneTime);
+    actor.shadowControllerList!.getController(name)!.setCalcCollisionMode(CalcCollisionMode.OneTime);
 }
 
 export function onCalcShadowDropPrivateGravityOneTime(actor: LiveActor, name: string | null = null): void {
-    actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.PrivateOneTime);
+    actor.shadowControllerList!.getController(name)!.setCalcDropGravityMode(CalcDropGravityMode.PrivateOneTime);
 }
 
 export function onCalcShadowDropPrivateGravity(actor: LiveActor, name: string | null = null): void {
-    actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.PrivateOn);
+    actor.shadowControllerList!.getController(name)!.setCalcDropGravityMode(CalcDropGravityMode.PrivateOn);
 }
 
 export function onCalcShadowDropGravityOneTime(actor: LiveActor, name: string | null = null): void {
-    actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.OneTime);
+    actor.shadowControllerList!.getController(name)!.setCalcDropGravityMode(CalcDropGravityMode.OneTime);
 }
 
 export function onCalcShadowDropGravity(actor: LiveActor, name: string | null = null): void {
-    actor.shadowControllerList!.getController(name).setCalcDropGravityMode(CalcDropGravityMode.On);
+    actor.shadowControllerList!.getController(name)!.setCalcDropGravityMode(CalcDropGravityMode.On);
 }
 
 function getShadowVolumeDrawer(actor: LiveActor, name: string | null): ShadowVolumeDrawer {
-    return actor.shadowControllerList!.getController(name).shadowDrawer as ShadowVolumeDrawer;
+    return actor.shadowControllerList!.getController(name)!.shadowDrawer as ShadowVolumeDrawer;
 }
 
 function getShadowVolumeSphere(actor: LiveActor, name: string | null): ShadowVolumeSphere {
@@ -1285,4 +1285,10 @@ export function setShadowVolumeSphereRadius(actor: LiveActor, name: string | nul
 
 export function setShadowVolumeStartDropOffset(actor: LiveActor, name: string | null, v: number): void {
     getShadowVolumeDrawer(actor, name).startDrawShapeOffset = v;
+}
+
+export function isExistShadow(actor: LiveActor, name: string | null): boolean {
+    if (actor.shadowControllerList === null)
+        return false;
+    return actor.shadowControllerList.getController(name) !== null;
 }

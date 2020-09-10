@@ -6,6 +6,7 @@ import { connectToScene } from "./ActorUtil";
 import { NameObj, MovementType } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { arrayRemove } from "../util";
+import { transformVec3Mat4w1, transformVec3Mat4w0 } from "../MathHelpers";
 
 function initHitSensorGroup(sceneObjHolder: SceneObjHolder, sensor: HitSensor): void {
     sceneObjHolder.create(SceneObj.SensorHitChecker);
@@ -22,6 +23,7 @@ export const enum HitSensorType {
     MapObjMoveCollision = 0x48,
     WoodBox             = 0x55,
     MapObjPress         = 0x76,
+    Eye                 = 0x7F,
 }
 
 export class HitSensor {
@@ -41,6 +43,10 @@ export class HitSensor {
 
     public addHitSensor(other: HitSensor): void {
         this.pairwiseSensors.push(other);
+    }
+
+    public isValid(): boolean {
+        return this.sensorValidByHost && this.sensorValidBySystem;
     }
 
     public validate(): void {
@@ -98,13 +104,14 @@ export class HitSensorInfo {
     }
 
     public update(): void {
-        if (this.useCallback) {
-            // TODO(jstpierre): Implement
-        } else if (this.baseMtx !== null) {
-            // TODO(jstpierre): Implement
-        } else {
-            const dst = this.sensor.center;
+        const dst = this.sensor.center;
 
+        if (this.useCallback) {
+            // TODO(jstpierre): Find a use of this?
+            // this.sensor.actor.updateHitSensor();
+        } else if (this.baseMtx !== null) {
+            transformVec3Mat4w1(dst, this.baseMtx, this.offset);
+        } else {
             if (this.translation !== null)
                 vec3.copy(dst, this.translation);
             else
@@ -112,7 +119,7 @@ export class HitSensorInfo {
 
             const baseMtx = this.sensor.actor.getBaseMtx();
             if (baseMtx !== null) {
-                vec3.transformMat4(scratchVec3, this.offset, baseMtx);
+                transformVec3Mat4w0(scratchVec3, baseMtx, this.offset);
                 vec3.add(dst, dst, scratchVec3);
             } else {
                 vec3.add(dst, dst, this.offset);
@@ -200,7 +207,7 @@ export class SensorHitChecker extends NameObj {
             sensor.group = this.playerGroup;
         else if (isSensorRide(sensor))
             sensor.group = this.rideGroup;
-        else if (sensor.isType(0x7F))
+        else if (sensor.isType(HitSensorType.Eye))
             sensor.group = this.eyeGroup;
         else if (sensor.isType(0x4A) || sensor.isType(0x4C) || sensor.isType(0x15) || sensor.isType(0x47) || sensor.isType(0x1F) || isSensorRush(sensor) || isSensorAutoRush(sensor))
             sensor.group = this.simpleGroup;
@@ -240,10 +247,14 @@ export class SensorHitChecker extends NameObj {
         for (let i = 0; i < a.length; i++) {
             const as = a[i];
 
-            // TODO(jstpierre): Check validity & clipping
+            // TODO(jstpierre): Check clipping
+            if (!as.isValid())
+                continue;
 
             for (let j = 0; j < b.length; j++) {
                 const bs = b[j];
+                if (!bs.isValid())
+                    continue;
                 this.checkAttack(as, bs);
             }
         }
@@ -253,25 +264,28 @@ export class SensorHitChecker extends NameObj {
         for (let i = 0; i < a.length; i++) {
             const as = a[i];
 
-            // TODO(jstpierre): Check validity & clipping
+            // TODO(jstpierre): Check clipping
+            if (!as.isValid())
+                continue;
 
             for (let j = i + 1; j < a.length; j++) {
                 const bs = a[j];
+                if (!bs.isValid())
+                    continue;
                 this.checkAttack(as, bs);
             }
         }
     }
 
     public checkAttack(a: HitSensor, b: HitSensor): void {
-        if (a.actor !== b.actor) {
-            const d = vec3.squaredDistance(a.center, b.center);
-            const r = a.radius + b.radius;
-            if (d < r * r) {
-                if (!b.isType(0x7F))
-                    a.addHitSensor(b);
-                if (!a.isType(0x7F))
-                    b.addHitSensor(a);
-            }
+        if (a.actor === b.actor)
+            return;
+
+        if (vec3.squaredDistance(a.center, b.center) < (a.radius + b.radius) ** 2.0) {
+            if (!isSensorEye(b))
+                a.addHitSensor(b);
+            if (!isSensorEye(a))
+                b.addHitSensor(a);
         }
     }
 }
@@ -281,27 +295,31 @@ export function isSensorPlayer(sensor: HitSensor): boolean {
 }
 
 export function isSensorNpc(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x04 && sensor.sensorType < 0x06;
+    return sensor.isType(HitSensorType.Npc);
+}
+
+export function isSensorEye(sensor: HitSensor): boolean {
+    return sensor.isType(HitSensorType.Eye);
 }
 
 export function isSensorRide(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x08 && sensor.sensorType < 0x12;
+    return sensor.sensorType >= 0x09 && sensor.sensorType < 0x12;
 }
 
 export function isSensorEnemy(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x13 && sensor.sensorType < 0x44;
+    return sensor.sensorType >= 0x14 && sensor.sensorType < 0x44;
 }
 
 export function isSensorMapObj(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x45 && sensor.sensorType < 0x5F;
+    return sensor.sensorType >= 0x46 && sensor.sensorType < 0x5F;
 }
 
 export function isSensorAutoRush(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x60 && sensor.sensorType < 0x6E;
+    return sensor.sensorType >= 0x61 && sensor.sensorType < 0x6E;
 }
 
 export function isSensorRush(sensor: HitSensor): boolean {
-    return sensor.sensorType > 0x6F && sensor.sensorType < 0x74;
+    return sensor.sensorType >= 0x70 && sensor.sensorType < 0x74;
 }
 
 export function isSensorPlayerOrRide(sensor: HitSensor): boolean {

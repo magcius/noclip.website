@@ -11,7 +11,7 @@ import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNea
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
-import { CollisionScaleType, invalidateCollisionParts, validateCollisionParts, CollisionPartsFilterFunc } from "./Collision";
+import { CollisionScaleType, invalidateCollisionParts, validateCollisionParts, CollisionPartsFilterFunc, CollisionParts, Triangle, getFirstPolyOnLineToMapExceptActor } from "./Collision";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { HitSensor, HitSensorType } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
@@ -543,10 +543,6 @@ export function addBodyMessageSensorMapObjPress(sceneObjHolder: SceneObjHolder, 
 }
 
 export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
-    return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
-}
-
-export function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
     return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
@@ -1410,4 +1406,41 @@ export function excludeCalcShadowToMyCollision(actor: LiveActor, collisionName: 
         throw "whoops";
     else
         excludeCalcShadowToSensorAll(actor, actor.collisionParts!.hitSensor);
+}
+
+export class MapObjConnector {
+    public mtx = mat4.create();
+    public collisionParts: CollisionParts | null = null;
+    private triangle = new Triangle();
+
+    constructor(private actor: LiveActor) {
+    }
+
+    public attach(sceneObjHolder: SceneObjHolder, v: ReadonlyVec3): boolean {
+        vec3.scaleAndAdd(scratchVec3b, this.actor.translation, v, 50.0);
+        vec3.scale(scratchVec3c, v, -500.0);
+        if (!getFirstPolyOnLineToMapExceptActor(sceneObjHolder, scratchVec3, this.triangle, scratchVec3b, scratchVec3c, this.actor))
+            return false;
+        this.collisionParts = this.triangle.collisionParts!;
+        mat4.mul(this.mtx, this.collisionParts.invWorldMtx, this.actor.getBaseMtx()!);
+        return true;
+    }
+
+    public attachToBack(sceneObjHolder: SceneObjHolder): boolean {
+        calcFrontVec(scratchVec3, this.actor);
+        return this.attach(sceneObjHolder, scratchVec3);
+    }
+
+    public attachToUnder(sceneObjHolder: SceneObjHolder): boolean {
+        calcUpVec(scratchVec3, this.actor);
+        return this.attach(sceneObjHolder, scratchVec3);
+    }
+
+    public connect(actor: LiveActor = this.actor): void {
+        if (this.collisionParts !== null) {
+            const dstMtx = actor.modelInstance!.modelMatrix;
+            mat4.mul(dstMtx, this.collisionParts.worldMtx, this.mtx);
+            getMatrixTranslation(actor.translation, dstMtx);
+        }
+    }
 }
