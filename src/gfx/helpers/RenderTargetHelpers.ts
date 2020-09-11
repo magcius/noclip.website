@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, makeTextureDescriptor2D } from "../platform/GfxPlatform";
+import { GfxDevice, GfxAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, makeTextureDescriptor2D, GfxColor } from "../platform/GfxPlatform";
 import { colorNewFromRGBA, TransparentBlack, Color, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 
@@ -183,7 +183,7 @@ export class PostFXRenderTarget {
     }
 }
 
-export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearColor: Color): GfxRenderPassDescriptor {
+export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearColor: Readonly<GfxColor>): GfxRenderPassDescriptor {
     return {
         colorAttachment: null,
         colorResolveTo: null,

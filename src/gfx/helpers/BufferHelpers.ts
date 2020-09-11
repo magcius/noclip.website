@@ -2,8 +2,9 @@
 // Helpers to manage GPU buffer data...
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { assert, align } from "../../util";
+import { align } from "../../util";
 import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
+import { assert } from "../platform/GfxPlatformUtil";
 
 export interface GfxCoalescedBuffer {
     buffer: GfxBuffer;

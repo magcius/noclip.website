@@ -1,7 +1,7 @@
 
 // Helpers to fill vertex buffers.
 
-import { mat4, mat2d, vec4, ReadonlyVec3 } from "gl-matrix";
+import { ReadonlyVec3, ReadonlyVec4, ReadonlyMat4, ReadonlyMat2d } from "gl-matrix";
 import { GfxColor } from "../platform/GfxPlatform";
 
 export function fillVec3v(d: Float32Array, offs: number, v: ReadonlyVec3, v3: number = 0): number {
@@ -20,7 +20,7 @@ export function fillVec4(d: Float32Array, offs: number, v0: number, v1: number =
     return 4;
 }
 
-export function fillVec4v(d: Float32Array, offs: number, v: vec4): number {
+export function fillVec4v(d: Float32Array, offs: number, v: ReadonlyVec4): number {
     d[offs + 0] = v[0];
     d[offs + 1] = v[1];
     d[offs + 2] = v[2];
@@ -28,7 +28,7 @@ export function fillVec4v(d: Float32Array, offs: number, v: vec4): number {
     return 4;
 }
 
-export function fillColor(d: Float32Array, offs: number, c: GfxColor): number {
+export function fillColor(d: Float32Array, offs: number, c: Readonly<GfxColor>): number {
     d[offs + 0] = c.r;
     d[offs + 1] = c.g;
     d[offs + 2] = c.b;
@@ -37,7 +37,7 @@ export function fillColor(d: Float32Array, offs: number, c: GfxColor): number {
 }
 
 // All of our matrices are row-major.
-export function fillMatrix4x4(d: Float32Array, offs: number, m: mat4): number {
+export function fillMatrix4x4(d: Float32Array, offs: number, m: ReadonlyMat4): number {
     d[offs +  0] = m[0];
     d[offs +  1] = m[4];
     d[offs +  2] = m[8];
@@ -57,7 +57,7 @@ export function fillMatrix4x4(d: Float32Array, offs: number, m: mat4): number {
     return 4*4;
 }
 
-export function fillMatrix4x3(d: Float32Array, offs: number, m: mat4): number {
+export function fillMatrix4x3(d: Float32Array, offs: number, m: ReadonlyMat4): number {
     d[offs +  0] = m[0];
     d[offs +  1] = m[4];
     d[offs +  2] = m[8];
@@ -73,7 +73,7 @@ export function fillMatrix4x3(d: Float32Array, offs: number, m: mat4): number {
     return 4*3;
 }
 
-export function fillMatrix3x2(d: Float32Array, offs: number, m: mat2d): number {
+export function fillMatrix3x2(d: Float32Array, offs: number, m: ReadonlyMat2d): number {
     // 3x2 matrices are actually sent across as 4x2.
     const ma = m[0], mb = m[1];
     const mc = m[2], md = m[3];
@@ -89,7 +89,7 @@ export function fillMatrix3x2(d: Float32Array, offs: number, m: mat2d): number {
     return 4*2;
 }
 
-export function fillMatrix4x2(d: Float32Array, offs: number, m: mat4): number {
+export function fillMatrix4x2(d: Float32Array, offs: number, m: ReadonlyMat4): number {
     // The bottom two rows are basically just ignored in a 4x2.
     d[offs +  0] = m[0];
     d[offs +  1] = m[4];

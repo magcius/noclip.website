@@ -3,7 +3,7 @@ import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, Gfx
 import { _T, GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags } from "./GfxPlatformFormat";
 
-import { gfxColorEqual, gfxColorCopy, range, assert, assertExists, leftPad } from './GfxPlatformUtil';
+import { gfxColorEqual, range, assert, assertExists, leftPad, gfxColorCopy } from './GfxPlatformUtil';
 import { copyMegaState, defaultMegaState, fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { IdentityViewportCoords } from '../helpers/RenderTargetHelpers';
