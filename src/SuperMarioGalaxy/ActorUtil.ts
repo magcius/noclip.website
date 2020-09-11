@@ -6,7 +6,6 @@ import { Camera, texProjCameraSceneTex } from "../Camera";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixAxis, getMatrixAxis, lerp, Vec3UnitX } from "../MathHelpers";
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
@@ -20,6 +19,7 @@ import { SceneObj, SceneObjHolder, ResourceHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
 import { RailDirection } from "./RailRider";
 import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
+import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -821,7 +821,7 @@ export function isValidDraw(actor: LiveActor): boolean {
     return actor.visibleAlive && actor.visibleScenario && actor.visibleModel;
 }
 
-export function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: NormalizedViewportCoords): void {
+export function loadTexProjectionMtx(m: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
     texProjCameraSceneTex(m, camera, viewport, -1);
     mat4.mul(m, m, camera.viewMatrix);
 }

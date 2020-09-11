@@ -12,9 +12,9 @@ import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxTexture } from "../gfx/platform/GfxPlatform";
+import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxTexture, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { TransparentBlack } from "../Color";
-import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor, NormalizedViewportCoords, setViewportOnRenderPass, IdentityViewportCoords, setScissorOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
+import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor, setViewportOnRenderPass, IdentityViewportCoords, setScissorOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -161,7 +161,7 @@ export class WeirdFancyRenderTarget {
         this.colorAttachment.destroy(device);
     }
 
-    public createRenderPass(device: GfxDevice, viewport: NormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
+    public createRenderPass(device: GfxDevice, viewport: GfxNormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
         copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
         this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
         this.renderPassDescriptor.colorResolveTo = colorResolveTo;

@@ -4,12 +4,12 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadTextureToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor, standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
@@ -33,7 +33,7 @@ export interface ViewerRenderInput {
     deltaTime: number;
     backbufferWidth: number;
     backbufferHeight: number;
-    viewport: NormalizedViewportCoords;
+    viewport: Readonly<GfxNormalizedViewportCoords>;
     onscreenTexture: GfxTexture;
 }
 
@@ -105,7 +105,7 @@ export class Viewer {
     public gfxDevice: GfxDevice;
     public viewerRenderInput: ViewerRenderInput;
     public renderStatisticsTracker = new RenderStatisticsTracker();
-    public viewport: NormalizedViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
+    public viewport: GfxNormalizedViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
 
     public scene: SceneGfx | null = null;
 

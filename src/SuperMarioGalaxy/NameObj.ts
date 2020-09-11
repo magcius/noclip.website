@@ -2,11 +2,10 @@
 import { DrawBufferHolder, drawBufferInitialTable, LightType, DrawCameraType } from "./DrawBuffer";
 import { SceneObjHolder } from "./Main";
 import { ViewerRenderInput } from "../viewer";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { Camera } from "../Camera";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { LiveActor } from "./LiveActor";
-import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { JMapInfoIter } from "./JMapInfo";
 import { mat4 } from "gl-matrix";
 import { assert } from "../util";
@@ -337,7 +336,7 @@ export class SceneNameObjListExecutor {
         }
     }
 
-    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, cameraType: DrawCameraType): void {
+    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, cameraType: DrawCameraType): void {
         this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera, viewport, cameraType);
     }
 

@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, makeTextureDescriptor2D, GfxColor } from "../platform/GfxPlatform";
+import { GfxDevice, GfxAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, makeTextureDescriptor2D, GfxColor, GfxNormalizedViewportCoords } from "../platform/GfxPlatform";
 import { colorNewFromRGBA, TransparentBlack, Color, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 
@@ -104,14 +104,7 @@ export function makeEmptyRenderPassDescriptor(): GfxRenderPassDescriptor {
     return makeClearRenderPassDescriptor(false, TransparentBlack);
 }
 
-export interface NormalizedViewportCoords {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-}
-
-export function setViewportOnRenderPass(renderPass: GfxRenderPass, viewport: NormalizedViewportCoords, attachment: ColorAttachment): void {
+export function setViewportOnRenderPass(renderPass: GfxRenderPass, viewport: Readonly<GfxNormalizedViewportCoords>, attachment: ColorAttachment): void {
     const x = attachment.width * viewport.x;
     const w = attachment.width * viewport.w;
     const y = attachment.height * viewport.y;
@@ -119,7 +112,7 @@ export function setViewportOnRenderPass(renderPass: GfxRenderPass, viewport: Nor
     renderPass.setViewport(x, y, w, h);
 }
 
-export function setScissorOnRenderPass(renderPass: GfxRenderPass, viewport: NormalizedViewportCoords, attachment: ColorAttachment): void {
+export function setScissorOnRenderPass(renderPass: GfxRenderPass, viewport: Readonly<GfxNormalizedViewportCoords>, attachment: ColorAttachment): void {
     const x = attachment.width * viewport.x;
     const w = attachment.width * viewport.w;
     const y = attachment.height * viewport.y;
@@ -127,7 +120,7 @@ export function setScissorOnRenderPass(renderPass: GfxRenderPass, viewport: Norm
     renderPass.setScissor(x, y, w, h);
 }
 
-export const IdentityViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
+export const IdentityViewportCoords: Readonly<GfxNormalizedViewportCoords> = { x: 0, y: 0, w: 1, h: 1 };
 
 export class BasicRenderTarget {
     public colorAttachment: ColorAttachment;
@@ -143,7 +136,7 @@ export class BasicRenderTarget {
         this.depthStencilAttachment.setParameters(device, width, height, numSamples);
     }
 
-    public createRenderPass(device: GfxDevice, viewport: NormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
+    public createRenderPass(device: GfxDevice, viewport: Readonly<GfxNormalizedViewportCoords>, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
         copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
         this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
         this.renderPassDescriptor.colorResolveTo = colorResolveTo;
@@ -168,7 +161,7 @@ export class PostFXRenderTarget {
         this.colorAttachment.setParameters(device, width, height, numSamples);
     }
 
-    public createRenderPass(device: GfxDevice, viewport: NormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
+    public createRenderPass(device: GfxDevice, viewport: Readonly<GfxNormalizedViewportCoords>, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
         copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
         this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
         this.renderPassDescriptor.colorResolveTo = colorResolveTo;

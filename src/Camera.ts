@@ -4,11 +4,10 @@ import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
 import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
-import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { reverseDepthForPerspectiveProjectionMatrix, reverseDepthForOrthographicProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
-import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
+import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
 import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
@@ -1063,7 +1062,7 @@ function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number
         texProjPerspMtx(dst, camera.fovY, camera.aspect, scaleS, scaleT, transS, transT);
 }
 
-export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: NormalizedViewportCoords, flipYScale: number): void {
+export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipYScale: number): void {
     // Map from -1 to 1, to viewport coords.
 
     // Map from -1 to 1 to 0 to 1.
