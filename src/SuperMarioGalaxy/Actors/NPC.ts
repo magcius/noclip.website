@@ -551,8 +551,11 @@ export class Peach extends NPCActor<PeachNrv> {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
         if (currentNerve === PeachNrv.Wait) {
-            if (isFirstStep(this))
-                startBck(this, 'Help');
+            if (isFirstStep(this)) {
+                // Super Mario Galaxy 2 doesn't have any animations (there's a separate PeachAnim.arc archive)...
+                if (this.modelManager!.xanimePlayer !== null)
+                    startBck(this, 'Help');
+            }
         }
     }
 }
