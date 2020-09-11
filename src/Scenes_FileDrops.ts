@@ -7,13 +7,13 @@ import { readString, flatten } from "./util";
 import * as Yaz0 from './Common/Compression/Yaz0';
 import * as CX from './Common/Compression/CX';
 
-import * as Grezzo3DS from './oot3d/scenes';
+import * as Grezzo3DS from './Content/oot3d/scenes';
 import * as NNS_G3D from './nns_g3d/scenes';
 import * as J3D from './j3d/scenes';
 import * as CTR_H3D from './Common/CTR_H3D/H3D';
 import * as RRES from './rres/scenes';
-import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
-import * as JPAExplorer from './InteractiveExamples/JPAExplorer';
+import * as PaperMarioTTYD from './Content/ttyd/Scenes_PaperMarioTTYD';
+import * as JPAExplorer from './Content/InteractiveExamples/JPAExplorer';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
 

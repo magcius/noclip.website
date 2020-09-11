@@ -2,9 +2,9 @@
 import { mat4, mat2d, vec3 } from "gl-matrix";
 import { GfxFormat, GfxDevice, GfxProgram, GfxBindingLayoutDescriptor, GfxTexture, GfxBlendMode, GfxBlendFactor, GfxMipFilterMode, GfxTexFilterMode, GfxSampler, GfxTextureDimension, GfxMegaStateDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import * as Viewer from '../viewer';
-import * as NITRO_GX from '../SuperMario64DS/nitro_gx';
-import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../SuperMario64DS/nitro_tex";
-import { NITRO_Program, VertexData } from '../SuperMario64DS/render';
+import * as NITRO_GX from '../Content/sm64ds/nitro_gx';
+import { readTexture, getFormatName, Texture, parseTexImageParamWrapModeS, parseTexImageParamWrapModeT, textureFormatIsTranslucent } from "../Content/sm64ds/nitro_tex";
+import { NITRO_Program, VertexData } from '../Content/sm64ds/render';
 import { GfxRenderInstManager, GfxRenderInst, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { TextureMapping } from "../TextureHolder";
 import { fillMatrix4x3, fillMatrix3x2, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";

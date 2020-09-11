@@ -11,7 +11,7 @@ import { LiveActor, ZoneAndLayer, isDead, dynamicSpawnZoneAndLayer } from "../Li
 import { isFirstStep } from "../Spine";
 import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1 } from "../../MathHelpers";
 import { divideByW } from "../../Camera";
-import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ";
+import { PeekZManager, PeekZResult } from "../../Content/zww/d_dlst_peekZ";
 import { GfxDevice, GfxCompareMode } from "../../gfx/platform/GfxPlatform";
 import { DepthStencilAttachment } from "../../gfx/helpers/RenderTargetHelpers";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers";

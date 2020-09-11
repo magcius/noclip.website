@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { U8Archive } from "./u8";
-import { createMarioKartWiiSceneFromU8Archive } from "./Scenes_MarioKartWii";
+import { createMarioKartWiiSceneFromU8Archive } from "../Content/mkwii/Scenes_MarioKartWii";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString } from "../util";
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';

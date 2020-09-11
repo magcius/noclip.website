@@ -47,9 +47,9 @@
     "asbuild:yaz0": "npx asc Yaz0_as.ts --baseDir ./src/assembly -O3 --runtime none --noAssert -b Yaz0_as.wasm -t Yaz0_as.wat",
     "asbuild": "yarn asbuild:gx_tex && yarn asbuild:yaz0 && node src/build_wat.js",
     "build": "webpack --config webpack.prod.js",
-    "build:zww": "cd src/WindWaker/tools && ts-node zww_extractor.ts",
-    "build:dk64": "cd src/DonkeyKong64/tools && ts-node extractor.ts",
-    "build:KatamariDamacy": "cd src/KatamariDamacy/tools && ts-node extractor.ts",
+    "build:zww": "cd src/Content/zww/tools && ts-node zww_extractor.ts",
+    "build:dk64": "cd src/Content/dk64/tools && ts-node extractor.ts",
+    "build:KatamariDamacy": "cd src/Content/katamari_damacy/tools && ts-node extractor.ts",
     "typecheck": "tsc -w --noEmit"
   },
   "bin": {

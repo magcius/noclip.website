@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assert } from "../util";
-import * as NITRO_TEX from "../SuperMario64DS/nitro_tex";
+import * as NITRO_TEX from "../Content/sm64ds/nitro_tex";
 import { mat4, mat2d, vec2 } from "gl-matrix";
 import { GfxCullMode } from "../gfx/platform/GfxPlatform";
 import AnimationController from "../AnimationController";

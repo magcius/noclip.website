@@ -15,7 +15,7 @@ import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate, GXTextureHolder } fro
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import * as JPAExplorer from '../InteractiveExamples/JPAExplorer';
+import * as JPAExplorer from '../Content/InteractiveExamples/JPAExplorer';
 import { SceneContext } from '../SceneBase';
 
 export class BasicRenderer implements Viewer.SceneGfx {

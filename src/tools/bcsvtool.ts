@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import * as BCSV from '../luigis_mansion/bcsv';
+import * as BCSV from '../Content/luigis_mansion/bcsv';
 import { assert } from 'console';
 import { inflate } from 'zlib';
 

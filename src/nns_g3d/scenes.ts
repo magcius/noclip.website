@@ -9,7 +9,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
 import { assertExists } from "../util";
 import { parseNSBMD } from "./NNS_G3D";
-import { NITRO_Program } from "../SuperMario64DS/render";
+import { NITRO_Program } from "../Content/sm64ds/render";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 
 class BasicNSBMDRenderer implements SceneGfx {
