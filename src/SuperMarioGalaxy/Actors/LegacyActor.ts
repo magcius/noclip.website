@@ -308,6 +308,13 @@ export class NoclipLegacyActorSpawner {
                 spawnGraph('OtaKingMagma');
                 spawnGraph('OtaKingMagmaBloom', SceneGraphTag.Bloom);
                 break;
+            case 'BattanKing':
+                spawnGraph('BattanKing', SceneGraphTag.Normal, { bck: 'talkwait.bck' }).then((actor) => {
+                    startBva(actor, 'normal');
+                    actor.translation[0] = -1200;
+                    actor.rotation[1] = -Math.PI / 2;
+                });
+                break;
 
             case 'PlantA':
                 spawnGraph(`PlantA${hexzero(assertExists(infoIter.getValueNumber('ShapeModelNo')), 2)}`);

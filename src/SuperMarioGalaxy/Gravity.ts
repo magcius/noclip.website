@@ -93,7 +93,7 @@ export class PlanetGravityManager extends NameObj {
     }
 }
 
-function registerGravity(sceneObjHolder: SceneObjHolder, gravity: PlanetGravity): void {
+export function registerGravity(sceneObjHolder: SceneObjHolder, gravity: PlanetGravity): void {
     sceneObjHolder.create(SceneObj.PlanetGravityManager);
     sceneObjHolder.planetGravityManager!.registerGravity(gravity);
 }
@@ -886,7 +886,7 @@ export class SegmentGravity extends PlanetGravity {
     }
 }
 
-class DiskGravity extends PlanetGravity {
+export class DiskGravity extends PlanetGravity {
     private enableEdgeGravity: boolean = false;
     private bothSide: boolean = false;
     private validDegree: number = 360.0;
@@ -1003,7 +1003,7 @@ class DiskGravity extends PlanetGravity {
     }
 }
 
-class DiskTorusGravity extends PlanetGravity {
+export class DiskTorusGravity extends PlanetGravity {
     private bothSide = false;
     private edgeType = 3;
     private diskRadius = 0;
@@ -1591,8 +1591,10 @@ export function createGlobalDiskTorusGravityObj(zoneAndLayer: ZoneAndLayer, scen
     const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
 
     gravity.setBothSide(arg0 !== 0);
-    gravity.setEdgeType(arg1);
+    if (arg1 !== -1)
+        gravity.setEdgeType(arg1);
     gravity.setDiskRadius(arg2);
+    console.log(arg0, arg1, arg2, 500.0 * maxElem);
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();

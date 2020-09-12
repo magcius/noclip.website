@@ -17,7 +17,7 @@ import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConsta
 import { GfxRenderInstManager, setSortKeyLayer, GfxRendererLayer, setSortKeyDepth } from '../../gfx/render/GfxRenderer';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../../Camera';
-import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType, CubeGravity, SegmentGravity } from '../Gravity';
+import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType, CubeGravity, SegmentGravity, DiskGravity, DiskTorusGravity } from '../Gravity';
 import { isFirstStep } from '../Spine';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { assertExists } from '../../util';
@@ -45,10 +45,10 @@ class GravityExplainerArrow {
 
     // Drawing.
     public pos = vec3.create();
-    public speed = 2.0;
+    public speed = 5.0;
     public time: number = 0.0;
-    public lifetime = 180.0;
-    public color = colorNewCopy(Red);
+    public lifetime = 360.0;
+    public color = colorNewCopy(White);
     public alpha: number = 1.0;
     public scale: number = 1.0;
     // plane to be cross to
@@ -117,13 +117,15 @@ export class GravityExplainer extends LiveActor {
     private arrows: GravityExplainerArrow[] = [];
 
     @dfShow()
-    private stemWidth: number = 18.0;
+    private stemWidth: number = 100.0;
     @dfShow()
-    private stemHeight = 80.0;
+    private stemHeight = 800.0;
     @dfShow()
-    private tipWidth = 63.0;
+    private tipWidth = 400.0;
     @dfShow()
-    private tipHeight = 70.0;
+    private tipHeight = 400.0;
+
+    private two: GravityExplainer2;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'GravityExplainer');
@@ -148,12 +150,52 @@ export class GravityExplainer extends LiveActor {
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
 
         connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
+
+        this.two = new GravityExplainer2(zoneAndLayer, sceneObjHolder);
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
+        this.mangleGravitiesForVideoHacks(sceneObjHolder);
         this.spawnArrows(sceneObjHolder);
+    }
+
+    private mangleGravitiesForVideoHacks(sceneObjHolder: SceneObjHolder): void {
+        const stageName = sceneObjHolder.scenarioData.getMasterZoneFilename();
+
+        if (stageName === 'IceVolcanoGalaxy') {
+            const g0 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 0 && gravity.pos[0] === 15400)) as ParallelGravity;
+            computeModelMatrixSRT(g0.boxMtx!, 9000, 5000, 3000, 0, 0, 0, 18400, 1700, -96100);
+            g0.updateIdentityMtx();
+
+            const g10 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 10 && gravity.pos[0] === 15100)) as ParallelGravity;
+            computeModelMatrixSRT(g10.boxMtx!, 1000, 3000, 1000, 0, 0, 0, 15300, 0, -99800);
+            g10.updateIdentityMtx();
+
+            const g5 = sceneObjHolder.planetGravityManager!.gravities[5] as ParallelGravity;
+            computeModelMatrixSRT(g5.boxMtx!, 2000, 1000, 10000, 0, 0, 0, 15000, -750, -105000);
+            g5.updateIdentityMtx();
+            getMatrixAxisY(g5.planeNormal, g5.boxMtx!);
+        } else if (stageName === 'HeavenlyBeachGalaxy') {
+            const g0 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 0)) as ParallelGravity;
+            sceneObjHolder.planetGravityManager!.gravities.forEach((v) => v.alive = false);
+            g0.alive = true;
+        } else if (stageName === 'HoneyBeeKingdomGalaxy') {
+            const g0 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 0)) as ParallelGravity;
+            sceneObjHolder.planetGravityManager!.gravities.forEach((v) => v.alive = false);
+            g0.alive = true;
+        } else if (stageName === 'LongForCastleGalaxy') {
+            sceneObjHolder.planetGravityManager!.gravities.forEach((v) => v.alive = false);
+
+            const g0 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 0)) as ParallelGravity;
+            g0.alive = true;
+
+            const g3 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 3)) as ParallelGravity;
+            g3.alive = true;
+            computeModelMatrixSRT(g3.boxMtx!, 2500, -1000, -2500, 0, 0, 0, 250, -2800, 550);
+            g3.updateIdentityMtx();
+        }
     }
 
     private spawnArrows(sceneObjHolder: SceneObjHolder): void {
@@ -161,19 +203,12 @@ export class GravityExplainer extends LiveActor {
 
         for (let i = 0; i < gravities.length; i++) {
             const grav = gravities[i];
-            if (!(grav instanceof SegmentGravity))
+            if (!grav.alive)
+                continue;
+            /*if (!(grav instanceof SegmentGravity))
                 continue;
             if (grav.distant !== 310)
                 continue;
-
-            /*
-            const aabb = new AABB(), v = vec3.create();
-            for (let j = 0; j < 1000; j++) {
-                if (!grav.generateRandomPoint(v))
-                    continue;
-                aabb.unionPoint(v);
-            }
-            */
             const count = 5;
 
             for (let j = 0; j < count; j++) {
@@ -203,6 +238,31 @@ export class GravityExplainer extends LiveActor {
 
             const segment = new GravityExplainer2_SegmentGravity(this.zoneAndLayer, sceneObjHolder, grav);
             break;
+            */
+
+            const aabb = new AABB(), v = vec3.create();
+            for (let j = 0; j < 1000; j++) {
+                if (!grav.generateRandomPoint(v))
+                    continue;
+                aabb.unionPoint(v);
+            }
+            const count = Math.sqrt(aabb.diagonalLengthSquared()) / 500.0;
+            console.log(count);
+
+            for (let j = 0; j < count; j++) {
+                const arrow = new GravityExplainerArrow();
+                arrow.scale = 0.5;
+                arrow.gravity = grav;
+
+                if (!grav.generateRandomPoint(arrow.coord))
+                    continue;
+                vec3.copy(arrow.pos, arrow.coord);
+
+                arrow.time = Math.random() * arrow.lifetime;
+                arrow.alpha = lerp(0.4, 0.8, Math.random());
+
+                this.arrows.push(arrow);
+            }
         }
     }
 
@@ -222,6 +282,12 @@ export class GravityExplainer extends LiveActor {
             this.globalFade = saturate((viewerInput.time - this.globalFadeStartTime) / 2000.0);
             if (this.globalFade >= 1.0)
                 this.globalFadeStartTime = -1;
+        }
+
+        for (let i = 0; i < sceneObjHolder.planetGravityManager!.gravities.length; i++) {
+            const grav = sceneObjHolder.planetGravityManager!.gravities[i];
+            if (grav instanceof DiskTorusGravity)
+                grav.drawDebug(sceneObjHolder, viewerInput);
         }
 
         for (let i = 0; i < this.arrows.length; i++) {
@@ -260,7 +326,7 @@ export class GravityExplainer extends LiveActor {
     }
 
     private drawArrow(arrow: GravityExplainerArrow, ddraw: TDDraw, camera: Camera): void {
-        if (!arrow.gravity.alive)
+        if (!arrow.gravity.alive || !arrow.gravity.switchActive)
             return;
 
         /*
@@ -914,7 +980,7 @@ class GravityExplainer2_ParallelGravity extends LiveActor {
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
-        const alpha = this.getPulseAlpha(t);
+        const alpha = this.getPulseAlpha(t) * this.globalFade;
 
         colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.c1);
@@ -975,11 +1041,24 @@ class GravityExplainer2_ParallelGravity extends LiveActor {
         renderInstManager.submitRenderInst(renderInst);
     }
 
+    public globalFade = 1.0;
+    public globalFadeStartTime = -1;
+
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!this.gravity.alive || !this.gravity.switchActive)
             return;
+
+        if (window.main.viewer.inputManager.isKeyDownEventTriggered('KeyY')) {
+            this.globalFadeStartTime = viewerInput.time;
+        }
+
+        if (this.globalFadeStartTime >= 0.0) {
+            this.globalFade = saturate((viewerInput.time - this.globalFadeStartTime) / 2000.0);
+            if (this.globalFade >= 1.0)
+                this.globalFadeStartTime = -1;
+        }
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = setSortKeyLayer(template.sortKey, GfxRendererLayer.TRANSLUCENT);
@@ -987,7 +1066,7 @@ class GravityExplainer2_ParallelGravity extends LiveActor {
         const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera, this.translation);
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
 
-        const duration = 10000.0;
+        const duration = 20000.0;
 
         let height = 1.0;
 
@@ -1203,18 +1282,6 @@ export class GravityExplainer2 extends LiveActor {
         super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2');
     }
 
-    private mangleGravitiesForVideoHacks(sceneObjHolder: SceneObjHolder): void {
-        const stageName = sceneObjHolder.scenarioData.getMasterZoneFilename();
-
-        if (stageName === 'IceVolcanoGalaxy') {
-            const g0 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 0 && gravity.pos[0] === 15400)) as ParallelGravity;
-            computeModelMatrixSRT(g0.boxMtx!, 9000, 5000, 3000, 0, 0, 0, 18400, 1700, -96100);
-
-            const g10 = assertExists(sceneObjHolder.planetGravityManager!.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 10 && gravity.pos[0] === 15100)) as ParallelGravity;
-            computeModelMatrixSRT(g10.boxMtx!, 1000, 3000, 1000, 0, 0, 0, 15300, 0, -99800);
-        }
-    }
-
     private spawnParticle(sceneObjHolder: SceneObjHolder, gravity: CubeGravity, xn: number, yn: number, zn: number): void {
         const m = 3000;
         getMatrixTranslation(scratchVec3, gravity.mtx);
@@ -1224,8 +1291,6 @@ export class GravityExplainer2 extends LiveActor {
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
-
-        this.mangleGravitiesForVideoHacks(sceneObjHolder);
 
         const gravities = sceneObjHolder.planetGravityManager!.gravities;
         for (let i = 0; i < gravities.length; i++) {
