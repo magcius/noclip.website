@@ -910,7 +910,7 @@ export function makeQuatUpFront(dst: quat, up: ReadonlyVec3, front: ReadonlyVec3
     quat.normalize(dst, dst);
 }
 
-export function makeAxisVerticalZX(axisRight: vec3, front: vec3): void {
+export function makeAxisVerticalZX(axisRight: vec3, front: ReadonlyVec3): void {
     vecKillElement(axisRight, Vec3UnitZ, front);
     if (isNearZeroVec3(axisRight, 0.001))
         vecKillElement(axisRight, Vec3UnitX, front);
@@ -1245,29 +1245,29 @@ function isOnGround(actor: LiveActor): boolean {
     return vec3.dot(actor.binder.floorHitInfo.faceNormal, actor.velocity) < 0.0;
 }
 
-function calcVelocityMoveToDirectionHorizon(dst: vec3, actor: LiveActor, direction: vec3, speed: number): void {
+function calcVelocityMoveToDirectionHorizon(dst: vec3, actor: LiveActor, direction: ReadonlyVec3, speed: number): void {
     vecKillElement(dst, direction, actor.gravityVector);
     normToLength(dst, speed);
 }
 
-export function calcVelocityMoveToDirection(dst: vec3, actor: LiveActor, direction: vec3, speed: number): void {
+export function calcVelocityMoveToDirection(dst: vec3, actor: LiveActor, direction: ReadonlyVec3, speed: number): void {
     calcVelocityMoveToDirectionHorizon(dst, actor, direction, speed);
     if (isOnGround(actor))
         vecKillElement(dst, dst, getGroundNormal(actor));
 }
 
-export function addVelocityMoveToDirection(actor: LiveActor, direction: vec3, speed: number): void {
+export function addVelocityMoveToDirection(actor: LiveActor, direction: ReadonlyVec3, speed: number): void {
     calcVelocityMoveToDirection(scratchVec3, actor, direction, speed);
     vec3.add(actor.velocity, actor.velocity, scratchVec3);
 }
 
-function calcMomentRollBall(dst: vec3, fwd: vec3, up: vec3, radius: number): void {
+function calcMomentRollBall(dst: vec3, fwd: ReadonlyVec3, up: ReadonlyVec3, radius: number): void {
     vec3.normalize(dst, up);
     vec3.cross(dst, dst, fwd);
     vec3.scale(dst, dst, 1.0 / radius);
 }
 
-export function rotateQuatRollBall(dst: quat, fwd: vec3, up: vec3, radius: number): void {
+export function rotateQuatRollBall(dst: quat, fwd: ReadonlyVec3, up: ReadonlyVec3, radius: number): void {
     calcMomentRollBall(scratchVec3, fwd, up, radius);
     const rollAmount = vec3.length(scratchVec3);
     vec3.normalize(scratchVec3, scratchVec3);
@@ -1294,7 +1294,7 @@ export function calcFrontVec(v: vec3, actor: LiveActor): void {
     getMatrixAxisZ(v, assertExists(actor.getBaseMtx()));
 }
 
-export function calcMtxFromGravityAndZAxis(dst: mat4, actor: LiveActor, gravityVec: vec3, front: vec3): void {
+export function calcMtxFromGravityAndZAxis(dst: mat4, actor: LiveActor, gravityVec: ReadonlyVec3, front: ReadonlyVec3): void {
     vec3.negate(scratchVec3b, gravityVec);
     makeMtxUpFrontPos(dst, scratchVec3b, front, actor.translation);
 }
