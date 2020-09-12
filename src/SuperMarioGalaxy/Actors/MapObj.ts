@@ -1158,13 +1158,13 @@ class Rock extends LiveActor<RockNrv> {
         if (this.currentRailPointNo !== railPointNo) {
             this.currentRailPointNo = railPointNo;
 
-            const slowFall = getJMapInfoBool(fallback(getCurrentRailPointArg0(this), -1));
+            const slowFall = fallback(getCurrentRailPointArg0(this), -1) >= 0;
             if (slowFall) {
                 this.falling = false;
                 this.fallSpeed = 0.2;
             }
 
-            const invalidBindSection = getJMapInfoBool(fallback(getCurrentRailPointArg1(this), -1));
+            const invalidBindSection = fallback(getCurrentRailPointArg1(this), -1) >= 0;
             if (invalidBindSection) {
                 this.setNerve(RockNrv.MoveInvalidBind);
                 return false;
