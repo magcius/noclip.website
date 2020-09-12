@@ -8,22 +8,158 @@ import { ViewerRenderInput } from "../viewer";
 import { arrayRemove } from "../util";
 import { transformVec3Mat4w1, transformVec3Mat4w0 } from "../MathHelpers";
 
-function initHitSensorGroup(sceneObjHolder: SceneObjHolder, sensor: HitSensor): void {
-    sceneObjHolder.create(SceneObj.SensorHitChecker);
-    sceneObjHolder.sensorHitChecker!.initGroup(sensor);
-}
-
 export const enum HitSensorType {
-    Player              = 0x01,
-    Npc                 = 0x05,
-    Unizo               = 0x24,
-    Rock                = 0x2A,
-    Wanwan              = 0x2B,
-    MapObj              = 0x46,
-    MapObjMoveCollision = 0x48,
-    WoodBox             = 0x55,
-    MapObjPress         = 0x76,
-    Eye                 = 0x7F,
+    Player                      = 0x01,
+    // ??? 0x02
+    // ??? 0x03
+    // ??? 0x04
+    Npc                         = 0x05,
+    // ??? 0x06
+    Animal                      = 0x07,
+    // ??? 0x08
+
+    _Ride_First                 = 0x09,
+    Ride                        = 0x09,
+    Tamakoro                    = 0x0A,
+    TamakoroHit                 = 0x0B,
+    SlingShooterAttack          = 0x0C,
+    SlingShooterNPC             = 0x0E,
+    JetTurtle                   = 0x0F,
+    // ??? 0x10
+    _Ride_Last                  = 0x11,
+
+    // ??? 0x12
+    // ??? 0x13
+
+    _Enemy_First                = 0x14,
+    Enemy                       = 0x14,
+    EnemySimple                 = 0x15,
+    EnemyAttack                 = 0x16,
+    CocoNut                     = 0x17,
+    WaterPressureBullet         = 0x18,
+    BombHei                     = 0x19,
+    Takobo                      = 0x1A,
+    Kuribo                      = 0x1B,
+    Karikari                    = 0x1C,
+    Begoman                     = 0x1D,
+    // Gesso, Jellyfish, Poihana = 0x1E,
+    // BegomanSpring, JumpBeamer, JumpBeamer = 0x1F, (bounce?)
+    MogucchiRefuseTerritory     = 0x20,
+    BigBubble                   = 0x21,
+    // ??? 0x22
+    Pukupuku                    = 0x23,
+    Unizo                       = 0x24,
+    CocoSamboHead               = 0x25,
+    CocoSambo                   = 0x26,
+    // ??? 0x27
+    // ??? 0x28
+    HomingKiller                = 0x29,
+    Rock                        = 0x2A,
+    Wanwan                      = 0x2B,
+    TripodBossGuardWallPart     = 0x2C,
+    TripodBossKillerGenerater   = 0x2D,
+    TombSpiderBody              = 0x2E,
+    TombSpiderEye               = 0x2F,
+    TombSpiderHip               = 0x30,
+    TombSpiderMouth             = 0x31,
+    // ??? 0x32
+    TombSpiderFrontLGland       = 0x33,
+    TombSpiderFrontLAttacker    = 0x34,
+    TombSpiderFrontRGland       = 0x35,
+    TombSpiderFrontRAttacker    = 0x36,
+    TombSpiderRearLGland        = 0x37,
+    TombSpiderRearLAttacker     = 0x38,
+    TombSpiderRearRGland        = 0x39,
+    TombSpiderRearRAttacker     = 0x3A,
+    TombSpiderVitalSpotC        = 0x3B,
+    TombSpiderVitalSpotL        = 0x3C,
+    TombSpiderVitalSpotR        = 0x3D,
+    TombSpiderCocoon            = 0x3E,
+    // ??? 0x3F
+    // ??? 0x40
+    // KoopaHipDrop, KoopaSpin, Koopa DamageEscapePush = 0x41 (special Koopa damage?)
+    KoopaFireShort              = 0x42,
+    _Enemy_Last                 = 0x43,
+
+    // ??? 0x44
+    // ??? 0x45
+
+    _MapObj_First               = 0x46,
+    // isSensorItem() = 0x4A, 0x4B, 0x4D
+    MapObj                      = 0x46,
+    MapObjSimple                = 0x47,
+    MapObjMoveCollision         = 0x48,
+    Coin                        = 0x4A,
+    // ??? 0x4B
+    StarPiece                   = 0x4C,
+    BenefitItem                 = 0x4D,
+    // ??? 0x4E
+    // PTimerSwitch, PicketSwitch = 0x4F, (push switches?)
+    MorphItemNeo                = 0x50,
+    // ??? 0x51
+    // BreakableCage, TripodBossCore, TripodBossShell = 0x52, (Breakable map objects?)
+    // ??? 0x53
+    // TreasureBoxCracked, UFOBreakable = 0x54, (Breakable map objects?)
+    WoodBox                     = 0x55,
+    WaterBazookaCapsule         = 0x56,
+    // ??? 0x57
+    // ??? 0x58
+    KameckBarrier               = 0x59,
+    KoopaAttack                 = 0x5A,
+    KoopaReceiver               = 0x5B,
+    KoopaBattleMapDamagePlate   = 0x5C,
+    KoopaBattleMapCoinPlate     = 0x5D,
+    KoopaBattleMapPlate         = 0x5E,
+    _MapObj_Last                = 0x5E,
+
+    // ??? 0x5F
+
+    _AutoRush_First             = 0x61,
+    Binder                      = 0x61,
+    TransferableBinder          = 0x62,
+    PriorBinder                 = 0x63,
+    SpinDriver                  = 0x64,
+    SuperSpinDriver             = 0x65,
+    TamakoroBind                = 0x66,
+    PowerStar                   = 0x67,
+    GCapture                    = 0x68,
+    // ??? 0x69
+    WaterPressureBulletBinder   = 0x6A,
+    MarioLauncher               = 0x6B,
+    QuestionCoin                = 0x6C,
+    SecnarioStarter             = 0x6D,
+    _AutoRush_Last              = 0x6D,
+
+    // ??? 0x6E
+    // ??? 0x6F
+
+    _Rush_First                 = 0x70,
+    // ??? 0x70
+    // ??? 0x71
+    // ??? 0x72
+    HitWallTimerSwitch          = 0x73,
+    _Rush_Last                  = 0x73,
+
+    // ??? 0x74
+    // ??? 0x75
+
+    MapObjPress                 = 0x76,
+    // ??? 0x77
+    // ??? 0x78
+    // BallOpener, DragonHeadFlower, JumpHole = 0x79,
+    SphereRailDash              = 0x7A,
+    BallRail                    = 0x7B,
+
+    // ??? 0x7C
+    // ??? 0x7D
+    // ??? 0x7E
+
+    Eye                         = 0x7F,
+    Push                        = 0x80,
+    // ??? 0x81
+    // ??? 0x82
+    MessageSensorHolder         = 0x83,
+    Receiver                    = 0x84,
 }
 
 export class HitSensor {
@@ -34,7 +170,8 @@ export class HitSensor {
     public sensorValidByHost: boolean = true;
 
     constructor(sceneObjHolder: SceneObjHolder, public sensorType: HitSensorType, pairwiseCapacity: number, public radius: number, public actor: LiveActor) {
-        initHitSensorGroup(sceneObjHolder, this);
+        sceneObjHolder.create(SceneObj.SensorHitChecker);
+        sceneObjHolder.sensorHitChecker!.initGroup(this);
     }
 
     public isType(type: HitSensorType): boolean {
@@ -209,7 +346,7 @@ export class SensorHitChecker extends NameObj {
             sensor.group = this.rideGroup;
         else if (sensor.isType(HitSensorType.Eye))
             sensor.group = this.eyeGroup;
-        else if (sensor.isType(0x4A) || sensor.isType(0x4C) || sensor.isType(0x15) || sensor.isType(0x47) || sensor.isType(0x1F) || isSensorRush(sensor) || isSensorAutoRush(sensor))
+        else if (sensor.isType(HitSensorType.Coin) || sensor.isType(HitSensorType.StarPiece) || sensor.isType(HitSensorType.EnemySimple) || sensor.isType(HitSensorType.MapObjSimple) || sensor.isType(0x1F) || isSensorRush(sensor) || isSensorAutoRush(sensor))
             sensor.group = this.simpleGroup;
         else if (isSensorMapObj(sensor))
             sensor.group = this.mapObjGroup;
@@ -303,23 +440,23 @@ export function isSensorEye(sensor: HitSensor): boolean {
 }
 
 export function isSensorRide(sensor: HitSensor): boolean {
-    return sensor.sensorType >= 0x09 && sensor.sensorType < 0x12;
+    return sensor.sensorType >= HitSensorType._Ride_First && sensor.sensorType <= HitSensorType._Ride_Last;
 }
 
 export function isSensorEnemy(sensor: HitSensor): boolean {
-    return sensor.sensorType >= 0x14 && sensor.sensorType < 0x44;
+    return sensor.sensorType >= HitSensorType._Enemy_First && sensor.sensorType <= HitSensorType._Enemy_Last;
 }
 
 export function isSensorMapObj(sensor: HitSensor): boolean {
-    return sensor.sensorType >= 0x46 && sensor.sensorType < 0x5F;
+    return sensor.sensorType >= HitSensorType._MapObj_First && sensor.sensorType <= HitSensorType._MapObj_Last;
 }
 
 export function isSensorAutoRush(sensor: HitSensor): boolean {
-    return sensor.sensorType >= 0x61 && sensor.sensorType < 0x6E;
+    return sensor.sensorType >= HitSensorType._AutoRush_First && sensor.sensorType <= HitSensorType._AutoRush_Last;
 }
 
 export function isSensorRush(sensor: HitSensor): boolean {
-    return sensor.sensorType >= 0x70 && sensor.sensorType < 0x74;
+    return sensor.sensorType >= HitSensorType._Rush_First && sensor.sensorType <= HitSensorType._Rush_Last;
 }
 
 export function isSensorPlayerOrRide(sensor: HitSensor): boolean {
