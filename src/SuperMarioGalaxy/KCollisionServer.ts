@@ -7,7 +7,7 @@ import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { isSameDirection } from "./ActorUtil";
 
 export class KC_PrismData {
-    public length: number = 0.0;
+    public height: number = 0.0;
     public positionIdx: number = 0;
     public faceNormalIdx: number = 0;
     public edgeNormal1Idx: number = 0;
@@ -72,7 +72,7 @@ export class KCollisionServer {
     private normalsOffs: number;
     private prisms: KC_PrismData[] = [];
     private blocksOffs: number;
-    private maxDistMul: number;
+    private prismThickness: number;
 
     private maskX: number;
     private maskY: number;
@@ -93,12 +93,14 @@ export class KCollisionServer {
         this.normalsOffs = this.view.getUint32(0x04);
         const prismsOffs = this.view.getUint32(0x08);
         this.blocksOffs = this.view.getUint32(0x0C);
-        this.maxDistMul = this.view.getFloat32(0x10);
+
+        // Add some "padding" to each prism / triangle
+        this.prismThickness = this.view.getFloat32(0x10);
 
         // Ignore the first prism.
         for (let offs = prismsOffs + 0x10; offs < this.blocksOffs; offs += 0x10) {
             const prism = new KC_PrismData();
-            prism.length = this.view.getFloat32(offs + 0x00);
+            prism.height = this.view.getFloat32(offs + 0x00);
             prism.positionIdx = this.view.getUint16(offs + 0x04);
             prism.faceNormalIdx = this.view.getUint16(offs + 0x06);
             prism.edgeNormal1Idx = this.view.getUint16(offs + 0x08);
@@ -201,7 +203,7 @@ export class KCollisionServer {
             vec3.cross(scratchVec3a, scratchVec3a, scratchVec3b);
 
             this.loadNormal(scratchVec3b, prism.edgeNormal3Idx);
-            const dist = prism.length / vec3.dot(scratchVec3a, scratchVec3b);
+            const dist = prism.height / vec3.dot(scratchVec3a, scratchVec3b);
 
             this.loadPosition(scratchVec3b, prism.positionIdx);
             vec3.scaleAndAdd(dst, scratchVec3b, scratchVec3a, dist);
@@ -222,12 +224,12 @@ export class KCollisionServer {
         dst[2] = this.view.getFloat32(offs + 0x08);
     }
 
-    private KCHitArrow(dst: KC_PrismHit, prism: KC_PrismData, origin: ReadonlyVec3, arrowDir: ReadonlyVec3): boolean {
+    private KCHitArrow(dst: KC_PrismHit, prism: KC_PrismData, pos: ReadonlyVec3, arrowDir: ReadonlyVec3): boolean {
         this.loadNormal(scratchVec3c, prism.faceNormalIdx);
 
         // Local space.
         this.loadPosition(scratchVec3d, prism.positionIdx);
-        vec3.sub(scratchVec3d, origin, scratchVec3d);
+        vec3.sub(scratchVec3d, pos, scratchVec3d);
 
         const proj = vec3.dot(scratchVec3c, scratchVec3d);
         if (proj < 0.0)
@@ -237,7 +239,7 @@ export class KCollisionServer {
         if (proj + projDir >= 0.0)
             return false;
 
-        const dist = proj / -projDir;
+        const dist = -(proj / projDir);
         vec3.scaleAndAdd(scratchVec3c, scratchVec3d, arrowDir, dist);
 
         this.loadNormal(scratchVec3d, prism.edgeNormal1Idx);
@@ -251,8 +253,8 @@ export class KCollisionServer {
             return false;
 
         this.loadNormal(scratchVec3d, prism.edgeNormal3Idx);
-        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d);
-        if (dotNrm3 >= 0.01 + prism.length)
+        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.height;
+        if (dotNrm3 >= 0.01)
             return false;
 
         dst.distance = dist;
@@ -261,7 +263,7 @@ export class KCollisionServer {
         return true;
     }
 
-    private KCHitSphere(dst: KC_PrismHit, prism: KC_PrismData, pos: ReadonlyVec3, radius: number, invAvgScale: number): boolean {
+    private KCHitSphere(dst: KC_PrismHit, prism: KC_PrismData, pos: ReadonlyVec3, radius: number, thickness: number): boolean {
         // Local space.
         this.loadPosition(scratchVec3d, prism.positionIdx);
         vec3.sub(scratchVec3d, pos, scratchVec3d);
@@ -277,7 +279,7 @@ export class KCollisionServer {
             return false;
 
         this.loadNormal(scratchVec3c, prism.edgeNormal3Idx);
-        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.length;
+        const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.height;
         if (dotNrm3 >= radius)
             return false;
 
@@ -288,7 +290,6 @@ export class KCollisionServer {
             return false;
 
         const sqRadius = radius ** 2.0;
-        const maxDist = this.maxDistMul * invAvgScale;
 
         dst.classification = 0;
 
@@ -427,6 +428,7 @@ export class KCollisionServer {
             throw "whoops";
         }
 
+        const maxDist = this.prismThickness * thickness;
         if (dst.distance < 0.0 || dst.distance > maxDist)
             return false;
 
@@ -441,12 +443,10 @@ export class KCollisionServer {
             return null;
     }
 
-    public checkPoint(dst: KC_PrismHit, v: ReadonlyVec3, maxDist: number): boolean {
-        maxDist *= this.maxDistMul;
-
-        const x = (v[0] - this.blocksTrans[0]) | 0;
-        const y = (v[1] - this.blocksTrans[1]) | 0;
-        const z = (v[2] - this.blocksTrans[2]) | 0;
+    public checkPoint(dst: KC_PrismHit, pos: ReadonlyVec3, thickness: number): boolean {
+        const x = (pos[0] - this.blocksTrans[0]) | 0;
+        const y = (pos[1] - this.blocksTrans[1]) | 0;
+        const z = (pos[2] - this.blocksTrans[2]) | 0;
 
         if ((x & this.maskX) !== 0 || (y & this.maskY) !== 0 || (z & this.maskZ) !== 0)
             return false;
@@ -461,30 +461,34 @@ export class KCollisionServer {
             if (prism === null)
                 return false;
 
-            if (prism.length <= 0.0) {
+            if (prism.height <= 0.0) {
                 // TODO(jstpierre): When would this happen?
                 continue;
             }
 
-            this.loadPosition(scratchVec3a, prism.positionIdx);
-
             // Local position.
-            vec3.sub(scratchVec3a, v, scratchVec3a);
+            this.loadPosition(scratchVec3a, prism.positionIdx);
+            vec3.sub(scratchVec3a, pos, scratchVec3a);
 
             this.loadNormal(scratchVec3b, prism.edgeNormal1Idx);
-            if (vec3.dot(scratchVec3a, scratchVec3b) < 0)
+            const dotNrm1 = vec3.dot(scratchVec3c, scratchVec3d);
+            if (dotNrm1 < 0.0)
                 continue;
 
             this.loadNormal(scratchVec3b, prism.edgeNormal2Idx);
-            if (vec3.dot(scratchVec3a, scratchVec3b) < 0)
+            const dotNrm2 = vec3.dot(scratchVec3c, scratchVec3d);
+            if (dotNrm2 < 0.0)
                 continue;
 
             this.loadNormal(scratchVec3b, prism.edgeNormal3Idx);
-            if (vec3.dot(scratchVec3a, scratchVec3b) < prism.length)
+            const dotNrm3 = vec3.dot(scratchVec3c, scratchVec3d) - prism.height;
+            if (dotNrm3 < 0.0)
                 continue;
 
             this.loadNormal(scratchVec3b, prism.faceNormalIdx);
-            const dist = -vec3.dot(scratchVec3b, v);
+            const dist = -vec3.dot(scratchVec3b, pos);
+
+            const maxDist = thickness * this.prismThickness;
             if (dist < 0.0 || dist > maxDist)
                 continue;
 
@@ -682,7 +686,7 @@ export class KCollisionServer {
                         if (prism === null)
                             break;
 
-                        if (prism.length < 0.0 || dst.prisms.indexOf(prism) >= 0)
+                        if (prism.height < 0.0 || dst.prisms.indexOf(prism) >= 0)
                             continue;
 
                         if (!this.KCHitSphere(prismHitScratch, prism, pos, radius, invAvgScale))
