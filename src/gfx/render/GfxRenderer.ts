@@ -769,6 +769,8 @@ export class GfxRenderInstManager {
         this.instPool.reset();
         if (this.simpleRenderInstList !== null)
             this.simpleRenderInstList.reset();
+        // Ensure we aren't leaking templates.
+        assert(this.templatePool.allocCount === 0);
     }
 
     public destroy(device: GfxDevice): void {

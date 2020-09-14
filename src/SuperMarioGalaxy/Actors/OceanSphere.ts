@@ -525,6 +525,8 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
             materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInstFrontFaces);
             renderInstManager.submitRenderInst(renderInstFrontFaces);
         }
+
+        renderInstManager.popTemplateRenderInst();
     }
 
     private updatePoints(): void {
