@@ -236,6 +236,11 @@ export class TDDraw extends TDDrawVtxSpec {
             recreateInputState = true;
         }
 
+        if ((this.recreateVertexBuffer || this.recreateIndexBuffer) && this.startIndex > 0) {
+            console.warn(`DDraw: Recreating buffers when render insts already made. This will cause illegal warnings. Use allocatePrimitives() to prevent this.`);
+            debugger;
+        }
+
         if (this.recreateVertexBuffer) {
             if (this.vertexBuffer !== null)
                 device.destroyBuffer(this.vertexBuffer);

@@ -2230,6 +2230,7 @@ class dCloth_packet_c {
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
         ddraw.beginDraw();
+        ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, ((this.flyGridSize - 1) * this.hoistGridSize) * 2 * 2);
         this.drawSide(device, renderInstManager, ddraw, true);
         this.drawSide(device, renderInstManager, ddraw, false);
         ddraw.endAndUpload(device, renderInstManager);
@@ -2700,6 +2701,7 @@ class d_a_majuu_flag extends fopAc_ac_c {
         const ddraw = this.ddraw;
         const device = globals.modelCache.device;
         ddraw.beginDraw();
+        ddraw.allocPrimitives(GX.Command.DRAW_TRIANGLE_STRIP, (11 + 9 + 7 + 5 + 3 + 1) * 2);
         this.drawSide(device, renderInstManager, ddraw, true);
         this.drawSide(device, renderInstManager, ddraw, false);
         ddraw.endAndUpload(device, renderInstManager);
