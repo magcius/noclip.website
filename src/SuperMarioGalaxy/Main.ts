@@ -3,7 +3,7 @@ import { mat4, vec3, ReadonlyVec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, assertExists, align, nArray, fallback, nullify, spliceBisectRight } from '../util';
 import { DataFetcher, AbortedCallback } from '../DataFetcher';
-import { MathConstants, computeModelMatrixSRT, computeNormalMatrix, clamp, computeProjectionMatrixFromCuboid, Vec3UnitY, Vec3Zero, Vec3UnitX } from '../MathHelpers';
+import { MathConstants, computeModelMatrixSRT, computeNormalMatrix, clamp, computeProjectionMatrixFromCuboid } from '../MathHelpers';
 import { Camera, texProjCameraSceneTex } from '../Camera';
 import { SceneContext } from '../SceneBase';
 import * as Viewer from '../viewer';
@@ -1578,16 +1578,6 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
     public placeExtra(sceneObjHolder: SceneObjHolder): void {
-        const gravity = new DiskTorusGravity();
-        gravity.setRadius(200.0);
-        gravity.setBothSide(true);
-        gravity.setPosition(vec3.fromValues(0, 100, 0));
-        gravity.setDirection(Vec3UnitY);
-        gravity.setDiskRadius(150.0);
-
-        gravity.updateIdentityMtx();
-        gravity.alive = true;
-        registerGravity(sceneObjHolder, gravity);
     }
 
     public patchRenderer(renderer: SMGRenderer): void {

@@ -8,7 +8,7 @@ import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxi
 import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
-import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpaceVector, getDebugOverlayCanvas2D, drawWorldSpacePoint } from "../DebugJunk";
 import { Red, Green } from "../Color";
 import { RailRider } from "./RailRider";
 
@@ -1106,8 +1106,9 @@ export class DiskTorusGravity extends PlanetGravity {
 export class ConeGravity extends PlanetGravity {
     public enableBottom: boolean = false;
     public topCutRate: number = 0.0;
-    private mtx = mat4.create();
-    private magX: number;
+
+    public mtx = mat4.create();
+    public magX: number;
 
     public setEnableBottom(v: boolean): void {
         this.enableBottom = v;

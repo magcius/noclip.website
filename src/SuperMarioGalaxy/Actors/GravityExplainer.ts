@@ -5,7 +5,7 @@ import * as GX from '../../gx/gx_enum';
 import { LiveActor, ZoneAndLayer, makeMtxTRSFromActor, MessageType } from "../LiveActor";
 import { TDDraw, TSDraw } from "../DDraw";
 import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../../gx/gx_render";
-import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { colorNewCopy, colorNewFromRGBA, colorFromRGBA, colorCopy, Magenta, Green, Red, White, colorLerp, Blue, Cyan } from "../../Color";
 import { dfShow } from "../../DebugFloaters";
 import { SceneObjHolder, getDeltaTimeFrames } from "../Main";
@@ -21,7 +21,7 @@ import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType,
 import { isFirstStep } from '../Spine';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { assertExists } from '../../util';
-import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceLine, drawWorldSpaceBasis } from '../../DebugJunk';
+import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceVector, drawWorldSpaceLine, drawWorldSpaceBasis, drawWorldSpaceCircle } from '../../DebugJunk';
 import { AABB } from '../../Geometry';
 import { initShadowVolumeSphere, setShadowDropLength, onCalcShadowDropGravity, setShadowVolumeSphereRadius } from '../Shadow';
 import { getBindedFixReactionVector, isBinded, isBindedGround } from '../Collision';
@@ -34,6 +34,7 @@ const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
 const scratchMatrix = mat4.create();
 
 class GravityExplainerArrow {
@@ -118,14 +119,14 @@ export class GravityExplainer extends LiveActor {
             computeModelMatrixSRT(g10.boxMtx!, 1000, 3000, 1000, 0, 0, 0, 15300, 0, -99800);
             g10.updateIdentityMtx();
 
-            const g5 = mgr.gravities[5] as ParallelGravity;
+            const g5 = mgr.gravities[4] as ParallelGravity;
             computeModelMatrixSRT(g5.boxMtx!, 2000, 1000, 10000, 0, 0, 0, 15000, -750, -105000);
             g5.updateIdentityMtx();
             getMatrixAxisY(g5.planeNormal, g5.boxMtx!);
         } else if (stageName === 'HeavenlyBeachGalaxy') {
-            const g0 = assertExists(mgr.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 0)) as ParallelGravity;
-            mgr.gravities.forEach((v) => v.alive = false);
-            g0.alive = true;
+            // const g0 = assertExists(mgr.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 0)) as ParallelGravity;
+            // mgr.gravities.forEach((v) => v.alive = false);
+            // g0.alive = true;
         } else if (stageName === 'HoneyBeeKingdomGalaxy') {
             const g0 = assertExists(mgr.gravities.find((gravity) => gravity instanceof ParallelGravity && gravity.l_id === 0)) as ParallelGravity;
             mgr.gravities.forEach((v) => v.alive = false);
@@ -143,7 +144,7 @@ export class GravityExplainer extends LiveActor {
         } else if (stageName === 'EggStarGalaxy') {
             mgr.gravities.forEach((v) => v.alive = false);
 
-            const g104 = mgr.gravities[104] as ParallelGravity;
+            const g104 = mgr.gravities[103] as ParallelGravity;
             g104.alive = true;
 
             /*
@@ -152,19 +153,21 @@ export class GravityExplainer extends LiveActor {
             computeModelMatrixSRT(g107.boxMtx!, 400, -350, 300, 0, MathConstants.TAU*(1/8), 0, -5758, -14440, -15141);
             */
 
-            const g108 = mgr.gravities[108] as ParallelGravity;
+            const g108 = mgr.gravities[107] as ParallelGravity;
             g108.alive = true;
             g108.rangeType = ParallelGravityRangeType.Cylinder;
             g108.setRangeCylinder(500, 500);
             g108.setPlane(Vec3UnitY, vec3.fromValues(-4634, -16845, -16330));
 
-            mgr.gravities[102].alive = true;
+            mgr.gravities[101].alive = true;
+            mgr.gravities[101].range *= 0.2;
+
+            mgr.gravities[104].alive = true;
             mgr.gravities[105].alive = true;
-            mgr.gravities[106].alive = true;
         } else if (stageName === 'CosmosGardenGalaxy') {
             mgr.gravities.forEach((v) => v.alive = false);
 
-            mgr.gravities[12].alive = true;
+            mgr.gravities[11].alive = true;
         }
     }
 
@@ -1237,7 +1240,7 @@ class GravityExplainer2_DiskGravity extends LiveActor {
         const scale = 1.0 - t;
         const alpha = getPulseAlpha(t);
 
-        const dist = scale * this.gravity.range * 0.2;
+        const dist = scale * this.gravity.range;
 
         const phinp = 20;
         const thetanp = 100;
@@ -1419,7 +1422,7 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
         mb.setTevKAlphaSel(0, GX.KonstAlphaSel.KASEL_1);
         mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
         mb.setZMode(true, GX.CompareType.LEQUAL, false);
-        mb.setCullMode(GX.CullMode.NONE);
+        mb.setCullMode(GX.CullMode.BACK);
         mb.setUsePnMtxIdx(false);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
@@ -1431,7 +1434,7 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
 
         colorFromRGBA(this.c0, 1.0, 1.0, 1.0, 0.2);
         colorFromRGBA(this.c1, 1.0, 1.0, 1.0, 0.0);
-    
+
         connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
     }
 
@@ -1449,42 +1452,53 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
 
         const validAngle = this.gravity.validSideDegree * MathConstants.DEG_TO_RAD;
 
-        const dr = (p: ReadonlyVec3, np: number): void => {
+        const dr = (p: ReadonlyVec3, np: number, b: boolean): void => {
             ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
             for (let i = 0; i < np; i++) {
                 const theta = lerp(-validAngle / 2, validAngle / 2, (i/(np-1)));
     
                 mat4.fromRotation(scratchMatrix, theta, this.gravity.segmentDirection);
                 transformVec3Mat4w0(scratchVec3, scratchMatrix, this.gravity.sideVectorOrtho);
-    
+
                 vec3.scaleAndAdd(scratchVec3a, p, scratchVec3, t0 * dist);
                 vec3.scaleAndAdd(scratchVec3b, p, scratchVec3, t1 * dist);
 
-                ddraw.position3vec3(scratchVec3a);
-                ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+                if (b) {
+                    ddraw.position3vec3(scratchVec3b);
+                    ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
 
-                ddraw.position3vec3(scratchVec3b);
-                ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
+                    ddraw.position3vec3(scratchVec3a);
+                    ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+                } else {
+                    ddraw.position3vec3(scratchVec3a);
+                    ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+
+                    ddraw.position3vec3(scratchVec3b);
+                    ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
+                }
             }
             ddraw.end();
         };
 
-        const ds = (theta: number): void => {
+        const ds = (theta: number, b: boolean): void => {
             mat4.fromRotation(scratchMatrix, theta, this.gravity.segmentDirection);
             transformVec3Mat4w0(scratchVec3, scratchMatrix, this.gravity.sideVectorOrtho);
 
             ddraw.begin(GX.Command.DRAW_QUADS);
 
-            vec3.scaleAndAdd(scratchVec3a, this.gravity.gravityPoints[0], scratchVec3, t0 * dist);
-            vec3.scaleAndAdd(scratchVec3b, this.gravity.gravityPoints[0], scratchVec3, t1 * dist);
+            const i0 = b ? 1 : 0;
+            const i1 = b ? 0 : 1;
+
+            vec3.scaleAndAdd(scratchVec3a, this.gravity.gravityPoints[i0], scratchVec3, t0 * dist);
+            vec3.scaleAndAdd(scratchVec3b, this.gravity.gravityPoints[i0], scratchVec3, t1 * dist);
             ddraw.position3vec3(scratchVec3a);
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
 
             ddraw.position3vec3(scratchVec3b);
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
 
-            vec3.scaleAndAdd(scratchVec3a, this.gravity.gravityPoints[1], scratchVec3, t0 * dist);
-            vec3.scaleAndAdd(scratchVec3b, this.gravity.gravityPoints[1], scratchVec3, t1 * dist);
+            vec3.scaleAndAdd(scratchVec3a, this.gravity.gravityPoints[i1], scratchVec3, t0 * dist);
+            vec3.scaleAndAdd(scratchVec3b, this.gravity.gravityPoints[i1], scratchVec3, t1 * dist);
             ddraw.position3vec3(scratchVec3b);
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
 
@@ -1494,14 +1508,36 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
             ddraw.end();
         };
 
+        const df = (np: number): void => {
+            ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+            for (let i = 0; i < np; i++) {
+                const theta = lerp(-validAngle / 2, validAngle / 2, (i/(np-1)));
+
+                mat4.fromRotation(scratchMatrix, theta, this.gravity.segmentDirection);
+                transformVec3Mat4w0(scratchVec3, scratchMatrix, this.gravity.sideVectorOrtho);
+
+                vec3.scaleAndAdd(scratchVec3a, this.gravity.gravityPoints[0], scratchVec3, t0 * dist);
+                vec3.scaleAndAdd(scratchVec3b, this.gravity.gravityPoints[1], scratchVec3, t0 * dist);
+                ddraw.position3vec3(scratchVec3a);
+                ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+                ddraw.position3vec3(scratchVec3b);
+                ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+            }
+            ddraw.end();
+        };
+
         const np = 15;
-        dr(this.gravity.gravityPoints[0], np);
-        dr(this.gravity.gravityPoints[1], np);
+        dr(this.gravity.gravityPoints[0], np, false);
+        dr(this.gravity.gravityPoints[1], np, true);
 
         if (validAngle >= 0.0 && validAngle < MathConstants.TAU) {
-            ds(-validAngle / 2);
-            ds(validAngle / 2);
+            ds(validAngle / 2, false);
+            ds(-validAngle / 2, true);
+        } else {
+            df(np);
         }
+
+        // drawWorldSpaceLine(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.gravity.gravityPoints[0], this.gravity.gravityPoints[1]);
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -1958,7 +1994,38 @@ class GravityExplainer2_ConeGravity extends LiveActor {
 
         const dist = scale * this.gravity.range;
 
-        // TODO(jstpierre): last remaining piece (!!!)
+        // Bottom point
+        getMatrixTranslation(scratchVec3a, this.gravity.mtx);
+        const bottomRadius = this.gravity.magX;
+
+        // Compute center top point.
+        getMatrixAxisY(scratchVec3b, this.gravity.mtx);
+        vec3.normalize(scratchVec3c, scratchVec3b);
+        vec3.scaleAndAdd(scratchVec3b, scratchVec3a, scratchVec3b, 1.0 - this.gravity.topCutRate);
+        const topRadius = bottomRadius * this.gravity.topCutRate;
+
+        const thetanp = 20;
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        for (let j = 0; j < thetanp; j++) {
+            const theta = -MathConstants.TAU * (j/(thetanp-1));
+
+            mat4.fromRotation(scratchMatrix, theta, scratchVec3c);
+            transformVec3Mat4w0(scratchVec3, scratchMatrix, Vec3UnitX);
+
+            // top point
+            vec3.scaleAndAdd(scratchVec3d, scratchVec3b, scratchVec3, topRadius + dist);
+            this.ddraw.position3vec3(scratchVec3d);
+            this.ddraw.normal3vec3(scratchVec3);
+            this.ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha * 0xFF);
+
+            // bottom point
+            transformVec3Mat4w0(scratchVec3, scratchMatrix, Vec3UnitX);
+            vec3.scaleAndAdd(scratchVec3d, scratchVec3a, scratchVec3, bottomRadius + dist);
+            this.ddraw.position3vec3(scratchVec3d);
+            this.ddraw.normal3vec3(scratchVec3);
+            this.ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, alpha * 0xFF);
+        }
+        this.ddraw.end();
     }
 
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
