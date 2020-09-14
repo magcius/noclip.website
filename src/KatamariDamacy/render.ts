@@ -366,7 +366,7 @@ export class BINModelInstance {
 }
 
 const scratchTextureMatrix = mat4.create();
-class BINTextureData {
+export class BINTextureData {
     public gfxTexture: GfxTexture[] = [];
     public viewerTexture: Viewer.Texture[] = [];
 

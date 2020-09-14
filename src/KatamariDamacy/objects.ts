@@ -355,7 +355,7 @@ export class ObjectRenderer {
             this.altObject.prepareToRender(renderInstManager, viewerInput, toNoclip, currentPalette, gameState);
         }
 
-        const debugMotion = false;
+        const debugMotion = this.objectSpawn.objectId === 0x591;
         if (debugMotion) {
             mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, toNoclip);
             drawWorldSpaceText(getDebugOverlayCanvas2D(), scratchMatrix, this.prevPosition, `Object ${hexzero(this.objectSpawn.objectId, 4)}`, 25, Magenta, { outline: 2, shadowBlur: 2 });
