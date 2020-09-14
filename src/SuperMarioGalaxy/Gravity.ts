@@ -265,9 +265,9 @@ export class ParallelGravity extends PlanetGravity {
     private boxExtentsSq: vec3 | null = null;
     private distanceCalcType: number = -1;
 
-    public setPlane(normal: ReadonlyVec3, translation: ReadonlyVec3): void {
+    public setPlane(normal: ReadonlyVec3, pos: ReadonlyVec3): void {
         vec3.normalize(this.planeNormal, normal);
-        vec3.copy(this.pos, translation);
+        vec3.copy(this.pos, pos);
     }
 
     public setBaseDistance(v: number): void {
@@ -282,9 +282,9 @@ export class ParallelGravity extends PlanetGravity {
         this.rangeType = rangeType;
     }
 
-    public setRangeCylinder(scaleX: number, scaleY: number): void {
-        this.cylinderRadius = scaleX;
-        this.cylinderHeight = scaleY;
+    public setRangeCylinder(radius: number, height: number): void {
+        this.cylinderRadius = radius;
+        this.cylinderHeight = height;
     }
 
     public setRangeBox(mtx: ReadonlyMat4): void {
@@ -897,10 +897,10 @@ export class DiskGravity extends PlanetGravity {
     private sideDirectionOrtho = vec3.create();
     private radius: number = 250.0;
 
-    private worldPosition = vec3.create();
-    private worldDirection = vec3.create();
-    private worldSideDirection = vec3.create();
-    private worldRadius: number = 250.0;
+    public worldPosition = vec3.create();
+    public worldDirection = vec3.create();
+    public worldSideDirection = vec3.create();
+    public worldRadius: number = 250.0;
 
     public setBothSide(v: boolean): void {
         this.bothSide = v;
@@ -1006,13 +1006,14 @@ export class DiskGravity extends PlanetGravity {
 export class DiskTorusGravity extends PlanetGravity {
     private bothSide = false;
     private edgeType = 3;
-    private diskRadius = 0;
     private radius = 2000.0;
     private position = vec3.create();
     private direction = vec3.create();
-    private worldRadius = 2000.0;
-    private worldPosition = vec3.create();
-    private worldDirection = vec3.create();
+
+    public diskRadius = 0;
+    public worldRadius = 2000.0;
+    public worldPosition = vec3.create();
+    public worldDirection = vec3.create();
 
     public setBothSide(v: boolean): void {
         this.bothSide = v;
@@ -1251,11 +1252,13 @@ export class ConeGravity extends PlanetGravity {
     }
 }
 
-class WireGravity extends PlanetGravity {
+export class WireGravity extends PlanetGravity {
     public points: vec3[] = [];
+    public directions: vec3[] = [];
 
-    public addPoint(point: ReadonlyVec3): void {
+    public addPoint(point: ReadonlyVec3, dir: ReadonlyVec3): void {
         this.points.push(vec3.clone(point));
+        this.directions.push(vec3.clone(dir));
     }
 
     protected calcOwnGravityVector(dst: vec3, pos: ReadonlyVec3): number {
@@ -1635,13 +1638,13 @@ export function createGlobalWireGravityObj(zoneAndLayer: ZoneAndLayer, sceneObjH
     // WireGravityCreator::settingFromJMapOtherParam
     const railRider = new RailRider(sceneObjHolder, infoIter);
 
-    const segmentCount = fallback(getJMapInfoArg0(infoIter), 20);
+    const segmentCount = fallback(getJMapInfoArg0(infoIter), 40);
 
-    const speed = railRider.getTotalLength() / (segmentCount + 1);
+    const speed = railRider.getTotalLength() / (segmentCount);
     railRider.setCoord(0.0);
     railRider.setSpeed(speed);
     for (let i = 0; i < segmentCount + 1; i++) {
-        gravity.addPoint(railRider.currentPos);
+        gravity.addPoint(railRider.currentPos, railRider.currentDir);
         railRider.move();
     }
 

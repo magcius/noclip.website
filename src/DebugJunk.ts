@@ -6,7 +6,7 @@ import { divideByW, ScreenSpaceProjection } from "./Camera";
 import { vec4, vec3, mat4, ReadonlyMat4, ReadonlyVec3 } from "gl-matrix";
 import { nArray, assert, assertExists, hexdump, magicstr } from "./util";
 import { UI, Slider } from "./ui";
-import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ } from "./MathHelpers";
+import { getMatrixTranslation, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, computeModelMatrixSRT } from "./MathHelpers";
 import ArrayBufferSlice from "./ArrayBufferSlice";
 import { downloadBufferSlice, downloadBuffer } from "./DownloadUtils";
 
@@ -451,4 +451,6 @@ export const debugJunk: any = {
     magicstr,
     ghidraDecode,
     downloadBuffer: downloadBuffer2,
+    computeModelMatrixSRT,
+    mat4,    
 };
