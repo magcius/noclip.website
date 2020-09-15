@@ -63,6 +63,7 @@ import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
+import * as Scenes_FFX from './FinalFantasyX/scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -122,6 +123,7 @@ const sceneGroups = [
     Scenes_Pilotwings64.sceneGroup,
     Scenes_PokemonSnap.sceneGroup,
     "PlayStation 2",
+    Scenes_FFX.sceneGroup,
     Scenes_GTA.sceneGroup.iii,
     Scenes_KatamariDamacy.sceneGroup,
     Scenes_KingdomHearts.sceneGroup,

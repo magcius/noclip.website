@@ -1003,7 +1003,7 @@ class SceneSelect extends Panel {
                         visible = true;
 
                     // If name matches, then we are explicitly visible.
-                    if (!visible && matchRegExps(n, item.name))
+                    if (!visible && (matchRegExps(n, item.name) || (item.altName && matchRegExps(n, item.altName))))
                         visible = true;
 
                     if (item === this.selectedSceneGroup)
