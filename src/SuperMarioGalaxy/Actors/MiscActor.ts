@@ -1733,7 +1733,7 @@ export class WoodBox extends LiveActor {
         this.initHitSensor();
         const radius = 120.0 * this.scale[0];
         vec3.set(scratchVec3, 0, radius, 0);
-        addHitSensor(sceneObjHolder, this, 'body', HitSensorType.WoodBox, 8, radius, scratchVec3);
+        addHitSensor(sceneObjHolder, this, 'body', HitSensorType.PunchBox, 8, radius, scratchVec3);
         initCollisionParts(sceneObjHolder, this, 'WoodBox', this.getSensor('body')!);
 
         useStageSwitchSleep(sceneObjHolder, this, infoIter);

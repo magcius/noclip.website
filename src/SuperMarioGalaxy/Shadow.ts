@@ -939,6 +939,10 @@ class AlphaShadow extends NameObj {
         this.materialHelperDrawAlpha.allocatePacketParamsDataOnInst(renderInst, packetParams);
         renderInstManager.submitRenderInst(renderInst);
     }
+
+    public destroy(device: GfxDevice): void {
+        this.orthoQuad.destroy(device);
+    }
 }
 
 export class ShadowControllerHolder extends NameObj {
