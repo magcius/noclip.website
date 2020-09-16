@@ -9,29 +9,26 @@ import { arrayRemove } from "../util";
 import { transformVec3Mat4w1, transformVec3Mat4w0 } from "../MathHelpers";
 
 export const enum HitSensorType {
+    _Player_Start               = 0x00,
     Player                      = 0x01,
-    // ??? 0x02
-    // ??? 0x03
-    // ??? 0x04
+    Puppeteer                   = 0x02,
+    _Player_End                 = 0x03,
+    _Npc_Start                  = 0x04,
     Npc                         = 0x05,
-    // ??? 0x06
+    _Npc_End                    = 0x06,
     Animal                      = 0x07,
-    // ??? 0x08
-
-    _Ride_First                 = 0x09,
+    _Ride_Start                 = 0x08,
     Ride                        = 0x09,
-    Tamakoro                    = 0x0A,
-    TamakoroHit                 = 0x0B,
-    SlingShooterAttack          = 0x0C,
-    SlingShooterNPC             = 0x0E,
+    SpherePlayer                = 0x0A,
+    SpherePlayerHit             = 0x0B,
+    SpringAttacker              = 0x0C,
+    SpringAttackerKinopio       = 0x0D,
+    SpringAttackerKinopioBind   = 0x0E,
     JetTurtle                   = 0x0F,
-    // ??? 0x10
-    _Ride_Last                  = 0x11,
-
-    // ??? 0x12
-    // ??? 0x13
-
-    _Enemy_First                = 0x14,
+    JetTurtleSlow               = 0x10,
+    SpecialWeapon               = 0x11,
+    _Ride_End                   = 0x12,
+    _Enemy_Start                = 0x13,
     Enemy                       = 0x14,
     EnemySimple                 = 0x15,
     EnemyAttack                 = 0x16,
@@ -42,124 +39,111 @@ export const enum HitSensorType {
     Kuribo                      = 0x1B,
     Karikari                    = 0x1C,
     Begoman                     = 0x1D,
-    // Gesso, Jellyfish, Poihana = 0x1E,
-    // BegomanSpring, JumpBeamer, JumpBeamer = 0x1F, (bounce?)
+    KillerTargetEnemy           = 0x1E,
+    PlayerAutoJump              = 0x1F,
     MogucchiRefuseTerritory     = 0x20,
     BigBubble                   = 0x21,
-    // ??? 0x22
+    Nokonoko                    = 0x22,
     Pukupuku                    = 0x23,
     Unizo                       = 0x24,
-    CocoSamboHead               = 0x25,
-    CocoSambo                   = 0x26,
-    // ??? 0x27
-    // ??? 0x28
+    SamboHead                   = 0x25,
+    SamboBody                   = 0x26,
+    HomingFire                  = 0x27,
+    HomingFireShooter           = 0x28,
     HomingKiller                = 0x29,
     Rock                        = 0x2A,
     Wanwan                      = 0x2B,
-    TripodBossGuardWallPart     = 0x2C,
+    TripodBossGuardWall         = 0x2C,
     TripodBossKillerGenerater   = 0x2D,
     TombSpiderBody              = 0x2E,
     TombSpiderEye               = 0x2F,
     TombSpiderHip               = 0x30,
     TombSpiderMouth             = 0x31,
-    // ??? 0x32
-    TombSpiderFrontLGland       = 0x33,
+    TombSpiderAttacker          = 0x32,
+    TombSpiderGlandFrontL       = 0x33,
     TombSpiderFrontLAttacker    = 0x34,
-    TombSpiderFrontRGland       = 0x35,
+    TombSpiderGlandFrontR       = 0x35,
     TombSpiderFrontRAttacker    = 0x36,
-    TombSpiderRearLGland        = 0x37,
+    TombSpiderGlandRearL        = 0x37,
     TombSpiderRearLAttacker     = 0x38,
-    TombSpiderRearRGland        = 0x39,
+    TombSpiderGlandRearR        = 0x39,
     TombSpiderRearRAttacker     = 0x3A,
     TombSpiderVitalSpotC        = 0x3B,
     TombSpiderVitalSpotL        = 0x3C,
     TombSpiderVitalSpotR        = 0x3D,
     TombSpiderCocoon            = 0x3E,
-    // ??? 0x3F
-    // ??? 0x40
-    // KoopaHipDrop, KoopaSpin, Koopa DamageEscapePush = 0x41 (special Koopa damage?)
+    SandGolemBlock              = 0x3F,
+    SandGolem                   = 0x40,
+    KoopaAttack                 = 0x41,
     KoopaFireShort              = 0x42,
-    _Enemy_Last                 = 0x43,
-
-    // ??? 0x44
-    // ??? 0x45
-
-    _MapObj_First               = 0x46,
+    KoopaBall                   = 0x43,
+    _Enemy_End                  = 0x44,
+    _MapObj_Start               = 0x45,
     // isSensorItem() = 0x4A, 0x4B, 0x4D
     MapObj                      = 0x46,
     MapObjSimple                = 0x47,
     MapObjMoveCollision         = 0x48,
+    ClipFieldMapParts           = 0x49,
     Coin                        = 0x4A,
-    // ??? 0x4B
+    CoinRed                     = 0x4B,
     StarPiece                   = 0x4C,
-    BenefitItem                 = 0x4D,
-    // ??? 0x4E
-    // PTimerSwitch, PicketSwitch = 0x4F, (push switches?)
-    MorphItemNeo                = 0x50,
-    // ??? 0x51
-    // BreakableCage, TripodBossCore, TripodBossShell = 0x52, (Breakable map objects?)
-    // ??? 0x53
-    // TreasureBoxCracked, UFOBreakable = 0x54, (Breakable map objects?)
-    WoodBox                     = 0x55,
+    KinokoOneUp                 = 0x4D,
+    CoinThrow                   = 0x4E,
+    Switch                      = 0x4F,
+    MorphItem                   = 0x50,
+    GolfCup                     = 0x51,
+    BreakableCage               = 0x52,
+    BeeFlower                   = 0x53,
+    KillerTargetMapObj          = 0x54,
+    PunchBox                    = 0x55,
     WaterBazookaCapsule         = 0x56,
-    // ??? 0x57
-    // ??? 0x58
+    IceJumpWall                 = 0x57,
+    KeySwitchAvoid              = 0x58,
     KameckBarrier               = 0x59,
-    KoopaAttack                 = 0x5A,
+    KoopaPush                   = 0x5A,
     KoopaReceiver               = 0x5B,
     KoopaBattleMapDamagePlate   = 0x5C,
     KoopaBattleMapCoinPlate     = 0x5D,
     KoopaBattleMapPlate         = 0x5E,
-    _MapObj_Last                = 0x5E,
-
-    // ??? 0x5F
-
-    _AutoRush_First             = 0x61,
+    _MapObj_End                 = 0x5F,
+    _AutoRushObj_Start          = 0x60,
     Binder                      = 0x61,
     TransferableBinder          = 0x62,
     PriorBinder                 = 0x63,
-    SpinDriver                  = 0x64,
-    SuperSpinDriver             = 0x65,
-    TamakoroBind                = 0x66,
-    PowerStar                   = 0x67,
-    GCapture                    = 0x68,
-    // ??? 0x69
+    SpinDriverBind              = 0x64,
+    SpinCannonBind              = 0x65,
+    SpherePlayerBind            = 0x66,
+    PowerStarBind               = 0x67,
+    GCaptureBind                = 0x68,
+    SpringAttackerBind          = 0x69,
     WaterPressureBulletBinder   = 0x6A,
-    MarioLauncher               = 0x6B,
-    QuestionCoin                = 0x6C,
-    SecnarioStarter             = 0x6D,
-    _AutoRush_Last              = 0x6D,
-
-    // ??? 0x6E
-    // ??? 0x6F
-
-    _Rush_First                 = 0x70,
-    // ??? 0x70
-    // ??? 0x71
-    // ??? 0x72
-    HitWallTimerSwitch          = 0x73,
-    _Rush_Last                  = 0x73,
-
-    // ??? 0x74
-    // ??? 0x75
-
+    MarioLauncherBind           = 0x6B,
+    QuestionCoinBind            = 0x6C,
+    SecnarioStarterBind         = 0x6D,
+    _AutoRushObj_End            = 0x6E,
+    _RushObj_Start              = 0x6F,
+    RushEnemy                   = 0x70,
+    CocoNutBind                 = 0x71,
+    TurnipBind                  = 0x72,
+    SwitchBind                  = 0x73,
+    _RushObj_End                = 0x74,
+    _PressObj_Start             = 0x75,
     MapObjPress                 = 0x76,
-    // ??? 0x77
-    // ??? 0x78
-    // BallOpener, DragonHeadFlower, JumpHole = 0x79,
-    SphereRailDash              = 0x7A,
+    _PressObj_End               = 0x77,
+    _SphereMoverObj_Start       = 0x78,
+    JumpHole                    = 0x79,
+    SphereDash                  = 0x7A,
     BallRail                    = 0x7B,
-
-    // ??? 0x7C
-    // ??? 0x7D
-    // ??? 0x7E
-
+    _SphereMoverObj_End         = 0x7C,
+    _Special_Start              = 0x7D,
+    SystemSensor                = 0x7E,
     Eye                         = 0x7F,
     Push                        = 0x80,
-    // ??? 0x81
-    // ??? 0x82
+    Demo                        = 0x81,
+    SwitchMessenger             = 0x82,
     MessageSensorHolder         = 0x83,
     Receiver                    = 0x84,
+    _Special_End                = 0x85,
 }
 
 export class HitSensor {
@@ -431,32 +415,32 @@ export function isSensorPlayer(sensor: HitSensor): boolean {
     return sensor.isType(HitSensorType.Player);
 }
 
-export function isSensorNpc(sensor: HitSensor): boolean {
-    return sensor.isType(HitSensorType.Npc);
-}
-
 export function isSensorEye(sensor: HitSensor): boolean {
     return sensor.isType(HitSensorType.Eye);
 }
 
+export function isSensorNpc(sensor: HitSensor): boolean {
+    return sensor.sensorType > HitSensorType._Npc_Start && sensor.sensorType < HitSensorType._Npc_End;
+}
+
 export function isSensorRide(sensor: HitSensor): boolean {
-    return sensor.sensorType >= HitSensorType._Ride_First && sensor.sensorType <= HitSensorType._Ride_Last;
+    return sensor.sensorType > HitSensorType._Ride_Start && sensor.sensorType < HitSensorType._Ride_End;
 }
 
 export function isSensorEnemy(sensor: HitSensor): boolean {
-    return sensor.sensorType >= HitSensorType._Enemy_First && sensor.sensorType <= HitSensorType._Enemy_Last;
+    return sensor.sensorType > HitSensorType._Enemy_Start && sensor.sensorType < HitSensorType._Enemy_End;
 }
 
 export function isSensorMapObj(sensor: HitSensor): boolean {
-    return sensor.sensorType >= HitSensorType._MapObj_First && sensor.sensorType <= HitSensorType._MapObj_Last;
+    return sensor.sensorType > HitSensorType._MapObj_Start && sensor.sensorType < HitSensorType._MapObj_End;
 }
 
 export function isSensorAutoRush(sensor: HitSensor): boolean {
-    return sensor.sensorType >= HitSensorType._AutoRush_First && sensor.sensorType <= HitSensorType._AutoRush_Last;
+    return sensor.sensorType > HitSensorType._AutoRushObj_Start && sensor.sensorType < HitSensorType._AutoRushObj_End;
 }
 
 export function isSensorRush(sensor: HitSensor): boolean {
-    return sensor.sensorType >= HitSensorType._Rush_First && sensor.sensorType <= HitSensorType._Rush_Last;
+    return sensor.sensorType > HitSensorType._RushObj_Start && sensor.sensorType < HitSensorType._RushObj_End;
 }
 
 export function isSensorPlayerOrRide(sensor: HitSensor): boolean {
