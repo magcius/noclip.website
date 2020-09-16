@@ -884,7 +884,7 @@ export class ModelCache {
     public currentStage: string;
     public onloadedcallback: (() => void) | null = null;
 
-    constructor(public device: GfxDevice, private dataFetcher: DataFetcher, private yaz0Decompressor: Yaz0.Yaz0Decompressor) {
+    constructor(public device: GfxDevice, private dataFetcher: DataFetcher, private decompressor: RARC.JKRDecompressor) {
     }
 
     public waitForLoad(): Promise<any> {
@@ -928,9 +928,9 @@ export class ModelCache {
         } });
 
         if (readString(buffer, 0x00, 0x04) === 'Yaz0')
-            buffer = Yaz0.decompressSync(this.yaz0Decompressor, buffer);
+            buffer = this.decompressor.decompress(buffer, RARC.JKRCompressionType.Yaz0);
 
-        const rarc = RARC.parse(buffer, '', this.yaz0Decompressor);
+        const rarc = RARC.parse(buffer, '', this.decompressor);
         this.archiveCache.set(archivePath, rarc);
         return rarc;
     }
@@ -1062,7 +1062,7 @@ class SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const modelCache = await context.dataShare.ensureObject<ModelCache>(`${pathBase}/ModelCache`, async () => {
-            const yaz0Decompressor = await Yaz0.decompressor();
+            const yaz0Decompressor = await RARC.getJKRDecompressor();
             return new ModelCache(context.device, context.dataFetcher, yaz0Decompressor);
         });
 

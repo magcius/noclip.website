@@ -1,5 +1,5 @@
 
-export default class WasmMemoryManager {
+export class WasmMemoryManager {
     // WebAssembly pages are 64k.
     public PAGE_SIZE = 64 * 1024;
 

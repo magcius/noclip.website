@@ -53,7 +53,8 @@
     "typecheck": "tsc -w --noEmit"
   },
   "bin": {
-    "nc-bcsvtool": "./src/tools/bcsvtool.ts"
+    "nc-bcsvtool": "./src/tools/bcsvtool.ts",
+    "nc-rarctool": "./src/tools/rarctool.ts"
   },
   "browserslist": [
     "last 2 Chrome versions"

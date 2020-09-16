@@ -118,7 +118,7 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
 }
 
 function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buffer: ArrayBufferSlice): void {
-    if (readString(buffer, 0, 4) === 'RARC') {
+    if (['RARC', 'CRAR'].includes(readString(buffer, 0x00, 0x04))) {
         const rarc = RARC.parse(buffer);
         renderer.rarc.push(rarc);
 

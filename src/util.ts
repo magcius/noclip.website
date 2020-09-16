@@ -1,6 +1,5 @@
 
 import ArrayBufferSlice from './ArrayBufferSlice';
-import { IS_DEVELOPMENT } from './BuildVersion';
 
 export function assert(b: boolean, message: string = ""): asserts b {
     if (!b) {
