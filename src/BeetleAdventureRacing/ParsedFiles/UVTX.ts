@@ -198,7 +198,6 @@ export class UVTX {
         const unk10 = view.getUint8(curPos + 18);
         const unk11 = view.getUint8(curPos + 19);
         const unk12 = view.getUint32(curPos + 20);
-        //TODO: this is used to set BLEND alpha
         this.blendAlpha = view.getUint8(curPos + 24);
         this.levelCount = view.getUint8(curPos + 25);
         curPos += 26;
@@ -224,8 +223,6 @@ export class UVTX {
             this.seqAnim = null;
         }
 
-        // TODO: for some reason BAR makes 4 copies of each palette... why?
-
         // then read palettes if there are any to read
         // TODO: this.unkByte1 is not just a bool - what is it
         const palettesData: ArrayBufferSlice[] = [];
@@ -237,11 +234,6 @@ export class UVTX {
                 curPos += 32;
             }
         }
-
-        // TODO: load second texture if necessary,
-        // and include it in the fake command execution.
-
-        
 
         // Now that we have read the full file data, let's turn it into something
         // we can use in noclip

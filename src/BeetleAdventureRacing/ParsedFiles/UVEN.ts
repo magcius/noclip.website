@@ -50,7 +50,19 @@ export class UVEN {
             // & 0x08 - something to do with a matrix gen?
             // & 0x10 - disables ENABLE_TEXTURE_GEN?
 
-            this.uvmds.push(filesystem.getOrLoadFile(UVMD, "UVMD", uvmdIndex));
+            let uvmd = filesystem.getOrLoadFile(UVMD, "UVMD", uvmdIndex);
+
+            // TODO: check that this actually has an effect on anything (also that it's implemented correctly)
+            for(let part of uvmd.lods[0].modelParts) {
+                for(let material of part.materials) { 
+                    if(unkByte & 0x01)
+                        material.renderOptions &= 0xffdfffff;
+                    if(unkByte & 0x10)
+                        material.renderOptions &= 0xffbfffff;
+                }
+            }
+
+            this.uvmds.push(uvmd);
 
             curPos += 3;
         }

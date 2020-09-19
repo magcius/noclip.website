@@ -84,9 +84,9 @@ class BARRenderer implements SceneGfx {
             }
         }
 
-        // TODO: we use purple as a default just so i know when it's not loading; in the future switch to something else
-        this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(1, 0, 1));
-        if (uven !== null) {
+        if (uven === null) {
+            this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(1, 0, 1));
+        } else {
             this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
         }
     }
@@ -130,11 +130,13 @@ class BARRenderer implements SceneGfx {
         topTemplate.setBindingLayouts(bindingLayouts);
         const renderInstManager = this.renderHelper.renderInstManager;
 
+
+
+        this.uvtrRenderer.prepareToRender(device, renderInstManager, viewerInput);
+
         // Render
         if(this.uvenRenderer !== null)
             this.uvenRenderer.prepareToRender(device, renderInstManager, viewerInput);
-
-        this.uvtrRenderer.prepareToRender(device, renderInstManager, viewerInput);
 
         // Final setup
         this.renderHelper.renderInstManager.popTemplateRenderInst();       
@@ -179,6 +181,7 @@ class BARSceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        // TODO maybe this and RendererStore should be global variables instead of passing them around everywhere?
         const filesystem = await context.dataShare.ensureObject<Filesystem>(`${pathBase}/FilesystemData`, async () => {
             return await loadFilesystem(context.dataFetcher, device);
         });

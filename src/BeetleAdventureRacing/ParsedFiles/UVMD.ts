@@ -156,8 +156,10 @@ export class UVMDRenderer {
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput,
         placementMatrix: mat4) {
-
         const lod0 = this.uvmd.lods[0];
+
+        // TODO: I think lod0.b2 -> model is always rotated towards the camera
+
         for(let part of lod0.modelParts) {
             // TODO: bad
             let index = lod0.modelParts.indexOf(part);

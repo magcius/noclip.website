@@ -1,6 +1,6 @@
 import * as RDP from '../Common/N64/RDP';
 
-//TODO: verify these 
+
 let colorA = [
     "COMBINED",
     "TEXEL0",
@@ -82,6 +82,7 @@ function ccString(a: string, b: string, c: string, d: string) {
     return `(${a} - ${b}) * ${c} + ${d}`;
 }
 
+//TODO: replace this with the version in RDP.ts
 export function humanReadableCombineParams(combineParams: RDP.CombineParams) {
     let c0 = ccString(
         colorA[combineParams.c0.a],

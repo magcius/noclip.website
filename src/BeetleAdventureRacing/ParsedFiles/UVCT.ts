@@ -100,7 +100,6 @@ export class UVCT {
             const unk_uvmd_2 = view.getUint16(curPos + 18);
             const unk_uvmd_3 = view.getUint16(curPos + 20);
 
-
             curPos += 22;
 
             let uvmd = filesystem.getOrLoadFile(UVMD, "UVMD", modelIndex);
