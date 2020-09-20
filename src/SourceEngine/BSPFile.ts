@@ -148,7 +148,9 @@ export interface BSPLeaf {
 }
 
 export function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: vec3): void {
-    assert(leaf.bbox.containsPoint(pos));
+    // XXX(jstpierre): This breaks on d2_coast_01, where there's a prop located outside
+    // the leaf it's in due to floating point rounding error.
+    // assert(leaf.bbox.containsPoint(pos));
 
     if (leaf.ambientLightSamples.length === 0) {
         // TODO(jstpierre): Figure out what to do in this scenario
@@ -1178,7 +1180,7 @@ export class BSPFile {
 
                 // Padding.
                 idx += 0x02;
-        }
+            }
 
             const surfaceset = new Set<number>();
             for (let i = firstleafface; i < firstleafface + numleaffaces; i++) {
