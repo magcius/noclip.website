@@ -1396,7 +1396,7 @@ void main() {
     public queryLimits(): GfxDeviceLimits {
         const gl = this.gl;
         return {
-            uniformBufferWordAlignment: 256 / 4,
+            uniformBufferWordAlignment: gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) / 4,
             uniformBufferMaxPageWordSize: this._uniformBufferMaxPageByteSize / 4,
         };
     }
