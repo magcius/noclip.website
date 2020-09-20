@@ -3,7 +3,7 @@ import { vec3 } from "gl-matrix";
 import { Stream, Stream_read_Vector3, Stream_read_Array_int, Stream_read_Color, Stream_read_Quaternion, Stream_read_Vector2, Stream_read_Array_float } from "./Stream";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, fallbackUndefined } from "../util";
-import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate } from "./Entity";
+import { Entity, Portable, Lightmap_Table, Entity_Pattern_Point, Entity_Inanimate, Entity_Power_Cable } from "./Entity";
 
 function get_truth_value(portable: Portable, item: Metadata_Item): boolean {
     const v: any = portable[item.name];
@@ -216,6 +216,7 @@ function unpack_portable_data(stream: Stream, portable: Portable, items: Metadat
 
 function unpack_single_portable(stream: Stream, portable_type: Portable_Type, portable_id: number, revision_number: number): Portable {
     const portable: Portable = portable_type.construct_new_obj(portable_id, revision_number);
+    (portable as any).type_name = portable_type.constructor.name;
     unpack_portable_data(stream, portable, portable_type.metadata.items);
     return portable;
 }
@@ -1717,6 +1718,10 @@ class Entity_Type_Power_Cable extends Portable_Type {
         m.add_integer("user_data", { minimum_revision_number: 0x5c, flags: Metadata_Item_Flags.DO_NOT_ADD_TO_SAVEGAMES });
 
         m.postprocess();
+    }
+
+    public construct_new_obj(portable_id: number, revision_number: number): Entity {
+        return new Entity_Power_Cable(portable_id, revision_number);
     }
 }
 

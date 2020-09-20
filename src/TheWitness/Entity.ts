@@ -1,5 +1,6 @@
 
 import { vec3, quat } from "gl-matrix";
+import { colorNewCopy, Magenta } from "../Color";
 
 export class Entity_Manager {
     public entity_list: Entity[] = [];
@@ -26,6 +27,9 @@ export class Lightmap_Table {
 }
 
 export class Entity implements Portable {
+    public visible = true;
+    public debug_color = colorNewCopy(Magenta);
+
     public entity_manager: Entity_Manager;
 
     public position: vec3;
@@ -60,6 +64,11 @@ export class Entity_Inanimate extends Entity {
 }
 
 export class Entity_Pattern_Point extends Entity {
+}
+
+export class Entity_Power_Cable extends Entity {
+    public transport_create_hook(): void {
+    }
 }
 
 export function register_entities(manager: Entity_Manager, entities: Entity[]): void {

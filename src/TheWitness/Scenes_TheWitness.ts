@@ -114,9 +114,9 @@ class TheWitnessRenderer implements SceneGfx {
 
         mat4.mul(scratchMatrix, viewerInput.camera.clipFromWorldMatrix, noclipSpaceFromTheWitnessSpace);
         for (let i = 0; i < this.entities.length; i++) {
-            // if (!(this.entities[i] instanceof Entity_Pattern_Point))
-            //     continue;
-            drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.entities[i].position);
+            if (!this.entities[i].visible)
+                continue;
+            drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.entities[i].position, this.entities[i].debug_color);
         }
 
         return mainPassRenderer;
