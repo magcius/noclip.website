@@ -336,6 +336,8 @@ export class Rosetta extends NPCActor {
                     this.waitActionName = 'WaitA';
                 else if (v === 1)
                     this.waitActionName = 'WaitB';
+
+                this.setNerve(RosettaNrv.Wait);
             }
 
             this.exeWaitDefault(sceneObjHolder, deltaTimeFrames);
