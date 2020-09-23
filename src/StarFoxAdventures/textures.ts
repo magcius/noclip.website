@@ -7,6 +7,7 @@ import { DataFetcher } from '../DataFetcher';
 
 import { GameInfo } from './scenes';
 import { loadRes } from './resource';
+import { readUint32 } from './util';
 
 export interface SFATexture {
     gfxTexture: GfxTexture;
@@ -99,7 +100,7 @@ function loadFirstValidTexture(device: GfxDevice, tab: DataView, bin: ArrayBuffe
 }
 
 function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayBufferSlice, id: number, isBeta: boolean): (SFATextureArray | null) {
-    const tabValue = tab.getUint32(id * 4);
+    const tabValue = readUint32(tab, 0, id);
     if (isValidTextureTabValue(tabValue)) {
         const arrayLength = (tabValue >> 24) & 0x3f;
         const binOffs = (tabValue & 0xffffff) * 2;
@@ -111,7 +112,7 @@ function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayB
             const result = { textures: [] as SFATexture[] };
             const binDv = bin.createDataView();
             for (let i = 0; i < arrayLength; i++) {
-                const texOffs = binDv.getUint32(binOffs + i * 4);
+                const texOffs = readUint32(binDv, binOffs, i);
                 const compData = bin.slice(binOffs + texOffs);
                 const uncompData = loadRes(compData);
                 result.textures.push(loadTexture(device, uncompData, isBeta));
@@ -192,7 +193,7 @@ class TextureFile {
             return false;
         }
 
-        const tabValue = this.tab.getUint32(num * 4);
+        const tabValue = readUint32(this.tab, 0, num);
         return isValidTextureTabValue(tabValue);
     }
 

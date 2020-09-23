@@ -1141,7 +1141,7 @@ function calcTexIdx(workData: JPAEmitterWorkData, tick: number, time: number, ra
 
     let anmIdx: number;
     if (bsp1.texCalcIdxType === CalcIdxType.Normal) {
-        anmIdx = Math.min(texIdxAnimData.length - 1, tick);
+        anmIdx = Math.min(texIdxAnimData.length - 1, tick | 0);
     } else if (bsp1.texCalcIdxType === CalcIdxType.Repeat) {
         anmIdx = ((tick | 0) + randomPhase) % texIdxAnimData.length;
     } else if (bsp1.texCalcIdxType === CalcIdxType.Reverse) {

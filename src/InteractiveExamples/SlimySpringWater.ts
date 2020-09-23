@@ -1,5 +1,5 @@
 
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 
 import { SceneGfx, ViewerRenderInput } from '../viewer';
 
@@ -346,15 +346,9 @@ export class SlimySpringWaterDesc implements SceneDesc {
 
             // Append a fake joint for the grass. This is disgusting.
             const transform = new JointTransformInfo();
-            transform.scaleX = 1.0;
-            transform.scaleY = 0.2;
-            transform.scaleZ = 1.0;
-            transform.rotationX = 0.0;
-            transform.rotationY = 0.0;
-            transform.rotationZ = 0.0;
-            transform.translationX = 0.0;
-            transform.translationY = 238.0;
-            transform.translationZ = 0.0;
+            vec3.set(transform.scale, 1.0, 0.2, 1.0);
+            vec3.set(transform.rotation, 0.0, 0.0, 0.0);
+            vec3.set(transform.translation, 0.0, 238.0, 0.0);
             bmd.jnt1.joints.push({ name: 'yikes', calcFlags: 0, transform, bbox: new AABB(), boundingSphereRadius: 1000 });
             bmd.drw1.matrixDefinitions.push({ kind: DRW1MatrixKind.Joint, jointIndex: 1 });
             bmd.shp1.shapes[4].mtxGroups[0].useMtxTable[0] = 1;

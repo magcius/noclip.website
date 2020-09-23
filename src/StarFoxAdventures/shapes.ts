@@ -15,6 +15,7 @@ import { SFAAnimationController } from './animation';
 import { SFAMaterial } from './materials';
 import { ModelRenderContext } from './models';
 import { computeModelView, ViewState } from './util';
+import { Viewer } from '../viewer';
 
 
 class MyShapeHelper {
@@ -100,11 +101,8 @@ class MyShapeHelper {
     }
 }
 
-interface ShapeConfig {
-    matrix: mat4;
-    boneMatrices: mat4[];
-    camera: Camera;
-}
+const scratchMtx0 = mat4.create();
+const scratchMtx1 = mat4.create();
 
 // The vertices and polygons of a shape.
 export class ShapeGeometry {
@@ -113,7 +111,6 @@ export class ShapeGeometry {
 
     private shapeHelper: MyShapeHelper | null = null;
     private packetParams = new PacketParams();
-    private scratchMtx = mat4.create();
     private verticesDirty = true;
 
     public pnMatrixMap: number[] = nArray(10, () => 0);
@@ -139,12 +136,9 @@ export class ShapeGeometry {
         this.hasFineSkinning = hasFineSkinning;
     }
 
-    private computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
-        computeViewMatrix(dst, camera);
-        mat4.mul(dst, dst, modelMatrix);
-    }
-
-    public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, config: ShapeConfig) {
+    public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
+        matrix: mat4, matrixPalette: mat4[], camera: Camera)
+    {
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
                 this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic, false);
@@ -158,17 +152,17 @@ export class ShapeGeometry {
 
         this.packetParams.clear();
 
+        const viewMtx = scratchMtx0;
+        computeViewMatrix(viewMtx, camera);
+        const modelViewMtx = scratchMtx1;
+        mat4.mul(modelViewMtx, viewMtx, matrix);
+
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
             // PNMTX 9 is used for fine-skinned vertices in models with fine-skinning enabled.
-            if (this.hasFineSkinning && i === 9) {
-                mat4.identity(this.scratchMtx);
-            } else {
-                mat4.copy(this.scratchMtx, config.boneMatrices[this.pnMatrixMap[i]]);
-            }
-
-            mat4.mul(this.scratchMtx, config.matrix, this.scratchMtx);
-
-            this.computeModelView(this.packetParams.u_PosMtx[i], config.camera, this.scratchMtx);
+            if (this.hasFineSkinning && i === 9)
+                mat4.copy(this.packetParams.u_PosMtx[i], modelViewMtx);
+            else
+                mat4.mul(this.packetParams.u_PosMtx[i], modelViewMtx, matrixPalette[this.pnMatrixMap[i]]);
         }
 
         material.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
@@ -176,7 +170,7 @@ export class ShapeGeometry {
 }
 
 export interface ShapeMaterial {
-    setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) => void;
+    setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext) => void;
     allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void;
 }
 
@@ -188,10 +182,6 @@ export class CommonShapeMaterial implements ShapeMaterial {
     private furLayer: number = 0;
     private overrideIndMtx: (mat4 | undefined)[] = [];
     private viewState: ViewState | undefined;
-    private scratchMtx = mat4.create();
-
-    public constructor(private animController: SFAAnimationController) {
-    }
 
     // Caution: Material is referenced, not copied.
     public setMaterial(material: SFAMaterial) {
@@ -222,12 +212,12 @@ export class CommonShapeMaterial implements ShapeMaterial {
         }
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext) {
         this.updateMaterialHelper();
         
         if (this.viewState === undefined) {
             this.viewState = {
-                sceneCtx: modelCtx,
+                sceneCtx: modelCtx.sceneCtx,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
                 outdoorAmbientColor: colorNewFromRGBA(1.0, 1.0, 1.0, 1.0),
@@ -235,11 +225,11 @@ export class CommonShapeMaterial implements ShapeMaterial {
             };
         }
 
-        this.viewState.outdoorAmbientColor = this.material.factory.getAmbientColor(modelCtx.ambienceNum);
+        this.viewState.sceneCtx = modelCtx.sceneCtx;
+        this.material.factory.getAmbientColor(this.viewState.outdoorAmbientColor, modelCtx.ambienceNum);
+        this.viewState.furLayer = this.furLayer;
 
-        // mat4.mul(this.scratchMtx, boneMatrices[this.geom.pnMatrixMap[0]], modelMatrix);
-        mat4.copy(this.scratchMtx, modelMatrix);
-        computeModelView(this.viewState.modelViewMtx, modelCtx.viewerInput.camera, this.scratchMtx);
+        computeModelView(this.viewState.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
         mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
 
         for (let i = 0; i < 8; i++) {
@@ -283,19 +273,14 @@ export class Shape {
         this.geom.reloadVertices();
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
-        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, {
-            matrix: modelMatrix,
-            boneMatrices: boneMatrices,
-            camera: modelCtx.viewerInput.camera,
-        });
-
-        this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, boneMatrices);
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, matrixPalette: mat4[]) {
+        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera);
+        this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, modelCtx: ModelRenderContext, boneMatrices: mat4[]) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, modelCtx: ModelRenderContext, matrixPalette: mat4[]) {
         const renderInst = renderInstManager.newRenderInst();
-        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, boneMatrices);
+        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matrixPalette);
         renderInstManager.submitRenderInst(renderInst);
     }
 }

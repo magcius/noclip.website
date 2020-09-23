@@ -10,10 +10,10 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { BasicRenderTarget, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, NormalizedViewportCoords, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
@@ -26,11 +26,11 @@ import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, T
 import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
-import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj } from './NameObj';
+import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
 import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './Actors/MiscActor';
-import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry, GameBits } from './NameObjFactory';
+import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { BckCtrl } from './Animation';
@@ -47,7 +47,7 @@ import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
-import { ShadowControllerHolder, ShadowControllerList } from './Shadow';
+import { ShadowControllerHolder } from './Shadow';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -152,8 +152,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         for (let i = 0; i < this.spawner.zones.length; i++) {
             const zoneNode = this.spawner.zones[i];
-            if (zoneNode === undefined)
-                continue;
             zoneNode.layerMask = assertExists(scenarioData.getValueNumber(zoneNode.name));
         }
 
@@ -283,7 +281,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.sceneObjHolder.drawSyncManager.beginFrame(device, this.mainRenderTarget.depthStencilAttachment);
 
         executor.executeMovement(this.sceneObjHolder, viewerInput);
-        executor.executeCalcAnim(this.sceneObjHolder, viewerInput);
+        executor.executeCalcAnim(this.sceneObjHolder);
 
         // Prepare our two scene params buffers.
         const sceneParamsOffs3D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
@@ -393,6 +391,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
 
         // executeDrawSilhouetteAndFillShadow() / executeDrawAlphaShadow()
+
+        // Resolve the alpha buffer to a texture to use for shadows.
+        device.submitPass(passRenderer);
+        passRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
         this.execute(passRenderer, DrawType.AlphaShadow);
 
         // execute(0x39);
@@ -452,7 +454,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // executeDrawListXlu()
         this.drawXlu(passRenderer, 0x18);
 
-        // execute(0x26);
+        this.execute(passRenderer, DrawType.ShadowSurface);
         this.execute(passRenderer, DrawType.EffectDraw3D);
         this.execute(passRenderer, DrawType.EffectDrawForBloomEffect);
         // execute(0x2f);
@@ -655,12 +657,23 @@ function patchBMD(bmd: BMD): void {
                 shape.loadedVertexLayout.singleVertexInputLayouts.push({ attrInput: VertexAttributeInput.TEX4567MTXIDX, format: GfxFormat.U8_RGBA_NORM, bufferIndex: 1, bufferOffset: 4 });
         }
     }
+
+    // Patch in GXSetDstAlpha. This is normally done in the main loop, but we hack it in here...
+    // This should only be done on opaque objects.
+    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
+        const mat = bmd.mat3.materialEntries[i];
+        if (mat.translucent || mat.gxMaterial.ropInfo.blendMode !== GX.BlendMode.NONE)
+            continue;
+
+        mat.gxMaterial.ropInfo.alphaUpdate = true;
+        mat.gxMaterial.ropInfo.dstAlpha = 0.0;
+    }
 }
 
 const scratchMatrix = mat4.create();
 
 // This is roughly ShapePacketUserData::callDL().
-function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: NormalizedViewportCoords, packetParams: PacketParams): void {
+function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
     const material = materialInstance.materialData.material;
     let hasAnyEnvMap = false;
 
@@ -801,7 +814,7 @@ class TextureListHolder {
     public addTextures(textures: Viewer.Texture[]): void {
         let changed = false;
         for (let i = 0; i < textures.length; i++) {
-            if (!this.viewerTextures.includes(textures[i])) {
+            if (this.viewerTextures.find((texture) => textures[i].name === texture.name) === undefined) {
                 spliceBisectRight(this.viewerTextures, textures[i], (a, b) => a.name.localeCompare(b.name));
                 changed = true;
             }
@@ -1033,14 +1046,13 @@ export class SceneObjHolder {
     // Noclip-specific stuff.
     public specialTextureBinder: SpecialTextureBinder;
     public renderParams = new RenderParams();
+    public viewerInput: Viewer.ViewerRenderInput;
+    public uiContainer: HTMLElement;
 
     // This is technically stored outside the SceneObjHolder, separately
     // on the same singleton, but c'est la vie...
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
-
-    public viewerInput: Viewer.ViewerRenderInput;
-    public uiContainer: HTMLElement;
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
@@ -1201,25 +1213,19 @@ class SMGSpawner {
     public zones: ZoneNode[] = [];
 
     private legacySpawner: NoclipLegacyActorSpawner;
-    private gameBit: GameBits;
 
     constructor(private sceneObjHolder: SceneObjHolder) {
         this.legacySpawner = new NoclipLegacyActorSpawner(this.sceneObjHolder);
-
-        if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy')
-            this.gameBit = GameBits.SMG1;
-        else if (this.sceneObjHolder.sceneDesc.pathBase === 'SuperMarioGalaxy2')
-            this.gameBit = GameBits.SMG2;
-        else
-            throw "whoops";
     }
 
     private getActorTableEntry(objName: string): NameObjFactoryTableEntry | null {
-        const actorTableEntry = getNameObjFactoryTableEntry(objName, this.gameBit);
+        const gameBit = this.sceneObjHolder.sceneDesc.gameBit;
+
+        const actorTableEntry = getNameObjFactoryTableEntry(objName, gameBit);
         if (actorTableEntry !== null)
             return actorTableEntry;
 
-        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName, this.gameBit);
+        const planetTableEntry = this.sceneObjHolder.planetMapCreator.getActorTableEntry(objName, gameBit);
         if (planetTableEntry !== null)
             return planetTableEntry;
 
@@ -1550,6 +1556,7 @@ class MessageDataHolder {
 export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public id: string;
     public pathBase: string;
+    public gameBit: GameBits;
 
     constructor(public name: string, public galaxyName: string, public scenarioOverride: number | null = null, id: string | null = null) {
         if (id !== null) {
@@ -1597,6 +1604,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.sceneDesc = this;
         sceneObjHolder.modelCache = modelCache;
         sceneObjHolder.uiContainer = context.uiContainer;
+        // TODO(jstpierre): This is ugly.
+        sceneObjHolder.viewerInput = window.main.viewer.viewerRenderInput;
         sceneObjHolder.specialTextureBinder = new SpecialTextureBinder(device, renderHelper.getCache());
         sceneObjHolder.requestArchives();
         context.destroyablePool.push(sceneObjHolder);

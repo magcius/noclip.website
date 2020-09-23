@@ -118,7 +118,7 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
 }
 
 function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buffer: ArrayBufferSlice): void {
-    if (readString(buffer, 0, 4) === 'RARC') {
+    if (['RARC', 'CRAR'].includes(readString(buffer, 0x00, 0x04))) {
         const rarc = RARC.parse(buffer);
         renderer.rarc.push(rarc);
 
@@ -144,6 +144,7 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
                 if (basename.includes('_sky'))
                     modelInstance.isSkybox = true;
                 renderer.addModelInstance(modelInstance);
+                renderer.textureHolder.addTextures(device, modelInstance.modelMaterialData.tex1Data!.tex1.textureDatas);
             } else if (file.name.endsWith('.bti')) {
                 const texture = readBTI_Texture(file.buffer, file.name);
                 renderer.textureHolder.addTextures(device, [texture]);
@@ -156,6 +157,7 @@ function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buff
         const bmdModel = new J3DModelData(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmd);
         const modelInstance = new J3DModelInstanceSimple(bmdModel);
         renderer.addModelInstance(modelInstance);
+        renderer.textureHolder.addTextures(device, modelInstance.modelMaterialData.tex1Data!.tex1.textureDatas);
     }
 }
 

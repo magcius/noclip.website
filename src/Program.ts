@@ -1,33 +1,8 @@
 
 import CodeEditor from "./CodeEditor";
 import { assertExists } from "./util";
-import { GfxVendorInfo, GfxProgramDescriptorSimple, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform";
 import { preprocessShader_GLSL } from "./gfx/shaderc/GfxShaderCompiler";
-
-type DefineMap = Map<string, string>;
-
-function definesEqual(a: DefineMap, b: DefineMap): boolean {
-    if (a.size !== b.size)
-        return false;
-
-    for (const [k, v] of a.entries())
-        if (b.get(k) !== v)
-            return false;
-
-    return true;
-}
-
-export function deviceProgramEqual(a: DeviceProgram, b: DeviceProgram): boolean {
-    if (a.both !== b.both)
-        return false;
-    if (a.vert !== b.vert)
-        return false;
-    if (a.frag !== b.frag)
-        return false;
-    if (!definesEqual(a.defines, b.defines))
-        return false;
-    return true;
-}
 
 export class DeviceProgram {
     public name: string = '(unnamed)';
@@ -63,11 +38,9 @@ export class DeviceProgram {
     }
 
     private _gfxDevice: GfxDevice | null = null;
-    private _gfxDescriptor: GfxProgramDescriptorSimple | null = null;
     private _gfxProgram: GfxProgram | null = null;
-    public associate(device: GfxDevice, descriptor: GfxProgramDescriptorSimple, program: GfxProgram): void {
+    public associate(device: GfxDevice, program: GfxProgram): void {
         this._gfxDevice = device;
-        this._gfxDescriptor = descriptor;
         this._gfxProgram = program;
     }
 
@@ -88,12 +61,10 @@ export class DeviceProgram {
                 timeout = 0;
                 this[n] = editor.getValue();
 
-                if (this._gfxDevice !== null && this._gfxDescriptor !== null && this._gfxProgram !== null) {
+                if (this._gfxDevice !== null && this._gfxProgram !== null) {
                     this.preprocessedVert = '';
                     this.ensurePreprocessed(this._gfxDevice.queryVendorInfo());
-                    this._gfxDescriptor.preprocessedVert = this.preprocessedVert;
-                    this._gfxDescriptor.preprocessedFrag = this.preprocessedFrag;
-                    this._gfxDevice.programPatched(this._gfxProgram);
+                    this._gfxDevice.programPatched(this._gfxProgram, this);
                 }
             };
 

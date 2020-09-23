@@ -9,6 +9,9 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController } from '../Camera';
 import { linkREL } from './REL';
 import { evt_disasm_ctx } from './evt';
+import * as AnimGroup from './AnimGroup';
+import { computeModelMatrixS } from '../MathHelpers';
+import { mat4 } from 'gl-matrix';
 
 const pathBase = `PaperMarioTTYD`;
 
@@ -41,7 +44,7 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             const mapFile = await dataFetcher.fetchData(`${pathBase}/G8ME01.map`, { allow404: true });
 
             const scriptExec = new evt_disasm_ctx(rel, this.relBaseAddress!, this.relEntry!, mapFile);
-            scriptExec.disasm();
+            // scriptExec.disasm();
         }
 
         const d = World.parse(dBuffer);
@@ -66,7 +69,47 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             textureHolder.setTextureOverride('tou_k_dummy', { width: 1, height: 1, flipY: false, gfxTexture });
         }
 
-        return new TTYDRenderer(device, d, textureHolder, backgroundTextureName);
+        const renderer = new TTYDRenderer(device, d, textureHolder, backgroundTextureName);
+        renderer.animGroupCache = new AnimGroup.AnimGroupDataCache(device, dataFetcher, pathBase);
+
+        /*
+        const agd1 = await renderer.animGroupCache!.requestAnimGroupData('c_bomt');
+        const agi1 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd1);
+        computeModelMatrixS(agi1.modelMatrix, 100);
+        mat4.translate(agi1.modelMatrix, agi1.modelMatrix, [-20, 0, 0]);
+        renderer.animGroupInstances.push(agi1);
+
+        const agd2 = await renderer.animGroupCache!.requestAnimGroupData('c_bomt_n');
+        const agi2 = new AnimGroup.AnimGroupInstance(device, renderer.renderHelper.getCache(), agd2);
+        computeModelMatrixS(agi2.modelMatrix, 100);
+        renderer.animGroupInstances.push(agi2);
+
+        const label = document.createElement('div');
+        label.style.font = '32pt monospace';
+        label.style.position = 'absolute';
+        label.style.bottom = '48px';
+        label.style.right = '16px';
+        label.style.color = 'white';
+        label.style.textShadow = '0px 0px 4px black';
+        label.textContent = '(none)';
+        context.uiContainer.appendChild(label);
+
+        let i = 0;
+        setInterval(() => {
+            let a = agd1.animGroup.anims[i++];
+            if (a === undefined) {
+                label.textContent = '(done)';
+                return;
+            }
+            while (agd2.animGroup.anims.find((g) => g.name === a.name.slice(4)) === undefined)
+                a = agd1.animGroup.anims[i++];
+            agi1.playAnimation(a.name);
+            agi2.playAnimation(a.name.slice(4));
+            label.textContent = a.name;
+        }, 2000);
+        */
+
+        return renderer;
     }
 }
 

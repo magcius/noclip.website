@@ -193,7 +193,7 @@ export class GfxRenderInst {
     private _bindingDescriptors: GfxBindingsDescriptor[] = nArray(1, () => ({ bindingLayout: null!, samplerBindings: [], uniformBufferBindings: [] }));
     private _dynamicUniformBufferByteOffsets: number[] = nArray(4, () => 0);
 
-    public _flags: number = 0;
+    public _flags: GfxRenderInstFlags = 0;
     private _lateSamplerBindings: string[] = [];
     private _inputState: GfxInputState | null = null;
     private _drawStart: number = 0;
@@ -453,8 +453,9 @@ export class GfxRenderInst {
                     dst.gfxTexture = null;
                     dst.gfxSampler = null;
                 } else {
-                    dst.gfxTexture = binding!.gfxTexture;
-                    dst.gfxSampler = binding!.gfxSampler;
+                    dst.gfxTexture = binding.gfxTexture;
+                    dst.gfxSampler = binding.gfxSampler;
+                    assert(binding.lateBinding === null);
                 }
             }
         }
@@ -768,6 +769,8 @@ export class GfxRenderInstManager {
         this.instPool.reset();
         if (this.simpleRenderInstList !== null)
             this.simpleRenderInstList.reset();
+        // Ensure we aren't leaking templates.
+        assert(this.templatePool.allocCount === 0);
     }
 
     public destroy(device: GfxDevice): void {

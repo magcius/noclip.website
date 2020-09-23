@@ -5,9 +5,9 @@ import { mat4, vec3, quat, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 
 // Basic scalar constants.
 export const enum MathConstants {
-    DEG_TO_RAD = 0.01745, // Math.PI / 180,
-    RAD_TO_DEG = 57.2947, // 180 / Math.PI,
-    TAU = 6.283, // Math.PI * 2
+    DEG_TO_RAD = 0.017453292519943295, // Math.PI / 180,
+    RAD_TO_DEG = 57.29577951308232, // 180 / Math.PI,
+    TAU = 6.283185307179586, // Math.PI * 2
     EPSILON = 0.000001,
 }
 
@@ -45,37 +45,6 @@ export function computeModelMatrixSRT(dst: mat4, scaleX: number, scaleY: number,
 
     dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ);
     dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ);
-    dst[10] = scaleZ * (cosY * cosX);
-    dst[11] = 0.0;
-
-    dst[12] = translationX;
-    dst[13] = translationY;
-    dst[14] = translationZ;
-    dst[15] = 1.0;
-}
-
-/**
- * Computes a model matrix {@param dst} from given SRT parameters. Rotation is assumed
- * to be in radians. This is similar to {@link computeModelMatrixSRT}, except it also
- * has support for Maya's Segment Scale Compensation (SSC).
- */
-export function computeModelMatrixSRT_MayaSSC(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rotationX: number, rotationY: number, rotationZ: number, translationX: number, translationY: number, translationZ: number, parentScaleX: number, parentScaleY: number, parentScaleZ: number): void {
-    const sinX = Math.sin(rotationX), cosX = Math.cos(rotationX);
-    const sinY = Math.sin(rotationY), cosY = Math.cos(rotationY);
-    const sinZ = Math.sin(rotationZ), cosZ = Math.cos(rotationZ);
-
-    dst[0] =  scaleX * (cosY * cosZ);
-    dst[1] =  scaleX * (sinZ * cosY)                      * (parentScaleX / parentScaleY);
-    dst[2] =  scaleX * (-sinY)                            * (parentScaleX / parentScaleZ);
-    dst[3] =  0.0;
-
-    dst[4] =  scaleY * (sinX * cosZ * sinY - cosX * sinZ) * (parentScaleY / parentScaleX);
-    dst[5] =  scaleY * (sinX * sinZ * sinY + cosX * cosZ);
-    dst[6] =  scaleY * (sinX * cosY)                      * (parentScaleY / parentScaleZ);
-    dst[7] =  0.0;
-
-    dst[8] =  scaleZ * (cosX * cosZ * sinY + sinX * sinZ) * (parentScaleZ / parentScaleX);
-    dst[9] =  scaleZ * (cosX * sinZ * sinY - sinX * cosZ) * (parentScaleZ / parentScaleY);
     dst[10] = scaleZ * (cosY * cosX);
     dst[11] = 0.0;
 
@@ -350,13 +319,6 @@ export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: num
     dst[15] = 9999.0;
 }
 
-export function computeTranslationMatrixFromSRTMatrix(dst: mat4, m: mat4): void {
-    mat4.identity(dst);
-    dst[12] = m[12];
-    dst[13] = m[13];
-    dst[14] = m[14];
-}
-
 export function computeRotationMatrixFromSRTMatrix(dst: mat4, m: mat4): void {
     const mx = 1 / Math.hypot(m[0], m[4], m[8]);
     const my = 1 / Math.hypot(m[1], m[5], m[9]);
@@ -375,7 +337,7 @@ export function computeRotationMatrixFromSRTMatrix(dst: mat4, m: mat4): void {
     dst[14] = 0;
 }
 
-export function computeMatrixWithoutTranslation(dst: mat4, m: mat4): void {
+export function computeMatrixWithoutTranslation(dst: mat4, m: ReadonlyMat4): void {
     mat4.copy(dst, m);
     dst[12] = 0;
     dst[13] = 0;
@@ -534,7 +496,7 @@ export function isNearZero(v: number, min: number): boolean {
     return v > -min && v < min;
 }
 
-export function isNearZeroVec3(v: vec3, min: number): boolean {
+export function isNearZeroVec3(v: ReadonlyVec3, min: number): boolean {
     return (
         v[0] > -min && v[0] < min &&
         v[1] > -min && v[1] < min &&
@@ -609,6 +571,11 @@ const asUint32 = new Uint32Array(baseBuffer);
 export function bitsAsFloat32(x: number): number {
     asUint32[0] = (x >>> 0) & 0xFFFFFFFF;
     return asFloat32[0];
+}
+
+export function float32AsBits(x: number): number {
+    asFloat32[0] = x;
+    return asUint32[0];
 }
 
 /**

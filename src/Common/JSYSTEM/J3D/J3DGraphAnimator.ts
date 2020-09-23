@@ -257,7 +257,8 @@ export function removeTexMtxAnimator(modelInstance: J3DModelInstance, ttk1: TTK1
 }
 
 export class J3DTexNoAnm {
-    constructor(private frameCtrl: J3DFrameCtrl, private animationEntry: TPT1AnimationEntry) {}
+    constructor(private frameCtrl: J3DFrameCtrl, private animationEntry: TPT1AnimationEntry) {
+    }
 
     public set(frameCtrl: J3DFrameCtrl, animationEntry: TPT1AnimationEntry): void {
         this.frameCtrl = frameCtrl;
@@ -314,9 +315,9 @@ export function calcJointMatrixMayaSSC(dst: mat4, parentScale: ReadonlyVec3): vo
 
 export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransformInfo, loadFlags: J3DLoadFlags, jnt1: Joint, shapeInstanceState: ShapeInstanceState): void {
     computeModelMatrixSRT(dst,
-        transform.scaleX, transform.scaleY, transform.scaleZ,
-        transform.rotationX, transform.rotationY, transform.rotationZ,
-        transform.translationX, transform.translationY, transform.translationZ);
+        transform.scale[0], transform.scale[1], transform.scale[2],
+        transform.rotation[0], transform.rotation[1], transform.rotation[2],
+        transform.translation[0], transform.translation[1], transform.translation[2]);
 
     const matrixCalcFlag = (loadFlags & J3DLoadFlags.ScalingRule_Mask);
     if (matrixCalcFlag === J3DLoadFlags.ScalingRule_Maya && !!(jnt1.calcFlags & 0x01))
@@ -324,15 +325,17 @@ export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransfor
 }
 
 export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number): void {
-    dst.scaleX = sampleAnimationData(entry.scaleX, animFrame);
-    dst.scaleY = sampleAnimationData(entry.scaleY, animFrame);
-    dst.scaleZ = sampleAnimationData(entry.scaleZ, animFrame);
-    dst.rotationX = sampleAnimationData(entry.rotationX, animFrame) * Math.PI;
-    dst.rotationY = sampleAnimationData(entry.rotationY, animFrame) * Math.PI;
-    dst.rotationZ = sampleAnimationData(entry.rotationZ, animFrame) * Math.PI;
-    dst.translationX = sampleAnimationData(entry.translationX, animFrame);
-    dst.translationY = sampleAnimationData(entry.translationY, animFrame);
-    dst.translationZ = sampleAnimationData(entry.translationZ, animFrame);
+    dst.scale[0] = sampleAnimationData(entry.scaleX, animFrame);
+    dst.scale[1] = sampleAnimationData(entry.scaleY, animFrame);
+    dst.scale[2] = sampleAnimationData(entry.scaleZ, animFrame);
+    // Use whole frames only for rotation -- this prevents bad tangents from getting in here that were never
+    // intended to be seen, especially at the looping edges of animations.
+    dst.rotation[0] = sampleAnimationData(entry.rotationX, (animFrame | 0));
+    dst.rotation[1] = sampleAnimationData(entry.rotationY, (animFrame | 0));
+    dst.rotation[2] = sampleAnimationData(entry.rotationZ, (animFrame | 0));
+    dst.translation[0] = sampleAnimationData(entry.translationX, animFrame);
+    dst.translation[1] = sampleAnimationData(entry.translationY, animFrame);
+    dst.translation[2] = sampleAnimationData(entry.translationZ, animFrame);
 }
 
 export class J3DJointMatrixAnm {
@@ -358,7 +361,7 @@ export class J3DJointMatrixAnm {
         const loadFlags = modelData.bmd.inf1.loadFlags;
         calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
 
-        vec3.set(shapeInstanceState.parentScale, transform.scaleX, transform.scaleY, transform.scaleZ);
+        vec3.copy(shapeInstanceState.parentScale, transform.scale);
     }
 }
 

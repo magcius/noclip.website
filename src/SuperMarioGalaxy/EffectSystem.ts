@@ -16,6 +16,7 @@ import { TextureMapping } from '../TextureHolder';
 import { XanimePlayer } from './Animation';
 import { getJointMtxByName } from './ActorUtil';
 import { Texture } from '../viewer';
+import { Binder, Triangle, getFloorCodeIndex, FloorCode } from './Collision';
 
 export class ParticleResourceHolder {
     private effectNameToIndex = new Map<string, number>();
@@ -461,6 +462,13 @@ export class MultiEmitter {
         return false;
     }
 
+    public isExistOneTimeEmitter(): boolean {
+        for (let i = 0; i < this.singleEmitters.length; i++)
+            if (this.singleEmitters[i].isOneTime())
+                return true;
+        return false;
+    }
+
     public createEmitter(effectSystem: EffectSystem): void {
         for (let i = 0; i < this.singleEmitters.length; i++)
             effectSystem.createSingleEmitter(this.singleEmitters[i], this.emitterCallBack);
@@ -675,12 +683,31 @@ function isDelete(multiEmitter: MultiEmitter, currentBckName: string | null, xan
     return false;
 }
 
+function getEffectAttributeName(floorCode: FloorCode): string {
+    if (floorCode === FloorCode.Ice)
+        return 'Ice';
+    else if (floorCode === FloorCode.DamageFire)
+        return 'DamageFire';
+    else if (floorCode === FloorCode.Sand || floorCode === FloorCode.NoStampSand)
+        return 'Sand';
+    else if (floorCode === FloorCode.WaterBottomH || floorCode === FloorCode.WaterBottomM || floorCode === FloorCode.WaterBottomL || floorCode === FloorCode.Wet)
+        return 'Water';
+    else if (floorCode === FloorCode.SinkDeathMud || floorCode === FloorCode.Brake)
+        return 'Mud';
+    else
+        return 'Default';
+}
+
 export class EffectKeeper {
     public multiEmitters: MultiEmitter[] = [];
     public changeBckReset: boolean = false;
     private currentBckName: string | null = null;
     private visibleScenario: boolean = true;
     private visibleDrawParticle: boolean = true;
+    private hasAttributeEffect: boolean = false;
+    private binder: Binder | null = null;
+    private oldFloorCode: FloorCode = -1;
+    private floorCode: FloorCode = -1;
 
     constructor(sceneObjHolder: SceneObjHolder, public actor: LiveActor, public groupName: string) {
         registerAutoEffectInGroup(sceneObjHolder, this, this.groupName);
@@ -718,7 +745,23 @@ export class EffectKeeper {
         this.multiEmitters.push(m);
     }
 
+    private isTypeAttributeEffect(name: string): boolean {
+        name = `${name}Attr`;
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            if (this.multiEmitters[i].name.includes(name))
+                return true;
+        return false;
+    }
+
     public getEmitter(name: string): MultiEmitter | null {
+        if (this.hasAttributeEffect && !name.includes('Attr') && this.isTypeAttributeEffect(name)) {
+            const nameFloor = `${name}Attr${getEffectAttributeName(this.floorCode)}`;
+            if (this.isRegisteredEmitter(nameFloor))
+                name = nameFloor;
+            else
+                name = `${name}AttrDefault`;
+        }
+
         for (let i = 0; i < this.multiEmitters.length; i++)
             if (this.multiEmitters[i].name === name)
                 return this.multiEmitters[i];
@@ -791,7 +834,7 @@ export class EffectKeeper {
         multiEmitter.bckName = this.currentBckName;
     }
 
-    public updateSyncBckEffect(effectSystem: EffectSystem, deltaTimeFrames: number): void {
+    private updateSyncBckEffect(effectSystem: EffectSystem, deltaTimeFrames: number): void {
         if (this.actor.modelManager === null || this.actor.modelManager.xanimePlayer === null)
             return;
 
@@ -810,6 +853,45 @@ export class EffectKeeper {
         this.changeBckReset = false;
     }
 
+    private updateAttributeEffect(sceneObjHolder: SceneObjHolder): void {
+        if (!this.hasAttributeEffect)
+            return;
+
+        if (this.oldFloorCode !== this.floorCode) {
+            for (let i = 0; i < this.multiEmitters.length; i++) {
+                const multiEmitter = this.multiEmitters[i];
+                if (multiEmitter.isValid() && !multiEmitter.isExistOneTimeEmitter()) {
+                    multiEmitter.deleteForeverEmitter();
+                    const emitterBaseName = multiEmitter.name.slice(0, multiEmitter.name.indexOf('Attr'));
+                    this.createEmitter(sceneObjHolder, emitterBaseName);
+                    break;
+                }
+            }
+        }
+
+        this.updateFloorCode(sceneObjHolder);
+    }
+
+    private updateFloorCodeTriangle(sceneObjHolder: SceneObjHolder, triangle: Triangle): void {
+        this.oldFloorCode = this.floorCode;
+        this.floorCode = getFloorCodeIndex(sceneObjHolder, triangle);
+    }
+
+    private updateFloorCode(sceneObjHolder: SceneObjHolder): void {
+        if (this.binder === null)
+            return;
+
+        if (this.binder.floorHitInfo.distance < 0.0 && this.binder.wallHitInfo.distance < 0.0 && this.binder.ceilingHitInfo.distance < 0.0)
+            return;
+
+        this.updateFloorCodeTriangle(sceneObjHolder, this.binder.floorHitInfo);
+    }
+
+    public update(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
+        this.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
+        this.updateAttributeEffect(sceneObjHolder);
+    }
+
     private syncVisibility(): void {
         for (let i = 0; i < this.multiEmitters.length; i++)
             this.multiEmitters[i].setDrawParticle(this.visibleScenario && this.visibleDrawParticle);
@@ -823,6 +905,20 @@ export class EffectKeeper {
     public setDrawParticle(v: boolean): void {
         this.visibleDrawParticle = v;
         this.syncVisibility();
+    }
+
+    private checkExistenceAttributeEffect(): void {
+        for (let i = 0; i < this.multiEmitters.length; i++) {
+            if (this.multiEmitters[i].name.includes('Attr')) {
+                this.hasAttributeEffect = true;
+                return;
+            }
+        }
+    }
+
+    public setBinder(binder: Binder): void {
+        this.binder = binder;
+        this.checkExistenceAttributeEffect();
     }
 }
 

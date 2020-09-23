@@ -55,6 +55,9 @@ export class GfxRenderDynamicUniformBuffer {
             newBuffer.set(this.shadowBufferU8, 0);
             this.shadowBufferU8 = newBuffer;
             this.shadowBufferF32 = new Float32Array(this.shadowBufferU8.buffer);
+
+            if (!(this.currentWordOffset <= newWordCount))
+                throw new Error(`Assert fail: this.currentWordOffset [${this.currentWordOffset}] <= newWordCount [${newWordCount}]`);
         }
     }
 
@@ -88,8 +91,11 @@ export class GfxRenderDynamicUniformBuffer {
         }
 
         const wordCount = alignNonPowerOfTwo(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
+        if (!(wordCount <= this.currentBufferWordSize))
+            throw new Error(`Assert fail: wordCount [${wordCount}] <= this.currentBufferWordSize [${this.currentBufferWordSize}]`);
+
         const gfxBuffer = assertExists(this.gfxBuffer);
-        hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount);
+        hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount * 4);
 
         // Reset the offset for next frame.
         // TODO(jstpierre): Should this be a separate step?

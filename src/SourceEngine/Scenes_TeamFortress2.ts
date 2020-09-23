@@ -32,11 +32,11 @@ class GarrysModSceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext) {
         const pathBase2 = `GarrysMod`;
 
-        const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
+        const filesystem = await context.dataShare.ensureObject(`${pathBase2}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             await filesystem.createVPKMount(`${pathBase2}/garrysmod`);
-            await filesystem.createVPKMount(`${pathBase}/hl2_textures`);
-            await filesystem.createVPKMount(`${pathBase}/hl2_misc`);
+            await filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`);
+            await filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`);
             return filesystem;
         });
 

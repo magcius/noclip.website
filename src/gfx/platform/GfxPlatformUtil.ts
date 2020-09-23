@@ -21,34 +21,34 @@ function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
     return true;
 }
 
-export function gfxSamplerBindingCopy(a: GfxSamplerBinding): GfxSamplerBinding {
+export function gfxSamplerBindingCopy(a: Readonly<GfxSamplerBinding>): GfxSamplerBinding {
     const gfxSampler = a.gfxSampler;
     const gfxTexture = a.gfxTexture;
     const lateBinding = a.lateBinding;
     return { gfxSampler, gfxTexture, lateBinding };
 }
 
-export function gfxBufferBindingCopy(a: GfxBufferBinding): GfxBufferBinding {
+export function gfxBufferBindingCopy(a: Readonly<GfxBufferBinding>): GfxBufferBinding {
     const buffer = a.buffer;
     const wordOffset = a.wordOffset;
     const wordCount = a.wordCount;
     return { buffer, wordOffset, wordCount };
 }
 
-export function gfxBindingsDescriptorCopy(a: GfxBindingsDescriptor): GfxBindingsDescriptor {
+export function gfxBindingsDescriptorCopy(a: Readonly<GfxBindingsDescriptor>): GfxBindingsDescriptor {
     const bindingLayout = a.bindingLayout;
     const samplerBindings = arrayCopy(a.samplerBindings, gfxSamplerBindingCopy);
     const uniformBufferBindings = arrayCopy(a.uniformBufferBindings, gfxBufferBindingCopy);
     return { bindingLayout, samplerBindings, uniformBufferBindings };
 }
 
-export function gfxBindingLayoutDescriptorCopy(a: GfxBindingLayoutDescriptor): GfxBindingLayoutDescriptor {
+export function gfxBindingLayoutDescriptorCopy(a: Readonly<GfxBindingLayoutDescriptor>): GfxBindingLayoutDescriptor {
     const numSamplers = a.numSamplers;
     const numUniformBuffers = a.numUniformBuffers;
     return { numSamplers, numUniformBuffers };
 }
 
-export function gfxRenderPipelineDescriptorCopy(a: GfxRenderPipelineDescriptor): GfxRenderPipelineDescriptor {
+export function gfxRenderPipelineDescriptorCopy(a: Readonly<GfxRenderPipelineDescriptor>): GfxRenderPipelineDescriptor {
     const bindingLayouts = arrayCopy(a.bindingLayouts, gfxBindingLayoutDescriptorCopy);
     const inputLayout = a.inputLayout;
     const program = a.program;
@@ -58,7 +58,7 @@ export function gfxRenderPipelineDescriptorCopy(a: GfxRenderPipelineDescriptor):
     return { bindingLayouts, inputLayout, megaStateDescriptor, program, topology, sampleCount };
 }
 
-export function gfxVertexAttributeDescriptorCopy(a: GfxVertexAttributeDescriptor): GfxVertexAttributeDescriptor {
+export function gfxVertexAttributeDescriptorCopy(a: Readonly<GfxVertexAttributeDescriptor>): GfxVertexAttributeDescriptor {
     const location = a.location;
     const format = a.format;
     const bufferIndex = a.bufferIndex;
@@ -66,7 +66,7 @@ export function gfxVertexAttributeDescriptorCopy(a: GfxVertexAttributeDescriptor
     return { location, format, bufferIndex, bufferByteOffset };
 }
 
-export function gfxInputLayoutBufferDescriptorCopy(a: GfxInputLayoutBufferDescriptor | null): GfxInputLayoutBufferDescriptor | null {
+export function gfxInputLayoutBufferDescriptorCopy(a: Readonly<GfxInputLayoutBufferDescriptor | null>): GfxInputLayoutBufferDescriptor | null {
     if (a !== null) {
         const byteStride = a.byteStride;
         const frequency = a.frequency;
@@ -76,24 +76,24 @@ export function gfxInputLayoutBufferDescriptorCopy(a: GfxInputLayoutBufferDescri
     }
 }
 
-export function gfxInputLayoutDescriptorCopy(a: GfxInputLayoutDescriptor): GfxInputLayoutDescriptor {
+export function gfxInputLayoutDescriptorCopy(a: Readonly<GfxInputLayoutDescriptor>): GfxInputLayoutDescriptor {
     const vertexAttributeDescriptors = arrayCopy(a.vertexAttributeDescriptors, gfxVertexAttributeDescriptorCopy);
     const vertexBufferDescriptors = arrayCopy(a.vertexBufferDescriptors, gfxInputLayoutBufferDescriptorCopy);
     const indexBufferFormat = a.indexBufferFormat;
     return { vertexAttributeDescriptors, vertexBufferDescriptors, indexBufferFormat };
 }
 
-function gfxBufferBindingEquals(a: GfxBufferBinding, b: GfxBufferBinding): boolean {
+function gfxBufferBindingEquals(a: Readonly<GfxBufferBinding>, b: Readonly<GfxBufferBinding>): boolean {
     return a.buffer === b.buffer && a.wordCount === b.wordCount && a.wordOffset === b.wordOffset;
 }
 
-function gfxSamplerBindingEquals(a: GfxSamplerBinding | null, b: GfxSamplerBinding | null): boolean {
+function gfxSamplerBindingEquals(a: Readonly<GfxSamplerBinding | null>, b: Readonly<GfxSamplerBinding | null>): boolean {
     if (a === null) return b === null;
     if (b === null) return false;
     return a.gfxSampler === b.gfxSampler && a.gfxTexture === b.gfxTexture;
 }
 
-export function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBindingsDescriptor): boolean {
+export function gfxBindingsDescriptorEquals(a: Readonly<GfxBindingsDescriptor>, b: Readonly<GfxBindingsDescriptor>): boolean {
     if (a.samplerBindings.length !== b.samplerBindings.length) return false;
     if (!arrayEqual(a.samplerBindings, b.samplerBindings, gfxSamplerBindingEquals)) return false;
     if (!arrayEqual(a.uniformBufferBindings, b.uniformBufferBindings, gfxBufferBindingEquals)) return false;
@@ -101,11 +101,11 @@ export function gfxBindingsDescriptorEquals(a: GfxBindingsDescriptor, b: GfxBind
     return true;
 }
 
-function gfxChannelBlendStateEquals(a: GfxChannelBlendState, b: GfxChannelBlendState): boolean {
+function gfxChannelBlendStateEquals(a: Readonly<GfxChannelBlendState>, b: Readonly<GfxChannelBlendState>): boolean {
     return a.blendMode == b.blendMode && a.blendSrcFactor === b.blendSrcFactor && a.blendDstFactor === b.blendDstFactor;
 }
 
-function gfxAttachmentsStateEquals(a: GfxAttachmentState, b: GfxAttachmentState): boolean {
+function gfxAttachmentStateEquals(a: Readonly<GfxAttachmentState>, b: Readonly<GfxAttachmentState>): boolean {
     if (!gfxChannelBlendStateEquals(a.rgbBlendState, b.rgbBlendState)) return false;
     if (!gfxChannelBlendStateEquals(a.alphaBlendState, b.alphaBlendState)) return false;
     if (a.colorWriteMask !== b.colorWriteMask) return false;
@@ -113,7 +113,7 @@ function gfxAttachmentsStateEquals(a: GfxAttachmentState, b: GfxAttachmentState)
 }
 
 function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaStateDescriptor): boolean {
-    if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentsStateEquals))
+    if (!arrayEqual(a.attachmentsState, b.attachmentsState, gfxAttachmentStateEquals))
         return false;
     if (!gfxColorEqual(a.blendConstant, b.blendConstant))
         return false;
@@ -130,15 +130,15 @@ function gfxMegaStateDescriptorEquals(a: GfxMegaStateDescriptor, b: GfxMegaState
     );
 }
 
-function gfxBindingLayoutEquals(a: GfxBindingLayoutDescriptor, b: GfxBindingLayoutDescriptor): boolean {
+function gfxBindingLayoutEquals(a: Readonly<GfxBindingLayoutDescriptor>, b: Readonly<GfxBindingLayoutDescriptor>): boolean {
     return a.numSamplers === b.numSamplers && a.numUniformBuffers === b.numUniformBuffers;
 }
 
-function gfxProgramEquals(a: GfxProgram, b: GfxProgram): boolean {
+function gfxProgramEquals(a: Readonly<GfxProgram>, b: Readonly<GfxProgram>): boolean {
     return a.ResourceUniqueId === b.ResourceUniqueId;
 }
 
-export function gfxRenderPipelineDescriptorEquals(a: GfxRenderPipelineDescriptor, b: GfxRenderPipelineDescriptor): boolean {
+export function gfxRenderPipelineDescriptorEquals(a: Readonly<GfxRenderPipelineDescriptor>, b: Readonly<GfxRenderPipelineDescriptor>): boolean {
     if (a.topology !== b.topology) return false;
     if (a.inputLayout !== b.inputLayout) return false;
     if (a.sampleCount !== b.sampleCount) return false;
@@ -148,7 +148,7 @@ export function gfxRenderPipelineDescriptorEquals(a: GfxRenderPipelineDescriptor
     return true;
 }
 
-export function gfxVertexAttributeDescriptorEquals(a: GfxVertexAttributeDescriptor, b: GfxVertexAttributeDescriptor): boolean {
+export function gfxVertexAttributeDescriptorEquals(a: Readonly<GfxVertexAttributeDescriptor>, b: Readonly<GfxVertexAttributeDescriptor>): boolean {
     return (
         a.bufferIndex === b.bufferIndex &&
         a.bufferByteOffset === b.bufferByteOffset &&
@@ -157,7 +157,7 @@ export function gfxVertexAttributeDescriptorEquals(a: GfxVertexAttributeDescript
     );
 }
 
-export function gfxInputLayoutBufferDescriptorEquals(a: GfxInputLayoutBufferDescriptor | null, b: GfxInputLayoutBufferDescriptor | null): boolean {
+export function gfxInputLayoutBufferDescriptorEquals(a: Readonly<GfxInputLayoutBufferDescriptor | null>, b: Readonly<GfxInputLayoutBufferDescriptor | null>): boolean {
     if (a === null) return b === null;
     if (b === null) return false;
     return (
@@ -166,14 +166,14 @@ export function gfxInputLayoutBufferDescriptorEquals(a: GfxInputLayoutBufferDesc
     );
 }
 
-export function gfxInputLayoutDescriptorEquals(a: GfxInputLayoutDescriptor, b: GfxInputLayoutDescriptor): boolean {
+export function gfxInputLayoutDescriptorEquals(a: Readonly<GfxInputLayoutDescriptor>, b: Readonly<GfxInputLayoutDescriptor>): boolean {
     if (a.indexBufferFormat !== b.indexBufferFormat) return false;
     if (!arrayEqual(a.vertexBufferDescriptors, b.vertexBufferDescriptors, gfxInputLayoutBufferDescriptorEquals)) return false;
     if (!arrayEqual(a.vertexAttributeDescriptors, b.vertexAttributeDescriptors, gfxVertexAttributeDescriptorEquals)) return false;
     return true;
 }
 
-export function gfxSamplerDescriptorEquals(a: GfxSamplerDescriptor, b: GfxSamplerDescriptor): boolean {
+export function gfxSamplerDescriptorEquals(a: Readonly<GfxSamplerDescriptor>, b: Readonly<GfxSamplerDescriptor>): boolean {
     return (
         a.wrapS === b.wrapS &&
         a.wrapT === b.wrapT &&
@@ -183,6 +183,17 @@ export function gfxSamplerDescriptorEquals(a: GfxSamplerDescriptor, b: GfxSample
         a.minLOD === b.minLOD &&
         a.maxLOD === b.maxLOD
     );
+}
+
+export function gfxColorEqual(c0: Readonly<GfxColor>, c1: Readonly<GfxColor>): boolean {
+    return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
+}
+
+export function gfxColorCopy(dst: GfxColor, src: Readonly<GfxColor>): void {
+    dst.r = src.r;
+    dst.g = src.g;
+    dst.b = src.b;
+    dst.a = src.a;
 }
 
 // Copied from toplevel util.ts
@@ -199,14 +210,6 @@ export function assertExists<T>(v: T | null | undefined): T {
         return v;
     else
         throw new Error("Missing object");
-}
-
-export function gfxColorEqual(c0: GfxColor, c1: GfxColor): boolean {
-    return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
-}
-
-export function gfxColorCopy(c0: GfxColor, c1: GfxColor): boolean {
-    return c0.r === c1.r && c0.g === c1.g && c0.b === c1.b && c0.a === c1.a;
 }
 
 export function range(start: number, count: number): number[] {

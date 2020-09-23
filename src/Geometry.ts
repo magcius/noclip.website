@@ -87,10 +87,10 @@ export class AABB {
     public set(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): void {
         this.minX = minX;
         this.minY = minY;
-        this.minX = minZ;
+        this.minZ = minZ;
         this.maxX = maxX;
         this.maxY = maxY;
-        this.maxX = maxZ;
+        this.maxZ = maxZ;
     }
 
     public reset(): void {
@@ -224,6 +224,13 @@ export class AABB {
         const extZ = (this.maxZ - this.minZ);
         const chord = Math.hypot(extX, extY, extZ);
         return chord / 2;
+    }
+
+    public maxCornerRadius(): number {
+        const x = Math.max(this.maxX, -this.minX);
+        const y = Math.max(this.maxY, -this.minY);
+        const z = Math.max(this.maxZ, -this.minZ);
+        return Math.sqrt(x*x + y*y + z*z);
     }
 
     public isEmpty(): boolean {

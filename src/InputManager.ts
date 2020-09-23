@@ -57,6 +57,7 @@ export default class InputManager {
     public buttons: number = 0;
     public ondraggingmodechanged: (() => void) | null = null;
     private scrollListeners: Listener[] = [];
+    private keyTriggerListeners = new Map<string, Listener[]>();
     private usePointerLock: boolean = true;
     public isInteractive: boolean = true;
 
@@ -165,6 +166,13 @@ export default class InputManager {
         return this.getDraggingMode() !== DraggingMode.None;
     }
 
+    public registerKeyTrigger(key: string, func: Listener): void {
+        if (!this.keyTriggerListeners.has(key))
+            this.keyTriggerListeners.set(key, []);
+
+        this.keyTriggerListeners.get(key)!.push(func);
+    }
+
     public afterFrame() {
         this.dx = 0;
         this.dy = 0;
@@ -175,6 +183,13 @@ export default class InputManager {
 
         // Go through and mark all keys as non-event-triggered.
         this.keysDown.forEach((v, k) => {
+            if (v) {
+                const triggers = this.keyTriggerListeners.get(k);
+                if (triggers)
+                    for (let i = 0; i < triggers.length; i++)
+                        triggers[i](this);
+            }
+
             this.keysDown.set(k, false);
         });
     }

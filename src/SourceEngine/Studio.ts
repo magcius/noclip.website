@@ -9,11 +9,9 @@ import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, LightCache } from "./Materials";
+import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode } from "./Materials";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4 } from "gl-matrix";
-import { AmbientCube } from "./BSPFile";
-import { getMatrixTranslation } from "../MathHelpers";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -821,7 +819,7 @@ export class HardwareVertData {
 }
 
 export class StudioModelCache {
-    private modelData = new Map<string, StudioModelData>();
+    private modelData: StudioModelData[] = [];
     private modelDataPromiseCache = new Map<string, Promise<StudioModelData>>();
 
     constructor(private renderContext: SourceRenderContext, private filesystem: SourceFileSystem) {
@@ -844,7 +842,9 @@ export class StudioModelCache {
             this.filesystem.fetchFileData(vvdPath),
             this.filesystem.fetchFileData(vtxPath),
         ]);
-        return new StudioModelData(this.renderContext, mdlBuffer!, vvdBuffer!, vtxBuffer!);
+        const modelData = new StudioModelData(this.renderContext, mdlBuffer!, vvdBuffer!, vtxBuffer!);
+        this.modelData.push(modelData);
+        return modelData;
     }
 
     public fetchStudioModelData(path: string): Promise<StudioModelData> {
@@ -854,8 +854,8 @@ export class StudioModelCache {
     }
 
     public destroy(device: GfxDevice): void {
-        for (const vtf of this.modelData.values())
-            vtf.destroy(device);
+        for (let i = 0; i < this.modelData.length; i++)
+            this.modelData[i].destroy(device);
     }
 }
 

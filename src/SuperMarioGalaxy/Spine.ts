@@ -1,5 +1,7 @@
 
 import { lerp } from "../MathHelpers";
+import { SceneObjHolder } from "./Main";
+import { assert } from "../util";
 
 interface SpineHost {
     spine: Spine | null;
@@ -39,6 +41,12 @@ export class Spine<Nerve extends number = number> {
     private nextNerve: Nerve | null = null;
     private tick: number = 0;
 
+    public initNerve(nerve: Nerve): void {
+        assert(this.currentNerve === undefined);
+        this.currentNerve = nerve;
+        this.tick = 0;
+    }
+
     public setNerve(nerve: Nerve): void {
         this.nextNerve = nerve;
         this.tick = -1;
@@ -56,13 +64,13 @@ export class Spine<Nerve extends number = number> {
         }
     }
 
-    public updateTick(deltaTime: number): void {
-        if (this.tick === 0.0 && deltaTime < 0.01) {
+    public updateTick(deltaTimeFrames: number): void {
+        if (this.tick === 0.0 && deltaTimeFrames < 0.01) {
             // If we have paused on a isFirstStep, increment the counter just
             // a bit so we don't get stuck in a loop.
             this.tick = 0.01;
         } else {
-            this.tick += deltaTime;
+            this.tick += deltaTimeFrames;
         }
     }
 
@@ -70,5 +78,35 @@ export class Spine<Nerve extends number = number> {
         if (this.nextNerve !== null)
             return this.nextNerve;
         return this.currentNerve;
+    }
+}
+
+// Basic SpineHost
+export abstract class NerveExecutor<Nerve extends number> implements SpineHost {
+    public spine = new Spine<Nerve>();
+
+    public initNerve(nerve: Nerve): void {
+        this.spine.initNerve(nerve);
+    }
+
+    public isNerve(nerve: Nerve): boolean {
+        return this.spine.getCurrentNerve() === nerve;
+    }
+
+    public getNerveStep(): number {
+        return this.spine.getNerveStep();
+    }
+
+    public setNerve(nerve: Nerve): void {
+        this.spine.setNerve(nerve);
+    }
+
+    protected abstract updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: Nerve, deltaTimeFrames: number): void;
+
+    protected updateNerveExecutor(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
+        this.spine.changeNerve();
+        this.updateSpine(sceneObjHolder, this.spine.getCurrentNerve(), deltaTimeFrames);
+        this.spine.updateTick(deltaTimeFrames);
+        this.spine.changeNerve();
     }
 }

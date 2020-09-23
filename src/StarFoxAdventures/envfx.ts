@@ -1,10 +1,10 @@
 import { vec3 } from 'gl-matrix';
 import { DataFetcher } from '../DataFetcher';
-import { Color, colorNewFromRGBA, colorToCSS, colorCopy, colorNewCopy } from '../Color';
+import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, colorFromRGBA } from '../Color';
 import { nArray } from '../util';
 
 import { SFATexture } from './textures';
-import { dataSubarray } from './util';
+import { dataSubarray, readUint16 } from './util';
 import { ObjectInstance } from './objects';
 import { World } from './world';
 
@@ -48,15 +48,15 @@ export class EnvfxManager {
         this.timeOfDay = time;
     }
 
-    public getAmbientColor(ambienceNum: number): Color {
+    public getAmbientColor(out: Color, ambienceNum: number) {
         if (this.overrideOutdoorAmbient !== null) {
-            return this.overrideOutdoorAmbient;
+            colorCopy(out, this.overrideOutdoorAmbient);
         } else {
             if (ambienceNum === 0) {
-                return this.atmosphere.outdoorAmbientColors[this.timeOfDay];
+                colorCopy(out, this.atmosphere.outdoorAmbientColors[this.timeOfDay]);
             } else {
                 // TODO
-                return colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
+                colorFromRGBA(out, 1.0, 1.0, 1.0, 1.0);
             }
         }
     }
@@ -85,10 +85,10 @@ export class EnvfxManager {
 
             const texIds: number[] = [];
             for (let i = 0; i < 4; i++) {
-                texIds.push(data.getUint16(0x2e + i * 2));
+                texIds.push(readUint16(data, 0x2e, i));
             }
             for (let i = 0; i < 4; i++) {
-                texIds.push(data.getUint16(0x3e + i * 2));
+                texIds.push(readUint16(data, 0x3e, i));
             }
 
             this.atmosphere.textures = [];

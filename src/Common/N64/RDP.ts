@@ -124,6 +124,119 @@ export function combineParamsUsesT1(cp: CombineParams) {
         alphaCombinePassUsesT1(cp.a0) || alphaCombinePassUsesT1(cp.a1);
 }
 
+// Some debug methods to find code that uses interesting properties of the color combiner
+export function combineParamsUseTexelsInSecondCycle(comb: CombineParams): boolean {
+    for(let param of [comb.a1.a, comb.a1.b, comb.a1.c, comb.a1.d, comb.c1.a, comb.c1.b, comb.c1.c, comb.c1.d]) {
+        // note that I'm using the CCMUX enum even though we're comparing against color and alpha
+        // (b/c in this case CCMUX.TEXEL0 == ACMUX.TEXEL0 and same for TEXEL1)
+        // same principle applies to other methods
+        if(param === CCMUX.TEXEL0 || param === CCMUX.TEXEL1)
+            return true;
+    }
+    return comb.c1.c === CCMUX.TEXEL0_A || comb.c1.c === CCMUX.TEXEL1_A;
+}
+
+export function combineParamsUseCombinedInFirstCycle(comb: CombineParams): boolean {
+    // Note: alpha C does not have a COMBINED option.
+    for(let param of [comb.a0.a, comb.a0.b, comb.a0.d, comb.c0.a, comb.c0.b, comb.c0.c, comb.c0.d]) {
+        if(param === CCMUX.COMBINED)
+            return true;
+    }
+    return comb.c0.c === CCMUX.COMBINED_A;
+}
+
+export function combineParamsUseT1InFirstCycle(comb: CombineParams): boolean {
+    for(let param of [comb.a0.a, comb.a0.b, comb.a0.c, comb.a0.d, comb.c0.a, comb.c0.b, comb.c0.c, comb.c0.d]) {
+        if(param === CCMUX.TEXEL1)
+            return true;
+    }
+    return comb.c0.c === CCMUX.TEXEL1_A;
+}
+
+// Important note for reading the output of this function: the color combiner
+// interprets a few of these differently depending on the cycle.
+// Specifically:
+//   In the second cycle, TEXEL0 actually refers to TEXEL1 and vice versa (for both color and alpha)
+//   In 1-cycle mode, TEXEL1 refers to TEXEL0 (for both color and alpha)
+//   In 2-cycle mode (and possibly also 1-cycle mode?) the value of COMBINED in the first cycle is always 0.5 (for both color and alpha)
+export function generateCombineParamsString(comb: CombineParams, twoCycle: boolean): string {
+    let ccString = (a: string, b: string, c: string, d: string) => `(${a} - ${b}) * ${c} + ${d}`;
+
+    let colorA = [
+        "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
+        "SHADE","ENVIRONMENT","1","NOISE",
+        "0","0","0","0","0","0","0","0",
+    ];
+    
+    let colorB = [
+        "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
+        "SHADE","ENVIRONMENT","CENTER","K4",
+        "0","0","0","0","0","0","0","0",
+    ];
+    
+    let colorC = [
+        "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
+        "SHADE","ENVIRONMENT","SCALE","COMBINED_ALPHA",
+        "TEXEL0_ALPHA","TEXEL1_ALPHA","PRIMITIVE_ALPHA",
+        "SHADE_ALPHA","ENV_ALPHA","LOD_FRACTION",
+        "PRIM_LOD_FRAC","K5",
+        "0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"
+    ];
+    
+    let colorD = [
+        "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
+        "SHADE","ENVIRONMENT","1","0"
+    ];
+    
+    let alphaABD = [
+        "COMBINED","TEXEL0","TEXEL1","PRIMITIVE",
+        "SHADE","ENVIRONMENT","1","0"
+    ];
+    
+    let alphaC = [
+        "LOD_FRACTION","TEXEL0","TEXEL1","PRIMITIVE",
+        "SHADE","ENVIRONMENT","PRIM_LOD_FRAC","0"
+    ];
+
+
+    let c0 = ccString(
+        colorA[comb.c0.a],
+        colorB[comb.c0.b],
+        colorC[comb.c0.c],
+        colorD[comb.c0.d],
+    );
+    let c1 = ccString(
+        colorA[comb.c1.a],
+        colorB[comb.c1.b],
+        colorC[comb.c1.c],
+        colorD[comb.c1.d],
+    )
+    let a0 = ccString(
+        alphaABD[comb.a0.a],
+        alphaABD[comb.a0.b],
+        alphaC[comb.a0.c],
+        alphaABD[comb.a0.d],
+    )
+    let a1 = ccString(
+        alphaABD[comb.a1.a],
+        alphaABD[comb.a1.b],
+        alphaC[comb.a1.c],
+        alphaABD[comb.a1.d],
+    );
+
+    let returnStr = `Cycle 0:
+    Color: ${c0} (${comb.c0.a}, ${comb.c0.b}, ${comb.c0.c}, ${comb.c0.d})
+    Alpha: ${a0} (${comb.a0.a}, ${comb.a0.b}, ${comb.a0.c}, ${comb.a0.d})`;
+    if(twoCycle) {
+        returnStr += `
+Cycle 1:
+    Color: ${c1} (${comb.c1.a}, ${comb.c1.b}, ${comb.c1.c}, ${comb.c1.d})
+    Alpha: ${a1} (${comb.a1.a}, ${comb.a1.b}, ${comb.a1.c}, ${comb.a1.d})`;
+    }
+
+    return returnStr;
+}
+
 export class Texture {
     public name: string;
     public format = 'rgba8';

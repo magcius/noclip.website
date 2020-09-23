@@ -14,7 +14,7 @@ import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gf
 import { VertexAnimationEffect, VertexEffectType, GeoNode, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter, SoftwareLightingEffect } from '../BanjoKazooie/geo';
 import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, getMatrixAxisX, getMatrixAxisY, transformVec3Mat4w0, normToLength, transformVec3Mat4w1 } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { RenderData, F3DEX_Program, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render';
+import { RenderData, F3DEX_Program, GeometryData, BoneAnimator, AnimationMode, AdjustableAnimationController } from '../BanjoKazooie/render';
 import { randomRange } from '../BanjoKazooie/particles';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 
@@ -383,63 +383,6 @@ export const enum BKPass {
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 2, },
 ];
-
-// an animation controller that makes it easier to change fps
-// and preserve control over the new phase
-export class AdjustableAnimationController {
-    private time = 0;
-    private initialized = false;
-    private phaseFrames = 0;
-
-    constructor(private fps = 30) { }
-
-    public setTimeFromViewerInput(viewerInput: Viewer.ViewerRenderInput): void {
-        this.time = viewerInput.time / 1000;
-        if (!this.initialized) {
-            this.initialized = true;
-            // treat phaseFrames as the intended start frame
-            this.phaseFrames -= this.time * this.fps;
-        }
-    }
-
-    // set a new fps for a controller that might not have been updated recently
-    // used for pooled renderers like particles
-    public init(newFPS: number, newPhase = 0) {
-        this.initialized = false;
-        this.fps = newFPS;
-        this.phaseFrames = newPhase;
-    }
-
-    // adjust the framerate, while either preserving the current phase value or setting a new one
-    public adjust(newFPS: number, newPhase?: number) {
-        // assume time is current, so just adjust the values now
-        if (newPhase !== undefined)
-            this.phaseFrames = newPhase - this.time * newFPS;
-        else // preserve old phase
-            this.phaseFrames += (this.fps - newFPS) * this.time;
-        this.fps = newFPS;
-    }
-
-    public getTimeInFrames(): number {
-        if (!this.initialized)
-            return this.phaseFrames;
-        return this.time * this.fps + this.phaseFrames;
-    }
-
-    public getTimeInSeconds(): number {
-        if (this.fps === 0)
-            return 0; // not sure what this should mean
-        else if (this.initialized)
-            return this.time + this.phaseFrames / this.fps;
-        else
-            return this.phaseFrames / this.fps;
-    }
-
-    public resetPhase(): void {
-        this.initialized = false;
-        this.phaseFrames = 0;
-    }
-}
 
 const geoNodeScratch = vec3.create();
 class GeoNodeRenderer {

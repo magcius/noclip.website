@@ -62,6 +62,7 @@ varying vec4 v_Color;
 varying vec4 v_TexCoord;
 
 const vec4 t_Zero = vec4(0.0);
+const vec4 t_Half = vec4(0.5);
 const vec4 t_One = vec4(1.0);
 `;
 
@@ -132,6 +133,13 @@ void main() {
         if (RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag(combParams);
+
+        // let twoCycle = RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE;
+        // if (RDP.combineParamsUseCombinedInFirstCycle(combParams) || RDP.combineParamsUseT1InFirstCycle(combParams)) {
+        //     console.log(RDP.generateCombineParamsString(combParams, twoCycle));
+        // } else if (twoCycle && RDP.combineParamsUseTexelsInSecondCycle(combParams)) {
+        //     console.log(RDP.generateCombineParamsString(combParams, twoCycle));
+        // }
     }
 
     private generateClamp(): string {
@@ -262,21 +270,26 @@ void main() {
 
 #ifdef USE_TEXTURE
     t_Tex0 = Texture2D_N64(PP_SAMPLER_2D(u_Texture[0]), v_TexCoord.xy);
-    t_Tex1 = Texture2D_N64(PP_SAMPLER_2D(u_Texture[1]), v_TexCoord.zw);
+    #ifdef TWO_CYCLE
+        t_Tex1 = Texture2D_N64(PP_SAMPLER_2D(u_Texture[1]), v_TexCoord.zw);
+    #else
+        t_Tex1 = t_Tex0;
+    #endif
 #endif
 
 #ifdef ONLY_VERTEX_COLOR
     t_Color.rgba = v_Color.rgba;
 #else
     t_Color = vec4(
-        CombineColorCycle0(t_Zero, t_Tex0, t_Tex1),
-        CombineAlphaCycle0(t_Zero.a, t_Tex0.a, t_Tex1.a)
+        CombineColorCycle0(t_Half, t_Tex0, t_Tex1),
+        CombineAlphaCycle0(t_Half.a, t_Tex0.a, t_Tex1.a)
     );
 
 #ifdef TWO_CYCLE
+    // Note that in the second cycle, Tex0 and Tex1 are swapped
     t_Color = vec4(
-        CombineColorCycle1(t_Color, t_Tex0, t_Tex1),
-        CombineAlphaCycle1(t_Color.a, t_Tex0.a, t_Tex1.a)
+        CombineColorCycle1(t_Color, t_Tex1, t_Tex0),
+        CombineAlphaCycle1(t_Color.a, t_Tex1.a, t_Tex0.a)
     );
 #endif
 #endif

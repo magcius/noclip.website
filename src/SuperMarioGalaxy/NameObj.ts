@@ -2,16 +2,21 @@
 import { DrawBufferHolder, drawBufferInitialTable, LightType, DrawCameraType } from "./DrawBuffer";
 import { SceneObjHolder } from "./Main";
 import { ViewerRenderInput } from "../viewer";
-import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { Camera } from "../Camera";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { LiveActor } from "./LiveActor";
-import { NormalizedViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
 import { JMapInfoIter } from "./JMapInfo";
 import { mat4 } from "gl-matrix";
 import { assert } from "../util";
 import { ub_SceneParamsBufferSize } from "../gx/gx_render";
 import { GX_Program } from "../gx/gx_material";
+
+export const enum GameBits {
+    SMG1 = 0b01,
+    SMG2 = 0b10,
+    Both = SMG1 | SMG2,
+}
 
 export const enum MovementType {
     None                           = -1,
@@ -106,6 +111,7 @@ export const enum DrawType {
     AstroDomeSkyClear              = 0x1E,
     AstroDomeOrbit                 = 0x1F,
     OceanBowlBloomDrawer           = 0x21,
+    ShadowSurface                  = 0x26,
     ShadowVolume                   = 0x27,
     AlphaShadow                    = 0x29,
     Fur                            = 0x31,
@@ -161,7 +167,7 @@ export class NameObj {
         // Default implementation; nothing.
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
         // Default implementation; nothing.
     }
 
@@ -283,10 +289,10 @@ export class SceneNameObjListExecutor {
                 this.nameObjExecuteInfos[i].nameObj.movement(sceneObjHolder, viewerInput);
     }
 
-    public executeCalcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public executeCalcAnim(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < this.nameObjExecuteInfos.length; i++)
             if (this.nameObjExecuteInfos[i].calcAnimType !== -1)
-                this.nameObjExecuteInfos[i].nameObj.calcAnim(sceneObjHolder, viewerInput);
+                this.nameObjExecuteInfos[i].nameObj.calcAnim(sceneObjHolder);
     }
 
     public calcViewAndEntry(sceneObjHolder: SceneObjHolder, drawCameraType: DrawCameraType, viewerInput: ViewerRenderInput): void {
@@ -330,7 +336,7 @@ export class SceneNameObjListExecutor {
         }
     }
 
-    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: NormalizedViewportCoords, cameraType: DrawCameraType): void {
+    public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, cameraType: DrawCameraType): void {
         this.drawBufferHolder.drawAllBuffers(device, renderInstManager, camera, viewport, cameraType);
     }
 
@@ -340,14 +346,14 @@ export class SceneNameObjListExecutor {
 }
 
 export class NameObjAdaptor extends NameObj {
-    public calcAnimCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
+    public calcAnimCallback: ((sceneObjHolder: SceneObjHolder) => void) | null = null;
     public calcViewAndEntryCallback: ((sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null) => void) | null = null;
     public movementCallback: ((sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput) => void) | null = null;
     public drawCallback: ((sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) => void) | null = null;
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
         if (this.calcAnimCallback !== null)
-            this.calcAnimCallback(sceneObjHolder, viewerInput);
+            this.calcAnimCallback(sceneObjHolder);
     }
 
     public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera | null, viewMatrix: mat4 | null): void {

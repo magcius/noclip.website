@@ -201,11 +201,12 @@ export function parseLevel(archives: LevelArchive[]): Level {
     if (skyboxDescriptor > 0) {
         const skyboxView = dataMap.getView(skyboxDescriptor);
         const skyboxDL = skyboxView.getUint32(0x00);
+        const skyboxRenderer = skyboxView.getUint32(0x04);
         const skyboxMats = skyboxView.getUint32(0x08);
         const animData = skyboxView.getUint32(0x0C);
         const materials = skyboxMats !== 0 ? parseMaterialData(dataMap, dataMap.deref(skyboxMats)) : [];
         const skyboxState = new F3DEX2.RSPState(new RSPSharedOutput(), dataMap);
-        initDL(skyboxState, true);
+        initDL(skyboxState, true, skyboxRenderer !== 0x800E1CA4);
         const skyboxModel = runRoomDL(dataMap, skyboxDL, [skyboxState], materials);
 
         const node: GFXNode = {
@@ -733,7 +734,7 @@ function parseRoom(dataMap: DataMap, roomStart: number, sharedCache: RDP.Texture
     return { node, objects, animation};
 }
 
-function initDL(rspState: F3DEX2.RSPState, opaque: boolean): void {
+function initDL(rspState: F3DEX2.RSPState, opaque: boolean, twoCycle = true): void {
     rspState.gSPSetGeometryMode(F3DEX2.RSP_Geometry.G_SHADE);
     if (opaque) {
         rspState.gDPSetOtherModeL(0, 29, 0x0C192078); // opaque surfaces
@@ -741,8 +742,9 @@ function initDL(rspState: F3DEX2.RSPState, opaque: boolean): void {
     } else
         rspState.gDPSetOtherModeL(0, 29, 0x005049D8); // translucent surfaces
     rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_TEXTFILT, 2, TextFilt.G_TF_BILERP << RDP.OtherModeH_Layout.G_MDSFT_TEXTFILT);
-    // initially 2-cycle, though this can change
-    rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, RDP.OtherModeH_CycleType.G_CYC_2CYCLE << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE);
+
+    if (twoCycle) // initially 2-cycle, though this can change
+        rspState.gDPSetOtherModeH(RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE, 2, RDP.OtherModeH_CycleType.G_CYC_2CYCLE << RDP.OtherModeH_Layout.G_MDSFT_CYCLETYPE);
     // some objects seem to assume this gets set, might rely on stage rendering first
     rspState.gDPSetTile(ImageFormat.G_IM_FMT_RGBA, ImageSize.G_IM_SIZ_16b, 0, 0x100, 5, 0, 0, 0, 0, 0, 0, 0);
 }

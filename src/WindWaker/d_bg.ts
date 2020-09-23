@@ -46,11 +46,22 @@ class cBgD__Tre_t {
     public childBlk: Int16Array;
 }
 
+const enum dBgW__PassFlag {
+    CamThrough       = 0x01,
+    ObjThrough       = 0x02,
+    LinkThrough      = 0x04,
+    ArrowThrough     = 0x08,
+    HSStick          = 0x10,
+    BombThrough      = 0x20,
+    BoomerangThrough = 0x40,
+    RopeThrough      = 0x80,
+}
+
 class cBgD__Inf_t {
     public polyID0: number = 0;
     public polyID1: number = 0;
     public polyID2: number = 0;
-    public passFlag: number = 0;
+    public passFlag: dBgW__PassFlag = 0;
 }
 
 // Raw data.
@@ -173,13 +184,13 @@ class cBgS_GrpPassChk {
 }
 
 class cBgS_PolyPassChk {
-    public pass0: boolean = false;
-    public pass1: boolean = false;
-    public pass2: boolean = false;
-    public pass3: boolean = false;
-    public pass4: boolean = false;
-    public pass5: boolean = false;
-    public pass6: boolean = false;
+    public objThrough: boolean = false;
+    public camThrough: boolean = false;
+    public linkThrough: boolean = false;
+    public arrowThrough: boolean = false;
+    public bombThrough: boolean = false;
+    public boomerangThrough: boolean = false;
+    public ropeThrough: boolean = false;
 }
 
 class cBgS_PolyInfo {
@@ -677,21 +688,20 @@ export class dBgW extends cBgW {
 
     protected ChkPolyThrough(triIdx: number, chk: cBgS_PolyPassChk | null): boolean {
         if (chk !== null) {
-            // This field is documented as "Camera Behavior" which means it's likely used in the camera code...
             const inf = this.dt.infTbl[this.dt.triTbl[triIdx].infIdx];
-            if (chk.pass0 && !!(inf.passFlag & 0x02))
+            if (chk.objThrough && !!(inf.passFlag & dBgW__PassFlag.ObjThrough))
                 return true;
-            if (chk.pass1 && !!(inf.passFlag & 0x01))
+            if (chk.camThrough && !!(inf.passFlag & dBgW__PassFlag.CamThrough))
                 return true;
-            if (chk.pass2 && !!(inf.passFlag & 0x04))
+            if (chk.linkThrough && !!(inf.passFlag & dBgW__PassFlag.LinkThrough))
                 return true;
-            if (chk.pass3 && !!(inf.passFlag & 0x08))
+            if (chk.arrowThrough && !!(inf.passFlag & dBgW__PassFlag.ArrowThrough))
                 return true;
-            if (chk.pass4 && !!(inf.passFlag & 0x20))
+            if (chk.bombThrough && !!(inf.passFlag & dBgW__PassFlag.BombThrough))
                 return true;
-            if (chk.pass5 && !!(inf.passFlag & 0x40))
+            if (chk.boomerangThrough && !!(inf.passFlag & dBgW__PassFlag.BoomerangThrough))
                 return true;
-            if (chk.pass6 && !!(inf.passFlag & 0x80))
+            if (chk.ropeThrough && !!(inf.passFlag & dBgW__PassFlag.RopeThrough))
                 return true;
         }
 

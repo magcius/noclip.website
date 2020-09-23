@@ -6,12 +6,12 @@ import { MaterialParams, ColorKind } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 
 import { SFATexture, TextureFetcher } from './textures';
-import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState, mat4SetValue } from './util';
+import { dataSubarray, mat4SetRow, mat4FromRowMajor, ViewState, mat4SetValue, mat4SetRowMajor } from './util';
 import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, colorNewFromRGBA } from '../Color';
+import { colorFromRGBA, Color, colorCopy } from '../Color';
 import { EnvfxManager } from './envfx';
 import { TextureMapping } from '../TextureHolder';
 
@@ -23,6 +23,8 @@ interface ShaderLayer {
 }
 
 export interface Shader {
+    isAncient?: boolean;
+    isBeta?: boolean;
     layers: ShaderLayer[],
     flags: number;
     attrFlags: number;
@@ -50,6 +52,7 @@ function parseShaderLayer(data: DataView, texIds: number[], isBeta: boolean): Sh
 }
 
 interface ShaderFields {
+    isAncient?: boolean;
     isBeta?: boolean;
     size: number;
     numLayers: number;
@@ -79,6 +82,13 @@ export const BETA_MODEL_SHADER_FIELDS: ShaderFields = {
     size: 0x38,
     numLayers: 0x36,
     layers: 0x20,
+};
+
+export const ANCIENT_MAP_SHADER_FIELDS: ShaderFields = {
+    isAncient: true,
+    size: 0x3c,
+    numLayers: 0x3a,
+    layers: 0x24,
 };
 
 export enum ShaderFlags {
@@ -125,7 +135,18 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.layers.push(layer);
     }
 
-    if (!fields.isBeta) {
+    if (fields.isAncient) {
+        shader.isAncient = true;
+        shader.attrFlags = ShaderAttrFlags.CLR; // FIXME: where is this field if present?
+        shader.flags = ShaderFlags.CullBackface;
+    } else if (fields.isBeta) {
+        shader.isBeta = true;
+        shader.attrFlags = data.getUint8(0x34);
+        shader.flags = 0; // TODO: where is this field?
+        shader.hasAuxTex0 = data.getUint32(0x8) === 1;
+        shader.hasAuxTex1 = data.getUint32(0x14) === 1;
+        shader.hasAuxTex2 = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
+    } else {
         shader.flags = data.getUint32(0x3c);
         shader.attrFlags = data.getUint8(0x40);
         shader.hasAuxTex0 = data.getUint32(0x8) !== 0;
@@ -133,12 +154,6 @@ export function parseShader(data: DataView, fields: ShaderFields, texIds: number
         shader.auxTex2Num = data.getUint32(0x34);
         shader.hasAuxTex2 = shader.auxTex2Num != 0xffffffff;
         shader.furRegionsTexId = parseTexId(data, 0x38, texIds);
-    } else {
-        shader.attrFlags = data.getUint8(0x34);
-        shader.flags = 0; // TODO: where is this field?
-        shader.hasAuxTex0 = data.getUint32(0x8) === 1;
-        shader.hasAuxTex1 = data.getUint32(0x14) === 1;
-        shader.hasAuxTex2 = !!(data.getUint8(0x37) & 0x40); // !!(data.getUint8(0x37) & 0x80);
     }
 
     // console.log(`loaded shader: ${JSON.stringify(shader, null, '\t')}`);
@@ -429,19 +444,19 @@ abstract class MaterialBase implements SFAMaterial {
     }
     
     public setupMaterialParams(params: MaterialParams, viewState: ViewState) {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < this.texMtx.length; i++) {
             if (this.texMtx[i] !== undefined) {
                 this.texMtx[i]!(params.u_TexMtx[i], viewState);
             }
         }
         
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < this.indTexMtxs.length; i++) {
             if (this.indTexMtxs[i] !== undefined) {
                 this.indTexMtxs[i]!(params.u_IndTexMtx[i], viewState);
             }
         }
 
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < this.postTexMtxs.length; i++) {
             if (this.postTexMtxs[i] !== undefined) {
                 this.postTexMtxs[i]!(params.u_PostTexMtx[i], viewState);
             }
@@ -519,6 +534,11 @@ class StandardMaterial extends MaterialBase {
             } else {
                 // TODO
             }
+
+            if (this.shader.isAncient) {
+                // XXX: show vertex colors in ancient maps
+                this.addTevStageForMultColor0A0();
+            }
         }
         
         if ((this.shader.flags & 0x40000000) || (this.shader.flags & 0x20000000)) {
@@ -552,6 +572,11 @@ class StandardMaterial extends MaterialBase {
             // FIXME: Objects have different rules for color-channels than map blocks
             if (this.isMapBlock) {
                 this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            }
+
+            if (this.shader.isAncient) {
+                // XXX: show vertex colors in ancient maps
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
             }
         }
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
@@ -701,12 +726,13 @@ class StandardMaterial extends MaterialBase {
     private addTevStagesForLava() {
         const warpParam = 1.0; // TODO: is this animated?
 
+        const itm0 = mat4.create();
         const indTexMtx0 = this.genIndTexMtx((dst: mat4, viewState: ViewState) => {
             const animSin = Math.sin(3.142 * viewState.sceneCtx.animController.envAnimValue1);
             const scale = (0.125 * animSin + 0.75) * warpParam;
             const cs = scale * Math.cos(3.142 * viewState.sceneCtx.animController.envAnimValue0);
             const sn = scale * Math.sin(3.142 * viewState.sceneCtx.animController.envAnimValue0);
-            const itm0 = mat4FromRowMajor(
+            mat4SetRowMajor(itm0,
                 cs,  sn,  0.0, 0.0,
                 -sn, cs,  0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
@@ -715,12 +741,13 @@ class StandardMaterial extends MaterialBase {
             mat4.copy(dst, itm0);
         });
 
+        const itm1 = mat4.create();
         const indTexMtx1 = this.genIndTexMtx((dst: mat4, viewState: ViewState) => {
             const animSin = Math.sin(3.142 * viewState.sceneCtx.animController.envAnimValue0);
             const scale = (0.125 * animSin + 0.75) * warpParam;
             const cs = scale * Math.cos(3.142 * -viewState.sceneCtx.animController.envAnimValue1);
             const sn = scale * Math.sin(3.142 * -viewState.sceneCtx.animController.envAnimValue1);
-            const itm1 = mat4FromRowMajor(
+            mat4SetRowMajor(itm1,
                 cs,  sn,  0.0, 0.0,
                 -sn, cs,  0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
@@ -754,10 +781,10 @@ class StandardMaterial extends MaterialBase {
             mat4SetValue(dst, 1, 3, v);
         });
 
-        const pttexmtx2 = mat4.create();
         const postTexMtx2 = this.genPostTexMtx((dst: mat4) => {
-            mat4.copy(dst, pttexmtx2);
+            mat4.identity(dst); // TODO?
         });
+
         const texCoord0 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx2));
 
         const texCoord1 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx0));
@@ -840,8 +867,9 @@ class StandardMaterial extends MaterialBase {
         mat4.fromYRotation(rot67deg, 67 * Math.PI / 180); // TODO: which axis?
         const postRotate2 = mat4.create();
         mat4.fromRotation(postRotate2, 1.0, [1, -2, 1]);
+        const pttexmtx2 = mat4.create();
         const postTexMtx2 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
-            const pttexmtx2 = mat4FromRowMajor(
+            mat4SetRowMajor(pttexmtx2,
                 0.01, 0.0,  0.0,  0.01 * mapOriginX + viewState.sceneCtx.animController.envAnimValue0,
                 0.0,  0.01, 0.0,  0.0,
                 0.0,  0.0,  0.01, 0.01 * mapOriginZ,
@@ -870,8 +898,9 @@ class StandardMaterial extends MaterialBase {
 
         const postRotate3 = mat4.create();
         mat4.fromRotation(postRotate3, 1.0, [-2, -1, 1]);
+        const pttexmtx3 = mat4.create();
         const postTexMtx3 = this.genPostTexMtx((dst: mat4, viewState: ViewState) => {
-            const pttexmtx3 = mat4FromRowMajor(
+            mat4SetRowMajor(pttexmtx3,
                 0.01, 0.0,  0.0,  0.01 * mapOriginX,
                 0.0,  0.01, 0.0,  0.0,
                 0.0,  0.0,  0.01, 0.01 * mapOriginZ + viewState.sceneCtx.animController.envAnimValue1,
@@ -964,9 +993,8 @@ class WaterMaterial extends MaterialBase {
             mat4.mul(dst, dst, viewState.modelViewMtx);
         };
 
-        const texmtx3 = mat4.create();
         this.texMtx[3] = (dst: mat4, viewState: ViewState) => {
-            mat4.copy(dst, texmtx3);
+            mat4.identity(dst);
             mat4SetValue(dst, 1, 3, viewState.sceneCtx.animController.envAnimValue0);
         }
 
@@ -1096,6 +1124,7 @@ class FurMaterial extends MaterialBase {
         const indStage0 = this.genIndTexStage();
         this.setIndTexOrder(indStage0, texCoord2, texMap2);
         this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
+
     
         // Stage 1: Fur map
         const texMap1 = this.genTexMap(makeFurMapMaterialTexture(this.factory));
@@ -1139,15 +1168,15 @@ class FurMaterial extends MaterialBase {
     
         if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
             this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
             this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
             this.ambColors[0] = (dst: Color, viewState: ViewState) => {
                 colorCopy(dst, viewState.outdoorAmbientColor);
             };
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
         // FIXME: Objects have different rules for color-channels than map blocks
         if (this.isMapBlock) {
@@ -1173,11 +1202,11 @@ export class MaterialFactory {
     constructor(private device: GfxDevice, private envfxMan?: EnvfxManager) {
     }
 
-    public getAmbientColor(ambienceNum: number): Color {
+    public getAmbientColor(out: Color, ambienceNum: number) {
         if (this.envfxMan !== undefined) {
-            return this.envfxMan.getAmbientColor(ambienceNum);
+            this.envfxMan.getAmbientColor(out, ambienceNum);
         } else {
-            return colorNewFromRGBA(1.0, 1.0, 1.0, 1.0);
+            colorFromRGBA(out, 1.0, 1.0, 1.0, 1.0);
         }
     }
 

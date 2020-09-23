@@ -1,19 +1,19 @@
 
-import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { BINModel, BINTexture, BINModelSector, BINModelPart, GSConfiguration } from "./bin";
 import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { computeViewMatrix } from "../Camera";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
-import { TextureHolder, LoadedTexture, TextureMapping } from "../TextureHolder";
+import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRendererLayer, setSortKeyDepth, makeSortKey } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, GSPixelStorageFormat, psmToString } from "../Common/PS2/GS";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { AABB } from "../Geometry";
 
 export class KatamariDamacyProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -29,13 +29,16 @@ precision mediump float;
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
+    vec3 u_LightDirs[2];
+    vec3 u_LightColors[3];
 };
 
 layout(row_major, std140) uniform ub_ModelParams {
-    Mat4x3 u_BoneMatrix[1];
-    Mat4x3 u_NormalMatrix[1];
+    Mat4x3 u_BoneMatrix[SKINNING_MATRIX_COUNT];
+    Mat4x3 u_NormalMatrix[SKINNING_MATRIX_COUNT];
     Mat4x2 u_TextureMatrix[1];
     vec4 u_Color;
+    float u_alphaMult;
 };
 
 uniform sampler2D u_Texture[1];
@@ -46,13 +49,14 @@ varying vec2 v_TexCoord;
 
     public vert = `
 ${KatamariDamacyProgram.reflectionDeclarations}
-layout(location = 0) in vec3 a_Position;
+layout(location = 0) in vec4 a_Position;
 layout(location = 1) in vec3 a_Normal;
 layout(location = 2) in vec2 a_TexCoord;
 
 void main() {
-    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[0]), vec4(a_Position, 1.0)));
-    v_Normal = normalize(Mul(_Mat4x4(u_NormalMatrix[0]), vec4(a_Normal, 0.0)).xyz);
+    int t_SkinningIndex = int(a_Position.w);
+    gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix[t_SkinningIndex]), vec4(a_Position.xyz, 1.0)));
+    v_Normal = normalize(Mul(_Mat4x4(u_NormalMatrix[t_SkinningIndex]), vec4(a_Normal, 0.0)).xyz);
     v_TexCoord = Mul(_Mat4x4(u_TextureMatrix[0]), vec4(a_TexCoord, 0.0, 1.0)).xy;
 }
 `;
@@ -111,10 +115,17 @@ void main() {
     t_Color = texture(SAMPLER_2D(u_Texture[0]), v_TexCoord);
     t_Color.rgba *= u_Color.rgba;
 
-    // Basic fake directional.
-    vec3 t_LightDirection = normalize(vec3(0.8, -1, 0.5));
-    float t_LightIntensity = max(dot(-v_Normal, t_LightDirection), 0.0);
-    t_Color.rgb *= mix(0.7, 1.2, t_LightIntensity);
+#ifdef LIGHTING
+    vec3 t_CombinedIntensity = u_LightColors[2];
+    float t_intensity = max(dot(v_Normal, u_LightDirs[0]), 0.0);
+    t_CombinedIntensity += t_intensity * u_LightColors[0];
+    t_intensity = max(dot(v_Normal, u_LightDirs[1]), 0.0);
+    t_CombinedIntensity += t_intensity * u_LightColors[1];
+
+    t_Color.rgb *= clamp(t_CombinedIntensity, 0.0, 1.0);
+#endif
+
+    t_Color.a *= u_alphaMult;
 
 ${this.generateAlphaTest(ate, atst, aref, afail)}
 
@@ -131,16 +142,16 @@ export class BINModelData {
     public inputLayout: GfxInputLayout;
     public inputState: GfxInputState;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public binModel: BINModel) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public sectorData: BINModelSectorData, public binModel: BINModel) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.binModel.vertexData.buffer);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, this.binModel.indexData.buffer);
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
-            { location: KatamariDamacyProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*4, format: GfxFormat.F32_RGB },
-            { location: KatamariDamacyProgram.a_Normal,   bufferIndex: 0, bufferByteOffset: 3*4, format: GfxFormat.F32_RGB },
-            { location: KatamariDamacyProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 6*4, format: GfxFormat.F32_RG },
+            { location: KatamariDamacyProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0*4, format: GfxFormat.F32_RGBA },
+            { location: KatamariDamacyProgram.a_Normal,   bufferIndex: 0, bufferByteOffset: 4*4, format: GfxFormat.F32_RGB },
+            { location: KatamariDamacyProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 7*4, format: GfxFormat.F32_RG },
         ];
-        const VERTEX_STRIDE = 3+3+2;
+        const VERTEX_STRIDE = 4+3+2;
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
             { byteStride: VERTEX_STRIDE*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
@@ -202,17 +213,19 @@ function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, Gfx
     }
 }
 
-const textureMatrix = mat4.create();
 export class BINModelPartInstance {
     private gfxProgram: GfxProgram;
-    private hasDynamicTexture: boolean = false;
     private textureMapping = nArray(1, () => new TextureMapping());
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
+    public alphaMultiplier = 1;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: KatamariDamacyTextureHolder, public binModelPart: BINModelPart) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public sectorData: BINModelSectorData, public binModelPart: BINModelPart, public transformCount = 1) {
         const gsConfiguration = this.binModelPart.gsConfiguration!;
 
         const program = new KatamariDamacyProgram(gsConfiguration);
+        if (this.binModelPart.lit)
+            program.defines.set("LIGHTING", "1");
+        program.defines.set("SKINNING_MATRIX_COUNT", this.transformCount.toString());
         this.gfxProgram = cache.createProgram(device, program);
 
         const zte = !!((gsConfiguration.test_1_data0 >>> 16) & 0x01);
@@ -223,9 +236,7 @@ export class BINModelPartInstance {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
         };
 
-        if (gsConfiguration.alpha_1_data0 === -1) {
-            // Do nothing? Not sure what the default is...
-        } else if (gsConfiguration.alpha_1_data0 === 0x44) {
+        if (gsConfiguration.alpha_1_data0 === 0x44) {
             setAttachmentStateSimple(this.megaStateFlags, {
                 blendMode: GfxBlendMode.ADD,
                 blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
@@ -239,12 +250,6 @@ export class BINModelPartInstance {
             });
         } else {
             throw "whoops";
-        }
-
-        if (this.binModelPart.textureName !== null) {
-            this.hasDynamicTexture = this.binModelPart.textureName.endsWith('/0000/0000');
-            if (!this.hasDynamicTexture)
-                textureHolder.fillTextureMapping(this.textureMapping[0], this.binModelPart.textureName);
         }
 
         // Katamari should not have any mipmaps.
@@ -270,98 +275,164 @@ export class BINModelPartInstance {
         });
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, modelViewMatrix: mat4, modelMatrix: mat4): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrices: mat4[], modelMatrices: mat4[], textureMatrix: mat4, currentPalette: number): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        if (this.hasDynamicTexture && this.binModelPart.textureName)
-            textureHolder.fillTextureMapping(this.textureMapping[0], this.binModelPart.textureName);
+        mat4.copy(scratchTextureMatrix, textureMatrix);
+        if (this.binModelPart.textureIndex !== null)
+            this.sectorData.textureData[this.binModelPart.textureIndex].fillTextureMapping(this.textureMapping[0], scratchTextureMatrix, currentPalette);
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
 
         renderInst.drawIndexes(this.binModelPart.indexCount, this.binModelPart.indexOffset);
 
-        if (this.hasDynamicTexture && this.textureMapping[0].flipY) {
-            textureMatrix[5] = -1;
-            textureMatrix[13] = 1;
-        } else {
-            mat4.identity(textureMatrix);
-        }
-
-        let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12+12+8+4);
+        let offs = renderInst.allocateUniformBuffer(KatamariDamacyProgram.ub_ModelParams, 12*2*this.transformCount+8+4+1);
         const mapped = renderInst.mapUniformBufferF32(KatamariDamacyProgram.ub_ModelParams);
-        offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
-        offs += fillMatrix4x3(mapped, offs, modelMatrix);
-        offs += fillMatrix4x2(mapped, offs, textureMatrix);
+        for (let i = 0; i < this.transformCount; i++)
+            offs += fillMatrix4x3(mapped, offs, modelViewMatrices[i]);
+        for (let i = 0; i < this.transformCount; i++)
+            offs += fillMatrix4x3(mapped, offs, modelMatrices[i]);
+        offs += fillMatrix4x2(mapped, offs, scratchTextureMatrix);
         offs += fillColor(mapped, offs, this.binModelPart.diffuseColor);
+        mapped[offs++] = this.alphaMultiplier;
         renderInstManager.submitRenderInst(renderInst);
     }
 }
 
-const scratchMat4 = mat4.create();
+// poisonous frog (0x2E6) uses the most of any object, though the game supports up to 9
+const scratchModelViews = nArray(6, () => mat4.create());
+const scratchModelMatrices = nArray(6, () => mat4.create());
+const scratchAABB = new AABB();
 const cullModeFlags = {
     cullMode: GfxCullMode.BACK,
 };
 export class BINModelInstance {
-    public modelMatrix: mat4 = mat4.create();
+    public modelMatrix = mat4.create();
     public modelParts: BINModelPartInstance[] = [];
+    public textureMatrix = mat4.create();
+    public uvState = 0;
     public visible = true;
+    public layer = GfxRendererLayer.BACKGROUND;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: KatamariDamacyTextureHolder, public binModelData: BINModelData) {
-        mat4.rotateX(this.modelMatrix, this.modelMatrix, Math.PI);
+    public translation = vec3.create();
+    public euler = vec3.create();
 
+    public skinningMatrices: mat4[] = [];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public binModelData: BINModelData, skinningCount = 0) {
+        this.skinningMatrices = nArray(skinningCount, () => mat4.create());
+        assert(skinningCount + 1 <= scratchModelViews.length);
         for (let i = 0; i < this.binModelData.binModel.modelParts.length; i++)
-            this.modelParts.push(new BINModelPartInstance(device, cache, textureHolder, this.binModelData.binModel.modelParts[i]));
+            this.modelParts.push(new BINModelPartInstance(device, cache, this.binModelData.sectorData, this.binModelData.binModel.modelParts[i], skinningCount + 1));
     }
 
     public setVisible(visible: boolean): void {
         this.visible = visible;
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, textureHolder: KatamariDamacyTextureHolder, viewRenderer: Viewer.ViewerRenderInput) {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, toNoclip: mat4, currentPalette: number, depth = 0): void {
         if (!this.visible)
+            return;
+
+        mat4.mul(scratchModelMatrices[0], toNoclip, this.modelMatrix);
+
+        scratchAABB.transform(this.binModelData.binModel.bbox, scratchModelMatrices[0]);
+        if (!viewerInput.camera.frustum.contains(scratchAABB))
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.binModelData.inputLayout, this.binModelData.inputState);
         template.setMegaStateFlags(cullModeFlags);
+        template.sortKey = makeSortKey(this.layer)
+        template.sortKey = setSortKeyDepth(template.sortKey, depth);
 
-        computeViewMatrix(scratchMat4, viewRenderer.camera);
-        mat4.mul(scratchMat4, scratchMat4, this.modelMatrix);
+        mat4.mul(scratchModelViews[0], viewerInput.camera.viewMatrix, scratchModelMatrices[0]);
+        for (let i = 0; i < this.skinningMatrices.length; i++) {
+            mat4.mul(scratchModelMatrices[i + 1], toNoclip, this.skinningMatrices[i]);
+            mat4.mul(scratchModelViews[i + 1], viewerInput.camera.viewMatrix, scratchModelMatrices[i + 1]);
+        }
 
         for (let i = 0; i < this.modelParts.length; i++)
-            this.modelParts[i].prepareToRender(renderInstManager, textureHolder, scratchMat4, this.modelMatrix);
+            this.modelParts[i].prepareToRender(renderInstManager, scratchModelViews, scratchModelMatrices, this.textureMatrix, currentPalette);
 
         renderInstManager.popTemplateRenderInst();
+    }
+
+    public setAlphaMultiplier(alpha: number): void {
+        for (let i = 0; i < this.modelParts.length; i++)
+            this.modelParts[i].alphaMultiplier = alpha;
+    }
+}
+
+const scratchTextureMatrix = mat4.create();
+class BINTextureData {
+    public gfxTexture: GfxTexture[] = [];
+    public viewerTexture: Viewer.Texture[] = [];
+
+    constructor(device: GfxDevice, private texture: BINTexture) {
+        for (let i = 0; i < this.texture.pixels.length; i++) {
+            const pixels = this.texture.pixels[i];
+
+            if (pixels !== 'framebuffer') {
+                const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
+                device.setResourceName(gfxTexture, texture.name);
+                const hostAccessPass = device.createHostAccessPass();
+                hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
+                device.submitPass(hostAccessPass);
+                this.gfxTexture[i] = gfxTexture;
+    
+                this.viewerTexture[i] = textureToCanvas(texture, `${texture.name}/${i}`, pixels);
+            }
+        }
+    }
+
+    public fillTextureMapping(m: TextureMapping, dstMtx: mat4, paletteIndex: number = 0): void {
+        if (this.texture.pixels[paletteIndex] === 'framebuffer') {
+            m.lateBinding = 'framebuffer';
+            dstMtx[5] *= -1;
+            dstMtx[13] += 1;
+        } else {
+            m.gfxTexture = this.gfxTexture[paletteIndex];
+        }
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.gfxTexture.length; i++)
+            device.destroyTexture(this.gfxTexture[i]);
     }
 }
 
 export class BINModelSectorData {
     public modelData: BINModelData[] = [];
+    public textureData: BINTextureData[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public binModelSector: BINModelSector) {
+        for (let i = 0; i < binModelSector.textures.length; i++)
+            this.textureData.push(new BINTextureData(device, binModelSector.textures[i]));
         for (let i = 0; i < binModelSector.models.length; i++)
-            this.modelData.push(new BINModelData(device, cache, binModelSector.models[i]));
+            this.modelData.push(new BINModelData(device, cache, this, binModelSector.models[i]));
     }
 
     public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.textureData.length; i++)
+            this.textureData[i].destroy(device);
         for (let i = 0; i < this.modelData.length; i++)
             this.modelData[i].destroy(device);
     }
 }
 
-function textureToCanvas(texture: BINTexture): Viewer.Texture {
+function textureToCanvas(texture: BINTexture, name: string, pixels: Uint8Array): Viewer.Texture {
     const canvas = document.createElement("canvas");
     const width = texture.width;
     const height = texture.height;
-    const name = texture.name;
     canvas.width = width;
     canvas.height = height;
     canvas.title = name;
 
     const ctx = canvas.getContext("2d")!;
     const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(texture.pixels);
+    imgData.data.set(pixels);
     ctx.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
 
@@ -370,21 +441,4 @@ function textureToCanvas(texture: BINTexture): Viewer.Texture {
     extraInfo.set('Format', psmToString(psm));
 
     return { name: name, surfaces, extraInfo };
-}
-
-export class KatamariDamacyTextureHolder extends TextureHolder<BINTexture> {
-    public addBINTexture(device: GfxDevice, bin: BINModelSector) {
-        this.addTextures(device, bin.textures);
-    }
-
-    public loadTexture(device: GfxDevice, texture: BINTexture): LoadedTexture {
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
-        device.setResourceName(gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
-        device.submitPass(hostAccessPass);
-
-        const viewerTexture: Viewer.Texture = textureToCanvas(texture);
-        return { gfxTexture, viewerTexture };
-    }
 }

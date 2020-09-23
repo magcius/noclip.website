@@ -1762,6 +1762,7 @@ class StudioPanel extends FloatingPanel {
     private keyframeNameInput: HTMLInputElement;
     private keyframeDurationContainer: HTMLElement;
     private keyframeDurationInput: HTMLInputElement;
+    private matchPrevSpeedBtn: HTMLInputElement;
     private keyframeHoldDurationInput: HTMLInputElement;
 
     private interpolationSettings: HTMLElement;
@@ -1955,7 +1956,10 @@ class StudioPanel extends FloatingPanel {
                     </div>
                     <div id="keyframeDurationContainer">
                         <div class="SettingsHeader KeyframeSettingsName">Duration</div>
-                        <input id="keyframeDuration" class="KeyframeNumericInput" type="number" min="0" max="100.0" step="0.1"/> <span>s</span>
+                        <div style="display:flex; align-items:center; justify-content:space-evenly">
+                            <input id="keyframeDuration" class="KeyframeNumericInput" type="number" min="0" max="100.0" step="0.1"/> <span>s</span>
+                            <button type="button" id="matchPrevSpeedBtn" class="SettingsButton" style="width:60%">Match Prev Speed</button>
+                        </div>
                     </div>
                     <div id="interpolationSettings">
                         <div class="SettingsHeader KeyframeSettingsName">Motion Interpolation</div>
@@ -2029,6 +2033,8 @@ class StudioPanel extends FloatingPanel {
         this.keyframeNameInput = this.contents.querySelector('#keyframeName') as HTMLInputElement;
         this.keyframeDurationContainer = this.contents.querySelector('#keyframeDurationContainer') as HTMLElement;
         this.keyframeDurationInput = this.contents.querySelector('#keyframeDuration') as HTMLInputElement;
+        this.matchPrevSpeedBtn = this.contents.querySelector('#matchPrevSpeedBtn') as HTMLInputElement;
+        this.matchPrevSpeedBtn.dataset.helpText = 'Attempt to auto-calculate the duration to match the previous keyframe\'s speed.';
         this.keyframeHoldDurationInput = this.contents.querySelector('#keyframeHoldDuration') as HTMLInputElement;
 
         this.interpolationSettings = this.contents.querySelector('#interpolationSettings') as HTMLElement;
@@ -2183,6 +2189,15 @@ class StudioPanel extends FloatingPanel {
             this.saveAnimation();
         }
 
+        this.matchPrevSpeedBtn.onclick = () => {
+            if (this.selectedKeyframeListItem) {
+                const index = parseInt(this.selectedKeyframeListItem.dataset.index as string);
+                const duration = this.animationManager.getMatchedSpeedDuration(index, this.loopAnimationCheckbox.checked);
+                this.selectedKeyframe.interpDuration = duration;
+                this.keyframeDurationInput.value = duration.toString();
+            }
+        }
+
         this.hermiteBtn.onclick = () => {
             this.linearEaseSettingsDiv.setAttribute('hidden', '');
             this.selectedKeyframe.usesLinearInterp = false;
@@ -2257,7 +2272,7 @@ class StudioPanel extends FloatingPanel {
                 this.stopPreviewKeyframeBtn.classList.remove('disabled');
                 this.stopAnimationBtn.removeAttribute('hidden');
                 this.stopAnimationBtn.removeAttribute('disabled');
-                this.animationManager.previewKeyframe(parseInt(this.selectedKeyframeListItem.dataset.index as string));
+                this.animationManager.previewKeyframe(parseInt(this.selectedKeyframeListItem.dataset.index as string), this.loopAnimationCheckbox.checked);
             }
         }
 

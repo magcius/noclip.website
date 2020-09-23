@@ -6,7 +6,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as GX from './gx_enum';
 import { align, assertExists } from '../util';
 import { gx_texture_asInstance, gx_texture_asExports } from '../wat_modules';
-import WasmMemoryManager from '../WasmMemoryManager';
+import { WasmMemoryManager } from '../WasmMemoryManager';
 
 type TextureDecoder = (pScratch: number, pDst: number, pSrc: number, width: number, height: number) => void;
 

@@ -1,25 +1,23 @@
-import * as Viewer from '../viewer';
 import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
 import { GameInfo } from './scenes';
-import { SFAMaterial, ShaderAttrFlags } from './materials';
+import { SFAMaterial, ShaderAttrFlags, ANCIENT_MAP_SHADER_FIELDS } from './materials';
 import { SFAAnimationController } from './animation';
 import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './materials';
-import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, getCamPos } from './util';
-import { BlockRenderer } from './blocks';
+import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, readUint32, readUint16, mat4SetRowMajor } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
 import { SceneRenderContext } from './render';
+import { Skeleton, SkeletonInstance } from './skeleton';
 
 interface Joint {
     parent: number;
@@ -36,6 +34,7 @@ interface CoarseBlend {
 }
 
 export enum ModelVersion {
+    AncientMap,
     Beta,
     BetaMap, // Demo swapcircle
     Demo, // Most demo files
@@ -106,7 +105,8 @@ interface Water {
     shape: Shape;
 }
 
-export interface ModelRenderContext extends SceneRenderContext {
+export interface ModelRenderContext {
+    sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
     ambienceNum: number;
     setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
@@ -135,9 +135,6 @@ class ModelShapes {
         return this.shapes.length;
     }
 
-    private scratchMtx = mat4.create();
-    private scratchMtx2 = mat4.create();
-
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number) {
         if (drawStep < 0 || drawStep >= this.shapes.length) {
             return;
@@ -149,10 +146,10 @@ class ModelShapes {
                 continue;
             }
 
-            mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
-            mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
-            mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            shapes[i].prepareToRender(device, renderInstManager, this.scratchMtx, modelCtx, boneMatrices);
+            mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
+            mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
+            mat4.mul(scratchMtx0, matrix, scratchMtx0);
+            shapes[i].prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
         }
     }
     
@@ -160,10 +157,10 @@ class ModelShapes {
         for (let i = 0; i < this.waters.length; i++) {
             const water = this.waters[i];
 
-            mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
-            mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
-            mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
-            water.shape.prepareToRender(device, renderInstManager, this.scratchMtx, modelCtx, boneMatrices);
+            mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
+            mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
+            mat4.mul(scratchMtx0, matrix, scratchMtx0);
+            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
         }
     }
 
@@ -172,28 +169,97 @@ class ModelShapes {
             const fur = this.furs[i];
 
             for (let j = 0; j < fur.numLayers; j++) {
-                mat4.fromTranslation(this.scratchMtx, [0, this.model.yTranslate, 0]);
-                mat4.translate(this.scratchMtx, this.scratchMtx, this.model.modelTranslate);
-                mat4.translate(this.scratchMtx, this.scratchMtx, [0, 0.4 * (j + 1), 0]);
-                mat4.mul(this.scratchMtx, matrix, this.scratchMtx);
+                mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
+                mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
+                mat4.translate(scratchMtx0, scratchMtx0, [0, 0.4 * (j + 1), 0]);
+                mat4.mul(scratchMtx0, matrix, scratchMtx0);
 
                 const mat = fur.shape.material as CommonShapeMaterial;
                 mat.setFurLayer(j);
                 const m00 = (j + 1) / 16 * 0.5;
                 const m11 = m00;
-                this.scratchMtx2 = mat4.fromValues(
+                mat4SetRowMajor(scratchMtx1,
                     m00, 0.0, 0.0, 0.0,
                     0.0, m11, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0
                 );
-                mat.setOverrideIndMtx(0, this.scratchMtx2);
-                fur.shape.prepareToRender(device, renderInstManager, this.scratchMtx, modelCtx, boneMatrices);
+                mat.setOverrideIndMtx(0, scratchMtx1);
+                fur.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
                 mat.setOverrideIndMtx(0, undefined);
             }
         }
     }
 }
+
+// Generate vertex attribute tables.
+// The game uses one table for everything. The final version of the game has a minor difference in
+// VAT 5 compared to older versions.
+function generateVat(old: boolean): GX_VtxAttrFmt[][] {
+    const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
+    for (let i = 0; i <= GX.Attr.MAX; i++) {
+        for (let j = 0; j < 8; j++) {
+            vat[j][i] = { compType: GX.CompType.U8, compShift: 0, compCnt: 0 };
+        }
+    }
+
+    vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+    vat[0][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[0][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[1][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 2, compCnt: GX.CompCnt.POS_XYZ };
+    vat[1][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[1][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[2][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+    vat[2][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[2][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[2][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+    vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+    vat[3][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[3][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[3][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+    vat[4][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[4][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[4][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
+
+    // The final version uses a 1/8 quantization factor; older versions do not use quantization.
+    vat[5][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: old ? 0 : 3, compCnt: GX.CompCnt.POS_XYZ };
+    vat[5][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[5][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[5][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+    vat[5][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+    vat[5][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+    vat[5][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[6][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
+    vat[6][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[6][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[6][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[6][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[6][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[6][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+
+    vat[7][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
+    vat[7][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
+    vat[7][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
+    vat[7][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[7][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+    vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
+
+    return vat;
+}
+
+const VAT = generateVat(false);
+const OLD_VAT = generateVat(true);
 
 export class Model {
     private createModelShapes: CreateModelShapesFunc;
@@ -203,9 +269,7 @@ export class Model {
 
     public joints: Joint[] = [];
     public coarseBlends: CoarseBlend[] = [];
-    public jointTfMatrices: mat4[] = [];
-    public bindMatrices: mat4[] = [];
-    public invBindMatrices: mat4[] = [];
+    public invBindTranslations: vec3[] = [];
 
     public yTranslate: number = 0;
     public modelTranslate: vec3 = vec3.create();
@@ -222,12 +286,12 @@ export class Model {
 
     public hasFineSkinning: boolean = false;
     public hasBetaFineSkinning: boolean = false;
+    public skeleton?: Skeleton;
 
-    constructor(device: GfxDevice,
+    constructor(
         private materialFactory: MaterialFactory,
         blockData: ArrayBufferSlice,
         texFetcher: TextureFetcher,
-        private animController: SFAAnimationController,
         public modelVersion: ModelVersion = ModelVersion.Final
     ) {
         let offs = 0;
@@ -271,6 +335,35 @@ export class Model {
                 numListBits: 6,
                 bitsOffsets: [0x90],
                 bitsByteCounts: [0x94],
+                oldVat: true,
+                hasYTranslate: false,
+            };
+        } else if (this.modelVersion === ModelVersion.AncientMap) {
+            fields = {
+                isBeta: true,
+                isMapBlock: true,
+                alwaysUseTex1: true,
+                shaderFields: ANCIENT_MAP_SHADER_FIELDS,
+                hasNormals: false,
+                hasBones: false,
+                texOffset: 0x58,
+                posOffset: 0x5c,
+                clrOffset: 0x60,
+                texcoordOffset: 0x64,
+                shaderOffset: 0x68,
+                listOffsets: 0x6c,
+                listSizes: 0x70,
+                posCount: 0x90,
+                clrCount: 0x94,
+                texcoordCount: 0x96,
+                texCount: 0xa0,
+                shaderCount: 0x9a,
+                dlOffsets: 0x6c,
+                dlSizes: 0x70,
+                dlInfoCount: 0x99,
+                numListBits: 6,
+                bitsOffsets: [0x7c],
+                bitsByteCounts: [0x86],
                 oldVat: true,
                 hasYTranslate: false,
             };
@@ -484,6 +577,8 @@ export class Model {
         this.hasFineSkinning = this.posFineSkinningConfig !== undefined && this.posFineSkinningConfig.numPieces !== 0;
         this.hasBetaFineSkinning = this.hasFineSkinning && this.modelVersion === ModelVersion.Beta;
 
+        const vat = fields.oldVat ? OLD_VAT : VAT;
+
         // @0x8: data size
         // @0xc: 4x3 matrix (placeholder; always zeroed in files)
         // @0x8e: y translation (up/down)
@@ -493,7 +588,7 @@ export class Model {
         // console.log(`Loading ${texCount} texture infos from 0x${texOffset.toString(16)}`);
         const texIds: number[] = [];
         for (let i = 0; i < texCount; i++) {
-            const texIdFromFile = blockDv.getUint32(texOffset + i * 4);
+            const texIdFromFile = readUint32(blockDv, texOffset, i);
             texIds.push(texIdFromFile);
         }
         // console.log(`texids: ${texIds}`);
@@ -570,18 +665,18 @@ export class Model {
             //     console.log(`trans: ${this.modelTranslate}`);
             // }
 
-            this.jointTfMatrices = nArray(this.joints.length, () => mat4.create());
-            this.bindMatrices = nArray(this.joints.length, () => mat4.create());
-            this.invBindMatrices = nArray(this.joints.length, () => mat4.create());
+            this.skeleton = new Skeleton();
+            this.invBindTranslations = nArray(this.joints.length, () => vec3.create());
+
             for (let i = 0; i < this.joints.length; i++) {
                 const joint = this.joints[i];
+
                 if (joint.boneNum !== i) {
                     throw Error(`wtf? joint's bone number doesn't match its index!`);
                 }
 
-                mat4.fromTranslation(this.jointTfMatrices[i], joint.translation);
-                mat4.fromTranslation(this.bindMatrices[i], joint.bindTranslation);
-                mat4.invert(this.invBindMatrices[i], this.bindMatrices[i]);
+                this.skeleton.addJoint(joint.parent != 0xff ? joint.parent : undefined, joint.translation);
+                vec3.negate(this.invBindTranslations[i], joint.bindTranslation);
             }
         }
 
@@ -590,74 +685,18 @@ export class Model {
         // console.log(`Loading ${shaderCount} shaders from offset 0x${shaderOffset.toString(16)}`);
 
         const shaders: Shader[] = [];
+
         offs = shaderOffset;
-        const shaderFields = fields.shaderFields;
         for (let i = 0; i < shaderCount; i++) {
-            const shaderBin = blockData.subarray(offs, shaderFields.size).createDataView();
-            const shader = parseShader(shaderBin, shaderFields, texIds);
+            const shaderBin = blockData.subarray(offs, fields.shaderFields.size).createDataView();
+
+            const shader = parseShader(shaderBin, fields.shaderFields, texIds);
             shaders.push(shader);
-            offs += shaderFields.size;
+
+            offs += fields.shaderFields.size;
         }
 
         this.materials = [];
-
-        const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
-        for (let i = 0; i <= GX.Attr.MAX; i++) {
-            for (let j = 0; j < 8; j++) {
-                vat[j][i] = { compType: GX.CompType.U8, compShift: 0, compCnt: 0 };
-            }
-        }
-
-        vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-        vat[0][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[0][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
-    
-        vat[1][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 2, compCnt: GX.CompCnt.POS_XYZ };
-        vat[1][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[1][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
-    
-        vat[2][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-        vat[2][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[2][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[2][GX.Attr.TEX0] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
-        vat[2][GX.Attr.TEX1] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[3][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
-        vat[3][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[3][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[3][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[3][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[3][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[3][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[4][GX.Attr.POS] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-        vat[4][GX.Attr.NRM] = { compType: GX.CompType.F32, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[4][GX.Attr.CLR0] = { compType: GX.CompType.RGBA8, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[4][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 7, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[5][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: fields.oldVat ? 0 : 3, compCnt: GX.CompCnt.POS_XYZ };
-        vat[5][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[5][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[5][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
-        vat[5][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
-        vat[5][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
-        vat[5][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[6][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 8, compCnt: GX.CompCnt.POS_XYZ };
-        vat[6][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[6][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[6][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[6][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[6][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[6][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-
-        vat[7][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
-        vat[7][GX.Attr.NRM] = { compType: GX.CompType.S8, compShift: 0, compCnt: GX.CompCnt.NRM_XYZ };
-        vat[7][GX.Attr.CLR0] = { compType: GX.CompType.RGBA4, compShift: 0, compCnt: GX.CompCnt.CLR_RGBA };
-        vat[7][GX.Attr.TEX0] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[7][GX.Attr.TEX1] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[7][GX.Attr.TEX2] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
-        vat[7][GX.Attr.TEX3] = { compType: GX.CompType.S16, compShift: 10, compCnt: GX.CompCnt.TEX_ST };
 
         const dlInfos: DisplayListInfo[] = [];
         const dlInfoCount = blockDv.getUint8(fields.dlInfoCount);
@@ -667,12 +706,9 @@ export class Model {
                 const dlOffsetsOffs = blockDv.getUint32(fields.dlOffsets);
                 const dlSizesOffs = blockDv.getUint32(fields.dlSizes);
 
-                const dlOffset = blockDv.getUint32(dlOffsetsOffs + i * 4);
-                const dlSize = blockDv.getUint16(dlSizesOffs + i * 2);
-                // console.log(`DL ${i}: offset 0x${dlOffset.toString(16)}, size 0x${dlSize.toString(16)}`);
                 dlInfos.push({
-                    offset: dlOffset,
-                    size: dlSize,
+                    offset: readUint32(blockDv, dlOffsetsOffs, i),
+                    size: readUint16(blockDv, dlSizesOffs, i),
                     specialBitAddress: -1,
                 });
             }
@@ -723,9 +759,7 @@ export class Model {
             return vtxArrays;
         }
 
-        const self = this;
-
-        function readVertexDesc(bits: LowBitReader, shader: Shader): GX_VtxDesc[] {
+        const readVertexDesc = (bits: LowBitReader, shader: Shader): GX_VtxDesc[] => {
             // console.log(`Setting descriptor`);
             const vcd: GX_VtxDesc[] = [];
             for (let i = 0; i <= GX.Attr.MAX; i++) {
@@ -797,7 +831,7 @@ export class Model {
             return vcd;
         }
 
-        function runSpecialBitstream(bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView): Shape {
+        const runSpecialBitstream = (bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView): Shape => {
             // console.log(`running special bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
 
             const bits = new LowBitReader(blockDv, bitsOffset);
@@ -825,17 +859,16 @@ export class Model {
 
             const vtxArrays = getVtxArrays(posBuffer);
 
-            const newShape = new ShapeGeometry(vtxArrays, vcd, vat, displayList, self.hasFineSkinning);
-            newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
+            const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
+            newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
 
-            const newMat = new CommonShapeMaterial(self.animController);
+            const newMat = new CommonShapeMaterial();
             newMat.setMaterial(material);
 
-            const newModelShape = new Shape(newShape, newMat, false);
-            return newModelShape;
+            return new Shape(newGeom, newMat, false);
         }
 
-        function runBitstream(modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView) {
+        const runBitstream = (modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView) => {
             // console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
             modelShapes.shapes[drawStep] = [];
             const shapes = modelShapes.shapes[drawStep];
@@ -846,12 +879,13 @@ export class Model {
 
             let curShader = shaders[0];
             let curMaterial: SFAMaterial | undefined = undefined;
-            function setShader(num: number) {
+
+            const setShader = (num: number) => {
                 curShader = shaders[num];
-                if (self.materials[num] === undefined) {
-                    self.materials[num] = self.materialFactory.buildMaterial(curShader, texFetcher, fields.isMapBlock);
+                if (this.materials[num] === undefined) {
+                    this.materials[num] = this.materialFactory.buildMaterial(curShader, texFetcher, fields.isMapBlock);
                 }
-                curMaterial = self.materials[num];
+                curMaterial = this.materials[num];
             }
 
             setShader(0);
@@ -881,22 +915,22 @@ export class Model {
     
                     try {
                         if (curShader.flags & ShaderFlags.Water) {
-                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildWaterMaterial.bind(self.materialFactory), posBuffer);
+                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, this.materialFactory.buildWaterMaterial.bind(this.materialFactory), posBuffer);
                             modelShapes.waters.push({ shape: newShape });
                         } else {
                             const vtxArrays = getVtxArrays(posBuffer);
 
-                            const newShape = new ShapeGeometry(vtxArrays, vcd, vat, displayList, self.hasFineSkinning);
-                            newShape.setPnMatrixMap(pnMatrixMap, self.hasFineSkinning);
+                            const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
+                            newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
 
-                            const newMat = new CommonShapeMaterial(self.animController);
+                            const newMat = new CommonShapeMaterial();
                             newMat.setMaterial(curMaterial!);
 
-                            const newModelShape = new Shape(newShape, newMat, !!(curShader.flags & ShaderFlags.DevGeometry));
-                            shapes.push(newModelShape);
+                            const newShape = new Shape(newGeom, newMat, !!(curShader.flags & ShaderFlags.DevGeometry));
+                            shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
-                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, self.materialFactory.buildFurMaterial.bind(self.materialFactory), posBuffer);
+                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, this.materialFactory.buildFurMaterial.bind(this.materialFactory), posBuffer);
 
                                 let numFurLayers;
                                 if (curShader.flags & ShaderFlags.ShortFur) {
@@ -979,25 +1013,42 @@ export class Model {
     }
 }
 
-export class ModelInstance implements BlockRenderer {
+const scratchMtx0 = mat4.create();
+const scratchMtx1 = mat4.create();
+const scratchMtx2 = mat4.create();
+const scratchMtx3 = mat4.create();
+const scratchVec0 = vec3.create();
+
+export enum DrawStep {
+    Waters = -2,
+    Furs = -1,
+    Solids = 0,
+    Translucents1 = 1,
+    Translucents2 = 2,
+}
+
+export class ModelInstance {
     private modelShapes: ModelShapes;
 
-    private jointPoseMatrices: mat4[] = [];
-    public boneMatrices: mat4[] = [];
-    private skeletonDirty: boolean = true;
+    public skeletonInst?: SkeletonInstance;
+
+    public matrixPalette: mat4[] = [];
+    private skinningDirty: boolean = true;
     private amap: DataView;
 
     constructor(public model: Model) {
         const numBones = this.model.joints.length + this.model.coarseBlends.length;
+
         if (numBones !== 0) {
-            this.jointPoseMatrices = nArray(this.model.joints.length, () => mat4.create());
-            this.boneMatrices = nArray(numBones, () => mat4.create());
+            this.skeletonInst = new SkeletonInstance(this.model.skeleton!);
+            this.matrixPalette = nArray(numBones, () => mat4.create());
         } else {
-            this.boneMatrices = [mat4.create()];
+            this.matrixPalette = [mat4.create()];
         }
 
+        this.skinningDirty = true;
+
         this.modelShapes = model.createInstanceShapes();
-        this.updateBoneMatrices();
     }
 
     public getAmap(modelAnimNum: number): DataView {
@@ -1018,95 +1069,82 @@ export class ModelInstance implements BlockRenderer {
     }
     
     public resetPose() {
-        for (let i = 0; i < this.jointPoseMatrices.length; i++) {
-            mat4.identity(this.jointPoseMatrices[i]);
+        mat4.identity(scratchMtx0);
+
+        for (let i = 0; i < this.model.joints.length; i++) {
+            this.skeletonInst!.setPoseMatrix(i, scratchMtx0);
         }
-        this.skeletonDirty = true;
+
+        this.skinningDirty = true;
     }
     
     public setJointPose(jointNum: number, mtx: mat4) {
-        if (jointNum < 0 || jointNum >= this.jointPoseMatrices.length) {
+        if (jointNum < 0 || jointNum >= this.model.joints.length) {
             return;
         }
 
-        mat4.copy(this.jointPoseMatrices[jointNum], mtx);
-        this.skeletonDirty = true;
+        this.skeletonInst!.setPoseMatrix(jointNum, mtx);
+        this.skinningDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, drawStep: number) {
-        this.updateBoneMatrices();
-        this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.boneMatrices, drawStep);
-    }
-    
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateBoneMatrices();
-        this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.boneMatrices);
-    }
-    
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
-        this.updateBoneMatrices();
-        this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.boneMatrices);
-    }
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
+        this.updateSkinning();
 
-    private scratch0 = mat4.create();
-    private scratch1 = mat4.create();
+        if (this.modelShapes.shapes.length !== 0) {
+            for (let i = 0; i < 3; i++) {
+                const template = renderInstManager.pushTemplateRenderInst();
+                template.filterKey = i;
+                this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i);
+                renderInstManager.popTemplateRenderInst();
+            }
+        }
+
+        if (this.modelShapes.waters.length !== 0) {
+            const template = renderInstManager.pushTemplateRenderInst();
+            template.filterKey = DrawStep.Waters;
+            this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+            renderInstManager.popTemplateRenderInst();
+        }
+
+        if (this.modelShapes.furs.length !== 0) {
+            const template = renderInstManager.pushTemplateRenderInst();
+            template.filterKey = DrawStep.Furs;
+            this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+            renderInstManager.popTemplateRenderInst();
+        }
+    }
     
-    private updateBoneMatrices() {
-        if (!this.skeletonDirty) {
+    private updateSkinning() {
+        if (!this.skinningDirty) {
             return;
         }
 
-        // Compute joint bones
-        // console.log(`computing ${this.joints.length} rigid joint bones`);
+        // Compute matrices for rigid joints (no blending)
         for (let i = 0; i < this.model.joints.length; i++) {
             const joint = this.model.joints[i];
 
-            const boneMtx = this.boneMatrices[joint.boneNum];
-            mat4.identity(boneMtx);
-            if (this.model.hasBetaFineSkinning) {
-                mat4.mul(boneMtx, boneMtx, this.model.invBindMatrices[joint.boneNum]);
-            }
+            // For vertices with only one joint-influence, positions are stored in joint-local space
+            // as an optimization.
+            mat4.copy(this.matrixPalette[joint.boneNum], this.skeletonInst!.getJointMatrix(joint.boneNum));
 
-            if (!this.model.hasBetaFineSkinning) {
-                // FIXME: Use this code for beta models with fine skinning
-                mat4.mul(boneMtx, this.jointPoseMatrices[joint.boneNum], boneMtx);
-                mat4.mul(boneMtx, this.model.jointTfMatrices[joint.boneNum], boneMtx);
-                if (joint.parent != 0xff) {
-                    mat4.mul(boneMtx, this.boneMatrices[joint.parent], boneMtx);
-                }
-            } else {
-                // FIXME: figure out what is broken about fine-skinned beta models that the following code is needed
-                let jointWalker = joint;
-                while (true) {
-                    mat4.mul(boneMtx, this.jointPoseMatrices[jointWalker.boneNum], boneMtx);
-                    mat4.mul(boneMtx, this.model.jointTfMatrices[jointWalker.boneNum], boneMtx);
-                    if (jointWalker.parent === 0xff) {
-                        break;
-                    }
-                    jointWalker = this.model.joints[jointWalker.parent];
-                }
-            }
+            // FIXME: Check beta models
         }
 
-        // Compute coarse blended bones
-        // console.log(`computing ${this.weights.length} blended bones`);
+        // Compute matrices for coarse blending
         for (let i = 0; i < this.model.coarseBlends.length; i++) {
             const blend = this.model.coarseBlends[i];
 
-            mat4.copy(this.scratch0, this.boneMatrices[blend.joint0]);
-            mat4.mul(this.scratch0, this.scratch0, this.model.invBindMatrices[blend.joint0]);
-            mat4.multiplyScalar(this.scratch0, this.scratch0, blend.influence0);
-            mat4.copy(this.scratch1, this.boneMatrices[blend.joint1]);
-            mat4.mul(this.scratch1, this.scratch1, this.model.invBindMatrices[blend.joint1]);
-            mat4.multiplyScalar(this.scratch1, this.scratch1, blend.influence1);
-
-            const boneMtx = this.boneMatrices[this.model.joints.length + i];
-            mat4.add(boneMtx, this.scratch0, this.scratch1);
+            // For vertices with more than one joint-influence, positions are stored in model space.
+            // Therefore, inverse bind translations must be applied.
+            mat4.translate(scratchMtx0, this.matrixPalette[blend.joint0], this.model.invBindTranslations[blend.joint0]);
+            mat4.multiplyScalar(scratchMtx0, scratchMtx0, blend.influence0);
+            mat4.translate(scratchMtx1, this.matrixPalette[blend.joint1], this.model.invBindTranslations[blend.joint1]);
+            mat4.multiplyScalarAndAdd(this.matrixPalette[this.model.joints.length + i], scratchMtx0, scratchMtx1, blend.influence1)
         }
 
         this.performFineSkinning();
 
-        this.skeletonDirty = false;
+        this.skinningDirty = false;
     }
 
     private performFineSkinning() {
@@ -1118,9 +1156,9 @@ export class ModelInstance implements BlockRenderer {
             return;
         }
 
-        const boneMtx0 = mat4.create();
-        const boneMtx1 = mat4.create();
-        const pos = vec3.create();
+        const boneMtx0 = scratchMtx2;
+        const boneMtx1 = scratchMtx3;
+        const pos = scratchVec0;
 
         // The original game performs fine skinning on the CPU.
         // A more appropriate place for these calculations might be in a vertex shader.
@@ -1129,13 +1167,13 @@ export class ModelInstance implements BlockRenderer {
         for (let i = 0; i < this.model.posFineSkinningPieces.length; i++) {
             const piece = this.model.posFineSkinningPieces[i];
 
-            mat4.copy(boneMtx0, this.boneMatrices[piece.bone0]);
+            mat4.copy(boneMtx0, this.matrixPalette[piece.bone0]);
             if (!this.model.hasBetaFineSkinning) {
-                mat4.mul(boneMtx0, boneMtx0, this.model.invBindMatrices[piece.bone0]);
+                mat4.translate(boneMtx0, boneMtx0, this.model.invBindTranslations[piece.bone0]);
             }
-            mat4.copy(boneMtx1, this.boneMatrices[piece.bone1]);
+            mat4.copy(boneMtx1, this.matrixPalette[piece.bone1]);
             if (!this.model.hasBetaFineSkinning) {
-                mat4.mul(boneMtx1, boneMtx1, this.model.invBindMatrices[piece.bone1]);
+                mat4.translate(boneMtx1, boneMtx1, this.model.invBindTranslations[piece.bone1]);
             }
 
             const src = dataSubarray(this.model.originalPosBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
@@ -1151,12 +1189,9 @@ export class ModelInstance implements BlockRenderer {
 
                 const weight0 = weights.getUint8(weightOffs) / 128;
                 const weight1 = weights.getUint8(weightOffs + 1) / 128;
-                mat4.copy(this.scratch0, boneMtx0);
-                mat4.multiplyScalar(this.scratch0, this.scratch0, weight0);
-                mat4.copy(this.scratch1, boneMtx1);
-                mat4.multiplyScalar(this.scratch1, this.scratch1, weight1);
-                mat4.add(this.scratch0, this.scratch0, this.scratch1);
-                vec3.transformMat4(pos, pos, this.scratch0);
+                mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
+                mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
+                vec3.transformMat4(pos, pos, scratchMtx0);
 
                 dst.setInt16(dstOffs, pos[0] * quant);
                 dst.setInt16(dstOffs + 2, pos[1] * quant);
@@ -1202,7 +1237,8 @@ class ModelsFile {
             return false;
         }
 
-        return this.tab.getUint32(num * 4) !== 0;
+
+        return readUint32(this.tab, 0, num) !== 0;
     }
 
     public getNumModels(): number {
@@ -1213,14 +1249,14 @@ class ModelsFile {
         if (this.models[num] === undefined) {
             console.log(`Loading model #${num} ...`);
     
-            const modelTabValue = this.tab.getUint32(num * 4);
+            const modelTabValue = readUint32(this.tab, 0, num);
             if (modelTabValue === 0) {
                 throw Error(`Model #${num} not found`);
             }
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.bin.subarray(modelOffs + 0x24));
-            this.models[num] = new Model(this.device, this.materialFactory, modelData, this.texFetcher, this.animController, this.modelVersion);
+            this.models[num] = new Model(this.materialFactory, modelData, this.texFetcher, this.modelVersion);
         }
 
         return this.models[num];

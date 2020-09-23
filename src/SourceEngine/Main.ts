@@ -779,6 +779,7 @@ export class SourceRenderContext {
     public destroy(device: GfxDevice): void {
         this.lightmapManager.destroy(device);
         this.materialCache.destroy(device);
+        this.studioModelCache.destroy(device);
     }
 }
 
@@ -995,6 +996,9 @@ export class SourceRenderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderTarget.destroy(device);
+        this.framebufferTexture.destroy(device);
+        this.resolvedSRGB.destroy(device);
+        this.renderTargetUNorm.destroy(device);
         this.renderHelper.destroy(device);
         this.renderContext.destroy(device);
         if (this.skyboxRenderer !== null)

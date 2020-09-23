@@ -4,12 +4,11 @@ import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
 import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
-import { NormalizedViewportCoords } from './gfx/helpers/RenderTargetHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
 import { reverseDepthForPerspectiveProjectionMatrix, reverseDepthForOrthographicProjectionMatrix } from './gfx/helpers/ReversedDepthHelpers';
-import { GfxClipSpaceNearZ } from './gfx/platform/GfxPlatform';
-import { CameraAnimationManager } from './CameraAnimationManager';
+import { GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
+import { CameraAnimationManager, InterpolationStep } from './CameraAnimationManager';
 
 // TODO(jstpierre): All of the cameras and camera controllers need a pretty big overhaul.
 
@@ -311,6 +310,7 @@ export class FPSCameraController implements CameraController {
 
     private keyMoveSpeed = 60;
     private keyMoveShiftMult = 5;
+    private keyMoveSlashMult = 0.1;
     private keyMoveVelocityMult = 1/5;
     private keyMoveDrag = 0.8;
     private keyAngleChangeVelFast = 0.1;
@@ -352,10 +352,14 @@ export class FPSCameraController implements CameraController {
 
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
         const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
+        const isSlashPressed = inputManager.isKeyDown('IntlBackslash');
 
         let keyMoveMult = 1;
         if (isShiftPressed)
             keyMoveMult = this.keyMoveShiftMult;
+
+        if (isSlashPressed)
+            keyMoveMult = this.keyMoveSlashMult;
 
         if (inputManager.isKeyDownEventTriggered('Numpad4') || inputManager.isKeyDownEventTriggered('Numpad1')) {
             // Save world forward vector from current position.
@@ -499,8 +503,7 @@ export class FPSCameraController implements CameraController {
 
 export class StudioCameraController extends FPSCameraController {
     private isAnimationPlaying: boolean = false;
-    private stepTrs: vec3 = vec3.create();
-    private stepRotQ: quat = quat.create();
+    private interpStep: InterpolationStep = new InterpolationStep();
     /**
      * Indicates if the camera is currently positioned on a keyframe's end position.
      */
@@ -541,7 +544,7 @@ export class StudioCameraController extends FPSCameraController {
     public updateAnimation(dt: number): CameraUpdateResult {
         if (this.animationManager.isKeyframeFinished()) {
             if (this.animationManager.playbackHasNextKeyframe())
-                this.animationManager.playbackNextKeyframe();
+                this.animationManager.playbackAdvanceKeyframe();
             else
                 this.stopAnimation();
             return CameraUpdateResult.Unchanged;
@@ -553,22 +556,24 @@ export class StudioCameraController extends FPSCameraController {
             return CameraUpdateResult.Unchanged;
         } else {
             this.animationManager.update(dt);
-            this.animationManager.playbackInterpolationStep(this.stepRotQ, this.stepTrs);
-            mat4.fromRotationTranslation(this.camera.worldMatrix, this.stepRotQ, this.stepTrs);
+            this.animationManager.playbackInterpolationStep(this.interpStep);
+            mat4.targetTo(this.camera.worldMatrix, this.interpStep.pos, this.interpStep.lookAtPos, Vec3UnitY);
+            mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, this.interpStep.bank);
             return CameraUpdateResult.Changed;
         }
     }
 
-    public setToPosition(pos: mat4): void {
-        mat4.copy(this.camera.worldMatrix, pos);
+    public setToPosition(setStep: InterpolationStep): void {
+        mat4.targetTo(this.camera.worldMatrix, setStep.pos, setStep.lookAtPos, Vec3UnitY);
+        mat4.rotateZ(this.camera.worldMatrix, this.camera.worldMatrix, setStep.bank);
         mat4.invert(this.camera.viewMatrix, this.camera.worldMatrix);
         this.camera.worldMatrixUpdated();
         this.isOnKeyframe = true;
     }
 
-    public playAnimation(startPos: mat4) {
+    public playAnimation(startStep: InterpolationStep) {
         this.isAnimationPlaying = true;
-        this.setToPosition(startPos);
+        this.setToPosition(startStep);
     }
 
     public stopAnimation() {
@@ -1062,7 +1067,7 @@ function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number
         texProjPerspMtx(dst, camera.fovY, camera.aspect, scaleS, scaleT, transS, transT);
 }
 
-export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: NormalizedViewportCoords, flipYScale: number): void {
+export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipYScale: number): void {
     // Map from -1 to 1, to viewport coords.
 
     // Map from -1 to 1 to 0 to 1.

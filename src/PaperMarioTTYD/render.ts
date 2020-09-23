@@ -25,6 +25,7 @@ import * as GX from '../gx/gx_enum';
 import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
+import { AnimGroupInstance, AnimGroupDataCache } from './AnimGroup';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -418,7 +419,10 @@ export class WorldRenderer extends BasicGXRendererHelper {
 
     private backgroundRenderer: BackgroundBillboardRenderer | null = null;
     private animationController = new AnimationController(60);
-    public animationNames: string[];
+    private animationNames: string[];
+
+    public animGroupInstances: AnimGroupInstance[] = [];
+    public animGroupCache: AnimGroupDataCache | null = null;
 
     constructor(device: GfxDevice, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
         super(device);
@@ -484,6 +488,9 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.rootNode.updateModelMatrix(this.rootMatrix);
         this.rootNode.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.textureHolder);
 
+        for (let i = 0; i < this.animGroupInstances.length; i++)
+            this.animGroupInstances[i].prepareToRender(device, renderInstManager, viewerInput);
+
         renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -540,6 +547,8 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.textureHolder.destroy(device);
         if (this.backgroundRenderer !== null)
             this.backgroundRenderer.destroy(device);
+        if (this.animGroupCache !== null)
+            this.animGroupCache.destroy(device);
         this.rootNode.destroy(device);
     }
 

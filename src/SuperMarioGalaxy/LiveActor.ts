@@ -18,7 +18,7 @@ import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } fro
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity, resetAllCollisionMtx, validateCollisionPartsForActor, invalidateCollisionPartsForActor, connectToScene } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
-import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts } from "./Collision";
+import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts, setCollisionMtx } from "./Collision";
 import { StageSwitchCtrl, createStageSwitchCtrl } from "./Switch";
 import { ShadowControllerList } from "./Shadow";
 
@@ -174,7 +174,7 @@ export class ModelManager {
         }
     }
 
-    public calcAnim(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAnim(): void {
         if (this.xanimePlayer !== null)
             this.xanimePlayer.calcAnm();
 
@@ -338,7 +338,7 @@ export function resetPosition(sceneObjHolder: SceneObjHolder, actor: LiveActor):
         actor.hitSensorKeeper.clear();
     if (actor.calcGravityFlag)
         calcGravity(sceneObjHolder, actor);
-    // calcAnimDirect
+    actor.calcAnim(sceneObjHolder);
     if (actor.collisionParts !== null)
         resetAllCollisionMtx(actor);
     // requestCalcActorShadowAppear
@@ -394,6 +394,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     // calcGravity is off by default until we can feel comfortable turning it on...
     public calcGravityFlag: boolean = false;
     public calcBinderFlag: boolean = false;
+    public calcAnimFlag: boolean = true;
     public boundingSphereRadius: number | null = null;
 
     public actorAnimKeeper: ActorAnimKeeper | null = null;
@@ -496,20 +497,36 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             this.offScenario(sceneObjHolder);
     }
 
-    // noclip hook for scenario changing. This should probably be makeActorAppeared/makeActorDead by default.
-
+    // noclip hook for scenario changing.
     protected onScenario(sceneObjHolder: SceneObjHolder): void {
-        // this.makeActorAppeared(sceneObjHolder);
-
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.validateBySystem();
+        // endClipped
+        if (this.collisionParts !== null)
+            validateCollisionPartsForActor(sceneObjHolder, this);
+        resetPosition(sceneObjHolder, this);
         if (this.effectKeeper !== null)
-            this.effectKeeper.setVisibleScenario(true);
+            this.effectKeeper.setDrawParticle(true);
+        if (this.actorLightCtrl !== null)
+            this.actorLightCtrl.reset(sceneObjHolder);
+
+        // tryUpdateHitSensorsAll
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.update();
     }
 
     protected offScenario(sceneObjHolder: SceneObjHolder): void {
-        // this.makeActorDead(sceneObjHolder);
-
+        vec3.set(this.velocity, 0, 0, 0);
+        if (this.hitSensorKeeper !== null) {
+            this.hitSensorKeeper.clear();
+            this.hitSensorKeeper.invalidateBySystem();
+        }
+        if (this.binder !== null)
+            this.binder.clear();
         if (this.effectKeeper !== null)
-            this.effectKeeper.setVisibleScenario(false);
+            this.effectKeeper.setDrawParticle(false);
+        if (this.collisionParts !== null)
+            invalidateCollisionParts(sceneObjHolder, this.collisionParts);
     }
 
     public getBaseMtx(): mat4 | null {
@@ -540,21 +557,15 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public initActorCollisionParts(sceneObjHolder: SceneObjHolder, name: string, hitSensor: HitSensor, resourceHolder: ResourceHolder | null, hostMtx: mat4 | null, scaleType: CollisionScaleType): void {
-        if (resourceHolder === null) {
-            this.collisionParts = createCollisionPartsFromLiveActor(sceneObjHolder, this, name, hitSensor, hostMtx, scaleType);
-        } else {
-            // TODO(jstpierre)
-            // makeMtxTRSFromActor(scratchMatrix, this);
-            // this.collisionParts = createCollisionPartsFromResourceHolder();
-            throw "whoops";
-        }
+        if (resourceHolder === null)
+            resourceHolder = this.resourceHolder;
 
+        this.collisionParts = createCollisionPartsFromLiveActor(sceneObjHolder, this, name, hitSensor, hostMtx, scaleType, resourceHolder);
         invalidateCollisionPartsForActor(sceneObjHolder, this);
     }
 
-    public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
+    public initActorLightCtrl(): void {
         this.actorLightCtrl = new ActorLightCtrl(this);
-        this.actorLightCtrl.init(sceneObjHolder);
     }
 
     public initEffectKeeper(sceneObjHolder: SceneObjHolder, groupName: string | null): void {
@@ -563,6 +574,8 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (groupName === null && this.modelInstance !== null)
             groupName = this.modelInstance.name;
         this.effectKeeper = new EffectKeeper(sceneObjHolder, this, assertExists(groupName));
+        if (this.binder !== null)
+            this.effectKeeper.setBinder(this.binder);
     }
 
     public initRailRider(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -580,14 +593,13 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public initBinder(radius: number, centerY: number, hitInfoCapacity: number): void {
         this.binder = new Binder(this.getBaseMtx()!, this.translation, this.gravityVector, centerY, radius, hitInfoCapacity);
         this.calcBinderFlag = true;
-
-        // if (this.effectKeeper !== null)
-        //     this.effectKeeper.setBinder(this.binder);
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setBinder(this.binder);
     }
 
     public initNerve(nerve: TNerve): void {
         this.spine = new Spine<TNerve>();
-        this.spine.setNerve(nerve);
+        this.spine.initNerve(nerve);
     }
 
     public setNerve(nerve: TNerve): void {
@@ -598,6 +610,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.spine!.getCurrentNerve() as TNerve;
     }
 
+    public isNerve(nerve: TNerve): boolean {
+        return this.spine!.getCurrentNerve() === nerve;
+    }
+
     public getNerveStep(): number {
         return this.spine!.getNerveStep();
     }
@@ -606,7 +622,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
     }
 
-    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         this.calcAndSetBaseMtxBase();
     }
 
@@ -621,14 +637,22 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.modelManager === null)
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+        if (!this.visibleAlive || !this.visibleScenario)
+            return;
+
+        if (!this.calcAnimFlag)
             return;
 
         // calcAnmMtx
-        vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
-        this.calcAndSetBaseMtx(sceneObjHolder, viewerInput);
-        this.modelManager.calcAnim(viewerInput);
+        if (this.modelManager !== null) {
+            vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+            this.calcAndSetBaseMtx(sceneObjHolder);
+            this.modelManager.calcAnim();
+        }
+
+        if (this.collisionParts !== null)
+            setCollisionMtx(this, this.collisionParts);
     }
 
     public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
@@ -743,7 +767,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
 
         // EffectKeeper::update()
         if (this.effectKeeper !== null)
-            this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
+            this.effectKeeper.update(sceneObjHolder, deltaTimeFrames);
 
         // ActorPadAndCameraCtrl::update()
 

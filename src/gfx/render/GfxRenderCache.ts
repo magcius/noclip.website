@@ -1,8 +1,8 @@
 
 import { GfxBindingsDescriptor, GfxBindings, GfxDevice, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxProgram, GfxInputLayoutDescriptor, GfxInputLayout, GfxSamplerDescriptor, GfxSampler, GfxProgramDescriptor, GfxProgramDescriptorSimple } from "../platform/GfxPlatform";
-import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
 import { gfxBindingsDescriptorCopy, gfxRenderPipelineDescriptorCopy, gfxBindingsDescriptorEquals, gfxRenderPipelineDescriptorEquals, gfxInputLayoutDescriptorEquals, gfxSamplerDescriptorEquals, gfxInputLayoutDescriptorCopy } from '../platform/GfxPlatformUtil';
-import { assert } from "../../util";
+import { HashMap, nullHashFunc, hashCodeNumberFinish, hashCodeNumberUpdate } from "../../HashMap";
+import { assert } from "../platform/GfxPlatformUtil";
 
 function gfxProgramDescriptorSimpleEquals(a: GfxProgramDescriptorSimple, b: GfxProgramDescriptorSimple): boolean {
     assert(a.preprocessedVert !== '' && b.preprocessedVert !== '');
@@ -79,15 +79,15 @@ export class GfxRenderCache {
         if (program === null) {
             const descriptorCopy = gfxProgramDescriptorSimpleCopy(gfxProgramDescriptorSimple);
             program = device.createProgramSimple(descriptorCopy);
-
-            // TODO(jstpierre): Ugliness
-            if ('associate' in (gfxProgramDescriptorSimple as any)) {
-                const gfxProgramDescriptor = gfxProgramDescriptorSimple as GfxProgramDescriptor;
-                gfxProgramDescriptor.associate(device, descriptorCopy, program);
-            }
-
             this.gfxProgramCache.add(descriptorCopy, program);
         }
+
+        // TODO(jstpierre): Ugliness
+        if ('associate' in (gfxProgramDescriptorSimple as any)) {
+            const gfxProgramDescriptor = gfxProgramDescriptorSimple as GfxProgramDescriptor;
+            gfxProgramDescriptor.associate(device, program);
+        }
+
         return program;
     }
 

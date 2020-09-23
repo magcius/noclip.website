@@ -3,17 +3,17 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { nArray } from '../util';
 
 import { SFARenderer, SceneRenderContext } from './render';
-import { BlockRenderer, BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
+import { BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
-import { ModelRenderContext } from './models';
+import { ModelRenderContext, ModelInstance } from './models';
 
 export interface BlockInfo {
     mod: number;
@@ -82,15 +82,18 @@ interface MapSceneInfo {
 interface BlockIter {
     x: number;
     z: number;
-    block: BlockRenderer;
+    block: ModelInstance;
 }
 
+const scratchMtx0 = mat4.create();
+
 export class MapInstance {
-    private matrix: mat4 = mat4.create();
+    private matrix: mat4 = mat4.create(); // map-to-world
+    private invMatrix: mat4 = mat4.create(); // world-to-map
     private numRows: number;
     private numCols: number;
     private blockInfoTable: (BlockInfo | null)[][] = []; // Addressed by blockInfoTable[z][x]
-    private blocks: (BlockRenderer | null)[][] = []; // Addressed by blocks[z][x]
+    private blocks: (ModelInstance | null)[][] = []; // Addressed by blocks[z][x]
 
     constructor(public info: MapSceneInfo, private blockFetcher: BlockFetcher) {
         this.numRows = info.getNumRows();
@@ -110,9 +113,9 @@ export class MapInstance {
         this.blocks = [];
     }
 
-    // Caution: Matrix will be referenced, not copied.
     public setMatrix(matrix: mat4) {
-        this.matrix = matrix;
+        mat4.copy(this.matrix, matrix);
+        mat4.invert(this.invMatrix, matrix);
     }
 
     public getNumDrawSteps(): number {
@@ -130,7 +133,7 @@ export class MapInstance {
         }
     }
 
-    public getBlockAtPosition(x: number, z: number): BlockRenderer | null {
+    public getBlockAtPosition(x: number, z: number): ModelInstance | null {
         const bx = Math.floor(x / 640);
         const bz = Math.floor(z / 640);
         const block = this.blocks[bz][bx];
@@ -140,52 +143,18 @@ export class MapInstance {
         return block;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, drawStep: number) {
-        const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
-
-        const matrix = mat4.create();
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext) {
         for (let b of this.iterateBlocks()) {
-            mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
-            mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRender(device, renderInstManager, modelCtx, matrix, drawStep);
+            mat4.fromTranslation(scratchMtx0, [640 * b.x, 0, 640 * b.z]);
+            mat4.mul(scratchMtx0, this.matrix, scratchMtx0);
+            b.block.prepareToRender(device, renderInstManager, modelCtx, scratchMtx0);
         }
-
-        renderInstManager.popTemplateRenderInst();
-    }
-
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext) {
-        const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
-
-        const matrix = mat4.create();
-        for (let b of this.iterateBlocks()) {
-            mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
-            mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix);
-        }
-
-        renderInstManager.popTemplateRenderInst();
-    }
-
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext) {
-        const template = renderInstManager.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, modelCtx.viewerInput, 0);
-
-        const matrix = mat4.create();
-        for (let b of this.iterateBlocks()) {
-            mat4.fromTranslation(matrix, [640 * b.x, 0, 640 * b.z]);
-            mat4.mul(matrix, this.matrix, matrix);
-            b.block.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix);
-        }
-
-        renderInstManager.popTemplateRenderInst();
     }
 
     public async reloadBlocks(dataFetcher: DataFetcher) {
         this.clearBlocks();
         for (let z = 0; z < this.numRows; z++) {
-            const row: (BlockRenderer | null)[] = [];
+            const row: (ModelInstance | null)[] = [];
             this.blocks.push(row);
             for (let x = 0; x < this.numCols; x++) {
                 const blockInfo = this.blockInfoTable[z][x];
@@ -254,26 +223,15 @@ class MapSceneRenderer extends SFARenderer {
     
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         const modelCtx: ModelRenderContext = {
-            ...sceneCtx,
+            sceneCtx,
             showDevGeometry: false,
             ambienceNum: 0,
             setupLights: () => {},
         };
 
         this.beginPass(sceneCtx.viewerInput);
-        this.map.prepareToRender(device, renderInstManager, modelCtx, 0);
-        this.endPass(device);
-
-        this.beginPass(sceneCtx.viewerInput);
-        this.map.prepareToRenderWaters(device, renderInstManager, modelCtx);
-        this.map.prepareToRenderFurs(device, renderInstManager, modelCtx);
-        this.endPass(device);
-
-        for (let drawStep = 1; drawStep < this.map.getNumDrawSteps(); drawStep++) {
-            this.beginPass(sceneCtx.viewerInput);
-            this.map.prepareToRender(device, renderInstManager, modelCtx, drawStep);
-            this.endPass(device);
-        }        
+        this.map.prepareToRender(device, renderInstManager, modelCtx);
+        this.endPass(device);    
     }
 }
 
@@ -386,7 +344,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
         };
 
         const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
-        const blockFetcher = await AncientBlockFetcher.create(this.gameInfo, dataFetcher, device, animController);
+        const blockFetcher = await AncientBlockFetcher.create(this.gameInfo, dataFetcher, device, materialFactory, animController);
         await mapRenderer.create(mapSceneInfo, this.gameInfo, dataFetcher, blockFetcher);
 
         // Rotate camera 135 degrees to more reliably produce a good view of the map
