@@ -286,13 +286,13 @@ export class SMGRenderer implements Viewer.SceneGfx {
         // Prepare our two scene params buffers.
         const sceneParamsOffs3D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
         fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(sceneParamsOffs3D, ub_SceneParamsBufferSize), sceneParamsOffs3D, sceneParams);
+        fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(), sceneParamsOffs3D, sceneParams);
         this.sceneObjHolder.renderParams.sceneParamsOffs3D = sceneParamsOffs3D;
 
         const sceneParamsOffs2D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
         computeProjectionMatrixFromCuboid(scratchMatrix, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
         fillSceneParams(sceneParams, scratchMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(sceneParamsOffs2D, ub_SceneParamsBufferSize), sceneParamsOffs2D, sceneParams);
+        fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(), sceneParamsOffs2D, sceneParams);
         this.sceneObjHolder.renderParams.sceneParamsOffs2D = sceneParamsOffs2D;
 
         const renderInstManager = this.renderHelper.renderInstManager;

@@ -240,7 +240,7 @@ export class BloomPostFXRenderer {
 
     public allocateParameterBuffer(uniformBuffer: GfxRenderDynamicUniformBuffer, bloomEffect: BloomEffect): number {
         const parameterBufferOffs = uniformBuffer.allocateChunk(4);
-        const d = uniformBuffer.mapBufferF32(parameterBufferOffs, 4);
+        const d = uniformBuffer.mapBufferF32();
 
         const bloomIntensity = (bloomEffect.bloomIntensity * bloomEffect.strength) / 0xFF;
         const threshold = bloomEffect.threshold / 0xFF;

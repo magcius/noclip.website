@@ -368,7 +368,7 @@ export class GXMaterialHelperGfx {
 
     public fillMaterialParamsData(renderInstManager: GfxRenderInstManager, offs: number, materialParams: MaterialParams): void {
         const uniformBuffer = renderInstManager.getTemplateRenderInst().getUniformBuffer();
-        const d = uniformBuffer.mapBufferF32(offs, this.materialParamsBufferSize);
+        const d = uniformBuffer.mapBufferF32();
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 

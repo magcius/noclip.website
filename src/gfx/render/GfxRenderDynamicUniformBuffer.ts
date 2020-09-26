@@ -64,13 +64,10 @@ export class GfxRenderDynamicUniformBuffer {
     }
 
     /**
-     * Return the CPU data buffer used internally. Note that due to GC performance reasons, a slice is not
-     * returned, but instead, the full shadow buffer, so you will need to write to the buffer with the same
-     * {@param wordOffset} that was passed in. The {@param wordOffset} and {@param wordCount} fields are
-     * simply used to allocate more shadow buffer space if required.
+     * Return the CPU data buffer used internally. Fill this in to submit data to the CPU. Write to
+     * it with the offset that was returned from {@see allocateChunk}.
      */
-    public mapBufferF32(wordOffset: number, wordCount: number): Float32Array {
-        // TODO(jstpierre): Remove the wordOffset / wordCount parameters.
+    public mapBufferF32(): Float32Array {
         return assertExists(this.shadowBufferF32);
     }
 

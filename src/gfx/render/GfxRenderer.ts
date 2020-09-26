@@ -389,11 +389,12 @@ export class GfxRenderInst {
     /**
      * This is a convenience wrapper for {@see GfxRenderDynamicUniformBuffer.mapBufferF32}, but uses
      * the values previously assigned for the uniform buffer slot at index {@param bufferIndex}.
+     * Like {@see GfxRenderDynamicUniformBuffer.mapBufferF32}, this does not return a slice for the
+     * buffer; you need to write to it with the correct uniform buffer offset; this will usually be
+     * returned by {@see allocateUniformBuffer}.
      */
     public mapUniformBufferF32(bufferIndex: number): Float32Array {
-        const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
-        const wordCount = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex].wordCount;
-        return this._uniformBuffer.mapBufferF32(wordOffset, wordCount);
+        return this._uniformBuffer.mapBufferF32();
     }
 
     /**
