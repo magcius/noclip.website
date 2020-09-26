@@ -2,7 +2,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as LZ4 from "../Common/Compression/LZ4";
 import { assert, nArray } from "../util";
-import { ZipFile } from "../ZipFile";
+import { ZipFile, parseZipFile } from "../ZipFile";
 import { GfxDevice, GfxTexture, GfxTextureDimension, GfxFormat, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxIndexBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { Color } from "../Color";
@@ -16,6 +16,7 @@ import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { getFormatByteSize } from "../gfx/platform/GfxPlatformFormat";
 import { Destroyable } from "../SceneBase";
 import { GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { TextureMapping } from "../TextureHolder";
 
 export const enum Asset_Type {
     Texture,
@@ -52,26 +53,45 @@ const enum Texture_Asset_Flags {
 }
 
 const enum D3DFormat {
+    DXT1 = 'DXT1',
     DXT5 = 'DXT5',
+    ATI1 = 'ATI1',
+    ATI2 = 'ATI2',
 }
 
 function get_gfx_format(format: string, srgb: boolean): GfxFormat {
-    if (format === D3DFormat.DXT5) {
+    if (format === D3DFormat.DXT1)
+        return srgb ? GfxFormat.BC1_SRGB : GfxFormat.BC1;
+    else if (format === D3DFormat.DXT5)
         return srgb ? GfxFormat.BC3_SRGB : GfxFormat.BC3;
-    } else {
+    else if (format === D3DFormat.ATI1)
+        return GfxFormat.BC4_UNORM;
+    else if (format === D3DFormat.ATI2)
+        return GfxFormat.BC5_UNORM;
+    else
         throw "whoops";
-    }
 }
 
-function get_mipmap_size(format: D3DFormat, width: number, height: number, depth: number) {
-    if (format === D3DFormat.DXT5) {
+function is_block_compressed(format: D3DFormat): boolean {
+    return true;
+}
+
+function get_mipmap_size(format: D3DFormat, width: number, height: number, depth: number): number {
+    if (is_block_compressed(format)) {
         width = Math.max(width, 4);
         height = Math.max(height, 4);
         const count = ((width * height) / 16) * depth;
-        return count * 16;
-    } else {
-        throw "whoops";
+        if (format === D3DFormat.DXT1)
+            return count * 8;
+        else if (format === D3DFormat.DXT5)
+            return count * 16;
+        else if (format === D3DFormat.ATI1)
+            return count * 8;
+        else if (format === D3DFormat.ATI2)
+            return count * 16;
     }
+
+    throw "whoops";
 }
 
 class Texture_Asset {
@@ -84,7 +104,7 @@ class Texture_Asset {
 
     private texture: GfxTexture;
 
-    constructor(device: GfxDevice, version: number, stream: Stream) {
+    constructor(device: GfxDevice, version: number, stream: Stream, name: string) {
         assert(version === 0x12);
 
         // Texture_Asset
@@ -115,6 +135,7 @@ class Texture_Asset {
             numLevels: this.mipmap_count,
             pixelFormat: get_gfx_format(d3d_format, !!(this.flags & Texture_Asset_Flags.Is_sRGB)),
         });
+        device.setResourceName(this.texture, name);
 
         const levelData: Uint8Array[] = [];
         let w = this.width, h = this.height, d = this.depth;
@@ -131,14 +152,18 @@ class Texture_Asset {
         device.submitPass(pass);
     }
 
+    public fillTextureMapping(m: TextureMapping): void {
+        m.gfxTexture = this.texture;
+    }
+
     public destroy(device: GfxDevice): void {
         device.destroyTexture(this.texture);
     }
 }
 
-function load_texture_asset(device: GfxDevice, version: number, buffer: ArrayBufferSlice): Texture_Asset {
+function load_texture_asset(device: GfxDevice, version: number, buffer: ArrayBufferSlice, name: string): Texture_Asset {
     const stream = new Stream(buffer);
-    return new Texture_Asset(device, version, stream);
+    return new Texture_Asset(device, version, stream, name);
 }
 
 function Stream_read_Bounding_Box(stream: Stream): AABB {
@@ -168,9 +193,32 @@ const enum Material_Type {
 }
 
 const enum Material_Flags {
+    Dynamic_Substitute                       = 0x00000001,
+    Two_Sided_Deprecated                     = 0x00000002,
+    Casts_Shadow                             = 0x00000002,
+    Lightmapped                              = 0x00000004,
+    Remove_During_Reduction                  = 0x00000010,
+    Do_Not_Use_When_Computing_Normals        = 0x00000020,
+    Detail                                   = 0x00000040,
+    Underwater                               = 0x00000080,
+    Vertex_Lightmap                          = 0x00000100,
+    Ground                                   = 0x00000200,
+    Solid                                    = 0x00000400,
+    Walkable                                 = 0x00000800,
+    Wind_Animation                           = 0x00001000,
+    Alternate_Map                            = 0x00002000,
+    Color_Cycle                              = 0x00004000,
+    Vertex_Lightmap_Auto                     = 0x00008000,
+    Entity_Specific_Marker                   = 0x00010000,
+    Translucent_Use_Environment_Map          = 0x00020000,
+    Translucent_Environment_Map_Is_Filtered  = 0x00040000,
+    Translucent_Sort_By_Mesh_Centroid        = 0x00080000,
+    Translucent_Has_Vertex_Colors            = 0x00100000,
+    Translucent_Force_To_Top_Of_Render_Order = 0x00200000,
+    Use_Blend_Map_On_Low                     = 0x00400000,
 }
 
-interface Render_Material {
+export interface Render_Material {
     name: string;
     material_type: Material_Type;
     flags: Material_Flags;
@@ -220,7 +268,7 @@ function unpack_Array<T>(stream: Stream, unpack_func: (stream: Stream) => T): T[
 const enum VertexAttributeFlags {
     BYTE_PACKED_POSITION            = 0x00000001,
     WORD_PACKED_POSITION            = 0x00000002,
-    HALF_PACKED_POSITION            = 0x00000003,
+    HALF_PACKED_POSITION            = 0x00000004,
     ATTRIBUTE_MASK_POSITION         = 0x00000007,
     HAS_TEXCOORD0                   = 0x00000010,
     WORD_PACKED_TEXCOORD0           = 0x00000020,
@@ -231,12 +279,12 @@ const enum VertexAttributeFlags {
     HALF_PACKED_TEXCOORD1           = 0x00000400,
     ATTRIBUTE_MASK_TEXCOORD1        = 0x00000700,
     HAS_NORMAL                      = 0x00001000,
-    WORD_PACKED_NORMAL              = 0x00002000,
-    HALF_PACKED_NORMAL              = 0x00004000,
+    BYTE_PACKED_NORMAL              = 0x00002000,
+    WORD_PACKED_NORMAL              = 0x00004000,
     ATTRIBUTE_MASK_NORMAL           = 0x00007000,
     HAS_TANGENT                     = 0x00010000,
-    WORD_PACKED_TANGENT             = 0x00020000,
-    HALF_PACKED_TANGENT             = 0x00040000,
+    BYTE_PACKED_TANGENT             = 0x00020000,
+    WORD_PACKED_TANGENT             = 0x00040000,
     ATTRIBUTE_MASK_TANGENT          = 0x00070000,
     HAS_COLOR0                      = 0x00100000,
     HALF_PACKED_COLOR0              = 0x00200000,
@@ -293,7 +341,6 @@ interface Skeleton {
 }
 
 class Device_Mesh {
-    private material_index: number;
     private index_count: number;
     private vertex_count: number;
 
@@ -302,7 +349,11 @@ class Device_Mesh {
     private input_layout: GfxInputLayout;
     private input_state: GfxInputState;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, sub_mesh_asset: Sub_Mesh_Asset) {
+    public material_index: number;
+    public detail_level: number;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, private sub_mesh_asset: Sub_Mesh_Asset) {
+        this.detail_level = sub_mesh_asset.detail_level;
         this.material_index = sub_mesh_asset.material_index;
         this.vertex_count = sub_mesh_asset.vertex_count;
         this.index_count = sub_mesh_asset.index_count;
@@ -315,7 +366,7 @@ class Device_Mesh {
             this.index_buffer = null;
         }
 
-        const indexBufferFormat = GfxFormat.U16_R;
+        const indexBufferFormat = (sub_mesh_asset.vertex_count * sub_mesh_asset.max_instance_count) > 0xFFFF ? GfxFormat.U32_R : GfxFormat.U16_R;
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
         const vaf = sub_mesh_asset.vertex_attribute_flags;
@@ -329,7 +380,7 @@ class Device_Mesh {
         else if (!!(vaf & VertexAttributeFlags.HALF_PACKED_POSITION))
             format = GfxFormat.F16_RGBA;
         else
-            format = GfxFormat.F32_RGBA;
+            format = GfxFormat.F32_RGB;
 
         vertexAttributeDescriptors.push({ location: 0, bufferIndex: 0, format, bufferByteOffset: offs });
         offs += getFormatByteSize(format);
@@ -346,8 +397,79 @@ class Device_Mesh {
             offs += getFormatByteSize(format);
         }
 
+        if (!!(vaf & VertexAttributeFlags.HAS_TEXCOORD1)) {
+            if (!!(vaf & VertexAttributeFlags.WORD_PACKED_TEXCOORD1))
+                format = GfxFormat.S16_RG_NORM;
+            else if (!!(vaf & VertexAttributeFlags.HALF_PACKED_TEXCOORD1))
+                format = GfxFormat.F16_RG;
+            else
+                format = GfxFormat.F32_RG;
+
+            vertexAttributeDescriptors.push({ location: 2, bufferIndex: 0, format, bufferByteOffset: offs });
+            offs += getFormatByteSize(format);
+        }
+
+        if (!!(vaf & VertexAttributeFlags.HAS_NORMAL)) {
+            if (!!(vaf & VertexAttributeFlags.BYTE_PACKED_NORMAL))
+                format = GfxFormat.U8_RGBA_NORM;
+            else if (!!(vaf & VertexAttributeFlags.WORD_PACKED_NORMAL))
+                format = GfxFormat.S16_RGBA_NORM;
+            else
+                format = GfxFormat.F32_RGB;
+
+            vertexAttributeDescriptors.push({ location: 3, bufferIndex: 0, format, bufferByteOffset: offs });
+            offs += getFormatByteSize(format);
+        }
+
+        if (!!(vaf & VertexAttributeFlags.HAS_TANGENT)) {
+            if (!!(vaf & VertexAttributeFlags.BYTE_PACKED_TANGENT))
+                format = GfxFormat.U8_RGBA_NORM;
+            else if (!!(vaf & VertexAttributeFlags.WORD_PACKED_TANGENT))
+                format = GfxFormat.S16_RGBA_NORM;
+            else
+                format = GfxFormat.F32_RGBA;
+
+            vertexAttributeDescriptors.push({ location: 4, bufferIndex: 0, format, bufferByteOffset: offs });
+            offs += getFormatByteSize(format);
+        }
+
+        if (!!(vaf & VertexAttributeFlags.HAS_COLOR0)) {
+            if (!!(vaf & VertexAttributeFlags.UNPACKED_COLOR0))
+                format = GfxFormat.F32_RGBA;
+            else if (!!(vaf & VertexAttributeFlags.HALF_PACKED_COLOR0))
+                format = GfxFormat.F16_RGBA;
+            else
+                format = GfxFormat.U8_RGBA_NORM;
+
+            vertexAttributeDescriptors.push({ location: 5, bufferIndex: 0, format, bufferByteOffset: offs });
+            offs += getFormatByteSize(format);
+        }
+
+        if (!!(vaf & VertexAttributeFlags.HAS_COLOR1)) {
+            format = GfxFormat.U8_RGBA_NORM;
+            vertexAttributeDescriptors.push({ location: 6, bufferIndex: 0, format, bufferByteOffset: offs });
+            offs += getFormatByteSize(format);
+        }
+
+        if (!!(vaf & VertexAttributeFlags.HAS_INDICES)) {
+            // TODO(jstpierre): Remove integer type (bake to norm in shader)
+            format = GfxFormat.U8_RGBA;
+            vertexAttributeDescriptors.push({ location: 7, bufferIndex: 0, format, bufferByteOffset: offs });
+            offs += getFormatByteSize(format);
+        }
+
+        if (!!(vaf & VertexAttributeFlags.HAS_WEIGHTS)) {
+            if (!!(vaf & VertexAttributeFlags.BYTE_PACKED_WEIGHTS))
+                format = GfxFormat.U8_RGBA_NORM;
+            else
+                format = GfxFormat.F32_RGBA;
+
+            vertexAttributeDescriptors.push({ location: 8, bufferIndex: 0, format, bufferByteOffset: offs });
+            offs += getFormatByteSize(format);
+        }
+
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: offs, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: sub_mesh_asset.vertex_size, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
 
         this.input_layout = cache.createInputLayout(device, {
@@ -391,7 +513,7 @@ export class Mesh_Asset {
 
     public device_mesh_array: Device_Mesh[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, version: number, stream: Stream) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, version: number, stream: Stream, name: string) {
         this.checksum = stream.readUint32();
         this.flags = stream.readUint32();
         this.max_lod_count = stream.readUint32();
@@ -415,12 +537,12 @@ export class Mesh_Asset {
     }
 }
 
-function load_mesh_asset(device: GfxDevice, cache: GfxRenderCache, version: number, buffer: ArrayBufferSlice): Mesh_Asset {
+function load_mesh_asset(device: GfxDevice, cache: GfxRenderCache, version: number, buffer: ArrayBufferSlice, name: string): Mesh_Asset {
     const stream = new Stream(buffer);
-    return new Mesh_Asset(device, cache, version, stream);
+    return new Mesh_Asset(device, cache, version, stream, name);
 }
 
-function load_asset<T extends Asset_Type>(device: GfxDevice, cache: GfxRenderCache, asset_type_: T, buffer: ArrayBufferSlice): AssetT<T> {
+function load_asset<T extends Asset_Type>(device: GfxDevice, cache: GfxRenderCache, asset_type_: T, buffer: ArrayBufferSlice, name: string): AssetT<T> {
     let headerView = buffer.createDataView();
     const asset_type = headerView.getUint32(0x00, true) as T;
     assert(asset_type_ === asset_type);
@@ -440,9 +562,9 @@ function load_asset<T extends Asset_Type>(device: GfxDevice, cache: GfxRenderCac
 
     type ResT = AssetT<T>;
     if (asset_type === Asset_Type.Texture) {
-        return load_texture_asset(device, version, buffer) as ResT;
+        return load_texture_asset(device, version, buffer, name) as ResT;
     } else if (asset_type === Asset_Type.Mesh) {
-        return load_mesh_asset(device, cache, version, buffer) as ResT;
+        return load_mesh_asset(device, cache, version, buffer, name) as ResT;
     } else if (asset_type === Asset_Type.World) {
         return load_entities(version, buffer) as ResT;
     } else {
@@ -474,14 +596,20 @@ function get_processed_filename(type: Asset_Type, source_name: string, options_h
 
 export class Asset_Manager {
     private bundles: ZipFile[] = [];
-    private cache = new GfxRenderCache();
+    public cache = new GfxRenderCache();
     private destroyables: Destroyable[] = [];
+    private asset_cache = new Map<string, any>();
 
-    constructor(private device: GfxDevice) {
+    constructor(public device: GfxDevice) {
     }
 
     public add_bundle(bundle: ZipFile) {
         this.bundles.push(bundle);
+
+        // XXX(jstpierre): This is a hack to load all assets. Eventually go through and implement the cluster system.
+        for (let i = 0; i < bundle.length; i++)
+            if (bundle[i].filename.endsWith('.pkg'))
+                this.add_bundle(parseZipFile(bundle[i].data));
     }
 
     private find_asset_data(processed_filename: string): ArrayBufferSlice {
@@ -498,10 +626,13 @@ export class Asset_Manager {
 
     public load_asset<T extends Asset_Type>(type: T, source_name: string, options_hash: number = 0): AssetT<T> {
         const processed_filename = get_processed_filename(type, source_name, options_hash);
+        if (this.asset_cache.has(processed_filename))
+            return this.asset_cache.get(processed_filename) as AssetT<T>;
         const asset_data = this.find_asset_data(processed_filename);
-        const asset = load_asset(this.device, this.cache, type, asset_data);
+        const asset = load_asset(this.device, this.cache, type, asset_data, source_name);
         if ('destroy' in asset)
             this.destroyables.push(asset as Destroyable);
+        this.asset_cache.set(processed_filename, asset);
         return asset;
     }
 

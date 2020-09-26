@@ -431,6 +431,7 @@ export class GfxRenderInst {
                 this._flags |= lateBit;
                 this._lateSamplerBindings[i] = typeof binding === 'string' ? binding : binding.lateBinding!;
             } else {
+                this._flags &= ~lateBit;
                 dst.gfxTexture = binding!.gfxTexture;
                 dst.gfxSampler = binding!.gfxSampler;
             }

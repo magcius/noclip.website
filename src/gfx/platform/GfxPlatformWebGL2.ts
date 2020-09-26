@@ -543,6 +543,13 @@ export class GfxPlatformWebGL2Config {
     public shaderDebug: boolean = false;
 }
 
+interface EXT_texture_compression_rgtc {
+    COMPRESSED_RED_RGTC1_EXT: number;
+    COMPRESSED_SIGNED_RED_RGTC1_EXT: number;
+    COMPRESSED_RED_GREEN_RGTC2_EXT: number;
+    COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT: number;
+};
+
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // Configuration
     private _shaderDebug = false;
@@ -550,6 +557,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // GL extension
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
     private _WEBGL_compressed_texture_s3tc_srgb: WEBGL_compressed_texture_s3tc_srgb | null = null;
+    private _EXT_texture_compression_rgtc: EXT_texture_compression_rgtc | null = null;
     private _KHR_parallel_shader_compile: KHR_parallel_shader_compile | null = null;
     private _uniformBufferMaxPageByteSize: number;
 
@@ -606,6 +614,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     constructor(public gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config) {
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
+        this._EXT_texture_compression_rgtc = gl.getExtension('EXT_texture_compression_rgtc');
         this._KHR_parallel_shader_compile = gl.getExtension('KHR_parallel_shader_compile');
 
         this._uniformBufferMaxPageByteSize = Math.min(gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE), UBO_PAGE_MAX_BYTE_SIZE);
@@ -826,6 +835,14 @@ void main() {
             return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT5_EXT;
         case GfxFormat.BC3_SRGB:
             return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
+        case GfxFormat.BC4_UNORM:
+            return this._EXT_texture_compression_rgtc!.COMPRESSED_RED_RGTC1_EXT;
+        case GfxFormat.BC4_SNORM:
+            return this._EXT_texture_compression_rgtc!.COMPRESSED_SIGNED_RED_RGTC1_EXT;
+        case GfxFormat.BC5_UNORM:
+            return this._EXT_texture_compression_rgtc!.COMPRESSED_RED_GREEN_RGTC2_EXT;
+        case GfxFormat.BC5_SNORM:
+            return this._EXT_texture_compression_rgtc!.COMPRESSED_SIGNED_RED_GREEN_RGTC2_EXT;
         case GfxFormat.D32F_S8:
             return WebGL2RenderingContext.DEPTH32F_STENCIL8;
         case GfxFormat.D24_S8:
@@ -840,19 +857,10 @@ void main() {
     }
     
     private translateTextureFormat(fmt: GfxFormat): GLenum {
+        if (this.isTextureFormatCompressed(fmt))
+            return this.translateTextureInternalFormat(fmt);
+
         switch (fmt) {
-        case GfxFormat.BC1:
-            return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT1_EXT;
-        case GfxFormat.BC1_SRGB:
-            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT;
-        case GfxFormat.BC2:
-            return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT3_EXT;
-        case GfxFormat.BC2_SRGB:
-            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT;
-        case GfxFormat.BC3:
-            return this._WEBGL_compressed_texture_s3tc!.COMPRESSED_RGBA_S3TC_DXT5_EXT;
-        case GfxFormat.BC3_SRGB:
-            return this._WEBGL_compressed_texture_s3tc_srgb!.COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT;
         case GfxFormat.D24_S8:
         case GfxFormat.D32F_S8:
             return WebGL2RenderingContext.DEPTH_STENCIL;
@@ -909,7 +917,11 @@ void main() {
         case FormatTypeFlags.BC1:
         case FormatTypeFlags.BC2:
         case FormatTypeFlags.BC3:
-            return true;
+        case FormatTypeFlags.BC4_UNORM:
+        case FormatTypeFlags.BC4_SNORM:
+        case FormatTypeFlags.BC5_UNORM:
+        case FormatTypeFlags.BC5_SNORM:
+                return true;
         default:
             return false;
         }
@@ -1411,6 +1423,11 @@ void main() {
         case GfxFormat.BC2:
         case GfxFormat.BC3:
             return this._WEBGL_compressed_texture_s3tc !== null;
+        case GfxFormat.BC4_UNORM:
+        case GfxFormat.BC4_SNORM:
+        case GfxFormat.BC5_UNORM:
+        case GfxFormat.BC5_SNORM:
+            return this._EXT_texture_compression_rgtc !== null;
         default:
             return true;
         }

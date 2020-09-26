@@ -15,6 +15,10 @@ export const enum FormatTypeFlags {
     BC1 = 0x41,
     BC2,
     BC3,
+    BC4_UNORM,
+    BC4_SNORM,
+    BC5_UNORM,
+    BC5_SNORM,
 
     // Special-case packed texture formats.
     U16_PACKED_5551 = 0x61,
@@ -53,6 +57,7 @@ export function makeFormat(type: FormatTypeFlags, comp: FormatCompFlags, flags: 
 
 export enum GfxFormat {
     F16_RG         = makeFormat(FormatTypeFlags.F16, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
+    F16_RGB        = makeFormat(FormatTypeFlags.F16, FormatCompFlags.COMP_RGB,  FormatFlags.NONE),
     F16_RGBA       = makeFormat(FormatTypeFlags.F16, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     F32_R          = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_R,    FormatFlags.NONE),
     F32_RG         = makeFormat(FormatTypeFlags.F32, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
@@ -98,6 +103,10 @@ export enum GfxFormat {
     BC2_SRGB       = makeFormat(FormatTypeFlags.BC2, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
     BC3            = makeFormat(FormatTypeFlags.BC3, FormatCompFlags.COMP_RGBA, FormatFlags.NONE),
     BC3_SRGB       = makeFormat(FormatTypeFlags.BC3, FormatCompFlags.COMP_RGBA, FormatFlags.SRGB),
+    BC4_UNORM      = makeFormat(FormatTypeFlags.BC4_UNORM, FormatCompFlags.COMP_R,    FormatFlags.NONE),
+    BC4_SNORM      = makeFormat(FormatTypeFlags.BC4_SNORM, FormatCompFlags.COMP_R,    FormatFlags.NONE),
+    BC5_UNORM      = makeFormat(FormatTypeFlags.BC5_UNORM, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
+    BC5_SNORM      = makeFormat(FormatTypeFlags.BC5_SNORM, FormatCompFlags.COMP_RG,   FormatFlags.NONE),
 
     // Depth/Stencil
     D24             = makeFormat(FormatTypeFlags.D24,   FormatCompFlags.COMP_R,  FormatFlags.DEPTH),
