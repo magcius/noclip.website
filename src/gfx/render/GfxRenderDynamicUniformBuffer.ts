@@ -37,6 +37,8 @@ export class GfxRenderDynamicUniformBuffer {
             wordOffset = alignNonPowerOfTwo(wordOffset, this.uniformBufferMaxPageWordSize);
 
         this.currentWordOffset = wordOffset + wordCount;
+        this.ensureShadowBuffer(wordOffset, wordCount);
+
         return wordOffset;
     }
 
@@ -62,14 +64,13 @@ export class GfxRenderDynamicUniformBuffer {
     }
 
     /**
-     * Return the shadow buffer used internally. Note that due to GC performance reasons, a slice is not
+     * Return the CPU data buffer used internally. Note that due to GC performance reasons, a slice is not
      * returned, but instead, the full shadow buffer, so you will need to write to the buffer with the same
      * {@param wordOffset} that was passed in. The {@param wordOffset} and {@param wordCount} fields are
      * simply used to allocate more shadow buffer space if required.
      */
     public mapBufferF32(wordOffset: number, wordCount: number): Float32Array {
-        // TODO(jstpierre): This API is kind of bad for initial performance...
-        this.ensureShadowBuffer(wordOffset, wordCount);
+        // TODO(jstpierre): Remove the wordOffset / wordCount parameters.
         return assertExists(this.shadowBufferF32);
     }
 
@@ -92,7 +93,7 @@ export class GfxRenderDynamicUniformBuffer {
 
         const wordCount = alignNonPowerOfTwo(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
         if (!(wordCount <= this.currentBufferWordSize))
-            throw new Error(`Assert fail: wordCount [${wordCount}] <= this.currentBufferWordSize [${this.currentBufferWordSize}]`);
+            throw new Error(`Assert fail: wordCount [${wordCount}] (${this.currentWordOffset} aligned ${this.uniformBufferMaxPageWordSize}) <= this.currentBufferWordSize [${this.currentBufferWordSize}]`);
 
         const gfxBuffer = assertExists(this.gfxBuffer);
         hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount * 4);
