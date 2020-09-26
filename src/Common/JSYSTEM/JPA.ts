@@ -2132,7 +2132,7 @@ function fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderI
     // These should be one allocation.
     let materialOffs = renderInst.allocateUniformBuffer(GX_Program.ub_MaterialParams, materialHelper.materialParamsBufferSize);
     let packetOffs = renderInst.allocateUniformBuffer(GX_Program.ub_PacketParams, materialHelper.packetParamsBufferSize);
-    const d = renderInst.getUniformBuffer().mapBufferF32(materialOffs, materialHelper.materialParamsBufferSize + materialHelper.packetParamsBufferSize);
+    const d = renderInst.getUniformBuffer().mapBufferF32();
 
     // Since this is called quite a *lot*, we have hand-inlined variants of
     // fillMaterialParamsDataWithOptimizations and fillPacketParamsDataWithOptimizations for speed here.
