@@ -4,7 +4,7 @@ import { assert, hexzero, assertExists, readString, nArray } from "../util";
 import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat, vec3 } from "gl-matrix";
-import { GSRegister, GSRegisterTEX0, GSMemoryMap, getGSRegisterTEX0, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS";
+import { GSRegister, GSRegisterTEX0, GSMemoryMap, getGSRegisterTEX0, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTPixelStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS";
 import { Endianness } from "../endian";
 import { MathConstants, computeModelMatrixSRT } from "../MathHelpers";
 
@@ -232,7 +232,7 @@ function decodeTexture(gsMemoryMap: GSMemoryMap[], tex0_data0: number, tex0_data
 
     // TODO(jstpierre): Handle other formats
     // assert(psm === GSPixelStorageFormat.PSMT4, `Unknown PSM ${psm}`);
-    assert(tex0.cpsm === GSCLUTStorageFormat.PSMCT32, `Unknown CPSM ${tex0.cpsm}`);
+    assert(tex0.cpsm === GSCLUTPixelStorageFormat.PSMCT32, `Unknown CPSM ${tex0.cpsm}`);
 
     // TODO(jstpierre): Read the TEXALPHA register.
     const alphaReg = tex0.tcc === GSTextureColorComponent.RGBA ? -1 : 0x80;
