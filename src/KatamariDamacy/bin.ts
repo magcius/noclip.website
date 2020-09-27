@@ -4,7 +4,7 @@ import { assert, hexzero, assertExists, readString, nArray } from "../util";
 import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat, vec3 } from "gl-matrix";
-import { GSRegister, GSMemoryMap, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS";
+import { GSRegister, GSRegisterTEX0, GSMemoryMap, getGSRegisterTEX0, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTPixelStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS";
 import { Endianness } from "../endian";
 import { MathConstants, computeModelMatrixSRT } from "../MathHelpers";
 
@@ -223,45 +223,33 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
 }
 
 function decodeTexture(gsMemoryMap: GSMemoryMap[], tex0_data0: number, tex0_data1: number, namePrefix: string = ''): BINTexture {
-    // Unpack TEX0 register.
-    const tbp0 = (tex0_data0 >>> 0) & 0x3FFF;
-    const tbw = (tex0_data0 >>> 14) & 0x3F;
-    const psm: GSPixelStorageFormat = (tex0_data0 >>> 20) & 0x3F;
-    const tw = (tex0_data0 >>> 26) & 0x0F;
-    const th = ((tex0_data0 >>> 30) & 0x03) | (((tex0_data1 >>> 0) & 0x03) << 2);
-    const tcc: GSTextureColorComponent = (tex0_data1 >>> 2) & 0x03;
-    const tfx: GSTextureFunction = (tex0_data1 >>> 3) & 0x03;
-    const cbp = (tex0_data1 >>> 5) & 0x3FFF;
-    const cpsm: GSCLUTStorageFormat = (tex0_data1 >>> 19) & 0x0F;
-    const csm = (tex0_data1 >>> 23) & 0x1;
-    const csa = (tex0_data1 >>> 24) & 0x1F;
-    const cld = (tex0_data1 >>> 29) & 0x03;
+    const tex0: GSRegisterTEX0 = getGSRegisterTEX0(tex0_data0, tex0_data1);
 
-    const name = `${namePrefix}/${hexzero(tbp0, 4)}/${hexzero(cbp, 4)}`;
+    const name = `${namePrefix}/${hexzero(tex0.tbp0, 4)}/${hexzero(tex0.cbp, 4)}`;
 
-    const width = 1 << tw;
-    const height = 1 << th;
+    const width = 1 << tex0.tw;
+    const height = 1 << tex0.th;
 
     // TODO(jstpierre): Handle other formats
     // assert(psm === GSPixelStorageFormat.PSMT4, `Unknown PSM ${psm}`);
-    assert(cpsm === GSCLUTStorageFormat.PSMCT32, `Unknown CPSM ${cpsm}`);
+    assert(tex0.cpsm === GSCLUTPixelStorageFormat.PSMCT32, `Unknown CPSM ${tex0.cpsm}`);
 
     // TODO(jstpierre): Read the TEXALPHA register.
-    const alphaReg = tcc === GSTextureColorComponent.RGBA ? -1 : 0x80;
+    const alphaReg = tex0.tcc === GSTextureColorComponent.RGBA ? -1 : 0x80;
 
     const pixels: (Uint8Array | 'framebuffer')[] = [];
     for (let i = 0; i < gsMemoryMap.length; i++) {
-        if (tbp0 === 0x0000 && cbp === 0x0000) {
+        if (tex0.tbp0 === 0x0000 && tex0.cbp === 0x0000) {
             // Framebuffer texture; dynamic.
             pixels.push('framebuffer');
         } else {
             const p = new Uint8Array(width * height * 4);
-            if (psm === GSPixelStorageFormat.PSMT4)
-                gsMemoryMapReadImagePSMT4_PSMCT32(p, gsMemoryMap[i], tbp0, tbw, width, height, cbp, csa, alphaReg);
-            else if (psm === GSPixelStorageFormat.PSMT8)
-                gsMemoryMapReadImagePSMT8_PSMCT32(p, gsMemoryMap[i], tbp0, tbw, width, height, cbp, alphaReg);
+            if (tex0.psm === GSPixelStorageFormat.PSMT4)
+                gsMemoryMapReadImagePSMT4_PSMCT32(p, gsMemoryMap[i], tex0.tbp0, tex0.tbw, width, height, tex0.cbp, tex0.csa, alphaReg);
+            else if (tex0.psm === GSPixelStorageFormat.PSMT8)
+                gsMemoryMapReadImagePSMT8_PSMCT32(p, gsMemoryMap[i], tex0.tbp0, tex0.tbw, width, height, tex0.cbp, alphaReg);
             else
-                console.warn(`Unsupported PSM ${psmToString(psm)} in texture ${name}`);
+                console.warn(`Unsupported PSM ${psmToString(tex0.psm)} in texture ${name}`);
             pixels.push(p);
         }
     }
