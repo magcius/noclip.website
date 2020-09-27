@@ -9,7 +9,7 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } f
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
-import { clamp } from './MathHelpers';
+import { clamp, MathConstants } from './MathHelpers';
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
@@ -1465,7 +1465,7 @@ class ViewerSettings extends Panel {
         this.fovSlider = new Slider();
         this.fovSlider.setLabel("Field of View");
         this.fovSlider.setRange(1, 100);
-        this.fovSlider.setValue(25);
+        this.fovSlider.setValue(Viewer.Viewer.FOV_Y_DEFAULT / MathConstants.TAU);
         this.fovSlider.onvalue = this.onFovSliderChange.bind(this);
         sliderContainer.appendChild(this.fovSlider.elem);
 

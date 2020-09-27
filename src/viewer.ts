@@ -95,7 +95,9 @@ export class Viewer {
     public xrCameraController: XRCameraController = new XRCameraController();
 
     public camera = new Camera();
-    public fovY: number = MathConstants.TAU / 8;
+
+    static readonly FOV_Y_DEFAULT: number = MathConstants.TAU / 6;
+    public fovY: number = Viewer.FOV_Y_DEFAULT;
     // Scene time. Can be paused / scaled / rewound / whatever.
     public sceneTime: number = 0;
     // requestAnimationFrame time. Used to calculate dt from the new time.
@@ -220,7 +222,7 @@ export class Viewer {
 
         resetGfxDebugGroup(this.debugGroup);
         this.gfxDevice.pushDebugGroup(this.debugGroup);
-        
+
         this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
 
         for (let i = 0; i < webXRContext.views.length; i++) {
