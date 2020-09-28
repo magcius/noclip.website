@@ -185,7 +185,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
     private tevReg1Front = colorNewFromRGBA8(0x0051706F);
     private tevReg1Back = colorNewFromRGBA8(0x0051706F);
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null) {
         super(zoneAndLayer, sceneObjHolder, 'OceanSphere');
 
         connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.OceanSphere);

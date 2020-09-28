@@ -321,6 +321,25 @@ export interface GfxRenderPass {
 
 export type GfxPass = GfxRenderPass | GfxHostAccessPass;
 
+/**
+ * GfxDevice represents a "virtual GPU"; this is something that, in the abstract, has a bunch of resources
+ * and can execute passes. In the concrete, this is a wrapper around a CanvasWebGL2RenderingContext for the
+ * WebGL 2 backend, or a GPUDevice for the WebGPU backend.
+ *
+ * A bit about the design of this API; all resources are "opaque", meaning you cannot look at the
+ * implementation details or underlying fields of the resources, and most objects cannot have their
+ * creation parameters modified after they are created. So, while buffers and textures can have their
+ * contents changed through data upload passes, they cannot be resized after creation. Create a new object
+ * and destroy the old one if you wish to "resize" it.
+ * 
+ * To upload data to the GPU, create and submit a {@type GfxHostAccessPass}. Note that the pass-based
+ * upload API is a bit ugly, and might change in the future. Specifically, it might be more advantageous
+ * to force a "upload all data at the beginning of the frame" style API, which is practically how the host
+ * access pass is used today for dynamic data management.
+ * 
+ * The render pass API itself is inspired by a lightweight version of Vulkan and Direct3D's "render passes";
+ * the style is that you must do all work on a given set of render attachments.
+ */
 export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
     createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
@@ -335,6 +354,10 @@ export interface GfxDevice {
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
     createReadback(elemCount: number): GfxReadback;
 
+    /**
+     * Destructors. You *must* call these on resources you create; they will not GC naturally. Call checkForLeaks()
+     * to ensure that you've called them. (In the noclip codebase, this happens automatically if you do not use
+     */
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
     destroySampler(o: GfxSampler): void;

@@ -4,8 +4,7 @@ import { readFileSync, writeFileSync } from 'fs';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BCSV from '../luigis_mansion/bcsv';
-import { assert } from 'console';
-import { inflate } from 'zlib';
+import { assert, hexzero } from '../util';
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
@@ -34,6 +33,15 @@ class CSVWriter {
     private escapeField(value: string): string {
         if (value.includes(','))
             value = `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}`;
+
+        value = value.split('').map((s) => {
+            const c = s.charCodeAt(0);
+            if (c >= 0x20 && c <= 0x7f)
+                return s;
+            else
+                return `\\x${hexzero(c, 2)}`;
+        }).join('');
+
         return value;
     }
 
@@ -63,7 +71,7 @@ function json(bcsv: BCSV.Bcsv): string {
 function main(inFilename: string, outFilename?: string): void {
     const data = fetchDataSync(inFilename);
     const bcsv = BCSV.parse(data);
-    const buf = json(bcsv);
+    const buf = csv(bcsv);
 
     if (outFilename) {
         console.log(inFilename);
@@ -74,6 +82,6 @@ function main(inFilename: string, outFilename?: string): void {
 }
 
 for (let i = 2; i < process.argv.length; i++)
-    main(process.argv[i], `${process.argv[i]}.json`);
+    main(process.argv[i], `${process.argv[i]}.csv`);
 
 // main(process.argv[2], process.argv[3]);

@@ -95,7 +95,7 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
     const bmd = BMD.parse(bmdFile.buffer);
     const bmt = bmtFile ? BMT.parse(bmtFile.buffer) : null;
     const bmdModel = new J3DModelData(device, cache, bmd);
-    const scene = new J3DModelInstanceSimple(bmdModel, materialHacks);
+    const scene = new J3DModelInstanceSimple(bmdModel);
     if (bmt !== null)
         scene.setModelMaterialDataOwned(new BMDModelMaterialData(device, cache, bmt));
 

@@ -991,9 +991,9 @@ export class DiskGravity extends PlanetGravity {
     }
 
     protected generateOwnRandomPoint(dst: vec3): void {
-        dst[0] = this.worldPosition[0] + getRandomFloat(-this.range, this.range);
-        dst[1] = this.worldPosition[1] + getRandomFloat(-this.range, this.range);
-        dst[2] = this.worldPosition[2] + getRandomFloat(-this.range, this.range);
+        dst[0] = this.worldPosition[0] + getRandomFloat(-this.radius, this.radius);
+        dst[1] = this.worldPosition[1] + getRandomFloat(-this.radius, this.radius);
+        dst[2] = this.worldPosition[2] + getRandomFloat(-this.radius, this.radius);
     }
 
     public drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
@@ -1598,7 +1598,6 @@ export function createGlobalDiskTorusGravityObj(zoneAndLayer: ZoneAndLayer, scen
     if (arg1 !== -1)
         gravity.setEdgeType(arg1);
     gravity.setDiskRadius(arg2);
-    console.log(arg0, arg1, arg2, 500.0 * maxElem);
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();

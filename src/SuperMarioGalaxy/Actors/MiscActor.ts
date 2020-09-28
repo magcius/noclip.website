@@ -363,8 +363,8 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
         // addHitSensor
 
         // TODO(jstpierre): Add shadows, but this might be a bit much. Probably want to add clipping before turning this on.
-        // initShadowVolumeSphere(sceneObjHolder, this, 30.0);
-        // onCalcShadowDropPrivateGravityOneTime(this);
+        initShadowVolumeSphere(sceneObjHolder, this, 30.0);
+        onCalcShadowDropPrivateGravityOneTime(this);
 
         if (this.type === 2) {
             this.initNerve(StarPieceNrv.RailMove);

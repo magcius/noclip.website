@@ -17,7 +17,7 @@ import { invlerp, Vec3Zero, transformVec3Mat4w0, transformVec3Mat4w1, MathConsta
 import { GfxRenderInstManager, setSortKeyLayer, GfxRendererLayer, setSortKeyDepth, makeDepthKey } from '../../gfx/render/GfxRenderer';
 import { GfxDevice } from '../../gfx/platform/GfxPlatform';
 import { Camera, computeViewSpaceDepthFromWorldSpacePoint } from '../../Camera';
-import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType, CubeGravity, SegmentGravity, DiskGravity, DiskTorusGravity, WireGravity, ConeGravity } from '../Gravity';
+import { PlanetGravity, PointGravity, ParallelGravity, ParallelGravityRangeType, CubeGravity, SegmentGravity, DiskGravity, DiskTorusGravity, WireGravity, ConeGravity, GravityTypeMask } from '../Gravity';
 import { isFirstStep } from '../Spine';
 import { GfxRenderCache } from '../../gfx/render/GfxRenderCache';
 import { assertExists } from '../../util';
@@ -46,12 +46,12 @@ class GravityExplainerArrow {
 
     // Drawing.
     public pos = vec3.create();
-    public speed = 5.0;
+    public speed = 3.5;
     public time: number = 0.0;
-    public lifetime = 360.0;
+    public lifetime = 240.0;
     public color = colorNewCopy(White);
     public alpha: number = 1.0;
-    public scale: number = 1.0;
+    public scale: number = 2.0;
     // plane to be cross to
     public cross: vec3 | null = null;
 }
@@ -62,13 +62,13 @@ export class GravityExplainer extends LiveActor {
     private arrows: GravityExplainerArrow[] = [];
 
     @dfShow()
-    private stemWidth: number = 100.0;
+    private stemWidth: number = 30.0;
     @dfShow()
-    private stemHeight = 800.0;
+    private stemHeight = 200.0;
     @dfShow()
-    private tipWidth = 400.0;
+    private tipWidth = 100.0;
     @dfShow()
-    private tipHeight = 400.0;
+    private tipHeight = 100.0;
 
     private two: GravityExplainer2;
 
@@ -96,17 +96,19 @@ export class GravityExplainer extends LiveActor {
 
         connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
 
-        this.two = new GravityExplainer2(zoneAndLayer, sceneObjHolder);
+        // this.two = new GravityExplainer2(zoneAndLayer, sceneObjHolder);
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
         this.mangleGravitiesForVideoHacks(sceneObjHolder);
-        // this.spawnArrows(sceneObjHolder);
+        this.spawnArrows(sceneObjHolder);
     }
 
     private mangleGravitiesForVideoHacks(sceneObjHolder: SceneObjHolder): void {
+        // Tell a few lies. Nothing to see here, move on :)
+
         const stageName = sceneObjHolder.scenarioData.getMasterZoneFilename();
         const mgr = sceneObjHolder.planetGravityManager!;
 
@@ -141,11 +143,8 @@ export class GravityExplainer extends LiveActor {
             g3.alive = true;
             computeModelMatrixSRT(g3.boxMtx!, 2500, -1000, -2500, 0, 0, 0, 250, -2800, 550);
             g3.updateIdentityMtx();
-        } else if (stageName === 'EggStarGalaxy') {
+        } else if (false && stageName === 'EggStarGalaxy') {
             mgr.gravities.forEach((v) => v.alive = false);
-
-            const g104 = mgr.gravities[103] as ParallelGravity;
-            g104.alive = true;
 
             /*
             const g107 = mgr.gravities[107] as ParallelGravity;
@@ -162,12 +161,72 @@ export class GravityExplainer extends LiveActor {
             mgr.gravities[101].alive = true;
             mgr.gravities[101].range *= 0.2;
 
+            mgr.gravities[103].alive = true;
             mgr.gravities[104].alive = true;
             mgr.gravities[105].alive = true;
-        } else if (stageName === 'CosmosGardenGalaxy') {
+        } else if (stageName === 'EggStarGalaxy') {
             mgr.gravities.forEach((v) => v.alive = false);
 
-            mgr.gravities[11].alive = true;
+            // cube
+            for (let i = 29; i <= 41; i++) {
+                if (i >= 30 && i <= 33)
+                    continue;
+                mgr.gravities[i].alive = true;
+                mgr.gravities[i].range *= 0.2;
+            }
+
+            // cyl
+            [32, 44, 47, 50, 53].forEach((i) => {
+                mgr.gravities[i].alive = true;
+                mgr.gravities[i].range *= 0.1;
+            });
+        } else if (stageName === 'CosmosGardenGalaxy') {
+            mgr.gravities.forEach((v) => v.alive = false);
+            mgr.gravities.forEach((v) => (v instanceof ParallelGravity) && (v.alive = true));
+            mgr.gravities[0].alive = false;
+
+            // "Spheres"
+            /*for (let i = 57; i <= 62; i++) {
+                const p = mgr.gravities[i] as PointGravity;
+                p.range *= 0.5;
+                p.alive = true;
+            }*/
+
+            // "Cubes"
+            /*mgr.gravities[42].alive = true;*/
+
+            // "Discs"
+            /*mgr.gravities[9].alive = true;*/
+
+            // "Donuts"
+            /*mgr.gravities[41].alive = true;
+            mgr.gravities[41].range *= 0.5;*/
+
+            // "Cylinders"
+            /*mgr.gravities[69].alive = true;
+            mgr.gravities[70].alive = true;
+            mgr.gravities[76].alive = true;*/
+
+            // "Wires"
+            /*mgr.gravities[11].alive = true;
+            mgr.gravities[11].range *= 0.7;*/
+
+            /*
+            for (let i = 57; i <= 62; i++) {
+                const p = mgr.gravities[i] as PointGravity;
+                p.range *= 0.5;
+            }
+            mgr.gravities[41].range *= 0.5;
+            mgr.gravities[11].range *= 0.7;
+            */
+        } else if (stageName === 'OceanRingGalaxy') {
+            mgr.gravities.forEach((v) => v.alive = false);
+            mgr.gravities[13].alive = true;
+        } else if (stageName === 'PhantomGalaxy') {
+            mgr.gravities[42].range *= 0.2;
+        } else if (stageName === 'HeavensDoorGalaxy') {
+            // mgr.gravities[0].range *= 0.5;
+            mgr.gravities[2].alive = false;
         }
     }
 
@@ -178,7 +237,8 @@ export class GravityExplainer extends LiveActor {
             const grav = gravities[i];
             if (!grav.alive)
                 continue;
-            /*if (!(grav instanceof SegmentGravity))
+            /*
+            if (!(grav instanceof SegmentGravity))
                 continue;
             if (grav.distant !== 310)
                 continue;
@@ -219,12 +279,10 @@ export class GravityExplainer extends LiveActor {
                     continue;
                 aabb.unionPoint(v);
             }
-            const count = Math.sqrt(aabb.diagonalLengthSquared()) / 500.0;
-            console.log(count);
+            let count = Math.sqrt(aabb.diagonalLengthSquared()) / 50.0;
 
             for (let j = 0; j < count; j++) {
                 const arrow = new GravityExplainerArrow();
-                arrow.scale = 0.5;
                 arrow.gravity = grav;
 
                 if (!grav.generateRandomPoint(arrow.coord))
@@ -239,7 +297,7 @@ export class GravityExplainer extends LiveActor {
         }
     }
 
-    public globalFade = 1.0;
+    public globalFade = 0.0;
     public globalFadeStartTime = -1;
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
@@ -267,7 +325,7 @@ export class GravityExplainer extends LiveActor {
             const arrow = this.arrows[i];
 
             // calcGravityVector(sceneObjHolder, this, arrow.coord, arrow.gravityVec);
-            arrow.gravity.calcGravity(arrow.gravityVec, arrow.coord);
+            arrow.gravity.calcGravity(arrow.gravityVec, arrow.pos);
             vec3.normalize(arrow.gravityVec, arrow.gravityVec);
 
             vec3.scaleAndAdd(arrow.pos, arrow.pos, arrow.gravityVec, arrow.speed * deltaTimeFrames);
@@ -692,7 +750,7 @@ class GravityExplainer2_PointGravity extends LiveActor {
             t = 1.0 - t;
 
         const scale = 1.0 - t;
-        const alpha = getPulseAlpha(t);
+        const alpha = getPulseAlpha(t) * sceneObjHolder.gravityExplainer.globalFade;
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
@@ -788,6 +846,11 @@ class GravityExplainer2_ParallelGravity extends LiveActor {
         colorFromRGBA(this.c0, 1.0, 1.0, 1.0, 0.2);
         colorFromRGBA(this.c1, 1.0, 1.0, 1.0, 0.0);
 
+        if (this.gravity.typeMask === GravityTypeMask.Shadow) {
+            colorFromRGBA(this.c0, 1.0, 0.0, 0.0, 1.0);
+            colorFromRGBA(this.c1, 1.0, 0.0, 0.0, 0.0);
+        }
+
         /*
         colorFromRGBA8(this.c0, 0x5A55FF00);
         colorCopy(this.c0, this.c0, 1.0);
@@ -877,7 +940,7 @@ class GravityExplainer2_ParallelGravity extends LiveActor {
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
-        const alpha = getPulseAlpha(t) * this.globalFade;
+        const alpha = getPulseAlpha(t) * sceneObjHolder.gravityExplainer.globalFade;
 
         colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.c1);
@@ -939,24 +1002,11 @@ class GravityExplainer2_ParallelGravity extends LiveActor {
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public globalFade = 1.0;
-    public globalFadeStartTime = -1;
-
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
         if (!this.gravity.alive || !this.gravity.switchActive)
             return;
-
-        if (window.main.viewer.inputManager.isKeyDownEventTriggered('KeyY')) {
-            this.globalFadeStartTime = viewerInput.time;
-        }
-
-        if (this.globalFadeStartTime >= 0.0) {
-            this.globalFade = saturate((viewerInput.time - this.globalFadeStartTime) / 2000.0);
-            if (this.globalFade >= 1.0)
-                this.globalFadeStartTime = -1;
-        }
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.sortKey = setSortKeyLayer(template.sortKey, GfxRendererLayer.TRANSLUCENT);
@@ -964,7 +1014,7 @@ class GravityExplainer2_ParallelGravity extends LiveActor {
         const depth = computeViewSpaceDepthFromWorldSpacePoint(viewerInput.camera, this.translation);
         template.sortKey = setSortKeyDepth(template.sortKey, depth);
 
-        const duration = 5000.0;
+        const duration = 10000.0;
 
         let height = 1.0;
 
@@ -1011,8 +1061,8 @@ class GravityExplainer2_CubeGravity extends LiveActor {
     @dfShow()
     private c1 = colorNewFromRGBA(0.8, 0.8, 0.8, 0.3);
 
-    private segmentSpacing = 200.0;
-    private segmentHeight = 150.0;
+    private segmentSpacing = 50.0;
+    private segmentHeight = 10.0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, protected gravity: CubeGravity) {
         super(zoneAndLayer, sceneObjHolder, 'GravityExplainer2_PointGravity');
@@ -1074,7 +1124,7 @@ class GravityExplainer2_CubeGravity extends LiveActor {
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
-        const alpha = getPulseAlpha(t);
+        const alpha = getPulseAlpha(t) * sceneObjHolder.gravityExplainer.globalFade;
 
         colorCopy(materialParams.u_Color[ColorKind.C0], this.c0);
         colorCopy(materialParams.u_Color[ColorKind.C1], this.c1);
@@ -1233,17 +1283,17 @@ class GravityExplainer2_DiskGravity extends LiveActor {
         ddraw.end();
     }
 
-    private drawDisk(t: number): void {
+    private drawDisk(t: number, globalFade: number): void {
         if (this.gravity.inverse)
             t = 1.0 - t;
 
         const scale = 1.0 - t;
-        const alpha = getPulseAlpha(t);
+        const alpha = getPulseAlpha(t) * globalFade;
 
         const dist = scale * this.gravity.range;
 
         const phinp = 20;
-        const thetanp = 100;
+        const thetanp = 50;
 
         // circle top
         vec3.scaleAndAdd(scratchVec3a, this.gravity.worldPosition, this.gravity.worldDirection, dist);
@@ -1299,7 +1349,7 @@ class GravityExplainer2_DiskGravity extends LiveActor {
         this.ddraw.beginDraw();
         for (let i = 0; i < numRings; i++) {
             const t = ((viewerInput.time + (i * duration / numRings)) / duration) % 1.0;
-            this.drawDisk(t);
+            this.drawDisk(t, sceneObjHolder.gravityExplainer.globalFade);
         }
         const renderInst = this.ddraw.endDraw(sceneObjHolder.modelCache.device, renderInstManager);
 
@@ -1438,7 +1488,7 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
         connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, DrawType.GravityExplainer);
     }
 
-    private drawWedge(t: number): void {
+    private drawWedge(t: number, globalFade: number): void {
         if (this.gravity.inverse)
             t = 1.0 - t;
 
@@ -1450,6 +1500,7 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
         const t0 = Math.max((scale - 0.2), 0);
         const t1 = scale;
 
+        const alpha = getPulseAlpha(t0) * globalFade;
         const validAngle = this.gravity.validSideDegree * MathConstants.DEG_TO_RAD;
 
         const dr = (p: ReadonlyVec3, np: number, b: boolean): void => {
@@ -1468,10 +1519,10 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
                     ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
 
                     ddraw.position3vec3(scratchVec3a);
-                    ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+                    ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, alpha));
                 } else {
                     ddraw.position3vec3(scratchVec3a);
-                    ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+                    ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, alpha));
 
                     ddraw.position3vec3(scratchVec3b);
                     ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
@@ -1492,7 +1543,7 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
             vec3.scaleAndAdd(scratchVec3a, this.gravity.gravityPoints[i0], scratchVec3, t0 * dist);
             vec3.scaleAndAdd(scratchVec3b, this.gravity.gravityPoints[i0], scratchVec3, t1 * dist);
             ddraw.position3vec3(scratchVec3a);
-            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, alpha));
 
             ddraw.position3vec3(scratchVec3b);
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
@@ -1503,7 +1554,7 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
             ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, 0xFF);
 
             ddraw.position3vec3(scratchVec3a);
-            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+            ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, alpha));
 
             ddraw.end();
         };
@@ -1519,14 +1570,14 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
                 vec3.scaleAndAdd(scratchVec3a, this.gravity.gravityPoints[0], scratchVec3, t0 * dist);
                 vec3.scaleAndAdd(scratchVec3b, this.gravity.gravityPoints[1], scratchVec3, t0 * dist);
                 ddraw.position3vec3(scratchVec3a);
-                ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+                ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, globalFade));
                 ddraw.position3vec3(scratchVec3b);
-                ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, getPulseAlpha(t0)));
+                ddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, lerp(0xFF, 0x00, globalFade));
             }
             ddraw.end();
         };
 
-        const np = 15;
+        const np = 30;
         dr(this.gravity.gravityPoints[0], np, false);
         dr(this.gravity.gravityPoints[1], np, true);
 
@@ -1550,7 +1601,7 @@ class GravityExplainer2_SegmentGravity extends LiveActor {
         this.ddraw.beginDraw();
         for (let i = 0; i < numRings; i++) {
             const t = ((viewerInput.time + (i * duration / numRings)) / duration) % 1.0;
-            this.drawWedge(t);
+            this.drawWedge(t, sceneObjHolder.gravityExplainer.globalFade);
         }
         const renderInst = this.ddraw.endDraw(sceneObjHolder.modelCache.device, renderInstManager);
         this.materialHelper.setOnRenderInst(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, renderInst);

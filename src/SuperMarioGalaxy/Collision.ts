@@ -87,6 +87,12 @@ function getAvgScale(v: vec3): number {
     return (v[0] + v[1] + v[2]) / 3.0;
 }
 
+function debugDrawTriangle(ctx: CanvasRenderingContext2D, clipFromWorldMatrix: ReadonlyMat4, triangle: Triangle): void {
+    drawWorldSpaceLine(ctx, clipFromWorldMatrix, triangle.pos0, triangle.pos1);
+    drawWorldSpaceLine(ctx, clipFromWorldMatrix, triangle.pos1, triangle.pos2);
+    drawWorldSpaceLine(ctx, clipFromWorldMatrix, triangle.pos2, triangle.pos0);
+}
+
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
@@ -94,6 +100,8 @@ const scratchVec3d = vec3.create();
 const scratchVec3e = vec3.create();
 const scratchVec3g = vec3.create();
 const scratchVec3h = vec3.create();
+
+const scratchTriangle = new Triangle();
 export class CollisionParts {
     public validated: boolean = false;
     public hostMtx: mat4 | null = null;
@@ -140,6 +148,7 @@ export class CollisionParts {
         mat4.copy(this.newWorldMtx, m);
     }
 
+    private drawDebug = false;
     public updateMtx(): void {
         const moved = !mat4.equals(this.newWorldMtx, this.worldMtx);
 
@@ -167,6 +176,16 @@ export class CollisionParts {
         } else {
             if (!moved)
                 this.notMovedCounter++;
+        }
+
+        if (this.drawDebug)
+            this.debugDrawAll();
+    }
+
+    private debugDrawAll(): void {
+        for (let i = 0; i < this.collisionServer.prisms.length; i++) {
+            scratchTriangle.fillData(this, i, this.hitSensor);
+            debugDrawTriangle(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, scratchTriangle);
         }
     }
 

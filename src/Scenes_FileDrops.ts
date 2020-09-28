@@ -17,7 +17,7 @@ import * as JPAExplorer from './InteractiveExamples/JPAExplorer';
 import { SceneContext } from "./SceneBase";
 import { DataFetcher, NamedArrayBufferSlice } from "./DataFetcher";
 
-function loadFileAsPromise(file: File, dataFetcher: DataFetcher): Promise<NamedArrayBufferSlice> {
+export function loadFileAsPromise(file: File, dataFetcher: DataFetcher): Promise<NamedArrayBufferSlice> {
     const progressMeter = dataFetcher.progressMeter;
 
     const request = new FileReader();

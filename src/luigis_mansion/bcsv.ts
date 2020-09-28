@@ -75,6 +75,8 @@ const nameTable = [
     'PlanetAmbientR', 'PlanetAmbientG', 'PlanetAmbientB', 'PlanetAmbientA', 'PlanetAlpha2',
     // Shadow
     'Name', 'GroupName', 'Joint', 'DropOffsetX', 'DropOffsetY', 'DropOffsetZ', 'DropStart', 'DropLength', 'SyncShow', 'FollowScale', 'Collision', 'Gravity',
+    // ObjNameTable
+    'en_name', 'jp_name',
 ];
 
 const hashLookup = new Map<number, string>();
@@ -167,7 +169,8 @@ export function parse(buffer: ArrayBufferSlice, littleEndian: boolean = false): 
                 break;
             case BcsvFieldType.SJIS: {
                 const strOffs = strTableOffs + view.getUint32(fieldOffs, littleEndian);
-                value = readStringSJIS(buffer, strOffs);
+                value = readString(buffer, strOffs, -1, true);
+                // value = readStringSJIS(buffer, strOffs);
                 break;
             }
             default:

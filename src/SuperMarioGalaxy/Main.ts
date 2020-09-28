@@ -19,7 +19,7 @@ import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
-import { MaterialParams, PacketParams, SceneParams, fillSceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from '../gx/gx_render';
+import { MaterialParams, PacketParams, SceneParams, fillSceneParams, ub_SceneParamsBufferSize, fillSceneParamsData, gxBindingLayouts } from '../gx/gx_render';
 import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -31,7 +31,7 @@ import { EffectSystem } from './EffectSystem';
 
 import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
-import { ZoneAndLayer, LayerId, LiveActorGroupArray, dynamicSpawnZoneAndLayer } from './LiveActor';
+import { ZoneAndLayer, LayerId, LiveActorGroupArray, dynamicSpawnZoneAndLayer, LiveActor } from './LiveActor';
 import { ObjInfo, NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea } from './MiscMap';
@@ -49,6 +49,7 @@ import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { GravityExplainer2, GravityExplainer } from './Actors/GravityExplainer';
+import { OceanSphere } from './Actors/OceanSphere';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -297,7 +298,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.sceneObjHolder.renderParams.sceneParamsOffs2D = sceneParamsOffs2D;
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        const template = this.renderHelper.pushTemplateRenderInst();
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setUniformBuffer(this.renderHelper.uniformBuffer);
+        template.setBindingLayouts(gxBindingLayouts);
 
         const effectSystem = this.sceneObjHolder.effectSystem;
         if (effectSystem !== null) {
@@ -1055,7 +1058,7 @@ export class SceneObjHolder {
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
 
-    public gravityExplainer: any;
+    public gravityExplainer: GravityExplainer;
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
@@ -1577,7 +1580,21 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract requestGlobalArchives(modelCache: ModelCache): void;
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
+    public requestExtra(sceneObjHolder: SceneObjHolder): void {
+        OceanSphere.requestArchives(sceneObjHolder, null!);
+        GravityExplainer2.requestArchives(sceneObjHolder);
+    }
+
     public placeExtra(sceneObjHolder: SceneObjHolder): void {
+        const stageName = sceneObjHolder.scenarioData.getMasterZoneFilename();
+        if (stageName === 'HeavensDoorGalaxy') {
+            /*const g = sceneObjHolder.nameObjHolder.nameObjs.find((ac) => ac.name === 'HeavensDoorMysteriousPlanet') as LiveActor;
+            const os = new OceanSphere(dynamicSpawnZoneAndLayer, sceneObjHolder, null);
+            vec3.copy(os.translation, g.translation);
+            os.radius = 2300;
+            os.isStartPosCamera = false;*/
+            // main.scene.sceneObjHolder.nameObjHolder.nameObjs.filter((v) => !['VROrbit', 'GlobalPointGravity', 'GravityExplainer2_PointGravity', 'OceanSphere'].includes(v.name)).forEach((v) => v.makeActorDead && v.makeActorDead(main.scene.sceneObjHolder));
+        }
     }
 
     public patchRenderer(renderer: SMGRenderer): void {
@@ -1613,16 +1630,12 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         context.destroyablePool.push(sceneObjHolder);
 
         await modelCache.waitForLoad();
-
-        const scenarioData = new ScenarioData(modelCache.getArchive(scenarioDataFilename)!);
-
-        for (let i = 0; i < scenarioData.zoneNames.length; i++) {
-            const zoneName = scenarioData.zoneNames[i];
+        sceneObjHolder.scenarioData = new ScenarioData(modelCache.getArchive(scenarioDataFilename)!);
+        for (let i = 0; i < sceneObjHolder.scenarioData.zoneNames.length; i++) {
+            const zoneName = sceneObjHolder.scenarioData.zoneNames[i];
             this.requestZoneArchives(modelCache, zoneName);
         }
-        GravityExplainer2.requestArchives(sceneObjHolder);
-
-        sceneObjHolder.scenarioData = scenarioData;
+        this.requestExtra(sceneObjHolder);
 
         await modelCache.waitForLoad();
 
@@ -1644,9 +1657,8 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
 
         await modelCache.waitForLoad();
 
-        this.placeExtra(sceneObjHolder);
-
         spawner.place();
+        this.placeExtra(sceneObjHolder);
 
         // GameScene::init()
         initSyncSleepController(sceneObjHolder);
