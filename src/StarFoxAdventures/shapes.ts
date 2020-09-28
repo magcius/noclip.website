@@ -1,4 +1,3 @@
-
 import { mat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Camera, computeViewMatrix } from '../Camera';
@@ -11,11 +10,9 @@ import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttr
 import { GXMaterial } from '../gx/gx_material';
 import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
 import { nArray } from '../util';
-import { SFAAnimationController } from './animation';
-import { SFAMaterial } from './materials';
+import { MaterialRenderContext, SFAMaterial } from './materials';
 import { ModelRenderContext } from './models';
-import { computeModelView, ViewState } from './util';
-import { Viewer } from '../viewer';
+import { computeModelView } from './util';
 
 
 class MyShapeHelper {
@@ -181,7 +178,7 @@ export class CommonShapeMaterial implements ShapeMaterial {
     private materialParams = new MaterialParams();
     private furLayer: number = 0;
     private overrideIndMtx: (mat4 | undefined)[] = [];
-    private viewState: ViewState | undefined;
+    private matCtx: MaterialRenderContext | undefined;
 
     // Caution: Material is referenced, not copied.
     public setMaterial(material: SFAMaterial) {
@@ -215,8 +212,8 @@ export class CommonShapeMaterial implements ShapeMaterial {
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext) {
         this.updateMaterialHelper();
         
-        if (this.viewState === undefined) {
-            this.viewState = {
+        if (this.matCtx === undefined) {
+            this.matCtx = {
                 sceneCtx: modelCtx.sceneCtx,
                 modelViewMtx: mat4.create(),
                 invModelViewMtx: mat4.create(),
@@ -225,17 +222,17 @@ export class CommonShapeMaterial implements ShapeMaterial {
             };
         }
 
-        this.viewState.sceneCtx = modelCtx.sceneCtx;
-        this.material.factory.getAmbientColor(this.viewState.outdoorAmbientColor, modelCtx.ambienceNum);
-        this.viewState.furLayer = this.furLayer;
+        this.matCtx.sceneCtx = modelCtx.sceneCtx;
+        this.material.factory.getAmbientColor(this.matCtx.outdoorAmbientColor, modelCtx.ambienceNum);
+        this.matCtx.furLayer = this.furLayer;
 
-        computeModelView(this.viewState.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
-        mat4.invert(this.viewState.invModelViewMtx, this.viewState.modelViewMtx);
+        computeModelView(this.matCtx.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);
+        mat4.invert(this.matCtx.invModelViewMtx, this.matCtx.modelViewMtx);
 
         for (let i = 0; i < 8; i++) {
             const tex = this.material.getTexture(i);
             if (tex !== undefined) {
-                tex.setOnTextureMapping(this.materialParams.m_TextureMapping[i], this.viewState);
+                tex.setOnTextureMapping(this.materialParams.m_TextureMapping[i], this.matCtx);
             } else {
                 this.materialParams.m_TextureMapping[i].reset();
             }
@@ -243,7 +240,7 @@ export class CommonShapeMaterial implements ShapeMaterial {
 
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
 
-        this.material.setupMaterialParams(this.materialParams, this.viewState);
+        this.material.setupMaterialParams(this.materialParams, this.matCtx);
 
         // XXX: test lighting
         colorCopy(this.materialParams.u_Color[ColorKind.MAT0], White); // TODO

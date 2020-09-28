@@ -231,11 +231,3 @@ export function computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): 
     computeViewMatrix(dst, camera);
     mat4.mul(dst, dst, modelMatrix);
 }
-
-export interface ViewState {
-    sceneCtx: SceneRenderContext;
-    modelViewMtx: mat4;
-    invModelViewMtx: mat4;
-    outdoorAmbientColor: Color;
-    furLayer: number;
-}
