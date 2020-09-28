@@ -1030,12 +1030,19 @@ function setUpShadowControlBaseMtxFromCSV(controller: ShadowController, actor: L
     }
 }
 
+// ActorShadow::setUpShadowControlFromCSV doesn't use the usual way to retrieve bool values from JMapInfo.
+// Instead, it uses JMapInfoIter::getValue<b> which appears to *also* treat 0 as a false value.
+// From what I can tell, no other code in the game uses this function, so we can just put it in here...
+function getJMapInfoBoolValue(infoIter: JMapInfoIter, name: string): boolean {
+    return fallback(infoIter.getValueNumber(name), -1) > 0;
+}
+
 function setUpShadowControlFromCSV(controller: ShadowController, actor: LiveActor, infoIter: JMapInfoIter): void {
     controller.setDropLength(fallback(infoIter.getValueNumber('DropLength'), 1000.0));
     controller.setDropStartOffset(fallback(infoIter.getValueNumber('DropStart'), 0.0));
     setUpShadowControlBaseMtxFromCSV(controller, actor, infoIter);
-    controller.followHostScale = getJMapInfoBool(fallback(infoIter.getValueNumber('FollowScale'), 1));
-    controller.visibleSyncHost = getJMapInfoBool(fallback(infoIter.getValueNumber('SyncShow'), 1));
+    controller.followHostScale = getJMapInfoBoolValue(infoIter, 'FollowScale');
+    controller.visibleSyncHost = getJMapInfoBoolValue(infoIter, 'SyncShow');
     controller.setCalcCollisionMode(fallback(infoIter.getValueNumber('Collision'), CalcCollisionMode.Off));
     controller.setCalcDropGravityMode(fallback(infoIter.getValueNumber('Gravity'), CalcDropGravityMode.Off));
 }
