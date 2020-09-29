@@ -223,7 +223,7 @@ export class CommonShapeMaterial implements ShapeMaterial {
         }
 
         this.matCtx.sceneCtx = modelCtx.sceneCtx;
-        this.material.factory.getAmbientColor(this.matCtx.outdoorAmbientColor, modelCtx.ambienceNum);
+        colorCopy(this.matCtx.outdoorAmbientColor, modelCtx.outdoorAmbientColor);
         this.matCtx.furLayer = this.furLayer;
 
         computeModelView(this.matCtx.modelViewMtx, modelCtx.sceneCtx.viewerInput.camera, modelMatrix);

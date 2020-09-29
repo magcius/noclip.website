@@ -14,6 +14,7 @@ import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
 import { ModelRenderContext, ModelInstance } from './models';
+import { White } from '../Color';
 
 export interface BlockInfo {
     mod: number;
@@ -225,7 +226,7 @@ class MapSceneRenderer extends SFARenderer {
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: false,
-            ambienceNum: 0,
+            outdoorAmbientColor: White,
             setupLights: () => {},
         };
 

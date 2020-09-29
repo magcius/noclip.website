@@ -18,6 +18,7 @@ import { TextureFetcher } from './textures';
 import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
 import { SceneRenderContext } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
+import { Color } from '../Color';
 
 interface Joint {
     parent: number;
@@ -108,7 +109,7 @@ interface Water {
 export interface ModelRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
-    ambienceNum: number;
+    outdoorAmbientColor: Color;
     setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
 }
 

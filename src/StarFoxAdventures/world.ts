@@ -140,6 +140,7 @@ export class World {
 
 const scratchMtx0 = mat4.create();
 const scratchVec0 = vec3.create();
+const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
@@ -351,10 +352,11 @@ class WorldRenderer extends SFARenderer {
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Render opaques
 
+        this.world.envfxMan.getAmbientColor(scratchColor0, 0); // Always use ambience #0 when rendering map
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: this.showDevGeometry,
-            ambienceNum: 0, // Always use ambience 0 when rendering the map,
+            outdoorAmbientColor: scratchColor0,
             setupLights: this.setupLights.bind(this),
         }
 

@@ -783,6 +783,7 @@ export interface Light {
 }
 
 const scratchQuat0 = quat.create();
+const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 
 export class ObjectInstance {
     private modelInst: ModelInstance | null = null;
@@ -974,9 +975,10 @@ export class ObjectInstance {
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
             const mtx = this.getWorldSRT();
+            this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
             this.modelInst.prepareToRender(device, renderInstManager, {
                 ...objectCtx,
-                ambienceNum: this.ambienceNum,
+                outdoorAmbientColor: scratchColor0,
             }, mtx);
 
             // Draw bones

@@ -13,6 +13,7 @@ import { MaterialFactory } from './materials';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { dataSubarray, createDownloadLink, readUint16 } from './util';
 import { TextureFetcher, SFATextureFetcher } from './textures';
+import { White } from '../Color';
 
 class ModelExhibitRenderer extends SFARenderer {
     private modelInst: ModelInstance | null | undefined = undefined; // undefined: Not set. null: Failed to load.
@@ -242,7 +243,7 @@ class ModelExhibitRenderer extends SFARenderer {
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: true,
-            ambienceNum: 0,
+            outdoorAmbientColor: White,
             setupLights: () => {},
         };
 
