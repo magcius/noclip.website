@@ -150,7 +150,7 @@ class ModelShapes {
             mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
             mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            shapes[i].prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
+            shapes[i].prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, boneMatrices);
         }
     }
     
@@ -161,7 +161,7 @@ class ModelShapes {
             mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
             mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
+            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, boneMatrices);
         }
     }
 
@@ -175,8 +175,6 @@ class ModelShapes {
                 mat4.translate(scratchMtx0, scratchMtx0, [0, 0.4 * (j + 1), 0]);
                 mat4.mul(scratchMtx0, matrix, scratchMtx0);
 
-                const mat = fur.shape.material as CommonShapeMaterial;
-                mat.setFurLayer(j);
                 const m00 = (j + 1) / 16 * 0.5;
                 const m11 = m00;
                 mat4SetRowMajor(scratchMtx1,
@@ -185,9 +183,10 @@ class ModelShapes {
                     0.0, 0.0, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0
                 );
-                mat.setOverrideIndMtx(0, scratchMtx1);
-                fur.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
-                mat.setOverrideIndMtx(0, undefined);
+                fur.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {
+                    overrideIndMtx: [scratchMtx1],
+                    furLayer: j,
+                }, boneMatrices);
             }
         }
     }
