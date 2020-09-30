@@ -39,7 +39,9 @@ export enum ModelVersion {
     Beta,
     BetaMap, // Demo swapcircle
     Demo, // Most demo files
+    DemoMap,
     Final,
+    FinalMap,
 }
 
 interface DisplayListInfo {
@@ -130,10 +132,6 @@ class ModelShapes {
                 shapes[j].reloadVertices();
             }
         }
-    }
-
-    public getNumDrawSteps() {
-        return this.shapes.length;
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number) {
@@ -262,6 +260,237 @@ function generateVat(old: boolean): GX_VtxAttrFmt[][] {
 const VAT = generateVat(false);
 const OLD_VAT = generateVat(true);
 
+const FIELDS: any = {
+    [ModelVersion.AncientMap]: {
+        isBeta: true,
+        isMapBlock: true,
+        alwaysUseTex1: true,
+        shaderFields: ANCIENT_MAP_SHADER_FIELDS,
+        hasNormals: false,
+        hasBones: false,
+        texOffset: 0x58,
+        posOffset: 0x5c,
+        clrOffset: 0x60,
+        texcoordOffset: 0x64,
+        shaderOffset: 0x68,
+        listOffsets: 0x6c,
+        listSizes: 0x70,
+        posCount: 0x90,
+        clrCount: 0x94,
+        texcoordCount: 0x96,
+        texCount: 0xa0,
+        shaderCount: 0x9a,
+        dlOffsets: 0x6c,
+        dlSizes: 0x70,
+        dlInfoCount: 0x99,
+        numListBits: 6,
+        bitsOffsets: [0x7c],
+        bitsByteCounts: [0x86],
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.Beta]: {
+        isBeta: true,
+        isMapBlock: false,
+        alwaysUseTex1: true,
+        shaderFields: BETA_MODEL_SHADER_FIELDS,
+        hasNormals: true,
+        hasBones: true,
+        texOffset: 0x1c,
+        posOffset: 0x24,
+        nrmOffset: 0x28, // ???
+        clrOffset: 0x2c,
+        texcoordOffset: 0x30,
+        shaderOffset: 0x34,
+        jointOffset: 0x38,
+        listOffsets: 0x6c,
+        listSizes: 0x70,
+        posCount: 0x9e,
+        nrmCount: 0xa0,
+        clrCount: 0xa2,
+        texcoordCount: 0xa4,
+        texCount: 0xaa,
+        jointCount: 0xab,
+        posFineSkinningConfig: 0x64,
+        posFineSkinningPieces: 0x80,
+        posFineSkinningWeights: 0x84,
+        nrmFineSkinningConfig: 0xac, // ???
+        // weightCount: 0xad,
+        shaderCount: 0xae,
+        texMtxCount: 0xaf,
+        dlOffsets: 0x88,
+        dlSizes: 0x8c,
+        dlInfoCount: 0xac,
+        numListBits: 6,
+        bitsOffsets: [0x90],
+        bitsByteCounts: [0x94],
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.BetaMap]: {
+        isBeta: true,
+        isMapBlock: true,
+        alwaysUseTex1: true,
+        shaderFields: BETA_MODEL_SHADER_FIELDS,
+        hasNormals: false,
+        hasBones: false,
+        texOffset: 0x58,
+        posOffset: 0x5c,
+        clrOffset: 0x60,
+        texcoordOffset: 0x64,
+        shaderOffset: 0x68,
+        listOffsets: 0x6c,
+        listSizes: 0x70,
+        posCount: 0x9e,
+        clrCount: 0xa2,
+        texcoordCount: 0xa4,
+        texCount: 0x98,
+        shaderCount: 0x99, // ???
+        texMtxCount: 0xaf,
+        dlOffsets: 0x6c,
+        dlSizes: 0x70,
+        dlInfoCount: 0x99, // ???
+        numListBits: 6,
+        bitsOffsets: [0x7c],
+        bitsByteCounts: [0x94], // ???
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.Demo]: {
+        isMapBlock: false,
+        alwaysUseTex1: true,
+        texOffset: 0x20,
+        texCount: 0xf2,
+        posOffset: 0x28,
+        posCount: 0xe4,
+        hasNormals: true,
+        nrmOffset: 0x2c,
+        nrmCount: 0xe6,
+        clrOffset: 0x30,
+        clrCount: 0xe8,
+        texcoordOffset: 0x34,
+        texcoordCount: 0xea,
+        hasBones: true,
+        jointOffset: 0x3c,
+        jointCount: 0xf3,
+        weightOffset: 0x54,
+        weightCount: 0xf4,
+        posFineSkinningConfig: 0x88,
+        posFineSkinningPieces: 0xa4,
+        posFineSkinningWeights: 0xa8,
+        nrmFineSkinningConfig: 0xac,
+        shaderOffset: 0x38,
+        shaderCount: 0xf8, // Polygon attributes and material information
+        shaderFields: SFADEMO_MODEL_SHADER_FIELDS,
+        dlInfoOffset: 0xd0,
+        dlInfoCount: 0xf5,
+        dlInfoSize: 0x1c,
+        // FIXME: Yet another format occurs in sfademo/frontend!
+        // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
+        numListBits: 8, // ??? should be 6 according to decompilation of demo????
+        bitsOffsets: [0xd4], // Whoa...
+        // FIXME: There are three bitstreams, probably for opaque and transparent objects
+        bitsByteCounts: [0xd8],
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.DemoMap]: {
+        isMapBlock: true,
+        texOffset: 0x54,
+        texCount: 0xa0,
+        posOffset: 0x58,
+        posCount: 0x90,
+        hasNormals: false,
+        nrmOffset: 0,
+        nrmCount: 0,
+        clrOffset: 0x5c,
+        clrCount: 0x94,
+        texcoordOffset: 0x60,
+        texcoordCount: 0x96,
+        hasBones: false,
+        jointOffset: 0,
+        jointCount: 0,
+        shaderOffset: 0x64,
+        shaderCount: 0xa0, // Polygon attributes and material information
+        shaderFields: SFADEMO_MAP_SHADER_FIELDS,
+        dlInfoOffset: 0x68,
+        dlInfoCount: 0x9f,
+        dlInfoSize: 0x34,
+        // FIXME: Yet another format occurs in sfademo/frontend!
+        // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
+        numListBits: 8, // ??? should be 6 according to decompilation of demo????
+        bitsOffsets: [0x74], // Whoa...
+        // FIXME: There are three bitstreams, probably for opaque and transparent objects
+        bitsByteCounts: [0x84],
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.Final]: {
+        isMapBlock: false,
+        alwaysUseTex1: true,
+        texOffset: 0x20,
+        texCount: 0xf2,
+        posOffset: 0x28,
+        posCount: 0xe4,
+        hasNormals: true,
+        nrmOffset: 0x2c,
+        nrmCount: 0xe6,
+        clrOffset: 0x30,
+        clrCount: 0xe8,
+        texcoordOffset: 0x34,
+        texcoordCount: 0xea,
+        hasBones: true,
+        jointOffset: 0x3c,
+        jointCount: 0xf3,
+        weightOffset: 0x54,
+        weightCount: 0xf4,
+        posFineSkinningConfig: 0x88,
+        posFineSkinningPieces: 0xa4,
+        posFineSkinningWeights: 0xa8,
+        nrmFineSkinningConfig: 0xac,
+        shaderOffset: 0x38,
+        shaderCount: 0xf8,
+        shaderFields: SFA_SHADER_FIELDS,
+        dlInfoOffset: 0xd0,
+        dlInfoCount: 0xf5,
+        dlInfoSize: 0x1c,
+        numListBits: 8,
+        bitsOffsets: [0xd4],
+        bitsByteCounts: [0xd8],
+        oldVat: false,
+        hasYTranslate: false,
+    },
+    [ModelVersion.FinalMap]: {
+        isMapBlock: true,
+        alwaysUseTex1: true,
+        texOffset: 0x54,
+        texCount: 0xa0,
+        posOffset: 0x58,
+        posCount: 0x90,
+        hasNormals: false,
+        nrmOffset: 0,
+        nrmCount: 0,
+        clrOffset: 0x5c,
+        clrCount: 0x94,
+        texcoordOffset: 0x60,
+        texcoordCount: 0x96,
+        hasBones: false,
+        jointOffset: 0,
+        jointCount: 0,
+        shaderOffset: 0x64,
+        shaderCount: 0xa2,
+        shaderFields: SFA_SHADER_FIELDS,
+        dlInfoOffset: 0x68,
+        dlInfoCount: 0xa1, // TODO
+        dlInfoSize: 0x1c,
+        numListBits: 8,
+        bitsOffsets: [0x78, 0x7c, 0x80],
+        bitsByteCounts: [0x84, 0x86, 0x88],
+        oldVat: false,
+        hasYTranslate: true,
+    },
+}
+
 const enum Opcode {
     SetShader   = 1,
     CallDL      = 2,
@@ -301,269 +530,13 @@ export class Model {
         private materialFactory: MaterialFactory,
         blockData: ArrayBufferSlice,
         texFetcher: TextureFetcher,
-        public modelVersion: ModelVersion = ModelVersion.Final
+        public modelVersion: ModelVersion
     ) {
         let offs = 0;
         const blockDv = blockData.createDataView();
         this.modelData = blockDv;
 
-        let fields: any;
-        if (this.modelVersion === ModelVersion.Beta) {
-            fields = {
-                isBeta: true,
-                isMapBlock: false,
-                alwaysUseTex1: true,
-                shaderFields: BETA_MODEL_SHADER_FIELDS,
-                hasNormals: true,
-                hasBones: true,
-                texOffset: 0x1c,
-                posOffset: 0x24,
-                nrmOffset: 0x28, // ???
-                clrOffset: 0x2c,
-                texcoordOffset: 0x30,
-                shaderOffset: 0x34,
-                jointOffset: 0x38,
-                listOffsets: 0x6c,
-                listSizes: 0x70,
-                posCount: 0x9e,
-                nrmCount: 0xa0,
-                clrCount: 0xa2,
-                texcoordCount: 0xa4,
-                texCount: 0xaa,
-                jointCount: 0xab,
-                posFineSkinningConfig: 0x64,
-                posFineSkinningPieces: 0x80,
-                posFineSkinningWeights: 0x84,
-                nrmFineSkinningConfig: 0xac, // ???
-                // weightCount: 0xad,
-                shaderCount: 0xae,
-                texMtxCount: 0xaf,
-                dlOffsets: 0x88,
-                dlSizes: 0x8c,
-                dlInfoCount: 0xac,
-                numListBits: 6,
-                bitsOffsets: [0x90],
-                bitsByteCounts: [0x94],
-                oldVat: true,
-                hasYTranslate: false,
-            };
-        } else if (this.modelVersion === ModelVersion.AncientMap) {
-            fields = {
-                isBeta: true,
-                isMapBlock: true,
-                alwaysUseTex1: true,
-                shaderFields: ANCIENT_MAP_SHADER_FIELDS,
-                hasNormals: false,
-                hasBones: false,
-                texOffset: 0x58,
-                posOffset: 0x5c,
-                clrOffset: 0x60,
-                texcoordOffset: 0x64,
-                shaderOffset: 0x68,
-                listOffsets: 0x6c,
-                listSizes: 0x70,
-                posCount: 0x90,
-                clrCount: 0x94,
-                texcoordCount: 0x96,
-                texCount: 0xa0,
-                shaderCount: 0x9a,
-                dlOffsets: 0x6c,
-                dlSizes: 0x70,
-                dlInfoCount: 0x99,
-                numListBits: 6,
-                bitsOffsets: [0x7c],
-                bitsByteCounts: [0x86],
-                oldVat: true,
-                hasYTranslate: false,
-            };
-        } else if (this.modelVersion === ModelVersion.BetaMap) {
-            fields = {
-                isBeta: true,
-                isMapBlock: true,
-                alwaysUseTex1: true,
-                shaderFields: BETA_MODEL_SHADER_FIELDS,
-                hasNormals: false,
-                hasBones: false,
-                texOffset: 0x58,
-                posOffset: 0x5c,
-                clrOffset: 0x60,
-                texcoordOffset: 0x64,
-                shaderOffset: 0x68,
-                listOffsets: 0x6c,
-                listSizes: 0x70,
-                posCount: 0x9e,
-                clrCount: 0xa2,
-                texcoordCount: 0xa4,
-                texCount: 0x98,
-                shaderCount: 0x99, // ???
-                texMtxCount: 0xaf,
-                dlOffsets: 0x6c,
-                dlSizes: 0x70,
-                dlInfoCount: 0x99, // ???
-                numListBits: 6,
-                bitsOffsets: [0x7c],
-                bitsByteCounts: [0x94], // ???
-                oldVat: true,
-                hasYTranslate: false,
-            };
-        } else if (this.modelVersion === ModelVersion.Demo) {
-            const isMapModel = false; // TODO: detect
-            if (isMapModel) {
-                // TODO: verify for correctness
-                fields = {
-                    isMapBlock: true,
-                    texOffset: 0x54,
-                    texCount: 0xa0,
-                    posOffset: 0x58,
-                    posCount: 0x90,
-                    hasNormals: false,
-                    nrmOffset: 0,
-                    nrmCount: 0,
-                    clrOffset: 0x5c,
-                    clrCount: 0x94,
-                    texcoordOffset: 0x60,
-                    texcoordCount: 0x96,
-                    hasBones: false,
-                    jointOffset: 0,
-                    jointCount: 0,
-                    shaderOffset: 0x64,
-                    shaderCount: 0xa0, // Polygon attributes and material information
-                    shaderFields: SFADEMO_MAP_SHADER_FIELDS,
-                    dlInfoOffset: 0x68,
-                    dlInfoCount: 0x9f,
-                    dlInfoSize: 0x34,
-                    // FIXME: Yet another format occurs in sfademo/frontend!
-                    // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
-                    numListBits: 8, // ??? should be 6 according to decompilation of demo????
-                    bitsOffsets: [0x74], // Whoa...
-                    // FIXME: There are three bitstreams, probably for opaque and transparent objects
-                    bitsByteCounts: [0x84],
-                    oldVat: true,
-                    hasYTranslate: false,
-                };
-            } else {
-                // TODO: verify for correctness
-                fields = {
-                    isMapBlock: false,
-                    alwaysUseTex1: true,
-                    texOffset: 0x20,
-                    texCount: 0xf2,
-                    posOffset: 0x28,
-                    posCount: 0xe4,
-                    hasNormals: true,
-                    nrmOffset: 0x2c,
-                    nrmCount: 0xe6,
-                    clrOffset: 0x30,
-                    clrCount: 0xe8,
-                    texcoordOffset: 0x34,
-                    texcoordCount: 0xea,
-                    hasBones: true,
-                    jointOffset: 0x3c,
-                    jointCount: 0xf3,
-                    weightOffset: 0x54,
-                    weightCount: 0xf4,
-                    posFineSkinningConfig: 0x88,
-                    posFineSkinningPieces: 0xa4,
-                    posFineSkinningWeights: 0xa8,
-                    nrmFineSkinningConfig: 0xac,
-                    shaderOffset: 0x38,
-                    shaderCount: 0xf8, // Polygon attributes and material information
-                    shaderFields: SFADEMO_MODEL_SHADER_FIELDS,
-                    dlInfoOffset: 0xd0,
-                    dlInfoCount: 0xf5,
-                    dlInfoSize: 0x1c,
-                    // FIXME: Yet another format occurs in sfademo/frontend!
-                    // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
-                    numListBits: 8, // ??? should be 6 according to decompilation of demo????
-                    bitsOffsets: [0xd4], // Whoa...
-                    // FIXME: There are three bitstreams, probably for opaque and transparent objects
-                    bitsByteCounts: [0xd8],
-                    oldVat: true,
-                    hasYTranslate: false,
-                };
-            }
-        } else if (this.modelVersion === ModelVersion.Final) {
-            // FIXME: This field is NOT a model type and doesn't reliably indicate
-            // the type of model.
-            const modelType = blockDv.getUint16(4);
-            switch (modelType) {
-            case 0:
-                // Used in character and object models
-                fields = {
-                    isMapBlock: false,
-                    alwaysUseTex1: true,
-                    texOffset: 0x20,
-                    texCount: 0xf2,
-                    posOffset: 0x28,
-                    posCount: 0xe4,
-                    hasNormals: true,
-                    nrmOffset: 0x2c,
-                    nrmCount: 0xe6,
-                    clrOffset: 0x30,
-                    clrCount: 0xe8,
-                    texcoordOffset: 0x34,
-                    texcoordCount: 0xea,
-                    hasBones: true,
-                    jointOffset: 0x3c,
-                    jointCount: 0xf3,
-                    weightOffset: 0x54,
-                    weightCount: 0xf4,
-                    posFineSkinningConfig: 0x88,
-                    posFineSkinningPieces: 0xa4,
-                    posFineSkinningWeights: 0xa8,
-                    nrmFineSkinningConfig: 0xac,
-                    shaderOffset: 0x38,
-                    shaderCount: 0xf8,
-                    shaderFields: SFA_SHADER_FIELDS,
-                    dlInfoOffset: 0xd0,
-                    dlInfoCount: 0xf5,
-                    dlInfoSize: 0x1c,
-                    numListBits: 8,
-                    bitsOffsets: [0xd4],
-                    bitsByteCounts: [0xd8],
-                    oldVat: false,
-                    hasYTranslate: false,
-                };
-                break;
-            case 8:
-            case 264:
-                // Used in map blocks
-                fields = {
-                    isMapBlock: true,
-                    alwaysUseTex1: true,
-                    texOffset: 0x54,
-                    texCount: 0xa0,
-                    posOffset: 0x58,
-                    posCount: 0x90,
-                    hasNormals: false,
-                    nrmOffset: 0,
-                    nrmCount: 0,
-                    clrOffset: 0x5c,
-                    clrCount: 0x94,
-                    texcoordOffset: 0x60,
-                    texcoordCount: 0x96,
-                    hasBones: false,
-                    jointOffset: 0,
-                    jointCount: 0,
-                    shaderOffset: 0x64,
-                    shaderCount: 0xa2,
-                    shaderFields: SFA_SHADER_FIELDS,
-                    dlInfoOffset: 0x68,
-                    dlInfoCount: 0xa1, // TODO
-                    dlInfoSize: 0x1c,
-                    numListBits: 8,
-                    bitsOffsets: [0x78, 0x7c, 0x80],
-                    bitsByteCounts: [0x84, 0x86, 0x88],
-                    oldVat: false,
-                    hasYTranslate: true,
-                };
-                break;
-            default:
-                throw Error(`Model type ${modelType} not implemented`);
-            }
-        } else {
-            throw Error(`Unhandled model version ${modelVersion}`);
-        }
+        const fields = FIELDS[modelVersion];
 
         if (fields.posFineSkinningConfig !== undefined) {
             this.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, fields.posFineSkinningConfig));
@@ -737,11 +710,10 @@ export class Model {
 
         let texMtxCount = 0;
         if (fields.hasBones) {
-            if (fields.isBeta) {
+            if (fields.isBeta)
                 texMtxCount = blockDv.getUint8(fields.texMtxCount);
-            } else {
+            else
                 texMtxCount = blockDv.getUint8(0xfa);
-            }
         }
 
         if (fields.hasYTranslate) {
@@ -1054,10 +1026,6 @@ export class ModelInstance {
 
     public getMaterials() {
         return this.model.getMaterials();
-    }
-
-    public getNumDrawSteps() {
-        return this.modelShapes.getNumDrawSteps();
     }
     
     public resetPose() {
