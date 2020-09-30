@@ -1,5 +1,5 @@
 import { nArray } from '../util';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -15,7 +15,7 @@ import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_
 import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, readUint32, readUint16, mat4SetRowMajor } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
-import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
+import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { SceneRenderContext } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { Color } from '../Color';
@@ -154,18 +154,18 @@ class ModelShapes {
         }
     }
     
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[]) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[]) {
         for (let i = 0; i < this.waters.length; i++) {
             const water = this.waters[i];
 
             mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
             mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, boneMatrices);
+            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette);
         }
     }
 
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[]) {
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[]) {
         for (let i = 0; i < this.furs.length; i++) {
             const fur = this.furs[i];
 
@@ -186,21 +186,22 @@ class ModelShapes {
                 fur.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {
                     overrideIndMtx: [scratchMtx1],
                     furLayer: j,
-                }, boneMatrices);
+                }, matrixPalette);
             }
         }
     }
 }
 
 // Generate vertex attribute tables.
-// The game uses one table for everything. The final version of the game has a minor difference in
-// VAT 5 compared to older versions.
+// The game initializes the VATs upon startup and uses them unchanged for nearly
+// everything.
+// The final version of the game has a minor difference in VAT 5 compared to beta
+// and older versions.
 function generateVat(old: boolean): GX_VtxAttrFmt[][] {
     const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
     for (let i = 0; i <= GX.Attr.MAX; i++) {
-        for (let j = 0; j < 8; j++) {
+        for (let j = 0; j < 8; j++)
             vat[j][i] = { compType: GX.CompType.U8, compShift: 0, compCnt: 0 };
-        }
     }
 
     vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
@@ -260,6 +261,14 @@ function generateVat(old: boolean): GX_VtxAttrFmt[][] {
 
 const VAT = generateVat(false);
 const OLD_VAT = generateVat(true);
+
+const enum Opcode {
+    SetShader   = 1,
+    CallDL      = 2,
+    SetVCD      = 3,
+    SetMatrices = 4,
+    End         = 5,
+}
 
 export class Model {
     private createModelShapes: CreateModelShapesFunc;
@@ -689,10 +698,7 @@ export class Model {
         offs = shaderOffset;
         for (let i = 0; i < shaderCount; i++) {
             const shaderBin = blockData.subarray(offs, fields.shaderFields.size).createDataView();
-
-            const shader = parseShader(shaderBin, fields.shaderFields, texIds);
-            shaders.push(shader);
-
+            shaders.push(parseShader(shaderBin, fields.shaderFields, texIds));
             offs += fields.shaderFields.size;
         }
 
@@ -749,13 +755,11 @@ export class Model {
         const getVtxArrays = (posBuffer: DataView) => {
             const vtxArrays: GX_Array[] = [];
             vtxArrays[GX.Attr.POS] = { buffer: arrayBufferSliceFromDataView(posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
-            if (fields.hasNormals) {
+            if (fields.hasNormals)
                 vtxArrays[GX.Attr.NRM] = { buffer: nrmBuffer, offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
-            }
             vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
-            for (let t = 0; t < 8; t++) {
+            for (let t = 0; t < 8; t++)
                 vtxArrays[GX.Attr.TEX0 + t] = { buffer: texcoordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
-            }
             return vtxArrays;
         }
 
@@ -861,11 +865,7 @@ export class Model {
 
             const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
             newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
-
-            const newMat = new CommonShapeMaterial();
-            newMat.setMaterial(material);
-
-            return new Shape(newGeom, newMat, false);
+            return new Shape(newGeom, new ShapeMaterial(material), false);
         }
 
         const runBitstream = (modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView) => {
@@ -895,14 +895,15 @@ export class Model {
             let done = false;
             while (!done) {
                 const opcode = bits.get(4);
+
                 switch (opcode) {
-                case 1: { // Set shader
+                case Opcode.SetShader: {
                     const shaderNum = bits.get(6);
                     // console.log(`Setting shader #${shaderNum}`);
                     setShader(shaderNum);
                     break;
                 }
-                case 2: { // Call display list
+                case Opcode.CallDL: {
                     const listNum = bits.get(fields.numListBits);
                     if (listNum >= dlInfoCount) {
                         console.warn(`Can't draw display list #${listNum} (out of range)`);
@@ -922,11 +923,7 @@ export class Model {
 
                             const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
                             newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
-
-                            const newMat = new CommonShapeMaterial();
-                            newMat.setMaterial(curMaterial!);
-
-                            const newShape = new Shape(newGeom, newMat, !!(curShader.flags & ShaderFlags.DevGeometry));
+                            const newShape = new Shape(newGeom, new ShapeMaterial(curMaterial!), !!(curShader.flags & ShaderFlags.DevGeometry));
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
@@ -950,21 +947,19 @@ export class Model {
                     }
                     break;
                 }
-                case 3: { // Set descriptor
+                case Opcode.SetVCD: {
                     vcd = readVertexDesc(bits, curShader);
                     break;
                 }
-                case 4: // Set matrix selectors (skipped by SFA block renderer)
+                case Opcode.SetMatrices: // When drawing map blocks, this command is ignored by the original game.
                     const numBones = bits.get(4);
-                    if (numBones > 10) {
+                    if (numBones > 10)
                         throw Error(`Too many PN matrices`);
-                    }
 
-                    for (let i = 0; i < numBones; i++) {
+                    for (let i = 0; i < numBones; i++)
                         pnMatrixMap[i] = bits.get(8);
-                    }
                     break;
-                case 5: // End
+                case Opcode.End: // End
                     done = true;
                     break;
                 default:
@@ -976,26 +971,23 @@ export class Model {
 
         this.createModelShapes = () => {
             let instancePosBuffer;
-            if (this.hasFineSkinning) {
+            if (this.hasFineSkinning)
                 instancePosBuffer = dataCopy(this.originalPosBuffer);
-            } else {
+            else
                 instancePosBuffer = this.originalPosBuffer;
-            }
 
             const modelShapes = new ModelShapes(this, instancePosBuffer);
 
             runBitstream(modelShapes, bitsOffsets[0], 0, modelShapes.posBuffer); // Opaques
-            for (let i = 1; i < bitsOffsets.length; i++) {
-                runBitstream(modelShapes, bitsOffsets[i], i, modelShapes.posBuffer); // Translucents and waters
-            }
+            for (let i = 1; i < bitsOffsets.length; i++)
+                runBitstream(modelShapes, bitsOffsets[i], i, modelShapes.posBuffer); // Translucents
 
             return modelShapes;
         }
 
         // If there is no fine skinning, we can share model shapes between instances.
-        if (!this.hasFineSkinning) {
+        if (!this.hasFineSkinning)
             this.sharedModelShapes = this.createModelShapes();
-        }
     }
 
     public createInstanceShapes(): ModelShapes {
@@ -1168,11 +1160,9 @@ export class ModelInstance {
             const piece = this.model.posFineSkinningPieces[i];
 
             mat4.copy(boneMtx0, this.matrixPalette[piece.bone0]);
-            if (!this.model.hasBetaFineSkinning) {
-                mat4.translate(boneMtx0, boneMtx0, this.model.invBindTranslations[piece.bone0]);
-            }
             mat4.copy(boneMtx1, this.matrixPalette[piece.bone1]);
             if (!this.model.hasBetaFineSkinning) {
+                mat4.translate(boneMtx0, boneMtx0, this.model.invBindTranslations[piece.bone0]);
                 mat4.translate(boneMtx1, boneMtx1, this.model.invBindTranslations[piece.bone1]);
             }
 

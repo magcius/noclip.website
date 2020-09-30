@@ -1,5 +1,5 @@
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { mat4, vec3, quat } from 'gl-matrix';
+import { mat4, vec3, quat, ReadonlyMat4 } from 'gl-matrix';
 import { Color } from '../Color';
 import { Camera, computeViewMatrix } from '../Camera';
 import { getMatrixTranslation } from '../MathHelpers';
@@ -227,7 +227,7 @@ export function getCamPos(v: vec3, camera: Camera): void {
     getMatrixTranslation(v, camera.worldMatrix);
 }
 
-export function computeModelView(dst: mat4, camera: Camera, modelMatrix: mat4): void {
+export function computeModelView(dst: mat4, camera: Camera, modelMatrix: ReadonlyMat4): void {
     computeViewMatrix(dst, camera);
     mat4.mul(dst, dst, modelMatrix);
 }

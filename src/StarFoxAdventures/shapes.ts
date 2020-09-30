@@ -1,4 +1,4 @@
-import { mat4 } from 'gl-matrix';
+import { mat4, ReadonlyMat4 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Camera, computeViewMatrix } from '../Camera';
 import { colorCopy, colorNewFromRGBA, White } from '../Color';
@@ -71,14 +71,12 @@ class MyShapeHelper {
         const hostAccessPass = device.createHostAccessPass();
 
         if (uploadVertices) {
-            for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++) {
+            for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++)
                 hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
-            }
         }
 
-        if (uploadIndices) {
+        if (uploadIndices)
             hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
-        }
 
         device.submitPass(hostAccessPass);
     }
@@ -112,7 +110,6 @@ export class ShapeGeometry {
 
     public pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
-    public hasBetaFineSkinning = false;
 
     constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
@@ -127,20 +124,21 @@ export class ShapeGeometry {
     }
 
     public setPnMatrixMap(pnMatrixMap: number[], hasFineSkinning: boolean) {
-        for (let i = 0; i < pnMatrixMap.length; i++) {
+        for (let i = 0; i < pnMatrixMap.length; i++)
             this.pnMatrixMap[i] = pnMatrixMap[i];
-        }
         this.hasFineSkinning = hasFineSkinning;
     }
 
     public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
-        matrix: mat4, matrixPalette: mat4[], camera: Camera)
+        matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[], camera: Camera)
     {
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
                 this.vtxLoader.loadedVertexLayout, this.loadedVertexData, this.isDynamic, false);
             this.verticesDirty = false;
-        } else if (this.verticesDirty) {
+        }
+        
+        if (this.verticesDirty) {
             this.shapeHelper.uploadData(device, true, false);
             this.verticesDirty = false;
         }
@@ -151,11 +149,12 @@ export class ShapeGeometry {
 
         const viewMtx = scratchMtx0;
         computeViewMatrix(viewMtx, camera);
+
         const modelViewMtx = scratchMtx1;
         mat4.mul(modelViewMtx, viewMtx, matrix);
 
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
-            // PNMTX 9 is used for fine-skinned vertices in models with fine-skinning enabled.
+            // If fine-skinning is enabled, matrix 9 is overridden with the identity matrix.
             if (this.hasFineSkinning && i === 9)
                 mat4.copy(this.packetParams.u_PosMtx[i], modelViewMtx);
             else
@@ -171,17 +170,15 @@ export interface MaterialOptions {
     furLayer?: number;
 }
 
-export interface ShapeMaterial {
-    setOnRenderInst: (device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) => void;
-    allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void;
-}
-
-export class CommonShapeMaterial implements ShapeMaterial {
-    private material: SFAMaterial;
+export class ShapeMaterial {
     private gxMaterial: GXMaterial | undefined;
     private materialHelper: GXMaterialHelperGfx;
     private materialParams = new MaterialParams();
     private matCtx: MaterialRenderContext | undefined;
+
+    public constructor(private material: SFAMaterial) {
+        this.updateMaterialHelper();
+    }
 
     // Caution: Material is referenced, not copied.
     public setMaterial(material: SFAMaterial) {
@@ -196,7 +193,7 @@ export class CommonShapeMaterial implements ShapeMaterial {
         }
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
         this.updateMaterialHelper();
         
         if (this.matCtx === undefined) {
@@ -258,12 +255,12 @@ export class Shape {
         this.geom.reloadVertices();
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: mat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: mat4[]) {
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[]) {
         this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera);
         this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: mat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: mat4[]) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[]) {
         const renderInst = renderInstManager.newRenderInst();
         this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions, matrixPalette);
         renderInstManager.submitRenderInst(renderInst);
