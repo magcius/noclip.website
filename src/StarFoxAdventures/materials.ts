@@ -1238,11 +1238,11 @@ export class MaterialFactory {
         return new StandardMaterial(this.device, this, shader, texFetcher, isMapBlock);
     }
     
-    public buildWaterMaterial(shader: Shader, texFetcher: TextureFetcher, isMapBlock: boolean): SFAMaterial {
+    public buildWaterMaterial(shader: Shader): SFAMaterial {
         return new WaterMaterial(this, shader);
     }
 
-    public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, alwaysUseTex1: boolean, isMapBlock: boolean): SFAMaterial {
+    public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, isMapBlock: boolean): SFAMaterial {
         return new FurMaterial(this.device, this, shader, texFetcher, isMapBlock);
     }
 

@@ -60,7 +60,7 @@ function parseDisplayListInfo(data: DataView): DisplayListInfo {
 }
 
 type CreateModelShapesFunc = () => ModelShapes;
-type BuildMaterialFunc = (shader: Shader, texFetcher: TextureFetcher, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean) => SFAMaterial;
+type BuildMaterialFunc = (shader: Shader, texFetcher: TextureFetcher, texIds: number[], isMapBlock: boolean) => SFAMaterial;
 
 interface FineSkinningConfig {
     numPieces: number;
@@ -264,7 +264,6 @@ const FIELDS: any = {
     [ModelVersion.AncientMap]: {
         isBeta: true,
         isMapBlock: true,
-        alwaysUseTex1: true,
         shaderFields: ANCIENT_MAP_SHADER_FIELDS,
         hasNormals: false,
         hasBones: false,
@@ -292,7 +291,6 @@ const FIELDS: any = {
     [ModelVersion.Beta]: {
         isBeta: true,
         isMapBlock: false,
-        alwaysUseTex1: true,
         shaderFields: BETA_MODEL_SHADER_FIELDS,
         hasNormals: true,
         hasBones: true,
@@ -330,7 +328,6 @@ const FIELDS: any = {
     [ModelVersion.BetaMap]: {
         isBeta: true,
         isMapBlock: true,
-        alwaysUseTex1: true,
         shaderFields: BETA_MODEL_SHADER_FIELDS,
         hasNormals: false,
         hasBones: false,
@@ -358,7 +355,6 @@ const FIELDS: any = {
     },
     [ModelVersion.Demo]: {
         isMapBlock: false,
-        alwaysUseTex1: true,
         texOffset: 0x20,
         texCount: 0xf2,
         posOffset: 0x28,
@@ -427,7 +423,6 @@ const FIELDS: any = {
     },
     [ModelVersion.Final]: {
         isMapBlock: false,
-        alwaysUseTex1: true,
         texOffset: 0x20,
         texCount: 0xf2,
         posOffset: 0x28,
@@ -462,7 +457,6 @@ const FIELDS: any = {
     },
     [ModelVersion.FinalMap]: {
         isMapBlock: true,
-        alwaysUseTex1: true,
         texOffset: 0x54,
         texCount: 0xa0,
         posOffset: 0x58,
@@ -738,9 +732,8 @@ export class Model {
         const readVertexDesc = (bits: LowBitReader, shader: Shader): GX_VtxDesc[] => {
             // console.log(`Setting descriptor`);
             const vcd: GX_VtxDesc[] = [];
-            for (let i = 0; i <= GX.Attr.MAX; i++) {
+            for (let i = 0; i <= GX.Attr.MAX; i++)
                 vcd[i] = { type: GX.AttrType.NONE };
-            }
             vcd[GX.Attr.NBT] = { type: GX.AttrType.NONE };
 
             if (fields.hasBones && jointCount >= 2) {
@@ -816,7 +809,7 @@ export class Model {
             bits.drop(4);
             const shaderNum = bits.get(6);
             const shader = shaders[shaderNum];
-            const material = buildSpecialMaterial(shader, texFetcher, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+            const material = buildSpecialMaterial(shader, texFetcher, texIds, fields.isMapBlock);
 
             bits.drop(4);
             const vcd = readVertexDesc(bits, shader);
