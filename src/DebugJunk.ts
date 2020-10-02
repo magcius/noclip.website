@@ -328,64 +328,23 @@ export function drawScreenSpaceProjection(ctx: CanvasRenderingContext2D, proj: S
     ctx.stroke();
 }
 
-export function interactiveBisect(items: any[], testItem: (itemIndex: number, v: boolean) => void, done: (itemIndex: number) => void): (v: boolean) => void {
-    let min = 0;
-    let max = items.length;
-
-    const performTest = () => {
-        // Set our new test.
-        let testMin = (min + (max - min) / 2) | 0;
-
-        const numSteps = Math.ceil(Math.log2(max - min));
-        console.log(`Set bounds are ${min} to ${max}. Test set bounds are now ${testMin} to ${max}. ${numSteps} step(s) left`);
-        for (let i = 0; i < max; i++) {
-            const isInTestSet = i >= testMin && i < max;
-            testItem(i, isInTestSet);
-        }
-    };
-
-    const step = (objectWasInTestSet: boolean) => {
-        assert(max > min);
-
-        // Special case (boundary edges)
-        if ((max - min) <= 2) {
-            // If we have two objects in our set, then the one we pick is the one that was in the test set.
-            if (objectWasInTestSet)
-                return done(min + 1);
-            else
-                return done(min);
-        }
-
-        if (objectWasInTestSet) {
-            // If the object is in our test set, then our new range should be that test set.
-            min = (min + (max - min) / 2) | 0;
-        } else {
-            // Otherwise, the new range are the objects that *weren't* in the test set last time.
-            max = ((min + (max - min) / 2) | 0) + 1;
-        }
-
-        performTest();
-    };
-
-    // Set up our initial test.
-    performTest();
-
-    return step;
-}
-
 function flashItem(item: any, fieldName: string, step: number = 0) {
     item[fieldName] = step % 2 === 1;
     if (step < 7)
         setTimeout(() => { flashItem(item, fieldName, step + 1) }, 200);
 }
 
-export function interactiveSliderSelect(items: any[], testItem: (itemIndex: number, v: boolean) => void, done: (itemIndex: number) => void): void {
+export function interactiveSliderSelect(items: any[], testItem: (itemIndex: number, v: boolean) => string | void, done: (itemIndex: number) => void): void {
     const ui: UI = (window as any).main.ui;
     const debugFloater = ui.debugFloaterHolder.makeFloatingPanel('SliderSelect');
     const slider = new Slider();
     // Revert to default style for clarity
     slider.elem.querySelector('input')!.classList.remove('Slider');
     debugFloater.contents.append(slider.elem);
+
+    const textLabel = document.createElement('div');
+    textLabel.style.padding = '1em';
+    debugFloater.contents.append(textLabel);
 
     const doneButton = document.createElement('div');
     doneButton.textContent = 'Select';
@@ -398,8 +357,15 @@ export function interactiveSliderSelect(items: any[], testItem: (itemIndex: numb
 
     slider.onvalue = (v: number) => {
         slider.setLabel('' + v);
-        for (let i = 0; i < items.length; i++)
-            testItem(i, (i <= v));
+
+        for (let i = 0; i < items.length; i++) {
+            const label = testItem(i, (i <= v));
+            if (i === v)
+                textLabel.textContent = label ? label : '';
+        }
+
+        if (v >= items.length)
+            textLabel.textContent = '';
     };
 
     slider.setValue(items.length);
@@ -415,8 +381,14 @@ export function interactiveSliderSelect(items: any[], testItem: (itemIndex: numb
 export function interactiveVizSliderSelect(items: any[], fieldName: string = 'visible', callback: ((item: number) => void) | null = null): void {
     const visibleItems = items.filter((v) => v[fieldName]);
 
-    interactiveSliderSelect(visibleItems, (i, v) => { visibleItems[i][fieldName] = v; }, (index) => {
+    interactiveSliderSelect(visibleItems, (i, v) => {
+        const item = visibleItems[i];
+        item[fieldName] = v;
+        return item.name || item.constructor.name;
+    }, (index) => {
         visibleItems.forEach((v) => v[fieldName] = true);
+        if (index >= visibleItems.length)
+            return;
         const item = visibleItems[index];
         const origIndex = items.indexOf(item);
         flashItem(item, fieldName);
@@ -426,13 +398,13 @@ export function interactiveVizSliderSelect(items: any[], fieldName: string = 'vi
     });
 }
 
-function downloadBuffer2(name: any, buffer: any) {
+function downloadBufferAny(name: any, buffer: any) {
     if (name.name && name.arrayBuffer)
         downloadBufferSlice(name.name, name);
     else if (buffer instanceof ArrayBufferSlice)
         downloadBufferSlice(name, buffer);
     else if (name.name && name.buffer)
-        downloadBuffer2(name.name, name.buffer);
+        downloadBuffer(name.name, name.buffer);
     else if (buffer instanceof ArrayBuffer)
         downloadBuffer(name, buffer);
 }
@@ -450,5 +422,5 @@ export const debugJunk: any = {
     hexdump,
     magicstr,
     ghidraDecode,
-    downloadBuffer: downloadBuffer2,
+    downloadBuffer: downloadBufferAny,
 };

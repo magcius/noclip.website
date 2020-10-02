@@ -80,7 +80,7 @@ import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
 import { SceneDesc, SceneGroup, SceneContext, getSceneDescs, Destroyable } from './SceneBase';
 import { prepareFrameDebugOverlayCanvas2D } from './DebugJunk';
-import { downloadBlob, downloadBuffer } from './DownloadUtils';
+import { downloadBlob } from './DownloadUtils';
 import { DataShare } from './DataShare';
 import InputManager from './InputManager';
 import { WebXRContext } from './WebXR';
