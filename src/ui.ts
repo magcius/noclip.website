@@ -1409,8 +1409,10 @@ export class Slider implements Widget {
         return +this.sliderInput.value;
     }
 
-    public setValue(v: number): void {
+    public setValue(v: number, triggerCallback: boolean = false): void {
         this.sliderInput.value = '' + v;
+        if (triggerCallback)
+            this.onInput();
     }
 
     public getT(): number {

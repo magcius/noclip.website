@@ -353,7 +353,7 @@ export function interactiveSliderSelect(items: any[], testItem: (itemIndex: numb
     doneButton.style.padding = '1em';
     debugFloater.contents.append(doneButton);
 
-    slider.setRange(0, items.length, 1);
+    slider.setRange(-1, items.length - 1, 1);
 
     slider.onvalue = (v: number) => {
         slider.setLabel('' + v);
@@ -364,12 +364,11 @@ export function interactiveSliderSelect(items: any[], testItem: (itemIndex: numb
                 textLabel.textContent = label ? label : '';
         }
 
-        if (v >= items.length)
+        if (v < 0)
             textLabel.textContent = '';
     };
 
-    slider.setValue(items.length);
-    slider.setLabel('' + items.length);
+    slider.setValue(items.length - 1, true);
 
     doneButton.onclick = () => {
         const index = slider.getValue();
