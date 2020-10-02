@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { openSync, readSync, closeSync, writeFileSync, mkdirSync } from "fs";
-import { hexzero } from "../../util";
+import { hexzero, readString } from "../../util";
 import { assert } from "console";
 
 function decompressFile(data: ArrayBufferSlice, format: number, length: number): ArrayBufferSlice {
@@ -67,9 +67,81 @@ function writeBufferSync(path: string, buffer: ArrayBufferSlice): void {
 const sectorSize = 0x800;
 const lsnMask = 0x003FFFFF;
 
+// this is kind of clumsy - loop over all "event" files to accumulate map id/name index pairs
+function dumpMapNames() {
+    const locIDs: number[] = [];
+    for (let fileIndex = 0x168; fileIndex <= 0x1B84; fileIndex += 0x12) {
+        const eventFile = `${pathBaseOut}/0c/${hexzero(fileIndex, 4)}.bin`;
+        let header: ArrayBufferSlice;
+        try {
+            header = fetchDataFragmentSync(eventFile, 0, 0x40);
+        } catch (e) {
+            continue;
+        }
+        assert(readString(header, 0, 4) === "EV01");
+        const dataStart = header.createDataView().getUint32(0x4, true);
+        const mainData = fetchDataFragmentSync(eventFile, dataStart, 0x40);
+        const view = mainData.createDataView();
+        const tkMapOffset = dataStart + view.getUint32(0x04, true);
+        const tkMapData = fetchDataFragmentSync(eventFile, tkMapOffset, 0x40);
+        const tkMap = tkMapData.createDataView().getUint16(0, true);
+        let count = view.getUint16(0x1E, true);
+        let locID = 0;
+        if (!(count & 0x8000)) {
+            // actually the map, no variants to choose from
+            locID = count;
+        } else {
+            // this map may have multiple names, depending where the player is
+            // just take the first one
+            count = count & 0x7FFF;
+            const idOffset = dataStart + view.getUint32(0x28, true);
+            const variantData = fetchDataFragmentSync(eventFile, idOffset, 2 * count);
+            const varView = variantData.createDataView();
+            locID = varView.getUint16(0, true);
+        }
+        if (locIDs[tkMap] !== undefined)
+            assert(locIDs[tkMap] === locID)
+        else
+            locIDs[tkMap] = locID;
+    }
+    // this file has blitzball strings and character names, too
+    const nameData = fetchDataFragmentSync(`${pathBaseOut}/12/0004.bin`, 0, 0x4BD0);
+    const view = nameData.createDataView();
+    const tableOffs = view.getUint32(0x2C, true);
+    const nameCount = view.getUint16(tableOffs, true) >>> 2;
+    for (let i = 0; i < locIDs.length; i++) {
+        if (locIDs[i] === undefined)
+            continue;
+        const index = locIDs[i];
+        assert(index < nameCount);
+        const nameOffs = view.getUint16(tableOffs + 4*index, true);
+        const name = readNameFromView(view, tableOffs + nameOffs);
+        console.log(i, name);
+    }
+}
+
+function readNameFromView(view: DataView, offset: number): string {
+    const codes: number[] = [];
+    while (true) {
+        const c = view.getUint8(offset++);
+        // codes are slightly shifted relative to ascii
+        if (c === 0)
+            break;
+        if (c >= 0x50) // letters shifted forward
+            codes.push(c - 15);
+        else if (c >= 0x3A) // some punctuation comes right after numbers
+            codes.push(c - 26);
+        else if (c >= 0x30) // numbers are the same as ascii
+            codes.push(c);
+        else
+            console.warn('skipping unknown code', c);
+    }
+    return String.fromCharCode(...codes);
+}
+
 function main() {
     const isoPath = `${pathBaseIn}/FFX.iso`;
-    
+
     const lsnTable = fetchDataFragmentSync(isoPath, 0x118 * sectorSize, 0x10000);
     const lsnView = lsnTable.createDataView();
     const folderTable = fetchDataFragmentSync(isoPath, 0x158 * sectorSize, 0x82);
