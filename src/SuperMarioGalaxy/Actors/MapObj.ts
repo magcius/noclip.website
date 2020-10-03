@@ -5,7 +5,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, scaleMatrix, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation } from '../../MathHelpers';
 import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos } from '../ActorUtil';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer } from '../ActorUtil';
 import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall } from '../Collision';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
@@ -108,7 +108,7 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
     protected railMover: MapPartsRailMover | null = null;
     protected railGuideDrawer: MapPartsRailGuideDrawer | null = null;
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo<TNerve>) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.objName = this.name;
@@ -371,7 +371,7 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
     private isWorking: boolean;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        const initInfo = new MapObjActorInitInfo();
+        const initInfo = new MapObjActorInitInfo<RailMoveObjNrv>();
         initInfo.setupDefaultPos();
         initInfo.setupConnectToScene();
         initInfo.setupEffect(null);
@@ -706,7 +706,6 @@ export class OceanWaveFloater extends MapObjActor {
 }
 
 const enum TsukidashikunNrv { Relax, WaitForward, SignForward, MoveForward, WaitBack, SignBack, MoveBack }
-
 export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
     private speed: number;
     private waitStep: number;
@@ -774,7 +773,6 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
 }
 
 const enum DriftWoodNrv { Wait }
-
 export class DriftWood extends MapObjActor<DriftWoodNrv> {
     private front: vec3;
 
@@ -813,10 +811,9 @@ export class DriftWood extends MapObjActor<DriftWoodNrv> {
 }
 
 const enum UFOKinokoNrv { Wait }
-
 export class UFOKinoko extends MapObjActor<UFOKinokoNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        const initInfo = new MapObjActorInitInfo();
+        const initInfo = new MapObjActorInitInfo<UFOKinokoNrv>();
         initInfo.setupDefaultPos();
         initInfo.setupConnectToScene();
         initInfo.setupEffect(null);
@@ -849,7 +846,6 @@ export class UFOKinoko extends MapObjActor<UFOKinokoNrv> {
 }
 
 const enum SideSpikeMoveStepNrv { Wait }
-
 export class SideSpikeMoveStep extends MapObjActor<SideSpikeMoveStepNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         const initInfo = new MapObjActorInitInfo<SideSpikeMoveStepNrv>();
@@ -875,12 +871,11 @@ export class SideSpikeMoveStep extends MapObjActor<SideSpikeMoveStepNrv> {
 }
 
 const enum AstroDomeNrv { Wait }
-
 export class AstroDome extends MapObjActor<AstroDomeNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         const domeId = assertExists(getJMapInfoArg0(infoIter));
         const domeModelName = AstroMapObj.getModelName('AstroDome', domeId);
-        const initInfo = new MapObjActorInitInfo();
+        const initInfo = new MapObjActorInitInfo<AstroDomeNrv>();
         initInfo.setupModelName(domeModelName);
         initInfo.setupNerve(AstroDomeNrv.Wait);
         setupInitInfoSimpleMapObj(initInfo);
@@ -1540,5 +1535,37 @@ export class WatchTowerRotateStep extends LiveActor<WatchTowerRotateStepNrv> {
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         sceneObjHolder.modelCache.requestObjectData('WatchTowerRotateStepLift');
+    }
+}
+
+const enum TreasureSpotNrv { Wait }
+export class TreasureSpot extends MapObjActor<TreasureSpotNrv> {
+    private isCoinFlower: boolean;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo<TreasureSpotNrv>();
+        setupInitInfoSimpleMapObj(initInfo);
+        // initInfo.setupHitSensor();
+        // initInto.setupHitSensorParam();
+        initInfo.setupNerve(TreasureSpotNrv.Wait);
+        // initInfo.setupSound();
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        this.isCoinFlower = this.isObjectName('CoinFlower');
+        // initStarPointerTarget
+        // declareCoin
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+        this.switchEmitGlow(sceneObjHolder);
+    }
+
+    private switchEmitGlow(sceneObjHolder: SceneObjHolder): void {
+        if (isNearPlayer(sceneObjHolder, this, 2000.0)) {
+            emitEffect(sceneObjHolder, this, 'Glow');
+        } else {
+            deleteEffect(sceneObjHolder, this, 'Glow');
+        }
     }
 }
