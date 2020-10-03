@@ -1350,19 +1350,19 @@ export function validateShadowAll(actor: LiveActor): void {
         actor.shadowControllerList!.shadowControllers[i].validate();
 }
 
-export function getEaseInValue(v0: number, v1: number, v2: number, v3: number): number {
-    const t = Math.cos((v0 / v3) * Math.PI * 0.5);
-    return lerp(v1, v2, 1 - t);
+export function getEaseInValue(t: number, dstMin: number = 0.0, dstMax: number = 1.0, duration: number = 1.0): number {
+    const curvedT = Math.cos((t / duration) * Math.PI * 0.5);
+    return lerp(dstMin, dstMax, 1 - curvedT);
 }
 
-export function getEaseOutValue(v0: number, v1: number, v2: number, v3: number): number {
-    const t = Math.sin((v0 / v3) * Math.PI * 0.5);
-    return lerp(v1, v2, t);
+export function getEaseOutValue(t: number, dstMin: number = 0.0, dstMax: number = 1.0, duration: number = 1.0): number {
+    const curvedT = Math.sin((t / duration) * Math.PI * 0.5);
+    return lerp(dstMin, dstMax, curvedT);
 }
 
-export function getEaseInOutValue(v0: number, v1: number, v2: number, v3: number): number {
-    const t = Math.cos((v0 / v3) * Math.PI);
-    return lerp(v1, v2, 0.5 * (1 - t));
+export function getEaseInOutValue(t: number, dstMin: number = 0.0, dstMax: number = 1.0, duration: number = 1.0): number {
+    const curvedT = Math.cos((t / duration) * Math.PI);
+    return lerp(dstMin, dstMax, 0.5 * (1 - curvedT));
 }
 
 export function turnVecToVecCos(dst: vec3, src: ReadonlyVec3, target: ReadonlyVec3, speed: number, up: ReadonlyVec3, upAmount: number): boolean {

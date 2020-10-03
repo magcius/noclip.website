@@ -323,6 +323,8 @@ export class Rosetta extends NPCActor {
 
         startBckNoInterpole(this, 'WaitA');
         this.calcAnim(sceneObjHolder);
+
+        this.waitActionName = 'WaitA';
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RosettaNrv, deltaTimeFrames: number): void {

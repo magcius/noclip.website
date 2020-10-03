@@ -11,6 +11,7 @@ import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnim
 
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
 import { ResTable } from "./Main";
+import { getEaseInOutValue } from "./ActorUtil";
 
 export class BckCtrlData {
     public Name: string = '';
@@ -252,7 +253,7 @@ export class XanimeCore implements JointMatrixCalc {
             if (this.interpoleRatio < 1.0) {
                 vec3.lerp(anmScale, xj.xformFrozen.scale, anmScale, this.interpoleRatio);
                 vec3.lerp(anmTrans, xj.xformFrozen.translation, anmTrans, this.interpoleRatio);
-                quat.lerp(anmRot, xj.xformFrozen.rotation, scratchQuat, this.interpoleRatio);
+                quat.slerp(anmRot, xj.xformFrozen.rotation, anmRot, this.interpoleRatio);
             }
 
             vec3.copy(xj.xformAnm.scale, anmScale);
@@ -406,7 +407,10 @@ export class XanimePlayer {
             this.updatedFrameCtrl = true;
 
             this.updateInterpoleRatio(deltaTimeFrames);
-            this.core.interpoleRatio = this.interpoleRatio;
+
+            // XXX(jstpierre): Apply some easing. This is to make the animations look a bit smoother,
+            // and compensate for the lack of exponential slide in updateInterpoleRatio.
+            this.core.interpoleRatio = getEaseInOutValue(this.interpoleRatio);
         }
     }
 
