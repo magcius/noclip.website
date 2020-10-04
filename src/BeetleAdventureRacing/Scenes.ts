@@ -1,7 +1,6 @@
 
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { BasicRenderTarget, makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxBindingLayoutDescriptor, GfxBlendFactor, GfxBlendMode, GfxCullMode, GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
+import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
 import { executeOnPass } from "../gfx/render/GfxRenderer";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { SceneContext, SceneDesc, SceneGroup, Destroyable } from "../SceneBase";
@@ -11,8 +10,6 @@ import { UVTR, UVTRRenderer } from "./ParsedFiles/UVTR";
 import { CameraController } from "../Camera";
 import * as UI from '../ui';
 import { UVEN, UVENRenderer } from "./ParsedFiles/UVEN";
-import { UVMDRenderer } from "./ParsedFiles/UVMD";
-import { mat4 } from "gl-matrix";
 import { UVTX, TexScrollAnim, TexSeqAnim } from "./ParsedFiles/UVTX";
 import { UVTS } from "./ParsedFiles/UVTS";
 import { colorNewFromRGBA } from "../Color";
@@ -116,6 +113,8 @@ class BARRenderer implements SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+        viewerInput.camera.setClipPlanes(0.1);
+
         // Update animations
         let deltaTimeSecs = viewerInput.deltaTime / 1000;
         for(let texScrollAnim of this.texScrollAnims) {
@@ -177,7 +176,7 @@ class BARSceneDesc implements SceneDesc {
             this.id = "sc" + this.sceneIndex.toString();
         } else {
             this.id = "tr" + this.uvtrIndex;
-        }       
+        }
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
