@@ -1,14 +1,14 @@
 
 import { mat4, vec3 } from "gl-matrix";
-import { assertExists, hexzero } from "../../util";
+import { assertExists, fallback, hexzero } from "../../util";
 import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "../LiveActor";
 import { SceneObjHolder, getObjectName, getTimeFrames } from "../Main";
-import { JMapInfoIter, createCsvParser } from "../JMapInfo";
+import { JMapInfoIter, createCsvParser, getJMapInfoScale, getJMapInfoRotateLocal, getJMapInfoTransLocal } from "../JMapInfo";
 import { ViewerRenderInput } from "../../viewer";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, startBtk, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckFrameAtRandom, getCamPos } from "../ActorUtil";
 import { MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint } from "./MiscActor";
 import { isFirstStep } from "../Spine";
-import { scaleMatrix } from "../../MathHelpers";
+import { computeModelMatrixSRT, scaleMatrix } from "../../MathHelpers";
 import { initMultiFur } from "../Fur";
 import { LightType } from "../DrawBuffer";
 import { emitEffect } from "../EffectSystem";
@@ -26,7 +26,7 @@ const enum SceneGraphTag {
     Indirect = 3,
 };
 
-export interface ObjInfo {
+interface ObjInfo {
     objId: number;
     objName: string;
     objArg0: number;
@@ -142,9 +142,29 @@ export class NoclipLegacyActorSpawner {
         this.isWorldMap = this.isSMG2 && this.sceneObjHolder.sceneDesc.galaxyName.startsWith('WorldMap');
     }
 
-    public async spawnObjectLegacy(zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter, objinfo: ObjInfo): Promise<void> {
+    public legacyCreateObjinfo(infoIter: JMapInfoIter): ObjInfo {
+        const objId = fallback(infoIter.getValueNumberNoInit('l_id'), -1);
+        const objName = fallback(infoIter.getValueString('name'), 'Unknown');
+        const objArg0 = fallback(infoIter.getValueNumberNoInit('Obj_arg0'), -1);
+        const modelMatrix = mat4.create();
+
+        const translation = vec3.create(), rotation = vec3.create(), scale = vec3.create();
+        getJMapInfoScale(scale, infoIter);
+        getJMapInfoRotateLocal(rotation, infoIter);
+        getJMapInfoTransLocal(translation, infoIter);
+        computeModelMatrixSRT(modelMatrix,
+            scale[0], scale[1], scale[2],
+            rotation[0], rotation[1], rotation[2],
+            translation[0], translation[1], translation[2]);
+
+        return { objId, objName, objArg0, modelMatrix };
+    }
+
+    public async spawnObjectLegacy(zoneAndLayer: ZoneAndLayer, infoIter: JMapInfoIter): Promise<void> {
         const modelCache = this.sceneObjHolder.modelCache;
         const galaxyName = this.sceneObjHolder.sceneDesc.galaxyName;
+
+        const objinfo = this.legacyCreateObjinfo(infoIter);
 
         const applyAnimations = (actor: LiveActor, animOptions: AnimOptions | null | undefined) => {
             if (animOptions !== null) {

@@ -23,7 +23,7 @@ import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
 import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos, quatGetAxisZ, quatGetAxisY, blendQuatUpFront, quatGetAxisX, turnVecToVecCos, excludeCalcShadowToMyCollision, addBodyMessageSensorMapObjPress, MapObjConnector, getEaseOutValue, getEaseInValue, getEaseInOutValue, turnVecToVecCosOnPlane, addHitSensorEye, tryStartBck } from '../ActorUtil';
-import { calcMapGround, CollisionKeeperCategory, getBindedFixReactionVector, getFirstPolyOnLineToMap, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isFloorPolygonAngle, isWallPolygonAngle, isOnGround, TriangleFilterFunc, isBindedWall, isBindedRoof } from '../Collision';
+import { calcMapGround, CollisionKeeperCategory, getBindedFixReactionVector, getFirstPolyOnLineToMap, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isFloorPolygonAngle, isWallPolygonAngle, isOnGround, TriangleFilterFunc, isBindedWall, isBindedRoof, getFirstPolyOnLineToMapExceptSensor } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName, isEffectValid } from '../EffectSystem';
 import { initFur, initFurPlanet } from '../Fur';
@@ -38,11 +38,11 @@ import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
 import { calcNerveRate, isGreaterEqualStep, isGreaterStep, NerveExecutor, isFirstStep, isLessStep } from '../Spine';
-import { isExistStageSwitchSleep } from '../Switch';
+import { isExistStageSwitchSleep, onSwitchBySwitchIdInfo } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
 import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowSurfaceCircle, onCalcShadow, initShadowVolumeOval, isShadowProjected, getShadowProjectionPos, getShadowProjectedSensor } from '../Shadow';
 import { initLightCtrl } from '../LightData';
-import { sceneActorInit } from '../../PokemonSnap/actor';
+import { isDemoLastStep, registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -589,7 +589,6 @@ export class BlackHole extends LiveActor {
 }
 
 const enum HatchWaterPlanetNrv { Wait, Open }
-
 export class HatchWaterPlanet extends LiveActor<HatchWaterPlanetNrv> {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -601,6 +600,9 @@ export class HatchWaterPlanet extends LiveActor<HatchWaterPlanetNrv> {
 
         this.initNerve(HatchWaterPlanetNrv.Wait);
 
+        if (tryRegisterDemoCast(sceneObjHolder, this, infoIter))
+            registerDemoActionNerveFunction(sceneObjHolder, this, HatchWaterPlanetNrv.Open);
+
         this.makeActorAppeared(sceneObjHolder);
     }
 
@@ -611,10 +613,6 @@ export class HatchWaterPlanet extends LiveActor<HatchWaterPlanetNrv> {
                 startBtk(this, 'HatchWaterPlanet');
             }
         }
-    }
-
-    public open(): void {
-        this.setNerve(HatchWaterPlanetNrv.Open);
     }
 }
 
@@ -5869,33 +5867,85 @@ export class FluffWind extends LiveActor {
     }
 }
 
-export class OceanFloaterLandParts extends LiveActor {
+const enum OceanFloaterLandPartsNrv { Wait, Move, Done }
+export class OceanFloaterLandParts extends LiveActor<OceanFloaterLandPartsNrv> {
+    private railMover: MapPartsRailMover | null = null;
+    private endPos = vec3.create();
+    private hasDemo = false;
+    private hasRisen = false;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
-        connectToSceneCollisionMapObj(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+        if (this.name === 'OceanFloaterChurch') {
+            // setEffectHostSRT. This is cut content, so we don't bother implementing it.
+        }
+        this.initHitSensor();
+        const bodySensor = addBodyMessageSensorMapObj(sceneObjHolder, this);
+        initCollisionParts(sceneObjHolder, this, this.name, bodySensor);
+        // setClippingTypeSphereContainsModelBoundingBox
+        // createLodCtrlPlanet
+        tryStartAllAnim(this, this.name);
 
         if (isConnectedWithRail(infoIter)) {
+            // initMoveType()
+
+            // initRailMoveFunction()
             this.initRailRider(sceneObjHolder, infoIter);
+            this.railMover = new MapPartsRailMover(sceneObjHolder, this, infoIter);
+            this.railMover.start();
+
+            calcRailEndPos(this.endPos, this);
+            this.initNerve(OceanFloaterLandPartsNrv.Wait);
+            if (tryRegisterDemoCast(sceneObjHolder, this, infoIter)) {
+                registerDemoActionNerveFunction(sceneObjHolder, this, OceanFloaterLandPartsNrv.Move);
+                this.hasDemo = true;
+            }
+
+            useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        } else {
+            this.initNerve(OceanFloaterLandPartsNrv.Done);
         }
 
-        if (this.name === 'OceanFloaterTypeU') {
-            // Checks whether the "Rise" flag is done. We assume it is.
-            moveCoordToEndPos(this);
-            moveTransToCurrentRailPos(this);
+        connectToSceneCollisionMapObj(sceneObjHolder, this);
 
-            assert(useStageSwitchWriteA(sceneObjHolder, this, infoIter));
+        if (this.name === 'OceanFloaterTypeU') {
+            // Checks whether the "Rise" flag is done. We assume it is not, so nothing in here applies.
         }
 
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
-        // TODO(jstpierre): Demo
-        if (isValidSwitchA(this))
-            this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: OceanFloaterLandPartsNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === OceanFloaterLandPartsNrv.Move) {
+            if (isFirstStep(this)) {
+                emitEffect(sceneObjHolder, this, 'RiseBubble');
+            }
+
+            this.railMover!.movement(sceneObjHolder, sceneObjHolder.viewerInput);
+            vec3.copy(this.translation, this.railMover!.translation);
+
+            if (!this.railMover!.isWorking()) {
+                deleteEffect(sceneObjHolder, this, 'RiseBubble');
+            }
+
+            if (this.hasDemo && isDemoLastStep(sceneObjHolder)) {
+                // endFloatUpDemo()
+                if (this.name === 'OceanFloaterTypeU') {
+                    // updateAlreadyDoneFlag
+                    if (isValidSwitchA(this))
+                        this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
+                }
+
+                this.setNerve(OceanFloaterLandPartsNrv.Done);
+                this.hasRisen = true;
+            }
+        }
     }
 }
 
@@ -6014,7 +6064,6 @@ export class Dossun extends LiveActor<DossunNrv> {
 }
 
 const enum PlantMemberNrv { Wait, Hint }
-
 class PlantMember extends LiveActor<PlantMemberNrv> {
     public hasItem: boolean = false;
 
@@ -6318,7 +6367,6 @@ export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
 }
 
 const enum OnimasuNrv { Wait, Jump, WaitForStamp, Stamp }
-
 abstract class Onimasu extends LiveActor<OnimasuNrv> {
     protected effectHostMtx = mat4.create();
 
@@ -6536,9 +6584,7 @@ function getPolygonOnRailPoint(sceneObjHolder: SceneObjHolder, dstPos: vec3, dst
     calcRailPointPos(dstPos, actor, pointIdx);
     calcGravityVector(sceneObjHolder, actor, dstPos, dstNrm);
     vec3.scale(dstNrm, dstNrm, 2000.0);
-    // TODO(jstpierre): getFirstPolyOnLineToMapExceptSensor
-    // const hitSensor = actor.getSensor('body');
-    if (getFirstPolyOnLineToMap(sceneObjHolder, dstPos, triangleScratch, dstPos, dstNrm))
+    if (getFirstPolyOnLineToMapExceptSensor(sceneObjHolder, dstPos, triangleScratch, dstPos, dstNrm, actor.getSensor('body')!))
         vec3.copy(dstNrm, triangleScratch.faceNormal);
     else
         vec3.normalize(dstNrm, dstNrm);
@@ -8038,36 +8084,6 @@ export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
                 this.makeActorDead(sceneObjHolder);
             }
         }
-    }
-}
-
-// Fake dumb hacky thing for noclip.
-export class DemoGroupFake extends LiveActor {
-    private sheetName: string;
-
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, sceneObjHolder, 'DemoExecutor');
-
-        this.sheetName = assertExists(infoIter.getValueString('TimeSheetName'));
-
-        this.initStageSwitch(sceneObjHolder, infoIter);
-        if (isValidSwitchAppear(this)) {
-            listenStageSwitchOnOffAppear(sceneObjHolder, this, this.switchOn.bind(this), this.switchOff.bind(this));
-        }
-    }
-
-    private switchOn(sceneObjHolder: SceneObjHolder): void {
-        if (this.sheetName === 'HatchWaterPlanetOpen') {
-            const cast = sceneObjHolder.nameObjHolder.nameObjs.find((obj) => obj.name === 'HatchWaterPlanet') as HatchWaterPlanet | undefined;
-            if (cast !== undefined)
-                cast.open();
-        }
-    }
-
-    private switchOff(sceneObjHolder: SceneObjHolder): void {
-    }
-
-    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
     }
 }
 

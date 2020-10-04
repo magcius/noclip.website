@@ -4,6 +4,7 @@ import { vec3 } from 'gl-matrix';
 import { MathConstants } from '../MathHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { fallback } from '../util';
+import type { SceneObjHolder } from './Main';
 
 export function getJMapInfoArg0(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg0'); }
 export function getJMapInfoArg1(infoIter: JMapInfoIter) { return infoIter.getValueNumberNoInit('Obj_arg1'); }
@@ -95,4 +96,22 @@ export class JMapInfoIter {
 export function createCsvParser(buffer: ArrayBufferSlice): JMapInfoIter {
     const bcsv = BCSV.parse(buffer);
     return new JMapInfoIter(bcsv, bcsv.records[0]);
+}
+
+export class JMapIdInfo {
+    constructor(public zoneId: number, public infoId: number) {
+    }
+
+    public equals(other: Readonly<JMapIdInfo>): boolean {
+        return this.zoneId === other.zoneId && this.infoId === other.infoId;
+    }
+}
+
+function getPlacedZoneId(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): number {
+    return sceneObjHolder.stageDataHolder.findPlacedStageDataHolder(infoIter)!.zoneId;
+}
+
+export function createJMapIdInfoFromIter(sceneObjHolder: SceneObjHolder, infoId: number, infoIter: JMapInfoIter): JMapIdInfo {
+    const zoneId = getPlacedZoneId(sceneObjHolder, infoIter);
+    return new JMapIdInfo(zoneId, infoId);
 }

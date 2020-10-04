@@ -810,6 +810,17 @@ export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolde
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, CollisionKeeperCategory.Map);
 }
 
+export function createCollisionPartsFilterSensor(hitSensor: HitSensor): CollisionPartsFilterFunc {
+    return (sceneObjHolder: SceneObjHolder, parts: CollisionParts): boolean => {
+        return parts.hitSensor === hitSensor;
+    };
+}
+
+export function getFirstPolyOnLineToMapExceptSensor(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: ReadonlyVec3, dir: ReadonlyVec3, hitSensor: HitSensor): boolean {
+    const partsFilter = createCollisionPartsFilterSensor(hitSensor);
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, CollisionKeeperCategory.Map);
+}
+
 export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: ReadonlyVec3, height: number): boolean {
     vec3.set(scratchVec3h, 0.0, -height, 0.0);
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3h, null, null, CollisionKeeperCategory.Map);

@@ -24,6 +24,7 @@ export const enum MovementType {
     ScreenEffect                   = 0x03,
     SensorHitChecker               = 0x05,
     MsgSharedGroup                 = 0x06,
+    DemoDirector                   = 0x0B,
     AreaObj                        = 0x0D,
     Model3DFor2D                   = 0x0E,
     ImageEffect                    = 0x17,
@@ -224,7 +225,7 @@ export class NameObjGroup<T extends NameObj> extends NameObj {
         super(sceneObjHolder, name);
     }
 
-    protected registerObj(obj: T): void {
+    public registerObj(obj: T): void {
         this.objArray.push(obj);
 
         assert(this.objArray.length <= this.maxCount);

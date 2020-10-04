@@ -1,5 +1,5 @@
 
-import { LiveActor, MessageType, isDead } from './LiveActor';
+import { LiveActor, MessageType, isDead, resetPosition } from './LiveActor';
 import { assertExists, fallback } from '../util';
 import { Spine, isFirstStep, getStep, isGreaterEqualStep } from './Spine';
 import { NameObj } from './NameObj';
@@ -8,7 +8,7 @@ import { JMapInfoIter } from './JMapInfo';
 import { computeModelMatrixR, MathConstants, isNearZero } from '../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
-import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement } from './ActorUtil';
+import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord } from './ActorUtil';
 
 export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
 
@@ -431,7 +431,8 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
 
             if (!isNearZero(this.accel, 0.0001) && getStep(this) < this.accelTime)
                 this.moveSpeed += this.accel;
-            moveCoordAndFollowTrans(this.actor, this.moveSpeed);
+            moveCoord(this.actor, this.moveSpeed);
+            getRailPos(this.translation, this.actor);
         } else if (currentNerve === MapPartsRailMoverNrv.MoveStart) {
             if (isFirstStep(this))
                 this.startMoveCoord = getRailCoord(this.actor);
@@ -445,7 +446,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
                 const dir = isRailGoingToEnd(this.actor) ? -1 : 1;
                 const mag = dir * ((((step / 3) & 1) === 0) ? -1 : 1);
                 setRailCoord(this.actor, this.startMoveCoord + (7 * mag * (step % 3)));
-                getRailPos(this.actor.translation, this.actor);
+                getRailPos(this.translation, this.actor);
             }
         } else if (currentNerve === MapPartsRailMoverNrv.StopAtPointBeforeRotate || currentNerve === MapPartsRailMoverNrv.StopAtPointAfterRotate) {
             if (isFirstStep(this)) {
@@ -492,6 +493,13 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
 
         this.passChecker.movement();
         super.movement(sceneObjHolder, viewerInput);
+    }
+
+    public tryResetPositionRepeat(sceneObjHolder: SceneObjHolder): void {
+        if (this.moveStopType === MoveStopType.Loop && this.spine.getCurrentNerve() === MapPartsRailMoverNrv.Move) {
+            if (this.spine.getNerveStep() < 1.0)
+                resetPosition(sceneObjHolder, this.actor);
+        }
     }
 
     private reachedEndPlayerOn(): void {
@@ -589,7 +597,6 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
 }
 
 const enum MapPartsRailGuideDrawerNrv { HideAll, Draw, DrawForward }
-
 class MapPartsRailGuidePoint extends LiveActor {
     constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, modelName: string, public coord: number) {
         super(actor.zoneAndLayer, sceneObjHolder, 'MapPartsRailGuidePoint');

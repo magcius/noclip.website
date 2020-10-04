@@ -1,12 +1,12 @@
 
 // Misc MapObj actors.
 
-import { mat4, vec3, ReadonlyMat4 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxis, getMatrixAxisX, getMatrixAxisZ, computeModelMatrixR, transformVec3Mat4w1 } from '../../MathHelpers';
+import { mat4, vec3, ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
+import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxisX, getMatrixAxisZ, computeModelMatrixR, Vec3UnitY } from '../../MathHelpers';
 import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
 import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer, invalidateShadowAll, getBckFrameMax, getBckFrameMaxNamed, joinToGroupArray, getPlayerPos, turnVecToVecCosOnPlane, getEaseInValue, getJointMtxByName, connectToSceneMapObjStrongLight, isBckOneTimeAndStopped, makeMtxFrontSidePos, addHitSensorMapObj, useStageSwitchWriteDead, isValidSwitchA, isValidSwitchDead, invalidateCollisionPartsForActor, isValidSwitchB } from '../ActorUtil';
-import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded, invalidateCollisionParts } from '../Collision';
+import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded } from '../Collision';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
 import { HitSensor, HitSensorType, isSensorMapObj } from '../HitSensor';
@@ -26,6 +26,7 @@ import { DrawBufferType, NameObj } from '../NameObj';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater } from '../MiscMap';
 import { isExistStageSwitchSleep } from '../Switch';
+import { registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -283,8 +284,13 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
 
         if (this.rotator !== null)
             this.rotator.movement(sceneObjHolder, viewerInput);
-        if (this.railMover !== null)
+        if (this.railMover !== null) {
             this.railMover.movement(sceneObjHolder, viewerInput);
+            if (this.railMover.isWorking()) {
+                vec3.copy(this.translation, this.railMover.translation);
+                this.railMover.tryResetPositionRepeat(sceneObjHolder);
+            }
+        }
         if (this.railGuideDrawer !== null)
             this.railGuideDrawer.movement(sceneObjHolder, viewerInput);
     }
@@ -2167,5 +2173,130 @@ export class BreakableCage extends LiveActor<BreakableCageNrv> {
         super.requestArchives(sceneObjHolder, infoIter);
         if (getObjectName(infoIter) !== 'BreakableFixation')
             sceneObjHolder.modelCache.requestObjectData('BreakableCageBreak');
+    }
+}
+
+const enum LargeChainNrv { Wait, Break }
+export class LargeChain extends LiveActor<LargeChainNrv> {
+    private fixPartsBegin: LargeChainParts;
+    private fixPartsEnd: LargeChainParts;
+    private parts: LargeChainParts[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'LargeChain');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        const length = assertExists(getJMapInfoArg0(infoIter));
+        const numParts = (length / 200.0) | 0;
+
+        // createChainParts()
+        for (let i = 0; i < numParts; i++) {
+            vec3.scaleAndAdd(scratchVec3a, this.translation, Vec3UnitY, 200.0 * i);
+
+            this.parts.push(new LargeChainParts(zoneAndLayer, sceneObjHolder, scratchVec3a, this.rotation, this.scale, false));
+
+            if (i === 0) {
+                this.fixPartsBegin = new LargeChainParts(zoneAndLayer, sceneObjHolder, scratchVec3a, this.rotation, this.scale, true);
+            } else if (i === numParts - 1) {
+                vec3.copy(scratchVec3b, this.rotation);
+                scratchVec3b[0] += 90 * MathConstants.DEG_TO_RAD;
+                scratchVec3b[1] += 180 * MathConstants.DEG_TO_RAD;
+                scratchVec3a[1] += 200.0;
+                this.fixPartsEnd = new LargeChainParts(zoneAndLayer, sceneObjHolder, scratchVec3a, this.rotation, this.scale, true);
+            }
+        }
+
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+
+        if (tryRegisterDemoCast(sceneObjHolder, this, infoIter)) {
+            registerDemoActionNerveFunction(sceneObjHolder, this, LargeChainNrv.Break);
+        }
+
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+        this.initNerve(LargeChainNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: LargeChainNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === LargeChainNrv.Break) {
+            const step = this.getNerveStep();
+            const numBrokenParts = (step / 5.0) | 0;
+
+            if (numBrokenParts > 0)
+                this.fixPartsBegin.breakChainParts(sceneObjHolder);
+            for (let i = 0; i < numBrokenParts; i++)
+                this.parts[i].breakChainParts(sceneObjHolder);
+            if (numBrokenParts >= this.parts.length - 1) {
+                this.fixPartsEnd.breakChainParts(sceneObjHolder);
+                this.makeActorDead(sceneObjHolder);
+            }
+        }
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.parts.length; i++)
+            this.parts[i].makeActorAppeared(sceneObjHolder);
+        this.fixPartsBegin.makeActorAppeared(sceneObjHolder);
+        this.fixPartsEnd.makeActorAppeared(sceneObjHolder);
+        super.makeActorAppeared(sceneObjHolder);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.parts.length; i++)
+            this.parts[i].makeActorDead(sceneObjHolder);
+        this.fixPartsBegin.makeActorDead(sceneObjHolder);
+        this.fixPartsEnd.makeActorDead(sceneObjHolder);
+        super.makeActorDead(sceneObjHolder);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('LargeChain');
+        sceneObjHolder.modelCache.requestObjectData('LargeChainFixPoint');
+    }
+}
+
+class LargeChainParts extends LiveActor {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, translation: ReadonlyVec3, rotation: ReadonlyVec3, scale: ReadonlyVec3, isFixPoint: boolean) {
+        super(zoneAndLayer, sceneObjHolder, 'LargeChainParts');
+
+        vec3.copy(this.translation, translation);
+        vec3.copy(this.rotation, rotation);
+        vec3.copy(this.scale, scale);
+
+        if (isFixPoint)
+            this.initModelManagerWithAnm(sceneObjHolder, 'LargeChainFixPoint');
+        else
+            this.initModelManagerWithAnm(sceneObjHolder, 'LargeChain');
+
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initHitSensor();
+        const bodySensor = addBodyMessageSensorMapObj(sceneObjHolder, this);
+
+        if (isFixPoint)
+            initCollisionParts(sceneObjHolder, this, 'LargeChainFixPoint', bodySensor, null);
+        else
+            initCollisionParts(sceneObjHolder, this, 'LargeChain', bodySensor, null);
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public breakChainParts(sceneObjHolder: SceneObjHolder): void {
+        if (!isDead(this))
+            this.makeActorDead(sceneObjHolder);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        deleteEffect(sceneObjHolder, this, 'Break');
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        emitEffect(sceneObjHolder, this, 'Break');
+        // startSound
+        super.makeActorDead(sceneObjHolder);
     }
 }
