@@ -521,13 +521,13 @@ function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): G
         if (srcParam === GfxBlendFactor.ONE)
             return GfxBlendFactor.ZERO;
         return GfxBlendFactor.ONE;
-    }
-    if (paramB === BlendParam_B.G_BL_A_MEM)
+    } else if (paramB === BlendParam_B.G_BL_A_MEM) {
         return GfxBlendFactor.DST_ALPHA;
-    if (paramB === BlendParam_B.G_BL_1)
+    } else if (paramB === BlendParam_B.G_BL_1) {
         return GfxBlendFactor.ONE;
-    if (paramB === BlendParam_B.G_BL_0)
+    } else if (paramB === BlendParam_B.G_BL_0) {
         return GfxBlendFactor.ZERO;
+    }
 
     throw "Unknown Blend Param B: "+paramB;
 }

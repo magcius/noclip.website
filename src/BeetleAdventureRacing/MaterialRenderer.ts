@@ -1,20 +1,19 @@
+
 import { mat4, vec3 } from "gl-matrix";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode, makeTextureDescriptor2D, GfxMegaStateDescriptor, GfxCullMode, GfxCompareMode, GfxBlendMode, GfxBlendFactor } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { fillMatrix4x4, fillMatrix4x3 } from "../gfx/helpers/UniformBufferHelpers";
+import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxMegaStateDescriptor, GfxCullMode } from "../gfx/platform/GfxPlatform";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DeviceProgram } from "../Program";
 import { ViewerRenderInput } from "../viewer";
 import { UVTX, UVTXRenderHelper } from "./ParsedFiles/UVTX";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 
 import * as RDP from '../Common/N64/RDP';
-import { humanReadableCombineParams, generateCycleDependentBlenderSettingsString } from './Util';
+import { humanReadableCombineParams } from './Util';
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { DEBUGGING_TOOLS_STATE, RendererStore } from "./Scenes";
 import { Material, RenderOptionsFlags } from "./ParsedFiles/Common";
-import { assert } from "../util";
-import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 
 export class MaterialRenderer {
     private vertexBuffer: GfxBuffer;
@@ -36,7 +35,9 @@ export class MaterialRenderer {
     // Might remove later
     private material: Material;
     private uvtx: UVTX;
-    
+
+    private isTranslucent = false;
+
     // TODO: some models are being culled incorrectly, figure out what's up with that
     // TODO: what's going on with the materials that (seemingly) have no texture and are invisible?
     // (e.g. see SS in the desert, MoM by the ice wall you smash)
@@ -54,9 +55,9 @@ export class MaterialRenderer {
         }
 
         // Rendering config
-        let stateFlags;
-        let otherModeLRenderMode: number;
-        ({ stateFlags, otherModeLRenderMode } = this.translateRenderOptions());
+        const { stateFlags, otherModeLRenderMode } = this.translateRenderOptions();
+        this.isTranslucent = !!((otherModeLRenderMode & (1 << RDP.OtherModeL_Layout.FORCE_BL)));
+
         this.stateFlagsFromGeomAndBlenderSettings = stateFlags;
         this.program = this.buildProgram(otherModeLRenderMode);
 
@@ -314,6 +315,8 @@ export class MaterialRenderer {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setMegaStateFlags(this.stateFlagsFromGeomAndBlenderSettings);
 
+        renderInst.sortKey = makeSortKey(this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
+
         // TODO: move this to template, it only needs to be set once
         let sceneParamsOffset = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
         const sceneParams = renderInst.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
@@ -334,9 +337,11 @@ export class MaterialRenderer {
 
         let modelToViewMatrix = mat4.create();
         mat4.mul(modelToViewMatrix, viewerInput.camera.viewMatrix, adjmodelToWorldMatrix);
-
         drawParamsOffs += fillMatrix4x3(drawParams, drawParamsOffs, modelToViewMatrix);
-        
+
+        if (this.isTranslucent)
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, -modelToViewMatrix[14]);
+
         let combineParamsOffs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_CombineParams, 8);
         const combineParams = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
 
