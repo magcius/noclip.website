@@ -1,32 +1,35 @@
 
 // Misc MapObj actors.
 
-import { mat4, vec3 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, scaleMatrix, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation } from '../../MathHelpers';
+import { mat4, vec3, ReadonlyMat4 } from 'gl-matrix';
+import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxis, getMatrixAxisX, getMatrixAxisZ } from '../../MathHelpers';
 import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer } from '../ActorUtil';
-import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall } from '../Collision';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer, invalidateShadowAll, getBckFrameMax, getBckFrameMaxNamed, joinToGroupArray, getPlayerPos, turnVecToVecCosOnPlane, getEaseInValue, getJointMtxByName, connectToSceneMapObjStrongLight, isBckOneTimeAndStopped, makeMtxFrontSidePos, addHitSensorMapObj } from '../ActorUtil';
+import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded } from '../Collision';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
-import { HitSensor, HitSensorType } from '../HitSensor';
-import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter, getJMapInfoArg2, getJMapInfoArg5, getJMapInfoBool, getJMapInfoArg3, getJMapInfoArg4 } from '../JMapInfo';
-import { LiveActor, MessageType, ZoneAndLayer, isDead, makeMtxTRFromActor } from '../LiveActor';
+import { HitSensor, HitSensorType, isSensorMapObj } from '../HitSensor';
+import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter, getJMapInfoArg2, getJMapInfoArg5, getJMapInfoBool, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg7 } from '../JMapInfo';
+import { LiveActor, MessageType, ZoneAndLayer, isDead, makeMtxTRFromActor, MsgSharedGroup, dynamicSpawnZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { getMapPartsArgMoveConditionType, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRotator, MoveConditionType, RailGuideType } from '../MapParts';
 import { createIndirectPlanetModel, PartsModel } from './MiscActor';
 import { isConnectedWithRail } from '../RailRider';
-import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep } from '../Spine';
+import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate } from '../Spine';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } from './ModelObj';
 import { initMultiFur } from '../Fur';
 import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength, initShadowVolumeBox, setShadowVolumeStartDropOffset } from '../Shadow';
 import { initLightCtrl } from '../LightData';
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
-import { DrawBufferType } from '../NameObj';
+import { DrawBufferType, NameObj } from '../NameObj';
+import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
+import { isInWater } from '../MiscMap';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 const scratchMatrix = mat4.create();
 
 function setupInitInfoSimpleMapObj(initInfo: MapObjActorInitInfo): void {
@@ -1567,5 +1570,399 @@ export class TreasureSpot extends MapObjActor<TreasureSpotNrv> {
         } else {
             deleteEffect(sceneObjHolder, this, 'Glow');
         }
+    }
+}
+
+const enum PressureMessengerNrv { Sync }
+class PressureMessenger extends LiveActor<PressureMessengerNrv> {
+    public step: number = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private group: MsgSharedGroup<PressureBase>) {
+        super(zoneAndLayer, sceneObjHolder, 'PressureMessenger');
+
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        this.initHitSensor();
+        addBodyMessageSensorMapObj(sceneObjHolder, this);
+        // invalidateClipping
+        this.initNerve(PressureMessengerNrv.Sync);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PressureMessengerNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === PressureMessengerNrv.Sync) {
+            if (isGreaterEqualStep(this, this.step)) {
+                this.group.sendMsgToGroupMember(MessageType.Pressure_StartWait, this.getSensor('body')!, 'body');
+                this.setNerve(PressureMessengerNrv.Sync);
+            }
+        }
+    }
+}
+
+function turnDirectionToTargetRadians(actor: LiveActor, dst: vec3, target: vec3, angle: number): void {
+    vec3.sub(scratchVec3a, target, actor.translation);
+    turnVecToVecCosOnPlane(dst, dst, scratchVec3a, actor.gravityVector, Math.cos(angle));
+}
+
+function getScaleWithReactionValueZeroToOne(t: number, a: number, b: number): number {
+    if (t < 0.5) {
+        return getEaseOutValue(2.0 * t);
+    } else {
+        const t2 = 2.0 * (t - 0.5);
+        const t3 = Math.cos(t2 * a * Math.PI);
+        return 1.0 + (b * (1.0 - t2) * (1.0 - t3));
+    }
+}
+
+const enum PressureBaseNrv { RelaxStart, Relax, FirstWait, WaitStart, Wait, SyncWait, PrepareToShot, Shot }
+const enum PressureBaseShotType { OnGravity, OffGravity, Follow, TargetPlayer }
+abstract class PressureBase extends LiveActor<PressureBaseNrv> {
+    private frontVec = vec3.create();
+    private delay: number;
+    private useShortShot: boolean;
+    protected shotType: PressureBaseShotType;
+    private group: MsgSharedGroup<PressureBase> | null;
+    private messenger: PressureMessenger | null = null;
+    private bulletSpeed: number;
+    private cannonAngleBound: number;
+    private cannonAngleRelaxAnim: number = 0.0;
+    private hasShotBullet: boolean = false;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, getObjectName(infoIter));
+        calcFrontVec(this.frontVec, this);
+        connectToSceneNoShadowedMapObjStrongLight(sceneObjHolder, this);
+
+        this.initHitSensor();
+        vec3.set(scratchVec3a, 0, 30.0, 0.0);
+        addHitSensorMapObj(sceneObjHolder, this, 'body', 8, 70.0, scratchVec3a);
+        // vec3.set(scratchVec3a, 40, 0.0, 0.0);
+        // addHitSensorAtJointMapObjSimple(sceneObjHolder, this, 'cannon', 'Cannon1', 8, 70.0, scratchVec3a);
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound();
+        initShadowVolumeSphere(sceneObjHolder, this, 75.0);
+        invalidateShadowAll(this);
+
+        // TODO(jstpierre): JointController
+        this.modelInstance!.jointMatrixCalcCallback = this.jointMatrixCalcCallback.bind(this);
+
+        this.cannonAngleBound = fallback(getJMapInfoArg0(infoIter), 0.0);
+        this.delay = fallback(getJMapInfoArg1(infoIter), 300);
+        const shotStartDuration = getBckFrameMaxNamed(this, 'ShotStart');
+        this.useShortShot = (this.delay < shotStartDuration);
+
+        this.initBullet(sceneObjHolder);
+
+        this.bulletSpeed = fallback(getJMapInfoArg2(infoIter), 30.0);
+        this.shotType = fallback(getJMapInfoArg3(infoIter), 0);
+
+        calcGravity(sceneObjHolder, this);
+
+        // setGroupClipping
+        this.group = joinToGroupArray(sceneObjHolder, this, infoIter, 'PressureBase', 0x20)!;
+
+        if (this.group !== null && this.group.getActor(0) === this)
+            this.messenger = new PressureMessenger(this.zoneAndLayer, sceneObjHolder, this.group);
+
+        // tryRegisterDemoCast
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+
+        if (useStageSwitchWriteA(sceneObjHolder, this, infoIter)) {
+            listenStageSwitchOnOffA(sceneObjHolder, this, this.startWait.bind(this), this.startRelax.bind(this));
+            this.initNerve(PressureBaseNrv.Relax);
+        } else {
+            this.initNerve(PressureBaseNrv.FirstWait);
+        }
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        if (this.messenger !== null) {
+            let best = -1;
+            for (let i = 0; i < this.group!.objArray.length; i++) {
+                const actor = this.group!.objArray[i];
+                best = Math.max(actor.delay, best);
+            }
+
+            this.messenger.step = best + 60;
+        }
+    }
+
+    private startRelax(sceneObjHolder: SceneObjHolder): void {
+        if (!this.isNerve(PressureBaseNrv.RelaxStart) && !this.isNerve(PressureBaseNrv.Relax))
+            this.setNerve(PressureBaseNrv.RelaxStart);
+    }
+
+    private startWait(sceneObjHolder: SceneObjHolder): void {
+        if (this.isNerve(PressureBaseNrv.Relax))
+            this.setNerve(PressureBaseNrv.WaitStart);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        if (this.shotType === PressureBaseShotType.TargetPlayer) {
+            getPlayerPos(scratchVec3a, sceneObjHolder);
+            turnDirectionToTargetRadians(this, this.frontVec, scratchVec3a, 5.0 * MathConstants.DEG_TO_RAD);
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PressureBaseNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === PressureBaseNrv.Wait) {
+            const bckLength = getBckFrameMaxNamed(this, 'ShotStart');
+            if (isGreaterEqualStep(this, this.delay - bckLength))
+                this.setNerve(PressureBaseNrv.PrepareToShot);
+            else if (isGreaterEqualStep(this, this.delay))
+                this.setNerve(PressureBaseNrv.Shot);
+        } else if (currentNerve === PressureBaseNrv.FirstWait) {
+            if (isGreaterEqualStep(this, this.delay))
+                this.setNerve(PressureBaseNrv.PrepareToShot);
+        } else if (currentNerve === PressureBaseNrv.PrepareToShot) {
+            if (isFirstStep(this))
+                startBck(this, 'ShotStart');
+            if (isBckStopped(this))
+                this.setNerve(PressureBaseNrv.Shot);
+        } else if (currentNerve === PressureBaseNrv.Shot) {
+            if (isFirstStep(this)) {
+                startBck(this, this.useShortShot ? 'ShortShot' : 'Shot');
+                this.hasShotBullet = false;
+            }
+
+            if (!this.hasShotBullet && isGreaterEqualStep(this, this.useShortShot ? 54 : 16)) {
+                this.shotBullet(sceneObjHolder, this.bulletSpeed);
+                this.hasShotBullet = true;
+            }
+
+            if (isBckStopped(this)) {
+                if (this.group !== null)
+                    this.setNerve(PressureBaseNrv.SyncWait);
+                else
+                    this.setNerve(PressureBaseNrv.Wait);
+            }
+        } else if (currentNerve === PressureBaseNrv.Relax) {
+            this.cannonAngleRelaxAnim = -45.0;
+        } else if (currentNerve === PressureBaseNrv.WaitStart || currentNerve === PressureBaseNrv.RelaxStart) {
+            const isRelax = currentNerve === PressureBaseNrv.RelaxStart;
+
+            if (isFirstStep(this)) {
+                if (isRelax)
+                    startBck(this, 'SwitchOff');
+                else
+                    startBck(this, 'SwitchOn');
+            }
+
+            const easedRate = getScaleWithReactionValueZeroToOne(calcNerveRate(this, 20), 1.0, -0.2);
+            const angleAnim = easedRate * (-45.0 - this.cannonAngleBound);
+            if (isRelax)
+                this.cannonAngleRelaxAnim = -45.0 - angleAnim;
+            else
+                this.cannonAngleRelaxAnim = this.cannonAngleBound + angleAnim;
+
+            if (isGreaterEqualStep(this, 20)) {
+                if (isRelax)
+                    this.setNerve(PressureBaseNrv.Relax);
+                else
+                    this.setNerve(PressureBaseNrv.Wait);
+            }
+        }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, msgType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (msgType === MessageType.Pressure_StartWait) {
+            if (!this.isNerve(PressureBaseNrv.RelaxStart) && !this.isNerve(PressureBaseNrv.Relax))
+                this.setNerve(PressureBaseNrv.Wait);
+        }
+
+        return super.receiveMessage(sceneObjHolder, msgType, otherSensor, thisSensor);
+    }
+
+    private jointMatrixCalcCallback(dst: mat4, modelData: J3DModelData, i: number): void {
+        if (modelData.bmd.jnt1.joints[i].name === 'Cannon1') {
+            const isRelax = this.isNerve(PressureBaseNrv.RelaxStart) || this.isNerve(PressureBaseNrv.Relax) || this.isNerve(PressureBaseNrv.WaitStart);
+            const angle = isRelax ? this.cannonAngleRelaxAnim : this.cannonAngleBound;
+
+            mat4.rotateZ(dst, dst, angle * MathConstants.DEG_TO_RAD);
+        }
+    }
+
+    protected abstract initBullet(sceneObjHolder: SceneObjHolder): void;
+    protected abstract shotBullet(sceneObjHolder: SceneObjHolder, speed: number): void;
+}
+
+export class WaterPressure extends PressureBase {
+    private longLifetime: boolean;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, infoIter);
+        this.longLifetime = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
+    }
+
+    protected initBullet(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.create(SceneObj.WaterPressureBulletHolder);
+    }
+
+    private calcGunPointFromCannon(dst: mat4): void {
+        const cannon1 = getJointMtxByName(this, 'Cannon1')!;
+        getMatrixAxisX(scratchVec3a, cannon1);
+        getMatrixTranslation(scratchVec3c, cannon1);
+        vec3.scaleAndAdd(scratchVec3c, scratchVec3c, scratchVec3a, 200.0);
+        getMatrixAxisY(scratchVec3b, cannon1);
+        makeMtxFrontUpPos(dst, scratchVec3a, scratchVec3b, scratchVec3c);
+    }
+
+    protected shotBullet(sceneObjHolder: SceneObjHolder, speed: number): void {
+        const bullet = sceneObjHolder.waterPressureBulletHolder!.callEmptyBullet();
+        if (bullet === null)
+            return;
+
+        this.calcGunPointFromCannon(scratchMatrix);
+        const isOnGravity = (this.shotType === PressureBaseShotType.OnGravity);
+        bullet.shotWaterBullet(sceneObjHolder, this, scratchMatrix, speed, !isOnGravity, false, this.longLifetime);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('WaterPressure');
+        WaterPressureBulletHolder.requestArchives(sceneObjHolder);
+    }
+}
+
+const enum WaterPressureBulletNrv { Fly }
+class WaterPressureBullet extends LiveActor<WaterPressureBulletNrv> {
+    private frontVec = vec3.create();
+    private sideVec = vec3.create();
+    private longLifetime = false;
+    private liveInWater = false;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
+        super(zoneAndLayer, sceneObjHolder, 'WaterPressureBullet');
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'WaterBullet');
+        connectToSceneMapObjStrongLight(sceneObjHolder, this);
+
+        this.initHitSensor();
+        addHitSensor(sceneObjHolder, this, 'body', HitSensorType.WaterPressureBullet, 4, 100.0, Vec3Zero);
+        addHitSensor(sceneObjHolder, this, 'binder', HitSensorType.WaterPressureBulletBinder, 4, 100.0, Vec3Zero);
+
+        this.initBinder(100.0, 0.0, 0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound()
+        // initStarPointerTarget()
+        initShadowVolumeSphere(sceneObjHolder, this, 75.0);
+        setShadowDropLength(this, null, 1500.0);
+        // registerDemoSimpleCastAll()
+        this.initNerve(WaterPressureBulletNrv.Fly);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        if (isNearZeroVec3(this.velocity, 0.001)) {
+            vec3.copy(scratchVec3a, this.gravityVector);
+        } else {
+            vec3.copy(scratchVec3a, this.velocity);
+        }
+
+        turnVecToVecCosOnPlane(this.frontVec, this.frontVec, scratchVec3a, this.sideVec, Math.cos(45.0 * 2.5 * MathConstants.DEG_TO_RAD));
+    }
+
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        if (isSensorMapObj(otherSensor))
+            this.makeActorDead(sceneObjHolder);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        emitEffect(sceneObjHolder, this, 'Break');
+        super.makeActorDead(sceneObjHolder);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        makeMtxFrontSidePos(this.modelInstance!.modelMatrix, this.frontVec, this.sideVec, this.translation);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WaterPressureBulletNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === WaterPressureBulletNrv.Fly) {
+            if (isFirstStep(this))
+                startBck(this, 'Shot');
+            if (isBckOneTimeAndStopped(this))
+                startBck(this, 'Move');
+            // Sufferer
+
+            if (this.calcGravityFlag)
+                vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, 0.4 * deltaTimeFrames);
+
+            // isPadSwing
+
+            if (!isBinded(this) && isInWater(sceneObjHolder, this.translation)) {
+                if (!this.liveInWater /*|| this.sufferer === null*/ /*|| !isBindedGroundSand(this)*/) {
+                    this.makeActorDead(sceneObjHolder);
+                } else {
+                    vecKillElement(this.velocity, this.velocity, this.gravityVector);
+                }
+            }
+
+            const lifetimeStep = this.longLifetime ? 300 : 180;
+            if (isGreaterEqualStep(this, lifetimeStep))
+                this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public shotWaterBullet(sceneObjHolder: SceneObjHolder, parentPressure: WaterPressure, mtx: ReadonlyMat4, speed: number, isOffGravity: boolean, liveInWater: boolean, longLifetime: boolean): void {
+        getMatrixAxisZ(this.frontVec, mtx);
+        vec3.scale(this.velocity, this.frontVec, speed);
+        getMatrixTranslation(this.translation, mtx);
+        getMatrixAxisX(this.sideVec, mtx);
+        vec3.zero(this.rotation);
+
+        this.makeActorAppeared(sceneObjHolder);
+
+        validateHitSensors(this);
+        // invalidateClipping
+        setShadowDropLength(this, null, 1500.0);
+        this.calcGravityFlag = !isOffGravity;
+        this.liveInWater = liveInWater;
+        this.longLifetime = longLifetime;
+        this.setNerve(WaterPressureBulletNrv.Fly);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('WaterBullet');
+    }
+}
+
+export class WaterPressureBulletHolder extends NameObj {
+    private bullets: WaterPressureBullet[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'WaterPressureBulletHolder');
+
+        for (let i = 0; i < 16; i++)
+            this.bullets.push(new WaterPressureBullet(dynamicSpawnZoneAndLayer, sceneObjHolder));
+    }
+
+    public callEmptyBullet(): WaterPressureBullet | null {
+        for (let i = 0; i < this.bullets.length; i++)
+            if (isDead(this.bullets[i]))
+                return this.bullets[i];
+        return null;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        WaterPressureBullet.requestArchives(sceneObjHolder);
     }
 }

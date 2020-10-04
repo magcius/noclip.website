@@ -207,6 +207,11 @@ export function getBckFrameMax(actor: LiveActor): number {
     return bckCtrl.endFrame;
 }
 
+export function getBckFrameMaxNamed(actor: LiveActor, name: string): number {
+    const bck = actor.modelManager!.resourceHolder.getRes(actor.modelManager!.resourceHolder.motionTable, name)!;
+    return bck.duration;
+}
+
 export function isBrkStopped(actor: LiveActor): boolean {
     return actor.modelManager!.isBckStopped();
 }
@@ -875,12 +880,12 @@ export function setMtxAxisXYZ(dst: mat4, x: ReadonlyVec3, y: ReadonlyVec3, z: Re
 export function makeMtxFrontUp(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3): void {
     const frontNorm = scratchVec3a;
     const upNorm = scratchVec3b;
-    const right = scratchVec3c;
+    const side = scratchVec3c;
     vec3.normalize(frontNorm, front);
-    vec3.cross(right, up, frontNorm);
-    vec3.normalize(right, right);
-    vec3.cross(upNorm, frontNorm, right);
-    setMtxAxisXYZ(dst, right, upNorm, frontNorm);
+    vec3.cross(side, up, frontNorm);
+    vec3.normalize(side, side);
+    vec3.cross(upNorm, frontNorm, side);
+    setMtxAxisXYZ(dst, side, upNorm, frontNorm);
 }
 
 export function makeMtxFrontUpPos(dst: mat4, front: ReadonlyVec3, up: ReadonlyVec3, pos: ReadonlyVec3): void {
@@ -891,16 +896,33 @@ export function makeMtxFrontUpPos(dst: mat4, front: ReadonlyVec3, up: ReadonlyVe
 export function makeMtxUpFront(dst: mat4, up: ReadonlyVec3, front: ReadonlyVec3): void {
     const upNorm = scratchVec3b;
     const frontNorm = scratchVec3a;
-    const right = scratchVec3c;
+    const side = scratchVec3c;
     vec3.normalize(upNorm, up);
-    vec3.cross(right, up, front);
-    vec3.normalize(right, right);
-    vec3.cross(frontNorm, right, upNorm);
-    setMtxAxisXYZ(dst, right, upNorm, frontNorm);
+    vec3.cross(side, up, front);
+    vec3.normalize(side, side);
+    vec3.cross(frontNorm, side, upNorm);
+    setMtxAxisXYZ(dst, side, upNorm, frontNorm);
 }
 
 export function makeMtxUpFrontPos(dst: mat4, up: ReadonlyVec3, front: ReadonlyVec3, pos: ReadonlyVec3): void {
     makeMtxUpFront(dst, up, front);
+    setMatrixTranslation(dst, pos);
+}
+
+export function makeMtxFrontSide(dst: mat4, front: ReadonlyVec3, side: ReadonlyVec3): void {
+    const up = scratchVec3b;
+    const frontNorm = scratchVec3a;
+    const sideNorm = scratchVec3c;
+    vec3.normalize(frontNorm, front);
+    vec3.cross(up, frontNorm, side);
+    vec3.normalize(up, up);
+    vec3.cross(sideNorm, up, frontNorm);
+    setMtxAxisXYZ(dst, sideNorm, up, frontNorm);
+}
+
+
+export function makeMtxFrontSidePos(dst: mat4, front: ReadonlyVec3, side: ReadonlyVec3, pos: ReadonlyVec3): void {
+    makeMtxFrontSide(dst, front, side);
     setMatrixTranslation(dst, pos);
 }
 
@@ -1352,7 +1374,7 @@ export function validateShadowAll(actor: LiveActor): void {
 
 export function getEaseInValue(t: number, dstMin: number = 0.0, dstMax: number = 1.0, duration: number = 1.0): number {
     const curvedT = Math.cos((t / duration) * Math.PI * 0.5);
-    return lerp(dstMin, dstMax, 1 - curvedT);
+    return lerp(dstMin, dstMax, 1.0 - curvedT);
 }
 
 export function getEaseOutValue(t: number, dstMin: number = 0.0, dstMax: number = 1.0, duration: number = 1.0): number {
@@ -1389,6 +1411,21 @@ export function turnVecToVecCos(dst: vec3, src: ReadonlyVec3, target: ReadonlyVe
         vec3.normalize(dst, target);
         return true;
     }
+}
+
+export function turnVecToVecCosOnPlane(dst: vec3, src: ReadonlyVec3, targetAny: ReadonlyVec3, up: ReadonlyVec3, speed: number): boolean {
+    vecKillElement(scratchVec3a, targetAny, up);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+
+    if (isNearZeroVec3(scratchVec3a, 0.001))
+        return false;
+
+    if (speed <= -1.0) {
+        vec3.copy(dst, scratchVec3a);
+        return false;
+    }
+
+    return turnVecToVecCos(dst, src, scratchVec3a, speed, up, 0.02);
 }
 
 function excludeCalcShadowToSensorAll(actor: LiveActor, hitSensor: HitSensor): void {

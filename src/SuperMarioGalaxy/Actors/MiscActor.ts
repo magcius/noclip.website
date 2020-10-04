@@ -22,7 +22,7 @@ import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModel
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistanceVertical, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos, quatGetAxisZ, quatGetAxisY, blendQuatUpFront, quatGetAxisX, turnVecToVecCos, excludeCalcShadowToMyCollision, addBodyMessageSensorMapObjPress, MapObjConnector, getEaseOutValue, getEaseInValue, getEaseInOutValue } from '../ActorUtil';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistanceVertical, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos, quatGetAxisZ, quatGetAxisY, blendQuatUpFront, quatGetAxisX, turnVecToVecCos, excludeCalcShadowToMyCollision, addBodyMessageSensorMapObjPress, MapObjConnector, getEaseOutValue, getEaseInValue, getEaseInOutValue, turnVecToVecCosOnPlane } from '../ActorUtil';
 import { calcMapGround, CollisionKeeperCategory, getBindedFixReactionVector, getFirstPolyOnLineToMap, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isFloorPolygonAngle, isWallPolygonAngle, isOnGround, TriangleFilterFunc } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
@@ -4648,7 +4648,7 @@ export class OceanRing extends LiveActor {
         return coord;
     }
 
-    public isInWater(sceneObjHolder: SceneObjHolder, pos: vec3): boolean {
+    public isInWater(sceneObjHolder: SceneObjHolder, pos: ReadonlyVec3): boolean {
         const coord = this.calcNearestPos(scratchVec3, null, pos);
         const width = 1200.0 * this.calcCurrentWidthRate(coord);
 
@@ -6818,7 +6818,6 @@ export class BrightObj extends LiveActor {
 }
 
 const enum FirePressureRadiateNrv { Relax, Wait, PrepareToRadiate, Radiate, RadiateMargin, SyncWait, }
-
 export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
     private effectHostMtx = mat4.create();
     private waitStep: number;
@@ -6871,10 +6870,10 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
     }
 
     public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
-        if (messageType === MessageType.FirePressureRadiate_StartSyncWait) {
+        if (messageType === MessageType.Pressure_StartSyncWait) {
             this.setNerve(FirePressureRadiateNrv.Wait);
             return true;
-        } else if (messageType === MessageType.FirePressureRadiate_StartWait) {
+        } else if (messageType === MessageType.Pressure_StartWait) {
             this.setNerve(FirePressureRadiateNrv.SyncWait);
             return true;
         }
@@ -6937,13 +6936,13 @@ export class FirePressureRadiate extends LiveActor<FirePressureRadiateNrv> {
 
                 if (this.isLeader) {
                     const sensor = this.getSensor('body')!;
-                    this.group!.sendMsgToGroupMember(MessageType.FirePressureRadiate_StartSyncWait, sensor, 'body');
+                    this.group!.sendMsgToGroupMember(MessageType.Pressure_StartSyncWait, sensor, 'body');
                 }
             }
         } else if (currentNerve === FirePressureRadiateNrv.SyncWait) {
             if (this.isLeader && isGreaterEqualStep(this, 60)) {
                 const sensor = this.getSensor('body')!;
-                this.group!.sendMsgToGroupMember(MessageType.FirePressureRadiate_StartWait, sensor, 'body');
+                this.group!.sendMsgToGroupMember(MessageType.Pressure_StartWait, sensor, 'body');
             }
         }
     }
@@ -7010,7 +7009,6 @@ export class CoconutTree extends LiveActor {
 }
 
 const enum MogucchiNrv { Stroll, Scatter, Die }
-
 export class Mogucchi extends LiveActor<MogucchiNrv> {
     private maxStrollSpeed: number;
     private strollSpeed: number;
@@ -7154,7 +7152,6 @@ export class Mogucchi extends LiveActor<MogucchiNrv> {
 }
 
 const enum MogucchiHillNrv { Wait, Move }
-
 class MogucchiHill extends LiveActor<MogucchiHillNrv> {
     private static pieceModelNames: string[] = [
         'MogucchiHillA',
@@ -7297,7 +7294,6 @@ class MogucchiHill extends LiveActor<MogucchiHillNrv> {
 }
 
 const enum MogucchiHillPieceNrv { Wait, Appear, Crumble }
-
 class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
     public baseMtx = mat4.create();
 
@@ -7672,9 +7668,7 @@ class AstroDomeOrbit extends LiveActor {
 }
 
 const enum MiniatureGalaxyNrv { Wait }
-
 const enum MiniatureGalaxyType { Normal, ExGalaxy, Boss }
-
 export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
     public galaxyType: MiniatureGalaxyType;
 
@@ -7906,7 +7900,6 @@ class Button {
 }
 
 const enum ScrewSwitchReverseNrv { Wait, Screw }
-
 export class ScrewSwitchReverse extends LiveActor<ScrewSwitchReverseNrv> {
     private button: Button;
 
@@ -8118,7 +8111,6 @@ class RingBeam extends LiveActor<RingBeamNrv> {
 }
 
 const enum BallBeamerNrv { Wait, AttackChargeWait, AttackCharging, Inter }
-
 export class BallBeamer extends LiveActor<BallBeamerNrv> {
     private switchOnA: boolean = false;
     private ringBeams: RingBeam[] = [];
@@ -8240,7 +8232,6 @@ export class BallBeamer extends LiveActor<BallBeamerNrv> {
 }
 
 const enum LavaGeyserNrv { Wait, WaitSwitch, Sign, ShootUp, ShootKeep, ShootDown }
-
 export class LavaGeyser extends LiveActor<LavaGeyserNrv> {
     private waitTime: number = 0;
     private keepWaitTime: number = 0;
@@ -8382,7 +8373,6 @@ export class HeatHazeDirector extends NameObj {
 }
 
 const enum LavaProminenceNrv { Wait, WaitSwitch, Sign, MoveStartExtra, MoveLoop, MoveEndExtra, }
-
 function calcUpVecFromGravity(dst: vec3, sceneObjHolder: SceneObjHolder, actor: LiveActor, pos: vec3): void {
     calcGravityVector(sceneObjHolder, actor, pos, dst);
     if (isNearZeroVec3(dst, 0.001))
@@ -8635,7 +8625,6 @@ function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveAct
 }
 
 const enum UnizoNrv { Wait, Jump, Chase, CollidePlayer, CollideEnemy, Break, JumpDown, FireDown }
-
 export class Unizo extends LiveActor<UnizoNrv> {
     private breakModel: ModelObj;
     private jumpHeight = 0.15;
@@ -9071,21 +9060,6 @@ function calcPassiveMovement(actor: LiveActor, param: Readonly<WalkerStateParam>
         addVelocityToGravity(actor, param.gravitySpeed * deltaTimeFrames);
         attenuateVelocity(actor, param.velDragAir ** deltaTimeFrames);
     }
-}
-
-function turnVecToVecCosOnPlane(dst: vec3, src: ReadonlyVec3, targetAny: ReadonlyVec3, up: ReadonlyVec3, speed: number): boolean {
-    vecKillElement(scratchVec3a, targetAny, up);
-    vec3.normalize(scratchVec3a, scratchVec3a);
-
-    if (isNearZeroVec3(scratchVec3a, 0.001))
-        return false;
-
-    if (speed <= -1.0) {
-        vec3.copy(dst, scratchVec3a);
-        return false;
-    }
-
-    return turnVecToVecCos(dst, src, scratchVec3a, speed, up, 0.02);
 }
 
 function turnDirectionToTargetUseGroundNormalDegree(actor: LiveActor, dst: vec3, targetPos: ReadonlyVec3, speedInDegrees: number): boolean {

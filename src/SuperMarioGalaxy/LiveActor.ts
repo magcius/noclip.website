@@ -374,8 +374,8 @@ export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: Lay
 
 export const enum MessageType {
     EnemyAttack                              = 0x53,
-    FirePressureRadiate_StartWait            = 0x68,
-    FirePressureRadiate_StartSyncWait        = 0x69,
+    Pressure_StartWait                       = 0x68,
+    Pressure_StartSyncWait                   = 0x69,
     TicoRail_StartTalk                       = 0xCE,
     MapPartsRailMover_TryRotate              = 0xCB,
     MapPartsRailMover_TryRotateBetweenPoints = 0xCD,

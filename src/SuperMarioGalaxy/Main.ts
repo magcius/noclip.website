@@ -48,6 +48,7 @@ import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
+import { WaterPressureBulletHolder } from './Actors/MapObj';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -973,32 +974,33 @@ class AreaObjContainer extends NameObj {
 }
 
 export const enum SceneObj {
-    SensorHitChecker        = 0x00,
-    CollisionDirector       = 0x01,
-    LightDirector           = 0x06,
-    StageSwitchContainer    = 0x0A,
-    SwitchWatcherHolder     = 0x0B,
-    SleepControllerHolder   = 0x0C,
-    AreaObjContainer        = 0x0D,
-    LiveActorGroupArray     = 0x0E,
-    ImageEffectSystemHolder = 0x1D,
-    BloomEffect             = 0x1E,
-    LensFlareDirector       = 0x25,
-    FurDrawManager          = 0x26,
-    PlanetGravityManager    = 0x32,
-    CoinRotater             = 0x38,
-    AirBubbleHolder         = 0x39,
-    StarPieceDirector       = 0x3C,
-    ShadowControllerHolder  = 0x44,
-    SwingRopeGroup          = 0x47,
-    TrapezeRopeDrawInit     = 0x4A,
-    MapPartsRailGuideHolder = 0x56,
-    ElectricRailHolder      = 0x59,
-    HeatHazeDirector        = 0x5D,
-    WaterAreaHolder         = 0x62,
-    WaterPlantDrawInit      = 0x63,
-    MiniatureGalaxyHolder   = 0x73,
-    PriorDrawAirHolder      = 0x75,
+    SensorHitChecker          = 0x00,
+    CollisionDirector         = 0x01,
+    LightDirector             = 0x06,
+    StageSwitchContainer      = 0x0A,
+    SwitchWatcherHolder       = 0x0B,
+    SleepControllerHolder     = 0x0C,
+    AreaObjContainer          = 0x0D,
+    LiveActorGroupArray       = 0x0E,
+    ImageEffectSystemHolder   = 0x1D,
+    BloomEffect               = 0x1E,
+    LensFlareDirector         = 0x25,
+    FurDrawManager            = 0x26,
+    PlanetGravityManager      = 0x32,
+    CoinRotater               = 0x38,
+    AirBubbleHolder           = 0x39,
+    StarPieceDirector         = 0x3C,
+    ShadowControllerHolder    = 0x44,
+    SwingRopeGroup            = 0x47,
+    TrapezeRopeDrawInit       = 0x4A,
+    MapPartsRailGuideHolder   = 0x56,
+    ElectricRailHolder        = 0x59,
+    HeatHazeDirector          = 0x5D,
+    WaterAreaHolder           = 0x62,
+    WaterPlantDrawInit        = 0x63,
+    WaterPressureBulletHolder = 0x69,
+    MiniatureGalaxyHolder     = 0x73,
+    PriorDrawAirHolder        = 0x75,
 }
 
 export class SceneObjHolder {
@@ -1036,6 +1038,7 @@ export class SceneObjHolder {
     public heatHazeDirector: HeatHazeDirector | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
+    public waterPressureBulletHolder: WaterPressureBulletHolder | null = null;
     public miniatureGalaxyHolder: MiniatureGalaxyHolder | null = null;
     public priorDrawAirHolder: PriorDrawAirHolder | null = null;
 
@@ -1104,6 +1107,8 @@ export class SceneObjHolder {
             return this.waterAreaHolder;
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             return this.waterPlantDrawInit;
+        else if (sceneObj === SceneObj.WaterPressureBulletHolder)
+            return this.waterPressureBulletHolder;
         else if (sceneObj === SceneObj.MiniatureGalaxyHolder)
             return this.miniatureGalaxyHolder;
         else if (sceneObj === SceneObj.PriorDrawAirHolder)
@@ -1156,6 +1161,8 @@ export class SceneObjHolder {
             this.waterAreaHolder = new WaterAreaHolder(this);
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             this.waterPlantDrawInit = new WaterPlantDrawInit(this);
+        else if (sceneObj === SceneObj.WaterPressureBulletHolder)
+            this.waterPressureBulletHolder = new WaterPressureBulletHolder(this);
         else if (sceneObj === SceneObj.MiniatureGalaxyHolder)
             this.miniatureGalaxyHolder = new MiniatureGalaxyHolder(this);
         else if (sceneObj === SceneObj.PriorDrawAirHolder)

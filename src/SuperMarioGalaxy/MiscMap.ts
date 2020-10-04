@@ -142,7 +142,7 @@ export class WaterAreaHolder extends NameObj {
     }
 }
 
-function getWaterAreaObj(dst: WaterInfo | null, sceneObjHolder: SceneObjHolder, position: vec3): boolean {
+function getWaterAreaObj(dst: WaterInfo | null, sceneObjHolder: SceneObjHolder, position: ReadonlyVec3): boolean {
     if (dst !== null)
         dst.reset();
 
@@ -186,7 +186,7 @@ function getWaterAreaObj(dst: WaterInfo | null, sceneObjHolder: SceneObjHolder, 
     return false;
 }
 
-export function isInWater(sceneObjHolder: SceneObjHolder, position: vec3): boolean {
+export function isInWater(sceneObjHolder: SceneObjHolder, position: ReadonlyVec3): boolean {
     return getWaterAreaObj(null, sceneObjHolder, position);
 }
 

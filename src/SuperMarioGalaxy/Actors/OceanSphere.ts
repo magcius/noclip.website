@@ -297,7 +297,7 @@ export class OceanSphere extends LiveActor<OceanSphereNrv> {
         this.makeActorAppeared(sceneObjHolder);
     }
 
-    public isInWater(position: vec3): boolean {
+    public isInWater(position: ReadonlyVec3): boolean {
         if (isDead(this))
             return false;
 

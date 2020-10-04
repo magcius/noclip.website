@@ -119,7 +119,7 @@ export class OceanBowl extends LiveActor {
         dst.depth = -vecKillElement(scratchVec3, scratchVec3, this.axisY);
     }
 
-    public isInWater(v: vec3): boolean {
+    public isInWater(v: ReadonlyVec3): boolean {
         vec3.sub(scratchVec3, v, this.translation);
 
         const mag = vec3.squaredLength(scratchVec3);
