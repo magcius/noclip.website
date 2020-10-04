@@ -61,6 +61,7 @@ import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
+import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
@@ -132,6 +133,7 @@ const sceneGroups = [
     Scenes_Portal.sceneGroup,
     "Experimental",
     Scenes_BanjoTooie.sceneGroup,
+    Scenes_BeetleAdventureRacing.sceneGroup,
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_DonkeyKong64.sceneGroup,
