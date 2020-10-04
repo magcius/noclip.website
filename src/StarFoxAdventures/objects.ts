@@ -22,34 +22,32 @@ interface SFAClass {
     unmount?: (obj: ObjectInstance, world: World) => void;
 }
 
-function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number) {
-    if (yawOffs !== undefined) {
+function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed: number = 1.0) {
+    if (yawOffs !== undefined)
         obj.yaw = angle16ToRads(data.getInt8(yawOffs) << 8);
-    }
-    if (pitchOffs !== undefined) {
+    if (pitchOffs !== undefined)
         obj.pitch = angle16ToRads(data.getInt8(pitchOffs) << 8);
-    }
-    if (rollOffs !== undefined) {
+    if (rollOffs !== undefined)
         obj.roll = angle16ToRads(data.getInt8(rollOffs) << 8);
-    }
+    obj.animSpeed = animSpeed;
 }
 
-function commonClass(yawOffs?: number, pitchOffs?: number, rollOffs?: number): SFAClass {
+function commonClass(yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed: number = 1.0): SFAClass {
     return {
         setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, yawOffs, pitchOffs, rollOffs);
+            commonSetup(obj, data, yawOffs, pitchOffs, rollOffs, animSpeed);
         },
     };
 }
 
-function decorClass(): SFAClass {
+function decorClass(animSpeed: number = 1.0): SFAClass {
     return {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, 0x1a, 0x19, 0x18);
+            obj.animSpeed = animSpeed;
             const scaleParam = data.getUint8(0x1b);
-            if (scaleParam !== 0) {
+            if (scaleParam !== 0)
                 obj.scale *= scaleParam / 255;
-            }
         },
     };
 }
@@ -125,7 +123,7 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         },
     },
     [251]: commonClass(0x18),
-    [254]: commonClass(0x1d), // MagicPlant
+    [254]: commonClass(0x1d, undefined, undefined, 0.03), // MagicPlant
     [255]: { // MagicDustMi
         setup: (obj: ObjectInstance, data: DataView) => {
             obj.setModelNum(data.getInt8(0x26));
@@ -359,9 +357,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, 0x1f);
             const scaleParam = data.getUint8(0x21);
-            if (scaleParam !== 0) {
+            if (scaleParam !== 0)
                 obj.scale *= scaleParam / 64;
-            }
         },
     },
     [385]: { // MMP_trenchF
@@ -405,12 +402,12 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         },
     },
     [423]: commonClass(),
-    [424]: commonClass(),
+    [424]: commonClass(undefined, undefined, undefined, 0.008), // SH_killermu (Note: This enemy has different anim speeds depending on current state)
     [425]: commonClass(0x1f),
     [427]: commonClass(0x18),
-    [429]: { // ThornTail
+    [429]: { // SH_thorntai
         setup: (obj: ObjectInstance, data: DataView) => {
-            commonSetup(obj, data, 0x19);
+            commonSetup(obj, data, 0x19, undefined, undefined, 0.006);
             obj.scale *= data.getUint16(0x1c) / 1000;
         },
     },
@@ -503,9 +500,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     },
     [502]: {
         setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum !== 0x803) {
+            if (obj.objType.typeNum !== 0x803)
                 commonSetup(obj, data, 0x18);
-            }
         },
     },
     [509]: commonClass(),
@@ -515,11 +511,10 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             obj.yaw = angle16ToRads((data.getUint8(0x18) & 0x3f) << 10);
             const objScale = data.getInt16(0x1a);
-            if (objScale < 1) {
+            if (objScale < 1)
                 obj.scale = 0.1;
-            } else {
+            else
                 obj.scale = objScale / 8192;
-            }
         },
     },
     [521]: { // WM_LevelCon
@@ -549,9 +544,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [550]: { // VFP_lavapoo
         setup: (obj: ObjectInstance, data: DataView) => {
             let scaleParam = data.getInt16(0x1a);
-            if (scaleParam === 0) {
+            if (scaleParam === 0)
                 scaleParam = 500;
-            }
             obj.scale = 1 / (scaleParam / getRandomInt(600, 1000));
         },
     },
@@ -576,9 +570,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [619]: commonClass(0x18),
     [620]: {
         setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum !== 0x86a && obj.objType.typeNum !== 0x86b) {
+            if (obj.objType.typeNum !== 0x86a && obj.objType.typeNum !== 0x86b)
                 commonSetup(obj, data, 0x18);
-            }
         },
     },
     [622]: commonClass(),
@@ -588,9 +581,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             commonSetup(obj, data, 0x18, 0x19);
             obj.roll = 0;
             const scaleParam = data.getInt16(0x1c);
-            if (scaleParam != 0) {
+            if (scaleParam != 0)
                 obj.scale *= 0.1 * scaleParam;
-            }
         },
     },
     [641]: commonClass(0x18),
@@ -671,11 +663,10 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             commonSetup(obj, data, 0x18, 0x19);
 
             const spotFunc = data.getUint8(0x21); // TODO: this value is passed to GXInitSpotLight
-            if (spotFunc === 0) {
+            if (spotFunc === 0)
                 obj.setModelNum(0);
-            } else {
+            else
                 obj.setModelNum(1);
-            }
 
             // Distance attenuation values are calculated by GXInitLightDistAttn with GX_DA_MEDIUM mode
             // TODO: Some types of light use other formulae
@@ -716,9 +707,9 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             // })
         },
     },
-    [685]: decorClass(),
+    [685]: decorClass(0.001),
     [686]: decorClass(),
-    [687]: decorClass(),
+    [687]: decorClass(0.0025),
     [688]: decorClass(),
     [689]: commonClass(0x1a, 0x19, 0x18),
     [690]: commonClass(0x1a, 0x19, 0x18),
@@ -753,6 +744,8 @@ export class ObjectType {
             this.name += String.fromCharCode(c);
             offs++;
         }
+
+        console.log(`object ${this.name} scale ${this.scale}`);
 
         const numModels = data.getUint8(0x55);
         const modelListOffs = data.getUint32(0x8);
@@ -806,6 +799,8 @@ export class ObjectInstance {
 
     private ambienceNum: number = 0;
 
+    public animSpeed: number = 1.0;
+
     public instanceData: any;
 
     constructor(public world: World, public objType: ObjectType, private objParams: DataView, public posInMap: vec3) {
@@ -828,32 +823,28 @@ export class ObjectInstance {
         
         this.setModelNum(0);
 
-        if (objClass in SFA_CLASSES) {
+        if (objClass in SFA_CLASSES)
             SFA_CLASSES[objClass].setup(this, objParams);
-        } else {
+        else
             console.log(`Don't know how to setup object class ${objClass} objType ${typeNum}`);
-        }
     }
 
     public mount() {
         const objClass = SFA_CLASSES[this.objType.objClass];
-        if (objClass !== undefined && objClass.mount !== undefined) {
+        if (objClass !== undefined && objClass.mount !== undefined)
             objClass.mount(this, this.world);
-        }
     }
 
     public unmount() {
         const objClass = SFA_CLASSES[this.objType.objClass];
-        if (objClass !== undefined && objClass.unmount !== undefined) {
+        if (objClass !== undefined && objClass.unmount !== undefined)
             objClass.unmount(this, this.world);
-        }
     }
 
     public setParent(parent: ObjectInstance | null) {
         this.parent = parent;
-        if (parent !== null) {
+        if (parent !== null)
             console.log(`attaching this object (${this.objType.name}) to parent ${parent?.objType.name}`);
-        }
     }
 
     public getLocalSRT(): mat4 {
@@ -919,9 +910,8 @@ export class ObjectInstance {
             this.modanim = this.world.resColl.modanimColl.getModanim(modelNum);
             this.modelInst = modelInst;
 
-            if (this.modanim.byteLength > 0 && amap.byteLength > 0) {
+            if (this.modanim.byteLength > 0 && amap.byteLength > 0)
                 this.setModelAnimNum(0);
-            }
         } catch (e) {
             console.warn(`Failed to load model ${num} due to exception:`);
             console.error(e);
@@ -931,7 +921,7 @@ export class ObjectInstance {
 
     public setModelAnimNum(num: number) {
         this.modelAnimNum = num;
-        const modanim = this.modanim.getUint16(num * 2);
+        const modanim = readUint16(this.modanim, 0, num);
         this.setAnim(this.world.resColl.animColl.getAnim(modanim));
     }
 
@@ -940,13 +930,12 @@ export class ObjectInstance {
     }
 
     public isInLayer(layer: number): boolean {
-        if (layer === 0) {
+        if (layer === 0)
             return true;
-        } else if (layer < 9) {
+        else if (layer < 9)
             return ((this.layerVals0x3 >>> (layer - 1)) & 1) === 0;
-        } else {
+        else
             return ((this.layerVals0x5 >>> (16 - layer)) & 1) === 0;
-        }
     }
 
     private curKeyframe: Keyframe | undefined = undefined;
@@ -955,12 +944,13 @@ export class ObjectInstance {
         if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
             // TODO: use time values from animation data?
             const amap = this.modelInst.getAmap(this.modelAnimNum!);
-            const kfTime = (this.world.animController.animController.getTimeInSeconds() * 4) % this.anim.keyframes.length;
+            const kfTime = (this.world.animController.animController.getTimeInFrames() * this.animSpeed) % this.anim.keyframes.length;
+
             const kf0Num = Math.floor(kfTime);
             let kf1Num = kf0Num + 1;
-            if (kf1Num >= this.anim.keyframes.length) {
+            if (kf1Num >= this.anim.keyframes.length)
                 kf1Num = 0;
-            }
+
             const kf0 = this.anim.keyframes[kf0Num];
             const kf1 = this.anim.keyframes[kf1Num];
             const ratio = kfTime - kf0Num;

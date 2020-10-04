@@ -1221,9 +1221,7 @@ export class ModelFetcher {
     }
 
     public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, texFetcher: Promise<TextureFetcher>, materialFactory: MaterialFactory, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelFetcher> {
-        const self = new ModelFetcher(device, gameInfo, await texFetcher, materialFactory, animController, modelVersion);
-
-        return self;
+        return new ModelFetcher(device, gameInfo, await texFetcher, materialFactory, animController, modelVersion);
     }
 
     private async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
@@ -1279,9 +1277,8 @@ export class ModelFetcher {
 
     public createModelInstance(num: number): ModelInstance {
         const model = this.getModel(num);
-        if (model === null) {
+        if (model === null)
             throw Error(`Model ${num} not found`);
-        }
         return new ModelInstance(model);
     }
 }
