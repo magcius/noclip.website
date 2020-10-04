@@ -551,6 +551,10 @@ export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveAc
     return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
+export function addHitSensorEye(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Eye, pairwiseCapacity, radius, actor, offset);
+}
+
 export function invalidateHitSensors(actor: LiveActor): void {
     actor.hitSensorKeeper!.invalidate();
 }
@@ -1345,7 +1349,7 @@ export function calcDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: 
 }
 
 export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): boolean {
-    return calcDistanceToPlayer(actor, sceneObjHolder.viewerInput.camera) <= radius;
+    return calcSqDistanceToPlayer(actor, sceneObjHolder.viewerInput.camera) <= radius ** 2.0;
 }
 
 export function getJointNum(actor: LiveActor): number {

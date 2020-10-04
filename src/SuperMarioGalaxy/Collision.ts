@@ -83,7 +83,7 @@ export const enum CollisionKeeperCategory {
 export type TriangleFilterFunc = (sceneObjHolder: SceneObjHolder, triangle: Triangle) => boolean;
 export type CollisionPartsFilterFunc = (sceneObjHolder: SceneObjHolder, parts: CollisionParts) => boolean;
 
-function getAvgScale(v: vec3): number {
+function getAvgScale(v: ReadonlyVec3): number {
     return (v[0] + v[1] + v[2]) / 3.0;
 }
 
@@ -217,10 +217,10 @@ export class CollisionParts {
 
     private updateBoundingSphereRangePrivate(scale: number): void {
         this.scale = scale;
-        this.boundingSphereRadius = this.collisionServer.farthestVertexDistance;
+        this.boundingSphereRadius = this.scale * this.collisionServer.farthestVertexDistance;
     }
 
-    public updateBoundingSphereRangeFromScaleVector(scaleVec: vec3): void {
+    public updateBoundingSphereRangeFromScaleVector(scaleVec: ReadonlyVec3): void {
         this.updateBoundingSphereRangePrivate(getAvgScale(scaleVec));
     }
 
@@ -319,7 +319,7 @@ export class CollisionParts {
         }
     }
 
-    private checkStrikeBallCore(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, p1: ReadonlyVec3, radius: number, invAvgScale: number, avgScale: number, triFilter: TriangleFilterFunc | null, normalFilter: vec3 | null): number {
+    private checkStrikeBallCore(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, vel: ReadonlyVec3, radius: number, invAvgScale: number, avgScale: number, triFilter: TriangleFilterFunc | null, normalFilter: vec3 | null): number {
         // Copy the positions before we run checkSphere, as pos is scratchVec3a, and we're going to stomp on it below.
         for (let i = dstIdx; i < hitInfo.length; i++)
             vec3.copy(hitInfo[i].strikeLoc, pos);
@@ -345,7 +345,7 @@ export class CollisionParts {
                 continue;
 
             const dist = this.checkCollisionResult.distances[i]!;
-            hitInfo[dstIdx].distance = dist;
+            hitInfo[dstIdx].distance = dist * avgScale;
             dstIdx++;
         }
         return dstIdx - dstIdxStart;

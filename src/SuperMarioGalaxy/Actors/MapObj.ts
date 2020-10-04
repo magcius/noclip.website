@@ -2,16 +2,16 @@
 // Misc MapObj actors.
 
 import { mat4, vec3, ReadonlyMat4 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxis, getMatrixAxisX, getMatrixAxisZ } from '../../MathHelpers';
+import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxis, getMatrixAxisX, getMatrixAxisZ, computeModelMatrixR, transformVec3Mat4w1 } from '../../MathHelpers';
 import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer, invalidateShadowAll, getBckFrameMax, getBckFrameMaxNamed, joinToGroupArray, getPlayerPos, turnVecToVecCosOnPlane, getEaseInValue, getJointMtxByName, connectToSceneMapObjStrongLight, isBckOneTimeAndStopped, makeMtxFrontSidePos, addHitSensorMapObj } from '../ActorUtil';
-import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded } from '../Collision';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer, invalidateShadowAll, getBckFrameMax, getBckFrameMaxNamed, joinToGroupArray, getPlayerPos, turnVecToVecCosOnPlane, getEaseInValue, getJointMtxByName, connectToSceneMapObjStrongLight, isBckOneTimeAndStopped, makeMtxFrontSidePos, addHitSensorMapObj, useStageSwitchWriteDead, isValidSwitchA, isValidSwitchDead, invalidateCollisionPartsForActor, isValidSwitchB } from '../ActorUtil';
+import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded, invalidateCollisionParts } from '../Collision';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
 import { HitSensor, HitSensorType, isSensorMapObj } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter, getJMapInfoArg2, getJMapInfoArg5, getJMapInfoBool, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg7 } from '../JMapInfo';
-import { LiveActor, MessageType, ZoneAndLayer, isDead, makeMtxTRFromActor, MsgSharedGroup, dynamicSpawnZoneAndLayer } from '../LiveActor';
+import { LiveActor, MessageType, ZoneAndLayer, isDead, makeMtxTRFromActor, MsgSharedGroup, dynamicSpawnZoneAndLayer, isMsgTypeEnemyAttack } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { getMapPartsArgMoveConditionType, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRotator, MoveConditionType, RailGuideType } from '../MapParts';
 import { createIndirectPlanetModel, PartsModel } from './MiscActor';
@@ -21,10 +21,11 @@ import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } f
 import { initMultiFur } from '../Fur';
 import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength, initShadowVolumeBox, setShadowVolumeStartDropOffset } from '../Shadow';
 import { initLightCtrl } from '../LightData';
-import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpaceVector, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../../DebugJunk';
 import { DrawBufferType, NameObj } from '../NameObj';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater } from '../MiscMap';
+import { isExistStageSwitchSleep } from '../Switch';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -1964,5 +1965,207 @@ export class WaterPressureBulletHolder extends NameObj {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         WaterPressureBullet.requestArchives(sceneObjHolder);
+    }
+}
+
+const enum BreakableCageType { Cage, CageRotate, CageL, Fixation, Trash }
+const enum BreakableCageNrv { Wait, Break }
+export class BreakableCage extends LiveActor<BreakableCageNrv> {
+    private type: BreakableCageType;
+    private breakModel: ModelObj | null = null;
+    private baseMtx = mat4.create();
+    private rotateSpeed: number = 0.0;
+    private switchDelayed: boolean;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        if (this.name === 'BreakableCage')
+            this.type = BreakableCageType.Cage;
+        else if (this.name === 'BreakableCageRotate')
+            this.type = BreakableCageType.CageRotate;
+        else if (this.name === 'BreakableCageL')
+            this.type = BreakableCageType.CageL;
+        else if (this.name === 'BreakableFixation')
+            this.type = BreakableCageType.Fixation;
+        else if (this.name === 'BreakableTrash')
+            this.type = BreakableCageType.Trash;
+        else
+            throw "whoops";
+
+        if (this.type === BreakableCageType.Trash)
+            joinToGroupArray(sceneObjHolder, this, infoIter, 'BreakableTrash', 32);
+
+        // initMapToolInfo()
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteB(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+        const arg1 = !this.isTypeCage() || getJMapInfoBool(fallback(getJMapInfoArg1(infoIter), -1));
+        this.switchDelayed = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
+
+        let radius = 300.0;
+        if (this.type === BreakableCageType.CageL)
+            radius = 600.0;
+        else if (this.type === BreakableCageType.Fixation)
+            radius = 425.0;
+        radius *= this.scale[0];
+
+        if (this.type === BreakableCageType.CageL) {
+            this.rotateSpeed = fallback(getJMapInfoArg0(infoIter), 0.0) * 0.01;
+        }
+
+        // initModel()
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        if (this.isTypeCage()) {
+            this.breakModel = createModelObjMapObjStrongLight(zoneAndLayer, sceneObjHolder, 'BreakableCageBreak', 'BreakableCageBreak', this.baseMtx);
+            vec3.copy(this.breakModel.scale, this.scale);
+            // invalidateClipping
+            // registerDemoSimpleCastAll
+            this.breakModel.makeActorDead(sceneObjHolder);
+            // TODO(jstpierre): createDummyDisplayModel
+        } else {
+            this.initEffectKeeper(sceneObjHolder, null);
+        }
+
+        connectToSceneMapObjStrongLight(sceneObjHolder, this);
+        this.initHitSensor();
+        const bodySensor = addHitSensor(sceneObjHolder, this, 'body', HitSensorType.BreakableCage, 8, radius, Vec3Zero);
+        initCollisionParts(sceneObjHolder, this, this.name, bodySensor, null);
+
+        // setClippingTypeSphere
+        // setGroupClipping
+
+        if (arg1)
+            makeMtxTRFromActor(this.baseMtx, this);
+        else
+            this.initBaseMtxForCage(sceneObjHolder);
+
+        // tryRegisterDemoCast
+        // addToAttributeGroupSearchTurtle
+        // declarePowerStar
+        // createActorCameraInfoIfExist / initActorCamera
+
+        this.initNerve(BreakableCageNrv.Wait);
+
+        if (isExistStageSwitchSleep(infoIter)) {
+            useStageSwitchSleep(sceneObjHolder, this, infoIter);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+                syncStageSwitchAppear(sceneObjHolder, this);
+                this.makeActorDead(sceneObjHolder);
+            } else {
+                this.makeActorAppeared(sceneObjHolder);
+            }
+        }
+    }
+
+    private isTypeCage(): boolean {
+        return this.type !== BreakableCageType.Fixation;
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        vec3.zero(this.rotation);
+        showModel(this);
+        validateHitSensors(this);
+        // validateClipping
+
+        if (this.breakModel !== null)
+            this.breakModel.makeActorDead(sceneObjHolder);
+        if (this.type === BreakableCageType.Fixation && isValidSwitchDead(this))
+            this.stageSwitchCtrl!.offSwitchDead(sceneObjHolder);
+        this.setNerve(BreakableCageNrv.Wait);
+        super.makeActorAppeared(sceneObjHolder);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+        if (this.breakModel !== null)
+            this.breakModel.makeActorDead(sceneObjHolder);
+        // TODO(jstpierre): dummyDisplayModel
+    }
+
+    private initBaseMtxForCage(sceneObjHolder: SceneObjHolder): void {
+        calcGravity(sceneObjHolder, this);
+        computeModelMatrixR(scratchMatrix, this.rotation[0], this.rotation[1], this.rotation[2]);
+        getMatrixAxisZ(scratchVec3b, scratchMatrix);
+        vec3.negate(scratchVec3a, this.gravityVector);
+        makeMtxUpFrontPos(this.baseMtx, scratchVec3a, scratchVec3b, this.translation);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        if (this.type === BreakableCageType.CageRotate) {
+            mat4.rotateY(this.modelInstance!.modelMatrix, this.baseMtx, this.rotation[1]);
+        } else {
+            mat4.copy(this.modelInstance!.modelMatrix, this.baseMtx);
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: BreakableCageNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === BreakableCageNrv.Wait) {
+            if (this.type === BreakableCageType.CageRotate) {
+                this.rotation[1] += this.rotateSpeed * MathConstants.DEG_TO_RAD;
+            }
+
+            // dummyDisplayModel rotation
+        } else if (currentNerve === BreakableCageNrv.Break) {
+            const switchDelayed = this.switchDelayed /* || this.dummyDisplayModel !== null */ || this.type === BreakableCageType.Fixation;
+            const switchImmediately = (this.type === BreakableCageType.CageRotate) || !switchDelayed;
+            if (isFirstStep(this)) {
+                hideModel(this);
+                invalidateHitSensors(this);
+                invalidateCollisionPartsForActor(sceneObjHolder, this);
+                // invalidateClipping
+
+                if (this.isTypeCage()) {
+                    this.breakModel!.makeActorAppeared(sceneObjHolder);
+                    startBck(this.breakModel!, 'Break');
+                } else {
+                    emitEffect(sceneObjHolder, this, 'Break');
+                }
+
+                if (isValidSwitchDead(this))
+                    this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
+            }
+
+            let isDead: boolean;
+            if (this.isTypeCage())
+                isDead = isBckStopped(this.breakModel!);
+            else
+                isDead = !isEffectValid(this, 'Break');
+
+            if (isDead) {
+                if (isValidSwitchDead(this))
+                    this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
+                if (isValidSwitchB(this))
+                    this.stageSwitchCtrl!.offSwitchB(sceneObjHolder);
+            }
+        }
+    }
+
+    private tryBreak(sceneObjHolder: SceneObjHolder): boolean {
+        if (!this.isNerve(BreakableCageNrv.Wait))
+            return false;
+
+        // ActorCameraInfo / requestStartDemoWithoutCinemaFrame
+        this.setNerve(BreakableCageNrv.Break);
+        return true;
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, msgType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+        if (isMsgTypeEnemyAttack(msgType) && msgType !== MessageType.EnemyAttackFire && msgType !== MessageType.EnemyAttackFireStrong) {
+            return this.tryBreak(sceneObjHolder);
+        }
+
+        return super.receiveMessage(sceneObjHolder, msgType, thisSensor, otherSensor);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        if (getObjectName(infoIter) !== 'BreakableFixation')
+            sceneObjHolder.modelCache.requestObjectData('BreakableCageBreak');
     }
 }

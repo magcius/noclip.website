@@ -373,7 +373,17 @@ export interface ZoneAndLayer {
 export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.Common };
 
 export const enum MessageType {
+    Take                                     = 0x1E,
+    Taken                                    = 0x1F,
+    Apart                                    = 0x21,
+    Throw                                    = 0x22,
+    Push                                     = 0x29,
+    _EnemyAttack_Start                       = 0x4B,
     EnemyAttack                              = 0x53,
+    EnemyAttackExplosion                     = 0x56,
+    EnemyAttackFire                          = 0x58,
+    EnemyAttackFireStrong                    = 0x59,
+    _EnemyAttack_End                         = 0x65,
     Pressure_StartWait                       = 0x68,
     Pressure_StartSyncWait                   = 0x69,
     TicoRail_StartTalk                       = 0xCE,
@@ -919,4 +929,8 @@ export class LiveActorGroupArray extends NameObj {
         group.registerActor(actor);
         return group;
     }
+}
+
+export function isMsgTypeEnemyAttack(msgType: MessageType): boolean {
+    return msgType > MessageType._EnemyAttack_Start && msgType < MessageType._EnemyAttack_End;
 }

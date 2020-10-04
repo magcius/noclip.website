@@ -1,7 +1,7 @@
 
 // Misc actors that aren't big enough to have their own file.
 
-import { mat4, quat, ReadonlyVec3, vec2, vec3, ReadonlyQuat } from 'gl-matrix';
+import { mat4, quat, ReadonlyVec3, vec2, vec3, ReadonlyQuat, ReadonlyMat4 } from 'gl-matrix';
 import { Camera } from '../../Camera';
 import { Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow, Blue } from '../../Color';
 import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
@@ -18,16 +18,16 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';
 import { getVertexInputLocation } from '../../gx/gx_material';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../../gx/gx_render';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero, Vec3NegY } from '../../MathHelpers';
+import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, quatFromEulerRadians, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero, Vec3NegY, computeModelMatrixT, computeMatrixWithoutScale, normToLengthAndAdd } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistanceVertical, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos, quatGetAxisZ, quatGetAxisY, blendQuatUpFront, quatGetAxisX, turnVecToVecCos, excludeCalcShadowToMyCollision, addBodyMessageSensorMapObjPress, MapObjConnector, getEaseOutValue, getEaseInValue, getEaseInOutValue, turnVecToVecCosOnPlane } from '../ActorUtil';
-import { calcMapGround, CollisionKeeperCategory, getBindedFixReactionVector, getFirstPolyOnLineToMap, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isFloorPolygonAngle, isWallPolygonAngle, isOnGround, TriangleFilterFunc } from '../Collision';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos, quatGetAxisZ, quatGetAxisY, blendQuatUpFront, quatGetAxisX, turnVecToVecCos, excludeCalcShadowToMyCollision, addBodyMessageSensorMapObjPress, MapObjConnector, getEaseOutValue, getEaseInValue, getEaseInOutValue, turnVecToVecCosOnPlane, addHitSensorEye, tryStartBck } from '../ActorUtil';
+import { calcMapGround, CollisionKeeperCategory, getBindedFixReactionVector, getFirstPolyOnLineToMap, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isFloorPolygonAngle, isWallPolygonAngle, isOnGround, TriangleFilterFunc, isBindedWall, isBindedRoof } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
-import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
+import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName, isEffectValid } from '../EffectSystem';
 import { initFur, initFurPlanet } from '../Fur';
-import { HitSensor, HitSensorType, isSensorEnemy, isSensorPlayerOrRide, sendMsgEnemyAttack } from '../HitSensor';
+import { HitSensor, HitSensorType, isSensorEnemy, isSensorPlayerOrRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, isSensorNear } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter, getJMapInfoArg5 } from '../JMapInfo';
 import { WorldmapPointInfo } from './LegacyActor';
 import { addBrightObj, BrightObjBase, BrightObjCheckArg } from './LensFlare';
@@ -37,11 +37,12 @@ import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType }
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
-import { calcNerveRate, isGreaterEqualStep, isGreaterStep, NerveExecutor, isFirstStep } from '../Spine';
+import { calcNerveRate, isGreaterEqualStep, isGreaterStep, NerveExecutor, isFirstStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
-import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowSurfaceCircle, onCalcShadow } from '../Shadow';
+import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowSurfaceCircle, onCalcShadow, initShadowVolumeOval, isShadowProjected, getShadowProjectionPos, getShadowProjectedSensor } from '../Shadow';
 import { initLightCtrl } from '../LightData';
+import { sceneActorInit } from '../../PokemonSnap/actor';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -122,29 +123,38 @@ export function createBloomModel(sceneObjHolder: SceneObjHolder, parentActor: Li
 
 class FixedPosition {
     public transformMatrix = mat4.create();
+    public normalizeScale = true;
     private localTrans = vec3.create();
+    private localRot = vec3.create();
 
-    constructor(private baseMtx: mat4, localTrans: vec3 | null = null) {
+    constructor(private baseMtx: mat4, localTrans: ReadonlyVec3 | null = null, localRot: ReadonlyVec3 | null = null) {
         if (localTrans !== null)
             this.setLocalTrans(localTrans);
+        if (localRot !== null)
+            vec3.copy(this.localRot, localRot);
     }
 
-    public setLocalTrans(localTrans: vec3): void {
+    public setLocalTrans(localTrans: ReadonlyVec3): void {
         vec3.copy(this.localTrans, localTrans);
     }
 
     public calc(): void {
-        mat4.copy(this.transformMatrix, this.baseMtx);
-        mat4.translate(this.transformMatrix, this.transformMatrix, this.localTrans);
+        computeModelMatrixR(scratchMatrix, this.localRot[0], this.localRot[1], this.localRot[2]);
+        mat4.mul(this.transformMatrix, this.baseMtx, scratchMatrix);
+        computeModelMatrixT(scratchMatrix, this.localTrans[0], this.localTrans[1], this.localTrans[2]);
+        mat4.mul(this.transformMatrix, this.transformMatrix, scratchMatrix);
+        computeMatrixWithoutScale(this.transformMatrix, this.transformMatrix);
     }
 }
 
 export class PartsModel extends LiveActor {
     public fixedPosition: FixedPosition | null = null;
-    public hostMtx: mat4 | null = null;
+    public hostMtx: ReadonlyMat4 | null = null;
     public useParentMatrix: boolean = true;
+    public isAttached = false;
+    private isDead = false;
 
-    constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType, transformMatrix: mat4 | null = null) {
+    constructor(sceneObjHolder: SceneObjHolder, objName: string, modelName: string, private parentActor: LiveActor, drawBufferType: DrawBufferType, transformMatrix: ReadonlyMat4 | null = null) {
         super(parentActor.zoneAndLayer, sceneObjHolder, objName);
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -180,8 +190,12 @@ export class PartsModel extends LiveActor {
         this.hostMtx = this.fixedPosition.transformMatrix;
     }
 
-    public initFixedPositionJoint(jointName: string, localTrans: vec3 | null): void {
-        this.fixedPosition = new FixedPosition(getJointMtxByName(this.parentActor, jointName)!, localTrans);
+    public initFixedPositionJoint(jointName: string | null, localTrans: vec3 | null, localRot: vec3 | null): void {
+        if (jointName !== null) {
+            this.fixedPosition = new FixedPosition(getJointMtxByName(this.parentActor, jointName)!, localTrans, localRot);
+        } else {
+            this.fixedPosition = new FixedPosition(this.parentActor.getBaseMtx()!, localTrans, localRot);
+        }
         this.hostMtx = this.fixedPosition.transformMatrix;
     }
 
@@ -200,6 +214,22 @@ export class PartsModel extends LiveActor {
             super.calcAndSetBaseMtx(sceneObjHolder);
         }
     }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!isDead(this) && !isDead(this.parentActor) && (this.isAttached || !isHiddenModel(this.parentActor))) {
+            if (this.isDead) {
+                this.isDead = false;
+                this.visibleModel = true;
+            }
+
+            super.movement(sceneObjHolder, viewerInput);
+        } else {
+            if (!this.isDead) {
+                this.isDead = true;
+                this.visibleModel = false;
+            }
+        }
+    }
 }
 
 function createPartsModelMapObj(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, localTrans: vec3 | null = null) {
@@ -216,6 +246,12 @@ function createPartsModelNoSilhouettedMapObj(sceneObjHolder: SceneObjHolder, par
 
 function createPartsModelNoSilhouettedMapObjMtx(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, mtx: mat4 | null) {
     return new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.NoSilhouettedMapObj, mtx);
+}
+
+function createPartsModelEnemyAndFix(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, transformMtx: ReadonlyMat4 | null, localTrans: vec3 | null, localRot: vec3 | null, jointName: string | null) {
+    const model = new PartsModel(sceneObjHolder, objName, objName, parentActor, DrawBufferType.MapObj, transformMtx);
+    model.initFixedPositionJoint(jointName, localTrans, localRot);
+    return model;
 }
 
 export class PlanetMap extends LiveActor {
@@ -401,11 +437,13 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
     }
 }
 
-export class EarthenPipe extends LiveActor {
+const enum EarthenPipeNrv { Wait }
+export class EarthenPipe extends LiveActor<EarthenPipeNrv> {
     private pipeStream: PartsModel | null = null;
     private scaleY: number;
     private axisY = vec3.create();
     private origTranslation = vec3.create();
+    private waterActive = false;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -426,21 +464,54 @@ export class EarthenPipe extends LiveActor {
             hideModel(this);
 
         vec3.copy(this.origTranslation, this.translation);
+        calcGravity(sceneObjHolder, this);
 
-        const obeyLocalGravity = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
-        if (false && obeyLocalGravity) {
-            // TODO(jstpierre): Compute gravity vectors
-        } else {
+        const useUpVec = getJMapInfoBool(fallback(getJMapInfoArg6(infoIter), -1));
+        if (useUpVec) {
             calcUpVec(this.axisY, this);
+        } else {
+            vec3.negate(this.axisY, this.gravityVector);
         }
 
         this.scaleY = 100 * this.scale[1];
         this.scale[1] = 1.0;
         this.calcTrans();
 
+        this.initNerve(EarthenPipeNrv.Wait);
+
         if (this.name === "EarthenPipeInWater") {
             this.pipeStream = createPartsModelMapObj(sceneObjHolder, this, "EarthenPipeStream");
             tryStartAllAnim(this.pipeStream, "EarthenPipeStream");
+            this.pipeStream.makeActorAppeared(sceneObjHolder);
+            this.waterActive = true;
+        }
+
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteB(sceneObjHolder, this, infoIter);
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: EarthenPipeNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (isValidSwitchA(this)) {
+            if (isOnSwitchA(sceneObjHolder, this)) {
+                if (!this.waterActive) {
+                    if (this.pipeStream !== null) {
+                        this.pipeStream.makeActorAppeared(sceneObjHolder);
+                        startAction(this.pipeStream, 'Appear');
+                        this.waterActive = true;
+                    }
+                }
+            } else {
+                if (this.waterActive) {
+                    if (this.pipeStream !== null) {
+                        this.pipeStream.makeActorDead(sceneObjHolder);
+                        this.waterActive = false;
+                    }
+                }
+            }
         }
     }
 
@@ -5822,6 +5893,7 @@ export class OceanFloaterLandParts extends LiveActor {
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        // TODO(jstpierre): Demo
         if (isValidSwitchA(this))
             this.stageSwitchCtrl!.onSwitchA(sceneObjHolder);
     }
@@ -9281,5 +9353,607 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         };
 
         this.stateWander = new WalkerStateWander(this, this.front, param, paramWander);
+    }
+}
+
+const enum HomingKillerNrv { Appear, MoveStart, Move, ChaseStart, Chase, GoToTarget, Break }
+const enum HomingKillerType { HomingKiller, Torpedo, MagnumKiller }
+class HomingKiller extends LiveActor<HomingKillerNrv> {
+    private type: HomingKillerType;
+    private baseMtx = mat4.create();
+    private effectHostMtx = mat4.create();
+    private origTranslation = vec3.create();
+    private origAxisY = vec3.create();
+    private origAxisZ = vec3.create();
+    private axisY = vec3.create();
+    private axisZ = vec3.create();
+
+    private torpedoPropellerParts: PartsModel | null = null;
+    private torpedoLightParts: ModelObj | null = null;
+    private moveTimer = 0;
+    private chaseTimer = 0;
+
+    private chaseStartDistance: number;
+    private chaseEndDistance: number;
+    private turnSpeed = 0.9997;
+    private nonHoming = false;
+    private chaseAllAround = false;
+    private chaseValidAngle = MathConstants.TAU;
+    private upright = false;
+    private targetSensor: HitSensor | null = null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        if (this.name === 'HomingKiller')
+            this.type = HomingKillerType.HomingKiller;
+        else if (this.name === 'Torpedo')
+            this.type = HomingKillerType.Torpedo;
+        else if (this.name === 'MagnumKiller')
+            this.type = HomingKillerType.MagnumKiller;
+        else
+            throw "whoops";
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.chaseStartDistance = fallback(getJMapInfoArg0(infoIter), 2000.0);
+        // noclip modification: severely up the chase end distance because the player has camera speed controls
+        this.chaseEndDistance = 50000.0;
+        const turnSpeedParam = fallback(getJMapInfoArg1(infoIter), 3);
+        this.turnSpeed = 1.0 - (0.0001 * turnSpeedParam);
+        this.nonHoming = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1)) || this.type === HomingKillerType.MagnumKiller;
+        this.chaseAllAround = getJMapInfoBool(fallback(getJMapInfoArg3(infoIter), -1));
+        this.upright = this.nonHoming || this.chaseAllAround;
+
+        if (!this.chaseAllAround)
+            this.chaseValidAngle = MathConstants.TAU / 2;
+
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+
+        if (this.type === HomingKillerType.Torpedo) {
+            this.torpedoPropellerParts = createPartsModelEnemyAndFix(sceneObjHolder, this, 'TorpedoPropeller', null, null, null, null);
+            this.torpedoLightParts = createModelObjMapObj(zoneAndLayer, sceneObjHolder, 'TorpedoLight', 'TorpedoLight', this.getBaseMtx()!);
+            this.torpedoLightParts.makeActorDead(sceneObjHolder);
+        }
+
+        connectToSceneEnemy(sceneObjHolder, this);
+        initLightCtrl(sceneObjHolder, this);
+
+        this.initHitSensor();
+
+        const scale = this.type === HomingKillerType.MagnumKiller ? 4.0 : 1.0;
+
+        vec3.set(scratchVec3a, 0.0, 0.0, -10.0);
+        vec3.scale(scratchVec3a, scratchVec3a, scale);
+        addHitSensor(sceneObjHolder, this, 'body', HitSensorType.HomingKiller, 8, 70.0 * scale, scratchVec3a);
+        addHitSensorEye(sceneObjHolder, this, 'eye', 16, 750.0, Vec3Zero);
+        this.initBinder(70.0 * scale, 0.0, 0);
+        this.calcGravityFlag = true;
+        calcGravity(sceneObjHolder, this);
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        if (this.type === HomingKillerType.HomingKiller)
+            setEffectHostMtx(this, 'SandColumn', this.effectHostMtx);
+
+        // initStarPointerTarget
+
+        // calcInitPosture()
+        vec3.copy(this.origTranslation, this.translation);
+        computeModelMatrixR(scratchMatrix, this.rotation[0], this.rotation[1], this.rotation[2]);
+        getMatrixAxisZ(this.origAxisZ, scratchMatrix);
+        if (!this.upright) {
+            vecKillElement(this.origAxisZ, this.origAxisZ, this.gravityVector);
+            vec3.normalize(this.origAxisZ, this.origAxisZ);
+        }
+
+        if (this.upright) {
+            getMatrixAxisY(this.origAxisY, scratchMatrix);
+        } else {
+            vec3.negate(this.origAxisY, this.gravityVector);
+        }
+
+        // initSound
+
+        if (this.type === HomingKillerType.MagnumKiller) {
+            initShadowFromCSV(sceneObjHolder, this);
+        } else {
+            vec3.set(scratchVec3a, 60.0, 60.0, 100.0);
+            vec3.scale(scratchVec3a, scratchVec3a, scale);
+            initShadowVolumeOval(sceneObjHolder, this, scratchVec3a);
+            setShadowDropLength(this, null, 2000.0);
+        }
+
+        // addToAttributeGroupSearchTurtle
+        // invalidateClipping
+        this.initNerve(HomingKillerNrv.Appear);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        vec3.copy(this.translation, this.origTranslation);
+        vec3.zero(this.rotation);
+        vec3.copy(this.axisZ, this.origAxisZ);
+        vec3.copy(this.axisY, this.origAxisY);
+        this.moveTimer = 0;
+        this.chaseTimer = 0;
+        this.updateBaseMtxNoRotateZ();
+        showModel(this);
+        this.calcBinderFlag = false;
+        validateHitSensors(this);
+        invalidateShadowAll(this);
+
+        super.makeActorAppeared(sceneObjHolder);
+        this.setNerve(HomingKillerNrv.Appear);
+    }
+
+    public calcAndSetBaseMtx(): void {
+        mat4.rotateZ(this.modelInstance!.modelMatrix, this.baseMtx, this.rotation[2] * 0.02);
+    }
+
+    private setBckRate(rate: number, includeParts: boolean): void {
+        if (this.type === HomingKillerType.MagnumKiller)
+            return;
+
+        setBckRate(this, rate);
+
+        if (includeParts && this.type === HomingKillerType.Torpedo)
+            setBckRate(this.torpedoPropellerParts!, rate);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HomingKillerNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === HomingKillerNrv.Appear) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Start');
+
+                if (this.type === HomingKillerType.MagnumKiller) {
+                    startBpk(this, 'Move');
+                    startBrk(this, 'Move');
+                } else if (this.type === HomingKillerType.Torpedo) {
+                    startBck(this.torpedoPropellerParts!, 'RotateTorpedo');
+                    this.torpedoLightParts!.makeActorAppeared(sceneObjHolder);
+                    startBck(this.torpedoLightParts!, 'Appear');
+                }
+
+                this.setBckRate(0.0, true);
+            }
+
+            let translateZ = saturate(this.getNerveStep() / 20.0) * 200.0;
+
+            if (isGreaterStep(this, 20) && isLessStep(this, 42)) {
+                const appearSignStep = (this.getNerveStep() - 20);
+                const appearSignZ = Math.sin(appearSignStep * 100.0 * MathConstants.DEG_TO_RAD);
+                translateZ += (appearSignStep * 18.0 * appearSignZ) / 22.0;
+            }
+
+            vec3.scaleAndAdd(this.translation, this.origTranslation, this.origAxisZ, translateZ);
+
+            if (isGreaterEqualStep(this, 72)) {
+                this.setBckRate(1.0, true);
+                emitEffect(sceneObjHolder, this, 'Shoot');
+                validateShadowAll(this);
+
+                if (this.type === HomingKillerType.HomingKiller)
+                    this.setNerve(HomingKillerNrv.MoveStart);
+                else
+                    this.setNerve(HomingKillerNrv.Move);
+            }
+        } else if (currentNerve === HomingKillerNrv.MoveStart) {
+            if (!this.processMove(sceneObjHolder, deltaTimeFrames))
+                return;
+            if (!this.tryChaseStart(sceneObjHolder, deltaTimeFrames))
+                return;
+            if (isBckStopped(this))
+                this.setNerve(HomingKillerNrv.Move);
+        } else if (currentNerve === HomingKillerNrv.Move) {
+            if (isFirstStep(this))
+                tryStartBck(this, 'Move');
+            if (!this.processMove(sceneObjHolder, deltaTimeFrames))
+                return;
+            this.tryChaseStart(sceneObjHolder, deltaTimeFrames);
+        } else if (currentNerve === HomingKillerNrv.ChaseStart) {
+            if (isFirstStep(this)) {
+                if (tryStartBck(this, 'ChaseStart')) {
+                    startBpk(this, 'Chase');
+                    startBrk(this, 'Chase');
+                }
+            }
+            if (!this.processChase(sceneObjHolder, deltaTimeFrames))
+                return;
+            if (isBckStopped(this))
+                this.setNerve(HomingKillerNrv.Chase);
+        } else if (currentNerve === HomingKillerNrv.Chase) {
+            if (isFirstStep(this))
+                tryStartBck(this, 'Chase');
+            this.processChase(sceneObjHolder, deltaTimeFrames);
+        } else if (currentNerve === HomingKillerNrv.GoToTarget) {
+            if (this.processChase(sceneObjHolder, deltaTimeFrames)) {
+                const eyeSensor = this.getSensor('eye')!;
+                let eyeHasTarget = false;
+                for (let i = 0; i < eyeSensor.pairwiseSensors.length; i++) {
+                    if (eyeSensor.pairwiseSensors[i] === this.targetSensor) {
+                        eyeHasTarget = true;
+                        break;
+                    }
+                }
+
+                if (!eyeHasTarget)
+                    this.setNerve(HomingKillerNrv.Chase);
+            }
+        } else if (currentNerve === HomingKillerNrv.Break) {
+            if (isFirstStep(this)) {
+                this.sendMsgExplosionToNearActor(sceneObjHolder);
+                hideModel(this);
+                invalidateHitSensors(this);
+                this.calcBinderFlag = false;
+                vec3.zero(this.velocity);
+                deleteEffectAll(this);
+                if (this.torpedoLightParts !== null)
+                    this.torpedoLightParts.makeActorDead(sceneObjHolder);
+                emitEffect(sceneObjHolder, this, 'Explosion');
+                if (isBindedGround(this)) {
+                    calcGravity(sceneObjHolder, this);
+                    if (this.type === HomingKillerType.HomingKiller) {
+                        const groundSensor = this.binder!.floorHitInfo.hitSensor!;
+                        if (!groundSensor.isType(HitSensorType.BreakableCage)) {
+                            const groundNormal = this.binder!.floorHitInfo.faceNormal;
+                            if (vec3.dot(this.gravityVector, groundNormal) < -0.75) {
+                                emitEffect(sceneObjHolder, this, 'SandColumn');
+
+                                let effectPos: ReadonlyVec3;
+                                if (isShadowProjected(this, null))
+                                    effectPos = getShadowProjectionPos(this, null);
+                                else
+                                    effectPos = this.translation;
+
+                                vec3.negate(scratchVec3, this.gravityVector);
+                                if (isSameDirection(this.axisZ, scratchVec3, 0.01))
+                                    makeMtxUpNoSupportPos(this.effectHostMtx, scratchVec3, effectPos);
+                                else
+                                    makeMtxUpFrontPos(this.effectHostMtx, scratchVec3a, this.axisZ, effectPos);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!isEffectValid(this, 'Explosion') && !(this.type === HomingKillerType.HomingKiller && isEffectValid(this, 'SandColumn'))) {
+                this.makeActorDead(sceneObjHolder);
+            }
+        }
+    }
+
+    private isChasing(): boolean {
+        return (this.isNerve(HomingKillerNrv.ChaseStart) || this.isNerve(HomingKillerNrv.Chase));
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        const isChasing = this.isChasing();
+
+        if (!this.isNerve(HomingKillerNrv.Appear) && !this.isNerve(HomingKillerNrv.Break)) {
+            if (this.type === HomingKillerType.Torpedo)
+                emitEffect(sceneObjHolder, this, isChasing ? 'BubbleChase' : 'Bubble');
+            else
+                emitEffect(sceneObjHolder, this, isChasing ? 'SmokeChase' : 'Smoke');
+        }
+
+        if (!this.isNerve(HomingKillerNrv.Break)) {
+            if (!this.upright || isChasing) {
+                vec3.negate(scratchVec3a, this.gravityVector);
+                if (isChasing) {
+                    turnVecToVecCos(this.axisY, this.axisY, scratchVec3a, Math.cos(2.0 * MathConstants.DEG_TO_RAD), this.axisZ, 0.02);
+                } else {
+                    vec3.copy(this.axisY, scratchVec3a);
+                }
+            }
+
+            this.updateBaseMtxNoRotateZ();
+        }
+    }
+
+    private static sensorTableTarget: HitSensorType[] = [
+        HitSensorType.KillerTargetEnemy,
+        HitSensorType.KillerTargetMapObj,
+        HitSensorType.BreakableCage,
+        HitSensorType.Rock,
+        HitSensorType.Wanwan,
+        HitSensorType.PunchBox,
+    ];
+
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        if (this.isNerve(HomingKillerNrv.Appear) || this.isNerve(HomingKillerNrv.Break))
+            return;
+
+        const eyeSensor = this.getSensor('eye');
+        if (thisSensor === eyeSensor) {
+            if (this.isNerve(HomingKillerNrv.Chase) && HomingKiller.isSensorType(otherSensor, HomingKiller.sensorTableTarget)) {
+                this.targetSensor = otherSensor;
+                this.setNerve(HomingKillerNrv.GoToTarget);
+            }
+        } else {
+            if (isSensorPlayerOrRide(otherSensor)) {
+                if (sendMsgEnemyAttackExplosion(sceneObjHolder, otherSensor, thisSensor))
+                    this.setNerve(HomingKillerNrv.Break);
+            } else {
+                if (!otherSensor.isType(HitSensorType.Karikari)) {
+                    const didExplode = this.tryToExplosion(sceneObjHolder, thisSensor, otherSensor);
+                    if (didExplode && this.type !== HomingKillerType.MagnumKiller)
+                        this.setNerve(HomingKillerNrv.Break);
+                }
+            }
+        }
+    }
+
+    private updateVelocity(): void {
+        const speed = this.type === HomingKillerType.Torpedo ? 5.0 : 12.0;
+        vec3.scale(this.velocity, this.axisZ, speed);
+    }
+
+    private processMove(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): boolean {
+        this.moveTimer += deltaTimeFrames;
+
+        if (this.tryBindedBreak(sceneObjHolder) || this.moveTimer >= 608 || this.isWaterBreak(sceneObjHolder)) {
+            this.setNerve(HomingKillerNrv.Break);
+            return false;
+        }
+
+        if (!this.upright) {
+            if (isSameDirection(this.axisZ, this.gravityVector, 0.01)) {
+                vec3.copy(scratchVec3b, this.axisZ);
+            } else {
+                vecKillElement(scratchVec3b, this.axisZ, this.gravityVector);
+                vec3.normalize(scratchVec3b, scratchVec3b);
+            }
+
+            turnVecToVecCos(this.axisZ, this.axisZ, scratchVec3b, 0.9995, this.gravityVector, 0.02);
+        }
+
+        this.updateVelocity();
+        return true;
+    }
+
+    private isWaterBreak(sceneObjHolder: SceneObjHolder): boolean {
+        const inWater = isInWater(sceneObjHolder, this.translation);
+
+        if (this.type === HomingKillerType.Torpedo)
+            return !inWater;
+        else
+            return inWater;
+    }
+
+    private isChaseStart(sceneObjHolder: SceneObjHolder): boolean {
+        if (this.chaseTimer < 35)
+            return false;
+
+        if (isHiddenModel(this))
+            return false;
+
+        if (!isNearPlayer(sceneObjHolder, this, this.chaseStartDistance))
+            return false;
+
+        getPlayerPos(scratchVec3a, sceneObjHolder);
+        vec3.sub(scratchVec3a, scratchVec3a, this.translation);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+        if (vec3.dot(this.axisZ, scratchVec3a) < Math.cos(this.chaseValidAngle))
+            return false;
+
+        return true;
+    }
+
+    private tryChaseStart(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): boolean {
+        this.chaseTimer += deltaTimeFrames;
+
+        if (this.chaseTimer >= 35)
+            this.calcBinderFlag = true;
+
+        if (!this.nonHoming && this.isChaseStart(sceneObjHolder)) {
+            const effectName = this.type === HomingKillerType.Torpedo ? 'Bubble' : 'Smoke';
+            deleteEffect(sceneObjHolder, this, effectName);
+            this.setNerve(HomingKillerNrv.ChaseStart);
+            return true;
+        }
+
+        return false;
+    }
+
+    private calcFrontVecToTarget(dst: vec3, sceneObjHolder: SceneObjHolder): void {
+        // getPlayerUpVec
+        getMatrixAxisY(scratchVec3a, sceneObjHolder.viewerInput.camera.worldMatrix);
+        const scale = this.type === HomingKillerType.Torpedo ? 75.0 : 200.0;
+        getPlayerPos(scratchVec3b, sceneObjHolder);
+        normToLengthAndAdd(scratchVec3b, scratchVec3a, scale);
+        vec3.sub(dst, scratchVec3b, this.translation);
+        vec3.normalize(dst, dst);
+    }
+
+    private isUpdateChaseFrontVec(v: ReadonlyVec3): boolean {
+        if (!this.isNerve(HomingKillerNrv.GoToTarget))
+            return true;
+
+        vec3.sub(scratchVec3b, this.targetSensor!.center, this.translation);
+        vec3.normalize(scratchVec3b, scratchVec3b);
+        return vec3.dot(scratchVec3b, v) > vec3.dot(scratchVec3b, this.axisZ);
+    }
+
+    private updateRotateZ(chaseVec: ReadonlyVec3, deltaTimeFrames: number): void {
+        const rotateSpeed = 1.0 * MathConstants.DEG_TO_RAD * deltaTimeFrames;
+
+        if (!isSameDirection(this.axisZ, this.gravityVector, 0.01) && !isSameDirection(chaseVec, this.gravityVector, 0.01)) {
+            vecKillElement(scratchVec3a, chaseVec, this.gravityVector);
+            vecKillElement(scratchVec3b, this.axisZ, this.gravityVector);
+
+            // Twist towards our target.
+            if (vec3.dot(scratchVec3a, scratchVec3b) < 0.95) {
+                vec3.cross(scratchVec3b, scratchVec3a, scratchVec3c);
+                const speed = rotateSpeed * Math.sign(vec3.dot(scratchVec3c, this.gravityVector));
+                this.rotation[2] = clamp(this.rotation[2] + speed, -60.0 * MathConstants.DEG_TO_RAD, 60.0 * MathConstants.DEG_TO_RAD);
+                return;
+            }
+        }
+
+        // Try to twist back to normal.
+        if (this.rotation[2] > 0.0)
+            this.rotation[2] = Math.max(this.rotation[2] - rotateSpeed, 0.0);
+        if (this.rotation[2] < 0.0)
+            this.rotation[2] = Math.min(this.rotation[2] + rotateSpeed, 0.0);
+    }
+
+    private processChase(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): boolean {
+        this.moveTimer += deltaTimeFrames;
+
+        if (this.tryBindedBreak(sceneObjHolder) || this.isWaterBreak(sceneObjHolder) || !isNearPlayer(sceneObjHolder, this, this.chaseEndDistance) ||
+            // noclip modification: we don't have a hitsensor for the player (camera)
+            isNearPlayer(sceneObjHolder, this, 100.0)
+        ) {
+            this.setNerve(HomingKillerNrv.Break);
+            return false;
+        }
+
+        this.calcFrontVecToTarget(scratchVec3a, sceneObjHolder);
+
+        if (isShadowProjected(this, null)) {
+            const shadowPos = getShadowProjectionPos(this, null);
+            const shadowSensor = getShadowProjectedSensor(this, null);
+            if (shadowSensor.isType(HitSensorType.BreakableCage)) {
+                if (vec3.squaredDistance(this.translation, shadowPos) < 300.0**2) {
+                    vec3.sub(scratchVec3a, shadowSensor.center, this.translation);
+                    vec3.normalize(scratchVec3a, scratchVec3a);
+                }
+            } else {
+                if (vec3.squaredDistance(this.translation, shadowPos) < 150.0**2) {
+                    getMatrixAxisY(scratchVec3b, this.baseMtx);
+                    if (!isSameDirection(scratchVec3a, scratchVec3b, 0.01)) {
+                        vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
+                        vec3.normalize(scratchVec3a, scratchVec3a);
+                    }
+                }
+            }
+        }
+
+        if (this.isUpdateChaseFrontVec(scratchVec3a)) {
+            turnVecToVecCos(this.axisZ, this.axisZ, scratchVec3a, this.turnSpeed, this.gravityVector, 0.02);
+        } else {
+            vec3.copy(scratchVec3a, this.axisZ);
+        }
+
+        this.updateVelocity();
+        this.updateRotateZ(scratchVec3a, deltaTimeFrames);
+        return true;
+    }
+
+    private static isSensorType(sensor: HitSensor, table: HitSensorType[]): boolean {
+        for (let i = 0; i < table.length; i++)
+            if (sensor.isType(table[i]))
+                return true;
+        return false;
+    }
+
+    private static sensorTableTryExplosion: HitSensorType[] = [
+        HitSensorType.KillerTargetEnemy,
+        HitSensorType.KillerTargetMapObj,
+        HitSensorType.Rock,
+        HitSensorType.Wanwan,
+        HitSensorType.Karikari,
+    ];
+
+    private tryToExplosion(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): boolean {
+        if (HomingKiller.isSensorType(otherSensor, HomingKiller.sensorTableTryExplosion) || isSensorEnemy(otherSensor))
+            return sendMsgEnemyAttackExplosion(sceneObjHolder, otherSensor, thisSensor);
+        else
+            return false;
+    }
+
+    private sendMsgExplosionToNearActor(sceneObjHolder: SceneObjHolder): void {
+        const eyeSensor = this.getSensor('eye')!;
+        for (let i = 0; i < eyeSensor.pairwiseSensors.length; i++)
+            if (isSensorNear(eyeSensor, eyeSensor.pairwiseSensors[i], 250.0))
+                this.tryToExplosion(sceneObjHolder, eyeSensor, eyeSensor.pairwiseSensors[i]);
+    }
+
+    private static sensorTableAttackIfBinded: HitSensorType[] = [
+        HitSensorType.KillerTargetEnemy,
+        HitSensorType.KillerTargetMapObj,
+        HitSensorType.BreakableCage,
+        HitSensorType.PunchBox,
+        HitSensorType.TripodBossGuardWall,
+        HitSensorType.TripodBossKillerGenerater,
+        HitSensorType.MapObj,
+    ];
+
+    private tryBindedBreak(sceneObjHolder: SceneObjHolder): boolean {
+        if (!isBinded(this))
+            return false;
+
+        const bodySensor = this.getSensor('body')!;
+
+        if (isBindedGround(this))
+            if (HomingKiller.isSensorType(this.binder!.floorHitInfo.hitSensor!, HomingKiller.sensorTableAttackIfBinded))
+                sendMsgEnemyAttackExplosion(sceneObjHolder, this.binder!.floorHitInfo.hitSensor!, bodySensor);
+        if (isBindedWall(this))
+            if (HomingKiller.isSensorType(this.binder!.wallHitInfo.hitSensor!, HomingKiller.sensorTableAttackIfBinded))
+                sendMsgEnemyAttackExplosion(sceneObjHolder, this.binder!.wallHitInfo.hitSensor!, bodySensor);
+        if (isBindedRoof(this))
+            if (HomingKiller.isSensorType(this.binder!.ceilingHitInfo.hitSensor!, HomingKiller.sensorTableAttackIfBinded))
+                sendMsgEnemyAttackExplosion(sceneObjHolder, this.binder!.ceilingHitInfo.hitSensor!, bodySensor);
+
+        this.calcBinderFlag = false;
+        return true;
+    }
+
+    private updateBaseMtxNoRotateZ(): void {
+        if (isSameDirection(this.axisZ, this.axisY, 0.01)) {
+            setMatrixTranslation(this.baseMtx, this.translation);
+        } else {
+            makeMtxFrontUpPos(this.baseMtx, this.axisZ, this.axisY, this.translation);
+        }
+    }
+}
+
+const enum HomingKillerLauncherNrv { AppearKiller, DeadKiller }
+export class HomingKillerLauncher extends LiveActor<HomingKillerLauncherNrv> {
+    private killer: HomingKiller;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'HomingKillerLauncher');
+
+        connectToSceneEnemyMovement(sceneObjHolder, this);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        useStageSwitchReadAppear(sceneObjHolder, this, infoIter);
+        // invalidateClipping()
+        this.initNerve(HomingKillerLauncherNrv.AppearKiller);
+        syncStageSwitchAppear(sceneObjHolder, this);
+
+        this.killer = new HomingKiller(zoneAndLayer, sceneObjHolder, infoIter);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        this.setNerve(HomingKillerLauncherNrv.AppearKiller);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HomingKillerLauncherNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === HomingKillerLauncherNrv.AppearKiller) {
+            if (isFirstStep(this) && isDead(this.killer))
+                this.killer.makeActorAppeared(sceneObjHolder);
+
+            if (isDead(this.killer))
+                this.setNerve(HomingKillerLauncherNrv.DeadKiller);
+        } else if (currentNerve === HomingKillerLauncherNrv.DeadKiller) {
+            if (isGreaterEqualStep(this, 180))
+                this.setNerve(HomingKillerLauncherNrv.AppearKiller);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        if (getObjectName(infoIter) === 'Torpedo') {
+            sceneObjHolder.modelCache.requestObjectData('TorpedoPropeller');
+            sceneObjHolder.modelCache.requestObjectData('TorpedoLight');
+        }
     }
 }

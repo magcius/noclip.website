@@ -402,7 +402,7 @@ export class SensorHitChecker extends NameObj {
         if (a.actor === b.actor)
             return;
 
-        if (vec3.squaredDistance(a.center, b.center) < (a.radius + b.radius) ** 2.0) {
+        if (isSensorNear(a, b, a.radius + b.radius)) {
             if (!isSensorEye(b))
                 a.addHitSensor(b);
             if (!isSensorEye(a))
@@ -451,6 +451,14 @@ export function sendMsgEnemyAttack(sceneObjHolder: SceneObjHolder, recvSensor: H
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttack, sendSensor);
 }
 
+export function sendMsgEnemyAttackExplosion(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttackExplosion, sendSensor);
+}
+
 export function sendArbitraryMsg(sceneObjHolder: SceneObjHolder, messageType: MessageType, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
     return recvSensor.receiveMessage(sceneObjHolder, messageType, sendSensor);
+}
+
+export function isSensorNear(a: HitSensor, b: HitSensor, radius: number): boolean {
+    return vec3.squaredDistance(a.center, b.center) < (radius ** 2.0);
 }

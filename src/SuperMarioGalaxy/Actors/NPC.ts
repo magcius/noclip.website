@@ -26,13 +26,15 @@ const scratchVec3c = vec3.create();
 
 function createPartsModelNpcAndFix(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
     const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.Npc);
-    model.initFixedPositionJoint(jointName, localTrans);
+    model.initFixedPositionJoint(jointName, localTrans, null);
+    model.isAttached = true;
     return model;
 }
 
 function createPartsModelIndirectNpc(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, objName: string, jointName: string, localTrans: vec3 | null = null) {
     const model = new PartsModel(sceneObjHolder, "npc parts", objName, parentActor, DrawBufferType.IndirectNpc);
-    model.initFixedPositionJoint(jointName, localTrans);
+    model.initFixedPositionJoint(jointName, localTrans, null);
+    model.isAttached = true;
     return model;
 }
 
