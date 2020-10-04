@@ -238,7 +238,7 @@ const sceneDescs = [
     new PokemonSoulSilverSceneDesc("285", "Pokeathlon ???"),
     new PokemonSoulSilverSceneDesc("286", "Pokeathlon ???"),
     new PokemonSoulSilverSceneDesc("287", "Pokeathlon ???"),
-    new PokemonSoulSilverSceneDesc("288", "Dragon's Den Dragon Shrine),
+    new PokemonSoulSilverSceneDesc("288", "Dragon's Den Dragon Shrine"),
     new PokemonSoulSilverSceneDesc("299", "Pokemon League Reception Gate"),
     new PokemonSoulSilverSceneDesc("301", "Elite Four Room ?"),
     new PokemonSoulSilverSceneDesc("302", "Elite Four Room ?"),
