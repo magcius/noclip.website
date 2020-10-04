@@ -4,6 +4,7 @@ import { AABB } from "../Geometry";
 import { mat4 } from "gl-matrix";
 import { assert, readString } from "../util";
 import { runDL_F3DEX2, RSPState, RSPOutput } from "./f3dex2";
+import { readMatrixRDP } from "../Common/N64/RDP";
 
 // Implementation of the PM64 "shape" format.
 // Basically everything in here was reverse engineered by Clover.
@@ -209,24 +210,7 @@ export function parse(buffer: ArrayBufferSlice): MapShapeBinary {
             const modelMatrix = mat4.create();
             if (modelMatrixAddr !== 0) {
                 const modelMatrixOffs = modelMatrixAddr - ramAddrBase;
-
-                // The RDP matrix format is a bit bizarre. High values are separate from low ones.
-                modelMatrix[0]  = ((view.getInt16(modelMatrixOffs + 0x00) << 16) | (view.getUint16(modelMatrixOffs + 0x20))) / 0x10000;
-                modelMatrix[1]  = ((view.getInt16(modelMatrixOffs + 0x02) << 16) | (view.getUint16(modelMatrixOffs + 0x22))) / 0x10000;
-                modelMatrix[2]  = ((view.getInt16(modelMatrixOffs + 0x04) << 16) | (view.getUint16(modelMatrixOffs + 0x24))) / 0x10000;
-                modelMatrix[3]  = ((view.getInt16(modelMatrixOffs + 0x06) << 16) | (view.getUint16(modelMatrixOffs + 0x26))) / 0x10000;
-                modelMatrix[4]  = ((view.getInt16(modelMatrixOffs + 0x08) << 16) | (view.getUint16(modelMatrixOffs + 0x28))) / 0x10000;
-                modelMatrix[5]  = ((view.getInt16(modelMatrixOffs + 0x0A) << 16) | (view.getUint16(modelMatrixOffs + 0x2A))) / 0x10000;
-                modelMatrix[6]  = ((view.getInt16(modelMatrixOffs + 0x0C) << 16) | (view.getUint16(modelMatrixOffs + 0x2C))) / 0x10000;
-                modelMatrix[7]  = ((view.getInt16(modelMatrixOffs + 0x0E) << 16) | (view.getUint16(modelMatrixOffs + 0x2E))) / 0x10000;
-                modelMatrix[8]  = ((view.getInt16(modelMatrixOffs + 0x10) << 16) | (view.getUint16(modelMatrixOffs + 0x30))) / 0x10000;
-                modelMatrix[9]  = ((view.getInt16(modelMatrixOffs + 0x12) << 16) | (view.getUint16(modelMatrixOffs + 0x32))) / 0x10000;
-                modelMatrix[10] = ((view.getInt16(modelMatrixOffs + 0x14) << 16) | (view.getUint16(modelMatrixOffs + 0x34))) / 0x10000;
-                modelMatrix[11] = ((view.getInt16(modelMatrixOffs + 0x16) << 16) | (view.getUint16(modelMatrixOffs + 0x36))) / 0x10000;
-                modelMatrix[12] = ((view.getInt16(modelMatrixOffs + 0x18) << 16) | (view.getUint16(modelMatrixOffs + 0x38))) / 0x10000;
-                modelMatrix[13] = ((view.getInt16(modelMatrixOffs + 0x1A) << 16) | (view.getUint16(modelMatrixOffs + 0x3A))) / 0x10000;
-                modelMatrix[14] = ((view.getInt16(modelMatrixOffs + 0x1C) << 16) | (view.getUint16(modelMatrixOffs + 0x3C))) / 0x10000;
-                modelMatrix[15] = ((view.getInt16(modelMatrixOffs + 0x1E) << 16) | (view.getUint16(modelMatrixOffs + 0x3E))) / 0x10000;
+                readMatrixRDP(modelMatrix, view, modelMatrixOffs);
             }
 
             return {
