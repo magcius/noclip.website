@@ -1662,6 +1662,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract getLightData(modelCache: ModelCache): JMapInfoIter;
     public abstract getZoneLightData(modelCache: ModelCache, zoneName: string): JMapInfoIter;
     public abstract getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC.JKRArchive;
+    public abstract getObjNameTable(modelCache: ModelCache): JMapInfoIter;
     public abstract requestGlobalArchives(modelCache: ModelCache): void;
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
@@ -1689,7 +1690,6 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         modelCache.requestArchiveData(`UsEnglish/MessageData/Message.arc`);
         modelCache.requestObjectData('PlanetMapDataTable');
         modelCache.requestObjectData('NPCData');
-        modelCache.requestArchiveData('StageData/ObjNameTable.arc');
 
         const sceneObjHolder = new SceneObjHolder();
         sceneObjHolder.sceneDesc = this;
@@ -1717,7 +1717,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         const lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
         sceneObjHolder.lightDirector = new LightDirector(sceneObjHolder, lightDataHolder);
         sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
-        sceneObjHolder.objNameTable = createCsvParser(modelCache.getArchive('StageData/ObjNameTable.arc')!.findFileData('ObjNameTable.tbl')!);
+        sceneObjHolder.objNameTable = this.getObjNameTable(modelCache);
 
         sceneObjHolder.create(SceneObj.EffectSystem);
 

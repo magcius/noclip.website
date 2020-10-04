@@ -6,7 +6,7 @@ import { connectToScene, startAction } from "./ActorUtil";
 import { createCsvParser, createJMapIdInfoFromIter, JMapIdInfo, JMapInfoIter } from "./JMapInfo";
 import { LiveActor, LiveActorGroup, ZoneAndLayer } from "./LiveActor";
 import { getDeltaTimeFrames, SceneObj, SceneObjHolder } from "./Main";
-import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjGroup } from "./NameObj";
+import { CalcAnimType, DrawBufferType, DrawType, GameBits, MovementType, NameObj, NameObjGroup } from "./NameObj";
 import { createStageSwitchCtrl, getSwitchWatcherHolder, StageSwitchCtrl, SwitchFunctorEventListener } from "./Switch";
 
 function getDemoName(infoIter: JMapInfoIter): string {
@@ -50,8 +50,10 @@ function getDemoSheetName(infoIter: JMapInfoIter): string {
 }
 
 function createSheetParser(sceneObjHolder: SceneObjHolder, executor: DemoExecutor, sheet: string): JMapInfoIter {
-    const sheetFilename = `Demo${executor.sheetName}/Demo${executor.sheetName}${sheet}.bcsv`;
-    const sheetData = assertExists(sceneObjHolder.demoDirector!.demoSheetArchive.findFileData(sheetFilename));
+    const sheetFilename = `Demo${executor.sheetName}${sheet}.bcsv`;
+    const zoneId = executor.idInfo.zoneId;
+    const demoSheetArchive = assertExists(sceneObjHolder.demoDirector!.getDemoSheetArchiveForZone(sceneObjHolder, zoneId));
+    const sheetData = assertExists(demoSheetArchive.findFilenameData(sheetFilename));
     return createCsvParser(sheetData);
 }
 
@@ -460,7 +462,7 @@ export class DemoCastGroupHolder<T extends DemoCastGroup> extends NameObjGroup<T
 
 export class DemoDirector extends NameObj {
     public executorHolder: DemoCastGroupHolder<DemoExecutor>;
-    public demoSheetArchive: JKRArchive;
+    public demoSheetArchives: (JKRArchive | null)[] = [];
     public currentExecutor: DemoExecutor | null = null;
     private inDemo = false;
 
@@ -468,7 +470,23 @@ export class DemoDirector extends NameObj {
         super(sceneObjHolder, 'DemoDirector');
         connectToScene(sceneObjHolder, this, MovementType.DemoDirector, CalcAnimType.None, DrawBufferType.None, DrawType.None);
         this.executorHolder = new DemoCastGroupHolder(sceneObjHolder, 'DemoExecutorHolder', 32);
-        this.demoSheetArchive = assertExists(sceneObjHolder.modelCache.getObjectData('DemoSheet'));
+    }
+
+    public getDemoSheetArchiveForZone(sceneObjHolder: SceneObjHolder, zoneId: number): JKRArchive | null {
+        if (this.demoSheetArchives[zoneId] === undefined) {
+            if (sceneObjHolder.sceneDesc.gameBit & GameBits.SMG1) {
+                if (this.demoSheetArchives[0] === undefined)
+                    this.demoSheetArchives[0] = assertExists(sceneObjHolder.modelCache.getObjectData('DemoSheet'));
+                this.demoSheetArchives[zoneId] = this.demoSheetArchives[0];
+            } else if (sceneObjHolder.sceneDesc.gameBit & GameBits.SMG2) {
+                const zoneName = sceneObjHolder.scenarioData.zoneNames[zoneId];
+                this.demoSheetArchives[zoneId] = sceneObjHolder.modelCache.getArchive(`StageData/${zoneName}/${zoneName}Demo.arc`);
+            } else {
+                throw "whoops";
+            }
+        }
+
+        return this.demoSheetArchives[zoneId];
     }
 
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {

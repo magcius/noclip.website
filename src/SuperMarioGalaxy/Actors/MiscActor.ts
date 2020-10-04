@@ -38,7 +38,7 @@ import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
 import { calcNerveRate, isGreaterEqualStep, isGreaterStep, NerveExecutor, isFirstStep, isLessStep } from '../Spine';
-import { isExistStageSwitchSleep, onSwitchBySwitchIdInfo } from '../Switch';
+import { isExistStageSwitchSleep } from '../Switch';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObj } from './ModelObj';
 import { initShadowVolumeSphere, setShadowDropLength, setShadowDropPositionPtr, onCalcShadowOneTime, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, initShadowFromCSV, addShadowVolumeCylinder, setShadowDropPosition, initShadowController, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowSurfaceCircle, onCalcShadow, initShadowVolumeOval, isShadowProjected, getShadowProjectionPos, getShadowProjectedSensor } from '../Shadow';
 import { initLightCtrl } from '../LightData';

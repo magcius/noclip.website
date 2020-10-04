@@ -78,6 +78,13 @@ export class JKRArchive {
             return null;
         return file.buffer;
     }
+
+    public findFilenameData(name: string): ArrayBufferSlice | null {
+        for (let i = 0; i < this.files.length; i++)
+            if (this.files[i].name.toLowerCase() === name.toLowerCase())
+                return this.files[i].buffer;
+        return null;
+    }
 }
 
 // Used while parsing

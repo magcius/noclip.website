@@ -19,12 +19,18 @@ class SMG2SceneDesc extends SMGSceneDescBase {
     public getZoneMapArchive(modelCache: ModelCache, zoneName: string): JKRArchive {
         return modelCache.getArchive(`StageData/${zoneName}/${zoneName}Map.arc`)!;
     }
+    public getObjNameTable(modelCache: ModelCache): JMapInfoIter {
+        const arc = modelCache.getArchive(`SystemData/ObjNameTable.arc`)!;
+        return createCsvParser(arc.findFileData(`ObjNameTable.tbl`)!);
+    }
     public requestGlobalArchives(modelCache: ModelCache): void {
         modelCache.requestArchiveData(`LightData/LightData.arc`);
+        modelCache.requestArchiveData(`SystemData/ObjNameTable.arc`);
     }
     public requestZoneArchives(modelCache: ModelCache, zoneName: string): void {
         modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Map.arc`);
         modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Light.arc`);
+        modelCache.requestArchiveData(`StageData/${zoneName}/${zoneName}Demo.arc`);
         if (zoneName.startsWith('WorldMap'))
             modelCache.requestObjectData(zoneName.slice(0, 10));
     }
