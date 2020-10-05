@@ -9705,7 +9705,8 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
     }
 
     private updateVelocity(): void {
-        const speed = this.type === HomingKillerType.Torpedo ? 5.0 : 12.0;
+        // noclip modification: Increase Torpedo speed by 3x to make it faster to hit the weight in Buoy Base.
+        const speed = this.type === HomingKillerType.Torpedo ? (3.0 * 5.0) : 12.0;
         vec3.scale(this.velocity, this.axisZ, speed);
     }
 
