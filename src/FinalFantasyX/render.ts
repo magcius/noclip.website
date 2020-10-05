@@ -8,12 +8,13 @@ import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert, hexzero } from "../util";
-import { GfxRenderInstManager, GfxRendererLayer } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import { GSAlphaCompareMode, GSAlphaFailMode, GSTextureFunction, GSDepthCompareMode, GSTextureFilter, psmToString, GSWrapMode } from "../Common/PS2/GS";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { AABB } from "../Geometry";
+import { computeModelMatrixR, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers";
 
 export class FFXProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -90,7 +91,7 @@ void main() {
     }
 
     private generateFrag(gsConfiguration: GSConfiguration): string {
-        assert(gsConfiguration.tex0.tfx === GSTextureFunction.MODULATE);
+        assert((gsConfiguration.prim & 0x10) === 0 || gsConfiguration.tex0.tfx === GSTextureFunction.MODULATE);
 
         // Contains depth & alpha test settings.
         const ate = !!((gsConfiguration.test_1_data0 >>> 0) & 0x01);
@@ -103,6 +104,10 @@ void main() {
         return `
 void main() {
     vec4 t_Color = v_Color;
+
+#ifdef TEXTURE
+    t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
+#endif
 
 ${this.generateAlphaTest(ate, atst, aref, afail)}
 
@@ -127,7 +132,7 @@ export class LevelModelData {
             { location: FFXProgram.a_Position, bufferIndex: 0, bufferByteOffset: 0 * 4, format: GfxFormat.F32_RGB },
             { location: FFXProgram.a_Color, bufferIndex: 0, bufferByteOffset: 3 * 4, format: GfxFormat.F32_RGBA },
             { location: FFXProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 7 * 4, format: GfxFormat.F32_RG },
-            { location: FFXProgram.a_TexCoord, bufferIndex: 0, bufferByteOffset: 9 * 4, format: GfxFormat.F32_RGBA },
+            { location: FFXProgram.a_Extra, bufferIndex: 0, bufferByteOffset: 9 * 4, format: GfxFormat.F32_RGBA },
         ];
         const VERTEX_STRIDE = 3 + 4 + 2 + 4;
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
@@ -151,11 +156,13 @@ export class LevelModelData {
 
 function translateWrapMode(wm: GSWrapMode): GfxWrapMode {
     switch (wm) {
-        case GSWrapMode.REPEAT: return GfxWrapMode.REPEAT;
-        case GSWrapMode.CLAMP: return GfxWrapMode.CLAMP;
-        // TODO(jstpierre): Support REGION_* clamp modes.
-        case GSWrapMode.REGION_REPEAT: return GfxWrapMode.REPEAT;
-        default: throw "whoops";
+        // region_ modes are handled by modifying the texture, so ignore them here
+        case GSWrapMode.REGION_CLAMP:
+        case GSWrapMode.CLAMP:
+            return GfxWrapMode.CLAMP;
+        case GSWrapMode.REGION_REPEAT:
+        case GSWrapMode.REPEAT:
+            return GfxWrapMode.REPEAT;
     }
 }
 
@@ -189,15 +196,14 @@ function translateTextureFilter(filter: GSTextureFilter): [GfxTexFilterMode, Gfx
 
 export class DrawCallInstance {
     private gfxProgram: GfxProgram;
-    private textureMapping = nArray(1, () => new TextureMapping());
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
-    public alphaMultiplier = 1;
+    private textureMappings: TextureMapping[] = [];
+    private textureMatrix = mat4.create();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public drawCall: DrawCall, public transformCount = 1) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public drawCall: DrawCall, textures: TextureData[]) {
         const gsConfiguration = this.drawCall.gsConfiguration!;
 
         const program = new FFXProgram(gsConfiguration);
-        this.gfxProgram = cache.createProgram(device, program);
 
         const zte = !!((gsConfiguration.test_1_data0 >>> 16) & 0x01);
         const ztst: GSDepthCompareMode = (gsConfiguration!.test_1_data0 >>> 17) & 0x03;
@@ -205,56 +211,91 @@ export class DrawCallInstance {
 
         this.megaStateFlags = {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
+            depthWrite: drawCall.gsConfiguration.depthWrite,
+            cullMode: GfxCullMode.FRONT,
         };
 
-        if (gsConfiguration.alpha_1_data0 === 0x44) {
+        if ((gsConfiguration.prim & 0x40) !== 0 && gsConfiguration.alpha_data0 !== 0) {
+            if (gsConfiguration.alpha_data0 === 0x44) {
+                setAttachmentStateSimple(this.megaStateFlags, {
+                    blendMode: GfxBlendMode.ADD,
+                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                    blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                });
+            } else if (gsConfiguration.alpha_data0 === 0x48) {
+                setAttachmentStateSimple(this.megaStateFlags, {
+                    blendMode: GfxBlendMode.ADD,
+                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+                    blendDstFactor: GfxBlendFactor.ONE,
+                });
+            } else {
+                throw `unknown alpha blend setting ${hexzero(gsConfiguration.alpha_data0, 2)}`;
+            }
+        } else { // alpha blending disabled
             setAttachmentStateSimple(this.megaStateFlags, {
                 blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+                blendSrcFactor: GfxBlendFactor.ONE,
+                blendDstFactor: GfxBlendFactor.ZERO,
             });
-        } else if (gsConfiguration.alpha_1_data0 === 0x48) {
-            setAttachmentStateSimple(this.megaStateFlags, {
-                blendMode: GfxBlendMode.ADD,
-                blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                blendDstFactor: GfxBlendFactor.ONE,
-            });
-        } else {
-            throw `unknown alpha blend setting ${hexzero(gsConfiguration.alpha_1_data0, 2)}`;
         }
 
-        // const lcm = (gsConfiguration.tex1_1_data0 >>> 0) & 0x01;
-        // const mxl = (gsConfiguration.tex1_1_data0 >>> 2) & 0x07;
-        // assert(lcm === 0x00);
-        // assert(mxl === 0x00);
+        if (drawCall.textureIndex >= 0) {
+            program.defines.set("TEXTURE", "1");
 
-        // const texMagFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 5) & 0x01;
-        // const texMinFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 6) & 0x07;
-        // const [magFilter] = translateTextureFilter(texMagFilter);
-        // const [minFilter, mipFilter] = translateTextureFilter(texMinFilter);
+            const lcm = (gsConfiguration.tex1_1_data0 >>> 0) & 0x01;
+            const mxl = (gsConfiguration.tex1_1_data0 >>> 2) & 0x07;
+            assert(lcm === 0x00);
+            assert(mxl === 0x00);
 
-        // const wrapS = translateWrapMode(gsConfiguration.clamp.wms);
-        // const wrapT = translateWrapMode(gsConfiguration.clamp.wmt);
+            const texMagFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 5) & 0x01;
+            const texMinFilter: GSTextureFilter = (gsConfiguration.tex1_1_data0 >>> 6) & 0x07;
+            const [magFilter] = translateTextureFilter(texMagFilter);
+            const [minFilter, mipFilter] = translateTextureFilter(texMinFilter);
 
-        // this.textureMapping[0].gfxSampler = cache.createSampler(device, {
-        //     minFilter, magFilter, mipFilter,
-        //     wrapS, wrapT,
-        //     minLOD: 0, maxLOD: 100,
-        // });
+            const wrapS = translateWrapMode(gsConfiguration.clamp.wms);
+            const wrapT = translateWrapMode(gsConfiguration.clamp.wmt);
+
+            this.textureMappings.push(new TextureMapping());
+            this.textureMappings[0].gfxSampler = cache.createSampler(device, {
+                minFilter, magFilter, mipFilter,
+                wrapS, wrapT,
+                minLOD: 0, maxLOD: 100,
+            });
+            const tex = textures[drawCall.textureIndex];
+            this.textureMappings[0].gfxTexture = tex.gfxTexture;
+
+            // we cropped region_* textures, so we need to remap the UVs to compensate
+            // there are some areas (The Nucleus)
+            if (gsConfiguration.clamp.wms >= GSWrapMode.REGION_CLAMP) {
+                this.textureMatrix[0] = (1 << gsConfiguration.tex0.tw) / tex.data.width;
+                if (gsConfiguration.clamp.wms === GSWrapMode.REGION_CLAMP)
+                    this.textureMatrix[12] = -gsConfiguration.clamp.minu / tex.data.width;
+            }
+            if (gsConfiguration.clamp.wmt >= GSWrapMode.REGION_CLAMP) {
+                this.textureMatrix[5] = (1 << gsConfiguration.tex0.th) / tex.data.height;
+                if (gsConfiguration.clamp.wmt === GSWrapMode.REGION_CLAMP)
+                    this.textureMatrix[13] = -gsConfiguration.clamp.minv / tex.data.height;
+            }
+        }
+
+        this.gfxProgram = cache.createProgram(device, program);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, modelMatrix: mat4, modelViewMatrix: mat4, textureMatrix: mat4): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, modelMatrix: mat4, modelViewMatrix: mat4): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
         renderInst.drawIndexes(this.drawCall.indexCount, this.drawCall.indexOffset);
 
+        if (this.textureMappings.length > 0)
+            renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
+
         let offs = renderInst.allocateUniformBuffer(FFXProgram.ub_ModelParams, 12 * 2 + 8);
         const mapped = renderInst.mapUniformBufferF32(FFXProgram.ub_ModelParams);
         offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
         offs += fillMatrix4x3(mapped, offs, modelMatrix);
-        offs += fillMatrix4x2(mapped, offs, textureMatrix);
+        offs += fillMatrix4x2(mapped, offs, this.textureMatrix);
         renderInstManager.submitRenderInst(renderInst);
     }
 }
@@ -262,24 +303,38 @@ export class DrawCallInstance {
 const toNoclip = mat4.create();
 mat4.fromXRotation(toNoclip, Math.PI);
 
+const enum RenderLayer {
+    OPA_SKYBOX,
+    OPA,
+    OPA_LIGHTING,
+    XLU_SKYBOX,
+    XLU,
+    XLU_LIGHTING,
+}
+
 const scratchMatrices = nArray(2, () => mat4.create());
 const scratchAABB = new AABB();
+const posScrath = vec3.create();
+// LevelModelInstance is the basic unit of geometry
 export class LevelModelInstance {
     public modelMatrix = mat4.create();
     public drawCalls: DrawCallInstance[] = [];
-    public textureMatrix = mat4.create();
-    public uvState = 0;
     public visible = true;
-    public layer = GfxRendererLayer.BACKGROUND;
+    public layer = GfxRendererLayer.TRANSLUCENT;
+    public depthSort = false;
 
-    public translation = vec3.create();
-    public euler = vec3.create();
+    constructor(device: GfxDevice, cache: GfxRenderCache, public data: LevelModelData, public model: LevelModel, textures: TextureData[], isSkybox: boolean) {
+        for (let i = 0; i < this.model.drawCalls.length; i++)
+            this.drawCalls.push(new DrawCallInstance(device, cache, this.model.drawCalls[i], textures));
 
-    public skinningMatrices: mat4[] = [];
-
-    constructor(device: GfxDevice, cache: GfxRenderCache, public data: LevelModelData) {
-        for (let i = 0; i < this.data.model.drawCalls.length; i++)
-            this.drawCalls.push(new DrawCallInstance(device, cache, this.data.model.drawCalls[i]));
+        if (isSkybox)
+            this.layer += model.isTranslucent ? RenderLayer.XLU_SKYBOX : RenderLayer.OPA_SKYBOX;
+        else if (model.flags & 0x10)
+            this.layer += model.isTranslucent ? RenderLayer.XLU_LIGHTING : RenderLayer.OPA_LIGHTING;
+        else {
+            this.layer += model.isTranslucent ? RenderLayer.XLU : RenderLayer.OPA;
+            this.depthSort = true;
+        }
     }
 
     public setVisible(visible: boolean): void {
@@ -293,71 +348,66 @@ export class LevelModelInstance {
         mat4.mul(scratchMatrices[0], toNoclip, this.modelMatrix);
         mat4.mul(scratchMatrices[1], viewerInput.camera.viewMatrix, scratchMatrices[0]);
 
-        scratchAABB.transform(this.data.model.bbox, scratchMatrices[0]);
+        scratchAABB.transform(this.model.bbox, scratchMatrices[0]);
         if (!viewerInput.camera.frustum.contains(scratchAABB))
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.data.inputLayout, this.data.inputState);
+        template.sortKey = makeSortKey(this.layer);
+        if (this.depthSort) {
+            transformVec3Mat4w1(posScrath, scratchMatrices[1], this.model.center);
+            template.sortKey = setSortKeyDepth(template.sortKey, -posScrath[2]);
+        }
 
         for (let i = 0; i < this.drawCalls.length; i++)
-            this.drawCalls[i].prepareToRender(renderInstManager, this.modelMatrix, scratchMatrices[1], this.textureMatrix);
+            this.drawCalls[i].prepareToRender(renderInstManager, this.modelMatrix, scratchMatrices[1]);
 
         renderInstManager.popTemplateRenderInst();
     }
-
-    public setAlphaMultiplier(alpha: number): void {
-        for (let i = 0; i < this.drawCalls.length; i++)
-            this.drawCalls[i].alphaMultiplier = alpha;
-    }
 }
 
-const scratchTextureMatrix = mat4.create();
-class TextureData {
-    public gfxTexture: GfxTexture[] = [];
-    public viewerTexture: Viewer.Texture[] = [];
+// LevelPartInstance is a logical grouping of level models that move together and act on the same effect data
+export class LevelPartInstance {
+    public modelMatrix = mat4.create();
+    public models: LevelModelInstance[] = [];
+    private visible = true;
 
-    constructor(device: GfxDevice, private texture: Texture) {
-        for (let i = 0; i < this.texture.pixels.length; i++) {
-            const pixels = this.texture.pixels[i];
-
-            const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
-            device.setResourceName(gfxTexture, texture.name);
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-            device.submitPass(hostAccessPass);
-            this.gfxTexture[i] = gfxTexture;
-
-            this.viewerTexture[i] = textureToCanvas(texture, `${texture.name}/${i}`, pixels);
+    constructor(device: GfxDevice, cache: GfxRenderCache, public part: LevelPart, data: LevelModelData[], textures: TextureData[]) {
+        for (let i = 0; i < part.models.length; i++) {
+            const model = new LevelModelInstance(device, cache, data[i], part.models[i], textures, part.isSkybox);
+            computeModelMatrixR(model.modelMatrix, part.euler[0], part.euler[1], part.euler[2]);
+            setMatrixTranslation(model.modelMatrix, vec3.fromValues(part.position[0], part.position[1], part.position[2]));
+            this.models.push(model);
         }
     }
 
-    public fillTextureMapping(m: TextureMapping, paletteIndex: number = 0): void {
-        m.gfxTexture = this.gfxTexture[paletteIndex];
+    public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        if (!this.visible)
+            return;
+        for (let i = 0; i < this.models.length; i++)
+            this.models[i].prepareToRender(renderInstManager, viewerInput);
     }
 
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.gfxTexture.length; i++)
-            device.destroyTexture(this.gfxTexture[i]);
-    }
 }
 
-export class LevelPartData {
-    public modelData: LevelModelData[] = [];
-    public textureData: TextureData[] = [];
+export class TextureData {
+    public gfxTexture: GfxTexture;
+    public viewerTexture: Viewer.Texture;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public part: LevelPart) {
-        for (let i = 0; i < part.textures.length; i++)
-            this.textureData.push(new TextureData(device, part.textures[i]));
-        for (let i = 0; i < part.models.length; i++)
-            this.modelData.push(new LevelModelData(device, cache, part.models[i]));
+    constructor(device: GfxDevice, public data: Texture) {
+        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, data.width, data.height, 1));
+        device.setResourceName(gfxTexture, data.name);
+        const hostAccessPass = device.createHostAccessPass();
+        hostAccessPass.uploadTextureData(gfxTexture, 0, [data.pixels]);
+        device.submitPass(hostAccessPass);
+        this.gfxTexture = gfxTexture;
+
+        this.viewerTexture = textureToCanvas(data, data.name, data.pixels);
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.textureData.length; i++)
-            this.textureData[i].destroy(device);
-        for (let i = 0; i < this.modelData.length; i++)
-            this.modelData[i].destroy(device);
+        device.destroyTexture(this.gfxTexture);
     }
 }
 

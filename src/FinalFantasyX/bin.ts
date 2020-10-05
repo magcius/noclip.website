@@ -1,7 +1,7 @@
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, readString } from "../util";
+import { assert, hexzero, readString } from "../util";
 import { AABB } from "../Geometry";
-import { GSRegister, GSMemoryMap, GSRegisterTEX0, GSRegisterCLAMP, getGSRegisterTEX0, getGSRegisterCLAMP } from "../Common/PS2/GS";
+import { GSRegister, GSMemoryMap, GSRegisterTEX0, GSRegisterCLAMP, getGSRegisterTEX0, getGSRegisterCLAMP, gsMemoryMapNew, gsMemoryMapUploadImage, GSPixelStorageFormat, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, gsMemoryMapReadImagePSMT4HL_PSMCT32, gsMemoryMapReadImagePSMT4HH_PSMCT32, gsMemoryMapReadImagePSMT8H_PSMCT32, GSWrapMode, gsMemoryMapReadImagePSMCT16, GSCLUTPixelStorageFormat } from "../Common/PS2/GS";
 import { vec3 } from "gl-matrix";
 
 const enum VifUnpackVN {
@@ -60,7 +60,7 @@ function getVifUnpackFormatByteSize(format: number): number {
 export interface DrawCall {
     indexOffset: number;
     indexCount: number;
-    textureIndex: number | null;
+    textureIndex: number;
     gsConfiguration: GSConfiguration;
     effectType: LevelEffectType;
     shader: ShaderMode;
@@ -70,13 +70,16 @@ export interface LevelModel {
     vertexData: Float32Array;
     indexData: Uint16Array;
     drawCalls: DrawCall[];
+    center: vec3;
     bbox: AABB;
+    flags: number;
+    isTranslucent: boolean;
 }
 
 export interface Texture {
     tex0: GSRegisterTEX0;
     clamp: GSRegisterCLAMP;
-    pixels: Uint8Array[];
+    pixels: Uint8Array;
     name: string;
     width: number;
     height: number;
@@ -88,6 +91,10 @@ export interface LevelPart {
     position: vec3;
     euler: vec3;
     models: LevelModel[];
+}
+
+export interface LevelData {
+    parts: LevelPart[];
     textures: Texture[];
 }
 
@@ -96,24 +103,29 @@ export interface GSConfiguration {
     clamp: GSRegisterCLAMP;
     tex1_1_data0: number;
     tex1_1_data1: number;
-    alpha_1_data0: number;
-    alpha_1_data1: number;
+    alpha_data0: number;
+    alpha_data1: number;
     test_1_data0: number;
     test_1_data1: number;
     depthWrite: boolean;
+    prim: number;
+}
+
+function structsEqual(a: any, b: any): boolean {
+    for (let field in a)
+        if ((a as any)[field] !== (b as any)[field])
+            return false;
+    return true;
 }
 
 function gsConfigurationEqual(a: GSConfiguration, b: GSConfiguration) {
-    for (let field in a.tex0)
-        if ((a.tex0 as any)[field] !== (b.tex0 as any)[field])
-            return false;
-    for (let field in a.clamp)
-        if ((a.clamp as any)[field] !== (b.clamp as any)[field])
-            return false;
+    if (!structsEqual(a.tex0, b.tex0)) return false;
+    if (!structsEqual(a.clamp, b.clamp)) return false;
     if (a.tex1_1_data0 !== b.tex1_1_data0 || a.tex1_1_data1 !== b.tex1_1_data1) return false;
-    if (a.alpha_1_data0 !== b.alpha_1_data0 || a.alpha_1_data1 !== b.alpha_1_data1) return false;
+    if (a.alpha_data0 !== b.alpha_data0 || a.alpha_data1 !== b.alpha_data1) return false;
     if (a.test_1_data0 !== b.test_1_data0 || a.test_1_data1 !== b.test_1_data1) return false;
     if (a.depthWrite !== b.depthWrite) return false;
+    if (a.prim != b.prim) return false;
     return true;
 }
 
@@ -121,7 +133,7 @@ const enum MapSectionType {
     LEVEL_PART,
     MODEL,
     TEXTURE,
-    PALETTE,
+    PALETTES,
 }
 
 const enum ShaderMode {
@@ -138,6 +150,84 @@ const enum LevelEffectType {
     UV_SCROLL,
 }
 
+export function parseLevelTextures(buffer: ArrayBufferSlice): GSMemoryMap {
+    assert(readString(buffer, 0, 4) === "MAP1")
+    const view = buffer.createDataView();
+    let offs = view.getUint32(0x14, true);
+
+    const gsMap = gsMemoryMapNew();
+    let foundPalettes = false;
+
+    assert(view.getUint32(offs) === 0x65432100)
+    const sectionCount = view.getUint32(offs + 0x0C, true);
+    offs += 0x40;
+
+    for (let i = 0; i < sectionCount; i++) {
+        const sectionType: MapSectionType = view.getUint32(offs + 0x00, true);
+        const sectionLength = view.getUint32(offs + 0x04, true);
+        offs += 0x40;
+
+        if (sectionType === MapSectionType.TEXTURE) {
+            const address = view.getUint32(offs + 0x04, true);
+            const format = view.getUint32(offs + 0x0C, true);
+            const isPSMT4 = format === GSPixelStorageFormat.PSMT4;
+            const bufferWidth = view.getUint32(offs + 0x08, true) >>> (isPSMT4 ? 1 : 0);
+            const width = view.getUint32(offs + 0x10, true) >>> (isPSMT4 ? 1 : 0);
+            const height = view.getUint32(offs + 0x14, true) >>> (isPSMT4 ? 2 : 0);
+            gsMemoryMapUploadImage(gsMap, isPSMT4 ? GSPixelStorageFormat.PSMCT32 : format, address, bufferWidth, 0, 0, width, height, buffer.slice(offs + 0x40));
+        } else if (sectionType === MapSectionType.PALETTES) {
+            assert(!foundPalettes, "multiple palette lists");
+            foundPalettes = true;
+            const paletteType = view.getUint32(offs - 0x40 + 0x24, true); // actually in the header, not the data block
+            let blockLength = 0, dest = 0, blockOffs = 0;
+            switch (paletteType) {
+                case 2: {
+                    blockLength = 0x20;
+                    dest = 0x2D00;
+                    blockOffs = 0x10;
+                } break;
+                case 3: {
+                    blockLength = 0x20;
+                    dest = 0x600;
+                    blockOffs = 0x04;
+                } break;
+                case 4: {
+                    blockLength = 0x10;
+                    dest = 0x2080;
+                    blockOffs = 0x04;
+                } break;
+                default:
+                    throw `bad palette type ${paletteType}`
+            }
+            let paletteOffs = offs;
+            for (let j = 0; j < 0x48; j++) {
+                gsMemoryMapUploadImage(gsMap, GSPixelStorageFormat.PSMCT32, dest + blockOffs, 1, 0, 0, 16, 16, buffer.slice(paletteOffs));
+                // the first blockLength palettes are arranged in groups of four with weird packing,
+                // while subsequent ones are stored consecutively at a different address
+                if (j === blockLength - 1) {
+                    dest = 0x2E00;
+                    blockOffs = 0;
+                } else if (j < blockLength) {
+                    if (paletteType === 2)
+                        blockOffs += 0x04;
+                    else
+                        blockOffs += 0x08;
+                    if (j % 4 === 3) { // end of group of four
+                        dest += 0x20;
+                        blockOffs = paletteType === 2 ? 0x10 : 0x04;
+                    }
+                } else
+                    dest += 0x4;
+                paletteOffs += 0x400;
+            }
+        } else 
+            console.warn("unfamiliar map section type", sectionType, "length", hexzero(sectionLength, 4))
+
+        offs += sectionLength;
+    }
+    return gsMap;
+}
+
 function vec3FromView(view: DataView, offset: number, littleEndian: boolean): vec3 {
     return vec3.fromValues(
         view.getFloat32(offset + 0x0, littleEndian),
@@ -146,8 +236,62 @@ function vec3FromView(view: DataView, offset: number, littleEndian: boolean): ve
     )
 }
 
-export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap, namePrefix: string): LevelPart[] {
-    assert(readString(buffer, 0, 4) === "MAP1")
+function effectiveTexel(x: number, min: number, max: number, mode: GSWrapMode): number {
+    if (mode === GSWrapMode.CLAMP || mode === GSWrapMode.REPEAT)
+        return x;
+    if (mode === GSWrapMode.REGION_CLAMP)
+        return min + x;
+    return max | (x & min);
+}
+
+function cropTexture(texture: Texture, clamp: GSRegisterCLAMP): void {
+    let width = texture.width, height = texture.height;
+    if (clamp.wms === GSWrapMode.REGION_REPEAT) {
+        let i = 0;
+        let mask = clamp.minu;
+        while (mask !== 0) {
+            i++;
+            mask = mask >>> 1;
+        }
+        width = 1 << i;
+    } else if (clamp.wms === GSWrapMode.REGION_CLAMP) {
+        width = clamp.maxu - clamp.minu + 1;
+    }
+    if (clamp.wmt === GSWrapMode.REGION_REPEAT) {
+        let i = 0;
+        let mask = clamp.minv;
+        while (mask !== 0) {
+            i++;
+            mask = mask >>> 1;
+        }
+        height = 1 << i;
+    } else if (clamp.wmt === GSWrapMode.REGION_CLAMP) {
+        height = clamp.maxv - clamp.minv + 1;
+    }
+
+    const newPixels = new Uint8Array(height * width * 4);
+    let dst = 0;
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const origX = effectiveTexel(x, clamp.minu, clamp.maxu, clamp.wms);
+            const origY = effectiveTexel(y, clamp.minv, clamp.maxv, clamp.wmt);
+            const src = (texture.width * origY + origX) * 4;
+
+            newPixels[dst + 0] = texture.pixels[src + 0];
+            newPixels[dst + 1] = texture.pixels[src + 1];
+            newPixels[dst + 2] = texture.pixels[src + 2];
+            newPixels[dst + 3] = texture.pixels[src + 3];
+            dst += 4;
+        }
+    }
+
+    texture.pixels = newPixels;
+    texture.width = width;
+    texture.height = height;
+}
+
+export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap, namePrefix: string): LevelData {
+    assert(readString(buffer, 0, 4) === "MAP1");
 
     const view = buffer.createDataView();
     let offs = view.getUint32(0x14, true);
@@ -159,8 +303,52 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
     // 3 positions, 4 colors, 2 UV coordinates, (up to) 4 extra values for effects.
     const VERTEX_STRIDE = 3 + 4 + 2 + 4;
 
+    const textures: Texture[] = [];
     const parts: LevelPart[] = [];
     let currPart: LevelPart;
+
+    function findOrDecodeTexture(tex0: GSRegisterTEX0, clamp: GSRegisterCLAMP): number {
+        for (let i = 0; i < textures.length; i++) {
+            if (structsEqual(textures[i].tex0, tex0) && structsEqual(textures[i].clamp, clamp))
+                return i;
+        }
+
+        const width = 1 << tex0.tw;
+        const height = 1 << tex0.th;
+
+        const pixels = new Uint8Array(width * height * 4);
+
+        assert(tex0.cpsm === GSCLUTPixelStorageFormat.PSMCT32);
+        if (tex0.psm === GSPixelStorageFormat.PSMT4)
+            gsMemoryMapReadImagePSMT4_PSMCT32(pixels, gsMap, tex0.tbp0, tex0.tbw, width, height, tex0.cbp, tex0.csa, -1);
+        else if (tex0.psm === GSPixelStorageFormat.PSMT8)
+            gsMemoryMapReadImagePSMT8_PSMCT32(pixels, gsMap, tex0.tbp0, tex0.tbw, width, height, tex0.cbp, -1);
+        else if (tex0.psm === GSPixelStorageFormat.PSMT8H)
+            gsMemoryMapReadImagePSMT8H_PSMCT32(pixels, gsMap, tex0.tbp0, tex0.tbw, width, height, tex0.cbp, -1);
+        else if (tex0.psm === GSPixelStorageFormat.PSMT4HH)
+            gsMemoryMapReadImagePSMT4HH_PSMCT32(pixels, gsMap, tex0.tbp0, tex0.tbw, width, height, tex0.cbp, tex0.csa, -1);
+        else if (tex0.psm === GSPixelStorageFormat.PSMT4HL)
+            gsMemoryMapReadImagePSMT4HL_PSMCT32(pixels, gsMap, tex0.tbp0, tex0.tbw, width, height, tex0.cbp, tex0.csa, -1);
+        else if (tex0.psm === GSPixelStorageFormat.PSMCT16)
+            gsMemoryMapReadImagePSMCT16(pixels, gsMap, tex0.tbp0, tex0.tbw, width, height);
+        else
+            console.log("missing format", hexzero(tex0.psm, 2))
+
+        const newTexture: Texture = {
+            tex0,
+            clamp,
+            pixels,
+            name: `${namePrefix}_${hexzero(tex0.tbp0, 4)}_${hexzero(tex0.cbp, 4)}`,
+            width,
+            height,
+        };
+        textures.push(newTexture);
+
+        // crude handling of region wrap modes
+        if (clamp.wms >= GSWrapMode.REGION_CLAMP || clamp.wmt >= GSWrapMode.REGION_CLAMP)
+            cropTexture(newTexture, clamp);
+        return textures.length - 1;
+    }
 
     for (let i = 0; i < sectionCount; i++) {
         const sectionType: MapSectionType = view.getUint32(offs + 0x00, true);
@@ -180,19 +368,18 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
                 position,
                 euler,
                 models: [],
-                textures: [],
             }
             parts.push(currPart);
         } else if (sectionType === MapSectionType.MODEL) {
             const flags = view.getUint16(offs + 0x00, true);
-            const regSet = view.getUint16(offs + 0x04, true);
+            const isTranslucent = view.getUint16(offs + 0x04, true) === 1;
             const float_08 = view.getFloat32(offs + 0x08, true);
             const modelQWC = view.getUint32(offs + 0x0C, true);
             const center = vec3FromView(view, offs + 0x10, true);
             const bboxMin = vec3FromView(view, offs + 0x20, true);
             const bboxMax = vec3FromView(view, offs + 0x30, true);
+            const radius = view.getFloat32(offs + 0x3C, true);
             const bbox = new AABB(bboxMin[0], bboxMin[1], bboxMin[2], bboxMax[0], bboxMax[1], bboxMax[2]);
-
 
             const packetsBegin = offs + 0x40;
             const packetsSize = modelQWC * 0x10;
@@ -202,7 +389,7 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
                 vertexRunData: Float32Array;
                 vertexRunCount: number;
                 indexRunData: Uint16Array;
-                textureIndex: number | null;
+                textureIndex: number;
                 gsConfiguration: GSConfiguration;
                 effectType: LevelEffectType;
                 shader: ShaderMode;
@@ -215,14 +402,15 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
             // State of current "vertex run".
             let vertexRunCount = 0;
             let vertexRunData: Float32Array | null = null;
-            let currentTextureIndex: number | null = null;
+            let currentTextureIndex = -1;
             let currentGSConfiguration: GSConfiguration = {
                 tex0: getGSRegisterTEX0(0, 0),
                 clamp: getGSRegisterCLAMP(0, 0),
-                tex1_1_data0: -1, tex1_1_data1: -1,
-                alpha_1_data0: 0x44, alpha_1_data1: -1,
-                test_1_data0: 0x5000F, test_1_data1: -1,
+                tex1_1_data0: 0x60, tex1_1_data1: 0,
+                alpha_data0: 0x44, alpha_data1: -1,
+                test_1_data0: 0x5000D, test_1_data1: -1,
                 depthWrite: true,
+                prim: 0,
             };
 
             let expectedColorOffs = -1;
@@ -234,7 +422,8 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
 
             const newVertexRun = () => {
                 // set expected buffer offsets (relative to ITOP)
-                vertexRunCount = 3 * view.getUint32(packetsIdx + 0x00, true);
+                const triCount = view.getUint32(packetsIdx + 0x00, true);
+                vertexRunCount = 3 * triCount;
                 vertexRunData = new Float32Array(vertexRunCount * VERTEX_STRIDE);
                 expectedColorOffs = view.getUint32(packetsIdx + 0x04, true);
                 expectedTexCoordOffs = expectedColorOffs + vertexRunCount;
@@ -243,6 +432,52 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
 
                 currentEffect = view.getUint32(packetsIdx + 0x10, true);
                 assert(currentEffect !== LevelEffectType.UNUSED);
+
+                // check for texture settings
+                const maybeGIFStart = view.getUint32(packetsIdx + 0x20, true);
+                if (maybeGIFStart === 0) {
+                    // make sure there's nothing else hiding
+                    for (let blockOffs = 0x30; blockOffs < 0x70; blockOffs += 4)
+                        assert(view.getUint32(packetsIdx + blockOffs, true) === 0);
+                } else {
+                    assert(maybeGIFStart <= 4);
+                    assert(view.getUint32(packetsIdx + 0x24, true) === 0x10000000); // 1 register, packed mode
+                    assert(view.getUint32(packetsIdx + 0x28, true) === 0xE); // address + value
+                    assert(view.getUint32(packetsIdx + 0x2C, true) === 0x0); // address + value
+
+                    // many models have two tex0 registers in a row for some reason
+                    // just assume the second one gets used
+                    for (let reg = 0, offs = packetsIdx + 0x30; reg < maybeGIFStart; reg++, offs += 0x10) {
+                        const lo = view.getUint32(offs + 0x0, true);
+                        const hi = view.getUint32(offs + 0x4, true);
+                        const addr = view.getUint32(offs + 0x8, true);
+                        if (addr === 0)
+                            continue;
+                        if (addr === GSRegister.TEX0_2) {
+                            currentGSConfiguration.tex0 = getGSRegisterTEX0(lo, hi);
+                        }
+                        else if (addr === GSRegister.CLAMP_2)
+                            currentGSConfiguration.clamp = getGSRegisterCLAMP(lo, hi);
+                        else if (addr === GSRegister.ALPHA_2) {
+                            currentGSConfiguration.alpha_data0 = lo;
+                            currentGSConfiguration.alpha_data1 = hi;
+                        } else
+                            throw `bad model gs register ${hexzero(addr, 2)}`;
+                    }
+                    currentTextureIndex = findOrDecodeTexture(currentGSConfiguration.tex0, currentGSConfiguration.clamp);
+                }
+
+                // read the giftag for vertex data
+                const vtxCycles = view.getUint32(packetsIdx + 0x80, true);
+                const vtxPrim = view.getUint32(packetsIdx + 0x84, true);
+                const regsLow = view.getUint32(packetsIdx + 0x88, true);
+                const regsHigh = view.getUint32(packetsIdx + 0x8C, true);
+
+                assert(vtxCycles === (0x8000 | triCount));
+                const primMask = 0xFF87C000; // allow aa, fog, alpha blending, and texturing to vary
+                const primTarget = 0x9105C000 | 0;
+                assert((vtxPrim & primMask) === primTarget && regsLow === 0x12412412 && regsHigh === 0x4);
+                currentGSConfiguration.prim = (vtxPrim >>> 15) & 0x7FF;
             };
 
             while (packetsIdx < packetsEnd) {
@@ -250,7 +485,8 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
                 const qwc = view.getUint8(packetsIdx + 0x02);
                 const cmd = view.getUint8(packetsIdx + 0x03) & 0x7F;
 
-                const atITOP = (imm & 0x8000) !== 0;
+                const atITOP = !!(imm & 0x8000);
+                const signExtend = !(imm & 0x4000);
                 const unpackDest = imm & 0x3FFF;
                 packetsIdx += 0x04;
 
@@ -277,9 +513,10 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
                             assert(unpackDest === expectedExtraOffs && currentEffect === LevelEffectType.UV_LERP);
                             runOffs = 9;
                         }
+                        assert(signExtend);
                         for (let j = 0; j < qwc; j++) {
-                            vertexRunData![j * VERTEX_STRIDE + runOffs + 0] = view.getUint16(packetsIdx + 0x00, true) / 0x1000;
-                            vertexRunData![j * VERTEX_STRIDE + runOffs + 1] = view.getUint16(packetsIdx + 0x02, true) / 0x1000;
+                            vertexRunData![j * VERTEX_STRIDE + runOffs + 0] = view.getInt16(packetsIdx + 0x00, true) / 0x1000;
+                            vertexRunData![j * VERTEX_STRIDE + runOffs + 1] = view.getInt16(packetsIdx + 0x02, true) / 0x1000;
                             packetsIdx += 0x04;
                         }
                     } else if (format === VifUnpackFormat.V3_32) {
@@ -366,9 +603,6 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
 
                         packetsIdx += 0x10;
                     }
-
-                    // Make sure that we actually created something here.
-                    assertExists(currentTextureIndex !== null);
                 } else if (cmd === 0x17) { // MSCNT
                     // Run an HLE form of the VU1 program.
                     assert(vertexRunData !== null);
@@ -379,9 +613,8 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
                         indexRunData[j] = j;
                     }
 
-                    const textureIndex = currentTextureIndex;
                     const gsConfiguration: GSConfiguration = Object.assign({}, currentGSConfiguration);
-                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, textureIndex: textureIndex!, gsConfiguration, effectType: currentEffect, shader: currentShader });
+                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, gsConfiguration, effectType: currentEffect, shader: currentShader, textureIndex: currentTextureIndex });
 
                     vertexRunCount = 0;
                     vertexRunData = null;
@@ -471,14 +704,11 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMemoryMap: GSMemo
 
                 indexOffset += vertexRun.vertexRunCount;
             }
-
-            currPart!.models.push({ vertexData, indexData, drawCalls, bbox });
-
+            currPart!.models.push({ vertexData, indexData, drawCalls, bbox, flags, isTranslucent, center });
         } else
             console.warn("unfamiliar map section type", sectionType, "length", hexzero(sectionLength, 4))
 
         offs += sectionLength;
     }
-
-    return parts;
+    return { parts, textures };
 }

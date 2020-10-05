@@ -7,10 +7,8 @@ import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
-import { FFXProgram, LevelModelInstance, LevelPartData } from "./render";
-import { gsMemoryMapNew } from "../Common/PS2/GS";
+import { FFXProgram, LevelModelData, LevelPartInstance, TextureData } from "./render";
 import { CameraController } from "../Camera";
-import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
 
 const pathBase = `ffx`;
 
@@ -21,8 +19,9 @@ class FFXRenderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
     public textureHolder = new FakeTextureHolder([]);
 
-    public models: LevelModelInstance[] = [];
-    public partData: LevelPartData[] = [];
+    public partRenderers: LevelPartInstance[] = [];
+    public modelData: LevelModelData[] = [];
+    public textureData: TextureData[] = [];
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -58,8 +57,8 @@ class FFXRenderer implements Viewer.SceneGfx {
         const sceneParamsMapped = template.mapUniformBufferF32(FFXProgram.ub_SceneParams);
         fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
-        for (let i = 0; i < this.models.length; i++)
-            this.models[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
+        for (let i = 0; i < this.partRenderers.length; i++)
+            this.partRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -69,8 +68,10 @@ class FFXRenderer implements Viewer.SceneGfx {
         this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
 
-        for (let i = 0; i < this.partData.length; i++)
-            this.partData[i].destroy(device);
+        for (let i = 0; i < this.modelData.length; i++)
+            this.modelData[i].destroy(device);
+        for (let i = 0; i < this.textureData.length; i++)
+            this.textureData[i].destroy(device);
     }
 }
 
@@ -83,24 +84,30 @@ class FFXLevelSceneDesc implements Viewer.SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        // const textureData = await context.dataFetcher.fetchData(`${pathBase}/13/${hexzero(2*this.index, 4)}.bin`);
+        const textureData = await context.dataFetcher.fetchData(`${pathBase}/13/${hexzero(2 * this.index, 4)}.bin`);
         const geometryData = await context.dataFetcher.fetchData(`${pathBase}/13/${hexzero(2 * this.index + 1, 4)}.bin`);
 
-
         const renderer = new FFXRenderer(device);
-        const gsMap = gsMemoryMapNew();
-        const parts = BIN.parseLevelGeometry(geometryData, gsMap, this.id);
-        console.log(parts)
+        const gsMap = BIN.parseLevelTextures(textureData);
+        const level = BIN.parseLevelGeometry(geometryData, gsMap, this.id);
         const cache = renderer.renderHelper.getCache();
-        for (let p of parts) {
-            const data = new LevelPartData(device, cache, p);
-            renderer.partData.push(data);
-            for (let i = 0; i < p.models.length; i++) {
-                const model = new LevelModelInstance(device, cache, data.modelData[i]);
-                computeModelMatrixR(model.modelMatrix, p.euler[0], p.euler[1], p.euler[2]);
-                setMatrixTranslation(model.modelMatrix, p.position)
-                renderer.models.push(model);
+
+        for (let tex of level.textures) {
+            const data = new TextureData(device, tex);
+            renderer.textureData.push(data);
+            renderer.textureHolder.viewerTextures.push(data.viewerTexture);
+        }
+        renderer.textureHolder.viewerTextures.sort((a, b) => a.name.localeCompare(b.name))
+
+        for (let p of level.parts) {
+            const modelData: LevelModelData[] = [];
+            for (let m of p.models) {
+                const data = new LevelModelData(device, cache, m);
+                renderer.modelData.push(data);
+                modelData.push(data);
             }
+            const partRenderer = new LevelPartInstance(device, cache, p, modelData, renderer.textureData);
+            renderer.partRenderers.push(partRenderer);
         }
 
         return renderer;
@@ -114,12 +121,12 @@ const sceneDescs = [
     "Intro",
     new FFXLevelSceneDesc(0x10, 'Zanarkand Ruins'),
     "Zanarkand (past)",
-    new FFXLevelSceneDesc(13, 'Zanarkand - Harbor (night)'),
-    new FFXLevelSceneDesc(14, 'Zanarkand - Harbor'),
+    new FFXLevelSceneDesc(17, 'Zanarkand - Harbor (night)'),
     new FFXLevelSceneDesc(15, 'Boathouse - Cabin'),
     new FFXLevelSceneDesc(24, 'Zanarkand - Overpass'),
-    new FFXLevelSceneDesc(17, 'Zanarkand - Harbor'),
-    new FFXLevelSceneDesc(20, 'Zanarkand - Harbor'),
+    new FFXLevelSceneDesc(14, 'Zanarkand - Harbor'),
+    new FFXLevelSceneDesc(13, 'Zanarkand - Harbor (dream)'),
+    new FFXLevelSceneDesc(20, 'Zanarkand - Harbor (night)'),
     new FFXLevelSceneDesc(18, 'Zanarkand - Overpass (boss)'),
     new FFXLevelSceneDesc(19, 'Zanarkand - Overpass (destroyed)'),
     // new FFXLevelSceneDesc(22, 'Zanarkand Stadium'),
@@ -170,7 +177,7 @@ const sceneDescs = [
 
     "S.S. Liki",
     new FFXLevelSceneDesc(95, "S.S. Liki - Deck"),
-    new FFXLevelSceneDesc(97, "S.S. Liki - Deck"),
+    // new FFXLevelSceneDesc(97, "S.S. Liki - Deck"), identical?
     new FFXLevelSceneDesc(98, "S.S. Liki - Bridge"),
     new FFXLevelSceneDesc(99, "S.S. Liki - Corridor"),
     new FFXLevelSceneDesc(102, "S.S. Liki - Cabin"),
@@ -202,37 +209,39 @@ const sceneDescs = [
     new FFXLevelSceneDesc(141, "Kilika - Fayth"),
     "S.S. Winno",
     new FFXLevelSceneDesc(145, "S.S. Winno - Deck"),
-    new FFXLevelSceneDesc(147, "S.S. Winno - Deck"),
+    new FFXLevelSceneDesc(147, "S.S. Winno - Deck (night)"),
     new FFXLevelSceneDesc(148, "S.S. Winno - Bridge"),
     new FFXLevelSceneDesc(149, "S.S. Winno - Corridor"),
     new FFXLevelSceneDesc(152, "S.S. Winno - Cabin"),
     new FFXLevelSceneDesc(153, "S.S. Winno - Engine Room"),
     new FFXLevelSceneDesc(154, "S.S. Winno - Bridge"),
-    "Luca",
+    "Luca Docks",
     new FFXLevelSceneDesc(165, "Luca Stadium - Main Gate"),
     new FFXLevelSceneDesc(166, "Luca - Number 1 Dock"),
     new FFXLevelSceneDesc(167, "Luca - Number 2 Dock"),
     new FFXLevelSceneDesc(168, "Luca - Number 3 Dock"),
     new FFXLevelSceneDesc(169, "Luca - Number 4 Dock"),
+    new FFXLevelSceneDesc(180, "Luca - Number 4 Dock (airship)"),
     new FFXLevelSceneDesc(170, "Luca - Number 5 Dock"),
+    "Luca Stadium",
     new FFXLevelSceneDesc(171, "Stadium - Stands"),
     new FFXLevelSceneDesc(172, "Stadium - VIP Seats"),
     new FFXLevelSceneDesc(173, "Stadium - Pool"),
     new FFXLevelSceneDesc(174, "Theater"),
-    new FFXLevelSceneDesc(175, "Theater - Entrance"),
-    // new FFXLevelSceneDesc(176, "Theater - Reception"),
-    new FFXLevelSceneDesc(177, "Theater - Main Hall"),
     new FFXLevelSceneDesc(178, "Stadium - Locker Room"), // also Basement A
     new FFXLevelSceneDesc(179, "Stadium - Basement B"),
-    new FFXLevelSceneDesc(180, "Luca - Number 4 Dock (airship)"),
+    "Luca",
     new FFXLevelSceneDesc(183, "Luca - Bridge"),
     new FFXLevelSceneDesc(186, "Luca - Square"),
     new FFXLevelSceneDesc(189, "Luca - Cafe"),
     new FFXLevelSceneDesc(191, "Luca - City Limits"),
     new FFXLevelSceneDesc(193, "Luca - Cafe"),
+    new FFXLevelSceneDesc(175, "Theater - Entrance"),
+    // new FFXLevelSceneDesc(176, "Theater - Reception"),
+    new FFXLevelSceneDesc(177, "Theater - Main Hall"),
     "Mi'ihen highroad",
     new FFXLevelSceneDesc(210, "Highroad - South End"),
-    new FFXLevelSceneDesc(211, "Highroad - Agency, Front (night)"),
+    new FFXLevelSceneDesc(211, "Highroad - Agency, Front (sunset)"),
     new FFXLevelSceneDesc(212, "Highroad - Agency, Front"),
     // new FFXLevelSceneDesc(213, "Highroad - Agency"),
     new FFXLevelSceneDesc(214, "Highroad - Newroad, South"),
@@ -243,9 +252,9 @@ const sceneDescs = [
     "Mushroom Rock",
     new FFXLevelSceneDesc(220, "Mushroom Rock - Plateau"),
     new FFXLevelSceneDesc(221, "Mushroom Rock - Valley"),
-    new FFXLevelSceneDesc(222, "Mushroom Rock - Ridge"),
     new FFXLevelSceneDesc(225, "Mushroom Rock - Precipice"),
-    new FFXLevelSceneDesc(223, "Mushroom Rock - Ridge (destroyed)"),
+    new FFXLevelSceneDesc(222, "Mushroom Rock - Ridge"),
+    new FFXLevelSceneDesc(223, "Mushroom Rock - Ridge (boss)"),
     new FFXLevelSceneDesc(226, "Underwater - Chasing Sin"),
     new FFXLevelSceneDesc(227, "Mushroom Rock - Aftermath"),
     new FFXLevelSceneDesc(228, "Mushroom Rock - Beach"),
@@ -254,12 +263,12 @@ const sceneDescs = [
     new FFXLevelSceneDesc(224, "Djose Highroad"),
     new FFXLevelSceneDesc(230, "Djose - Pilgrimage Road"),
     new FFXLevelSceneDesc(231, "Djose Temple"),
-    new FFXLevelSceneDesc(232, "Djose - Inn"),
+    // new FFXLevelSceneDesc(232, "Djose - Inn"),
     new FFXLevelSceneDesc(233, "Djose - Great Hall"),
-    new FFXLevelSceneDesc(234, "Djose - Monks' Chamber"),
-    new FFXLevelSceneDesc(235, "Djose - Nuns' Chamber"),
+    // new FFXLevelSceneDesc(234, "Djose - Monks' Chamber"),
+    // new FFXLevelSceneDesc(235, "Djose - Nuns' Chamber"),
     new FFXLevelSceneDesc(236, "Djose - Trials"),
-    new FFXLevelSceneDesc(237, "Djose - Antechamber"),
+    new FFXLevelSceneDesc(237, "Djose - Antechamber (storm)"),
     new FFXLevelSceneDesc(238, "Djose - Antechamber"),
     new FFXLevelSceneDesc(239, "Djose - Fayth"),
     "Moonflow",
@@ -317,8 +326,8 @@ const sceneDescs = [
     // new FFXLevelSceneDesc(331, "Lake Macalania - Agency"),
     new FFXLevelSceneDesc(332, "Lake Macalania"),
     new FFXLevelSceneDesc(333, "Lake Macalania - Crevasse"),
+    new FFXLevelSceneDesc(335, "Lake Macalania - Crevasse (end)"), // official name is "None"?
     new FFXLevelSceneDesc(334, "Lake Macalania - Lake Bottom"),
-    new FFXLevelSceneDesc(335, "None"), // official name is "None"?
     "Macalania Temple",
     new FFXLevelSceneDesc(340, "Macalania - Road"),
     new FFXLevelSceneDesc(341, "Macalania - Hall"),
@@ -342,19 +351,25 @@ const sceneDescs = [
     // new FFXLevelSceneDesc(367, "Home - Living Quarters"),
     // new FFXLevelSceneDesc(368, '368'),
     "Airship",
-    new FFXLevelSceneDesc(380, "Airship - Cabin"),
     // new FFXLevelSceneDesc(382, "Airship - Corridor"),
     // new FFXLevelSceneDesc(385, "Airship - Corridor"),
     new FFXLevelSceneDesc(388, "Airship - Bridge"),
     // new FFXLevelSceneDesc(392, '392'),
     new FFXLevelSceneDesc(395, "Airship - Deck"),
-    new FFXLevelSceneDesc(396, "Airship - Bridge"),
+    // new FFXLevelSceneDesc(396, "Airship - Bridge"), // white background
     // new FFXLevelSceneDesc(397, '397'),
-    new FFXLevelSceneDesc(399, "Airship - Bridge"),
+    new FFXLevelSceneDesc(399, "Airship - Bridge (sunset)"),
+    new FFXLevelSceneDesc(380, "Airship - Cabin"),
     new FFXLevelSceneDesc(400, "Airship - Cabin"),
-    new FFXLevelSceneDesc(401, "Airship - Bridge"),
+    new FFXLevelSceneDesc(401, "Airship Map"), // labelled Airship - Bridge, maybe this is for the background?
+    // these all seem identical to 401
+    // new FFXLevelSceneDesc(460, '460'),
+    // new FFXLevelSceneDesc(461, '461'),
+    // new FFXLevelSceneDesc(462, '462'),
+    // new FFXLevelSceneDesc(463, '463'),
+    // new FFXLevelSceneDesc(464, '464'),
+    // new FFXLevelSceneDesc(465, '465'),
     "Bevelle",
-    new FFXLevelSceneDesc(405, "Bevelle - Via Purifico (entrance)"),
     new FFXLevelSceneDesc(406, "Bevelle - Main Gate"),
     // new FFXLevelSceneDesc(409, '409'),
     new FFXLevelSceneDesc(410, "Bevelle - Tower of Light"),
@@ -365,6 +380,7 @@ const sceneDescs = [
     new FFXLevelSceneDesc(415, "Bevelle - The Inquisition"),
     // new FFXLevelSceneDesc(416, "Bevelle - Dungeons"),
     new FFXLevelSceneDesc(419, "Bevelle - Via Purifico"),
+    new FFXLevelSceneDesc(405, "Bevelle - Via Purifico (boss)"),
     new FFXLevelSceneDesc(420, "Bevelle - The Two Fates"),
     new FFXLevelSceneDesc(421, "Bevelle - Trials"),
     new FFXLevelSceneDesc(422, "Bevelle - Antechamber"),
@@ -388,13 +404,6 @@ const sceneDescs = [
     // new FFXLevelSceneDesc(456, '456'),
     // new FFXLevelSceneDesc(457, '457'),
     // new FFXLevelSceneDesc(458, '458'),
-    "???",
-    new FFXLevelSceneDesc(460, '460'),
-    new FFXLevelSceneDesc(461, '461'),
-    new FFXLevelSceneDesc(462, '462'),
-    new FFXLevelSceneDesc(463, '463'),
-    new FFXLevelSceneDesc(464, '464'),
-    new FFXLevelSceneDesc(465, '465'),
     "Mount Gagazet",
     new FFXLevelSceneDesc(485, "Gagazet - Mountain Gate"),
     new FFXLevelSceneDesc(486, "Gagazet - Mountain Trail"),
@@ -403,11 +412,11 @@ const sceneDescs = [
     new FFXLevelSceneDesc(491, "Gagazet - Mountain Cave"),
     new FFXLevelSceneDesc(492, "Gagazet - Submerged Passage"),
     new FFXLevelSceneDesc(493, "Gagazet - Summit Region"),
-    new FFXLevelSceneDesc(495, "Gagazet - Summit Region"),
+    new FFXLevelSceneDesc(495, "Gagazet - Summit Region (night)"),
     "Zanarkand Ruins",
     new FFXLevelSceneDesc(494, "Road to the Zanarkand Ruins"),
-    new FFXLevelSceneDesc(496, "Road to the Zanarkand Ruins"),
-    new FFXLevelSceneDesc(500, "Zanarkand Ruins"),
+    new FFXLevelSceneDesc(496, "Road to the Zanarkand Ruins (night)"),
+    new FFXLevelSceneDesc(500, "Zanarkand Ruins (campfire)"),
     new FFXLevelSceneDesc(501, "Zanarkand Ruins"),
     new FFXLevelSceneDesc(502, "Zanarkand Ruins - Overpass"),
     "Zanarkand Dome",
@@ -418,14 +427,15 @@ const sceneDescs = [
     new FFXLevelSceneDesc(517, "Dome - Cloister of Trials"),
     new FFXLevelSceneDesc(518, "Dome - Chamber of the Fayth"),
     new FFXLevelSceneDesc(519, "Dome - Great Hall"),
-    new FFXLevelSceneDesc(520, "Dome - Great Hall"),
+    new FFXLevelSceneDesc(520, "Dome - Great Hall (ruins)"),
     new FFXLevelSceneDesc(521, "Dome - The Beyond"),
     new FFXLevelSceneDesc(522, "Dome - Trials"),
     "Fighting Sin",
     new FFXLevelSceneDesc(565, "Airship - Deck"),
-    new FFXLevelSceneDesc(566, "Airship - Deck"),
-    new FFXLevelSceneDesc(567, "Airship - Deck"),
-    new FFXLevelSceneDesc(568, "Airship - Deck"),
+    // new FFXLevelSceneDesc(566, "Airship - Deck"), identical
+    new FFXLevelSceneDesc(567, "Fighting Sin"), // official name is still "Airship - Deck"
+    new FFXLevelSceneDesc(568, "Airship - Deck (sunset)"),
+    new FFXLevelSceneDesc(8, 'Airship - Bridge'), // unofficial name
     "Inside Sin",
     // new FFXLevelSceneDesc(580, "Sin - Near Airship"),
     new FFXLevelSceneDesc(582, "Sin - Sea of Sorrow"),
@@ -438,19 +448,18 @@ const sceneDescs = [
     "Omega Ruins",
     new FFXLevelSceneDesc(590, "Omega Ruins (caverns)"),
     new FFXLevelSceneDesc(591, "Omega Ruins"),
-    "Miscellaneous",
-    new FFXLevelSceneDesc(5, 'airship exterior'),
+    "Unused/Test?",
+    // new FFXLevelSceneDesc(5, 'airship exterior'), bad palette?
     // new FFXLevelSceneDesc(6, '6'),
     // new FFXLevelSceneDesc(7, '7'),
-    new FFXLevelSceneDesc(8, 'airship cabin'),
     // new FFXLevelSceneDesc(10, '10'),
     new FFXLevelSceneDesc(1, '1'),
     new FFXLevelSceneDesc(2, '2'),
     new FFXLevelSceneDesc(3, '3'),
-    new FFXLevelSceneDesc(4, 'blitzball'),
+    new FFXLevelSceneDesc(4, 'blitzball stadium'),
     // new FFXLevelSceneDesc(600, '600'),
     new FFXLevelSceneDesc(604, '604'),
-    new FFXLevelSceneDesc(620, 'besaid'),
+    new FFXLevelSceneDesc(620, 'besaid (no water)'),
     // new FFXLevelSceneDesc(621, '621'),
     new FFXLevelSceneDesc(650, 'via purifico '),
     // new FFXLevelSceneDesc(680, '680'),
