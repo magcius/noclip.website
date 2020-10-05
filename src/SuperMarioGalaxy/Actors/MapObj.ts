@@ -726,7 +726,7 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         initInfo.setupConnectToScene();
         initInfo.setupEffect(null);
         // initInfo.setupSound(4);
-        initInfo.setupNerve(TsukidashikunNrv.WaitBack);
+        initInfo.setupNerve(TsukidashikunNrv.Relax);
         initInfo.initLightControl = true;
         initInfo.lightType = LightType.Strong;
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
@@ -734,6 +734,22 @@ export class Tsukidashikun extends MapObjActor<TsukidashikunNrv> {
         this.waitStep = fallback(getJMapInfoArg0(infoIter), 120);
         moveCoordToNearestPos(this);
         this.initFinish(sceneObjHolder, infoIter);
+    }
+
+    protected initCaseNoUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        this.startMove();
+    }
+
+    protected initCaseUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        listenStageSwitchOnOffB(sceneObjHolder, this, this.startMove.bind(this), this.startRelax.bind(this));
+    }
+
+    private startMove(): void {
+        this.setNerve(TsukidashikunNrv.WaitBack);
+    }
+
+    private startRelax(): void {
+        this.setNerve(TsukidashikunNrv.Relax);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TsukidashikunNrv, deltaTimeFrames: number): void {
