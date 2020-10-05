@@ -687,6 +687,10 @@ class Coin extends LiveActor {
             } else {
                 this.appearFixInit(sceneObjHolder);
             }
+
+            if (useStageSwitchWriteB(sceneObjHolder, this, infoIter)) {
+                listenStageSwitchOnOffB(sceneObjHolder, this, this.makeActorDead.bind(this), this.makeActorAppeared.bind(this));
+            }
         }
 
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
@@ -9278,8 +9282,6 @@ export class Kuribo extends LiveActor<KuriboNrv> {
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-
-        const l_id = infoIter.getValueNumber('l_id');
 
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'Kuribo');
