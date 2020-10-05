@@ -9522,10 +9522,12 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
             if (isFirstStep(this)) {
                 startBck(this, 'Start');
 
-                if (this.type === HomingKillerType.MagnumKiller) {
+                if (this.type !== HomingKillerType.MagnumKiller) {
                     startBpk(this, 'Move');
                     startBrk(this, 'Move');
-                } else if (this.type === HomingKillerType.Torpedo) {
+                }
+
+                if (this.type === HomingKillerType.Torpedo) {
                     startBck(this.torpedoPropellerParts!, 'RotateTorpedo');
                     this.torpedoLightParts!.makeActorAppeared(sceneObjHolder);
                     startBck(this.torpedoLightParts!, 'Appear');

@@ -975,7 +975,7 @@ export const enum ByteCodeOp {
     NODEDESC = 0x02, // NodeID ParentMtxID
     NODEMIX = 0x03, // TODO
     DRAW = 0x04, // MatID ShpID NodeID
-    EVPMTX = 0x05, // TODO
+    EVPMTX = 0x05, // MtxID NodeID
     MTXDUP = 0x06, // ToMtxID FromMtxID
 };
 
