@@ -209,7 +209,7 @@ class PokemonHGSSSceneDesc implements Viewer.SceneDesc {
     
 }
 
-const id = 'pkmnhgss';
+const id = 'pkmnsslvr';
 const name = 'Pokemon Heart Gold Soul Silver';
 const sceneDescs = [
     new PokemonHGSSSceneDesc("0", "Johto & Kanto Region", false),
