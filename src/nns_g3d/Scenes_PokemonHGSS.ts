@@ -15,7 +15,7 @@ import { parseNSBMD, BTX0, parseNSBTX, fx32 } from './NNS_G3D';
 import { AABB } from '../Geometry';
 import { PlatinumMapRenderer, tryMDL0 } from './Scenes_PokemonPlatinum';
 
-const pathBase = `PokemonHGSS`;
+const pathBase = `PokemonSoulSilver`;
 class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     public fileDataCache = new Map<string, ArrayBufferSlice>();
