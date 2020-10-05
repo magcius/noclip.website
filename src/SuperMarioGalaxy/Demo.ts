@@ -49,12 +49,15 @@ function getDemoSheetName(infoIter: JMapInfoIter): string {
     return infoIter.getValueString('TimeSheetName')!;
 }
 
-function createSheetParser(sceneObjHolder: SceneObjHolder, executor: DemoExecutor, sheet: string): JMapInfoIter {
+function createSheetParser(sceneObjHolder: SceneObjHolder, executor: DemoExecutor, sheet: string): JMapInfoIter | null {
     const sheetFilename = `Demo${executor.sheetName}${sheet}.bcsv`;
     const zoneId = executor.idInfo.zoneId;
     const demoSheetArchive = assertExists(sceneObjHolder.demoDirector!.getDemoSheetArchiveForZone(sceneObjHolder, zoneId));
-    const sheetData = assertExists(demoSheetArchive.findFilenameData(sheetFilename));
-    return createCsvParser(sheetData);
+    const sheetData = demoSheetArchive.findFilenameData(sheetFilename);
+    if (sheetData !== null)
+        return createCsvParser(sheetData);
+    else
+        return null;
 }
 
 class DemoTimePartInfo {
@@ -78,7 +81,10 @@ class DemoTimeKeeper {
 
     constructor(sceneObjHolder: SceneObjHolder, executor: DemoExecutor) {
         const sheet = createSheetParser(sceneObjHolder, executor, 'Time');
-        this.partInfos = sheet.mapRecords((infoIter) => new DemoTimePartInfo(infoIter));
+        if (sheet !== null)
+            this.partInfos = sheet.mapRecords((infoIter) => new DemoTimePartInfo(infoIter));
+        else
+            this.partInfos = [];
     }
 
     public getCurrentPartInfo(): DemoTimePartInfo | null {
@@ -325,7 +331,10 @@ class DemoActionKeeper {
 
     constructor(sceneObjHolder: SceneObjHolder, executor: DemoExecutor) {
         const sheet = createSheetParser(sceneObjHolder, executor, 'Action');
-        this.actionInfos = sheet.mapRecords((infoIter) => new DemoActionInfo(infoIter));
+        if (sheet !== null)
+            this.actionInfos = sheet.mapRecords((infoIter) => new DemoActionInfo(infoIter));
+        else
+            this.actionInfos = [];
     }
 
     public initCast(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter): void {
