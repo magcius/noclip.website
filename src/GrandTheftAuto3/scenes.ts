@@ -1,6 +1,5 @@
 
 import * as rw from 'librw';
-//@ts-ignore
 import * as meta from './scenes.json';
 import { SceneDesc, SceneGroup, SceneGfx } from '../viewer';
 import { initializeBasis, BasisFile, BasisFormat } from '../vendor/basis_universal';
@@ -66,7 +65,7 @@ interface GameMetadata {
     basisTextures: boolean;
     map: {
         name: string;
-        interiors: [string, number, string][];
+        interiors: { name: string, interior: number, suffix: string }[];
     };
 }
 
@@ -485,7 +484,7 @@ function makeSceneGroup(meta: GameMetadata) {
     };
     if (meta.map.interiors.length > 0) {
         sceneGroup.sceneDescs.push('Interiors');
-        for (const [name, interior, suffix] of meta.map.interiors) {
+        for (const { name, interior, suffix } of meta.map.interiors) {
             const id = (suffix === '') ? String(interior) : `${interior}/${suffix.toLowerCase()}`;
             sceneGroup.sceneDescs.push(new GTA3SceneDesc(meta, name, interior, id));
         }

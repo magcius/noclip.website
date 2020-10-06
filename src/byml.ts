@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice, { ArrayBuffer_slice } from "./ArrayBufferSlice";
-import { assert, readString, align } from "./util";
+import { assert, readString, align, decodeString } from "./util";
 import { Endianness } from "./endian";
 
 export const enum FileType {
@@ -41,21 +41,6 @@ const fileDescriptions: { [key: number]: FileDescription } = {
     },
 }
 
-function decodeUTF8(buffer: Uint8Array): string {
-    // @ts-ignore
-    if (typeof TextDecoder !== 'undefined') {
-        // @ts-ignore
-        return new TextDecoder('utf8')!.decode(buffer);
-    // @ts-ignore
-    } else if (typeof require !== 'undefined') {
-        // @ts-ignore
-        const { StringDecoder } = require('string_decoder');
-        return new StringDecoder('utf8').write(buffer);
-    } else {
-        throw "whoops";
-    }
-}
-
 function readStringUTF8(buffer: ArrayBufferSlice, offs: number): string {
     const buf = buffer.createTypedArray(Uint8Array, offs);
     let i = 0;
@@ -64,7 +49,7 @@ function readStringUTF8(buffer: ArrayBufferSlice, offs: number): string {
             break;
         i++;
     }
-    return decodeUTF8(buffer.createTypedArray(Uint8Array, offs, i));
+    return decodeString(buffer.slice(0, i));
 }
 
 export type StringTable = string[];

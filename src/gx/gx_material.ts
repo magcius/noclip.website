@@ -1464,7 +1464,7 @@ export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>
 }
 // #endregion
 
-// #region Material parsing
+// #region Material parsing from GX registers
 export function parseTexGens(r: DisplayListRegisters, numTexGens: number): TexGen[] {
     const texGens: TexGen[] = [];
 

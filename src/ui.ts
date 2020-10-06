@@ -10,12 +10,12 @@ import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
 import { clamp } from './MathHelpers';
-
-// @ts-ignore
-import logoURL from './assets/logo.png';
 import { DebugFloaterHolder, FloatingPanel } from './DebugFloaters';
 import { LinearEaseType, Keyframe, CameraAnimationManager } from './CameraAnimationManager';
 import { DraggingMode } from './InputManager';
+
+// @ts-ignore
+import logoURL from './assets/logo.png';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
