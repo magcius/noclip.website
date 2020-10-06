@@ -1,7 +1,7 @@
 
 precision mediump float; precision lowp sampler2DArray;
 
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x3 u_ViewMatrix;
     Mat4x3 u_WorldMatrix;

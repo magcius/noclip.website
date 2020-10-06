@@ -32,7 +32,7 @@ export class F3DEX_Program extends DeviceProgram {
     public both = `
 precision mediump float;
 
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 #ifdef LIGHTING
     #ifdef TEXTURE_GEN
@@ -41,7 +41,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 #endif
 };
 
-layout(row_major, std140) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix[BONE_MATRIX_COUNT];
     Mat4x2 u_TexMatrix[2];
 };

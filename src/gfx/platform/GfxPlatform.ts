@@ -260,7 +260,6 @@ export interface GfxDebugGroup {
 }
 
 export interface GfxBugQuirks {
-    rowMajorMatricesBroken: boolean;
 }
 
 export const enum GfxClipSpaceNearZ {

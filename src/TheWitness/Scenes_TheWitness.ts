@@ -22,11 +22,11 @@ class Blended_Program extends DeviceProgram {
     public static ub_ObjectParams = 1;
 
     public both = `
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ViewProjection;
 };
 
-layout(row_major, std140) uniform ub_ObjectParams {
+layout(std140) uniform ub_ObjectParams {
     Mat4x4 u_ModelMatrix;
     vec4 u_BlendRanges;
 };

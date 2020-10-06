@@ -291,7 +291,7 @@ export function materialHasDynamicAlphaTest(material: { hasDynamicAlphaTest?: bo
 function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean, usePnMtxIdx?: boolean, hasDynamicAlphaTest?: boolean }): string {
     return `
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     vec4 u_Misc0;
 };
@@ -316,7 +316,7 @@ struct FogBlock {
 };
 
 // Expected to change with each material.
-layout(row_major, std140) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     vec4 u_ColorMatReg[2];
     vec4 u_ColorAmbReg[2];
     vec4 u_KonstColor[4];
@@ -343,7 +343,7 @@ ${materialHasDynamicAlphaTest(material) ? `
 
 // Expected to change with each shape draw.
 // TODO(jstpierre): Rename from ub_PacketParams.
-layout(row_major, std140) uniform ub_PacketParams {
+layout(std140) uniform ub_PacketParams {
 ${materialUsePnMtxIdx(material) ? `
     Mat4x3 u_PosMtx[10];
 ` : `

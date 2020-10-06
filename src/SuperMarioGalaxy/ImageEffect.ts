@@ -29,7 +29,7 @@ class BloomPassBaseProgram extends DeviceProgram {
     public static BindingsDefinition = `
 uniform sampler2D u_Texture;
 
-layout(std140) uniform ub_Params {
+layout(layout(std140) uniform ub_Params {
     vec4 u_Misc0;
 };
 #define u_BloomIntensity (u_Misc0.x)

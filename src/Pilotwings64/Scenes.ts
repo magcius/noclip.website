@@ -2308,11 +2308,11 @@ class SnowProgram extends DeviceProgram {
     public static ub_DrawParams = 1;
 
     public both = `
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
-layout(row_major, std140) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix;
     vec4 u_Shift;
 };`

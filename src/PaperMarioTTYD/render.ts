@@ -37,7 +37,7 @@ class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
     public both: string = `
-layout(row_major, std140) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
 

@@ -150,7 +150,7 @@ class AglProgram extends DeviceProgram {
     public static globalDefinitions = `
 precision mediump float;
 
-layout(row_major, std140) uniform ub_ShapeParams {
+layout(std140) uniform ub_ShapeParams {
     Mat4x4 u_Projection;
     Mat4x3 u_ModelView;
 };

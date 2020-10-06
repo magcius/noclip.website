@@ -41,7 +41,7 @@ export class MaterialProgramBase extends DeviceProgram {
     public static ub_SceneParams = 0;
 
     public Common = `
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_ProjectionView;
     vec4 u_CameraPosWorld;
 };
@@ -600,7 +600,7 @@ struct WorldLight {
     // TODO(jstpierre): Spot/Directional Lights
 };
 
-layout(row_major, std140) uniform ub_ObjectParams {
+layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
 #ifdef USE_AMBIENT_CUBE
     // TODO(jstpierre): Pack this more efficiently?
@@ -1274,7 +1274,7 @@ precision mediump float;
 
 ${this.Common}
 
-layout(row_major, std140) uniform ub_ObjectParams {
+layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
     Mat4x2 u_Texture2Transform;
     vec4 u_ModulationColor;
@@ -1384,7 +1384,7 @@ precision mediump float;
 
 ${this.Common}
 
-layout(row_major, std140) uniform ub_ObjectParams {
+layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
 #ifdef USE_TEXSCROLL
     vec4 u_TexScroll;
@@ -1573,7 +1573,7 @@ precision mediump float;
 
 ${this.Common}
 
-layout(row_major, std140) uniform ub_ObjectParams {
+layout(std140) uniform ub_ObjectParams {
     Mat4x3 u_ModelMatrix;
     vec4 u_RefractTint;
 #ifdef USE_ENVMAP

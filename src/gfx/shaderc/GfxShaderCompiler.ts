@@ -86,45 +86,38 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         });
     }
 
-    let matrixDefines: string;
-    if (vendorInfo.bugQuirks.rowMajorMatricesBroken) {
-        matrixDefines = `
-struct Mat4x4 { vec4 _m[4]; };
-struct Mat4x3 { vec4 _m[3]; };
-struct Mat4x2 { vec4 _m[2]; };
-vec4 Mul(Mat4x4 m, vec4 v) { return vec4(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v), dot(m._m[3], v)); }
-vec3 Mul(Mat4x3 m, vec4 v) { return vec3(dot(m._m[0], v), dot(m._m[1], v), dot(m._m[2], v)); }
-vec2 Mul(Mat4x2 m, vec4 v) { return vec2(dot(m._m[0], v), dot(m._m[1], v)); }
-vec3 Mat4x3GetCol0(Mat4x3 m) { return vec3(m._m[0].x, m._m[1].x, m._m[2].x); }
-vec3 Mat4x3GetCol1(Mat4x3 m) { return vec3(m._m[0].y, m._m[1].y, m._m[2].y); }
-vec3 Mat4x3GetCol2(Mat4x3 m) { return vec3(m._m[0].z, m._m[1].z, m._m[2].z); }
-vec4 Mul(vec3 v, Mat4x3 m) { return vec4(
-dot(vec3(m._m[0].x, m._m[1].x, m._m[2].x), v),
-dot(vec3(m._m[0].y, m._m[1].y, m._m[2].y), v),
-dot(vec3(m._m[0].z, m._m[1].z, m._m[2].z), v),
-dot(vec3(m._m[0].w, m._m[1].w, m._m[2].w), v)
-); }
-void Fma(Mat4x3 d, Mat4x3 m, float s) { d._m[0] += m._m[0] * s; d._m[1] += m._m[1] * s; d._m[2] += m._m[2] * s; }
-Mat4x4 _Mat4x4(Mat4x3 m) { Mat4x4 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[2] = m._m[2]; o._m[3] = vec4(0, 0, 0, 1); return o; }
-Mat4x4 _Mat4x4(Mat4x2 m) { Mat4x4 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[2] = vec4(0, 0, 1, 0); o._m[3] = vec4(0, 0, 0, 1); return o; }
-Mat4x4 _Mat4x4(float n) { Mat4x4 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n; o._m[3].w = n; return o; }
-Mat4x3 _Mat4x3(Mat4x4 m) { Mat4x3 o; o._m[0] = m._m[0]; o._m[1] = m._m[1]; o._m[2] = m._m[2]; return o; }
-Mat4x3 _Mat4x3(float n) { Mat4x3 o; o._m[0].x = n; o._m[1].y = n; o._m[2].z = n; return o; }
+    const matrixLibary = `
+struct Mat4x4 { vec4 mx; vec4 my; vec4 mz; vec4 mw; };
+struct Mat4x3 { vec4 mx; vec4 my; vec4 mz; };
+struct Mat4x2 { vec4 mx; vec4 my; };
+
+vec3 Mat4x3GetCol0(Mat4x3 m) { return vec3(m.mx.x, m.my.x, m.mz.x); }
+vec3 Mat4x3GetCol1(Mat4x3 m) { return vec3(m.mx.y, m.my.y, m.mz.y); }
+vec3 Mat4x3GetCol2(Mat4x3 m) { return vec3(m.mx.z, m.my.z, m.mz.z); }
+vec3 Mat4x3GetCol3(Mat4x3 m) { return vec3(m.mx.w, m.my.w, m.mz.w); }
+
+vec4 Mul(Mat4x4 m, vec4 v) { return vec4(dot(m.mx, v), dot(m.my, v), dot(m.mz, v), dot(m.mw, v)); }
+vec3 Mul(Mat4x3 m, vec4 v) { return vec3(dot(m.mx, v), dot(m.my, v), dot(m.mz, v)); }
+vec2 Mul(Mat4x2 m, vec4 v) { return vec2(dot(m.mx, v), dot(m.my, v)); }
+
+vec4 Mul(vec3 v, Mat4x3 m) {
+    return vec4(
+        dot(Mat4x3GetCol0(m), v),
+        dot(Mat4x3GetCol1(m), v),
+        dot(Mat4x3GetCol2(m), v),
+        dot(Mat4x3GetCol3(m), v)
+    );
+}
+
+void Fma(Mat4x3 d, Mat4x3 m, float s) { d.mx += m.mx * s; d.my += m.my * s; d.mz += m.mz * s; }
+
+Mat4x4 _Mat4x4(float n) { Mat4x4 o; o.mx.x = n; o.my.y = n; o.mz.z = n; o.mw.w = n; return o; }
+Mat4x4 _Mat4x4(Mat4x3 m) { Mat4x4 o = _Mat4x4(1.0); o.mx = m.mx; o.my = m.my; o.mz = m.mz; return o; }
+Mat4x4 _Mat4x4(Mat4x2 m) { Mat4x4 o = _Mat4x4(1.0); o.mx = m.mx; o.my = m.my; return o; }
+
+Mat4x3 _Mat4x3(float n) { Mat4x3 o; o.mx.x = n; o.my.y = n; o.mz.z = n; return o; }
+Mat4x3 _Mat4x3(Mat4x4 m) { Mat4x3 o; o.mx = m.mx; o.my = m.my; o.mz = m.mz; return o; }
 `;
-    } else {
-        matrixDefines = `
-#define Mat4x4 mat4x4
-#define Mat4x3 mat4x3
-#define Mat4x2 mat4x2
-#define _Mat4x4 mat4x4
-#define _Mat4x3 mat4x3
-#define Mul(A, B) (A * (B))
-#define Fma(D, M, S) (D += (M) * (S))
-#define Mat4x3GetCol0(A) (A)[0]
-#define Mat4x3GetCol1(A) (A)[1]
-#define Mat4x3GetCol2(A) (A)[2]
-`;
-    }
 
     const hasFragColor = rest.includes('gl_FragColor');
 
@@ -140,7 +133,7 @@ ${hasFragColor ? `
 #define gl_FragColor o_color
 ${type === 'frag' ? `out vec4 o_color;` : ''}
 ` : ``}
-${matrixDefines}
+${matrixLibary}
 ${definesString}
 ${rest}
 `.trim();
