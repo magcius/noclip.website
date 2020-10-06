@@ -78,6 +78,7 @@ export class PlanetGravityManager extends NameObj {
                 vec3.copy(gravityInfo.direction, scratchGravLocal);
                 gravityInfo.gravity = gravity;
                 gravityInfo.priority = gravity.priority;
+                bestMag = mag;
             }
         }
 
