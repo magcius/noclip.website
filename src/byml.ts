@@ -49,7 +49,7 @@ function readStringUTF8(buffer: ArrayBufferSlice, offs: number): string {
             break;
         i++;
     }
-    return decodeString(buffer.slice(0, i));
+    return decodeString(buffer.subarray(offs, i));
 }
 
 export type StringTable = string[];
