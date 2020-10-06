@@ -45,6 +45,8 @@ export class MaterialParams {
     public u_IndTexMtx: mat4[] = nArray(3, () => mat4.create()); // mat4x2
     public u_Lights: GX_Material.Light[] = nArray(8, () => new GX_Material.Light());
     public u_FogBlock = new GX_Material.FogBlock();
+    public u_DynamicAlphaRefA: number = 0;
+    public u_DynamicAlphaRefB: number = 0;
 
     constructor() {
         colorFromRGBA(this.u_Color[ColorKind.MAT0], 1.0, 1.0, 1.0, 1.0);
@@ -74,7 +76,7 @@ export function fillSceneParamsData(d: Float32Array, bOffs: number, sceneParams:
     assert(d.length >= offs);
 }
 
-export function fillLightData(d: Float32Array, offs: number, light: GX_Material.Light): number {
+export function fillLightData(d: Float32Array, offs: number, light: Readonly<GX_Material.Light>): number {
     offs += fillColor(d, offs, light.Color);
     offs += fillVec3v(d, offs, light.Position);
     offs += fillVec3v(d, offs, light.Direction);
@@ -83,7 +85,7 @@ export function fillLightData(d: Float32Array, offs: number, light: GX_Material.
     return 4*5;
 }
 
-export function fillFogBlock(d: Float32Array, offs: number, fog: GX_Material.FogBlock): number {
+export function fillFogBlock(d: Float32Array, offs: number, fog: Readonly<GX_Material.FogBlock>): number {
     offs += fillVec4(d, offs, fog.A, fog.B, fog.C, fog.AdjCenter);
     offs += fillVec4(d, offs, fog.AdjTable[0], fog.AdjTable[1], fog.AdjTable[2], fog.AdjTable[3]);
     offs += fillVec4(d, offs, fog.AdjTable[4], fog.AdjTable[5], fog.AdjTable[6], fog.AdjTable[7]);
@@ -92,11 +94,18 @@ export function fillFogBlock(d: Float32Array, offs: number, fog: GX_Material.Fog
     return 4*5;
 }
 
-export function fillTextureMappingInfo(d: Float32Array, offs: number, textureMapping: TextureMapping): number {
-    return fillVec4(d, offs, textureMapping.width, (textureMapping.flipY ? -1 : 1) * textureMapping.height, 0, textureMapping.lodBias);
+export function fillTextureSize(d: Float32Array, offs: number, m: TextureMapping): number {
+    d[offs++] = m.width;
+    d[offs++] = m.height * (m.flipY ? -1 : 1);
+    return 2;
 }
 
-function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, materialParams: MaterialParams): void {
+export function fillTextureBias(d: Float32Array, offs: number, m: TextureMapping): number {
+    d[offs++] = m.lodBias;
+    return 1;
+}
+
+function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, materialParams: Readonly<MaterialParams>): void {
     let offs = bOffs;
 
     for (let i = 0; i < 12; i++)
@@ -104,7 +113,9 @@ function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMateria
     for (let i = 0; i < 10; i++)
         offs += fillMatrix4x3(d, offs, materialParams.u_TexMtx[i]);
     for (let i = 0; i < 8; i++)
-        offs += fillTextureMappingInfo(d, offs, materialParams.m_TextureMapping[i]);
+        offs += fillTextureSize(d, offs, materialParams.m_TextureMapping[i]);
+    for (let i = 0; i < 8; i++)
+        offs += fillTextureBias(d, offs, materialParams.m_TextureMapping[i]);
     for (let i = 0; i < 3; i++)
         offs += fillMatrix4x2(d, offs, materialParams.u_IndTexMtx[i]);
     if (GX_Material.materialHasPostTexMtxBlock(material))
@@ -115,6 +126,8 @@ function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMateria
             offs += fillLightData(d, offs, materialParams.u_Lights[i]);
     if (GX_Material.materialHasFogBlock(material))
         offs += fillFogBlock(d, offs, materialParams.u_FogBlock);
+    if (GX_Material.materialHasDynamicAlphaTest(material))
+        offs += fillVec4(d, offs, materialParams.u_DynamicAlphaRefA, materialParams.u_DynamicAlphaRefB);
 
     assert(d.length >= offs);
 }

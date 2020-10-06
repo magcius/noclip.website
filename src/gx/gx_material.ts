@@ -46,6 +46,7 @@ export interface GXMaterial {
     hasPostTexMtxBlock?: boolean;
     hasLightsBlock?: boolean;
     hasFogBlock?: boolean;
+    hasDynamicAlphaTest?: boolean;
 }
 
 export class Light {
@@ -283,7 +284,11 @@ export function materialUsePnMtxIdx(material: { usePnMtxIdx?: boolean }): boolea
     return material.usePnMtxIdx !== undefined ? material.usePnMtxIdx : true;
 }
 
-function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean, usePnMtxIdx?: boolean }): string {
+export function materialHasDynamicAlphaTest(material: { hasDynamicAlphaTest?: boolean }): boolean {
+    return material.hasDynamicAlphaTest !== undefined ? material.hasDynamicAlphaTest : false;
+}
+
+function generateBindingsDefinition(material: { hasPostTexMtxBlock?: boolean, hasLightsBlock?: boolean, hasFogBlock?: boolean, usePnMtxIdx?: boolean, hasDynamicAlphaTest?: boolean }): string {
     return `
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
@@ -317,8 +322,8 @@ layout(row_major, std140) uniform ub_MaterialParams {
     vec4 u_KonstColor[4];
     vec4 u_Color[4];
     Mat4x3 u_TexMtx[10];
-    // SizeX, SizeY, 0, Bias
-    vec4 u_TextureParams[8];
+    vec4 u_TextureSizes[4];
+    vec4 u_TextureBiases[2];
     Mat4x2 u_IndTexMtx[3];
 
     // Optional parameters.
@@ -330,6 +335,9 @@ ${materialHasLightsBlock(material) ? `
 ` : ``}
 ${materialHasFogBlock(material) ? `
     FogBlock u_FogBlock;
+` : ``}
+${materialHasDynamicAlphaTest(material) ? `
+    vec4 u_DynamicAlphaParams;
 ` : ``}
 };
 
@@ -348,27 +356,23 @@ uniform sampler2D u_Texture[8];
 }
 
 export function getMaterialParamsBlockSize(material: GXMaterial): number {
-    const hasPostTexMtxBlock = materialHasPostTexMtxBlock(material);
-    const hasLightsBlock = materialHasLightsBlock(material);
-    const hasFogBlock = materialHasFogBlock(material);
-
-    let size = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*2*3 + 4*8;
-    if (hasPostTexMtxBlock)
+    let size = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*4 + 4*2 + 4*2*3;
+    if (materialHasPostTexMtxBlock(material))
         size += 4*3*20;
-    if (hasLightsBlock)
+    if (materialHasLightsBlock(material))
         size += 4*5*8;
-    if (hasFogBlock)
+    if (materialHasFogBlock(material))
         size += 4*5;
+    if (materialHasDynamicAlphaTest(material))
+        size += 4*1;
 
     return size;
 }
 
 export function getPacketParamsBlockSize(material: GXMaterial): number {
-    const usePnMtxIdx = materialUsePnMtxIdx(material);
-
     let size = 0;
 
-    if (usePnMtxIdx)
+    if (materialUsePnMtxIdx(material))
         size += 4*3 * 10;
     else
         size += 4*3 * 1;
@@ -1104,8 +1108,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         }
     }
 
-    private generateAlphaTestCompare(compare: GX.CompareType, reference: number) {
-        const ref = this.generateFloat(reference);
+    private generateAlphaTestCompare(compare: GX.CompareType, ref: string) {
         switch (compare) {
         case GX.CompareType.NEVER:   return `false`;
         case GX.CompareType.LESS:    return `t_PixelOut.a <  ${ref}`;
@@ -1135,12 +1138,12 @@ ${this.generateLightAttnFn(chan, lightName)}
         if (alphaTest.op === GX.AlphaOp.OR && (alphaTest.compareA === GX.CompareType.ALWAYS || alphaTest.compareB === GX.CompareType.ALWAYS))
             return '';
 
+        const referenceA = materialHasDynamicAlphaTest(this.material) ? `u_DynamicAlphaParams.x` : this.generateFloat(alphaTest.referenceA);
+        const referenceB = materialHasDynamicAlphaTest(this.material) ? `u_DynamicAlphaParams.y` : this.generateFloat(alphaTest.referenceB);
+
         return `
-    // Alpha Test: Op ${alphaTest.op}
-    // Compare A: ${alphaTest.compareA} Reference A: ${this.generateFloat(alphaTest.referenceA)}
-    // Compare B: ${alphaTest.compareB} Reference B: ${this.generateFloat(alphaTest.referenceB)}
-    bool t_AlphaTestA = ${this.generateAlphaTestCompare(alphaTest.compareA, alphaTest.referenceA)};
-    bool t_AlphaTestB = ${this.generateAlphaTestCompare(alphaTest.compareB, alphaTest.referenceB)};
+    bool t_AlphaTestA = ${this.generateAlphaTestCompare(alphaTest.compareA, referenceA)};
+    bool t_AlphaTestB = ${this.generateAlphaTestCompare(alphaTest.compareB, referenceB)};
     if (!(${this.generateAlphaTestOp(alphaTest.op)}))
         discard;`;
     }
@@ -1304,9 +1307,17 @@ ${this.generateTexGens()}
 ${both}
 ${this.generateTexCoordGetters()}
 
-float TextureLODBias(int index) { return u_SceneTextureLODBias + u_TextureParams[index].w; }
-vec2 TextureInvScale(int index) { return 1.0 / u_TextureParams[index].xy; }
-vec2 TextureScale(int index) { return u_TextureParams[index].xy; }
+float TextureLODBias(int index) {
+    vec4 elem = u_TextureBiases[index / 4]; // 01
+    int sub = index % 4; // 0123
+    return u_SceneTextureLODBias + elem[sub];
+}
+vec2 TextureScale(int index) {
+    vec4 elem = u_TextureSizes[index / 2];
+    int sub = 2 * (index % 2);
+    return vec2(elem[sub + 0], elem[sub + 1]);
+}
+vec2 TextureInvScale(int index) { return 1.0 / TextureScale(index); }
 
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }

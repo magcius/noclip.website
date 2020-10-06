@@ -73,6 +73,7 @@ export function fillMatrix4x3(d: Float32Array, offs: number, m: ReadonlyMat4): n
     return 4*3;
 }
 
+// TODO(jstpierre): Remove
 export function fillMatrix3x2(d: Float32Array, offs: number, m: ReadonlyMat2d): number {
     // 3x2 matrices are actually sent across as 4x2.
     const ma = m[0], mb = m[1];
