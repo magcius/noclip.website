@@ -455,37 +455,32 @@ abstract class MaterialBase implements SFAMaterial {
     
     public setupMaterialParams(params: MaterialParams, matCtx: MaterialRenderContext) {
         for (let i = 0; i < this.texMtx.length; i++) {
-            if (this.texMtx[i] !== undefined) {
+            if (this.texMtx[i] !== undefined)
                 this.texMtx[i]!(params.u_TexMtx[i], matCtx);
-            }
         }
         
         for (let i = 0; i < this.indTexMtxs.length; i++) {
-            if (this.indTexMtxs[i] !== undefined) {
+            if (this.indTexMtxs[i] !== undefined)
                 this.indTexMtxs[i]!(params.u_IndTexMtx[i], matCtx);
-            }
         }
 
         for (let i = 0; i < this.postTexMtxs.length; i++) {
-            if (this.postTexMtxs[i] !== undefined) {
+            if (this.postTexMtxs[i] !== undefined)
                 this.postTexMtxs[i]!(params.u_PostTexMtx[i], matCtx);
-            }
         }
 
         for (let i = 0; i < 2; i++) {
-            if (this.ambColors[i] !== undefined) {
+            if (this.ambColors[i] !== undefined)
                 this.ambColors[i]!(params.u_Color[ColorKind.AMB0 + i], matCtx);
-            } else {
+            else
                 colorFromRGBA(params.u_Color[ColorKind.AMB0 + i], 1.0, 1.0, 1.0, 1.0);
-            }
         }
 
         for (let i = 0; i < 4; i++) {
-            if (this.konstColors[i] !== undefined) {
+            if (this.konstColors[i] !== undefined)
                 this.konstColors[i]!(params.u_Color[ColorKind.K0 + i], matCtx);
-            } else {
+            else
                 colorFromRGBA(params.u_Color[ColorKind.K0 + i], 1.0, 1.0, 1.0, 1.0);
-            }
         }
     }
     
@@ -537,9 +532,9 @@ class StandardMaterial extends MaterialBase {
                 this.addTevStagesForNonLava();
             }
     
-            if ((this.shader.flags & ShaderFlags.ReflectSkyscape) != 0) {
+            if (this.shader.flags & ShaderFlags.ReflectSkyscape) {
                 console.log(`TODO: skyscape reflection?`);
-            } else if ((this.shader.flags & ShaderFlags.Caustic) != 0) {
+            } else if (this.shader.flags & ShaderFlags.Caustic) {
                 this.addTevStagesForCaustic();
             } else {
                 // TODO
@@ -566,33 +561,22 @@ class StandardMaterial extends MaterialBase {
         }
 
         if (this.isMapBlock) {
-            if ((this.shader.flags & 1) || (this.shader.flags & 0x40000) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+            // FIXME: flags 0x1, 0x800 and 0x1000 are not well-understood
+            if ((this.shader.flags & 0x1) || (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
                 this.ambColors[0] = undefined; // AMB0 is opaque white
-                if (this.shader.flags & 0x40000)
+                if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend)
                     this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
                 else
                     this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
             } else {
+                // AMB0 is the outdoor ambient color
                 this.ambColors[0] = (dst: Color, matCtx: MaterialRenderContext) => {
                     colorCopy(dst, matCtx.outdoorAmbientColor);
                 };
                 this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
             }
 
-            // if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
-            //     this.ambColors[0] = undefined; // AMB0 is solid white
-            //     this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            // } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
-            //     this.ambColors[0] = undefined; // AMB0 is solid white
-            //     this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            // } else if (this.isMapBlock) {
-            //     this.ambColors[0] = (dst: Color, matCtx: MaterialRenderContext) => {
-            //         colorCopy(dst, matCtx.outdoorAmbientColor);
-            //     };
-            //     this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
-            //     // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            // }
-            // FIXME: Objects have different rules for color-channels than map blocks
+            // FIXME: Objects have different rules for ALPHA0 than map blocks
             if (this.isMapBlock) {
                 this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
             }
@@ -1189,22 +1173,26 @@ class FurMaterial extends MaterialBase {
         this.setTevColorFormula(stage2, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
         this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
     
-        if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
-            this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
-            this.ambColors[0] = undefined; // AMB0 is solid white
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        // FIXME: flags 0x1, 0x800 and 0x1000 are not well-understood
+        if ((this.shader.flags & 0x1) || (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+            this.ambColors[0] = undefined; // AMB0 is opaque white
+            if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend)
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            else
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         } else {
+            // AMB0 is the outdoor ambient color
             this.ambColors[0] = (dst: Color, matCtx: MaterialRenderContext) => {
                 colorCopy(dst, matCtx.outdoorAmbientColor);
             };
-            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
+
         // FIXME: Objects have different rules for color-channels than map blocks
         if (this.isMapBlock) {
             this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         }
+
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
         this.mb.setCullMode(GX.CullMode.BACK);

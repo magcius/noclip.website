@@ -22,17 +22,18 @@ interface SFAClass {
     unmount?: (obj: ObjectInstance, world: World) => void;
 }
 
-function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed: number = 1.0) {
+function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed?: number) {
     if (yawOffs !== undefined)
         obj.yaw = angle16ToRads(data.getInt8(yawOffs) << 8);
     if (pitchOffs !== undefined)
         obj.pitch = angle16ToRads(data.getInt8(pitchOffs) << 8);
     if (rollOffs !== undefined)
         obj.roll = angle16ToRads(data.getInt8(rollOffs) << 8);
-    obj.animSpeed = animSpeed;
+    if (animSpeed !== undefined)
+        obj.animSpeed = animSpeed;
 }
 
-function commonClass(yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed: number = 1.0): SFAClass {
+function commonClass(yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed?: number): SFAClass {
     return {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, yawOffs, pitchOffs, rollOffs, animSpeed);
@@ -799,7 +800,9 @@ export class ObjectInstance {
 
     private ambienceNum: number = 0;
 
-    public animSpeed: number = 1.0;
+    public animSpeed: number = 0.1; // Default to a sensible value.
+    // In the game, each object class is responsible for driving its own animations
+    // at the appropriate speed.
 
     public instanceData: any;
 
