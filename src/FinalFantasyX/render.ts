@@ -1,13 +1,13 @@
 
 import { GfxDevice, GfxBuffer, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxBufferUsage, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCullMode, GfxCompareMode, makeTextureDescriptor2D, GfxProgram, GfxMegaStateDescriptor, GfxBlendMode, GfxBlendFactor, GfxInputLayoutBufferDescriptor, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { DrawCall, GSConfiguration, LevelModel, LevelPart, Texture } from "./bin";
+import { DrawCall, GSConfiguration, LevelEffectType, LevelModel, LevelPart, Texture } from "./bin";
 import { DeviceProgram } from "../Program";
 import * as Viewer from "../viewer";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { mat4, vec3 } from "gl-matrix";
 import { fillMatrix4x3, fillMatrix4x2 } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
-import { nArray, assert, hexzero } from "../util";
+import { assert, hexzero } from "../util";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
@@ -31,11 +31,11 @@ precision mediump float;
 // Expected to be constant across the entire scene.
 layout(row_major, std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
+    Mat4x3 u_LightDirection;
 };
 
 layout(row_major, std140) uniform ub_ModelParams {
     Mat4x3 u_BoneMatrix;
-    Mat4x3 u_NormalMatrix;
     Mat4x2 u_TextureMatrix;
 };
 
@@ -54,7 +54,13 @@ layout(location = 3) in vec4 a_Extra;
 void main() {
     gl_Position = Mul(u_Projection, Mul(_Mat4x4(u_BoneMatrix), vec4(a_Position.xyz, 1.0)));
     v_Color = a_Color;
+#ifdef ENV_MAP
+    vec4 t_viewNormal = Mul(_Mat4x4(u_BoneMatrix), vec4(a_Extra.xyz, 0.0));
+    t_viewNormal = Mul(_Mat4x4(u_LightDirection), vec4(t_viewNormal.xyz, 0.0));
+    v_TexCoord = (t_viewNormal.xz/4.0) + 0.5;
+#else
     v_TexCoord = Mul(_Mat4x4(u_TextureMatrix), vec4(a_TexCoord, 0.0, 1.0)).xy;
+#endif
 }
 `;
 
@@ -211,8 +217,8 @@ export class DrawCallInstance {
 
         this.megaStateFlags = {
             depthCompare: reverseDepthForCompareMode(translateDepthCompareMode(ztst)),
-            depthWrite: drawCall.gsConfiguration.depthWrite,
-            cullMode: GfxCullMode.FRONT,
+            depthWrite: gsConfiguration.depthWrite,
+            cullMode: gsConfiguration.cullingEnabled ? GfxCullMode.FRONT : GfxCullMode.NONE,
         };
 
         if ((gsConfiguration.prim & 0x40) !== 0 && gsConfiguration.alpha_data0 !== 0) {
@@ -238,6 +244,9 @@ export class DrawCallInstance {
                 blendDstFactor: GfxBlendFactor.ZERO,
             });
         }
+
+        if (drawCall.effectType === LevelEffectType.ENV_MAP)
+            program.defines.set("ENV_MAP", "1");
 
         if (drawCall.textureIndex >= 0) {
             program.defines.set("TEXTURE", "1");
@@ -281,7 +290,7 @@ export class DrawCallInstance {
         this.gfxProgram = cache.createProgram(device, program);
     }
 
-    public prepareToRender(renderInstManager: GfxRenderInstManager, modelMatrix: mat4, modelViewMatrix: mat4): void {
+    public prepareToRender(renderInstManager: GfxRenderInstManager, modelViewMatrix: mat4): void {
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setMegaStateFlags(this.megaStateFlags);
@@ -291,10 +300,9 @@ export class DrawCallInstance {
         if (this.textureMappings.length > 0)
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMappings);
 
-        let offs = renderInst.allocateUniformBuffer(FFXProgram.ub_ModelParams, 12 * 2 + 8);
+        let offs = renderInst.allocateUniformBuffer(FFXProgram.ub_ModelParams, 12 + 8);
         const mapped = renderInst.mapUniformBufferF32(FFXProgram.ub_ModelParams);
         offs += fillMatrix4x3(mapped, offs, modelViewMatrix);
-        offs += fillMatrix4x3(mapped, offs, modelMatrix);
         offs += fillMatrix4x2(mapped, offs, this.textureMatrix);
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -312,7 +320,7 @@ const enum RenderLayer {
     XLU_LIGHTING,
 }
 
-const scratchMatrices = nArray(2, () => mat4.create());
+const scratchMatrix = mat4.create();
 const scratchAABB = new AABB();
 const posScrath = vec3.create();
 // LevelModelInstance is the basic unit of geometry
@@ -345,23 +353,24 @@ export class LevelModelInstance {
         if (!this.visible)
             return;
 
-        mat4.mul(scratchMatrices[0], toNoclip, this.modelMatrix);
-        mat4.mul(scratchMatrices[1], viewerInput.camera.viewMatrix, scratchMatrices[0]);
+        mat4.mul(scratchMatrix, toNoclip, this.modelMatrix);
 
-        scratchAABB.transform(this.model.bbox, scratchMatrices[0]);
+        scratchAABB.transform(this.model.bbox, scratchMatrix);
         if (!viewerInput.camera.frustum.contains(scratchAABB))
             return;
+
+        mat4.mul(scratchMatrix, viewerInput.camera.viewMatrix, scratchMatrix);
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.setInputLayoutAndState(this.data.inputLayout, this.data.inputState);
         template.sortKey = makeSortKey(this.layer);
         if (this.depthSort) {
-            transformVec3Mat4w1(posScrath, scratchMatrices[1], this.model.center);
+            transformVec3Mat4w1(posScrath, scratchMatrix, this.model.center);
             template.sortKey = setSortKeyDepth(template.sortKey, -posScrath[2]);
         }
 
         for (let i = 0; i < this.drawCalls.length; i++)
-            this.drawCalls[i].prepareToRender(renderInstManager, this.modelMatrix, scratchMatrices[1]);
+            this.drawCalls[i].prepareToRender(renderInstManager, scratchMatrix);
 
         renderInstManager.popTemplateRenderInst();
     }

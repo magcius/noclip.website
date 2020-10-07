@@ -1,7 +1,7 @@
 import * as BIN from "./bin";
 import * as Viewer from '../viewer';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { BasicRenderTarget, makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
@@ -9,6 +9,7 @@ import { FakeTextureHolder } from '../TextureHolder';
 import { hexzero } from '../util';
 import { FFXProgram, LevelModelData, LevelPartInstance, TextureData } from "./render";
 import { CameraController } from "../Camera";
+import { mat4 } from "gl-matrix";
 
 const pathBase = `ffx`;
 
@@ -22,6 +23,9 @@ class FFXRenderer implements Viewer.SceneGfx {
     public partRenderers: LevelPartInstance[] = [];
     public modelData: LevelModelData[] = [];
     public textureData: TextureData[] = [];
+
+    public lightDirection = mat4.create();
+    public clearPass = standardFullClearRenderPassDescriptor;
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -40,7 +44,7 @@ class FFXRenderer implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearPass);
 
         renderInstManager.drawOnPassRenderer(device, passRenderer);
         renderInstManager.resetRenderInsts();
@@ -53,9 +57,10 @@ class FFXRenderer implements Viewer.SceneGfx {
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        const offs = template.allocateUniformBuffer(FFXProgram.ub_SceneParams, 16);
+        let offs = template.allocateUniformBuffer(FFXProgram.ub_SceneParams, 16 + 12);
         const sceneParamsMapped = template.mapUniformBufferF32(FFXProgram.ub_SceneParams);
-        fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+        fillMatrix4x3(sceneParamsMapped, offs, this.lightDirection);
 
         for (let i = 0; i < this.partRenderers.length; i++)
             this.partRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
@@ -91,6 +96,9 @@ class FFXLevelSceneDesc implements Viewer.SceneDesc {
         const gsMap = BIN.parseLevelTextures(textureData);
         const level = BIN.parseLevelGeometry(geometryData, gsMap, this.id);
         const cache = renderer.renderHelper.getCache();
+
+        renderer.clearPass = makeClearRenderPassDescriptor(true, level.clearColor);
+        mat4.copy(renderer.lightDirection, level.lightDirection);
 
         for (let tex of level.textures) {
             const data = new TextureData(device, tex);
@@ -143,12 +151,12 @@ const sceneDescs = [
     new FFXLevelSceneDesc(38, "Ruins - Underwater Passage"),
     new FFXLevelSceneDesc(40, "Ruins - Antechamber"),
     new FFXLevelSceneDesc(42, "Ruins - Fayth"),
-    'Al Bhed Diving',
+    'Salvage Ship',
     new FFXLevelSceneDesc(50, "Salvage Ship - Deck"),
     new FFXLevelSceneDesc(51, "Salvage Ship - Underwater"),
     new FFXLevelSceneDesc(52, "Salvage Ship"),
-    new FFXLevelSceneDesc(57, "Underwater Ruins (boss)"),
-    new FFXLevelSceneDesc(58, "Underwater Ruins"),
+    new FFXLevelSceneDesc(57, "Underwater Ruins (interior)"),
+    new FFXLevelSceneDesc(58, "Underwater Ruins (exterior)"),
     'Besaid',
     new FFXLevelSceneDesc(65, "Besaid - Port"),
     new FFXLevelSceneDesc(66, "Besaid - Port (with boat)"),

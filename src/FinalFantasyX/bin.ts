@@ -2,7 +2,9 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, hexzero, readString } from "../util";
 import { AABB } from "../Geometry";
 import { GSRegister, GSMemoryMap, GSRegisterTEX0, GSRegisterCLAMP, getGSRegisterTEX0, getGSRegisterCLAMP, gsMemoryMapNew, gsMemoryMapUploadImage, GSPixelStorageFormat, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, gsMemoryMapReadImagePSMT4HL_PSMCT32, gsMemoryMapReadImagePSMT4HH_PSMCT32, gsMemoryMapReadImagePSMT8H_PSMCT32, GSWrapMode, gsMemoryMapReadImagePSMCT16, GSCLUTPixelStorageFormat } from "../Common/PS2/GS";
-import { vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
+import { Color, colorFromRGBA, colorNewFromRGBA } from "../Color";
+import { MathConstants } from "../MathHelpers";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -63,7 +65,6 @@ export interface DrawCall {
     textureIndex: number;
     gsConfiguration: GSConfiguration;
     effectType: LevelEffectType;
-    shader: ShaderMode;
 }
 
 export interface LevelModel {
@@ -96,6 +97,8 @@ export interface LevelPart {
 export interface LevelData {
     parts: LevelPart[];
     textures: Texture[];
+    clearColor: Color;
+    lightDirection: mat4;
 }
 
 export interface GSConfiguration {
@@ -108,6 +111,7 @@ export interface GSConfiguration {
     test_1_data0: number;
     test_1_data1: number;
     depthWrite: boolean;
+    cullingEnabled: boolean;
     prim: number;
 }
 
@@ -125,7 +129,8 @@ function gsConfigurationEqual(a: GSConfiguration, b: GSConfiguration) {
     if (a.alpha_data0 !== b.alpha_data0 || a.alpha_data1 !== b.alpha_data1) return false;
     if (a.test_1_data0 !== b.test_1_data0 || a.test_1_data1 !== b.test_1_data1) return false;
     if (a.depthWrite !== b.depthWrite) return false;
-    if (a.prim != b.prim) return false;
+    if (a.cullingEnabled !== b.cullingEnabled) return false;
+    if (a.prim !== b.prim) return false;
     return true;
 }
 
@@ -134,20 +139,17 @@ const enum MapSectionType {
     MODEL,
     TEXTURE,
     PALETTES,
+    LIGHTING,
 }
 
-const enum ShaderMode {
-    COLOR_AND_TEXTURE,
-    COLOR_AND_NORMALS,
-}
-
-const enum LevelEffectType {
+export const enum LevelEffectType {
     NONE,
     POSITIONS,
     UNUSED,
     UV_LERP,
     COLORS,
     UV_SCROLL,
+    ENV_MAP, // actually a different VU program, not an effect
 }
 
 export function parseLevelTextures(buffer: ArrayBufferSlice): GSMemoryMap {
@@ -220,8 +222,8 @@ export function parseLevelTextures(buffer: ArrayBufferSlice): GSMemoryMap {
                     dest += 0x4;
                 paletteOffs += 0x400;
             }
-        } else 
-            console.warn("unfamiliar map section type", sectionType, "length", hexzero(sectionLength, 4))
+        } else
+            throw `bad map section type ${sectionType} in textures`;
 
         offs += sectionLength;
     }
@@ -306,6 +308,8 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
     const textures: Texture[] = [];
     const parts: LevelPart[] = [];
     let currPart: LevelPart;
+    const clearColor = colorNewFromRGBA(0, 0, 0, 1);
+    const lightDirection = mat4.create();
 
     function findOrDecodeTexture(tex0: GSRegisterTEX0, clamp: GSRegisterCLAMP): number {
         for (let i = 0; i < textures.length; i++) {
@@ -392,7 +396,6 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
                 textureIndex: number;
                 gsConfiguration: GSConfiguration;
                 effectType: LevelEffectType;
-                shader: ShaderMode;
             }
             const modelVertexRuns: ModelRun[] = [];
 
@@ -410,6 +413,7 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
                 alpha_data0: 0x44, alpha_data1: -1,
                 test_1_data0: 0x5000D, test_1_data1: -1,
                 depthWrite: true,
+                cullingEnabled: true,
                 prim: 0,
             };
 
@@ -418,7 +422,6 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
             let expectedPositionOffs = -1;
             let expectedExtraOffs = -1;
             let currentEffect: LevelEffectType = LevelEffectType.NONE;
-            let currentShader: ShaderMode = ShaderMode.COLOR_AND_TEXTURE;
 
             const newVertexRun = () => {
                 // set expected buffer offsets (relative to ITOP)
@@ -430,8 +433,12 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
                 expectedPositionOffs = expectedTexCoordOffs + vertexRunCount;
                 expectedExtraOffs = expectedPositionOffs + vertexRunCount;
 
-                currentEffect = view.getUint32(packetsIdx + 0x10, true);
-                assert(currentEffect !== LevelEffectType.UNUSED);
+                const effect: LevelEffectType = view.getUint32(packetsIdx + 0x10, true);
+                assert(effect !== LevelEffectType.UNUSED && effect < LevelEffectType.ENV_MAP);
+                if (currentEffect === LevelEffectType.ENV_MAP)
+                    assert(effect === LevelEffectType.NONE)
+                else
+                    currentEffect = effect;
 
                 // check for texture settings
                 const maybeGIFStart = view.getUint32(packetsIdx + 0x20, true);
@@ -495,7 +502,8 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
 
                     // TODO: figure out this constant-offset data, used to mask some flag?
                     if (!atITOP) {
-                        assert(unpackDest === 4);
+                        assert(unpackDest === 4 && format === VifUnpackFormat.S_32);
+                        currentGSConfiguration.cullingEnabled = !!(view.getUint32(packetsIdx, true) & 0x8000);
                         packetsIdx += qwc * getVifUnpackFormatByteSize(format);
                         continue;
                     }
@@ -508,7 +516,7 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
 
                     } else if (format === VifUnpackFormat.V2_16) {
                         let runOffs = 7;
-                        assert(currentShader === ShaderMode.COLOR_AND_TEXTURE);
+                        assert(currentEffect !== LevelEffectType.ENV_MAP);
                         if (unpackDest !== expectedTexCoordOffs) {
                             assert(unpackDest === expectedExtraOffs && currentEffect === LevelEffectType.UV_LERP);
                             runOffs = 9;
@@ -523,7 +531,7 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
                         let runOffs = 0;
                         if (unpackDest === expectedTexCoordOffs) {
                             // actually normals
-                            assert(currentShader === ShaderMode.COLOR_AND_NORMALS);
+                            assert(currentEffect === LevelEffectType.ENV_MAP);
                             runOffs = 9;
                         } else if (unpackDest !== expectedPositionOffs) {
                             assert(unpackDest === expectedExtraOffs && currentEffect === LevelEffectType.POSITIONS);
@@ -614,15 +622,18 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
                     }
 
                     const gsConfiguration: GSConfiguration = Object.assign({}, currentGSConfiguration);
-                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, gsConfiguration, effectType: currentEffect, shader: currentShader, textureIndex: currentTextureIndex });
+                    modelVertexRuns.push({ vertexRunData: vertexRunData!, vertexRunCount, indexRunData, gsConfiguration, effectType: currentEffect, textureIndex: currentTextureIndex });
 
                     vertexRunCount = 0;
                     vertexRunData = null;
                     // Texture does not get reset; it carries over between runs.
                 } else if (cmd === 0x14) { // MSCAL
-                    // save which vu program is running
-                    currentShader = imm >>> 1;
-                    assert(currentShader < 2)
+                    // check if this calls the env map program
+                    assert(imm <= 2);
+                    if (imm === 2)
+                        currentEffect = LevelEffectType.ENV_MAP;
+                    else
+                        currentEffect = LevelEffectType.NONE;
                 } else if (cmd === 0x00 || cmd === 0x10 || cmd === 0x11) {
                     // NOP and FLUSH commands can be ignored
                 } else if (cmd === 0x01) { // CYCLE
@@ -665,13 +676,12 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
                 let modelPartsCompatible = currentDrawCall !== null
                     && vertexRun.textureIndex === currentDrawCall!.textureIndex
                     && vertexRun.effectType === currentDrawCall.effectType
-                    && vertexRun.shader === currentDrawCall.shader
                     && gsConfigurationEqual(vertexRun.gsConfiguration, currentDrawCall!.gsConfiguration);
 
                 if (!modelPartsCompatible) {
                     currentDrawCall = {
                         indexOffset: indexDst, indexCount: 0, textureIndex: vertexRun.textureIndex,
-                        gsConfiguration: vertexRun.gsConfiguration, effectType: vertexRun.effectType, shader: vertexRun.shader
+                        gsConfiguration: vertexRun.gsConfiguration, effectType: vertexRun.effectType,
                     };
                     drawCalls.push(currentDrawCall);
                 }
@@ -705,10 +715,22 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, gsMap: GSMemoryMap,
                 indexOffset += vertexRun.vertexRunCount;
             }
             currPart!.models.push({ vertexData, indexData, drawCalls, bbox, flags, isTranslucent, center });
+        } else if (sectionType === MapSectionType.LIGHTING) {
+            const clearColorR = view.getUint8(offs + 0x00) / 0xFF;
+            const clearColorG = view.getUint8(offs + 0x01) / 0xFF;
+            const clearColorB = view.getUint8(offs + 0x02) / 0xFF;
+            const clearColorA = view.getUint8(offs + 0x03) / 0x80;
+            colorFromRGBA(clearColor, clearColorR, clearColorG, clearColorB, clearColorA);
+
+            // only two levels have a different light direction, the others just come from the camera
+            const azimuthal = view.getFloat32(offs + 0x1C, true);
+            const polar = view.getFloat32(offs + 0x20, true);
+            mat4.fromXRotation(lightDirection, azimuthal * MathConstants.DEG_TO_RAD);
+            mat4.rotateY(lightDirection, lightDirection, polar * MathConstants.DEG_TO_RAD);
         } else
             console.warn("unfamiliar map section type", sectionType, "length", hexzero(sectionLength, 4))
 
         offs += sectionLength;
     }
-    return { parts, textures };
+    return { parts, textures, lightDirection, clearColor };
 }
