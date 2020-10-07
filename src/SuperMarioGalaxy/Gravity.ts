@@ -28,7 +28,6 @@ export class GravityInfo {
     public gravity: PlanetGravity;
 }
 
-const scratchGravTotal = vec3.create();
 const scratchGravLocal = vec3.create();
 export class PlanetGravityManager extends NameObj {
     public gravities: PlanetGravity[] = [];
@@ -37,10 +36,10 @@ export class PlanetGravityManager extends NameObj {
         super(sceneObjHolder, 'PlanetGravityManager');
     }
 
-    public calcTotalGravityVector(dst: vec3 | null, gravityInfo: GravityInfo | null, pos: ReadonlyVec3, gravityTypeMask: GravityTypeMask, attachmentFilter: any): boolean {
+    public calcTotalGravityVector(dst: vec3, gravityInfo: GravityInfo | null, pos: ReadonlyVec3, gravityTypeMask: GravityTypeMask, hostFilter: NameObj | null): boolean {
         let bestPriority = -1;
         let bestMag = -1.0;
-        vec3.set(scratchGravTotal, 0, 0, 0);
+        vec3.zero(dst);
 
         for (let i = 0; i < this.gravities.length; i++) {
             const gravity = this.gravities[i];
@@ -48,6 +47,9 @@ export class PlanetGravityManager extends NameObj {
             // TODO(jstpierre): Check gravity attachment
 
             if (!gravity.alive || !gravity.switchActive)
+                continue;
+
+            if (hostFilter !== null && gravity.owner === hostFilter)
                 continue;
 
             if (!(gravity.typeMask & gravityTypeMask))
@@ -64,12 +66,12 @@ export class PlanetGravityManager extends NameObj {
             let newBest = false;
             if (gravity.priority === bestPriority) {
                 // Combine the two.
-                vec3.add(scratchGravTotal, scratchGravTotal, scratchGravLocal);
+                vec3.add(dst, dst, scratchGravLocal);
                 if (mag > bestMag)
                     newBest = true;
             } else {
                 // Overwrite with the new best gravity.
-                vec3.copy(scratchGravTotal, scratchGravLocal);
+                vec3.copy(dst, scratchGravLocal);
                 bestPriority = gravity.priority;
                 newBest = true;
             }
@@ -82,8 +84,7 @@ export class PlanetGravityManager extends NameObj {
             }
         }
 
-        if (dst !== null)
-            vec3.normalize(dst, scratchGravTotal);
+        vec3.normalize(dst, dst);
 
         return bestPriority >= 0;
     }

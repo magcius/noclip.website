@@ -1019,7 +1019,10 @@ export class Binder {
         const origPos = vec3.copy(scratchVec3d, scratchVec3c);
         const vel = vec3.copy(scratchVec3g, actorVelocity);
 
-        let ret = this.findBindedPos(sceneObjHolder, pos, vel, this.expandDistance, false);
+        const expandDistance = this.expandDistance;
+        let ret = this.findBindedPos(sceneObjHolder, pos, vel, expandDistance, false);
+        this.expandDistance = false;
+
         if (ret === BinderFindBindedPositionRet.NoCollide) {
             vec3.copy(dstVel, actorVelocity);
         } else {
@@ -1029,7 +1032,7 @@ export class Binder {
             vec3.add(pos, pos, fixReact);
             vec3.copy(this.fixReactionVec, fixReact);
 
-            while (!this.expandDistance && ret === BinderFindBindedPositionRet.MoveAlongHittedPlanes) {
+            while (!expandDistance && ret === BinderFindBindedPositionRet.MoveAlongHittedPlanes) {
                 // Put the remainder of the velocity energy along the planes.
 
                 const moveVel = scratchVec3h;
@@ -1132,7 +1135,7 @@ export class Binder {
             maxZ = Math.min(z, maxZ);
 
             if (this.useMovingReaction) {
-                // add on "asdf2" field.
+                // add on "hitVel" field.
                 throw "whoops";
             }
         }
