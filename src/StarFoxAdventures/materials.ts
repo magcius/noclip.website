@@ -15,6 +15,7 @@ import { colorFromRGBA, Color, colorCopy } from '../Color';
 import { EnvfxManager } from './envfx';
 import { TextureMapping } from '../TextureHolder';
 import { SceneRenderContext } from './render';
+import { Material } from '../SuperMario64DS/sm64ds_bmd';
 
 interface ShaderLayer {
     texId: number | null;
@@ -565,19 +566,32 @@ class StandardMaterial extends MaterialBase {
         }
 
         if (this.isMapBlock) {
-            if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
-                this.ambColors[0] = undefined; // AMB0 is solid white
-                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
-                this.ambColors[0] = undefined; // AMB0 is solid white
-                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-            } else if (this.isMapBlock) {
+            if ((this.shader.flags & 1) || (this.shader.flags & 0x40000) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+                this.ambColors[0] = undefined; // AMB0 is opaque white
+                if (this.shader.flags & 0x40000)
+                    this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+                else
+                    this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            } else {
                 this.ambColors[0] = (dst: Color, matCtx: MaterialRenderContext) => {
                     colorCopy(dst, matCtx.outdoorAmbientColor);
                 };
-                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
-                // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+                this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
             }
+
+            // if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
+            //     this.ambColors[0] = undefined; // AMB0 is solid white
+            //     this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            // } else if ((this.shader.flags & 1) || (this.shader.flags & 0x800) || (this.shader.flags & 0x1000)) {
+            //     this.ambColors[0] = undefined; // AMB0 is solid white
+            //     this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            // } else if (this.isMapBlock) {
+            //     this.ambColors[0] = (dst: Color, matCtx: MaterialRenderContext) => {
+            //         colorCopy(dst, matCtx.outdoorAmbientColor);
+            //     };
+            //     this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.REG, 0xff, GX.DiffuseFunction.NONE, GX.AttenuationFunction.SPOT);
+            //     // this.mb.setChanCtrl(GX.ColorChannelID.COLOR0, true, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+            // }
             // FIXME: Objects have different rules for color-channels than map blocks
             if (this.isMapBlock) {
                 this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);

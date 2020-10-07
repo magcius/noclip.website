@@ -647,9 +647,8 @@ export class Model {
             for (let i = 0; i < this.joints.length; i++) {
                 const joint = this.joints[i];
 
-                if (joint.boneNum !== i) {
+                if (joint.boneNum !== i)
                     throw Error(`wtf? joint's bone number doesn't match its index!`);
-                }
 
                 this.skeleton.addJoint(joint.parent != 0xff ? joint.parent : undefined, joint.translation);
                 vec3.negate(this.invBindTranslations[i], joint.bindTranslation);
@@ -789,11 +788,10 @@ export class Model {
             if (shader.layers.length > 0) {
                 // Note: texCoordDesc applies to all texture coordinates in the vertex
                 for (let t = 0; t < 8; t++) {
-                    if (t < shader.layers.length) {
+                    if (t < shader.layers.length)
                         vcd[GX.Attr.TEX0 + t].type = texCoordDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                    } else {
+                    else
                         vcd[GX.Attr.TEX0 + t].type = GX.AttrType.NONE;
-                    }
                 }
             }
 
@@ -816,9 +814,8 @@ export class Model {
 
             bits.drop(4);
             const num = bits.get(4);
-            for (let i = 0; i < num; i++) {
+            for (let i = 0; i < num; i++)
                 bits.drop(8);
-            }
 
             bits.drop(4);
             const listNum = bits.get(8);
@@ -838,18 +835,16 @@ export class Model {
             modelShapes.shapes[drawStep] = [];
             const shapes = modelShapes.shapes[drawStep];
 
-            if (bitsOffset === 0) {
+            if (bitsOffset === 0)
                 return;
-            }
 
             let curShader = shaders[0];
             let curMaterial: SFAMaterial | undefined = undefined;
 
             const setShader = (num: number) => {
                 curShader = shaders[num];
-                if (this.materials[num] === undefined) {
+                if (this.materials[num] === undefined)
                     this.materials[num] = this.materialFactory.buildMaterial(curShader, texFetcher, fields.isMapBlock);
-                }
                 curMaterial = this.materials[num];
             }
 
@@ -895,13 +890,12 @@ export class Model {
                                 const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, this.materialFactory.buildFurMaterial.bind(this.materialFactory), posBuffer);
 
                                 let numFurLayers;
-                                if (curShader.flags & ShaderFlags.ShortFur) {
+                                if (curShader.flags & ShaderFlags.ShortFur)
                                     numFurLayers = 4;
-                                } else if (curShader.flags & ShaderFlags.MediumFur) {
+                                else if (curShader.flags & ShaderFlags.MediumFur)
                                     numFurLayers = 8;
-                                } else { // curShader.flags & ShaderFlags.LongFur
+                                else // curShader.flags & ShaderFlags.LongFur
                                     numFurLayers = 16;
-                                }
                     
                                 modelShapes.furs.push({ shape: newShape, numLayers: numFurLayers });
                             }

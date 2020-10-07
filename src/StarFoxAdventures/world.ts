@@ -324,6 +324,14 @@ class WorldRenderer extends SFARenderer {
         if (this.enableLights) {
             const worldView = scratchMtx0;
             computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
+
+            // Global specular ambient
+            lights[i].reset();
+            vec3.set(lights[i].Direction, 1, 1, 1);
+            colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
+            vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
+            vec3.copy(lights[i].DistAtten, [1000, 1000, 1000]);
+            i++;
     
             // const ctx = getDebugOverlayCanvas2D();
             for (let light of this.world.lights) {
