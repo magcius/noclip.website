@@ -326,12 +326,13 @@ class WorldRenderer extends SFARenderer {
             computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
 
             // Global specular ambient
-            lights[i].reset();
-            vec3.set(lights[i].Direction, 1, 1, 1);
-            colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
-            vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
-            vec3.copy(lights[i].DistAtten, [1000, 1000, 1000]);
-            i++;
+            // (TODO)
+            // lights[i].reset();
+            // vec3.set(lights[i].Direction, 1, 1, 1);
+            // colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
+            // vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
+            // vec3.copy(lights[i].DistAtten, [1000, 1000, 1000]);
+            // i++;
     
             // const ctx = getDebugOverlayCanvas2D();
             for (let light of this.world.lights) {
@@ -385,9 +386,8 @@ class WorldRenderer extends SFARenderer {
                     obj.render(device, renderInstManager, modelCtx);
         
                     const drawLabels = false;
-                    if (drawLabels) {
+                    if (drawLabels)
                         drawWorldSpaceText(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
-                    }
                 }
             }
         }
