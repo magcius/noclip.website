@@ -49,9 +49,6 @@ export class PlanetGravityManager extends NameObj {
             if (!gravity.alive || !gravity.switchActive)
                 continue;
 
-            if (hostFilter !== null && gravity.owner === hostFilter)
-                continue;
-
             if (!(gravity.typeMask & gravityTypeMask))
                 continue;
 
