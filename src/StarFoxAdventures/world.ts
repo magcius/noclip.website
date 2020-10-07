@@ -140,6 +140,7 @@ export class World {
 
 const scratchMtx0 = mat4.create();
 const scratchVec0 = vec3.create();
+const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
@@ -323,6 +324,15 @@ class WorldRenderer extends SFARenderer {
         if (this.enableLights) {
             const worldView = scratchMtx0;
             computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
+
+            // Global specular ambient
+            // (TODO)
+            // lights[i].reset();
+            // vec3.set(lights[i].Direction, 1, 1, 1);
+            // colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
+            // vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
+            // vec3.copy(lights[i].DistAtten, [1000, 1000, 1000]);
+            // i++;
     
             // const ctx = getDebugOverlayCanvas2D();
             for (let light of this.world.lights) {
@@ -351,10 +361,11 @@ class WorldRenderer extends SFARenderer {
     protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Render opaques
 
+        this.world.envfxMan.getAmbientColor(scratchColor0, 0); // Always use ambience #0 when rendering map
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: this.showDevGeometry,
-            ambienceNum: 0, // Always use ambience 0 when rendering the map,
+            outdoorAmbientColor: scratchColor0,
             setupLights: this.setupLights.bind(this),
         }
 
@@ -375,9 +386,8 @@ class WorldRenderer extends SFARenderer {
                     obj.render(device, renderInstManager, modelCtx);
         
                     const drawLabels = false;
-                    if (drawLabels) {
+                    if (drawLabels)
                         drawWorldSpaceText(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
-                    }
                 }
             }
         }

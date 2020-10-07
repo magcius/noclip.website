@@ -1,5 +1,5 @@
 import { nArray } from '../util';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
@@ -15,9 +15,10 @@ import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_
 import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, readUint32, readUint16, mat4SetRowMajor } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
-import { Shape, ShapeGeometry, CommonShapeMaterial } from './shapes';
+import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { SceneRenderContext } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
+import { Color } from '../Color';
 
 interface Joint {
     parent: number;
@@ -38,7 +39,9 @@ export enum ModelVersion {
     Beta,
     BetaMap, // Demo swapcircle
     Demo, // Most demo files
+    DemoMap,
     Final,
+    FinalMap,
 }
 
 interface DisplayListInfo {
@@ -57,7 +60,7 @@ function parseDisplayListInfo(data: DataView): DisplayListInfo {
 }
 
 type CreateModelShapesFunc = () => ModelShapes;
-type BuildMaterialFunc = (shader: Shader, texFetcher: TextureFetcher, texIds: number[], alwaysUseTex1: boolean, isMapBlock: boolean) => SFAMaterial;
+type BuildMaterialFunc = (shader: Shader, texFetcher: TextureFetcher, texIds: number[], isMapBlock: boolean) => SFAMaterial;
 
 interface FineSkinningConfig {
     numPieces: number;
@@ -108,7 +111,7 @@ interface Water {
 export interface ModelRenderContext {
     sceneCtx: SceneRenderContext;
     showDevGeometry: boolean;
-    ambienceNum: number;
+    outdoorAmbientColor: Color;
     setupLights: (lights: GX_Material.Light[], modelCtx: ModelRenderContext) => void;
 }
 
@@ -131,10 +134,6 @@ class ModelShapes {
         }
     }
 
-    public getNumDrawSteps() {
-        return this.shapes.length;
-    }
-
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number) {
         if (drawStep < 0 || drawStep >= this.shapes.length) {
             return;
@@ -149,22 +148,22 @@ class ModelShapes {
             mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
             mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            shapes[i].prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
+            shapes[i].prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, boneMatrices);
         }
     }
     
-    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[]) {
+    public prepareToRenderWaters(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[]) {
         for (let i = 0; i < this.waters.length; i++) {
             const water = this.waters[i];
 
             mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
             mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
+            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette);
         }
     }
 
-    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[]) {
+    public prepareToRenderFurs(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[]) {
         for (let i = 0; i < this.furs.length; i++) {
             const fur = this.furs[i];
 
@@ -174,8 +173,6 @@ class ModelShapes {
                 mat4.translate(scratchMtx0, scratchMtx0, [0, 0.4 * (j + 1), 0]);
                 mat4.mul(scratchMtx0, matrix, scratchMtx0);
 
-                const mat = fur.shape.material as CommonShapeMaterial;
-                mat.setFurLayer(j);
                 const m00 = (j + 1) / 16 * 0.5;
                 const m11 = m00;
                 mat4SetRowMajor(scratchMtx1,
@@ -184,23 +181,25 @@ class ModelShapes {
                     0.0, 0.0, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0
                 );
-                mat.setOverrideIndMtx(0, scratchMtx1);
-                fur.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, boneMatrices);
-                mat.setOverrideIndMtx(0, undefined);
+                fur.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {
+                    overrideIndMtx: [scratchMtx1],
+                    furLayer: j,
+                }, matrixPalette);
             }
         }
     }
 }
 
 // Generate vertex attribute tables.
-// The game uses one table for everything. The final version of the game has a minor difference in
-// VAT 5 compared to older versions.
+// The game initializes the VATs upon startup and uses them unchanged for nearly
+// everything.
+// The final version of the game has a minor difference in VAT 5 compared to beta
+// and older versions.
 function generateVat(old: boolean): GX_VtxAttrFmt[][] {
     const vat: GX_VtxAttrFmt[][] = nArray(8, () => []);
     for (let i = 0; i <= GX.Attr.MAX; i++) {
-        for (let j = 0; j < 8; j++) {
+        for (let j = 0; j < 8; j++)
             vat[j][i] = { compType: GX.CompType.U8, compShift: 0, compCnt: 0 };
-        }
     }
 
     vat[0][GX.Attr.POS] = { compType: GX.CompType.S16, compShift: 0, compCnt: GX.CompCnt.POS_XYZ };
@@ -261,6 +260,239 @@ function generateVat(old: boolean): GX_VtxAttrFmt[][] {
 const VAT = generateVat(false);
 const OLD_VAT = generateVat(true);
 
+const FIELDS: any = {
+    [ModelVersion.AncientMap]: {
+        isBeta: true,
+        isMapBlock: true,
+        shaderFields: ANCIENT_MAP_SHADER_FIELDS,
+        hasNormals: false,
+        hasBones: false,
+        texOffset: 0x58,
+        posOffset: 0x5c,
+        clrOffset: 0x60,
+        texcoordOffset: 0x64,
+        shaderOffset: 0x68,
+        listOffsets: 0x6c,
+        listSizes: 0x70,
+        posCount: 0x90,
+        clrCount: 0x94,
+        texcoordCount: 0x96,
+        texCount: 0xa0,
+        shaderCount: 0x9a,
+        dlOffsets: 0x6c,
+        dlSizes: 0x70,
+        dlInfoCount: 0x99,
+        numListBits: 6,
+        bitsOffsets: [0x7c],
+        bitsByteCounts: [0x86],
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.Beta]: {
+        isBeta: true,
+        isMapBlock: false,
+        shaderFields: BETA_MODEL_SHADER_FIELDS,
+        hasNormals: true,
+        hasBones: true,
+        texOffset: 0x1c,
+        posOffset: 0x24,
+        nrmOffset: 0x28, // ???
+        clrOffset: 0x2c,
+        texcoordOffset: 0x30,
+        shaderOffset: 0x34,
+        jointOffset: 0x38,
+        listOffsets: 0x6c,
+        listSizes: 0x70,
+        posCount: 0x9e,
+        nrmCount: 0xa0,
+        clrCount: 0xa2,
+        texcoordCount: 0xa4,
+        texCount: 0xaa,
+        jointCount: 0xab,
+        posFineSkinningConfig: 0x64,
+        posFineSkinningPieces: 0x80,
+        posFineSkinningWeights: 0x84,
+        nrmFineSkinningConfig: 0xac, // ???
+        // weightCount: 0xad,
+        shaderCount: 0xae,
+        texMtxCount: 0xaf,
+        dlOffsets: 0x88,
+        dlSizes: 0x8c,
+        dlInfoCount: 0xac,
+        numListBits: 6,
+        bitsOffsets: [0x90],
+        bitsByteCounts: [0x94],
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.BetaMap]: {
+        isBeta: true,
+        isMapBlock: true,
+        shaderFields: BETA_MODEL_SHADER_FIELDS,
+        hasNormals: false,
+        hasBones: false,
+        texOffset: 0x58,
+        posOffset: 0x5c,
+        clrOffset: 0x60,
+        texcoordOffset: 0x64,
+        shaderOffset: 0x68,
+        listOffsets: 0x6c,
+        listSizes: 0x70,
+        posCount: 0x9e,
+        clrCount: 0xa2,
+        texcoordCount: 0xa4,
+        texCount: 0x98,
+        shaderCount: 0x99, // ???
+        texMtxCount: 0xaf,
+        dlOffsets: 0x6c,
+        dlSizes: 0x70,
+        dlInfoCount: 0x99, // ???
+        numListBits: 6,
+        bitsOffsets: [0x7c],
+        bitsByteCounts: [0x94], // ???
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.Demo]: {
+        isMapBlock: false,
+        texOffset: 0x20,
+        texCount: 0xf2,
+        posOffset: 0x28,
+        posCount: 0xe4,
+        hasNormals: true,
+        nrmOffset: 0x2c,
+        nrmCount: 0xe6,
+        clrOffset: 0x30,
+        clrCount: 0xe8,
+        texcoordOffset: 0x34,
+        texcoordCount: 0xea,
+        hasBones: true,
+        jointOffset: 0x3c,
+        jointCount: 0xf3,
+        weightOffset: 0x54,
+        weightCount: 0xf4,
+        posFineSkinningConfig: 0x88,
+        posFineSkinningPieces: 0xa4,
+        posFineSkinningWeights: 0xa8,
+        nrmFineSkinningConfig: 0xac,
+        shaderOffset: 0x38,
+        shaderCount: 0xf8, // Polygon attributes and material information
+        shaderFields: SFADEMO_MODEL_SHADER_FIELDS,
+        dlInfoOffset: 0xd0,
+        dlInfoCount: 0xf5,
+        dlInfoSize: 0x1c,
+        // FIXME: Yet another format occurs in sfademo/frontend!
+        // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
+        numListBits: 8, // ??? should be 6 according to decompilation of demo????
+        bitsOffsets: [0xd4], // Whoa...
+        // FIXME: There are three bitstreams, probably for opaque and transparent objects
+        bitsByteCounts: [0xd8],
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.DemoMap]: {
+        isMapBlock: true,
+        texOffset: 0x54,
+        texCount: 0xa0,
+        posOffset: 0x58,
+        posCount: 0x90,
+        hasNormals: false,
+        nrmOffset: 0,
+        nrmCount: 0,
+        clrOffset: 0x5c,
+        clrCount: 0x94,
+        texcoordOffset: 0x60,
+        texcoordCount: 0x96,
+        hasBones: false,
+        jointOffset: 0,
+        jointCount: 0,
+        shaderOffset: 0x64,
+        shaderCount: 0xa0, // Polygon attributes and material information
+        shaderFields: SFADEMO_MAP_SHADER_FIELDS,
+        dlInfoOffset: 0x68,
+        dlInfoCount: 0x9f,
+        dlInfoSize: 0x34,
+        // FIXME: Yet another format occurs in sfademo/frontend!
+        // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
+        numListBits: 8, // ??? should be 6 according to decompilation of demo????
+        bitsOffsets: [0x74], // Whoa...
+        // FIXME: There are three bitstreams, probably for opaque and transparent objects
+        bitsByteCounts: [0x84],
+        oldVat: true,
+        hasYTranslate: false,
+    },
+    [ModelVersion.Final]: {
+        isMapBlock: false,
+        texOffset: 0x20,
+        texCount: 0xf2,
+        posOffset: 0x28,
+        posCount: 0xe4,
+        hasNormals: true,
+        nrmOffset: 0x2c,
+        nrmCount: 0xe6,
+        clrOffset: 0x30,
+        clrCount: 0xe8,
+        texcoordOffset: 0x34,
+        texcoordCount: 0xea,
+        hasBones: true,
+        jointOffset: 0x3c,
+        jointCount: 0xf3,
+        weightOffset: 0x54,
+        weightCount: 0xf4,
+        posFineSkinningConfig: 0x88,
+        posFineSkinningPieces: 0xa4,
+        posFineSkinningWeights: 0xa8,
+        nrmFineSkinningConfig: 0xac,
+        shaderOffset: 0x38,
+        shaderCount: 0xf8,
+        shaderFields: SFA_SHADER_FIELDS,
+        dlInfoOffset: 0xd0,
+        dlInfoCount: 0xf5,
+        dlInfoSize: 0x1c,
+        numListBits: 8,
+        bitsOffsets: [0xd4],
+        bitsByteCounts: [0xd8],
+        oldVat: false,
+        hasYTranslate: false,
+    },
+    [ModelVersion.FinalMap]: {
+        isMapBlock: true,
+        texOffset: 0x54,
+        texCount: 0xa0,
+        posOffset: 0x58,
+        posCount: 0x90,
+        hasNormals: false,
+        nrmOffset: 0,
+        nrmCount: 0,
+        clrOffset: 0x5c,
+        clrCount: 0x94,
+        texcoordOffset: 0x60,
+        texcoordCount: 0x96,
+        hasBones: false,
+        jointOffset: 0,
+        jointCount: 0,
+        shaderOffset: 0x64,
+        shaderCount: 0xa2,
+        shaderFields: SFA_SHADER_FIELDS,
+        dlInfoOffset: 0x68,
+        dlInfoCount: 0xa1, // TODO
+        dlInfoSize: 0x1c,
+        numListBits: 8,
+        bitsOffsets: [0x78, 0x7c, 0x80],
+        bitsByteCounts: [0x84, 0x86, 0x88],
+        oldVat: false,
+        hasYTranslate: true,
+    },
+}
+
+const enum Opcode {
+    SetShader   = 1,
+    CallDL      = 2,
+    SetVCD      = 3,
+    SetMatrices = 4,
+    End         = 5,
+}
+
 export class Model {
     private createModelShapes: CreateModelShapesFunc;
     private sharedModelShapes: ModelShapes | null = null;
@@ -292,269 +524,13 @@ export class Model {
         private materialFactory: MaterialFactory,
         blockData: ArrayBufferSlice,
         texFetcher: TextureFetcher,
-        public modelVersion: ModelVersion = ModelVersion.Final
+        public modelVersion: ModelVersion
     ) {
         let offs = 0;
         const blockDv = blockData.createDataView();
         this.modelData = blockDv;
 
-        let fields: any;
-        if (this.modelVersion === ModelVersion.Beta) {
-            fields = {
-                isBeta: true,
-                isMapBlock: false,
-                alwaysUseTex1: true,
-                shaderFields: BETA_MODEL_SHADER_FIELDS,
-                hasNormals: true,
-                hasBones: true,
-                texOffset: 0x1c,
-                posOffset: 0x24,
-                nrmOffset: 0x28, // ???
-                clrOffset: 0x2c,
-                texcoordOffset: 0x30,
-                shaderOffset: 0x34,
-                jointOffset: 0x38,
-                listOffsets: 0x6c,
-                listSizes: 0x70,
-                posCount: 0x9e,
-                nrmCount: 0xa0,
-                clrCount: 0xa2,
-                texcoordCount: 0xa4,
-                texCount: 0xaa,
-                jointCount: 0xab,
-                posFineSkinningConfig: 0x64,
-                posFineSkinningPieces: 0x80,
-                posFineSkinningWeights: 0x84,
-                nrmFineSkinningConfig: 0xac, // ???
-                // weightCount: 0xad,
-                shaderCount: 0xae,
-                texMtxCount: 0xaf,
-                dlOffsets: 0x88,
-                dlSizes: 0x8c,
-                dlInfoCount: 0xac,
-                numListBits: 6,
-                bitsOffsets: [0x90],
-                bitsByteCounts: [0x94],
-                oldVat: true,
-                hasYTranslate: false,
-            };
-        } else if (this.modelVersion === ModelVersion.AncientMap) {
-            fields = {
-                isBeta: true,
-                isMapBlock: true,
-                alwaysUseTex1: true,
-                shaderFields: ANCIENT_MAP_SHADER_FIELDS,
-                hasNormals: false,
-                hasBones: false,
-                texOffset: 0x58,
-                posOffset: 0x5c,
-                clrOffset: 0x60,
-                texcoordOffset: 0x64,
-                shaderOffset: 0x68,
-                listOffsets: 0x6c,
-                listSizes: 0x70,
-                posCount: 0x90,
-                clrCount: 0x94,
-                texcoordCount: 0x96,
-                texCount: 0xa0,
-                shaderCount: 0x9a,
-                dlOffsets: 0x6c,
-                dlSizes: 0x70,
-                dlInfoCount: 0x99,
-                numListBits: 6,
-                bitsOffsets: [0x7c],
-                bitsByteCounts: [0x86],
-                oldVat: true,
-                hasYTranslate: false,
-            };
-        } else if (this.modelVersion === ModelVersion.BetaMap) {
-            fields = {
-                isBeta: true,
-                isMapBlock: true,
-                alwaysUseTex1: true,
-                shaderFields: BETA_MODEL_SHADER_FIELDS,
-                hasNormals: false,
-                hasBones: false,
-                texOffset: 0x58,
-                posOffset: 0x5c,
-                clrOffset: 0x60,
-                texcoordOffset: 0x64,
-                shaderOffset: 0x68,
-                listOffsets: 0x6c,
-                listSizes: 0x70,
-                posCount: 0x9e,
-                clrCount: 0xa2,
-                texcoordCount: 0xa4,
-                texCount: 0x98,
-                shaderCount: 0x99, // ???
-                texMtxCount: 0xaf,
-                dlOffsets: 0x6c,
-                dlSizes: 0x70,
-                dlInfoCount: 0x99, // ???
-                numListBits: 6,
-                bitsOffsets: [0x7c],
-                bitsByteCounts: [0x94], // ???
-                oldVat: true,
-                hasYTranslate: false,
-            };
-        } else if (this.modelVersion === ModelVersion.Demo) {
-            const isMapModel = false; // TODO: detect
-            if (isMapModel) {
-                // TODO: verify for correctness
-                fields = {
-                    isMapBlock: true,
-                    texOffset: 0x54,
-                    texCount: 0xa0,
-                    posOffset: 0x58,
-                    posCount: 0x90,
-                    hasNormals: false,
-                    nrmOffset: 0,
-                    nrmCount: 0,
-                    clrOffset: 0x5c,
-                    clrCount: 0x94,
-                    texcoordOffset: 0x60,
-                    texcoordCount: 0x96,
-                    hasBones: false,
-                    jointOffset: 0,
-                    jointCount: 0,
-                    shaderOffset: 0x64,
-                    shaderCount: 0xa0, // Polygon attributes and material information
-                    shaderFields: SFADEMO_MAP_SHADER_FIELDS,
-                    dlInfoOffset: 0x68,
-                    dlInfoCount: 0x9f,
-                    dlInfoSize: 0x34,
-                    // FIXME: Yet another format occurs in sfademo/frontend!
-                    // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
-                    numListBits: 8, // ??? should be 6 according to decompilation of demo????
-                    bitsOffsets: [0x74], // Whoa...
-                    // FIXME: There are three bitstreams, probably for opaque and transparent objects
-                    bitsByteCounts: [0x84],
-                    oldVat: true,
-                    hasYTranslate: false,
-                };
-            } else {
-                // TODO: verify for correctness
-                fields = {
-                    isMapBlock: false,
-                    alwaysUseTex1: true,
-                    texOffset: 0x20,
-                    texCount: 0xf2,
-                    posOffset: 0x28,
-                    posCount: 0xe4,
-                    hasNormals: true,
-                    nrmOffset: 0x2c,
-                    nrmCount: 0xe6,
-                    clrOffset: 0x30,
-                    clrCount: 0xe8,
-                    texcoordOffset: 0x34,
-                    texcoordCount: 0xea,
-                    hasBones: true,
-                    jointOffset: 0x3c,
-                    jointCount: 0xf3,
-                    weightOffset: 0x54,
-                    weightCount: 0xf4,
-                    posFineSkinningConfig: 0x88,
-                    posFineSkinningPieces: 0xa4,
-                    posFineSkinningWeights: 0xa8,
-                    nrmFineSkinningConfig: 0xac,
-                    shaderOffset: 0x38,
-                    shaderCount: 0xf8, // Polygon attributes and material information
-                    shaderFields: SFADEMO_MODEL_SHADER_FIELDS,
-                    dlInfoOffset: 0xd0,
-                    dlInfoCount: 0xf5,
-                    dlInfoSize: 0x1c,
-                    // FIXME: Yet another format occurs in sfademo/frontend!
-                    // numListBits: 6, // 6 is needed for mod12; 8 is needed for early crfort?!
-                    numListBits: 8, // ??? should be 6 according to decompilation of demo????
-                    bitsOffsets: [0xd4], // Whoa...
-                    // FIXME: There are three bitstreams, probably for opaque and transparent objects
-                    bitsByteCounts: [0xd8],
-                    oldVat: true,
-                    hasYTranslate: false,
-                };
-            }
-        } else if (this.modelVersion === ModelVersion.Final) {
-            // FIXME: This field is NOT a model type and doesn't reliably indicate
-            // the type of model.
-            const modelType = blockDv.getUint16(4);
-            switch (modelType) {
-            case 0:
-                // Used in character and object models
-                fields = {
-                    isMapBlock: false,
-                    alwaysUseTex1: true,
-                    texOffset: 0x20,
-                    texCount: 0xf2,
-                    posOffset: 0x28,
-                    posCount: 0xe4,
-                    hasNormals: true,
-                    nrmOffset: 0x2c,
-                    nrmCount: 0xe6,
-                    clrOffset: 0x30,
-                    clrCount: 0xe8,
-                    texcoordOffset: 0x34,
-                    texcoordCount: 0xea,
-                    hasBones: true,
-                    jointOffset: 0x3c,
-                    jointCount: 0xf3,
-                    weightOffset: 0x54,
-                    weightCount: 0xf4,
-                    posFineSkinningConfig: 0x88,
-                    posFineSkinningPieces: 0xa4,
-                    posFineSkinningWeights: 0xa8,
-                    nrmFineSkinningConfig: 0xac,
-                    shaderOffset: 0x38,
-                    shaderCount: 0xf8,
-                    shaderFields: SFA_SHADER_FIELDS,
-                    dlInfoOffset: 0xd0,
-                    dlInfoCount: 0xf5,
-                    dlInfoSize: 0x1c,
-                    numListBits: 8,
-                    bitsOffsets: [0xd4],
-                    bitsByteCounts: [0xd8],
-                    oldVat: false,
-                    hasYTranslate: false,
-                };
-                break;
-            case 8:
-            case 264:
-                // Used in map blocks
-                fields = {
-                    isMapBlock: true,
-                    alwaysUseTex1: true,
-                    texOffset: 0x54,
-                    texCount: 0xa0,
-                    posOffset: 0x58,
-                    posCount: 0x90,
-                    hasNormals: false,
-                    nrmOffset: 0,
-                    nrmCount: 0,
-                    clrOffset: 0x5c,
-                    clrCount: 0x94,
-                    texcoordOffset: 0x60,
-                    texcoordCount: 0x96,
-                    hasBones: false,
-                    jointOffset: 0,
-                    jointCount: 0,
-                    shaderOffset: 0x64,
-                    shaderCount: 0xa2,
-                    shaderFields: SFA_SHADER_FIELDS,
-                    dlInfoOffset: 0x68,
-                    dlInfoCount: 0xa1, // TODO
-                    dlInfoSize: 0x1c,
-                    numListBits: 8,
-                    bitsOffsets: [0x78, 0x7c, 0x80],
-                    bitsByteCounts: [0x84, 0x86, 0x88],
-                    oldVat: false,
-                    hasYTranslate: true,
-                };
-                break;
-            default:
-                throw Error(`Model type ${modelType} not implemented`);
-            }
-        } else {
-            throw Error(`Unhandled model version ${modelVersion}`);
-        }
+        const fields = FIELDS[modelVersion];
 
         if (fields.posFineSkinningConfig !== undefined) {
             this.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, fields.posFineSkinningConfig));
@@ -671,9 +647,8 @@ export class Model {
             for (let i = 0; i < this.joints.length; i++) {
                 const joint = this.joints[i];
 
-                if (joint.boneNum !== i) {
+                if (joint.boneNum !== i)
                     throw Error(`wtf? joint's bone number doesn't match its index!`);
-                }
 
                 this.skeleton.addJoint(joint.parent != 0xff ? joint.parent : undefined, joint.translation);
                 vec3.negate(this.invBindTranslations[i], joint.bindTranslation);
@@ -689,10 +664,7 @@ export class Model {
         offs = shaderOffset;
         for (let i = 0; i < shaderCount; i++) {
             const shaderBin = blockData.subarray(offs, fields.shaderFields.size).createDataView();
-
-            const shader = parseShader(shaderBin, fields.shaderFields, texIds);
-            shaders.push(shader);
-
+            shaders.push(parseShader(shaderBin, fields.shaderFields, texIds));
             offs += fields.shaderFields.size;
         }
 
@@ -731,11 +703,10 @@ export class Model {
 
         let texMtxCount = 0;
         if (fields.hasBones) {
-            if (fields.isBeta) {
+            if (fields.isBeta)
                 texMtxCount = blockDv.getUint8(fields.texMtxCount);
-            } else {
+            else
                 texMtxCount = blockDv.getUint8(0xfa);
-            }
         }
 
         if (fields.hasYTranslate) {
@@ -749,22 +720,19 @@ export class Model {
         const getVtxArrays = (posBuffer: DataView) => {
             const vtxArrays: GX_Array[] = [];
             vtxArrays[GX.Attr.POS] = { buffer: arrayBufferSliceFromDataView(posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
-            if (fields.hasNormals) {
+            if (fields.hasNormals)
                 vtxArrays[GX.Attr.NRM] = { buffer: nrmBuffer, offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
-            }
             vtxArrays[GX.Attr.CLR0] = { buffer: clrBuffer, offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
-            for (let t = 0; t < 8; t++) {
+            for (let t = 0; t < 8; t++)
                 vtxArrays[GX.Attr.TEX0 + t] = { buffer: texcoordBuffer, offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
-            }
             return vtxArrays;
         }
 
         const readVertexDesc = (bits: LowBitReader, shader: Shader): GX_VtxDesc[] => {
             // console.log(`Setting descriptor`);
             const vcd: GX_VtxDesc[] = [];
-            for (let i = 0; i <= GX.Attr.MAX; i++) {
+            for (let i = 0; i <= GX.Attr.MAX; i++)
                 vcd[i] = { type: GX.AttrType.NONE };
-            }
             vcd[GX.Attr.NBT] = { type: GX.AttrType.NONE };
 
             if (fields.hasBones && jointCount >= 2) {
@@ -820,11 +788,10 @@ export class Model {
             if (shader.layers.length > 0) {
                 // Note: texCoordDesc applies to all texture coordinates in the vertex
                 for (let t = 0; t < 8; t++) {
-                    if (t < shader.layers.length) {
+                    if (t < shader.layers.length)
                         vcd[GX.Attr.TEX0 + t].type = texCoordDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                    } else {
+                    else
                         vcd[GX.Attr.TEX0 + t].type = GX.AttrType.NONE;
-                    }
                 }
             }
 
@@ -840,16 +807,15 @@ export class Model {
             bits.drop(4);
             const shaderNum = bits.get(6);
             const shader = shaders[shaderNum];
-            const material = buildSpecialMaterial(shader, texFetcher, texIds, fields.alwaysUseTex1, fields.isMapBlock);
+            const material = buildSpecialMaterial(shader, texFetcher, texIds, fields.isMapBlock);
 
             bits.drop(4);
             const vcd = readVertexDesc(bits, shader);
 
             bits.drop(4);
             const num = bits.get(4);
-            for (let i = 0; i < num; i++) {
+            for (let i = 0; i < num; i++)
                 bits.drop(8);
-            }
 
             bits.drop(4);
             const listNum = bits.get(8);
@@ -861,11 +827,7 @@ export class Model {
 
             const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
             newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
-
-            const newMat = new CommonShapeMaterial();
-            newMat.setMaterial(material);
-
-            return new Shape(newGeom, newMat, false);
+            return new Shape(newGeom, new ShapeMaterial(material), false);
         }
 
         const runBitstream = (modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView) => {
@@ -873,18 +835,16 @@ export class Model {
             modelShapes.shapes[drawStep] = [];
             const shapes = modelShapes.shapes[drawStep];
 
-            if (bitsOffset === 0) {
+            if (bitsOffset === 0)
                 return;
-            }
 
             let curShader = shaders[0];
             let curMaterial: SFAMaterial | undefined = undefined;
 
             const setShader = (num: number) => {
                 curShader = shaders[num];
-                if (this.materials[num] === undefined) {
+                if (this.materials[num] === undefined)
                     this.materials[num] = this.materialFactory.buildMaterial(curShader, texFetcher, fields.isMapBlock);
-                }
                 curMaterial = this.materials[num];
             }
 
@@ -895,14 +855,15 @@ export class Model {
             let done = false;
             while (!done) {
                 const opcode = bits.get(4);
+
                 switch (opcode) {
-                case 1: { // Set shader
+                case Opcode.SetShader: {
                     const shaderNum = bits.get(6);
                     // console.log(`Setting shader #${shaderNum}`);
                     setShader(shaderNum);
                     break;
                 }
-                case 2: { // Call display list
+                case Opcode.CallDL: {
                     const listNum = bits.get(fields.numListBits);
                     if (listNum >= dlInfoCount) {
                         console.warn(`Can't draw display list #${listNum} (out of range)`);
@@ -922,24 +883,19 @@ export class Model {
 
                             const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
                             newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
-
-                            const newMat = new CommonShapeMaterial();
-                            newMat.setMaterial(curMaterial!);
-
-                            const newShape = new Shape(newGeom, newMat, !!(curShader.flags & ShaderFlags.DevGeometry));
+                            const newShape = new Shape(newGeom, new ShapeMaterial(curMaterial!), !!(curShader.flags & ShaderFlags.DevGeometry));
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
                                 const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, this.materialFactory.buildFurMaterial.bind(this.materialFactory), posBuffer);
 
                                 let numFurLayers;
-                                if (curShader.flags & ShaderFlags.ShortFur) {
+                                if (curShader.flags & ShaderFlags.ShortFur)
                                     numFurLayers = 4;
-                                } else if (curShader.flags & ShaderFlags.MediumFur) {
+                                else if (curShader.flags & ShaderFlags.MediumFur)
                                     numFurLayers = 8;
-                                } else { // curShader.flags & ShaderFlags.LongFur
+                                else // curShader.flags & ShaderFlags.LongFur
                                     numFurLayers = 16;
-                                }
                     
                                 modelShapes.furs.push({ shape: newShape, numLayers: numFurLayers });
                             }
@@ -950,21 +906,19 @@ export class Model {
                     }
                     break;
                 }
-                case 3: { // Set descriptor
+                case Opcode.SetVCD: {
                     vcd = readVertexDesc(bits, curShader);
                     break;
                 }
-                case 4: // Set matrix selectors (skipped by SFA block renderer)
+                case Opcode.SetMatrices: // When drawing map blocks, this command is ignored by the original game.
                     const numBones = bits.get(4);
-                    if (numBones > 10) {
+                    if (numBones > 10)
                         throw Error(`Too many PN matrices`);
-                    }
 
-                    for (let i = 0; i < numBones; i++) {
+                    for (let i = 0; i < numBones; i++)
                         pnMatrixMap[i] = bits.get(8);
-                    }
                     break;
-                case 5: // End
+                case Opcode.End: // End
                     done = true;
                     break;
                 default:
@@ -976,26 +930,23 @@ export class Model {
 
         this.createModelShapes = () => {
             let instancePosBuffer;
-            if (this.hasFineSkinning) {
+            if (this.hasFineSkinning)
                 instancePosBuffer = dataCopy(this.originalPosBuffer);
-            } else {
+            else
                 instancePosBuffer = this.originalPosBuffer;
-            }
 
             const modelShapes = new ModelShapes(this, instancePosBuffer);
 
             runBitstream(modelShapes, bitsOffsets[0], 0, modelShapes.posBuffer); // Opaques
-            for (let i = 1; i < bitsOffsets.length; i++) {
-                runBitstream(modelShapes, bitsOffsets[i], i, modelShapes.posBuffer); // Translucents and waters
-            }
+            for (let i = 1; i < bitsOffsets.length; i++)
+                runBitstream(modelShapes, bitsOffsets[i], i, modelShapes.posBuffer); // Translucents
 
             return modelShapes;
         }
 
         // If there is no fine skinning, we can share model shapes between instances.
-        if (!this.hasFineSkinning) {
+        if (!this.hasFineSkinning)
             this.sharedModelShapes = this.createModelShapes();
-        }
     }
 
     public createInstanceShapes(): ModelShapes {
@@ -1062,10 +1013,6 @@ export class ModelInstance {
 
     public getMaterials() {
         return this.model.getMaterials();
-    }
-
-    public getNumDrawSteps() {
-        return this.modelShapes.getNumDrawSteps();
     }
     
     public resetPose() {
@@ -1168,11 +1115,9 @@ export class ModelInstance {
             const piece = this.model.posFineSkinningPieces[i];
 
             mat4.copy(boneMtx0, this.matrixPalette[piece.bone0]);
-            if (!this.model.hasBetaFineSkinning) {
-                mat4.translate(boneMtx0, boneMtx0, this.model.invBindTranslations[piece.bone0]);
-            }
             mat4.copy(boneMtx1, this.matrixPalette[piece.bone1]);
             if (!this.model.hasBetaFineSkinning) {
+                mat4.translate(boneMtx0, boneMtx0, this.model.invBindTranslations[piece.bone0]);
                 mat4.translate(boneMtx1, boneMtx1, this.model.invBindTranslations[piece.bone1]);
             }
 
@@ -1270,9 +1215,7 @@ export class ModelFetcher {
     }
 
     public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, texFetcher: Promise<TextureFetcher>, materialFactory: MaterialFactory, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelFetcher> {
-        const self = new ModelFetcher(device, gameInfo, await texFetcher, materialFactory, animController, modelVersion);
-
-        return self;
+        return new ModelFetcher(device, gameInfo, await texFetcher, materialFactory, animController, modelVersion);
     }
 
     private async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
@@ -1328,9 +1271,8 @@ export class ModelFetcher {
 
     public createModelInstance(num: number): ModelInstance {
         const model = this.getModel(num);
-        if (model === null) {
+        if (model === null)
             throw Error(`Model ${num} not found`);
-        }
         return new ModelInstance(model);
     }
 }

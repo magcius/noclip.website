@@ -22,7 +22,7 @@ export class BlockCollection {
     private constructor(private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texFetcher: TextureFetcher, private modelVersion: ModelVersion, private isCompressed: boolean) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, tabPath: string, binPath: string, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texFetcher: TextureFetcher, modelVersion: ModelVersion = ModelVersion.Final, isCompressed: boolean = true): Promise<BlockCollection> {
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, tabPath: string, binPath: string, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texFetcher: TextureFetcher, modelVersion: ModelVersion, isCompressed: boolean = true): Promise<BlockCollection> {
         const self = new BlockCollection(device, materialFactory, animController, texFetcher, modelVersion, isCompressed);
 
         const pathBase = gameInfo.pathBase;
@@ -107,7 +107,7 @@ export class SFABlockFetcher implements BlockFetcher {
             const tabPath = `${subdir}/mod${modNum}.tab`;
             const binPath = `${subdir}/mod${modNum}.zlb.bin`;
             const [blockColl, _] = await Promise.all([
-                BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, this.device, this.materialFactory, this.animController, this.texFetcher),
+                BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, this.device, this.materialFactory, this.animController, this.texFetcher, ModelVersion.FinalMap),
                 this.texFetcher.loadSubdirs([subdir], dataFetcher),
             ]);
             this.blockColls[mod] = blockColl;

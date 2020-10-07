@@ -181,18 +181,16 @@ export class AnimFile {
                         result.scale = (result.scale & 0xffff) / 1024;
 
                         hasTranslation = !!(cmd & 0x20);
-                        if (hasTranslation) {
+                        if (hasTranslation)
                             cmd = getNextCmd();
-                        }
                     }
                     
                     if (hasTranslation) {
                         result.translation = interpS16(cmd & 0xfff0);
 
                         const numTransBits = cmd & 0xf;
-                        if (numTransBits !== 0) {
+                        if (numTransBits !== 0)
                             result.translation += kfReader.get(numTransBits);
-                        }
 
                         result.translation = interpS16(result.translation) / 512;
                     }
@@ -204,9 +202,8 @@ export class AnimFile {
             function loadPose(): Pose {
                 const result: Pose = createPose();
 
-                for (let i = 0; i < NUM_AXES; i++) {
+                for (let i = 0; i < NUM_AXES; i++)
                     result.axes[i] = loadAxis();
-                }
 
                 return result;
             }
@@ -227,33 +224,19 @@ export class AnimFile {
             keyframes.push(keyframe);
         }
 
-        const times = [];
         let speed = 1;
         if (header.timesOffset !== 0) {
             let timesOffs = header.timesOffset;
+
             speed = data.getFloat32(timesOffs);
             timesOffs += 0x4;
+            console.log(`speed: ${speed}`);
             const numTimes = data.getUint16(timesOffs);
             timesOffs += 0x2;
-            if (data.getUint16(timesOffs) === 0) {
-                // FIXME: what is this?
-                timesOffs += 0x2;
-                if (data.getUint16(timesOffs) === 0) {
-                    timesOffs += 0x2;
-                }
-            }
-            if (data.getUint16(timesOffs) !== numTimes) {
-                console.warn(`mismatched numTimes ${data.getUint16(timesOffs)} != ${numTimes}`);
-            }
-            timesOffs += 0x2;
-    
-            for (let i = 0; i < numTimes; i++) {
-                times.push(data.getInt16(timesOffs));
-                timesOffs += 0x2;
-            }
+            console.log(`num times: ${numTimes}`);
         }
 
-        const anim = { keyframes, speed, times };
+        const anim = { keyframes, speed, times: [] };
         // console.log(`loaded anim #${num} from offs 0x${offs.toString(16)}: ${JSON.stringify({speed, times}, null, '\t')}`);
         return anim;
     }
