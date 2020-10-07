@@ -8,6 +8,9 @@ jobs:
 
     docker:
       - image: circleci/node:10.16.3
+        auth:
+          username: jasperrlz
+          password: $DOCKERHUB_PASSWORD
 
     working_directory: ~/repo
 

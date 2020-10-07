@@ -223,11 +223,11 @@ class DKSProgram extends DeviceProgram {
 
     public static BindingDefinitions = `
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
-layout(row_major, std140) uniform ub_MeshFragParams {
+layout(std140) uniform ub_MeshFragParams {
     Mat4x3 u_ViewFromLocal[1];
     // Fourth element has g_DiffuseMapColorPower
     vec4 u_DiffuseMapColor;

@@ -24,7 +24,7 @@ import { calcJointMatrixFromTransform } from './J3DGraphAnimator';
 import { LoadedVertexDraw } from '../../../gx/gx_displaylist';
 
 export class ShapeInstanceState {
-    // One matrix for each joint, which transform into world space.
+    // One matrix for each joint, which transform into the parent joint's space.
     public jointToParentMatrixArray: mat4[] = [];
 
     // One matrix for each joint, which transform into world space.
@@ -1266,8 +1266,6 @@ export class J3DModelInstance {
     private calcJointAnimRecurse(node: JointTreeNode, parentNode: JointTreeNode | null): void {
         const shapeInstanceState = this.shapeInstanceState;
 
-        // Our root node is a dummy node that houses a special model matrix.
-        // TODO(jstpierre): Remove this.
         if (parentNode !== null) {
             const jointIndex = node.jointIndex;
             assert(jointIndex >= 0);

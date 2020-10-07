@@ -67,18 +67,18 @@ export class NITRO_Program extends DeviceProgram {
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
 // Expected to change with each material.
-layout(row_major, std140) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     Mat4x2 u_TexMtx[1];
     vec4 u_Misc0;
 };
 #define u_TexCoordMode (u_Misc0.x)
 
-layout(row_major, std140) uniform ub_PacketParams {
+layout(std140) uniform ub_PacketParams {
     Mat4x3 u_PosMtx[32];
 };
 

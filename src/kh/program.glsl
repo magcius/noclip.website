@@ -2,12 +2,12 @@
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     float u_Time;
 };
 
-layout(row_major, std140) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     Mat4x4 u_Model;
     Mat4x3 u_View;
     vec4 u_AnimOffset;

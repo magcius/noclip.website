@@ -26,11 +26,11 @@ class FezProgram {
     public static ub_ShapeParams = 1;
 
     public both = `
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
-layout(row_major, std140) uniform ub_ShapeParams {
+layout(std140) uniform ub_ShapeParams {
     Mat4x3 u_BoneMatrix[1];
     vec4 u_LightDirection;
     vec4 u_TexScaleBiasPre;

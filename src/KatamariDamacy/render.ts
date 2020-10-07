@@ -27,13 +27,13 @@ export class KatamariDamacyProgram extends DeviceProgram {
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     vec3 u_LightDirs[2];
     vec3 u_LightColors[3];
 };
 
-layout(row_major, std140) uniform ub_ModelParams {
+layout(std140) uniform ub_ModelParams {
     Mat4x3 u_BoneMatrix[SKINNING_MATRIX_COUNT];
     Mat4x3 u_NormalMatrix[SKINNING_MATRIX_COUNT];
     Mat4x2 u_TextureMatrix[1];

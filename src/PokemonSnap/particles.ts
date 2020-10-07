@@ -581,11 +581,11 @@ class ParticleProgram extends DeviceProgram {
     public both = `
 precision mediump float;
 
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
-layout(row_major, std140) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     Mat4x3 u_Matrix;
     vec4 u_PrimColor;
     vec4 u_EnvColor;

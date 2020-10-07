@@ -24,12 +24,12 @@ class IVProgram extends DeviceProgram {
     public both = `
 precision mediump float;
 
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x4 u_ModelView;
 };
 
-layout(row_major, std140) uniform ub_ObjectParams {
+layout(std140) uniform ub_ObjectParams {
     vec4 u_Color;
 };
 

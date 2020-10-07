@@ -126,7 +126,7 @@ class FurProgram extends DeviceProgram {
     public static ub_ShapeParams = 0;
 
     public both = `
-layout(row_major, std140) uniform ub_ShapeParams {
+layout(std140) uniform ub_ShapeParams {
     Mat4x4 u_Projection;
     Mat4x3 u_BoneMatrix[1];
     vec4 u_Misc[3];

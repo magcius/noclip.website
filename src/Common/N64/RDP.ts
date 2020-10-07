@@ -7,6 +7,7 @@ import { ImageSize, ImageFormat, decodeTex_CI4, decodeTex_CI8, decodeTex_IA8, de
 import { GfxDevice, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxCompareMode, GfxMegaStateDescriptor, GfxBlendFactor, GfxBlendMode } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { setAttachmentStateSimple } from "../../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { mat4 } from "gl-matrix";
 
 export const enum CCMUX {
     COMBINED    = 0,
@@ -520,13 +521,13 @@ function translateBlendParamB(paramB: BlendParam_B, srcParam: GfxBlendFactor): G
         if (srcParam === GfxBlendFactor.ONE)
             return GfxBlendFactor.ZERO;
         return GfxBlendFactor.ONE;
-    }
-    if (paramB === BlendParam_B.G_BL_A_MEM)
+    } else if (paramB === BlendParam_B.G_BL_A_MEM) {
         return GfxBlendFactor.DST_ALPHA;
-    if (paramB === BlendParam_B.G_BL_1)
+    } else if (paramB === BlendParam_B.G_BL_1) {
         return GfxBlendFactor.ONE;
-    if (paramB === BlendParam_B.G_BL_0)
+    } else if (paramB === BlendParam_B.G_BL_0) {
         return GfxBlendFactor.ZERO;
+    }
 
     throw "Unknown Blend Param B: "+paramB;
 }
@@ -581,4 +582,25 @@ export function translateRenderMode(renderMode: number): Partial<GfxMegaStateDes
     out.depthWrite = (renderMode & (1 << OtherModeL_Layout.Z_UPD)) !== 0;
 
     return out;
+}
+
+export function readMatrixRDP(dst: mat4, view: DataView, offs: number): number {
+    // The RDP matrix format is a bit bizarre. High values are separate from low ones.
+    dst[0]  = ((view.getInt16(offs + 0x00) << 16) | (view.getUint16(offs + 0x20))) / 0x10000;
+    dst[1]  = ((view.getInt16(offs + 0x02) << 16) | (view.getUint16(offs + 0x22))) / 0x10000;
+    dst[2]  = ((view.getInt16(offs + 0x04) << 16) | (view.getUint16(offs + 0x24))) / 0x10000;
+    dst[3]  = ((view.getInt16(offs + 0x06) << 16) | (view.getUint16(offs + 0x26))) / 0x10000;
+    dst[4]  = ((view.getInt16(offs + 0x08) << 16) | (view.getUint16(offs + 0x28))) / 0x10000;
+    dst[5]  = ((view.getInt16(offs + 0x0A) << 16) | (view.getUint16(offs + 0x2A))) / 0x10000;
+    dst[6]  = ((view.getInt16(offs + 0x0C) << 16) | (view.getUint16(offs + 0x2C))) / 0x10000;
+    dst[7]  = ((view.getInt16(offs + 0x0E) << 16) | (view.getUint16(offs + 0x2E))) / 0x10000;
+    dst[8]  = ((view.getInt16(offs + 0x10) << 16) | (view.getUint16(offs + 0x30))) / 0x10000;
+    dst[9]  = ((view.getInt16(offs + 0x12) << 16) | (view.getUint16(offs + 0x32))) / 0x10000;
+    dst[10] = ((view.getInt16(offs + 0x14) << 16) | (view.getUint16(offs + 0x34))) / 0x10000;
+    dst[11] = ((view.getInt16(offs + 0x16) << 16) | (view.getUint16(offs + 0x36))) / 0x10000;
+    dst[12] = ((view.getInt16(offs + 0x18) << 16) | (view.getUint16(offs + 0x38))) / 0x10000;
+    dst[13] = ((view.getInt16(offs + 0x1A) << 16) | (view.getUint16(offs + 0x3A))) / 0x10000;
+    dst[14] = ((view.getInt16(offs + 0x1C) << 16) | (view.getUint16(offs + 0x3C))) / 0x10000;
+    dst[15] = ((view.getInt16(offs + 0x1E) << 16) | (view.getUint16(offs + 0x3E))) / 0x10000;
+    return 0x40;
 }

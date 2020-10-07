@@ -171,12 +171,8 @@ const enum GfxRenderInstFlags {
     Template = 1 << 1,
     Draw = 1 << 2,
 
-    // We allow 16 late-binding textures, which should be good enough for most circumstances.
-    HasLateTextureBinding0 = 1 << 3,
-    HasLateTextureBindingMask = 0xFFFF << 3,
-
     // Which flags are inherited from templates...
-    InheritedFlags = (Indexed | HasLateTextureBindingMask),
+    InheritedFlags = Indexed,
 }
 
 export class GfxRenderInst {
@@ -194,7 +190,6 @@ export class GfxRenderInst {
     private _dynamicUniformBufferByteOffsets: number[] = nArray(4, () => 0);
 
     public _flags: GfxRenderInstFlags = 0;
-    private _lateSamplerBindings: string[] = [];
     private _inputState: GfxInputState | null = null;
     private _drawStart: number = 0;
     private _drawCount: number = 0;
@@ -250,8 +245,6 @@ export class GfxRenderInst {
         for (let i = 0; i < Math.min(tbd.uniformBufferBindings.length, obd.uniformBufferBindings.length); i++)
             tbd.uniformBufferBindings[i].wordCount = o._bindingDescriptors[0].uniformBufferBindings[i].wordCount;
         this.setSamplerBindingsFromTextureMappings(obd.samplerBindings);
-        for (let i = 0; i < o._lateSamplerBindings.length; i++)
-            this._lateSamplerBindings[i] = o._lateSamplerBindings[i];
         for (let i = 0; i < o._dynamicUniformBufferByteOffsets.length; i++)
             this._dynamicUniformBufferByteOffsets[i] = o._dynamicUniformBufferByteOffsets[i];
     }
@@ -412,29 +405,21 @@ export class GfxRenderInst {
      * instead of a GfxSamplerBinding to record that it can be resolved later, and use
      * {@see GfxRenderInst.resolveLateSamplerBinding} or equivalent to fill it in later.
      */
-    public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | string | null)[]): void {
+    public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
         for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
             const dst = this._bindingDescriptors[0].samplerBindings[i];
             const binding = m[i];
 
-            const lateBit = GfxRenderInstFlags.HasLateTextureBinding0 << i;
-
             if (binding === undefined || binding === null) {
-                this._flags &= ~lateBit;
                 dst.gfxTexture = null;
                 dst.gfxSampler = null;
+                dst.lateBinding = null;
                 continue;
             }
 
-            // Check if this is a late binding.
-            if (typeof binding === 'string' || binding.lateBinding !== null) {
-                this._flags |= lateBit;
-                this._lateSamplerBindings[i] = typeof binding === 'string' ? binding : binding.lateBinding!;
-            } else {
-                this._flags &= ~lateBit;
-                dst.gfxTexture = binding!.gfxTexture;
-                dst.gfxSampler = binding!.gfxSampler;
-            }
+            dst.gfxTexture = binding.gfxTexture;
+            dst.gfxSampler = binding.gfxSampler;
+            dst.lateBinding = binding.lateBinding;
         }
     }
 
@@ -447,25 +432,24 @@ export class GfxRenderInst {
      */
     public resolveLateSamplerBinding(name: string, binding: GfxSamplerBinding | null): void {
         for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
-            const lateBit = GfxRenderInstFlags.HasLateTextureBinding0 << i;
             const dst = this._bindingDescriptors[0].samplerBindings[i];
-            if (!!(this._flags & lateBit) && this._lateSamplerBindings[i] === name) {
-                this._flags &= ~lateBit;
+            if (dst.lateBinding === name) {
                 if (binding === null) {
                     dst.gfxTexture = null;
                     dst.gfxSampler = null;
                 } else {
+                    assert(binding.lateBinding === null);
                     dst.gfxTexture = binding.gfxTexture;
                     dst.gfxSampler = binding.gfxSampler;
-                    assert(binding.lateBinding === null);
                 }
+
+                dst.lateBinding = null;
             }
         }
     }
 
     public drawOnPassWithState(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState): void {
         assert(!!(this._flags & GfxRenderInstFlags.Draw));
-        assert((this._flags & GfxRenderInstFlags.HasLateTextureBindingMask) === 0);
 
         if (this._renderPipeline !== null) {
             state.currentRenderPipelineDescriptor = null;
@@ -514,7 +498,6 @@ export class GfxRenderInst {
 
     public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
         assert(!!(this._flags & GfxRenderInstFlags.Draw));
-        assert((this._flags & GfxRenderInstFlags.HasLateTextureBindingMask) === 0);
 
         if (this._renderPipeline !== null) {
             passRenderer.setPipeline(this._renderPipeline);

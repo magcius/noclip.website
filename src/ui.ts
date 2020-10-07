@@ -9,13 +9,13 @@ import { GITHUB_REVISION_URL, GITHUB_URL, GIT_SHORT_REVISION, IS_DEVELOPMENT } f
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { RenderStatistics } from './RenderStatistics';
 import { GlobalGrabManager } from './GrabManager';
-import { clamp, MathConstants } from './MathHelpers';
-
-// @ts-ignore
-import logoURL from './assets/logo.png';
+import { clamp } from './MathHelpers';
 import { DebugFloaterHolder, FloatingPanel } from './DebugFloaters';
 import { LinearEaseType, Keyframe, CameraAnimationManager } from './CameraAnimationManager';
 import { DraggingMode } from './InputManager';
+
+// @ts-ignore
+import logoURL from './assets/logo.png';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1409,8 +1409,10 @@ export class Slider implements Widget {
         return +this.sliderInput.value;
     }
 
-    public setValue(v: number): void {
+    public setValue(v: number, triggerCallback: boolean = false): void {
         this.sliderInput.value = '' + v;
+        if (triggerCallback)
+            this.onInput();
     }
 
     public getT(): number {
@@ -1465,7 +1467,7 @@ class ViewerSettings extends Panel {
         this.fovSlider = new Slider();
         this.fovSlider.setLabel("Field of View");
         this.fovSlider.setRange(1, 100);
-        this.fovSlider.setValue(Viewer.Viewer.FOV_Y_DEFAULT / MathConstants.TAU);
+        this.fovSlider.setValue(Viewer.Viewer.FOV_Y_DEFAULT / Math.PI * 100);
         this.fovSlider.onvalue = this.onFovSliderChange.bind(this);
         sliderContainer.appendChild(this.fovSlider.elem);
 

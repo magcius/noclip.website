@@ -2,7 +2,7 @@
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     vec4 u_Misc0;
 };
@@ -10,7 +10,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 #define u_ScreenSize (u_Misc0.xy)
 #define u_LodBias (u_Misc0.z)
 
-layout(row_major, std140) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix[1];
     Mat4x2 u_TexMatrix[2];
 };

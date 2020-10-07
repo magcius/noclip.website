@@ -23,7 +23,7 @@ import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVert
 import { getPointHermite } from "../../Spline";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
-import { MaterialParams, ColorKind, PacketParams, fillIndTexMtx, fillTextureMappingInfo } from "../../gx/gx_render";
+import { MaterialParams, ColorKind, PacketParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0 } from "../../MathHelpers";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
@@ -2148,13 +2148,21 @@ function fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderI
     // Skip u_TexMtx[1-9]
     materialOffs += 4*3*9;
 
-    materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[0]);
-    // Skip u_TextureInfo[1]
-    materialOffs += 4;
-    materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[2]);
-    materialOffs += fillTextureMappingInfo(d, materialOffs, materialParams.m_TextureMapping[3]);
-    // Skip u_TextureInfo[4-8]
-    materialOffs += 4*4;
+    materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[0]);
+    // Skip u_TextureSize[1]
+    materialOffs += 2;
+    materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[2]);
+    materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[3]);
+    // Skip u_TextureSize[4-8]
+    materialOffs += 2*4;
+
+    materialOffs += fillTextureBias(d, materialOffs, materialParams.m_TextureMapping[0]);
+    // Skip u_TextureBias[1]
+    materialOffs += 1;
+    materialOffs += fillTextureBias(d, materialOffs, materialParams.m_TextureMapping[2]);
+    materialOffs += fillTextureBias(d, materialOffs, materialParams.m_TextureMapping[3]);
+    // Skip u_TextureBias[4-8]
+    materialOffs += 1*4;
 
     materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
 

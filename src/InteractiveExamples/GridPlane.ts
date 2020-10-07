@@ -17,7 +17,7 @@ class GridPlaneProgram extends DeviceProgram {
     public both = `
 precision mediump float;
 
-layout(row_major, std140) uniform ub_Params {
+layout(std140) uniform ub_Params {
     Mat4x4 u_Projection;
     Mat4x3 u_ModelView;
     vec4 u_GridColor;

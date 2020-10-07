@@ -78,6 +78,13 @@ export class JKRArchive {
             return null;
         return file.buffer;
     }
+
+    public findFilenameData(name: string): ArrayBufferSlice | null {
+        for (let i = 0; i < this.files.length; i++)
+            if (this.files[i].name.toLowerCase() === name.toLowerCase())
+                return this.files[i].buffer;
+        return null;
+    }
 }
 
 // Used while parsing
@@ -130,17 +137,24 @@ export function parse(buffer: ArrayBufferSlice, name: string = '', decompressor:
     const littleEndian = (magic === 'CRAR');
 
     const size = view.getUint32(0x04, littleEndian);
-    const dataOffs = view.getUint32(0x0C, littleEndian) + 0x20;
-    const dirCount = view.getUint32(0x20, littleEndian);
-    const dirTableOffs = view.getUint32(0x24, littleEndian) + 0x20;
-    const fileEntryCount = view.getUint32(0x28, littleEndian);
-    const fileEntryTableOffs = view.getUint32(0x2C, littleEndian) + 0x20;
-    const strTableOffs = view.getUint32(0x34, littleEndian) + 0x20;
+    const dataHeaderOffs = view.getUint32(0x08, littleEndian);
+    assert(dataHeaderOffs === 0x20);
+    const dataHeaderSize = view.getUint32(0x0C, littleEndian);
+    const totalDataSize = view.getUint32(0x10, littleEndian);
+    const mramDataSize = view.getUint32(0x14, littleEndian);
+    const aramDataSize = view.getUint32(0x18, littleEndian);
 
-    let dirTableIdx = dirTableOffs;
+    const dataOffs = dataHeaderOffs + dataHeaderSize;
+    const nodeCount = view.getUint32(0x20, littleEndian);
+    const nodeTableOffs = view.getUint32(0x24, littleEndian) + dataHeaderOffs;
+    const fileEntryCount = view.getUint32(0x28, littleEndian);
+    const fileEntryTableOffs = view.getUint32(0x2C, littleEndian) + dataHeaderOffs;
+    const strTableOffs = view.getUint32(0x34, littleEndian) + dataHeaderOffs;
+
+    let dirTableIdx = nodeTableOffs;
     const dirEntries: DirEntry[] = [];
     const allFiles: RARCFile[] = [];
-    for (let i = 0; i < dirCount; i++) {
+    for (let i = 0; i < nodeCount; i++) {
         let type = readString(buffer, dirTableIdx + 0x00, 0x04, false);
         if (littleEndian)
             type = type[3] + type[2] + type[1] + type[0];

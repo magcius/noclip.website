@@ -10,7 +10,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { vec3, mat4 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy, Color } from "../Color";
 import { computeModelMatrixR } from "../MathHelpers";
-import { DrawType } from "./NameObj";
+import { DrawType, NameObj } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
 import { XanimePlayer } from './Animation';
@@ -958,13 +958,17 @@ export class ParticleEmitterHolder {
     }
 }
 
-export class EffectSystem {
+export class EffectSystem extends NameObj {
     public particleResourceHolder: ParticleResourceHolder;
     public particleEmitterHolder: ParticleEmitterHolder;
     public emitterManager: JPA.JPAEmitterManager;
     public drawInfo = new JPA.JPADrawInfo();
 
-    constructor(device: GfxDevice, effectArc: RARC.JKRArchive) {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'EffectSystem');
+
+        const device = sceneObjHolder.modelCache.device;
+        const effectArc = sceneObjHolder.modelCache.getArchive('ParticleData/Effect.arc')!;
         this.particleResourceHolder = new ParticleResourceHolder(effectArc);
 
         // These numbers are from GameScene::initEffect.
@@ -997,7 +1001,7 @@ export class EffectSystem {
         this.drawInfo.texPrjMtx = texPrjMtx;
     }
 
-    public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, groupID: number): void {
+    public drawEmitters(device: GfxDevice, renderInstManager: GfxRenderInstManager, groupID: number): void {
         this.emitterManager.draw(device, renderInstManager, this.drawInfo, groupID);
     }
 

@@ -83,7 +83,7 @@ export const enum CollisionKeeperCategory {
 export type TriangleFilterFunc = (sceneObjHolder: SceneObjHolder, triangle: Triangle) => boolean;
 export type CollisionPartsFilterFunc = (sceneObjHolder: SceneObjHolder, parts: CollisionParts) => boolean;
 
-function getAvgScale(v: vec3): number {
+function getAvgScale(v: ReadonlyVec3): number {
     return (v[0] + v[1] + v[2]) / 3.0;
 }
 
@@ -217,10 +217,10 @@ export class CollisionParts {
 
     private updateBoundingSphereRangePrivate(scale: number): void {
         this.scale = scale;
-        this.boundingSphereRadius = this.collisionServer.farthestVertexDistance;
+        this.boundingSphereRadius = this.scale * this.collisionServer.farthestVertexDistance;
     }
 
-    public updateBoundingSphereRangeFromScaleVector(scaleVec: vec3): void {
+    public updateBoundingSphereRangeFromScaleVector(scaleVec: ReadonlyVec3): void {
         this.updateBoundingSphereRangePrivate(getAvgScale(scaleVec));
     }
 
@@ -319,7 +319,7 @@ export class CollisionParts {
         }
     }
 
-    private checkStrikeBallCore(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, p1: ReadonlyVec3, radius: number, invAvgScale: number, avgScale: number, triFilter: TriangleFilterFunc | null, normalFilter: vec3 | null): number {
+    private checkStrikeBallCore(sceneObjHolder: SceneObjHolder, hitInfo: HitInfo[], dstIdx: number, pos: ReadonlyVec3, vel: ReadonlyVec3, radius: number, invAvgScale: number, avgScale: number, triFilter: TriangleFilterFunc | null, normalFilter: vec3 | null): number {
         // Copy the positions before we run checkSphere, as pos is scratchVec3a, and we're going to stomp on it below.
         for (let i = dstIdx; i < hitInfo.length; i++)
             vec3.copy(hitInfo[i].strikeLoc, pos);
@@ -345,7 +345,7 @@ export class CollisionParts {
                 continue;
 
             const dist = this.checkCollisionResult.distances[i]!;
-            hitInfo[dstIdx].distance = dist;
+            hitInfo[dstIdx].distance = dist * avgScale;
             dstIdx++;
         }
         return dstIdx - dstIdxStart;
@@ -810,6 +810,17 @@ export function getFirstPolyOnLineToMapExceptActor(sceneObjHolder: SceneObjHolde
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, CollisionKeeperCategory.Map);
 }
 
+export function createCollisionPartsFilterSensor(hitSensor: HitSensor): CollisionPartsFilterFunc {
+    return (sceneObjHolder: SceneObjHolder, parts: CollisionParts): boolean => {
+        return parts.hitSensor === hitSensor;
+    };
+}
+
+export function getFirstPolyOnLineToMapExceptSensor(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: ReadonlyVec3, dir: ReadonlyVec3, hitSensor: HitSensor): boolean {
+    const partsFilter = createCollisionPartsFilterSensor(hitSensor);
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, partsFilter, CollisionKeeperCategory.Map);
+}
+
 export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: ReadonlyVec3, height: number): boolean {
     vec3.set(scratchVec3h, 0.0, -height, 0.0);
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, null, p0, scratchVec3h, null, null, CollisionKeeperCategory.Map);
@@ -1008,7 +1019,10 @@ export class Binder {
         const origPos = vec3.copy(scratchVec3d, scratchVec3c);
         const vel = vec3.copy(scratchVec3g, actorVelocity);
 
-        let ret = this.findBindedPos(sceneObjHolder, pos, vel, this.expandDistance, false);
+        const expandDistance = this.expandDistance;
+        let ret = this.findBindedPos(sceneObjHolder, pos, vel, expandDistance, false);
+        this.expandDistance = false;
+
         if (ret === BinderFindBindedPositionRet.NoCollide) {
             vec3.copy(dstVel, actorVelocity);
         } else {
@@ -1018,7 +1032,7 @@ export class Binder {
             vec3.add(pos, pos, fixReact);
             vec3.copy(this.fixReactionVec, fixReact);
 
-            while (!this.expandDistance && ret === BinderFindBindedPositionRet.MoveAlongHittedPlanes) {
+            while (!expandDistance && ret === BinderFindBindedPositionRet.MoveAlongHittedPlanes) {
                 // Put the remainder of the velocity energy along the planes.
 
                 const moveVel = scratchVec3h;
@@ -1121,7 +1135,7 @@ export class Binder {
             maxZ = Math.min(z, maxZ);
 
             if (this.useMovingReaction) {
-                // add on "asdf2" field.
+                // add on "hitVel" field.
                 throw "whoops";
             }
         }

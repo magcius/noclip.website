@@ -24,7 +24,7 @@ import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../g
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoScale } from './JMapInfo';
+import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
 import { EffectSystem } from './EffectSystem';
@@ -32,7 +32,7 @@ import { EffectSystem } from './EffectSystem';
 import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
-import { ObjInfo, NoclipLegacyActorSpawner } from './Actors/LegacyActor';
+import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
@@ -48,6 +48,8 @@ import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
+import { WaterPressureBulletHolder } from './Actors/MapObj';
+import { DemoDirector } from './Demo';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -238,7 +240,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             }
 
             effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
-            effectSystem.draw(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, drawType);
+            effectSystem.drawEmitters(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, drawType);
 
             this.renderHelper.renderInstManager.popTemplateRenderInst();
         }
@@ -973,32 +975,129 @@ class AreaObjContainer extends NameObj {
 }
 
 export const enum SceneObj {
-    SensorHitChecker        = 0x00,
-    CollisionDirector       = 0x01,
-    LightDirector           = 0x06,
-    StageSwitchContainer    = 0x0A,
-    SwitchWatcherHolder     = 0x0B,
-    SleepControllerHolder   = 0x0C,
-    AreaObjContainer        = 0x0D,
-    LiveActorGroupArray     = 0x0E,
-    ImageEffectSystemHolder = 0x1D,
-    BloomEffect             = 0x1E,
-    LensFlareDirector       = 0x25,
-    FurDrawManager          = 0x26,
-    PlanetGravityManager    = 0x32,
-    CoinRotater             = 0x38,
-    AirBubbleHolder         = 0x39,
-    StarPieceDirector       = 0x3C,
-    ShadowControllerHolder  = 0x44,
-    SwingRopeGroup          = 0x47,
-    TrapezeRopeDrawInit     = 0x4A,
-    MapPartsRailGuideHolder = 0x56,
-    ElectricRailHolder      = 0x59,
-    HeatHazeDirector        = 0x5D,
-    WaterAreaHolder         = 0x62,
-    WaterPlantDrawInit      = 0x63,
-    MiniatureGalaxyHolder   = 0x73,
-    PriorDrawAirHolder      = 0x75,
+    SensorHitChecker               = 0x00,
+    CollisionDirector              = 0x01,
+    ClippingDirector               = 0x02,
+    DemoDirector                   = 0x03,
+    EventDirector                  = 0x04,
+    EffectSystem                   = 0x05,
+    LightDirector                  = 0x06,
+    SceneDataInitializer           = 0x07,
+    StageDataHolder                = 0x08,
+    MessageSensorHolder            = 0x09,
+    StageSwitchContainer           = 0x0A,
+    SwitchWatcherHolder            = 0x0B,
+    SleepControllerHolder          = 0x0C,
+    AreaObjContainer               = 0x0D,
+    LiveActorGroupArray            = 0x0E,
+    MovementOnOffGroupHolder       = 0x0F,
+    CaptureScreenActor             = 0x10,
+    AudCameraWatcher               = 0x11,
+    AudEffectDirector              = 0x12,
+    AudBgmConductor                = 0x13,
+    MarioHolder                    = 0x14,
+    // Removed                     = 0x15,
+    MirrorCamera                   = 0x16,
+    CameraContext                  = 0x17,
+    IgnorePauseNameObj             = 0x18,
+    TalkDirector                   = 0x19,
+    EventSequencer                 = 0x1A,
+    StopSceneController            = 0x1B,
+    SceneNameObjMovementController = 0x1C,
+    ImageEffectSystemHolder        = 0x1D,
+    BloomEffect                    = 0x1E,
+    BloomEffectSimple              = 0x1F,
+    ScreenBlurEffect               = 0x20,
+    DepthOfFieldBlur               = 0x21,
+    ScreenWipeHolder               = 0x22,
+    PlayerActionGuidance           = 0x23,
+    ScenePlayingResult             = 0x24,
+    LensFlareDirector              = 0x25,
+    FurDrawManager                 = 0x26,
+    PlacementStateChecker          = 0x27,
+    NamePosHolder                  = 0x28,
+    NPCDirector                    = 0x29,
+    ResourceShare                  = 0x2A,
+    MoviePlayerSimple              = 0x2B,
+    WarpPodMgr                     = 0x2C,
+    CenterScreenBlur               = 0x2D,
+    OdhConverter                   = 0x2E,
+    CometRetryButton               = 0x2F,
+    AllLiveActorGroup              = 0x30,
+    CameraDirector                 = 0x31,
+    PlanetGravityManager           = 0x32,
+    BaseMatrixFollowTargetHolder   = 0x33,
+    GameSceneLayoutHolder          = 0x34,
+    // Removed                     = 0x35
+    CoinHolder                     = 0x36,
+    PurpleCoinHolder               = 0x37,
+    CoinRotater                    = 0x38,
+    AirBubbleHolder                = 0x39,
+    BigFanHolder                   = 0x3A,
+    KarikariDirector               = 0x3B,
+    StarPieceDirector              = 0x3C,
+    BegomanAttackPermitter         = 0x3D,
+    TripodBossAccesser             = 0x3E,
+    KameckBeamHolder               = 0x3F,
+    KameckFireBallHolder           = 0x40,
+    KameckBeamTurtleHolder         = 0x41,
+    KabokuriFireHolder             = 0x42,
+    TakoHeiInkHolder               = 0x43,
+    ShadowControllerHolder         = 0x44,
+    ShadowVolumeDrawInit           = 0x45,
+    ShadowSurfaceDrawInit          = 0x46,
+    SwingRopeGroup                 = 0x47,
+    PlantStalkDrawInit             = 0x48,
+    PlantLeafDrawInit              = 0x49,
+    TrapezeRopeDrawInit            = 0x4A,
+    // Removed                     = 0x4B,
+    VolumeModelDrawInit            = 0x4C,
+    SpinDriverPathDrawInit         = 0x4D,
+    NoteGroup                      = 0x4E,
+    ClipAreaDropHolder             = 0x4F,
+    FallOutFieldDraw               = 0x50,
+    ClipFieldFillDraw              = 0x51,
+    // Removed                     = 0x52,
+    ClipAreaHolder                 = 0x53,
+    ArrowSwitchMultiHolder         = 0x54,
+    ScreenAlphaCapture             = 0x55,
+    MapPartsRailGuideHolder        = 0x56,
+    GCapture                       = 0x57,
+    NameObjExecuteHolder           = 0x58,
+    ElectricRailHolder             = 0x59,
+    SpiderThread                   = 0x5A,
+    QuakeEffectGenerator           = 0x5B,
+    // Removed                     = 0x5C,
+    HeatHazeDirector               = 0x5D,
+    ChipHolderYellow               = 0x5E,
+    ChipHolderBlue                 = 0x5F,
+    BigBubbleHolder                = 0x60,
+    EarthenPipeMediator            = 0x61,
+    WaterAreaHolder                = 0x62,
+    WaterPlantDrawInit             = 0x63,
+    OceanHomeMapCtrl               = 0x64,
+    RaceManager                    = 0x65,
+    GroupCheckManager              = 0x66,
+    SkeletalFishBabyRailHolder     = 0x67,
+    SkeletalFishBossRailHolder     = 0x68,
+    WaterPressureBulletHolder      = 0x69,
+    FirePressureBulletHolder       = 0x6A,
+    SunshadeMapHolder              = 0x6B,
+    MiiFacePartsHolder             = 0x6C,
+    MiiFaceIconHolder              = 0x6D,
+    FluffWindHolder                = 0x6E,
+    SphereSelector                 = 0x6F,
+    GalaxyNamePlateDrawer          = 0x70,
+    CinemaFrame                    = 0x71,
+    BossAccessor                   = 0x72,
+    MiniatureGalaxyHolder          = 0x73,
+    PlanetMapCreator               = 0x74,
+    PriorDrawAirHolder             = 0x75,
+    InformationObserver            = 0x76,
+    GalaxyMapController            = 0x77,
+    MoviePlayingSequenceHolder     = 0x78,
+    PrologueHolder                 = 0x79,
+    StaffRoll                      = 0x7A,
 }
 
 export class SceneObjHolder {
@@ -1011,11 +1110,12 @@ export class SceneObjHolder {
     public lightDirector: LightDirector;
     public npcDirector: NPCDirector;
     public stageDataHolder: StageDataHolder;
-    public effectSystem: EffectSystem | null = null;
     public messageDataHolder: MessageDataHolder | null = null;
 
     public sensorHitChecker: SensorHitChecker | null = null;
     public collisionDirector: CollisionDirector | null = null;
+    public demoDirector: DemoDirector | null = null;
+    public effectSystem: EffectSystem | null = null;
     public stageSwitchContainer: StageSwitchContainer | null = null;
     public switchWatcherHolder: SwitchWatcherHolder | null = null;
     public sleepControllerHolder: SleepControllerHolder | null = null;
@@ -1036,23 +1136,24 @@ export class SceneObjHolder {
     public heatHazeDirector: HeatHazeDirector | null = null;
     public waterAreaHolder: WaterAreaHolder | null = null;
     public waterPlantDrawInit: WaterPlantDrawInit | null = null;
+    public waterPressureBulletHolder: WaterPressureBulletHolder | null = null;
     public miniatureGalaxyHolder: MiniatureGalaxyHolder | null = null;
     public priorDrawAirHolder: PriorDrawAirHolder | null = null;
 
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
     public galaxyNameSortTable: GalaxyNameSortTable | null = null;
+    public sceneNameObjListExecutor = new SceneNameObjListExecutor();
+    public nameObjHolder = new NameObjHolder();
+
+    // Technically should be on the StageDataHolder, but since that has children, I think that's ugly.
+    public objNameTable: JMapInfoIter;
 
     // Noclip-specific stuff.
     public specialTextureBinder: SpecialTextureBinder;
     public renderParams = new RenderParams();
     public viewerInput: Viewer.ViewerRenderInput;
     public uiContainer: HTMLElement;
-
-    // This is technically stored outside the SceneObjHolder, separately
-    // on the same singleton, but c'est la vie...
-    public sceneNameObjListExecutor = new SceneNameObjListExecutor();
-    public nameObjHolder = new NameObjHolder();
 
     public create(sceneObj: SceneObj): void {
         if (this.getObj(sceneObj) === null)
@@ -1064,8 +1165,12 @@ export class SceneObjHolder {
             return this.sensorHitChecker;
         else if (sceneObj === SceneObj.CollisionDirector)
             return this.collisionDirector;
+        else if (sceneObj === SceneObj.DemoDirector)
+            return this.demoDirector;
         else if (sceneObj === SceneObj.StageSwitchContainer)
             return this.stageSwitchContainer;
+        else if (sceneObj === SceneObj.EffectSystem)
+            return this.effectSystem;
         else if (sceneObj === SceneObj.SwitchWatcherHolder)
             return this.switchWatcherHolder;
         else if (sceneObj === SceneObj.SleepControllerHolder)
@@ -1104,6 +1209,8 @@ export class SceneObjHolder {
             return this.waterAreaHolder;
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             return this.waterPlantDrawInit;
+        else if (sceneObj === SceneObj.WaterPressureBulletHolder)
+            return this.waterPressureBulletHolder;
         else if (sceneObj === SceneObj.MiniatureGalaxyHolder)
             return this.miniatureGalaxyHolder;
         else if (sceneObj === SceneObj.PriorDrawAirHolder)
@@ -1116,6 +1223,10 @@ export class SceneObjHolder {
             this.sensorHitChecker = new SensorHitChecker(this);
         else if (sceneObj === SceneObj.CollisionDirector)
             this.collisionDirector = new CollisionDirector(this);
+        else if (sceneObj === SceneObj.DemoDirector)
+            this.demoDirector = new DemoDirector(this);
+        else if (sceneObj === SceneObj.EffectSystem)
+            this.effectSystem = new EffectSystem(this);
         else if (sceneObj === SceneObj.StageSwitchContainer)
             this.stageSwitchContainer = new StageSwitchContainer(this);
         else if (sceneObj === SceneObj.SwitchWatcherHolder)
@@ -1156,6 +1267,8 @@ export class SceneObjHolder {
             this.waterAreaHolder = new WaterAreaHolder(this);
         else if (sceneObj === SceneObj.WaterPlantDrawInit)
             this.waterPlantDrawInit = new WaterPlantDrawInit(this);
+        else if (sceneObj === SceneObj.WaterPressureBulletHolder)
+            this.waterPressureBulletHolder = new WaterPressureBulletHolder(this);
         else if (sceneObj === SceneObj.MiniatureGalaxyHolder)
             this.miniatureGalaxyHolder = new MiniatureGalaxyHolder(this);
         else if (sceneObj === SceneObj.PriorDrawAirHolder)
@@ -1168,10 +1281,6 @@ export class SceneObjHolder {
 
     public destroy(device: GfxDevice): void {
         this.nameObjHolder.destroy(device);
-
-        if (this.effectSystem !== null)
-            this.effectSystem.destroy(device);
-
         this.drawSyncManager.destroy(device);
     }
 }
@@ -1257,9 +1366,8 @@ class SMGSpawner {
                 actorTableEntry.factoryFunc(zoneAndLayer, this.sceneObjHolder, infoIter);
             } else {
                 // Spawn legacy.
-                const objInfoLegacy = stageDataHolder.legacyCreateObjinfo(infoIter);
                 const infoIterCopy = copyInfoIter(infoIter);
-                this.legacySpawner.spawnObjectLegacy(zoneAndLayer, infoIterCopy, objInfoLegacy);
+                this.legacySpawner.spawnObjectLegacy(zoneAndLayer, infoIterCopy);
             }
         }, priority);
 
@@ -1375,24 +1483,6 @@ class StageDataHolder {
         const pointInfo = this.createCsvParser(this.zoneArchive.findFileData(`jmp/path/CommonPathPointInfo.${no}`)!);
 
         return [commonPathInfo, pointInfo];
-    }
-
-    public legacyCreateObjinfo(infoIter: JMapInfoIter): ObjInfo {
-        const objId = fallback(infoIter.getValueNumberNoInit('l_id'), -1);
-        const objName = fallback(infoIter.getValueString('name'), 'Unknown');
-        const objArg0 = fallback(infoIter.getValueNumberNoInit('Obj_arg0'), -1);
-        const modelMatrix = mat4.create();
-
-        const translation = vec3.create(), rotation = vec3.create(), scale = vec3.create();
-        getJMapInfoScale(scale, infoIter);
-        getJMapInfoRotateLocal(rotation, infoIter);
-        getJMapInfoTransLocal(translation, infoIter);
-        computeModelMatrixSRT(modelMatrix,
-            scale[0], scale[1], scale[2],
-            rotation[0], rotation[1], rotation[2],
-            translation[0], translation[1], translation[2]);
-
-        return { objId, objName, objArg0, modelMatrix };
     }
 
     private iterLayer(layerId: LayerId, callback: LayerObjInfoCallback, buffer: ArrayBufferSlice): void {
@@ -1572,6 +1662,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
     public abstract getLightData(modelCache: ModelCache): JMapInfoIter;
     public abstract getZoneLightData(modelCache: ModelCache, zoneName: string): JMapInfoIter;
     public abstract getZoneMapArchive(modelCache: ModelCache, zoneName: string): RARC.JKRArchive;
+    public abstract getObjNameTable(modelCache: ModelCache): JMapInfoIter;
     public abstract requestGlobalArchives(modelCache: ModelCache): void;
     public abstract requestZoneArchives(modelCache: ModelCache, zoneName: string): void;
 
@@ -1613,12 +1704,10 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         await modelCache.waitForLoad();
 
         const scenarioData = new ScenarioData(modelCache.getArchive(scenarioDataFilename)!);
-
         for (let i = 0; i < scenarioData.zoneNames.length; i++) {
             const zoneName = scenarioData.zoneNames[i];
             this.requestZoneArchives(modelCache, zoneName);
         }
-
         sceneObjHolder.scenarioData = scenarioData;
 
         await modelCache.waitForLoad();
@@ -1628,9 +1717,9 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         const lightDataHolder = new LightDataHolder(this.getLightData(modelCache));
         sceneObjHolder.lightDirector = new LightDirector(sceneObjHolder, lightDataHolder);
         sceneObjHolder.stageDataHolder = new StageDataHolder(this, modelCache, sceneObjHolder.scenarioData, sceneObjHolder.scenarioData.getMasterZoneFilename(), 0);
+        sceneObjHolder.objNameTable = this.getObjNameTable(modelCache);
 
-        if (modelCache.isArchiveExist(`ParticleData/Effect.arc`))
-            sceneObjHolder.effectSystem = new EffectSystem(device, modelCache.getArchive(`ParticleData/Effect.arc`)!);
+        sceneObjHolder.create(SceneObj.EffectSystem);
 
         if (modelCache.isArchiveExist(`UsEnglish/MessageData/Message.arc`))
             sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`)!);

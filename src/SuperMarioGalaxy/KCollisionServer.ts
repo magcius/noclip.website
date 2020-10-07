@@ -649,7 +649,7 @@ export class KCollisionServer {
         }
     }
 
-    public checkSphere(dst: CheckCollideResult, maxResults: number, pos: ReadonlyVec3, radius: number, invAvgScale: number): boolean {
+    public checkSphere(dst: CheckCollideResult, maxResults: number, pos: ReadonlyVec3, radius: number, scale: number): boolean {
         // Put in local space.
         vec3.sub(scratchVec3a, pos, this.blocksTrans);
 
@@ -689,7 +689,7 @@ export class KCollisionServer {
                         if (prism.height < 0.0 || dst.prisms.indexOf(prism) >= 0)
                             continue;
 
-                        if (!this.KCHitSphere(prismHitScratch, prism, pos, radius, invAvgScale))
+                        if (!this.KCHitSphere(prismHitScratch, prism, pos, radius, scale))
                             continue;
 
                         dst.prisms[dstPrismCount] = prism;
