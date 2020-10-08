@@ -1401,7 +1401,7 @@ function dKyr_sun_move(globals: dGlobals): void {
     vec3.scaleAndAdd(pkt.sunPos, globals.cameraPosition, scratchVec3, 8000.0);
 
     let sunCanGlare = true;
-    if (envLight.weatherPselIdx !== 0 || (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0.5)) {
+    if (envLight.colpatWeather !== 0 || (envLight.colpatCurr !== 0 && envLight.colpatBlend > 0.5)) {
         // Sun should not glare during non-sunny weather.
         sunCanGlare = false;
     } else if (roomType === 2) {
@@ -1851,9 +1851,9 @@ function wether_move_star(globals: dGlobals, deltaTimeInFrames: number): void {
             starAmount = 1.0;
     }
 
-    if (envLight.weatherPselIdx !== 0)
+    if (envLight.colpatWeather !== 0)
         starAmount = 0.0;
-    else if (envLight.pselIdxCurr !== 0 && envLight.blendPsel > 0.5)
+    else if (envLight.colpatCurr !== 0 && envLight.colpatBlend > 0.5)
         starAmount = 0.0;
 
     envLight.starAmount = cLib_addCalc(envLight.starAmount, starAmount, 0.1, 0.01, 0.000001);
@@ -2151,7 +2151,7 @@ function wether_move_vrkumo(globals: dGlobals, deltaTimeInFrames: number): void 
     } else if (!globals.scnPlay.vrboxLoaded || envLight.vrboxInvisible) {
         pkt.count = 0;
     } else {
-        if (((envLight.pselIdxCurr === 1 || envLight.pselIdxCurr === 2) && envLight.blendPsel > 0.0) || ((envLight.pselIdxPrev === 1 || envLight.pselIdxPrev === 2) && envLight.blendPsel < 1.0)) {
+        if (((envLight.colpatCurr === 1 || envLight.colpatCurr === 2) && envLight.colpatBlend > 0.0) || ((envLight.colpatPrev === 1 || envLight.colpatPrev === 2) && envLight.colpatBlend < 1.0)) {
             pkt.strength = cLib_addCalc(pkt.strength, 1.0, 0.1, 0.003, 0.0000007);
         } else {
             pkt.strength = cLib_addCalc(pkt.strength, 0.0, 0.08, 0.002, 0.00000007);

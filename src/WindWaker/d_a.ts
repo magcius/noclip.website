@@ -828,13 +828,13 @@ const enum Kytag00EffectMode {
 class d_a_kytag00 extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_kytag00;
 
-    private pselIdx = 0;
+    private colpat = 0;
     private effectMode = Kytag00EffectMode.None;
     private invert = false;
     private alwaysCheckPlayerPos = false;
     private target = 0.0;
     private effectSet = false;
-    private pselSet = false;
+    private colpatSet = false;
 
     // Cylinder
     private innerFadeY = 0.0;
@@ -842,7 +842,7 @@ class d_a_kytag00 extends fopAc_ac_c {
     private outerRadius = 0.0;
 
     public subload(globals: dGlobals): cPhs__Status {
-        this.pselIdx = this.parameters & 0xFF;
+        this.colpat = this.parameters & 0xFF;
         this.effectMode = (this.parameters >>> 8) & 0xFF;
         this.invert = !!((this.rot[0] >>> 8) & 0xFF);
         this.alwaysCheckPlayerPos = !!(this.rot[2] & 0xFF);
@@ -936,19 +936,19 @@ class d_a_kytag00 extends fopAc_ac_c {
 
             const target = this.target * blendXZ * blendY;
 
-            if (envLight.envrIdxPrev === envLight.envrIdxCurr && this.pselIdx < 4) {
-                this.pselSet = true;
+            if (envLight.envrIdxPrev === envLight.envrIdxCurr && this.colpat < 4) {
+                this.colpatSet = true;
 
                 if (target > 0.5) {
-                    envLight.blendPselGather = target;
-                    envLight.pselIdxPrevGather = envLight.weatherPselIdx;
-                    envLight.pselIdxCurrGather = this.pselIdx;
-                    envLight.colSetModeGather = 1;
+                    envLight.colpatBlendGather = target;
+                    envLight.colpatPrevGather = envLight.colpatWeather;
+                    envLight.colpatCurrGather = this.colpat;
+                    envLight.colpatModeGather = 1;
                 } else {
-                    envLight.blendPselGather = 1.0 - target;
-                    envLight.pselIdxPrevGather = this.pselIdx;
-                    envLight.pselIdxCurrGather = envLight.weatherPselIdx;
-                    envLight.colSetModeGather = 1;
+                    envLight.colpatBlendGather = 1.0 - target;
+                    envLight.colpatPrevGather = this.colpat;
+                    envLight.colpatCurrGather = envLight.colpatWeather;
+                    envLight.colpatModeGather = 1;
                 }
             }
 
@@ -973,12 +973,12 @@ class d_a_kytag00 extends fopAc_ac_c {
                 // TODO(jstpierre): The rest of the modes.
             }
         } else {
-            if (this.pselSet) {
-                this.pselSet = false;
-                envLight.pselIdxPrevGather = envLight.weatherPselIdx;
-                envLight.pselIdxCurrGather = envLight.weatherPselIdx;
-                envLight.blendPselGather = 0.0;
-                envLight.colSetModeGather = 1;
+            if (this.colpatSet) {
+                this.colpatSet = false;
+                envLight.colpatPrevGather = envLight.colpatWeather;
+                envLight.colpatCurrGather = envLight.colpatWeather;
+                envLight.colpatBlendGather = 0.0;
+                envLight.colpatModeGather = 1;
             }
 
             if (this.effectSet) {
