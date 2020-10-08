@@ -869,7 +869,7 @@ class ShadowVolumeFlatModel extends ShadowVolumeModel {
     }
 }
 
-// TODO(jstpierre): This is not how it's normally done. fillSilhouetteColor is called directly from the main list, normally.
+// NOTE(jstpierre): This is not how it's normally done. fillSilhouetteColor is called directly from the main list, normally.
 class AlphaShadow extends NameObj {
     private materialHelperDrawAlpha: GXMaterialHelperGfx;
     private orthoSceneParams = new SceneParams();

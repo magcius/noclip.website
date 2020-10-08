@@ -228,8 +228,8 @@ export class HitSensorInfo {
         const dst = this.sensor.center;
 
         if (this.useCallback) {
-            // TODO(jstpierre): Find a use of this?
             // this.sensor.actor.updateHitSensor();
+            throw "whoops";
         } else if (this.baseMtx !== null) {
             transformVec3Mat4w1(dst, this.baseMtx, this.offset);
         } else {

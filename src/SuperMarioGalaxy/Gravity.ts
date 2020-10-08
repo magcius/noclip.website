@@ -3,7 +3,7 @@ import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { JMapInfoIter, getJMapInfoScale, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { LiveActor, ZoneAndLayer, getJMapInfoTrans, getJMapInfoRotate } from "./LiveActor";
-import { fallback, assertExists, nArray } from "../util";
+import { fallback, assertExists, nArray, spliceBisectRight } from "../util";
 import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxisX, getMatrixAxisY, getMatrixTranslation, isNearZeroVec3, isNearZero, getMatrixAxisZ, Vec3Zero, setMatrixTranslation, transformVec3Mat4w1, lerp } from "../MathHelpers";
 import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
 import { NameObj } from "./NameObj";
@@ -53,7 +53,7 @@ export class PlanetGravityManager extends NameObj {
                 continue;
 
             if (gravity.priority < bestPriority)
-                continue;
+                break;
 
             if (!gravity.calcGravity(scratchGravLocal, pos))
                 continue;
@@ -87,8 +87,9 @@ export class PlanetGravityManager extends NameObj {
     }
 
     public registerGravity(gravity: PlanetGravity): void {
-        // TODO(jstpierre): Sort by priority
-        this.gravities.push(gravity);
+        spliceBisectRight(this.gravities, gravity, (a, b) => {
+            return b.priority - a.priority;
+        });
     }
 }
 
@@ -159,8 +160,7 @@ abstract class PlanetGravity {
 
     protected abstract calcOwnGravityVector(dst: vec3, pos: ReadonlyVec3): number;
 
-    // TODO(jstpierre): I don't think this is ever called with a non-identity matrix, so I'm excluding
-    // the parameter for now...
+    // TODO(jstpierre): BaseMatrixFollower
     protected updateMtx(): void {
     }
 

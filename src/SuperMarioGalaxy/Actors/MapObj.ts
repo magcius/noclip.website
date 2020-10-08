@@ -247,7 +247,7 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
     }
 
     protected initCaseUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        // TODO(jstpierre): Switch B
+        listenStageSwitchOnOffB(sceneObjHolder, this, this.startMapPartsFunctions.bind(this), this.endMapPartsFunctions.bind(this));
     }
 
     protected initCaseNoUseSwitchA(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -277,6 +277,15 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
             this.railMover.start();
         if (this.railGuideDrawer !== null)
             this.railGuideDrawer.start(sceneObjHolder);
+    }
+
+    public endMapPartsFunctions(sceneObjHolder: SceneObjHolder): void {
+        if (this.rotator !== null)
+            this.rotator.end();
+        if (this.railMover !== null)
+            this.railMover.end();
+        if (this.railGuideDrawer !== null)
+            this.railGuideDrawer.end(sceneObjHolder);
     }
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {

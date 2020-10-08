@@ -5,7 +5,6 @@ import { mat4, quat, ReadonlyVec3, vec2, vec3, ReadonlyQuat, ReadonlyMat4 } from
 import { Camera } from '../../Camera';
 import { Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow, Blue } from '../../Color';
 import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
-import { LoopMode } from '../../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
 import { drawWorldSpaceBasis, drawWorldSpacePoint, getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpaceVector } from '../../DebugJunk';
@@ -22,7 +21,7 @@ import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModel
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setLoopMode, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos, quatGetAxisZ, quatGetAxisY, blendQuatUpFront, quatGetAxisX, turnVecToVecCos, excludeCalcShadowToMyCollision, addBodyMessageSensorMapObjPress, MapObjConnector, getEaseOutValue, getEaseInValue, getEaseInOutValue, turnVecToVecCosOnPlane, addHitSensorEye, tryStartBck } from '../ActorUtil';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addVelocityMoveToDirection, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateQuatRollBall, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, vecKillElement, validateHitSensors, invalidateShadowAll, validateShadowAll, makeMtxFrontNoSupportPos, makeAxisVerticalZX, calcRailStartPos, calcRailEndPos, quatGetAxisZ, quatGetAxisY, blendQuatUpFront, quatGetAxisX, turnVecToVecCos, excludeCalcShadowToMyCollision, addBodyMessageSensorMapObjPress, MapObjConnector, getEaseOutValue, getEaseInValue, getEaseInOutValue, turnVecToVecCosOnPlane, addHitSensorEye, tryStartBck } from '../ActorUtil';
 import { calcMapGround, CollisionKeeperCategory, getBindedFixReactionVector, getFirstPolyOnLineToMap, isBinded, isBindedGround, isGroundCodeDamage, isGroundCodeDamageFire, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface, isFloorPolygonAngle, isWallPolygonAngle, isOnGround, TriangleFilterFunc, isBindedWall, isBindedRoof, getFirstPolyOnLineToMapExceptSensor } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName, isEffectValid } from '../EffectSystem';
@@ -941,8 +940,6 @@ export class QuestionCoin extends LiveActor {
 
         this.useLocalGravity = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
 
-        // TODO(jstpierre): initAfterPlacement
-
         if (this.useLocalGravity) {
             makeMtxTRFromActor(this.mtx, this);
         } else {
@@ -957,6 +954,9 @@ export class QuestionCoin extends LiveActor {
         connectToSceneItemStrongLight(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, null);
 
+        this.initHitSensor();
+        vec3.set(scratchVec3, 0.0, 210.0 * this.scale[0], 0.0);
+        addHitSensor(sceneObjHolder, this, 'binder', HitSensorType.QuestionCoinBind, 0x10, 150.0 * this.scale[0], scratchVec3);
         useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
 
         if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
@@ -965,6 +965,15 @@ export class QuestionCoin extends LiveActor {
         } else {
             this.makeActorAppeared(sceneObjHolder);
         }
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        if (isInWater(sceneObjHolder, this.translation)) {
+            const binderSensor = this.getSensor('binder')!;
+            binderSensor.radius *= 2.0;
+        }
+
+        // TODO(jstpierre): Shadow setup
     }
 
     protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
@@ -2562,12 +2571,8 @@ export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
     }
 }
 
-const enum TreasureBoxType {
-    Normal, Cracked, Gold,
-}
-
+const enum TreasureBoxType { Normal, Cracked, Gold }
 const enum TreasureBoxNrv { Wait, AlwaysOpen }
-
 export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
     private type: TreasureBoxType;
 
@@ -2608,7 +2613,11 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
                 emitEffect(sceneObjHolder, this, `Gold`);
             }
         } else if (currentNerve === TreasureBoxNrv.AlwaysOpen) {
-            // TODO(jstpierre): Go to end of Bck animation.
+            if (isFirstStep(this)) {
+                invalidateHitSensors(this);
+                startBck(this, 'Open');
+                setBckFrameAndStop(this, getBckFrameMax(this));
+            }
         }
     }
 
@@ -2840,8 +2849,6 @@ export class WarpPod extends LiveActor {
         if (this.visible) {
             startBck(this, 'Active');
             startBrk(this, 'Active');
-            // This is a bit hokey, but we don't have an XanimePlayer, so this is our solution...
-            setLoopMode(this, LoopMode.ONCE);
         }
 
         // The game normally will check a few different save file bits
@@ -2860,7 +2867,7 @@ export class WarpPod extends LiveActor {
         if (this.visible) {
             connectToScene(sceneObjHolder, this, MovementType.MapObj, CalcAnimType.MapObj, DrawBufferType.MapObj, DrawType.WarpPodPath);
         } else {
-            connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, -1);
+            connectToScene(sceneObjHolder, this, MovementType.MapObj, CalcAnimType.None, DrawBufferType.None, DrawType.None);
         }
 
         this.groupId = assertExists(getJMapInfoGroupId(infoIter));
@@ -2979,7 +2986,7 @@ export class WarpPod extends LiveActor {
             setEffectEnvColor(this, 'EndGlow', this.color);
         }
     }
-    
+
     public destroy(device: GfxDevice): void {
         super.destroy(device);
 
@@ -3217,7 +3224,6 @@ export class StarPieceGroup extends LiveActor<StarPieceGroupNrv> {
 
         let starPieceCount: number;
 
-        // TODO(jstpierre): StarPieceFlow
         if (isStarPieceGroup) {
             starPieceCount = fallback(getJMapInfoArg0(infoIter), 6);
             this.radius = fallback(getJMapInfoArg1(infoIter), 400);
@@ -4665,7 +4671,6 @@ export class OceanRing extends LiveActor {
     }
 
     private updatePoints(): void {
-        // TODO(jstpierre): Accurate heightScale?
         for (let i = 0; i < this.points.length; i++)
             this.points[i].updatePos(this.waveTheta1, this.waveTheta2, this.waveHeight1, this.waveHeight2, 1.0);
     }
@@ -6099,7 +6104,9 @@ class PlantMember extends LiveActor<PlantMemberNrv> {
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
-        // TODO(jstpierre): updateLightCtrlDirect
+        if (this.actorLightCtrl !== null) {
+            this.actorLightCtrl.update(sceneObjHolder, sceneObjHolder.viewerInput.camera, true, 0.0);
+        }
     }
 
     public initPosture(sceneObjHolder: SceneObjHolder): void {
