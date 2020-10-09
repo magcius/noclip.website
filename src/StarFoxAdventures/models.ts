@@ -1028,17 +1028,15 @@ export class ModelInstance {
     public resetPose() {
         mat4.identity(scratchMtx0);
 
-        for (let i = 0; i < this.model.joints.length; i++) {
+        for (let i = 0; i < this.model.joints.length; i++)
             this.skeletonInst!.setPoseMatrix(i, scratchMtx0);
-        }
 
         this.skinningDirty = true;
     }
     
     public setJointPose(jointNum: number, mtx: mat4) {
-        if (jointNum < 0 || jointNum >= this.model.joints.length) {
+        if (jointNum < 0 || jointNum >= this.model.joints.length)
             return;
-        }
 
         this.skeletonInst!.setPoseMatrix(jointNum, mtx);
         this.skinningDirty = true;
@@ -1060,6 +1058,7 @@ export class ModelInstance {
         if (this.modelShapes.waters.length !== 0) {
             const template = renderInstManager.pushTemplateRenderInst();
             template.filterKey = DrawStep.Waters;
+            template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
             renderInstManager.popTemplateRenderInst();
         }
@@ -1067,6 +1066,7 @@ export class ModelInstance {
         if (this.modelShapes.furs.length !== 0) {
             const template = renderInstManager.pushTemplateRenderInst();
             template.filterKey = DrawStep.Furs;
+            template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
             renderInstManager.popTemplateRenderInst();
         }

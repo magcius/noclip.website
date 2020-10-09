@@ -13,7 +13,7 @@ import { GXMaterial } from '../gx/gx_material';
 import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
 import { nArray } from '../util';
 import { MaterialRenderContext, SFAMaterial } from './materials';
-import { ModelRenderContext } from './models';
+import { DrawStep, ModelRenderContext } from './models';
 import { computeModelView } from './util';
 
 
@@ -169,7 +169,7 @@ export class ShapeGeometry {
             // FIXME: Should aabb.transform be used instead?
             vec3.transformMat4(center, center, modelViewMtx);
             const depth = -center[2];
-            
+
             if (false && getSortKeyLayer(renderInst.sortKey) === GfxRendererLayer.TRANSLUCENT) {
                 const ctx = getDebugOverlayCanvas2D();
                 const wsaabb = this.aabb!.clone();

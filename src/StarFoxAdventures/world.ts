@@ -370,9 +370,8 @@ class WorldRenderer extends SFARenderer {
         }
 
         this.beginPass(sceneCtx.viewerInput);
-        if (this.world.mapInstance !== null) {
+        if (this.world.mapInstance !== null)
             this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx);
-        }
 
         if (this.showObjects) {
             const ctx = getDebugOverlayCanvas2D();
