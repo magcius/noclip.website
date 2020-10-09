@@ -246,7 +246,6 @@ function generateRandomPointInCylinder(dst: vec3, pos: ReadonlyVec3, up: Readonl
 }
 
 const enum ParallelGravityRangeType { Sphere, Box, Cylinder }
-
 class ParallelGravity extends PlanetGravity {
     private rangeType = ParallelGravityRangeType.Sphere;
     private baseDistance: number = 2000.0;
@@ -1095,7 +1094,7 @@ class DiskTorusGravity extends PlanetGravity {
     }
 }
 
-export class ConeGravity extends PlanetGravity {
+class ConeGravity extends PlanetGravity {
     public enableBottom: boolean = false;
     public topCutRate: number = 0.0;
     private mtx = mat4.create();
