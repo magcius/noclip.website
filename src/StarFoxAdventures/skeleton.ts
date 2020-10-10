@@ -55,9 +55,8 @@ export class SkeletonInstance {
 
             mat4.copy(dst, this.poseMatrices[i]);
             mat4PostTranslate(dst, joint.translation);
-            if (joint.parent !== undefined) {
+            if (joint.parent !== undefined)
                 mat4.mul(dst, this.jointMatrices[joint.parent], dst);
-            }
         }
 
         this.dirty = false;

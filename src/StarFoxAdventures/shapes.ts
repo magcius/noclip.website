@@ -1,17 +1,19 @@
-import { mat4, ReadonlyMat4 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { Camera, computeViewMatrix } from '../Camera';
+import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
 import { colorCopy, colorNewFromRGBA, White } from '../Color';
+import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { AABB } from '../Geometry';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeDepthKey, makeSortKeyTranslucent, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
 import { GXMaterial } from '../gx/gx_material';
 import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
 import { nArray } from '../util';
 import { MaterialRenderContext, SFAMaterial } from './materials';
-import { ModelRenderContext } from './models';
+import { DrawStep, ModelRenderContext } from './models';
 import { computeModelView } from './util';
 
 
@@ -98,6 +100,7 @@ class MyShapeHelper {
 
 const scratchMtx0 = mat4.create();
 const scratchMtx1 = mat4.create();
+const scratchVec0 = vec3.create();
 
 // The vertices and polygons of a shape.
 export class ShapeGeometry {
@@ -107,6 +110,8 @@ export class ShapeGeometry {
     private shapeHelper: MyShapeHelper | null = null;
     private packetParams = new PacketParams();
     private verticesDirty = true;
+
+    private aabb?: AABB;
 
     public pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
@@ -121,6 +126,11 @@ export class ShapeGeometry {
     public reloadVertices() {
         this.vtxLoader.loadVertexData(this.loadedVertexData, this.vtxArrays);
         this.verticesDirty = true;
+    }
+
+    // The bounding box is represented in model space.
+    public setBoundingBox(aabb: AABB) {
+        this.aabb = aabb.clone();
     }
 
     public setPnMatrixMap(pnMatrixMap: number[], hasFineSkinning: boolean) {
@@ -152,6 +162,29 @@ export class ShapeGeometry {
 
         const modelViewMtx = scratchMtx1;
         mat4.mul(modelViewMtx, viewMtx, matrix);
+
+        if (this.aabb !== undefined) {
+            const center = scratchVec0;
+            this.aabb.centerPoint(center);
+            // FIXME: Should aabb.transform be used instead?
+            vec3.transformMat4(center, center, modelViewMtx);
+            const depth = -center[2];
+
+            if (false && getSortKeyLayer(renderInst.sortKey) === GfxRendererLayer.TRANSLUCENT) {
+                const ctx = getDebugOverlayCanvas2D();
+                const wsaabb = this.aabb!.clone();
+                wsaabb.transform(wsaabb, matrix);
+                const wcenter = vec3.create();
+                wsaabb.centerPoint(wcenter);
+                drawWorldSpacePoint(ctx, camera.clipFromWorldMatrix, wcenter);
+                drawWorldSpaceAABB(ctx, camera.clipFromWorldMatrix, wsaabb);
+                drawWorldSpaceText(ctx, camera.clipFromWorldMatrix, wcenter, `${depth}`);
+            }
+
+            // XXX: the game has a max sort-key of 0x7fffff, whereas we have a max of 0xffff.
+            // Hopefully our depth range is adequate.
+            renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
+        }
 
         for (let i = 0; i < this.packetParams.u_PosMtx.length; i++) {
             // If fine-skinning is enabled, matrix 9 is overridden with the identity matrix.

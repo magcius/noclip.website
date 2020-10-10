@@ -1,5 +1,5 @@
 
-import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { nArray } from "./util";
 import { transformVec3Mat4w1 } from "./MathHelpers";
 
@@ -52,7 +52,7 @@ export class AABB {
         public maxZ: number = -Infinity,
     ) {}
 
-    public transform(src: AABB, m: mat4): void {
+    public transform(src: AABB, m: ReadonlyMat4): void {
         // Transforming Axis-Aligned Bounding Boxes from Graphics Gems.
         const srcMin = scratchVec3a, srcMax = scratchVec3b;
         vec3.set(srcMin, src.minX, src.minY, src.minZ);
@@ -95,6 +95,10 @@ export class AABB {
 
     public reset(): void {
         this.set(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
+    }
+
+    public clone(): AABB {
+        return new AABB(this.minX, this.minY, this.minZ, this.maxX, this.maxY, this.maxZ);
     }
 
     public setFromPoints(points: vec3[]): void {

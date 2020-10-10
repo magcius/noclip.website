@@ -3,7 +3,7 @@ import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, makeSortKeyTranslucent } from "../gfx/render/GfxRenderer";
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
@@ -19,6 +19,7 @@ import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { SceneRenderContext } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { Color } from '../Color';
+import { AABB } from '../Geometry';
 
 interface Joint {
     parent: number;
@@ -47,14 +48,22 @@ export enum ModelVersion {
 interface DisplayListInfo {
     offset: number;
     size: number;
-    specialBitAddress: number; // Command bit address for fur/grass or water
-    // TODO: Also includes bounding box
+    aabb?: AABB;
+    specialBitAddress?: number; // Command bit address for fur/grass or water
 }
 
 function parseDisplayListInfo(data: DataView): DisplayListInfo {
     return {
         offset: data.getUint32(0x0),
         size: data.getUint16(0x4),
+        aabb: new AABB(
+            data.getInt16(0x6) / 8,
+            data.getInt16(0x8) / 8,
+            data.getInt16(0xa) / 8,
+            data.getInt16(0xc) / 8,
+            data.getInt16(0xe) / 8,
+            data.getInt16(0x10) / 8
+        ),
         specialBitAddress: data.getUint16(0x14),
     }
 }
@@ -128,22 +137,19 @@ class ModelShapes {
         // TODO: reload waters and furs
         for (let i = 0; i < this.shapes.length; i++) {
             const shapes = this.shapes[i];
-            for (let j = 0; j < shapes.length; j++) {
+            for (let j = 0; j < shapes.length; j++)
                 shapes[j].reloadVertices();
-            }
         }
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, boneMatrices: mat4[], drawStep: number) {
-        if (drawStep < 0 || drawStep >= this.shapes.length) {
+        if (drawStep < 0 || drawStep >= this.shapes.length)
             return;
-        }
 
         const shapes = this.shapes[drawStep];
         for (let i = 0; i < shapes.length; i++) {
-            if (shapes[i].isDevGeometry && !modelCtx.showDevGeometry) {
+            if (shapes[i].isDevGeometry && !modelCtx.showDevGeometry)
                 continue;
-            }
 
             mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
             mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
@@ -520,6 +526,8 @@ export class Model {
     public hasBetaFineSkinning: boolean = false;
     public skeleton?: Skeleton;
 
+    public isMapBlock: boolean;
+
     constructor(
         private materialFactory: MaterialFactory,
         blockData: ArrayBufferSlice,
@@ -531,6 +539,7 @@ export class Model {
         this.modelData = blockDv;
 
         const fields = FIELDS[modelVersion];
+        this.isMapBlock = !!fields.isMapBlock;
 
         if (fields.posFineSkinningConfig !== undefined) {
             this.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, fields.posFineSkinningConfig));
@@ -827,6 +836,8 @@ export class Model {
 
             const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
             newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
+            if (dlInfo.aabb !== undefined)
+                newGeom.setBoundingBox(dlInfo.aabb);
             return new Shape(newGeom, new ShapeMaterial(material), false);
         }
 
@@ -876,18 +887,20 @@ export class Model {
     
                     try {
                         if (curShader.flags & ShaderFlags.Water) {
-                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, this.materialFactory.buildWaterMaterial.bind(this.materialFactory), posBuffer);
+                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress!, this.materialFactory.buildWaterMaterial.bind(this.materialFactory), posBuffer);
                             modelShapes.waters.push({ shape: newShape });
                         } else {
                             const vtxArrays = getVtxArrays(posBuffer);
 
                             const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, this.hasFineSkinning);
                             newGeom.setPnMatrixMap(pnMatrixMap, this.hasFineSkinning);
+                            if (dlInfo.aabb !== undefined)
+                                newGeom.setBoundingBox(dlInfo.aabb);
                             const newShape = new Shape(newGeom, new ShapeMaterial(curMaterial!), !!(curShader.flags & ShaderFlags.DevGeometry));
                             shapes.push(newShape);
 
                             if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
-                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress, this.materialFactory.buildFurMaterial.bind(this.materialFactory), posBuffer);
+                                const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress!, this.materialFactory.buildFurMaterial.bind(this.materialFactory), posBuffer);
 
                                 let numFurLayers;
                                 if (curShader.flags & ShaderFlags.ShortFur)
@@ -1018,17 +1031,15 @@ export class ModelInstance {
     public resetPose() {
         mat4.identity(scratchMtx0);
 
-        for (let i = 0; i < this.model.joints.length; i++) {
+        for (let i = 0; i < this.model.joints.length; i++)
             this.skeletonInst!.setPoseMatrix(i, scratchMtx0);
-        }
 
         this.skinningDirty = true;
     }
     
     public setJointPose(jointNum: number, mtx: mat4) {
-        if (jointNum < 0 || jointNum >= this.model.joints.length) {
+        if (jointNum < 0 || jointNum >= this.model.joints.length)
             return;
-        }
 
         this.skeletonInst!.setPoseMatrix(jointNum, mtx);
         this.skinningDirty = true;
@@ -1041,6 +1052,12 @@ export class ModelInstance {
             for (let i = 0; i < 3; i++) {
                 const template = renderInstManager.pushTemplateRenderInst();
                 template.filterKey = i;
+                if (this.model.isMapBlock) {
+                    template.sortKey = makeSortKey(i !== 0 ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
+                } else {
+                    // All objects are sorted by depth and drawn after all map opaques.
+                    template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
+                }
                 this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i);
                 renderInstManager.popTemplateRenderInst();
             }
@@ -1049,6 +1066,10 @@ export class ModelInstance {
         if (this.modelShapes.waters.length !== 0) {
             const template = renderInstManager.pushTemplateRenderInst();
             template.filterKey = DrawStep.Waters;
+            // XXX: in the game, waters do not seem to be sorted by depth.
+            // Thus, in Krazoa Palace, the circular pool surrounding the Krazoa head
+            // always appears in front of the water-wall.
+            // template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
             renderInstManager.popTemplateRenderInst();
         }
@@ -1056,6 +1077,7 @@ export class ModelInstance {
         if (this.modelShapes.furs.length !== 0) {
             const template = renderInstManager.pushTemplateRenderInst();
             template.filterKey = DrawStep.Furs;
+            template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
             renderInstManager.popTemplateRenderInst();
         }

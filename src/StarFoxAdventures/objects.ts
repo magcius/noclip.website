@@ -3,8 +3,10 @@ import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import * as GX_Material from '../gx/gx_material';
+import * as GX from '../gx/gx_enum';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 
+import { StandardMaterial } from './materials';
 import { ModelInstance, ModelRenderContext } from './models';
 import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUint16 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
@@ -12,6 +14,7 @@ import { World } from './world';
 import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 import { SceneRenderContext } from './render';
 import { colorNewFromRGBA } from '../Color';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
@@ -714,7 +717,26 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [688]: decorClass(),
     [689]: commonClass(0x1a, 0x19, 0x18),
     [690]: commonClass(0x1a, 0x19, 0x18),
-    [691]: commonClass(),
+    [691]: { // SkyVortS
+        setup: (obj: ObjectInstance, data: DataView) => {
+            commonSetup(obj, data);
+            // Caution: This will modify the materials for all instances of the model.
+            // TODO: find a cleaner way to do this
+            const mats = obj.modelInst!.getMaterials();
+            for (let i = 0; i < mats.length; i++) {
+                const mat = mats[i];
+                if (mat !== undefined && mat instanceof StandardMaterial) {
+                    mat.setBlendOverride({
+                        setup: (mb: GXMaterialBuilder) => {
+                            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+                            mb.setZMode(true, GX.CompareType.LEQUAL, false);
+                        },
+                    });
+                    mat.rebuild();
+                }
+            }
+        },
+    },
     [693]: commonClass(),
     [694]: { // CNThitObjec
         setup: (obj: ObjectInstance, data: DataView) => {
@@ -780,7 +802,7 @@ const scratchQuat0 = quat.create();
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 
 export class ObjectInstance {
-    private modelInst: ModelInstance | null = null;
+    public modelInst: ModelInstance | null = null;
 
     public parent: ObjectInstance | null = null;
 
