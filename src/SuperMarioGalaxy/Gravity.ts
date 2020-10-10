@@ -246,16 +246,17 @@ function generateRandomPointInCylinder(dst: vec3, pos: ReadonlyVec3, up: Readonl
 }
 
 const enum ParallelGravityRangeType { Sphere, Box, Cylinder }
+const enum ParallelGravityDistanceCalcType { None = -1, X, Y, Z }
 class ParallelGravity extends PlanetGravity {
     private rangeType = ParallelGravityRangeType.Sphere;
-    private baseDistance: number = 2000.0;
-    private cylinderRadius: number = 500.0;
-    private cylinderHeight: number = 1000.0;
+    private baseDistance = 2000.0;
+    private cylinderRadius = 500.0;
+    private cylinderHeight = 1000.0;
     private boxMtx: mat4 | null = null;
     private boxExtentsSq: vec3 | null = null;
     private planeNormal = vec3.create();
     private pos = vec3.create();
-    private distanceCalcType: number = -1;
+    private distanceCalcType = ParallelGravityDistanceCalcType.None;
 
     public setPlane(normal: ReadonlyVec3, translation: ReadonlyVec3): void {
         vec3.normalize(this.planeNormal, normal);
@@ -330,13 +331,13 @@ class ParallelGravity extends PlanetGravity {
         if (dotZ < -extentsSq[2] || dotZ > extentsSq[2])
             return -1;
 
-        if (this.distanceCalcType === -1)
+        if (this.distanceCalcType === ParallelGravityDistanceCalcType.None)
             return this.baseDistance;
-        else if (this.distanceCalcType === 0)
+        else if (this.distanceCalcType === ParallelGravityDistanceCalcType.X)
             return this.baseDistance + (Math.abs(dotX) / Math.sqrt(extentsSq[0]));
-        else if (this.distanceCalcType === 1)
+        else if (this.distanceCalcType === ParallelGravityDistanceCalcType.Y)
             return this.baseDistance + (Math.abs(dotY) / Math.sqrt(extentsSq[1]));
-        else if (this.distanceCalcType === 2)
+        else if (this.distanceCalcType === ParallelGravityDistanceCalcType.Z)
             return this.baseDistance + (Math.abs(dotZ) / Math.sqrt(extentsSq[2]));
         else
             throw "whoops";
@@ -1400,6 +1401,11 @@ export function createGlobalPlaneInCylinderGravityObj(zoneAndLayer: ZoneAndLayer
     gravity.setPlane(scratchVec3a, scratchVec3b);
     getJMapInfoScale(scratchVec3a, infoIter);
     gravity.setRangeCylinder(500.0 * scratchVec3a[0], 500.0 * scratchVec3a[1]);
+
+    // PlaneInCylinderGravityCreator::settingFromJMapArgs
+    const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
+    if (arg0 >= 0)
+        gravity.setBaseDistance(arg0);
 
     settingGravityParamFromJMap(gravity, infoIter);
     gravity.updateIdentityMtx();
