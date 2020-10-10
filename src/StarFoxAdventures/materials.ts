@@ -489,9 +489,14 @@ abstract class MaterialBase implements SFAMaterial {
     }
 }
 
-class StandardMaterial extends MaterialBase {
+export interface BlendOverride {
+    setup: (mb: GXMaterialBuilder) => void;
+}
+
+export class StandardMaterial extends MaterialBase {
     private cprevIsValid = false;
     private aprevIsValid = false;
+    private blendOverride?: BlendOverride = undefined;
 
     constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher, private isMapBlock: boolean) {
         super(factory, shader);
@@ -545,20 +550,6 @@ class StandardMaterial extends MaterialBase {
                 this.addTevStageForMultColor0A0();
             }
         }
-        
-        if ((this.shader.flags & 0x40000000) || (this.shader.flags & 0x20000000)) {
-            this.mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
-            this.mb.setZMode(true, GX.CompareType.LEQUAL, false);
-            this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-        } else {
-            this.mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
-            this.mb.setZMode(true, GX.CompareType.LEQUAL, true);
-            if (((this.shader.flags & ShaderFlags.AlphaCompare) != 0) && ((this.shader.flags & ShaderFlags.Lava) == 0)) {
-                this.mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
-            } else {
-                this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-            }
-        }
 
         if (this.isMapBlock) {
             // FIXME: flags 0x1, 0x800 and 0x1000 are not well-understood
@@ -589,6 +580,26 @@ class StandardMaterial extends MaterialBase {
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 
         this.mb.setCullMode((this.shader.flags & ShaderFlags.CullBackface) != 0 ? GX.CullMode.BACK : GX.CullMode.NONE);
+
+        if (this.blendOverride !== undefined) {
+            this.blendOverride.setup(this.mb);
+        } else if ((this.shader.flags & 0x40000000) || (this.shader.flags & 0x20000000)) {
+            this.mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.NOOP);
+            this.mb.setZMode(true, GX.CompareType.LEQUAL, false);
+            this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+        } else {
+            this.mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
+            this.mb.setZMode(true, GX.CompareType.LEQUAL, true);
+            if (((this.shader.flags & ShaderFlags.AlphaCompare) != 0) && ((this.shader.flags & ShaderFlags.Lava) == 0)) {
+                this.mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
+            } else {
+                this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+            }
+        }
+    }
+
+    public setBlendOverride(blendOverride?: BlendOverride) {
+        this.blendOverride = blendOverride;
     }
 
     private genScrollableTexCoord(texMap: TexMap, scrollingTexMtx?: number): TexCoord {

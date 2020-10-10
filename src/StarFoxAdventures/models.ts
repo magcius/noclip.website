@@ -1066,7 +1066,10 @@ export class ModelInstance {
         if (this.modelShapes.waters.length !== 0) {
             const template = renderInstManager.pushTemplateRenderInst();
             template.filterKey = DrawStep.Waters;
-            template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+            // XXX: in the game, waters do not seem to be sorted by depth.
+            // Thus, in Krazoa Palace, the circular pool surrounding the Krazoa head
+            // always appears in front of the water-wall.
+            // template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
             renderInstManager.popTemplateRenderInst();
         }
