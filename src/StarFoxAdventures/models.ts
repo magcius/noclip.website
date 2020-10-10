@@ -526,6 +526,8 @@ export class Model {
     public hasBetaFineSkinning: boolean = false;
     public skeleton?: Skeleton;
 
+    public isMapBlock: boolean;
+
     constructor(
         private materialFactory: MaterialFactory,
         blockData: ArrayBufferSlice,
@@ -537,6 +539,7 @@ export class Model {
         this.modelData = blockDv;
 
         const fields = FIELDS[modelVersion];
+        this.isMapBlock = !!fields.isMapBlock;
 
         if (fields.posFineSkinningConfig !== undefined) {
             this.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(blockDv, fields.posFineSkinningConfig));
@@ -1049,7 +1052,12 @@ export class ModelInstance {
             for (let i = 0; i < 3; i++) {
                 const template = renderInstManager.pushTemplateRenderInst();
                 template.filterKey = i;
-                template.sortKey = makeSortKey(i !== 0 ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
+                if (this.model.isMapBlock) {
+                    template.sortKey = makeSortKey(i !== 0 ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
+                } else {
+                    // All objects are sorted by depth and drawn after all map opaques.
+                    template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
+                }
                 this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i);
                 renderInstManager.popTemplateRenderInst();
             }
