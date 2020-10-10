@@ -275,8 +275,8 @@ export class CollisionParts {
     private projectToPlane(dst: vec3, pos: ReadonlyVec3, planePos: ReadonlyVec3, normal: ReadonlyVec3): void {
         // Put in plane space.
         vec3.sub(dst, pos, planePos);
-        vec3.scaleAndAdd(dst, pos, normal, -vec3.dot(dst, normal));
-        vec3.add(dst, pos, planePos);
+        vecKillElement(dst, dst, normal);
+        vec3.add(dst, dst, planePos);
     }
 
     private calcCollidePosition(dst: vec3, prism: KC_PrismData, classification: number): void {

@@ -52,7 +52,7 @@ const nameTable = [
     'PlanetName', 'LowFlag', 'MiddleFlag', 'BloomFlag', 'WaterFlag', 'WaterFlag', 'IndirectFlag',
     // Placement
     'Obj_arg0', 'Obj_arg1', 'Obj_arg2', 'Obj_arg3', 'Obj_arg4', 'Obj_arg5', 'Obj_arg6', 'Obj_arg7',
-    'SW_APPEAR', 'SW_A', 'SW_B', 'SW_SLEEP',
+    'SW_APPEAR', 'SW_DEAD', 'SW_A', 'SW_B', 'SW_SLEEP',
     'CommonPath_ID', 'FollowId', 'ClippingGroupId', 'GroupId', 'DemoGroupId', 'MapParts_ID', 'Obj_ID', 'ChildObjId',
     'RotateSpeed', 'RotateAngle', 'RotateAxis', 'RotateAccelType', 'RotateStopTime', 'RotateType',
     // Gravity

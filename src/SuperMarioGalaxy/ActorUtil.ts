@@ -20,6 +20,7 @@ import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from ".
 import { RailDirection } from "./RailRider";
 import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
 import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
+import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -223,12 +224,6 @@ export function getBrkFrameMax(actor: LiveActor): number {
 
 export function isBtpStopped(actor: LiveActor): boolean {
     return actor.modelManager!.isBtpStopped();
-}
-
-// TODO(jstpierre): Remove.
-export function setLoopMode(actor: LiveActor, loopMode: LoopMode): void {
-    const bckCtrl = actor.modelManager!.getBckCtrl();
-    bckCtrl.loopMode = loopMode;
 }
 
 export function initDefaultPos(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): void {
@@ -447,7 +442,8 @@ export function setBvaRate(actor: LiveActor, rate: number): void {
 }
 
 export function isBckPlayingXanimePlayer(xanimePlayer: XanimePlayer, name: string): boolean {
-    // TODO(jstpierre): Support stopped flag?
+    if (!!(xanimePlayer.frameCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped))
+        return false;
     return xanimePlayer.isRun(name) && xanimePlayer.frameCtrl.speedInFrames !== 0.0;
 }
 
@@ -480,7 +476,6 @@ export function isBvaPlaying(actor: LiveActor, name: string): boolean {
 }
 
 export function isAnyAnimStopped(actor: LiveActor, name: string): boolean {
-    // TODO(jstpierre): I can't figure out what actually checks that the animation *was* playing. Weird.
     if (!isBckExist(actor, name) || !actor.modelManager!.isBckStopped())
         return false;
     if (!isBtkExist(actor, name) || !actor.modelManager!.isBtkStopped())
@@ -1169,7 +1164,7 @@ export function useStageSwitchReadAppear(sceneObjHolder: SceneObjHolder, actor: 
 }
 
 export function syncStageSwitchAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
-    // TODO(jstpierre): How is SW_APPEAR *actually* different from Sleep, except for the vfunc used?
+    // XXX(jstpierre): How is SW_APPEAR *actually* different from Sleep, except for the vfunc used?
 
     // NOTE(jstpierre): ActorAppearSwitchListener is calls appear/kill vfunc instead, but
     // I can't see the motivation behind these two different vfuncs tbqh.

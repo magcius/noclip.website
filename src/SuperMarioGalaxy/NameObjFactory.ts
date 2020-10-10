@@ -50,7 +50,6 @@ function N(objName: string, gameBits = GameBits.Both): NameObjFactoryTableEntry 
 }
 
 function _(objName: string, factory: NameObjFactory, extraRequestArchivesFunc: NameObjRequestArchivesFunc | null = null, gameBits = GameBits.Both): NameObjFactoryTableEntry {
-    // TODO(jstpierre): Is there a better way to construct dynamically like this? I swear there is.
     const factoryFunc: NameObjFactoryFunc = function(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
         return new factory(zoneAndLayer, sceneObjHolder, infoIter);
     };

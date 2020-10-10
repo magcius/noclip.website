@@ -5,7 +5,6 @@ import { readFileSync, writeFileSync } from 'fs';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import * as BCSV from '../luigis_mansion/bcsv';
 import { assert } from 'console';
-import { inflate } from 'zlib';
 
 function fetchDataSync(path: string): ArrayBufferSlice {
     const b: Buffer = readFileSync(path);
@@ -62,9 +61,5 @@ function main(inFilename: string, outFilename?: string): void {
     }
 }
 
-/*
 for (let i = 2; i < process.argv.length; i++)
     main(process.argv[i], `${process.argv[i]}.csv`);
-*/
-
-main(process.argv[2], process.argv[3]);

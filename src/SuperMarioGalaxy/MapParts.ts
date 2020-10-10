@@ -184,6 +184,10 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
         this.spine.setNerve(MapPartsRotatorNrv.Rotate);
     }
 
+    public end(): void {
+        this.spine.setNerve(MapPartsRotatorNrv.Wait);
+    }
+
     private updateVelocity(): void {
         if (this.rotateAngle !== 0 && this.rotateAccelType === AccelType.Reverse) {
             // TODO(jstpierre): Reverse accel type
@@ -259,6 +263,9 @@ class MapPartsRailPointPassChecker {
 
     public start(): void {
         this.currentRailPointId = this.getCurrentPointId();
+    }
+
+    public end(): void {
     }
 
     public isPassed(): boolean {
@@ -362,6 +369,11 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
             this.spine.setNerve(MapPartsRailMoverNrv.MoveStart);
         else
             this.spine.setNerve(MapPartsRailMoverNrv.Move);
+    }
+
+    public end(): void {
+        this.passChecker.end();
+        this.spine.setNerve(MapPartsRailMoverNrv.Wait);
     }
 
     private moveToInitPos(): void {
