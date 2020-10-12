@@ -7,7 +7,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneDesc, SceneContext } from "../SceneBase";
 import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolveSymbol } from "./SYSDOLPHIN";
 import { colorFromRGBA8 } from "../Color";
-import { assertExists, assert, hexdump, fallbackUndefined } from "../util";
+import { assertExists, assert, fallbackUndefined } from "../util";
 import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ftData } from "./Melee_ft";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
@@ -88,7 +88,7 @@ class HSDDesc implements SceneDesc {
             this.rootName = joint.name.slice(0, -6);
         }
         const ctx = new HSD_LoadContext(arc);
-        const rootInst = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `${this.rootName}_joint`)))));
+        const rootInst = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `${this.rootName}_joint`)))!));
         rootInst.addAnimAll(
             HSD_AObjLoadAnimJoint(ctx, HSD_Archive_FindPublic(arc, `${this.rootName}_animjoint`)),
             HSD_AObjLoadMatAnimJoint(ctx, HSD_Archive_FindPublic(arc, `${this.rootName}_matanim_joint`)),
@@ -138,7 +138,7 @@ class MeleeFtInstance {
         const variant = this.data.variants[this.variantIndex];
         const rootJointName = `${this.data.shareName}${variant.jointName}_Share_joint`;
         const ctx = new HSD_LoadContext(variant.mdArc);
-        const jobjData = modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(variant.mdArc, rootJointName))));
+        const jobjData = modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(variant.mdArc, rootJointName)))!);
         this.rootInst = new HSD_JObjRoot_Instance(jobjData);
     }
 
@@ -251,14 +251,14 @@ class MeleeTitleDesc implements SceneDesc {
         colorFromRGBA8(scene.clearRenderPassDescriptor.colorClearColor, 0x262626FF);
 
         const ctx = new HSD_LoadContext(arc);
-        const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`)))));
+        const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`)))!));
         bg.addAnimAll(
             HSD_AObjLoadAnimJoint(ctx, HSD_Archive_FindPublic(arc, `TtlBg_Top_animjoint`)),
             HSD_AObjLoadMatAnimJoint(ctx, HSD_Archive_FindPublic(arc, `TtlBg_Top_matanim_joint`)),
             null);
         scene.jobjRoots.push(bg);
 
-        const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`)))));
+        const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`)))!));
         moji.addAnimAll(
             HSD_AObjLoadAnimJoint(ctx, HSD_Archive_FindPublic(arc, `TtlMoji_Top_animjoint`)), 
             HSD_AObjLoadMatAnimJoint(ctx, HSD_Archive_FindPublic(arc, `TtlMoji_Top_matanim_joint`)),
@@ -284,7 +284,9 @@ class MeleeMapDesc implements SceneDesc {
             if (this.gobj_roots !== null && !this.gobj_roots.includes(i))
                 continue;
             const bg_gobj = map_head.gobj[i];
-            const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(bg_gobj.jobj!));
+            if (bg_gobj.jobj === null)
+                continue;
+            const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(bg_gobj.jobj));
             bg.addAnimAll(fallbackUndefined(bg_gobj.anim[0], null), fallbackUndefined(bg_gobj.matAnim[0], null), fallbackUndefined(bg_gobj.shapeAnim[0], null));
             scene.jobjRoots.push(bg);
         }

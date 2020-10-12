@@ -20,7 +20,7 @@ export interface ftData_SubAction {
 function Melee_ftData_LoadInternal(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): ftData {
     const view = buffer.createDataView();
 
-    const subActionTableBuffer = HSD_LoadContext__ResolvePtrAutoSize(ctx, view.getUint32(0x0C));
+    const subActionTableBuffer = HSD_LoadContext__ResolvePtrAutoSize(ctx, view.getUint32(0x0C))!;
     const subActionTable: ftData_SubAction[] = [];
 
     const numEntries = subActionTableBuffer.byteLength / 0x18;

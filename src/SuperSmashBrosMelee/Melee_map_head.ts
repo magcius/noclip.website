@@ -11,10 +11,10 @@ export interface map_gobjData {
 }
 
 function HSD_LoadNullTerminatedPointerArray<T>(ctx: HSD_LoadContext, offset: number, loadFunc: (ctx: HSD_LoadContext, buffer: ArrayBufferSlice) => T): T[] {
-    if (offset === 0)
+    if (offset === 0 || offset === 0xFFFFFFFF)
         return [];
 
-    const buffer = HSD_LoadContext__ResolvePtrAutoSize(ctx, offset);
+    const buffer = HSD_LoadContext__ResolvePtrAutoSize(ctx, offset)!;
     const view = buffer.createDataView();
 
     const L: T[] = [];
@@ -23,7 +23,7 @@ function HSD_LoadNullTerminatedPointerArray<T>(ctx: HSD_LoadContext, offset: num
         const structOffs = view.getUint32(offs + 0x00);
         if (structOffs === 0x00)
             break;
-        L.push(loadFunc(ctx, HSD_LoadContext__ResolvePtrAutoSize(ctx, structOffs)));
+        L.push(loadFunc(ctx, HSD_LoadContext__ResolvePtrAutoSize(ctx, structOffs)!));
         offs += 0x04;
     }
     return L;
@@ -50,7 +50,7 @@ function HSD_LoadStructArray<T>(ctx: HSD_LoadContext, buffer: ArrayBufferSlice, 
     const L: T[] = [];
     const offs = view.getUint32(offset + 0x00);
     const length = view.getUint32(offset + 0x04);
-    const arrayBuffer = HSD_LoadContext__ResolvePtrAutoSize(ctx, offs);
+    const arrayBuffer = HSD_LoadContext__ResolvePtrAutoSize(ctx, offs)!;
     assert(arrayBuffer.byteLength / structSize === length);
     for (let i = 0; i < length; i++) {
         const buffer = arrayBuffer.subarray(i * structSize, structSize);

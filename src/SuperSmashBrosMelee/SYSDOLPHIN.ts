@@ -136,7 +136,9 @@ export function HSD_LoadContext__ResolveSymbol(ctx: HSD_LoadContext, symbol: HSD
     return HSD_LoadContext__ResolvePtr(ctx, symbol.offset);
 }
 
-export function HSD_LoadContext__ResolvePtrAutoSize(ctx: HSD_LoadContext, offs: number): ArrayBufferSlice {
+export function HSD_LoadContext__ResolvePtrAutoSize(ctx: HSD_LoadContext, offs: number): ArrayBufferSlice | null {
+    if (offs === 0xFFFFFFFF)
+        return null;
     const size = HSD_Archive__GetStructSize(ctx.archive, offs);
     return HSD_Archive__ResolvePtr(ctx.archive, offs, size);
 }
@@ -915,7 +917,10 @@ export interface HSD_JObjRoot {
     tlutDescs: HSD_TlutDesc[];
 }
 
-export function HSD_JObjLoadJoint(ctx: HSD_LoadContext, buffer: ArrayBufferSlice): HSD_JObjRoot {
+export function HSD_JObjLoadJoint(ctx: HSD_LoadContext, buffer: ArrayBufferSlice | null): HSD_JObjRoot | null {
+    if (buffer === null)
+        return null;
+
     const jobjs: HSD_JObj[] = [];
     HSD_JObjLoadJointInternal(jobjs, ctx, buffer);
     assert(jobjs.length === 1);
