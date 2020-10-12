@@ -12,6 +12,7 @@ import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ft
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
 import { Melee_map_headData_Load } from "./Melee_map_head";
+import { CameraController } from "../Camera";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];
@@ -42,6 +43,10 @@ export class MeleeRenderer extends BasicGXRendererHelper {
         super(device);
 
         this.modelCache = new ModelCache(device, this.getCache());
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(4/60);
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
