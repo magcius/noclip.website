@@ -312,6 +312,7 @@ const sceneDescs = [
     new MeleeMapDesc(`GrFz.dat`),
     new MeleeMapDesc(`GrGb.dat`),
     new MeleeMapDesc(`GrGd.dat`),
+    new MeleeMapDesc(`GrGr.dat`),
     new MeleeMapDesc(`GrHe.dat`),
     new MeleeMapDesc(`GrI1.dat`),
     new MeleeMapDesc(`GrI2.dat`),
