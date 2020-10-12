@@ -237,6 +237,10 @@ function isVtxAttribTex(vtxAttrib: GX.Attr): boolean {
     }
 }
 
+function isVtxAttribNrm(vtxAttrib: GX.Attr): boolean {
+    return vtxAttrib === GX.Attr.NRM || vtxAttrib === GX.Attr.NBT;
+}
+
 function getAttributeComponentByteSize(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): CompSize {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
@@ -285,16 +289,9 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.C
         else if (compCnt === GX.CompCnt.POS_XYZ)
             return FormatCompFlags.COMP_RGB;
     case GX.Attr.NRM:
-        if (compCnt === GX.CompCnt.NRM_XYZ)
-            return FormatCompFlags.COMP_RGB;
-        // NBT*XYZ
-        // XXX(jstpierre): This is impossible in modern graphics APIs. We need to split this into three attributes...
-        // Thankfully, nobody seems to be using NRM_NBT.
-        else if (compCnt === GX.CompCnt.NRM_NBT)
-            return 9;
-        // Separated NBT has three components per index.
-        else if (compCnt === GX.CompCnt.NRM_NBT3)
-            return FormatCompFlags.COMP_RGB;
+    case GX.Attr.NBT:
+        // Normals always have 3 components per index.
+        return FormatCompFlags.COMP_RGB;
     case GX.Attr.CLR0:
     case GX.Attr.CLR1:
         if (compCnt === GX.CompCnt.CLR_RGB)
@@ -352,7 +349,7 @@ function getComponentShift(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number
 
     // Normals *always* use either 6 or 14 for their shift values.
     // The value in the VAT is ignored.
-    if (vtxAttrib === GX.Attr.NRM) {
+    if (isVtxAttribNrm(vtxAttrib)) {
         if (vatFormat.compType === GX.CompType.U8 || vatFormat.compType === GX.CompType.S8)
             return 6;
         else if (vatFormat.compType === GX.CompType.U16 || vatFormat.compType === GX.CompType.S16)
@@ -372,7 +369,7 @@ function getComponentType(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): GX.Comp
 }
 
 function getIndexNumComponents(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number {
-    if (vtxAttrib === GX.Attr.NRM && vatFormat.compCnt === GX.CompCnt.NRM_NBT3)
+    if (isVtxAttribNrm(vtxAttrib) && vatFormat.compCnt === GX.CompCnt.NRM_NBT3)
         return 3;
     else
         return 1;
@@ -401,6 +398,7 @@ function getAttrName(vtxAttrib: GX.Attr): string {
     case GX.Attr.TEX5:       return `TEX5`;
     case GX.Attr.TEX6:       return `TEX6`;
     case GX.Attr.TEX7:       return `TEX7`;
+    case GX.Attr.NBT:        return `NBT`;
     default:
         throw new Error("whoops");
     }
@@ -481,6 +479,11 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
     return { srcVertexSize, vatFormat, vcd };
 }
 
+function isVatLayoutNBT(vatLayout: VatLayout, vtxAttrib: GX.Attr): boolean {
+    const compCnt = vatLayout.vatFormat[vtxAttrib].compCnt;
+    return compCnt === GX.CompCnt.NRM_NBT || compCnt === GX.CompCnt.NRM_NBT3;
+}
+
 export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VertexLayout {
     // Copy inputs since we use them as a cache.
     vat = arrayCopy(vat, vatCopy);
@@ -541,7 +544,10 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
             input = allocateVertexInput(VertexAttributeInput.POS, inputFormat);
             fieldCompOffset = 3;
             fieldFormat = input.format;
-        } else if (vtxAttrib === GX.Attr.NBT) {
+        } else if (isVtxAttribNrm(vtxAttrib) && isVatLayoutNBT(vatLayouts[0]!, vtxAttrib)) {
+            // TODO(jstpierre): I have no clue how it works for VAT layouts if one has NBT and the others don't.
+            // I think NBT is a weird quirk of GX and the hardware maps it to something different.
+
             // NBT. Allocate layouts for all of NRM, BINRM, TANGENT.
             input = allocateVertexInput(VertexAttributeInput.NRM, inputFormat);
             allocateVertexInput(VertexAttributeInput.BINRM, inputFormat);
@@ -784,15 +790,15 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
         }
 
         function compileAttribIndex(viewName: string, readIndex: string, drawCallIdxIncr: number): string {
-            if (vtxAttrib === GX.Attr.NRM && vtxAttrFmt.compCnt === GX.CompCnt.NRM_NBT3) {
+            if (isVtxAttribNrm(vtxAttrib) && vtxAttrFmt.compCnt === GX.CompCnt.NRM_NBT3) {
                 // Special case: NBT3.
                 return `
     // NRM
-    ${compileOneIndex(viewName, `${readIndex} + 0`, drawCallIdxIncr, `_N`)}
+    ${compileOneIndex(viewName, readIndex, drawCallIdxIncr, `_N`)}
     // BINRM
-    ${compileOneIndex(viewName, `${readIndex} + 3`, drawCallIdxIncr, `_B`)}
+    ${compileOneIndex(viewName, readIndex, drawCallIdxIncr, `_B`)}
     // TANGENT
-    ${compileOneIndex(viewName, `${readIndex} + 6`, drawCallIdxIncr, `_T`)}`;
+    ${compileOneIndex(viewName, readIndex, drawCallIdxIncr, `_T`)}`;
             } else {
                 return `
     // ${getAttrName(vtxAttrib)}
@@ -1111,7 +1117,7 @@ class VtxLoaderImpl implements VtxLoader {
     public loadVertexDataInto(dst: DataView, dstOffs: number, loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]): void {
         const vtxArrayViews: DataView[] = [];
         const vtxArrayStrides: number[] = [];
-        for (let i = 0; i < GX.Attr.MAX; i++) {
+        for (let i = 0; i <= GX.Attr.MAX; i++) {
             if (vtxArrays[i] !== undefined) {
                 vtxArrayViews[i] = vtxArrays[i].buffer.createDataView(vtxArrays[i].offs);
                 vtxArrayStrides[i] = vtxArrays[i].stride;

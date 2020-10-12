@@ -119,7 +119,7 @@ export function Melee_figatree_Load(archive: HSD_Archive): figatree {
     return { kind: 'Anim', name, endFrame, aobj };
 }
 
-export function Melee_SplitDataAJ(buffer: ArrayBufferSlice, subActionTable: readonly ftData_SubAction[]): (HSD_Archive | null)[] {
+export function Melee_SplitDataAJ(buffer: ArrayBufferSlice, subActionTable: Readonly<ftData_SubAction>[]): (HSD_Archive | null)[] {
     const subActionTableAJ: (HSD_Archive | null)[] = [];
 
     for (let i = 0; i < subActionTable.length; i++) {

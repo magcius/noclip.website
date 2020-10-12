@@ -45,7 +45,7 @@ export interface GfxCoalescedBuffersCombo {
 }
 
 export class GfxBufferCoalescerCombo {
-    public coalescedBuffers: GfxCoalescedBuffersCombo[];
+    public coalescedBuffers: GfxCoalescedBuffersCombo[] = [];
     private vertexBuffer: GfxBuffer | null = null;
     private indexBuffer: GfxBuffer | null = null;
 

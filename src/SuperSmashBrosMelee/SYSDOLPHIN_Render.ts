@@ -5,7 +5,7 @@ import { GfxDevice, GfxTexture, GfxSampler, GfxCullMode } from "../gfx/platform/
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { LoadedVertexData } from "../gx/gx_displaylist";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst, setSortKeyLayer, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput, Texture } from "../viewer";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { computeModelMatrixSRT, lerp, saturate, MathConstants, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
@@ -186,9 +186,16 @@ export class HSD_AObj_Instance {
 
     constructor(public aobj: HSD_AObj) {
         this.flags = this.aobj.flags;
+
+        // XXX(jstpierre): Mark all animations to loop.
+        this.flags |= HSD_AObjFlags.ANIM_LOOP;
     }
 
     private calcFObj<T>(fobj: HSD_FObj, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
+        // TODO(jstpierre): I think this means my FObj parsing is broken :/
+        if (fobj.keyframes.length === 0)
+            return;
+
         const time = this.currFrame;
 
         let i = 0;
@@ -204,10 +211,10 @@ export class HSD_AObj_Instance {
         if (k0.kind === 'Constant') {
             callback(fobj.type, k0.p0, obj);
         } else if (k0.kind === 'Linear') {
-            const t = k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0;
+            const t = saturate(k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0);
             callback(fobj.type, lerp(k0.p0, k0.p1, t), obj);
         } else if (k0.kind === 'Hermite') {
-            const t = k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0;
+            const t = saturate(k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0);
             callback(fobj.type, getPointHermite(k0.p0, k0.p1, k0.d0, k0.d1, t), obj);
         }
     }
@@ -220,6 +227,9 @@ export class HSD_AObj_Instance {
                 // TODO(jstpierre): Rewind Frame
                 this.currFrame -= this.aobj.endFrame;
             }
+        } else {
+            this.currFrame = Math.min(this.currFrame, this.aobj.endFrame);
+            // HSD_FObjStopAnimAll
         }
 
         for (let i = 0; i < this.aobj.fobj.length; i++)
@@ -273,7 +283,7 @@ export class HSD_TObj_Instance {
 
     private static updateAnim(trackType: HSD_TObjAnmType, value: number, tobj: HSD_TObj_Instance): void {
         if (trackType === HSD_TObjAnmType.TIMG) {
-            tobj.imageDesc = assertExists(tobj.texAnim!.imageDescs[value]);
+            tobj.imageDesc = assertExists(tobj.texAnim!.imageDescs[(value | 0)]);
         } else if (trackType === HSD_TObjAnmType.TRAU) {
             tobj.translation[0] = value;
         } else if (trackType === HSD_TObjAnmType.TRAV) {
@@ -1041,6 +1051,8 @@ class HSD_MObj_Instance {
         this.setupTExpConstants(materialParams);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        if (!!(this.data.mobj.renderMode & HSD_RenderModeFlags.XLU))
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT);
     }
 }
 
@@ -1086,7 +1098,7 @@ class HSD_DObj_Instance {
     }
 
     public addAnimAll(matAnim: HSD_MatAnim | null, shapeAnim: /* HSD_ShapeAnim | */ null): void {
-        if (this.mobj !== null && matAnim !== null)
+        if (this.mobj !== null && matAnim !== null && matAnim !== undefined)
             this.mobj.addAnim(matAnim);
     }
 
@@ -1119,7 +1131,7 @@ class HSD_DObj_Instance {
 
             if (pobj.kind === 'Rigid') {
                 // TODO(jstpierre): Shared vtx.
-                assert(pobj.jointReference === 0);
+                assert(pobj.jointReferenceID === 0);
 
                 mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, jobj.jointMtx);
             } else if (pobj.kind === 'Envelope') {
@@ -1134,7 +1146,7 @@ class HSD_DObj_Instance {
                     if (mtxEnv.length === 1) {
                         const env = mtxEnv[0];
                         assert(env.weight === 1.0);
-                        const envJObj = root.findJObjByJointReferenceID(env.jointReference);
+                        const envJObj = root.findJObjByJointReferenceID(env.jointReferenceID);
 
                         if (!!(jobj.data.jobj.flags & HSD_JObjFlags.SKELETON_ROOT)) {
                             // Rigid vertices are stored in bone-local space if stored on the skeleton root.
@@ -1148,7 +1160,7 @@ class HSD_DObj_Instance {
                         for (let j = 0; j < mtxEnv.length; j++) {
                             const env = mtxEnv[j];
                             assert(env.weight < 1.0);
-                            const envJObj = root.findJObjByJointReferenceID(env.jointReference);
+                            const envJObj = root.findJObjByJointReferenceID(env.jointReferenceID);
                             mat4.mul(scratchMatrixEnv, envJObj.jointMtx, envJObj.data.jobj.inverseBindPose);
                             mat4.multiplyScalarAndAdd(dst, dst, scratchMatrixEnv, env.weight);
                         }
@@ -1278,6 +1290,8 @@ class HSD_JObj_Instance {
             jobj.nodeVisible = value >= 0.5;
         } else if (trackType === HSD_JObjAnmType.BRANCH) {
             jobj.setVisibleAll(value >= 0.5);
+        } else if (trackType === 40) {
+            // dptcl callback
         } else {
             debugger;
         }

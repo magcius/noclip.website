@@ -5,12 +5,13 @@ import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data, HSD_AObj_Instance } from "./S
 import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneDesc, SceneContext } from "../SceneBase";
-import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive } from "./SYSDOLPHIN";
+import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolveSymbol } from "./SYSDOLPHIN";
 import { colorFromRGBA8 } from "../Color";
-import { assertExists, assert } from "../util";
+import { assertExists, assert, hexdump, fallbackUndefined } from "../util";
 import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ftData } from "./Melee_ft";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
+import { Melee_map_headData_Load } from "./Melee_map_head";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];
@@ -86,11 +87,12 @@ class HSDDesc implements SceneDesc {
             }
             this.rootName = joint.name.slice(0, -6);
         }
-        const rootInst = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `${this.rootName}_joint`)))));
+        const ctx = new HSD_LoadContext(arc);
+        const rootInst = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `${this.rootName}_joint`)))));
         rootInst.addAnimAll(
-            HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `${this.rootName}_animjoint`)),
-            HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `${this.rootName}_matanim_joint`)),
-            HSD_AObjLoadShapeAnimJoint(arc, HSD_Archive_FindPublic(arc, `${this.rootName}_shapeanim_joint`)));
+            HSD_AObjLoadAnimJoint(ctx, HSD_Archive_FindPublic(arc, `${this.rootName}_animjoint`)),
+            HSD_AObjLoadMatAnimJoint(ctx, HSD_Archive_FindPublic(arc, `${this.rootName}_matanim_joint`)),
+            HSD_AObjLoadShapeAnimJoint(ctx, HSD_Archive_FindPublic(arc, `${this.rootName}_shapeanim_joint`)));
         scene.jobjRoots.push(rootInst);
         return scene;
     }
@@ -135,9 +137,8 @@ class MeleeFtInstance {
     constructor(modelCache: ModelCache, public data: MeleeFtData, public variantIndex: number) {
         const variant = this.data.variants[this.variantIndex];
         const rootJointName = `${this.data.shareName}${variant.jointName}_Share_joint`;
-        const mdArc = variant.mdArc;
-        const rootJointSymbol = assertExists(HSD_Archive_FindPublic(mdArc, rootJointName));
-        const jobjData = modelCache.loadJObjRoot(HSD_JObjLoadJoint(mdArc, rootJointSymbol));
+        const ctx = new HSD_LoadContext(variant.mdArc);
+        const jobjData = modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(variant.mdArc, rootJointName))));
         this.rootInst = new HSD_JObjRoot_Instance(jobjData);
     }
 
@@ -249,17 +250,18 @@ class MeleeTitleDesc implements SceneDesc {
         const scene = new MeleeRenderer(device);
         colorFromRGBA8(scene.clearRenderPassDescriptor.colorClearColor, 0x262626FF);
 
-        const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`)))));
+        const ctx = new HSD_LoadContext(arc);
+        const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`)))));
         bg.addAnimAll(
-            HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_animjoint`)),
-            HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlBg_Top_matanim_joint`)),
+            HSD_AObjLoadAnimJoint(ctx, HSD_Archive_FindPublic(arc, `TtlBg_Top_animjoint`)),
+            HSD_AObjLoadMatAnimJoint(ctx, HSD_Archive_FindPublic(arc, `TtlBg_Top_matanim_joint`)),
             null);
         scene.jobjRoots.push(bg);
 
-        const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(arc, assertExists(HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`)))));
+        const moji = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `TtlMoji_Top_joint`)))));
         moji.addAnimAll(
-            HSD_AObjLoadAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_animjoint`)), 
-            HSD_AObjLoadMatAnimJoint(arc, HSD_Archive_FindPublic(arc, `TtlMoji_Top_matanim_joint`)),
+            HSD_AObjLoadAnimJoint(ctx, HSD_Archive_FindPublic(arc, `TtlMoji_Top_animjoint`)), 
+            HSD_AObjLoadMatAnimJoint(ctx, HSD_Archive_FindPublic(arc, `TtlMoji_Top_matanim_joint`)),
             null);
         scene.jobjRoots.push(moji);
 
@@ -267,15 +269,106 @@ class MeleeTitleDesc implements SceneDesc {
     }
 }
 
+class MeleeMapDesc implements SceneDesc {
+    constructor(public id: string, public name: string = id, public gobj_roots: number[] | null = null) {}
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
+        const dataFetcher = context.dataFetcher;
+        const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/${this.id}`));
+        const ctx = new HSD_LoadContext(arc);
+        const map_head = Melee_map_headData_Load(ctx, assertExists(HSD_Archive_FindPublic(arc, `map_head`)));
+
+        const scene = new MeleeRenderer(device);
+
+        for (let i = 0; i < map_head.gobj.length; i++) {
+            if (this.gobj_roots !== null && !this.gobj_roots.includes(i))
+                continue;
+            const bg_gobj = map_head.gobj[i];
+            const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(bg_gobj.jobj!));
+            bg.addAnimAll(fallbackUndefined(bg_gobj.anim[0], null), fallbackUndefined(bg_gobj.matAnim[0], null), fallbackUndefined(bg_gobj.shapeAnim[0], null));
+            scene.jobjRoots.push(bg);
+        }
+
+        return scene;
+    }
+}
+
 const sceneDescs = [
     new MeleeTitleDesc(),
-    new MeleeFtDesc(),
+    new MeleeMapDesc(`GrBb.dat`, "Big Blue"),
+    new MeleeMapDesc(`GrCn.dat`, "Corneria"),
+    new MeleeMapDesc(`GrCs.dat`, "Peach's Castle"),
+    new MeleeMapDesc(`GrEF1.dat`),
+    new MeleeMapDesc(`GrEF2.dat`),
+    new MeleeMapDesc(`GrEF3.dat`),
+    new MeleeMapDesc(`GrFs.dat`),
+    new MeleeMapDesc(`GrFz.dat`),
+    new MeleeMapDesc(`GrGb.dat`),
+    new MeleeMapDesc(`GrGd.dat`),
+    new MeleeMapDesc(`GrHe.dat`),
+    new MeleeMapDesc(`GrI1.dat`),
+    new MeleeMapDesc(`GrI2.dat`),
+    new MeleeMapDesc(`GrIm.dat`),
+    new MeleeMapDesc(`GrIz.dat`),
+    new MeleeMapDesc(`GrKg.dat`),
+    new MeleeMapDesc(`GrKr.dat`),
+    new MeleeMapDesc(`GrMc.dat`),
+    new MeleeMapDesc(`GrNBa.dat`),
+    new MeleeMapDesc(`GrNBr.dat`),
+    new MeleeMapDesc(`GrNFg.dat`),
+    new MeleeMapDesc(`GrNKr.dat`),
+    new MeleeMapDesc(`GrNLa.dat`),
+    new MeleeMapDesc(`GrNPo.dat`),
+    new MeleeMapDesc(`GrNSr.dat`),
+    new MeleeMapDesc(`GrNZr.dat`),
+    new MeleeMapDesc(`GrOk.dat`),
+    new MeleeMapDesc(`GrOp.dat`),
+    new MeleeMapDesc(`GrOt.dat`),
+    new MeleeMapDesc(`GrOy.dat`),
+    new MeleeMapDesc(`GrPs.dat`),
+    new MeleeMapDesc(`GrPs1.dat`),
+    new MeleeMapDesc(`GrPs2.dat`),
+    new MeleeMapDesc(`GrPs3.dat`),
+    new MeleeMapDesc(`GrPs4.dat`),
+    new MeleeMapDesc(`GrPu.dat`),
+    new MeleeMapDesc(`GrRc.dat`),
+    new MeleeMapDesc(`GrSh.dat`),
+    new MeleeMapDesc(`GrSt.dat`),
+    new MeleeMapDesc(`GrTCa.dat`),
+    new MeleeMapDesc(`GrTCl.dat`),
+    new MeleeMapDesc(`GrTDk.dat`),
+    new MeleeMapDesc(`GrTDr.dat`),
+    new MeleeMapDesc(`GrTe.dat`),
+    new MeleeMapDesc(`GrTFc.dat`),
+    new MeleeMapDesc(`GrTFe.dat`),
+    new MeleeMapDesc(`GrTFx.dat`),
+    new MeleeMapDesc(`GrTGn.dat`),
+    new MeleeMapDesc(`GrTGw.dat`),
+    new MeleeMapDesc(`GrTIc.dat`),
+    new MeleeMapDesc(`GrTKb.dat`),
+    new MeleeMapDesc(`GrTKp.dat`),
+    new MeleeMapDesc(`GrTLg.dat`),
+    new MeleeMapDesc(`GrTLk.dat`),
+    new MeleeMapDesc(`GrTMr.dat`),
+    new MeleeMapDesc(`GrTMs.dat`),
+    new MeleeMapDesc(`GrTMt.dat`),
+    new MeleeMapDesc(`GrTNs.dat`),
+    new MeleeMapDesc(`GrTPc.dat`),
+    new MeleeMapDesc(`GrTPe.dat`),
+    new MeleeMapDesc(`GrTPk.dat`),
+    new MeleeMapDesc(`GrTPr.dat`),
+    new MeleeMapDesc(`GrTSk.dat`),
+    new MeleeMapDesc(`GrTSs.dat`),
+    new MeleeMapDesc(`GrTYs.dat`),
+    new MeleeMapDesc(`GrTZd.dat`),
+    new MeleeMapDesc(`GrVe.dat`, "Venom"),
+    new MeleeMapDesc(`GrYt.dat`),
+    new MeleeMapDesc(`GrZe.dat`),
     new HSDDesc(`PlFxNr.dat`),
     new HSDDesc(`PlKbNr.dat`),
     new HSDDesc(`MnExtAll.usd`, "MenMainBack_Top"),
     new HSDDesc(`GmRgEBG3.dat`),
     new HSDDesc(`GmRst.usd`),
-
     new HSDDesc(`TyZkPair.dat`),
     new HSDDesc(`TyZkWmen.dat`),
     new HSDDesc(`TmBox.dat`),
@@ -634,11 +727,12 @@ const sceneDescs = [
     new HSDDesc(`TyZeldR2.dat`),
     new HSDDesc(`TyZeniga.dat`),
     new HSDDesc(`TyZkMen.dat`),
+    // new MeleeFtDesc(),
 ];
 
 const id = `SuperSmashBrosMelee`;
 const name = "Super Smash Bros. Melee";
 
 export const sceneGroup: SceneGroup = {
-    id, name, sceneDescs, hidden: true,
+    id, name, sceneDescs,
 };
