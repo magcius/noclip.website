@@ -51,9 +51,8 @@ class ElebitsRenderer extends BasicGXRendererHelper {
         }
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(24/60);
-        return c;
     }
 
     public createPanels(): UI.Panel[] {
@@ -91,11 +90,11 @@ class ElebitsRenderer extends BasicGXRendererHelper {
 }
 
 class ElebitsSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, public rooms: number[]) {}
+    constructor(public id: string, public stageDir: string, public name: string, public rooms: number[]) {}
 
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const paths = this.rooms.map((room) => makeElbPath(this.id, room));
+        const paths = this.rooms.map((room) => makeElbPath(this.stageDir, room));
         const promises: Promise<ArrayBufferSlice>[] = paths.map((path) => dataFetcher.fetchData(path));
         return Promise.all(promises).then((buffers: ArrayBufferSlice[]) => {
             const stageRRESes = buffers.map((buffer) => BRRES.parse(buffer));
@@ -107,13 +106,13 @@ class ElebitsSceneDesc implements Viewer.SceneDesc {
 const id = "elb";
 const name = "Elebits";
 const sceneDescs: Viewer.SceneDesc[] = [
-    new ElebitsSceneDesc("stg01", "Mom and Dad's House", range(1, 18)),
-    new ElebitsSceneDesc("stg03", "The Town", [1]),
-    new ElebitsSceneDesc("stg02", "Amusement Park - Main Hub", [1, 5]),
-    new ElebitsSceneDesc("stg02", "Amusement Park - Castle", [2]),
-    new ElebitsSceneDesc("stg02", "Amusement Park - Entrance", [3, 6]),
-    new ElebitsSceneDesc("stg02", "Amusement Park - Space", [4]),
-    new ElebitsSceneDesc("stg04", "Tutorial", [1, 2]),
+    new ElebitsSceneDesc("stg01",  "stg01", "Mom and Dad's House", range(1, 18)),
+    new ElebitsSceneDesc("stg03",  "stg03", "The Town", [1]),
+    new ElebitsSceneDesc("stg02a", "stg02", "Amusement Park - Main Hub", [1, 5]),
+    new ElebitsSceneDesc("stg02b", "stg02", "Amusement Park - Castle", [2]),
+    new ElebitsSceneDesc("stg02c", "stg02", "Amusement Park - Entrance", [3, 6]),
+    new ElebitsSceneDesc("stg02d", "stg02", "Amusement Park - Space", [4]),
+    new ElebitsSceneDesc("stg04",  "stg04", "Tutorial", [1, 2]),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

@@ -1,4 +1,6 @@
 
+// Common utilities for the PS2's Geometry Synthesizer (GS).
+
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 
 export const enum GSRegister {
@@ -34,10 +36,15 @@ export const enum GSPixelStorageFormat {
     PSMZ16S  = 0x3A,
 }
 
-export const enum GSCLUTStorageFormat {
+export const enum GSCLUTPixelStorageFormat {
     PSMCT32  = 0x00,
     PSMCT16  = 0x02,
     PSMCT16S = 0x0A,
+}
+
+export const enum GSCLUTStorageMode {
+    CSM1  = 0x00,
+    CSM2  = 0x01,
 }
 
 export const enum GSTextureColorComponent {
@@ -109,8 +116,8 @@ export interface GSRegisterTEX0 {
     tcc: GSTextureColorComponent;
     tfx: GSTextureFunction;
     cbp: number;
-    cpsm: GSPixelStorageFormat;
-    csm: GSCLUTStorageFormat;
+    cpsm: GSCLUTPixelStorageFormat;
+    csm: GSCLUTStorageMode;
     csa: number;
     cld: number;
 }

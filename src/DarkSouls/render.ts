@@ -106,7 +106,7 @@ class BatchData {
     constructor(device: GfxDevice, cache: GfxRenderCache, flverData: FLVERData, public batch: Batch, vertexBuffer: GfxCoalescedBuffer, indexBuffers: GfxCoalescedBuffer[]) {
         const flverInputState = flverData.flver.inputStates[batch.inputStateIndex];
         const flverInputLayout = flverData.flver.inputLayouts[flverInputState.inputLayoutIndex];
-        const buffers: GfxVertexBufferDescriptor[] = [{ buffer: vertexBuffer.buffer, byteOffset: vertexBuffer.wordOffset * 0x04 }];
+        const buffers: GfxVertexBufferDescriptor[] = [vertexBuffer];
 
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
@@ -136,7 +136,7 @@ class BatchData {
 
         for (let j = 0; j < batch.primitiveIndexes.length; j++) {
             const coaIndexBuffer = assertExists(indexBuffers.shift());
-            const indexBuffer: GfxIndexBufferDescriptor = { buffer: coaIndexBuffer.buffer, byteOffset: coaIndexBuffer.wordOffset * 0x04 };
+            const indexBuffer: GfxIndexBufferDescriptor = coaIndexBuffer;
             const inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
             this.inputStates.push(inputState);
         }
@@ -223,11 +223,11 @@ class DKSProgram extends DeviceProgram {
 
     public static BindingDefinitions = `
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
-layout(row_major, std140) uniform ub_MeshFragParams {
+layout(std140) uniform ub_MeshFragParams {
     Mat4x3 u_ViewFromLocal[1];
     // Fourth element has g_DiffuseMapColorPower
     vec4 u_DiffuseMapColor;
@@ -299,7 +299,7 @@ void main() {
     private buildTexAccess(texParam: MTDTexture): string {
         const texAssign = getTexAssign(this.mtd, texParam.name);
         assert(texAssign > -1);
-        return `texture(u_Texture[${texAssign}], v_TexCoord[${texParam.uvNumber}])`;
+        return `texture(SAMPLER_2D(u_Texture[${texAssign}]), v_TexCoord[${texParam.uvNumber}])`;
     }
 
     private genDiffuse(): string {
@@ -561,9 +561,10 @@ function linkTextureParameter(textureMapping: TextureMapping[], textureHolder: D
 
     const textureName = assertExists(lookupTextureParameter(material, name)).toLowerCase();
     if (textureHolder.hasTexture(textureName)) {
-        // TODO(jstpierre): Figure out why textures aren't in the proper archives.
         const texAssign = getTexAssign(mtd, name);
         textureHolder.fillTextureMapping(textureMapping[texAssign], textureName);
+    } else {
+        // TODO(jstpierre): Missing textures?
     }
 }
 
@@ -580,7 +581,7 @@ class BatchInstance {
     private gfxProgram: GfxProgram;
     private sortKey: number;
 
-    constructor(device: GfxDevice, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, material: Material, mtd: MTD) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, material: Material, mtd: MTD) {
         const program = new DKSProgram(mtd);
 
         // If this is a Phong shader, then turn on lighting.
@@ -661,7 +662,8 @@ class BatchInstance {
                 vec4.set(this.texScroll[i], param[0], param[1], 0, 0);
         }
 
-        this.gfxProgram = device.createProgram(program);
+        program.ensurePreprocessed(device.queryVendorInfo());
+        this.gfxProgram = cache.createProgram(device, program);
 
         const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKey = makeSortKey(layer, 0);
@@ -705,20 +707,17 @@ class BatchInstance {
             if (!shouldRenderPrimitive(primitive))
                 continue;
 
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.setInputLayoutAndState(this.batchData.inputLayout, this.batchData.inputStates[j]);
             renderInst.setMegaStateFlags(this.megaState);
             if (primitive.cullMode)
                 renderInst.getMegaStateFlags().cullMode = GfxCullMode.BACK;
             renderInst.drawIndexes(getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, primitive.indexCount));
             renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();
-    }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
     }
 }
 
@@ -730,7 +729,7 @@ export class FLVERInstance {
     public visible = true;
     public name: string;
 
-    constructor(device: GfxDevice, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, public flverData: FLVERData) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, textureHolder: DDSTextureHolder, materialDataHolder: MaterialDataHolder, public flverData: FLVERData) {
         for (let i = 0; i < this.flverData.flver.batches.length; i++) {
             const batchData = this.flverData.batchData[i];
             const batch = batchData.batch;
@@ -740,7 +739,7 @@ export class FLVERInstance {
             const mtdName = mtdFilePath.split('\\').pop()!;
             const mtd = materialDataHolder.getMaterial(mtdName);
 
-            this.batchInstances.push(new BatchInstance(device, flverData, batchData, textureHolder, material, mtd));
+            this.batchInstances.push(new BatchInstance(device, cache, flverData, batchData, textureHolder, material, mtd));
         }
     }
 
@@ -758,11 +757,6 @@ export class FLVERInstance {
 
         for (let i = 0; i < this.batchInstances.length; i++)
             this.batchInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].destroy(device);
     }
 }
 
@@ -790,7 +784,7 @@ function modelMatrixFromPart(m: mat4, part: Part): void {
 export class MSBRenderer {
     public flverInstances: FLVERInstance[] = [];
 
-    constructor(device: GfxDevice, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private msb: MSB) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private textureHolder: DDSTextureHolder, private modelHolder: ModelHolder, private materialDataHolder: MaterialDataHolder, private msb: MSB) {
         for (let i = 0; i < msb.parts.length; i++) {
             const part = msb.parts[i];
             if (part.type === 0) {
@@ -798,7 +792,7 @@ export class MSBRenderer {
                 if (flverData === undefined)
                     continue;
 
-                const instance = new FLVERInstance(device, this.textureHolder, this.materialDataHolder, flverData);
+                const instance = new FLVERInstance(device, cache, this.textureHolder, this.materialDataHolder, flverData);
                 instance.visible = !isLODModel(part.name);
                 instance.name = part.name;
                 modelMatrixFromPart(instance.modelMatrix, part);
@@ -807,14 +801,13 @@ export class MSBRenderer {
         }
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(20/60);
-        return c;
     }
 
     private lodModels: string[] = [];
     public chooseLODModel(): void {
-        interactiveVizSliderSelect(this.flverInstances, (index) => {
+        interactiveVizSliderSelect(this.flverInstances, 'visible', (index) => {
             const instance = this.flverInstances[index];
             this.lodModels.push(instance.name);
             setTimeout(() => { instance.visible = false; }, 2000);
@@ -838,8 +831,6 @@ export class MSBRenderer {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.flverInstances.length; i++)
-            this.flverInstances[i].destroy(device);
         this.modelHolder.destroy(device);
     }
 }

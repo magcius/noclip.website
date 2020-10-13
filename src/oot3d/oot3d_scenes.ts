@@ -12,8 +12,8 @@ import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render';
 import { SceneGroup } from '../viewer';
-import { assert, assertExists, hexzero, readString } from '../util';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { assert, assertExists, hexzero } from '../util';
+import { DataFetcher } from '../DataFetcher';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
@@ -22,7 +22,7 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRen
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { MathConstants } from "../MathHelpers";
+import { MathConstants, scaleMatrix } from "../MathHelpers";
 import { CameraController } from '../Camera';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
@@ -37,9 +37,8 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(12/60);
-        return c;
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -64,7 +63,6 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, OoT3DPass.SKYBOX);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
@@ -131,13 +129,6 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
     }
 }
 
-export function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
-    if (readString(buffer, 0x00, 0x04) === 'LzS\x01')
-        return LzS.decompress(buffer.createDataView());
-    else
-        return buffer;
-}
-
 export class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
@@ -153,22 +144,22 @@ export class ModelCache {
         return Promise.all(v);
     }
 
-    private fetchFile(path: string, flags: DataFetcherFlags): Promise<ArrayBufferSlice> {
+    private fetchFile(path: string, allow404: boolean): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
-        const p = this.dataFetcher.fetchData(path, flags, () => {
+        const p = this.dataFetcher.fetchData(path, { allow404, abortedCallback: () => {
             this.filePromiseCache.delete(path);
             this.archivePromiseCache.delete(path);
-        });
+        } });
         this.filePromiseCache.set(path, p);
         return p;
     }
 
-    public fetchFileData(path: string, flags: DataFetcherFlags = DataFetcherFlags.NONE): Promise<ArrayBufferSlice> {
+    public fetchFileData(path: string, allow404: boolean = false): Promise<ArrayBufferSlice> {
         const p = this.filePromiseCache.get(path);
         if (p !== undefined) {
             return p.then(() => this.getFileData(path));
         } else {
-            return this.fetchFile(path, flags).then((data) => {
+            return this.fetchFile(path, allow404).then((data) => {
                 this.fileDataCache.set(path, data);
                 return data;
             });
@@ -189,7 +180,7 @@ export class ModelCache {
             p = this.fetchFileData(archivePath).then((data) => {
                 return data;
             }).then((data) => {
-                const arc = ZAR.parse(maybeDecompress(data));
+                const arc = ZAR.parse(LzS.maybeDecompress(data));
                 this.archiveCache.set(archivePath, arc);
                 return arc;
             });
@@ -761,7 +752,7 @@ class SceneDesc implements Viewer.SceneDesc {
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
-            mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
+            scaleMatrix(cmbRenderer.modelMatrix, actor.modelMatrix, scale);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
@@ -909,7 +900,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.shapeInstances[3].visible = chest === Chest.SMALL_WOODEN || chest === Chest.LARGE_WOODEN;
 
                 if (chest === Chest.BOSS || chest === Chest.LARGE_WOODEN)
-                    mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2]);
+                    scaleMatrix(b.modelMatrix, b.modelMatrix, 2);
             }
 
             const whichBox = ((actor.variable) >>> 12) & 0x0F;
@@ -1749,6 +1740,11 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/kaeporagaebora1.cmb`, 0.025);
             b.bindCSAB(parseCSAB(zar, `anim/owl_wait.csab`));
             b.setVertexColorScale(characterLightScale);
+        } else if (actor.actorId === ActorId.En_Ms) {
+            const zar = await fetchArchive(`zelda_ms.zar`);
+            const b = buildModel(zar, `model/beanmaster.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ms_matsu.csab`));
+            b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Okuta) {
             const zar = await fetchArchive(`zelda_oc2.zar`);
             const b = buildModel(zar, `model/octarock.cmb`);
@@ -2345,7 +2341,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const textureHolder = dataHolder.textureHolder;
 
         const [zarBuffer, zsiBuffer] = await Promise.all([
-            modelCache.fetchFileData(path_zar, DataFetcherFlags.ALLOW_404),
+            modelCache.fetchFileData(path_zar, true),
             modelCache.fetchFileData(path_info_zsi),
         ]);
 

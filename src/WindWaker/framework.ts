@@ -11,8 +11,12 @@ export const enum fpc__ProcessName {
     d_kankyo            = 0x0015,
     d_envse             = 0x0017,
     d_a_sea             = 0x0028,
+    d_a_mgameboard      = 0x0040,
     d_a_obj_lpalm       = 0x004B,
     d_a_obj_Ygush00     = 0x0099,
+    d_a_majuu_flag      = 0x00AF,
+    d_a_tori_flag       = 0x00B0,
+    d_a_sie_flag        = 0x00B1,
     d_a_ep              = 0x00BA,
     d_a_tbox            = 0x0126,
     d_a_kytag00         = 0x0181,
@@ -23,6 +27,7 @@ export const enum fpc__ProcessName {
     d_a_vrbox           = 0x01BA,
     d_a_vrbox2          = 0x01BB,
     d_a_bg              = 0x01BC,
+    d_a_swhit0          = 0x01C9,
     d_kyeff             = 0x01E4,
     d_kyeff2            = 0x01E5,
 };
@@ -152,7 +157,7 @@ class standard_create_request_class<T = any> {
     ]);
     public process: base_process_class | null = null;
 
-    constructor(public layer: layer_class, public pcId: number, public constructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
+    constructor(public layer: layer_class, public pcId: number, public konstructor: fpc_bs__Constructor, public profileBinary: ArrayBufferSlice, public userData: T) {
     }
 
     // fpcSCtRq_Handler
@@ -166,7 +171,7 @@ class standard_create_request_class<T = any> {
 
     private CreateProcess(globals: fGlobals, globalUserData: GlobalUserData, userData: this): cPhs__Status {
         const self = userData;
-        self.process = new self.constructor(globals, self.pcId, self.profileBinary.createDataView());
+        self.process = new self.konstructor(globals, self.pcId, self.profileBinary.createDataView());
         return cPhs__Status.Next;
     }
 
@@ -420,7 +425,7 @@ export function fpcM_Management(globals: fGlobals, globalUserData: GlobalUserDat
     fpcCt_Handler(globals, globalUserData);
     // fpcPi_Handler(globals);
     // fpcCt_Handler(globals);
-    const deltaTimeInFrames = viewerInput.deltaTime / 1000 * 30;
+    const deltaTimeInFrames = Math.min(viewerInput.deltaTime / 1000 * 30, 5);
     fpcEx_Handler(globals, globalUserData, deltaTimeInFrames);
     fpcDw_Handler(globals, globalUserData, renderInstManager, viewerInput);
 }
@@ -497,6 +502,7 @@ export class fopAc_ac_c extends leafdraw_class {
         }
 
         const status = this.subload(globals, prm);
+        assert(status !== cPhs__Status.Complete);
         if (status === cPhs__Status.Next)
             fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
         return status;

@@ -126,7 +126,7 @@ export class PeekZManager {
                 });
             }
 
-            const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: this.depthTexture.gfxTexture, gfxSampler: this.depthSampler }];
+            const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: this.depthTexture.gfxTexture, gfxSampler: this.depthSampler, lateBinding: null }];
             this.fullscreenCopyBindings = device.createBindings({ bindingLayout: { numSamplers: 1, numUniformBuffers: 0 }, samplerBindings, uniformBufferBindings: [], });
         }
 
@@ -155,13 +155,13 @@ void main() {
 }
 `;
             const fullscreenFS: string = `
-uniform highp sampler2D u_Texture;
+uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
 
 out uint o_Output;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     o_Output = uint(color.r * 4294967295.0);
 }
 `;
@@ -219,7 +219,6 @@ void main() {
         this.resolveRenderPassDescriptor.depthStencilAttachment = depthStencilAttachment;
         this.resolveRenderPassDescriptor.depthStencilResolveTo = this.depthTexture.gfxTexture;
         renderPass = device.createRenderPass(this.resolveRenderPassDescriptor);
-        renderPass.endPass();
         device.submitPass(renderPass);
 
         // Resolve depth texture to color texture.
@@ -232,7 +231,6 @@ void main() {
         renderPass.setBindings(0, this.fullscreenCopyBindings!, []);
         renderPass.setInputState(null);
         renderPass.draw(3, 0);
-        renderPass.endPass();
         device.submitPass(renderPass);
 
         // Now go through and start submitting readbacks on our texture.

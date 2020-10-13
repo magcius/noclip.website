@@ -47,7 +47,7 @@ export function HSD_ArchiveParse(buffer: ArrayBufferSlice): HSD_Archive {
         const relocationTableEntryOffs = view.getUint32(baseIdx + 0x00);
 
         // Retrieve the value where it would point. This is most likely the
-        // start of a structure. We will use this in HSD_LoadContext_GetStructSize.
+        // start of a structure. We will use this in HSD_Archive__GetStructSize.
         const relocationTableValue = view.getUint32(dataOffs + relocationTableEntryOffs);
 
         if (!validOffsets.includes(relocationTableValue))
@@ -85,10 +85,10 @@ export function HSD_ArchiveParse(buffer: ArrayBufferSlice): HSD_Archive {
     return { dataBuffer, validOffsets, publics, externs };
 }
 
-export function HSD_Archive_FindPublic(arc: HSD_Archive, symbolName: string): HSD_ArchiveSymbol | null {
+export function HSD_Archive_FindPublic(arc: HSD_Archive, symbolName: string): ArrayBufferSlice | null {
     const obj = arc.publics.find((sym) => sym.name === symbolName);
     if (obj !== undefined)
-        return obj;
+        return HSD_Archive__ResolvePtr(arc, obj.offset);
     else
         return null;
 }
@@ -113,6 +113,11 @@ function HSD_Archive__GetStructSize(arc: HSD_Archive, offs: number): number {
     return nextOffs - offs;
 }
 
+function HSD_Archive__GetStructOffset(arc: HSD_Archive, buffer: ArrayBufferSlice): number {
+    assert(buffer.arrayBuffer === arc.dataBuffer.arrayBuffer);
+    return buffer.byteOffset - arc.dataBuffer.byteOffset;
+}
+
 function HSD_Archive__ResolvePtr(arc: HSD_Archive, offs: number, size?: number): ArrayBufferSlice {
     // Ensure that this is somewhere within our relocation table.
     assert(arc.validOffsets.indexOf(offs) >= 0);
@@ -127,7 +132,13 @@ export class HSD_LoadContext {
     }
 }
 
-export function HSD_LoadContext__ResolvePtrAutoSize(ctx: HSD_LoadContext, offs: number): ArrayBufferSlice {
+export function HSD_LoadContext__ResolveSymbol(ctx: HSD_LoadContext, symbol: HSD_ArchiveSymbol): ArrayBufferSlice {
+    return HSD_LoadContext__ResolvePtr(ctx, symbol.offset);
+}
+
+export function HSD_LoadContext__ResolvePtrAutoSize(ctx: HSD_LoadContext, offs: number): ArrayBufferSlice | null {
+    if (offs === 0xFFFFFFFF)
+        return null;
     const size = HSD_Archive__GetStructSize(ctx.archive, offs);
     return HSD_Archive__ResolvePtr(ctx.archive, offs, size);
 }
@@ -600,11 +611,11 @@ interface HSD_PObjBase {
 
 interface HSD_PObjRigid extends HSD_PObjBase {
     kind: 'Rigid';
-    jointReference: number;
+    jointReferenceID: number;
 }
 
 interface HSD_EnvelopeDesc {
-    jointReference: number;
+    jointReferenceID: number;
     weight: number;
 }
 
@@ -679,7 +690,7 @@ function HSD_PObjLoadDesc(pobjs: HSD_PObj[], ctx: HSD_LoadContext, buffer: Array
     const objType = flags & HSD_PObjFlags.OBJTYPE_MASK;
     if (objType === HSD_PObjFlags.OBJTYPE_SKIN) {
         const jointReference = contentsOffs;
-        pobjs.push({ flags, loadedVertexLayout, loadedVertexData, kind: 'Rigid', jointReference });
+        pobjs.push({ flags, loadedVertexLayout, loadedVertexData, kind: 'Rigid', jointReferenceID: jointReference });
     } else if (objType === HSD_PObjFlags.OBJTYPE_ENVELOPE) {
         // Array of arrays of HSD_EnvelopeDesc structs. Fun!
         const envelopeDesc: HSD_EnvelopeDesc[][] = [];
@@ -702,7 +713,7 @@ function HSD_PObjLoadDesc(pobjs: HSD_PObj[], ctx: HSD_LoadContext, buffer: Array
                         break;
                     const weight = envArrView.getFloat32(envArrIdx + 0x04);
                     envArrIdx += 0x08;
-                    mtxEnv.push({ jointReference, weight });
+                    mtxEnv.push({ jointReferenceID: jointReference, weight });
                 }
 
                 envelopeDesc.push(mtxEnv);
@@ -713,7 +724,7 @@ function HSD_PObjLoadDesc(pobjs: HSD_PObj[], ctx: HSD_LoadContext, buffer: Array
         assert(envelopeDesc.length <= 10);
         pobjs.push({ flags, loadedVertexLayout, loadedVertexData, kind: 'Envelope', envelopeDesc });
     } else if (objType === HSD_PObjFlags.OBJTYPE_SHAPEANIM) {
-        throw "whoops";
+        // throw "whoops";
     } else {
         throw "whoops";
     }
@@ -819,9 +830,7 @@ export const enum HSD_JObjFlags {
     ROOT_TEXEDGE        = 1 << 30,
 }
 
-function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: HSD_LoadContext, offs: number): void {
-    assert(offs !== 0);
-    const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
+function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
     // const classNameOffs = view.getUint32(0x00);
     const flags: HSD_JObjFlags = view.getUint32(0x04);
@@ -879,18 +888,19 @@ function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: HSD_LoadContext, offs
     // const robj = view.getUint32(0x3C);
 
     const children: HSD_JObj[] = [];
-    if (firstChildOffs !== 0)
-        HSD_JObjLoadJointInternal(children, ctx, firstChildOffs);
+    if (firstChildOffs !== 0) {
+        HSD_JObjLoadJointInternal(children, ctx, HSD_LoadContext__ResolvePtr(ctx, firstChildOffs));
+    }
 
-    const jointReferenceID = offs;
+    const jointReferenceID = HSD_Archive__GetStructOffset(ctx.archive, buffer);
     const base: HSD_JObjBase = { jointReferenceID, flags, rotation, scale, translation, inverseBindPose, children };
 
     if (contentsOffs === 0) {
         jobjs.push({ ... base, kind: 'None' });
     } else if (!!(flags & HSD_JObjFlags.SPLINE)) {
-        throw "whoops";
+        // throw "whoops";
     } else if (!!(flags & HSD_JObjFlags.PTCL)) {
-        throw "whoops";
+        // throw "whoops";
     } else {
         const dobj: HSD_DObj[] = [];
         HSD_DObjLoadDesc(dobj, ctx, HSD_LoadContext__ResolvePtr(ctx, contentsOffs));
@@ -898,7 +908,7 @@ function HSD_JObjLoadJointInternal(jobjs: HSD_JObj[], ctx: HSD_LoadContext, offs
     }
 
     if (nextSiblingOffs !== 0)
-        HSD_JObjLoadJointInternal(jobjs, ctx, nextSiblingOffs);
+        HSD_JObjLoadJointInternal(jobjs, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
 }
 
 export interface HSD_JObjRoot {
@@ -907,11 +917,12 @@ export interface HSD_JObjRoot {
     tlutDescs: HSD_TlutDesc[];
 }
 
-export function HSD_JObjLoadJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol): HSD_JObjRoot {
-    const ctx = new HSD_LoadContext(archive);
+export function HSD_JObjLoadJoint(ctx: HSD_LoadContext, buffer: ArrayBufferSlice | null): HSD_JObjRoot | null {
+    if (buffer === null)
+        return null;
 
     const jobjs: HSD_JObj[] = [];
-    HSD_JObjLoadJointInternal(jobjs, ctx, symbol.offset);
+    HSD_JObjLoadJointInternal(jobjs, ctx, buffer);
     assert(jobjs.length === 1);
     const jobj = jobjs[0];
 
@@ -1201,9 +1212,7 @@ export interface HSD_AnimJointRoot {
     root: HSD_AnimJoint;
 }
 
-function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: HSD_LoadContext, offs: number): void {
-    assert(offs !== 0);
-    const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
+function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
     const firstChildOffs = view.getUint32(0x00);
     const nextSiblingOffs = view.getUint32(0x04);
@@ -1212,8 +1221,8 @@ function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: HSD_Loa
     const flags = view.getUint32(0x10);
 
     const children: HSD_AnimJoint[] = [];
-    if (firstChildOffs !== 0)
-        HSD_AObjLoadAnimJointInternal(children, ctx, firstChildOffs);
+    if (firstChildOffs !== 0 && firstChildOffs !== 0xFFFFFFFF)
+        HSD_AObjLoadAnimJointInternal(children, ctx, HSD_LoadContext__ResolvePtr(ctx, firstChildOffs));
 
     let aobj: HSD_AObj | null = null;
     if (aobjDescOffs !== 0)
@@ -1222,17 +1231,15 @@ function HSD_AObjLoadAnimJointInternal(animJoints: HSD_AnimJoint[], ctx: HSD_Loa
     animJoints.push({ children, aobj });
 
     if (nextSiblingOffs !== 0)
-        HSD_AObjLoadAnimJointInternal(animJoints, ctx, nextSiblingOffs);
+        HSD_AObjLoadAnimJointInternal(animJoints, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
 }
 
-export function HSD_AObjLoadAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol | null): HSD_AnimJointRoot | null {
-    if (symbol === null)
+export function HSD_AObjLoadAnimJoint(ctx: HSD_LoadContext, buffer: ArrayBufferSlice | null): HSD_AnimJointRoot | null {
+    if (buffer === null)
         return null;
 
-    const ctx = new HSD_LoadContext(archive);
-
     const animJoints: HSD_AnimJoint[] = [];
-    HSD_AObjLoadAnimJointInternal(animJoints, ctx, symbol.offset);
+    HSD_AObjLoadAnimJointInternal(animJoints, ctx, buffer);
     assert(animJoints.length === 1);
     const root = animJoints[0];
 
@@ -1334,17 +1341,15 @@ function HSD_AObjLoadMatAnim(matAnims: HSD_MatAnim[], ctx: HSD_LoadContext, buff
         HSD_AObjLoadMatAnim(matAnims, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
 }
 
-function HSD_AObjLoadMatAnimJointInternal(matAnimJoints: HSD_MatAnimJoint[], ctx: HSD_LoadContext, offs: number): void {
-    assert(offs !== 0);
-    const buffer = HSD_LoadContext__ResolvePtr(ctx, offs);
+function HSD_AObjLoadMatAnimJointInternal(matAnimJoints: HSD_MatAnimJoint[], ctx: HSD_LoadContext, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
     const firstChildOffs = view.getUint32(0x00);
     const nextSiblingOffs = view.getUint32(0x04);
     const matAnimOffs = view.getUint32(0x08);
 
     const children: HSD_MatAnimJoint[] = [];
-    if (firstChildOffs !== 0)
-        HSD_AObjLoadMatAnimJointInternal(children, ctx, firstChildOffs);
+    if (firstChildOffs !== 0 && firstChildOffs !== 0xFFFFFFFF)
+        HSD_AObjLoadMatAnimJointInternal(children, ctx, HSD_LoadContext__ResolvePtr(ctx, firstChildOffs));
 
     let matAnim: HSD_MatAnim[] = [];
     if (matAnimOffs !== 0)
@@ -1353,17 +1358,15 @@ function HSD_AObjLoadMatAnimJointInternal(matAnimJoints: HSD_MatAnimJoint[], ctx
     matAnimJoints.push({ children, matAnim });
     
     if (nextSiblingOffs !== 0)
-        HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, nextSiblingOffs);
+        HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, HSD_LoadContext__ResolvePtr(ctx, nextSiblingOffs));
 }
 
-export function HSD_AObjLoadMatAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol | null): HSD_MatAnimJointRoot | null {
-    if (symbol === null)
+export function HSD_AObjLoadMatAnimJoint(ctx: HSD_LoadContext, buffer: ArrayBufferSlice | null): HSD_MatAnimJointRoot | null {
+    if (buffer === null)
         return null;
 
-    const ctx = new HSD_LoadContext(archive);
-
     const matAnimJoints: HSD_MatAnimJoint[] = [];
-    HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, symbol.offset);
+    HSD_AObjLoadMatAnimJointInternal(matAnimJoints, ctx, buffer);
     assert(matAnimJoints.length === 1);
     const root = matAnimJoints[0];
 
@@ -1379,7 +1382,7 @@ export interface HSD_ShapeAnimJointRoot {
     root: HSD_ShapeAnimJoint;
 }
 
-export function HSD_AObjLoadShapeAnimJoint(archive: HSD_Archive, symbol: HSD_ArchiveSymbol | null): HSD_ShapeAnimJointRoot | null {
+export function HSD_AObjLoadShapeAnimJoint(ctx: HSD_LoadContext, buffer: ArrayBufferSlice | null): HSD_ShapeAnimJointRoot | null {
     return null;
 }
 //#endregion

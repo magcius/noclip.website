@@ -41,7 +41,7 @@ class Command_Batch {
     private shapeHelper: GXShapeHelperGfx;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private materialCommand: Command_Material, private sceneGraphNode: SceneGraphNode, batch: Batch, coalescedBuffers: GfxCoalescedBuffersCombo) {
-        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {
@@ -58,13 +58,12 @@ class Command_Batch {
 
         const renderInst = renderInstManager.newRenderInst();
         this.shapeHelper.setOnRenderInst(renderInst);
-        const materialOffs = this.materialCommand.materialHelper.allocateMaterialParams(renderInst);
         this.materialCommand.fillMaterialParams(materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         this.materialCommand.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        this.materialCommand.materialHelper.fillMaterialParamsDataOnInst(renderInst, materialOffs, materialParams);
+        this.materialCommand.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         this.computeModelView(packetParams.u_PosMtx[0], viewerInput.camera);
-        this.shapeHelper.fillPacketParams(packetParams, renderInst);
+        this.materialCommand.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -176,9 +175,8 @@ export class LuigisMansionRenderer extends BasicGXRendererHelper {
             this.binCommands.push(new Command_Bin(device, this.renderHelper, bins[i]));
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(16/60);
-        return c;
     }
 
     public createPanels(): UI.Panel[] {

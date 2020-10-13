@@ -29,6 +29,7 @@ export class MapMesh {
     public normal: vec3[] = [];
     public layer = 0;
     public translucent: boolean = false;
+    public useNormal: boolean = false;
     public uvScroll = vec2.fromValues(0, 0);
     // Sets GS register ALPHA_1: {A = 0, B = 1, C = 0, D = 1, FIX = 0x80}
     public addAlpha: boolean = false;
@@ -458,6 +459,7 @@ function parseGeometry(buffer: ArrayBufferSlice, geometryFile: BarFile, mapGroup
             mesh.texture = mapGroup.textureIndexMap.get(textureIndex)![1];
         }
         mesh.translucent = view.getUint16(i * 0x10 + 0x2A, true) === 0x1;
+        mesh.useNormal = view.getUint16(i * 0x10 + 0x26, true) > 0;
         mesh.addAlpha = (view.getUint8(i * 0x10 + 0x2C) & 0x40) > 0;
         const uvScrollIndex = (view.getUint16(i * 0x10 + 0x2C, true) >> 1) & 0xF;
         const texture = assertExists(mesh.texture);

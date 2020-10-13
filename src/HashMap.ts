@@ -122,10 +122,10 @@ export class HashMap<K, V> {
             return;
 
         this.needsReconfigure = true;
-        requestAnimationFrame(() => this.manuallyReconfigure());
+        requestAnimationFrame(this.manuallyReconfigure);
     }
 
-    public manuallyReconfigure(): void {
+    public manuallyReconfigure = () => {
         let numBuckets = Math.ceil(this.size() / assertExists(this.autoLoadFactor));
         if (numBuckets <= this.buckets.length)
             return;

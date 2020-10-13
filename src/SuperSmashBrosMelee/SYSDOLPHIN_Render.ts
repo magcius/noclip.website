@@ -5,10 +5,10 @@ import { GfxDevice, GfxTexture, GfxSampler, GfxCullMode } from "../gfx/platform/
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { LoadedVertexData } from "../gx/gx_displaylist";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst, setSortKeyLayer, GfxRendererLayer } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput, Texture } from "../viewer";
-import { vec3, mat4 } from "gl-matrix";
-import { computeModelMatrixSRT, lerp, saturate, MathConstants, computeModelMatrixSRT_MayaSSC, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
+import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { computeModelMatrixSRT, lerp, saturate, MathConstants, Vec3One, computeModelMatrixR, computeModelMatrixS } from "../MathHelpers";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import * as GX from "../gx/gx_enum";
 import { TextureMapping } from "../TextureHolder";
@@ -49,13 +49,14 @@ class HSD_DObj_Data {
     public shapeHelpers: GXShapeHelperGfx[] = [];
     public mobj: HSD_MObj_Data | null = null;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBuffers: GfxCoalescedBuffersCombo[], public dobj: HSD_DObj) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, coalescedBufferss: GfxCoalescedBuffersCombo[], public dobj: HSD_DObj) {
         if (this.dobj.mobj !== null)
             this.mobj = new HSD_MObj_Data(device, cache, this.dobj.mobj);
 
         for (let i = 0; i < this.dobj.pobj.length; i++) {
             const pobj = this.dobj.pobj[i];
-            this.shapeHelpers.push(new GXShapeHelperGfx(device, cache, coalescedBuffers.shift()!, pobj.loadedVertexLayout, pobj.loadedVertexData));
+            const coalescedBuffers = coalescedBufferss.shift()!;
+            this.shapeHelpers.push(new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, pobj.loadedVertexLayout, pobj.loadedVertexData));
         }
     }
 
@@ -185,9 +186,16 @@ export class HSD_AObj_Instance {
 
     constructor(public aobj: HSD_AObj) {
         this.flags = this.aobj.flags;
+
+        // XXX(jstpierre): Mark all animations to loop.
+        this.flags |= HSD_AObjFlags.ANIM_LOOP;
     }
 
     private calcFObj<T>(fobj: HSD_FObj, callback: (trackType: number, value: number, obj: T) => void, obj: T): void {
+        // TODO(jstpierre): I think this means my FObj parsing is broken :/
+        if (fobj.keyframes.length === 0)
+            return;
+
         const time = this.currFrame;
 
         let i = 0;
@@ -203,10 +211,10 @@ export class HSD_AObj_Instance {
         if (k0.kind === 'Constant') {
             callback(fobj.type, k0.p0, obj);
         } else if (k0.kind === 'Linear') {
-            const t = k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0;
+            const t = saturate(k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0);
             callback(fobj.type, lerp(k0.p0, k0.p1, t), obj);
         } else if (k0.kind === 'Hermite') {
-            const t = k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0;
+            const t = saturate(k0.duration !== 0 ? ((time - k0.time) / k0.duration) : 1.0);
             callback(fobj.type, getPointHermite(k0.p0, k0.p1, k0.d0, k0.d1, t), obj);
         }
     }
@@ -219,6 +227,9 @@ export class HSD_AObj_Instance {
                 // TODO(jstpierre): Rewind Frame
                 this.currFrame -= this.aobj.endFrame;
             }
+        } else {
+            this.currFrame = Math.min(this.currFrame, this.aobj.endFrame);
+            // HSD_FObjStopAnimAll
         }
 
         for (let i = 0; i < this.aobj.fobj.length; i++)
@@ -272,7 +283,7 @@ export class HSD_TObj_Instance {
 
     private static updateAnim(trackType: HSD_TObjAnmType, value: number, tobj: HSD_TObj_Instance): void {
         if (trackType === HSD_TObjAnmType.TIMG) {
-            tobj.imageDesc = assertExists(tobj.texAnim!.imageDescs[value]);
+            tobj.imageDesc = assertExists(tobj.texAnim!.imageDescs[(value | 0)]);
         } else if (trackType === HSD_TObjAnmType.TRAU) {
             tobj.translation[0] = value;
         } else if (trackType === HSD_TObjAnmType.TRAV) {
@@ -1037,10 +1048,11 @@ class HSD_MObj_Instance {
         }
 
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
-        const offs = this.materialHelper.allocateMaterialParams(renderInst);
         this.setupTExpConstants(materialParams);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        if (!!(this.data.mobj.renderMode & HSD_RenderModeFlags.XLU))
+            renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT);
     }
 }
 
@@ -1086,7 +1098,7 @@ class HSD_DObj_Instance {
     }
 
     public addAnimAll(matAnim: HSD_MatAnim | null, shapeAnim: /* HSD_ShapeAnim | */ null): void {
-        if (this.mobj !== null && matAnim !== null)
+        if (this.mobj !== null && matAnim !== null && matAnim !== undefined)
             this.mobj.addAnim(matAnim);
     }
 
@@ -1119,7 +1131,7 @@ class HSD_DObj_Instance {
 
             if (pobj.kind === 'Rigid') {
                 // TODO(jstpierre): Shared vtx.
-                assert(pobj.jointReference === 0);
+                assert(pobj.jointReferenceID === 0);
 
                 mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, jobj.jointMtx);
             } else if (pobj.kind === 'Envelope') {
@@ -1134,7 +1146,7 @@ class HSD_DObj_Instance {
                     if (mtxEnv.length === 1) {
                         const env = mtxEnv[0];
                         assert(env.weight === 1.0);
-                        const envJObj = root.findJObjByJointReferenceID(env.jointReference);
+                        const envJObj = root.findJObjByJointReferenceID(env.jointReferenceID);
 
                         if (!!(jobj.data.jobj.flags & HSD_JObjFlags.SKELETON_ROOT)) {
                             // Rigid vertices are stored in bone-local space if stored on the skeleton root.
@@ -1148,7 +1160,7 @@ class HSD_DObj_Instance {
                         for (let j = 0; j < mtxEnv.length; j++) {
                             const env = mtxEnv[j];
                             assert(env.weight < 1.0);
-                            const envJObj = root.findJObjByJointReferenceID(env.jointReference);
+                            const envJObj = root.findJObjByJointReferenceID(env.jointReferenceID);
                             mat4.mul(scratchMatrixEnv, envJObj.jointMtx, envJObj.data.jobj.inverseBindPose);
                             mat4.multiplyScalarAndAdd(dst, dst, scratchMatrixEnv, env.weight);
                         }
@@ -1176,12 +1188,21 @@ class HSD_DObj_Instance {
                 megaStateFlags.cullMode = GfxCullMode.FRONT_AND_BACK;
 
             shapeHelper.setOnRenderInst(renderInst);
-            shapeHelper.fillPacketParams(packetParams, renderInst);
+            this.mobj.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
             renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();
     }
+}
+
+function applyMayaSSC(dst: mat4, parentScaleX: number, parentScaleY: number, parentScaleZ: number): void {
+    dst[1] *= (parentScaleX / parentScaleY);
+    dst[2] *= (parentScaleX / parentScaleZ);
+    dst[4] *= (parentScaleY / parentScaleX);
+    dst[6] *= (parentScaleY / parentScaleZ);
+    dst[8] *= (parentScaleZ / parentScaleX);
+    dst[9] *= (parentScaleZ / parentScaleY);
 }
 
 class HSD_JObj_Instance {
@@ -1195,7 +1216,8 @@ class HSD_JObj_Instance {
     public scale = vec3.create();
     private parentScale = vec3.fromValues(1, 1, 1);
 
-    public visible: boolean = true;
+    public visible = true;
+    public nodeVisible = true;
 
     constructor(public data: HSD_JObj_Data, texImageDataCache: HSD__TexImageDataCache, public parent: HSD_JObj_Instance | null = null) {
         for (let i = 0; i < this.data.dobj.length; i++)
@@ -1207,15 +1229,11 @@ class HSD_JObj_Instance {
         vec3.copy(this.translation, jobj.translation);
         vec3.copy(this.rotation, jobj.rotation);
         vec3.copy(this.scale, jobj.scale);
-        this.visible = !(jobj.flags & HSD_JObjFlags.HIDDEN);
-    }
-
-    public setVisible(v: boolean): void {
-        this.visible = v;
+        this.nodeVisible = !(jobj.flags & HSD_JObjFlags.HIDDEN);
     }
 
     public setVisibleAll(v: boolean): void {
-        this.visible = v;
+        this.nodeVisible = v;
 
         for (let i = 0; i < this.children.length; i++)
             this.children[i].setVisibleAll(v);
@@ -1269,9 +1287,11 @@ class HSD_JObj_Instance {
         } else if (trackType === HSD_JObjAnmType.SCAZ) {
             jobj.scale[2] = value;
         } else if (trackType === HSD_JObjAnmType.NODE) {
-            jobj.setVisible(value >= 0.5);
+            jobj.nodeVisible = value >= 0.5;
         } else if (trackType === HSD_JObjAnmType.BRANCH) {
             jobj.setVisibleAll(value >= 0.5);
+        } else if (trackType === 40) {
+            // dptcl callback
         } else {
             debugger;
         }
@@ -1288,7 +1308,7 @@ class HSD_JObj_Instance {
             this.children[i].calcAnim(deltaTimeInFrames);
     }
 
-    public calcMtx(parentJointMtx: mat4 | null = null, parentScale: vec3 = Vec3One): void {
+    public calcMtx(parentJointMtx: mat4 | null = null, parentScale: ReadonlyVec3 = Vec3One): void {
         const useClassicScale = !!(this.data.jobj.flags & HSD_JObjFlags.CLASSICAL_SCALE);
 
         if (useClassicScale)
@@ -1296,11 +1316,11 @@ class HSD_JObj_Instance {
         else
             vec3.mul(this.parentScale, this.scale, parentScale);
 
-        computeModelMatrixSRT_MayaSSC(this.jointMtx,
+        computeModelMatrixSRT(this.jointMtx,
             this.scale[0], this.scale[1], this.scale[2],
             this.rotation[0], this.rotation[1], this.rotation[2],
-            this.translation[0], this.translation[1], this.translation[2],
-            parentScale[0], parentScale[1], parentScale[2]);
+            this.translation[0], this.translation[1], this.translation[2]);
+        applyMayaSSC(this.jointMtx, this.parentScale[0], this.parentScale[1], this.parentScale[2]);
 
         if (parentJointMtx !== null)
             mat4.mul(this.jointMtx, parentJointMtx, this.jointMtx);
@@ -1313,9 +1333,13 @@ class HSD_JObj_Instance {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, root: HSD_JObjRoot_Instance): void {
-        if (this.visible)
+        if (!this.visible)
+            return;
+
+        if (this.nodeVisible)
             for (let i = 0; i < this.dobj.length; i++)
                 this.dobj[i].draw(device, renderInstManager, viewerInput, this, root);
+
         for (let i = 0; i < this.children.length; i++)
             this.children[i].draw(device, renderInstManager, viewerInput, root);
     }
@@ -1375,9 +1399,9 @@ export class HSD_JObjRoot_Instance {
         vec3.transformMat4(scratchVec3b, [0, 0, 0], jobj.jointMtx);
 
         if (highlight) {
-            drawWorldSpacePoint(ctx, camera, scratchVec3b, Red, 6);
+            drawWorldSpacePoint(ctx, camera.clipFromWorldMatrix, scratchVec3b, Red, 6);
             if (idx < 10)
-                drawWorldSpaceText(ctx, camera, scratchVec3b, '' + idx);
+                drawWorldSpaceText(ctx, camera.clipFromWorldMatrix, scratchVec3b, '' + idx);
         }
 
         if (jobj.parent !== null) {
@@ -1385,7 +1409,7 @@ export class HSD_JObjRoot_Instance {
             const color = colorNewCopy(Red);
             if (highlight)
                 colorCopy(color, Yellow);
-            drawWorldSpaceLine(ctx, camera, scratchVec3a, scratchVec3b, color);
+            drawWorldSpaceLine(ctx, camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b, color);
         }
 
         for (let i = 0; i < jobj.children.length; i++)

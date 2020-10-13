@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { readFileSync, writeFileSync } from "fs";
-import { assert, hexzero, nArray, hexdump } from "../../util";
+import { assert, hexzero, nArray } from "../../util";
 import * as Pako from 'pako';
 import * as BYML from "../../byml";
 

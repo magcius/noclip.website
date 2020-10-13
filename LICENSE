@@ -1,6 +1,15 @@
-Note some implementations of game engines were reverse engineered, and not in a "clean-room" manner. Please consult your lawyer if you wish to reuse some code from this project.
+NOTE
 
-Files written specifically for the noclip project have not been reverse engineered. Please contact me for further details.
+Some implementations of game softwares were reverse-engineered, and not in a "clean-room"
+manner. The re-interpretations of these original game softwares are available under the
+MIT License.
+
+Some files written specifically for the noclip project have not been reverse engineered,
+and are available solely under the MIT License as displayed below. Please contact
+Jasper St. Pierre at jstpierre@mecheye.net for further details on which source files are
+completely clean from a reverse-engineering standpoint, and which are not.
+
+
 
 MIT License
 

@@ -1,11 +1,11 @@
 
-import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { assert, nArray, hexzero } from "../../util";
-
 // Microsoft LZX
 
 // https://docs.microsoft.com/en-us/previous-versions/bb417343(v=msdn.10)#microsoft-lzx-data-compression-format
 // https://github.com/FNA-XNA/FNA/blob/master/src/Content/LzxDecoder.cs
+
+import ArrayBufferSlice from "../../ArrayBufferSlice";
+import { assert } from "../../util";
 
 class BitStream {
     public offs: number = 0;
@@ -115,7 +115,7 @@ export class LZXState {
             this.positionSlots = 36;
         else if (windowBits === 19)
             this.positionSlots = 38;
-        // TODO(jstpierre): This deviates from spec. Probably intentionally?
+        // XXX(jstpierre): This deviates from spec. Probably intentionally?
         else if (windowBits === 20)
             this.positionSlots = 42;
         else if (windowBits === 21)
@@ -257,7 +257,7 @@ export function decompressLZX(state: LZXState, dst: Uint8Array, dstOffs: number,
             if (state.blockType === BlockType.Verbatim || state.blockType === BlockType.Aligned) {
                 // Aligned trees have an extra table at the start.
 
-                // TODO(jstpierre): Spec puts this after the verbatim block. Likely a format change to make
+                // XXX(jstpierre): Spec puts this after the verbatim block. Likely a format change to make
                 // the decode control flow easier here.
                 if (state.blockType === BlockType.Aligned) {
                     for (let i = 0; i < 8; i++)

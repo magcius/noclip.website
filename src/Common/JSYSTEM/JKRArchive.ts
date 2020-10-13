@@ -5,6 +5,7 @@ import ArrayBufferSlice from '../../ArrayBufferSlice';
 import { assert, readString } from '../../util';
 import * as Yay0 from '../Compression/Yay0';
 import * as Yaz0 from '../Compression/Yaz0';
+import { NamedArrayBufferSlice } from '../../DataFetcher';
 
 export const enum JKRFileAttr {
     Normal          = 0x01,
@@ -37,21 +38,14 @@ export interface RARCDir {
     subdirs: RARCDir[];
 }
 
-export function findFileInDir(dir: RARCDir, filename: string): RARCFile | null {
+function findFileInDir(dir: RARCDir, filename: string): RARCFile | null {
     const file = dir.files.find((file) => file.name.toLowerCase() === filename.toLowerCase());
     return file || null;
 }
 
-export function findFileDataInDir(dir: RARCDir, filename: string): ArrayBufferSlice | null {
-    const file = findFileInDir(dir, filename);
-    return file ? file.buffer : null;
-}
-
 export class JKRArchive {
-    // All the files in a flat list.
-    public files: RARCFile[];
-    // Root directory.
-    public root: RARCDir;
+    constructor(public files: RARCFile[], public root: RARCDir, public name: string) {
+    }
 
     public findDirParts(parts: string[]): RARCDir | null {
         let dir: RARCDir | undefined = this.root;
@@ -84,6 +78,13 @@ export class JKRArchive {
             return null;
         return file.buffer;
     }
+
+    public findFilenameData(name: string): ArrayBufferSlice | null {
+        for (let i = 0; i < this.files.length; i++)
+            if (this.files[i].name.toLowerCase() === name.toLowerCase())
+                return this.files[i].buffer;
+        return null;
+    }
 }
 
 // Used while parsing
@@ -94,28 +95,75 @@ interface DirEntry {
     subdirIndexes: number[];
 }
 
-export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decompressor | null = null): JKRArchive {
+export interface JKRDecompressor {
+    decompress(src: ArrayBufferSlice, type: JKRCompressionType): ArrayBufferSlice;
+}
+
+export class JKRDecompressorSW {
+    public decompress(src: ArrayBufferSlice, type: JKRCompressionType): ArrayBufferSlice {
+        if (type === JKRCompressionType.Yaz0)
+            return Yaz0.decompressSW(src);
+        else if (type === JKRCompressionType.Yay0)
+            return Yay0.decompress(src);
+        else
+            throw "whoops";
+    }
+}
+
+export class JKRDecompressorWASM {
+    constructor(private yaz0: Yaz0.Yaz0DecompressorWASM) {
+    }
+
+    public decompress(src: ArrayBufferSlice, type: JKRCompressionType): ArrayBufferSlice {
+        if (type === JKRCompressionType.Yaz0)
+            return Yaz0.decompressSync(this.yaz0, src);
+        else if (type === JKRCompressionType.Yay0)
+            return Yay0.decompress(src);
+        else
+            throw "whoops";
+    }
+}
+
+export async function getJKRDecompressor(): Promise<JKRDecompressor> {
+    const yaz0 = await Yaz0.getWASM();
+    return new JKRDecompressorWASM(yaz0);
+}
+
+export function parse(buffer: ArrayBufferSlice, name: string = '', decompressor: JKRDecompressor | null = null): JKRArchive {
     const view = buffer.createDataView();
 
-    assert(readString(buffer, 0x00, 0x04) === 'RARC');
-    const size = view.getUint32(0x04);
-    const dataOffs = view.getUint32(0x0C) + 0x20;
-    const dirCount = view.getUint32(0x20);
-    const dirTableOffs = view.getUint32(0x24) + 0x20;
-    const fileEntryCount = view.getUint32(0x28);
-    const fileEntryTableOffs = view.getUint32(0x2C) + 0x20;
-    const strTableOffs = view.getUint32(0x34) + 0x20;
+    const magic = readString(buffer, 0x00, 0x04);
+    assert(magic === 'RARC' || magic === 'CRAR');
+    const littleEndian = (magic === 'CRAR');
 
-    let dirTableIdx = dirTableOffs;
+    const size = view.getUint32(0x04, littleEndian);
+    const dataHeaderOffs = view.getUint32(0x08, littleEndian);
+    assert(dataHeaderOffs === 0x20);
+    const dataHeaderSize = view.getUint32(0x0C, littleEndian);
+    const totalDataSize = view.getUint32(0x10, littleEndian);
+    const mramDataSize = view.getUint32(0x14, littleEndian);
+    const aramDataSize = view.getUint32(0x18, littleEndian);
+
+    const dataOffs = dataHeaderOffs + dataHeaderSize;
+    const nodeCount = view.getUint32(0x20, littleEndian);
+    const nodeTableOffs = view.getUint32(0x24, littleEndian) + dataHeaderOffs;
+    const fileEntryCount = view.getUint32(0x28, littleEndian);
+    const fileEntryTableOffs = view.getUint32(0x2C, littleEndian) + dataHeaderOffs;
+    const strTableOffs = view.getUint32(0x34, littleEndian) + dataHeaderOffs;
+
+    let dirTableIdx = nodeTableOffs;
     const dirEntries: DirEntry[] = [];
     const allFiles: RARCFile[] = [];
-    for (let i = 0; i < dirCount; i++) {
-        const type = readString(buffer, dirTableIdx + 0x00, 0x04, false);
-        const nameOffs = view.getUint32(dirTableIdx + 0x04);
+    for (let i = 0; i < nodeCount; i++) {
+        let type = readString(buffer, dirTableIdx + 0x00, 0x04, false);
+        if (littleEndian)
+            type = type[3] + type[2] + type[1] + type[0];
+
+        const nameOffs = view.getUint32(dirTableIdx + 0x04, littleEndian);
         const name = readString(buffer, strTableOffs + nameOffs, -1, true);
-        const nameHash = view.getUint16(dirTableIdx + 0x08);
-        const fileEntryCount = view.getUint16(dirTableIdx + 0x0A);
-        const fileEntryFirstIndex = view.getUint32(dirTableIdx + 0x0C);
+        const nameHash = view.getUint16(dirTableIdx + 0x08, littleEndian);
+        const fileEntryCount = view.getUint16(dirTableIdx + 0x0A, littleEndian);
+        const fileEntryFirstIndex = view.getUint32(dirTableIdx + 0x0C, littleEndian);
 
         const files: RARCFile[] = [];
         const subdirIndexes = [];
@@ -124,15 +172,15 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
         let fileEntryIdx = fileEntryTableOffs + (fileEntryFirstIndex * 0x14);
         for (let j = 0; j < fileEntryCount; j++) {
             const index = (fileEntryIdx - fileEntryTableOffs) / 0x14;
-            const id = view.getUint16(fileEntryIdx + 0x00);
-            const nameHash = view.getUint16(fileEntryIdx + 0x02);
-            const flagsAndNameOffs = view.getUint32(fileEntryIdx + 0x04);
+            const id = view.getUint16(fileEntryIdx + 0x00, littleEndian);
+            const nameHash = view.getUint16(fileEntryIdx + 0x02, littleEndian);
+            const flagsAndNameOffs = view.getUint32(fileEntryIdx + 0x04, littleEndian);
             let flags = (flagsAndNameOffs >>> 24) & 0xFF;
             const nameOffs = flagsAndNameOffs & 0x00FFFFFF;
             const name = readString(buffer, strTableOffs + nameOffs, -1, true);
 
-            const entryDataOffs = view.getUint32(fileEntryIdx + 0x08);
-            const entryDataSize = view.getUint32(fileEntryIdx + 0x0C);
+            const entryDataOffs = view.getUint32(fileEntryIdx + 0x08, littleEndian);
+            const entryDataSize = view.getUint32(fileEntryIdx + 0x0C, littleEndian);
             fileEntryIdx += 0x14;
 
             if (name === '.' || name === '..')
@@ -152,20 +200,13 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
                     compressionType = (flags & JKRFileAttr.CompressionType) ? JKRCompressionType.Yaz0 : JKRCompressionType.Yay0;
 
                 // Only decompress if we're expecting it.
-                if (compressionType !== JKRCompressionType.None && yaz0Decompressor !== null) {
-                    if (compressionType === JKRCompressionType.Yaz0) {
-                        fileBuffer = Yaz0.decompressSync(yaz0Decompressor, rawFileBuffer);
-                        compressionType = JKRCompressionType.None;
-                    } else if (compressionType === JKRCompressionType.Yay0) {
-                        fileBuffer = Yay0.decompress(rawFileBuffer);
-                        compressionType = JKRCompressionType.None;
-                    } else {
-                        throw "whoops";
-                    }
+                if (compressionType !== JKRCompressionType.None && decompressor !== null) {
+                    fileBuffer = decompressor.decompress(rawFileBuffer, compressionType);
                 } else {
                     fileBuffer = rawFileBuffer;
                 }
 
+                (fileBuffer as NamedArrayBufferSlice).name = name;
                 const file: RARCFile = { index, id, name, flags, compressionType, buffer: fileBuffer };
                 files.push(file);
                 allFiles.push(file);
@@ -192,8 +233,5 @@ export function parse(buffer: ArrayBufferSlice, yaz0Decompressor: Yaz0.Yaz0Decom
     const root = translateDirEntry(0);
     assert(root.type === 'ROOT');
 
-    const rarc = new JKRArchive();
-    rarc.files = allFiles;
-    rarc.root = root;
-    return rarc;
+    return new JKRArchive(allFiles, root, name);
 }

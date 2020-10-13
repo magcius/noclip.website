@@ -31,9 +31,8 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
         this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(8/60);
-        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

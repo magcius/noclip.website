@@ -11,8 +11,6 @@ import * as Grezzo3DS from './oot3d/scenes';
 import * as NNS_G3D from './nns_g3d/scenes';
 import * as J3D from './j3d/scenes';
 import * as CTR_H3D from './Common/CTR_H3D/H3D';
-import * as DC_PVRT from './Common/DC/PVRT';
-import * as JSR from './Common/DC/jsr';
 import * as RRES from './rres/scenes';
 import * as PaperMarioTTYD from './PaperMarioTTYD/Scenes_PaperMarioTTYD';
 import * as JPAExplorer from './InteractiveExamples/JPAExplorer';
@@ -58,7 +56,7 @@ async function loadArbitraryFile(context: SceneContext, buffer: ArrayBufferSlice
     buffer = await decompressArbitraryFile(buffer);
     const magic = readString(buffer, 0x00, 0x04);
 
-    if (magic === 'RARC' || magic === 'J3D2')
+    if (magic === 'RARC' || magic === 'CRAR' || magic === 'J3D2')
         return J3D.createSceneFromBuffer(context, buffer);
 
     if (magic === '\x55\xAA\x38\x2D') // U8
@@ -77,7 +75,7 @@ export async function createSceneFromFiles(context: SceneContext, buffers: Named
 
     const buffer = buffers[0];
 
-    if (buffer.name.endsWith('.zar') || buffer.name.endsWith('.gar'))
+    if (buffer.name.endsWith('.zar') || buffer.name.endsWith('.gar') || buffer.name.endsWith('.gar.lzs'))
         return Grezzo3DS.createSceneFromZARBuffer(device, buffer);
 
     if (buffer.name.endsWith('.arc') || buffer.name.endsWith('.carc') || buffer.name.endsWith('.szs'))

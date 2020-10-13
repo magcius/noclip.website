@@ -1,11 +1,12 @@
 import * as RDP from '../Common/N64/RDP';
 
-import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA4, decodeTex_I4, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_I8, decodeTex_IA16, TextFilt } from "../Common/N64/Image";
-import { nArray, assert, assertExists, hexzero } from "../util";
+import { parseTLUT, ImageFormat, getImageFormatName, ImageSize, getImageSizeName, TextureLUT, decodeTex_RGBA16, decodeTex_IA4, decodeTex_I4, decodeTex_IA8, decodeTex_RGBA32, decodeTex_CI4, decodeTex_CI8, decodeTex_I8, decodeTex_IA16, TextFilt, getSizBitsPerPixel } from "../Common/N64/Image";
+import { nArray, assert } from "../util";
 import { GfxCullMode, GfxBlendFactor, GfxBlendMode, GfxMegaStateDescriptor, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { Rom } from "./zelview0";
 import { vec4, mat4 } from "gl-matrix";
+import { loadVertexFromView } from '../Common/N64/RSP';
 
 export class Vertex {
     public x: number = 0;
@@ -33,17 +34,7 @@ class StagingVertex extends Vertex {
 
     public setFromView(view: DataView, offs: number): void {
         this.outputIndex = -1;
-
-        this.x = view.getInt16(offs + 0x00);
-        this.y = view.getInt16(offs + 0x02);
-        this.z = view.getInt16(offs + 0x04);
-        // flag (unused)
-        this.tx = view.getInt16(offs + 0x08) / 32; // Convert from 11.5 fixed-point format
-        this.ty = view.getInt16(offs + 0x0A) / 32;
-        this.c0 = view.getUint8(offs + 0x0C) / 0xFF;
-        this.c1 = view.getUint8(offs + 0x0D) / 0xFF;
-        this.c2 = view.getUint8(offs + 0x0E) / 0xFF;
-        this.a = view.getUint8(offs + 0x0F) / 0xFF;
+        loadVertexFromView(this, view, offs);
     }
 }
 
@@ -276,15 +267,6 @@ export class DrawCall {
     }
 }
 
-function getSizBitsPerPixel(siz: ImageSize): number {
-    switch (siz) {
-    case ImageSize.G_IM_SIZ_4b:  return 4;
-    case ImageSize.G_IM_SIZ_8b:  return 8;
-    case ImageSize.G_IM_SIZ_16b: return 16;
-    case ImageSize.G_IM_SIZ_32b: return 32;
-    }
-}
-
 export class RSPOutput {
     public drawCalls: DrawCall[] = [];
 
@@ -403,7 +385,7 @@ function translateTile_IA16(tmem: DataView, tile: TileDescriptor): Texture {
 const tlutColorTable = new Uint8Array(256 * 4);
 
 function translateTile_CI4(tmem: DataView, tile: TileDescriptor, tlutfmt: TextureLUT): Texture {
-    const palTmem = 0x100 + (tile.palette << 4); // FIXME: how is address calculated?
+    const palTmem = 0x100 + (tile.palette << 4);
     translateTLUT(tlutColorTable, tmem, palTmem, ImageSize.G_IM_SIZ_4b, tlutfmt);
 
     const tileW = tile.getWidth();
@@ -469,15 +451,6 @@ function translateTileTexture(tmem: DataView, tile: TileDescriptor, tlutfmt: Tex
 export class RSPSharedOutput {
     public vertices: Vertex[] = [];
     public indices: number[] = [];
-
-    public setVertexBufferFromData(vertexData: DataView): void {
-        const scratchVertex = new StagingVertex();
-
-        for (let offs = 0; offs < vertexData.byteLength; offs += 0x10) {
-            scratchVertex.setFromView(vertexData, offs);
-            this.loadVertex(scratchVertex);
-        }
-    }
 
     public loadVertex(v: StagingVertex): void {
         if (v.outputIndex === -1) {
@@ -713,8 +686,6 @@ export class RSPState {
     }
 
     public gSPTri(i0: number, i1: number, i2: number): void {
-        if (window.debug)
-            console.log('EXEC TRI');
         this._flushDrawCall();
 
         this.sharedOutput.loadVertex(this.vertexCache[i0]);
@@ -812,12 +783,12 @@ export class RSPState {
         }
     }
 
-    public setPrimColor(r: number, g: number, b: number, a: number): void {
+    public gDPSetPrimColor(r: number, g: number, b: number, a: number): void {
         this.primColor = vec4.fromValues(r, g, b, a);
         this.stateChanged = true;
     }
 
-    public setEnvColor(r: number, g: number, b: number, a: number): void {
+    public gDPSetEnvColor(r: number, g: number, b: number, a: number): void {
         this.envColor = vec4.fromValues(r, g, b, a);
         this.stateChanged = true;
     }
@@ -1030,7 +1001,7 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
             const g = ((w1 >>> 16) & 0xFF) / 255;
             const b = ((w1 >>> 8) & 0xFF) / 255;
             const a = ((w1 >>> 0) & 0xFF) / 255;
-            state.setPrimColor(r, g, b, a);
+            state.gDPSetPrimColor(r, g, b, a);
         } break;
         
         case F3DZEX_GBI.G_SETENVCOLOR: {
@@ -1038,7 +1009,7 @@ export function runDL_F3DZEX(state: RSPState, rom: Rom, addr: number): void {
             const g = ((w1 >>> 16) & 0xFF) / 255;
             const b = ((w1 >>> 8) & 0xFF) / 255;
             const a = ((w1 >>> 0) & 0xFF) / 255;
-            state.setEnvColor(r, g, b, a);
+            state.gDPSetEnvColor(r, g, b, a);
         } break;
 
         case F3DZEX_GBI.G_RDPFULLSYNC:

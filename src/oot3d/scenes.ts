@@ -4,6 +4,7 @@ import * as CSAB from './csab';
 import * as CTXB from './ctxb';
 import * as CMB from './cmb';
 import * as ZAR from './zar';
+import * as LzS from '../Common/Compression/LzS';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
@@ -237,6 +238,7 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
         archivePanel.setTitle(UI.LAYER_ICON, 'Archive Files');
 
         const select = new SometimesMultiSelect();
+        select.setTextSelectable(true);
 
         const files: UI.ScrollSelectItem[] = this.archive.files.map((file): UI.ScrollSelectItem => {
             if (this.isFileSupported(file))
@@ -309,5 +311,5 @@ class ArchiveCmbScene implements Viewer.SceneGfx {
 }
 
 export function createSceneFromZARBuffer(device: GfxDevice, buffer: ArrayBufferSlice): Viewer.SceneGfx {
-    return new ArchiveCmbScene(device, ZAR.parse(buffer));
+    return new ArchiveCmbScene(device, ZAR.parse(LzS.maybeDecompress(buffer)));
 }

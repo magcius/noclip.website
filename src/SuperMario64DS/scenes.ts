@@ -11,7 +11,7 @@ import * as BCA from './sm64ds_bca';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { BMDData, Sm64DSCRG1, BMDModelInstance, SM64DSPass, CRG1Level, CRG1Object, NITRO_Program, CRG1StandardObject, CRG1DoorObject } from './render';
-import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util';
 import AnimationController from '../AnimationController';
@@ -19,8 +19,8 @@ import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUni
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
-import { MathConstants, clamp } from '../MathHelpers';
+import { DataFetcher } from '../DataFetcher';
+import { MathConstants, clamp, scaleMatrix } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 // https://github.com/Arisotura/SM64DSe/blob/master/obj_list.txt
@@ -410,9 +410,9 @@ class ModelCache {
         assert(!this.filePromiseCache.has(path));
         assert(path.startsWith('/data'));
 
-        const p = this.dataFetcher.fetchData(`${pathBase}${path}`, DataFetcherFlags.NONE, () => {
+        const p = this.dataFetcher.fetchData(`${pathBase}${path}`, { abortedCallback: () => {
             this.filePromiseCache.delete(path);
-        });
+        } });
         this.filePromiseCache.set(path, p);
         return p;
     }
@@ -512,10 +512,9 @@ class SM64DSRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         this.renderInstManager.setVisibleByFilterKeyExact(SM64DSPass.SKYBOX);
         this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
@@ -753,7 +752,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
         const modelCache = renderer.modelCache;
         const bmdData = await modelCache.fetchModel(device, filename);
         const bmdRenderer = new BMDModelInstance(bmdData, level);
-        mat4.scale(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, [scale, scale, scale]);
+        scaleMatrix(bmdRenderer.modelMatrix, bmdRenderer.modelMatrix, scale);
         bmdRenderer.isSkybox = isSkybox;
         renderer.bmdRenderers.push(bmdRenderer);
         return bmdRenderer;
@@ -779,7 +778,7 @@ export class SM64DSSceneDesc implements Viewer.SceneDesc {
 
         // Don't ask, ugh.
         scale = scale * (GLOBAL_SCALE / 100);
-        mat4.scale(m, m, [scale, scale, scale]);
+        scaleMatrix(m, m, scale);
     }
 
     private async _createBMDRendererForStandardObject(device: GfxDevice, renderer: SM64DSRenderer, object: CRG1StandardObject): Promise<void> {

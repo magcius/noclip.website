@@ -3,19 +3,21 @@
 
 import * as Viewer from '../viewer';
 
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { MDL0Renderer, G3DPass } from './render';
+import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render';
 import { assert, assertExists } from '../util';
-import { mat4 } from 'gl-matrix';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { mat4, vec3 } from 'gl-matrix';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
 import { BMD0, parseNSBMD, BTX0, parseNSBTX, BTP0, BTA0, parseNSBTP, parseNSBTA } from './NNS_G3D';
 import { CameraController } from '../Camera';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { NITRO_Program } from '../SuperMario64DS/render';
 
 export class WorldMapRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
@@ -35,14 +37,19 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
         this.textureHolder = new FakeTextureHolder(viewerTextures);
     }
 
-    public createCameraController(c: CameraController) {
+    public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(8/60);
-        return c;
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
+
+        template.setBindingLayouts(nnsG3dBindingLayouts);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
+        const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(this.renderInstManager, viewerInput);
         this.renderInstManager.popTemplateRenderInst();
@@ -58,10 +65,9 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
         this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
-        skyboxPassRenderer.endPass();
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
@@ -90,7 +96,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBMD(path: string, dataFetcher: DataFetcher): Promise<BMD0 | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, { allow404: true }).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0)
                 return null;
             return parseNSBMD(buffer);
@@ -98,7 +104,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBTX(path: string, dataFetcher: DataFetcher): Promise<BTX0 | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, { allow404: true }).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0)
                 return null;
             return parseNSBTX(buffer);
@@ -106,7 +112,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBTA(path: string, dataFetcher: DataFetcher): Promise<BTA0 | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, { allow404: true }).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0)
                 return null;
             return parseNSBTA(buffer);
@@ -114,7 +120,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
     }
 
     private fetchBTP(path: string, dataFetcher: DataFetcher): Promise<BTP0 | null> {
-        return dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404).then((buffer: ArrayBufferSlice) => {
+        return dataFetcher.fetchData(path, { allow404: true}).then((buffer: ArrayBufferSlice) => {
             if (buffer.byteLength === 0)
                 return null;
             return parseNSBTP(buffer);
@@ -141,7 +147,7 @@ class NewSuperMarioBrosDSSceneDesc implements Viewer.SceneDesc {
         return new ObjectData(bmd, btx, bta, btp);
     }
 
-    private createRendererFromData(device: GfxDevice, objectData: ObjectData, position: number[] | null = null): MDL0Renderer {
+    private createRendererFromData(device: GfxDevice, objectData: ObjectData, position: vec3 | null = null): MDL0Renderer {
         const scaleFactor = 1/16;
         const renderer = new MDL0Renderer(device, objectData.bmd.models[0], objectData.btx !== null ? assertExists(objectData.btx.tex0) : assertExists(objectData.bmd.tex0));
         if (position !== null)
@@ -230,7 +236,7 @@ class ObjectData {
 }
 
 interface IWorldMapObj {
-    type: WorldMapObjType, position: number[];
+    type: WorldMapObjType, position: vec3;
 }
 
 const worldMapDescs: IWorldMapObj[][] = [

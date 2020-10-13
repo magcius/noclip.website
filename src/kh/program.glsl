@@ -2,12 +2,12 @@
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     float u_Time;
 };
 
-layout(row_major, std140) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     Mat4x4 u_Model;
     Mat4x3 u_View;
     vec4 u_AnimOffset;
@@ -52,7 +52,7 @@ void main() {
     tc = fract(tc * v_TexRepeat) / v_TexRepeat;
     tc = clamp(tc, v_TexClip.xz + u_AnimOffset.xy, v_TexClip.yw + u_AnimOffset.xy);
     tc = tc * v_TexScaleOffset.xy + v_TexScaleOffset.zw;
-    t_Color = texture(u_Texture, tc);
+    t_Color = texture(SAMPLER_2D(u_Texture), tc);
 #endif
 
 #ifdef USE_VERTEX_COLOR

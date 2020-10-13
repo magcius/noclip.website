@@ -169,7 +169,7 @@ class WS2_Renderer extends BasicGXRendererHelper {
                 const v = scratchVec3;
                 vec3.set(v, 0, 0, 0);
                 vec3.transformMat4(v, v, p.modelMatrix);
-                drawWorldSpacePoint(ctx, viewerInput.camera, v, Magenta, 10);
+                drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, v, Magenta, 10);
             }
         }
     }

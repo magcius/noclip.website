@@ -2,11 +2,11 @@
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
-layout(row_major, std140) uniform ub_MeshFragParams {
+layout(std140) uniform ub_MeshFragParams {
     Mat4x3 u_BoneMatrix[1];
 };
 
@@ -32,7 +32,7 @@ void main() {
     vec4 t_Color = vec4(1.0);
 
 #ifdef USE_TEXTURE
-    t_Color *= texture(u_Texture[0], v_TexCoord);
+    t_Color *= texture(SAMPLER_2D(u_Texture[0]), v_TexCoord);
 #endif
 
 #ifdef USE_VERTEX_COLOR

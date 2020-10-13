@@ -17,7 +17,7 @@ class GridPlaneProgram extends DeviceProgram {
     public both = `
 precision mediump float;
 
-layout(row_major, std140) uniform ub_Params {
+layout(std140) uniform ub_Params {
     Mat4x4 u_Projection;
     Mat4x3 u_ModelView;
     vec4 u_GridColor;
@@ -129,7 +129,7 @@ export class GridPlane {
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayout);
         renderInst.setGfxProgram(this.gfxProgram);
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
@@ -150,6 +150,7 @@ export class GridPlane {
         offs += fillMatrix4x3(d, offs, scratchMatrix);
         offs += fillColor(d, offs, this.color);
         offs += fillVec4(d, offs, this.cellCount, this.lineWidth / this.modelMatrix[0]);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice) {

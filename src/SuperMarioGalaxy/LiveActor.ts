@@ -1,14 +1,11 @@
 
-import { NameObj, NameObjGroup } from "./NameObj";
+import { NameObj, NameObjGroup, MovementType } from "./NameObj";
 import { EffectKeeper } from "./EffectSystem";
 import { Spine } from "./Spine";
 import { ActorLightCtrl } from "./LightData";
 import { vec3, mat4 } from "gl-matrix";
-import { SceneObjHolder, getObjectName, FPS, getDeltaTimeFrames, ResourceHolder } from "./Main";
-import { GfxTexture } from "../gfx/platform/GfxPlatform";
-import { EFB_WIDTH, EFB_HEIGHT } from "../gx/gx_material";
+import { SceneObjHolder, getObjectName, getDeltaTimeFrames, ResourceHolder, SpecialTextureType } from "./Main";
 import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoBool } from "./JMapInfo";
-import { TextureMapping } from "../TextureHolder";
 import { computeModelMatrixSRT, computeEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
 import { Camera } from "../Camera";
 import { LightType } from "./DrawBuffer";
@@ -18,22 +15,12 @@ import * as Viewer from '../viewer';
 import { assertExists, fallback } from "../util";
 import { RailRider } from "./RailRider";
 import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
-import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity } from "./ActorUtil";
+import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
+import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity, resetAllCollisionMtx, validateCollisionPartsForActor, invalidateCollisionPartsForActor, connectToScene } from "./ActorUtil";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
-
-function setIndirectTextureOverride(modelInstance: J3DModelInstance, sceneTexture: GfxTexture): void {
-    const m = modelInstance.getTextureMappingReference("IndDummy");
-    if (m !== null)
-        setTextureMappingIndirect(m, sceneTexture);
-}
-
-export function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
-    m.gfxTexture = sceneTexture;
-    m.width = EFB_WIDTH;
-    m.height = EFB_HEIGHT;
-    m.flipY = true;
-}
+import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts, setCollisionMtx } from "./Collision";
+import { StageSwitchCtrl, createStageSwitchCtrl } from "./Switch";
+import { ShadowControllerList } from "./Shadow";
 
 class ActorAnimDataInfo {
     public Name: string;
@@ -187,14 +174,14 @@ export class ModelManager {
         }
     }
 
-    public calcAnim(viewerInput: Viewer.ViewerRenderInput): void {
+    public calcAnim(): void {
         if (this.xanimePlayer !== null)
             this.xanimePlayer.calcAnm();
 
         if (this.bvaPlayer !== null)
             this.bvaPlayer.calc();
 
-        this.modelInstance.calcAnim(viewerInput.camera);
+        this.modelInstance.calcAnim();
     }
 
     public update(deltaTimeFrames: number): void {
@@ -229,8 +216,8 @@ export class ModelManager {
     }
 
     public isBckStopped(): boolean {
-        // TODO(jstpierre): Play flags
-        return this.xanimePlayer!.frameCtrl.speedInFrames === 0.0;
+        const bckCtrl = this.xanimePlayer!.frameCtrl;
+        return !!(bckCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped);
     }
 
     public getBtkCtrl(): J3DFrameCtrl {
@@ -245,6 +232,10 @@ export class ModelManager {
         return this.btkPlayer!.isPlaying(name);
     }
 
+    public isBtkStopped(): boolean {
+        return this.btkPlayer!.isStop();
+    }
+
     public getBrkCtrl(): J3DFrameCtrl {
         return this.brkPlayer!.frameCtrl;
     }
@@ -255,6 +246,10 @@ export class ModelManager {
 
     public isBrkPlaying(name: string): boolean {
         return this.brkPlayer!.isPlaying(name);
+    }
+
+    public isBrkStopped(): boolean {
+        return this.brkPlayer!.isStop();
     }
 
     public getBtpCtrl(): J3DFrameCtrl {
@@ -269,6 +264,10 @@ export class ModelManager {
         return this.btpPlayer!.isPlaying(name);
     }
 
+    public isBtpStopped(): boolean {
+        return this.btpPlayer!.isStop();
+    }
+
     public getBpkCtrl(): J3DFrameCtrl {
         return this.bpkPlayer!.frameCtrl;
     }
@@ -281,6 +280,10 @@ export class ModelManager {
         return this.bpkPlayer!.isPlaying(name);
     }
 
+    public isBpkStopped(): boolean {
+        return this.bpkPlayer!.isStop();
+    }
+
     public getBvaCtrl(): J3DFrameCtrl {
         return this.bvaPlayer!.frameCtrl;
     }
@@ -291,6 +294,10 @@ export class ModelManager {
 
     public isBvaPlaying(name: string): boolean {
         return this.bvaPlayer!.isPlaying(name);
+    }
+
+    public isBvaStopped(): boolean {
+        return this.bvaPlayer!.isStop();
     }
 }
 
@@ -319,25 +326,43 @@ export function makeMtxTRFromActor(dst: mat4, actor: LiveActor): void {
         actor.translation[0], actor.translation[1], actor.translation[2]);
 }
 
+export function makeMtxTRSFromActor(dst: mat4, actor: LiveActor): void {
+    computeModelMatrixSRT(dst,
+        actor.scale[0], actor.scale[1], actor.scale[2],
+        actor.rotation[0], actor.rotation[1], actor.rotation[2],
+        actor.translation[0], actor.translation[1], actor.translation[2]);
+}
+
+export function resetPosition(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    if (actor.hitSensorKeeper !== null)
+        actor.hitSensorKeeper.clear();
+    if (actor.calcGravityFlag)
+        calcGravity(sceneObjHolder, actor);
+    actor.calcAnim(sceneObjHolder);
+    if (actor.collisionParts !== null)
+        resetAllCollisionMtx(actor);
+    // requestCalcActorShadowAppear
+}
+
 export const enum LayerId {
-    COMMON = -1,
-    LAYER_A = 0,
-    LAYER_B,
-    LAYER_C,
-    LAYER_D,
-    LAYER_E,
-    LAYER_F,
-    LAYER_G,
-    LAYER_H,
-    LAYER_I,
-    LAYER_J,
-    LAYER_K,
-    LAYER_L,
-    LAYER_M,
-    LAYER_N,
-    LAYER_O,
-    LAYER_P,
-    LAYER_MAX = LAYER_P,
+    Common = -1,
+    LayerA = 0,
+    LayerB,
+    LayerC,
+    LayerD,
+    LayerE,
+    LayerF,
+    LayerG,
+    LayerH,
+    LayerI,
+    LayerJ,
+    LayerK,
+    LayerL,
+    LayerM,
+    LayerN,
+    LayerO,
+    LayerP,
+    LayerMax = LayerP,
 }
 
 export interface ZoneAndLayer {
@@ -345,19 +370,41 @@ export interface ZoneAndLayer {
     layerId: LayerId;
 }
 
-export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.COMMON };
+export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.Common };
 
 export const enum MessageType {
-    TicoRail_StartTalk = 0xCE,
-    MapPartsRailMover_TryRotate = 0xCB,
+    Take                                     = 0x1E,
+    Taken                                    = 0x1F,
+    Apart                                    = 0x21,
+    Throw                                    = 0x22,
+    Push                                     = 0x29,
+    _EnemyAttack_Start                       = 0x4B,
+    EnemyAttack                              = 0x53,
+    EnemyAttackExplosion                     = 0x56,
+    EnemyAttackFire                          = 0x58,
+    EnemyAttackFireStrong                    = 0x59,
+    _EnemyAttack_End                         = 0x65,
+    Pressure_StartWait                       = 0x68,
+    Pressure_StartSyncWait                   = 0x69,
+    TicoRail_StartTalk                       = 0xCE,
+    MapPartsRailMover_TryRotate              = 0xCB,
     MapPartsRailMover_TryRotateBetweenPoints = 0xCD,
-    MapPartsRailMover_Vanish = 0xCF,
+    MapPartsRailMover_Vanish                 = 0xCF,
+    SphereSelector_SelectStart               = 0xE0,
+    SphereSelector_SelectEnd                 = 0xE1,
+
+    NoclipButton_Click                       = 0x200,
 }
 
+const scratchVec3a = vec3.create();
 export class LiveActor<TNerve extends number = number> extends NameObj {
     public visibleScenario: boolean = true;
     public visibleAlive: boolean = true;
     public visibleModel: boolean = true;
+    // calcGravity is off by default until we can feel comfortable turning it on...
+    public calcGravityFlag: boolean = false;
+    public calcBinderFlag: boolean = false;
+    public calcAnimFlag: boolean = true;
     public boundingSphereRadius: number | null = null;
 
     public actorAnimKeeper: ActorAnimKeeper | null = null;
@@ -367,14 +414,19 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     public railRider: RailRider | null = null;
     public modelManager: ModelManager | null = null;
     public hitSensorKeeper: HitSensorKeeper | null = null;
+    public collisionParts: CollisionParts | null = null;
+    public binder: Binder | null = null;
+    public stageSwitchCtrl: StageSwitchCtrl | null = null;
+    public shadowControllerList: ShadowControllerList | null = null;
 
     public translation = vec3.create();
     public rotation = vec3.create();
     public scale = vec3.fromValues(1, 1, 1);
     public velocity = vec3.create();
     public gravityVector = vec3.fromValues(0, -1, 0);
-    // calcGravity is off by default until we can feel comfortable turning it on...
-    public calcGravityFlag: boolean = false;
+
+    // HACK(jstpierre): For not having proper culling that stops movement
+    public initWaitPhase: number = 0;
 
     constructor(public zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, public name: string) {
         super(sceneObjHolder, name);
@@ -389,7 +441,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.modelManager !== null ? this.modelManager.modelInstance : null;
     }
 
-    public attackSensor(thisSensor: HitSensor, otherSensor: HitSensor): void {
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
         // Do nothing by default.
     }
 
@@ -400,36 +452,97 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
             return null;
     }
 
-    public receiveMessage(messageType: MessageType, thisSensor: HitSensor | null, otherSensor: HitSensor | null): boolean {
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         return false;
     }
 
-    public makeActorAppeared(): void {
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.validateBySystem();
+        // endClipped
         this.visibleAlive = true;
+        if (this.collisionParts !== null)
+            validateCollisionPartsForActor(sceneObjHolder, this);
+        resetPosition(sceneObjHolder, this);
+        if (this.actorLightCtrl !== null)
+            this.actorLightCtrl.reset(sceneObjHolder);
+
+        // tryUpdateHitSensorsAll
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.update();
+
+        // addToClippingTarget
+
+        // connectToSceneTemporarily
+        // connectToDrawTemporarily
     }
 
-    public makeActorDead(): void {
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        vec3.set(this.velocity, 0, 0, 0);
+        if (this.hitSensorKeeper !== null) {
+            this.hitSensorKeeper.clear();
+            this.hitSensorKeeper.invalidateBySystem();
+        }
+        if (this.binder !== null)
+            this.binder.clear();
+        if (this.effectKeeper !== null)
+            this.effectKeeper.clear();
+        if (this.collisionParts !== null)
+            invalidateCollisionParts(sceneObjHolder, this.collisionParts);
         this.visibleAlive = false;
+        // removeFromClippingTarget
+        // disconnectToSceneTemporarily
+        // disconnectToDrawTemporarily
     }
 
     public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
-        this.visibleScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
+        const newVisibleScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
+        if (this.visibleScenario === newVisibleScenario)
+            return;
+
+        this.visibleScenario = newVisibleScenario;
+        if (newVisibleScenario)
+            this.onScenario(sceneObjHolder);
+        else
+            this.offScenario(sceneObjHolder);
     }
 
-    public setIndirectTextureOverride(sceneTexture: GfxTexture): void {
-        setIndirectTextureOverride(this.modelInstance!, sceneTexture);
+    // noclip hook for scenario changing.
+    protected onScenario(sceneObjHolder: SceneObjHolder): void {
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.validateBySystem();
+        // endClipped
+        if (this.collisionParts !== null)
+            validateCollisionPartsForActor(sceneObjHolder, this);
+        resetPosition(sceneObjHolder, this);
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setDrawParticle(true);
+        if (this.actorLightCtrl !== null)
+            this.actorLightCtrl.reset(sceneObjHolder);
+
+        // tryUpdateHitSensorsAll
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.update();
+    }
+
+    protected offScenario(sceneObjHolder: SceneObjHolder): void {
+        vec3.set(this.velocity, 0, 0, 0);
+        if (this.hitSensorKeeper !== null) {
+            this.hitSensorKeeper.clear();
+            this.hitSensorKeeper.invalidateBySystem();
+        }
+        if (this.binder !== null)
+            this.binder.clear();
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setDrawParticle(false);
+        if (this.collisionParts !== null)
+            invalidateCollisionParts(sceneObjHolder, this.collisionParts);
     }
 
     public getBaseMtx(): mat4 | null {
         if (this.modelInstance === null)
             return null;
         return this.modelInstance.modelMatrix;
-    }
-
-    public getJointMtx(jointName: string): mat4 | null {
-        if (this.modelInstance === null)
-            return null;
-        return this.modelInstance.getJointToWorldMatrixReference(jointName);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -447,16 +560,20 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         this.calcAndSetBaseMtxBase();
 
         // Compute the joint matrices an initial time in case anything wants to rely on them...
-        this.modelManager.modelInstance.calcJointToWorld();
-
-        // TODO(jstpierre): RE the whole ModelManager / XanimePlayer thing.
-        // Seems like it's possible to have a secondary file for BCK animations?
+        this.modelManager.modelInstance.calcAnim();
         this.actorAnimKeeper = ActorAnimKeeper.tryCreate(this);
     }
 
-    public initLightCtrl(sceneObjHolder: SceneObjHolder): void {
+    public initActorCollisionParts(sceneObjHolder: SceneObjHolder, name: string, hitSensor: HitSensor, resourceHolder: ResourceHolder | null, hostMtx: mat4 | null, scaleType: CollisionScaleType): void {
+        if (resourceHolder === null)
+            resourceHolder = this.resourceHolder;
+
+        this.collisionParts = createCollisionPartsFromLiveActor(sceneObjHolder, this, name, hitSensor, hostMtx, scaleType, resourceHolder);
+        invalidateCollisionPartsForActor(sceneObjHolder, this);
+    }
+
+    public initActorLightCtrl(): void {
         this.actorLightCtrl = new ActorLightCtrl(this);
-        this.actorLightCtrl.init(sceneObjHolder);
     }
 
     public initEffectKeeper(sceneObjHolder: SceneObjHolder, groupName: string | null): void {
@@ -465,19 +582,32 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         if (groupName === null && this.modelInstance !== null)
             groupName = this.modelInstance.name;
         this.effectKeeper = new EffectKeeper(sceneObjHolder, this, assertExists(groupName));
+        if (this.binder !== null)
+            this.effectKeeper.setBinder(this.binder);
     }
 
     public initRailRider(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        this.railRider = new RailRider(sceneObjHolder, this, infoIter);
+        this.railRider = new RailRider(sceneObjHolder, infoIter);
     }
 
     public initHitSensor(): void {
         this.hitSensorKeeper = new HitSensorKeeper();
     }
 
+    public initStageSwitch(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        this.stageSwitchCtrl = createStageSwitchCtrl(sceneObjHolder, infoIter);
+    }
+
+    public initBinder(radius: number, centerY: number, hitInfoCapacity: number): void {
+        this.binder = new Binder(this.getBaseMtx()!, this.translation, this.gravityVector, centerY, radius, hitInfoCapacity);
+        this.calcBinderFlag = true;
+        if (this.effectKeeper !== null)
+            this.effectKeeper.setBinder(this.binder);
+    }
+
     public initNerve(nerve: TNerve): void {
         this.spine = new Spine<TNerve>();
-        this.spine.setNerve(nerve);
+        this.spine.initNerve(nerve);
     }
 
     public setNerve(nerve: TNerve): void {
@@ -488,6 +618,10 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         return this.spine!.getCurrentNerve() as TNerve;
     }
 
+    public isNerve(nerve: TNerve): boolean {
+        return this.spine!.getCurrentNerve() === nerve;
+    }
+
     public getNerveStep(): number {
         return this.spine!.getNerveStep();
     }
@@ -496,7 +630,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         makeMtxTRFromActor(this.modelInstance!.modelMatrix, this);
     }
 
-    public calcAndSetBaseMtx(viewerInput: Viewer.ViewerRenderInput): void {
+    protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         this.calcAndSetBaseMtxBase();
     }
 
@@ -511,29 +645,45 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    public calcAnim(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.modelManager === null)
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+        if (!this.visibleAlive || !this.visibleScenario)
+            return;
+
+        if (!this.calcAnimFlag)
             return;
 
         // calcAnmMtx
-        vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
-        this.calcAndSetBaseMtx(viewerInput);
-        this.modelManager.calcAnim(viewerInput);
+        if (this.modelManager !== null) {
+            vec3.copy(this.modelManager.modelInstance.baseScale, this.scale);
+            this.calcAndSetBaseMtx(sceneObjHolder);
+            this.modelManager.calcAnim();
+        }
+
+        if (this.collisionParts !== null)
+            setCollisionMtx(this, this.collisionParts);
     }
 
-    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    public calcViewAndEntry(sceneObjHolder: SceneObjHolder, camera: Camera, viewMatrix: mat4 | null): void {
         if (this.modelInstance === null)
             return;
 
-        this.modelInstance.calcView(viewerInput.camera);
+        if (viewMatrix !== null)
+            this.modelInstance.calcView(camera, camera.viewMatrix);
+        else
+            this.modelInstance.calcView(null, null);
 
-        const visible = this.visibleModel && this.getActorVisible(viewerInput.camera);
+        const visible = this.visibleModel && this.getActorVisible(camera);
         this.modelInstance.visible = visible;
         if (!visible)
             return;
 
+        // Bind the correct scene texture.
+        const indDummy = this.modelInstance.getTextureMappingReference('IndDummy');
+        if (indDummy !== null)
+            sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
+
         if (this.actorLightCtrl !== null) {
-            this.actorLightCtrl.loadLight(this.modelInstance, viewerInput.camera);
+            this.actorLightCtrl.loadLight(this.modelInstance, camera);
         } else {
             // If we don't have an individualized actor light control, then load the default area light.
             // This is basically what DrawBufferExecuter::draw() and DrawBufferGroup::draw() effectively do.
@@ -557,44 +707,88 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
                 // it's loaded in either DrawBufferExecuter or DrawBufferGroup, which run before the material
                 // DL, so the actor will overwrite the ambient light. I'm quite sure this is a bug in the
                 // original game engine, honestly.
-                lightInfo.setOnModelInstance(this.modelInstance, viewerInput.camera, false);
+                lightInfo.setOnModelInstance(this.modelInstance, camera, false);
             }
         }
     }
 
-    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
-        if (this.hitSensorKeeper !== null)
-            this.hitSensorKeeper.doObjCol();
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
+    }
 
-        if (this.visibleAlive) {
-            const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+    }
 
-            if (this.calcGravityFlag)
-                calcGravity(sceneObjHolder, this);
-
-            if (this.modelManager !== null)
-                this.modelManager.update(deltaTimeFrames);
-
-            // TODO(jstpierre): Split out updateSpine to a vfunc or something.
-            if (this.spine !== null)
-                this.spine.update(deltaTimeFrames);
-
-            // TODO(jstpierre): Add control vfunc here.
-
-            // updateBinder
-            vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
-
-            if (this.effectKeeper !== null) {
-                this.effectKeeper.updateSyncBckEffect(sceneObjHolder.effectSystem!, deltaTimeFrames);
-                this.effectKeeper.setVisibleScenario(this.visibleAlive && this.visibleScenario);
+    private updateBinder(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
+        if (this.binder !== null) {
+            if (this.calcBinderFlag) {
+                this.binder.bind(sceneObjHolder, scratchVec3a, this.velocity);
+                vec3.scaleAndAdd(this.translation, this.translation, scratchVec3a, deltaTimeFrames);
+            } else {
+                vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
+                this.binder.clear();
             }
-
-            if (this.actorLightCtrl !== null)
-                this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
-
-            if (this.hitSensorKeeper !== null)
-                this.hitSensorKeeper.update();
+        } else {
+            vec3.scaleAndAdd(this.translation, this.translation, this.velocity, deltaTimeFrames);
         }
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        // Don't do anything. All cleanup should have happened at offScenario time.
+        if (!this.visibleScenario)
+            return;
+
+        if (this.calcGravityFlag)
+            calcGravity(sceneObjHolder, this);
+
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.doObjCol(sceneObjHolder);
+
+        if (!this.visibleAlive)
+            return;
+
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+
+        if (this.modelManager !== null)
+            this.modelManager.update(deltaTimeFrames);
+
+        if (this.spine !== null) {
+            if (this.initWaitPhase > 0) {
+                this.initWaitPhase -= deltaTimeFrames;
+            } else {
+                this.spine.changeNerve();
+                this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
+                this.spine.updateTick(deltaTimeFrames);
+                this.spine.changeNerve();
+            }
+        }
+
+        if (!this.visibleAlive)
+            return;
+
+        this.control(sceneObjHolder, viewerInput);
+
+        if (!this.visibleAlive)
+            return;
+
+        // updateBinder()
+        this.updateBinder(sceneObjHolder, deltaTimeFrames);
+
+        // EffectKeeper::update()
+        if (this.effectKeeper !== null)
+            this.effectKeeper.update(sceneObjHolder, deltaTimeFrames);
+
+        // ActorPadAndCameraCtrl::update()
+
+        if (this.actorLightCtrl !== null)
+            this.actorLightCtrl.update(sceneObjHolder, viewerInput.camera, false, deltaTimeFrames);
+
+        // tryUpdateHitSensorsAll()
+        if (this.hitSensorKeeper !== null)
+            this.hitSensorKeeper.update();
+
+        // requestCalcActorShadow()
+        if (this.shadowControllerList !== null)
+            this.shadowControllerList.requestCalc();
     }
 }
 
@@ -603,15 +797,15 @@ export function isDead(actor: LiveActor): boolean {
 }
 
 export class LiveActorGroup<T extends LiveActor> extends NameObjGroup<T> {
-    public appearAll(): void {
+    public appearAll(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < this.objArray.length; i++)
             if (isDead(this.objArray[i]))
-                this.objArray[i].makeActorAppeared();
+                this.objArray[i].makeActorAppeared(sceneObjHolder);
     }
 
-    public killAll(): void {
+    public killAll(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < this.objArray.length; i++)
-            this.objArray[i].makeActorAppeared();
+            this.objArray[i].makeActorDead(sceneObjHolder);
     }
 
     public getLivingActorNum(): number {
@@ -636,4 +830,105 @@ export class LiveActorGroup<T extends LiveActor> extends NameObjGroup<T> {
     public registerActor(obj: T): void {
         this.registerObj(obj);
     }
+}
+
+export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
+    private pendingMessageType: MessageType | null = null;
+    private pendingHitSensor: HitSensor | null = null;
+    private pendingSensorName: string | null = null;
+
+    constructor(sceneObjHolder: SceneObjHolder, public zoneId: number, public infoId: number, name: string, maxCount: number) {
+        super(sceneObjHolder, name, maxCount);
+        connectToScene(sceneObjHolder, this, MovementType.MsgSharedGroup, -1, -1, -1);
+    }
+
+    public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.movement(sceneObjHolder, viewerInput);
+
+        if (this.pendingMessageType !== null) {
+            for (let i = 0; i < this.objArray.length; i++) {
+                const actor = this.objArray[i];
+                const sensor = actor.getSensor(this.pendingSensorName!)!;
+                sensor.receiveMessage(sceneObjHolder, this.pendingMessageType, this.pendingHitSensor!);
+            }
+
+            this.pendingMessageType = null;
+            this.pendingHitSensor = null;
+            this.pendingSensorName = null;
+        }
+    }
+
+    public sendMsgToGroupMember(messageType: MessageType, hitSensor: HitSensor, sensorName: string): void {
+        this.pendingMessageType = messageType;
+        this.pendingHitSensor = hitSensor;
+        this.pendingSensorName = sensorName;
+    }
+}
+
+export function getJMapInfoClippingGroupID(infoIter: JMapInfoIter): number | null {
+    return infoIter.getValueNumberNoInit('ClippingGroupId');
+}
+
+export function getJMapInfoGroupID(infoIter: JMapInfoIter): number | null {
+    const groupId = infoIter.getValueNumberNoInit('GroupId');
+    if (groupId !== null)
+        return groupId;
+
+    return getJMapInfoClippingGroupID(infoIter);
+}
+
+export class LiveActorGroupArray extends NameObj {
+    private groups: MsgSharedGroup<LiveActor>[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'LiveActorGroupArray');
+    }
+
+    public getLiveActorGroup<T extends LiveActor>(actor: T): MsgSharedGroup<T> | null {
+        for (let i = 0; i < this.groups.length; i++) {
+            const group = this.groups[i];
+            for (let j = 0; j < group.objArray.length; j++)
+                if (group.objArray[j] === actor)
+                    return group as MsgSharedGroup<T>;
+        }
+
+        return null;
+    }
+
+    public findGroup<T extends LiveActor>(zoneId: number, groupId: number): MsgSharedGroup<T> | null {
+        for (let i = 0; i < this.groups.length; i++) {
+            const group = this.groups[i];
+            if (group.zoneId === zoneId && group.infoId === groupId)
+                return group as MsgSharedGroup<T>;
+        }
+
+        return null;
+    }
+
+    public createGroup<T extends LiveActor>(sceneObjHolder: SceneObjHolder, zoneId: number, infoId: number, groupName: string, maxCount: number): MsgSharedGroup<T> {
+        const group = new MsgSharedGroup<T>(sceneObjHolder, zoneId, infoId, groupName, maxCount);
+        this.groups.push(group);
+        return group;
+    }
+
+    public entry<T extends LiveActor>(sceneObjHolder: SceneObjHolder, actor: T, infoIter: JMapInfoIter, groupName: string | null, maxCount: number): MsgSharedGroup<T> | null {
+        const zoneId = actor.zoneAndLayer.zoneId;
+        const groupId = getJMapInfoGroupID(infoIter);
+        if (groupId === null)
+            return null;
+
+        let group = this.findGroup<T>(zoneId, groupId);
+        if (group === null) {
+            if (groupName === null)
+                groupName = `group${groupId}`;
+
+            group = this.createGroup<T>(sceneObjHolder, zoneId, groupId, groupName, maxCount);
+        }
+        group.registerActor(actor);
+        return group;
+    }
+}
+
+export function isMsgTypeEnemyAttack(msgType: MessageType): boolean {
+    return msgType > MessageType._EnemyAttack_Start && msgType < MessageType._EnemyAttack_End;
 }

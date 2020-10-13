@@ -1,5 +1,5 @@
 
-import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, ub_SceneParams, fillSceneParamsData, u_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXTextureHolder, MaterialParams, PacketParams, ColorKind, translateWrapModeGfx, loadedDataCoalescerComboGfx, fillSceneParamsData, ub_SceneParamsBufferSize, SceneParams, fillSceneParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GXMaterialHelperGfx, GXShapeHelperGfx, BasicGXRendererHelper } from '../gx/gx_render';
 
 import * as TPL from './tpl';
@@ -10,7 +10,7 @@ import { mat4 } from 'gl-matrix';
 import { assert, nArray } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram, GfxMegaStateDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram, GfxMegaStateDescriptor, GfxCullMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
 import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
@@ -20,11 +20,12 @@ import { AABB } from '../Geometry';
 import { colorCopy, White, Color, colorNewCopy, colorFromRGBA } from '../Color';
 import * as UI from '../ui';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GXMaterialHacks } from '../gx/gx_material';
+import { GXMaterialHacks, GX_Program } from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
-import { projectionMatrixD3DFromOpenGL, projectionMatrixOpenGLFromD3D } from '../gfx/helpers/ProjectionHelpers';
+import { projectionMatrixConvertClipSpaceNearZ } from '../gfx/helpers/ProjectionHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
+import { AnimGroupInstance, AnimGroupDataCache } from './AnimGroup';
 
 export class TPLTextureHolder extends GXTextureHolder<TPL.TPLTexture> {
     public addTPLTextures(device: GfxDevice, tpl: TPL.TPL): void {
@@ -36,7 +37,7 @@ class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
     public both: string = `
-layout(row_major, std140) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
 
@@ -60,7 +61,7 @@ void main() {
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor = vec4(color.rgb, 1.0);
 }
 `;
@@ -80,7 +81,7 @@ class BackgroundBillboardRenderer {
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, renderInput: Viewer.ViewerRenderInput): void {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.drawPrimitives(3);
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND, this.gfxProgram.ResourceUniqueId);
         renderInst.setInputLayoutAndState(null, null);
@@ -97,6 +98,8 @@ class BackgroundBillboardRenderer {
         const aspect = renderInput.backbufferWidth / renderInput.backbufferHeight;
 
         offs += fillVec4(d, offs, aspect, -1, o, 0);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {
@@ -159,11 +162,14 @@ class MaterialInstance {
     }
 
     private fillMaterialParams(materialParams: MaterialParams, textureHolder: TPLTextureHolder): void {
+        for (let i = 0; i < 8; i++)
+            materialParams.m_TextureMapping[i].reset();
+
         for (let i = 0; i < this.material.samplers.length; i++) {
             const sampler = this.material.samplers[i];
 
             const texMapping = materialParams.m_TextureMapping[i];
-            textureHolder.fillTextureMapping(texMapping, sampler.textureName);
+            assert(textureHolder.fillTextureMapping(texMapping, sampler.textureName));
             texMapping.gfxSampler = this.gfxSamplers[i];
 
             if (this.materialAnimators[i]) {
@@ -198,9 +204,8 @@ class MaterialInstance {
         // Set up the program.
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
 
-        const offs = this.materialHelper.allocateMaterialParams(renderInst);
         this.fillMaterialParams(materialParams, textureHolder);
-        this.materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
         renderInst.setMegaStateFlags(this.materialHelper.megaStateFlags);
@@ -214,8 +219,8 @@ class BatchInstance {
     private shapeHelper: GXShapeHelperGfx;
     private packetParams = new PacketParams();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public materialInstance: MaterialInstance, private nodeInstance: NodeInstance, private batch: Batch, private coalescedBuffers: GfxCoalescedBuffersCombo) {
-        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers, batch.loadedVertexLayout, batch.loadedVertexData);
+    constructor(device: GfxDevice, cache: GfxRenderCache, public materialInstance: MaterialInstance, private nodeInstance: NodeInstance, batch: Batch, coalescedBuffers: GfxCoalescedBuffersCombo) {
+        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, batch.loadedVertexLayout, batch.loadedVertexData);
     }
 
     private computeModelView(dst: mat4, camera: Camera): void {
@@ -229,7 +234,7 @@ class BatchInstance {
         const materialInstance = materialInstanceOverride !== null ? materialInstanceOverride : this.materialInstance;
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst, textureHolder);
         this.computeModelView(this.packetParams.u_PosMtx[0], viewerInput.camera);
-        this.shapeHelper.fillPacketParams(this.packetParams, renderInst);
+        materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -312,13 +317,13 @@ class NodeInstance {
             const depthBias = 1.0 + (indexBias * -2.0 * far * near) / ((far + near) * (1.0 + indexBias));
 
             if (depthBias !== 1.0) {
-                let offs = template.allocateUniformBuffer(ub_SceneParams, u_SceneParamsBufferSize);
-                const d = template.mapUniformBufferF32(ub_SceneParams);
-                fillSceneParams(sceneParams, viewerInput.camera, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+                let offs = template.allocateUniformBuffer(GX_Program.ub_SceneParams, ub_SceneParamsBufferSize);
+                const d = template.mapUniformBufferF32(GX_Program.ub_SceneParams);
+                fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-                projectionMatrixD3DFromOpenGL(sceneParams.u_Projection);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, GfxClipSpaceNearZ.Zero, viewerInput.camera.clipSpaceNearZ);
                 sceneParams.u_Projection[10] *= depthBias;
-                projectionMatrixOpenGLFromD3D(sceneParams.u_Projection);
+                projectionMatrixConvertClipSpaceNearZ(sceneParams.u_Projection, viewerInput.camera.clipSpaceNearZ, GfxClipSpaceNearZ.Zero);
                 fillSceneParamsData(d, offs, sceneParams);
             }
         }
@@ -414,7 +419,10 @@ export class WorldRenderer extends BasicGXRendererHelper {
 
     private backgroundRenderer: BackgroundBillboardRenderer | null = null;
     private animationController = new AnimationController(60);
-    public animationNames: string[];
+    private animationNames: string[];
+
+    public animGroupInstances: AnimGroupInstance[] = [];
+    public animGroupCache: AnimGroupDataCache | null = null;
 
     constructor(device: GfxDevice, private d: TTYDWorld, public textureHolder: TPLTextureHolder, backgroundTextureName: string | null) {
         super(device);
@@ -448,8 +456,6 @@ export class WorldRenderer extends BasicGXRendererHelper {
     }
 
     public playAnimationName(animationName: string): boolean {
-        this.stopAllAnimations();
-
         const animation = this.d.animations.find((a) => a.name === animationName);
         if (animation) {
             this.playAnimation(animation);
@@ -481,6 +487,9 @@ export class WorldRenderer extends BasicGXRendererHelper {
 
         this.rootNode.updateModelMatrix(this.rootMatrix);
         this.rootNode.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput, this.textureHolder);
+
+        for (let i = 0; i < this.animGroupInstances.length; i++)
+            this.animGroupInstances[i].prepareToRender(device, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -538,6 +547,8 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.textureHolder.destroy(device);
         if (this.backgroundRenderer !== null)
             this.backgroundRenderer.destroy(device);
+        if (this.animGroupCache !== null)
+            this.animGroupCache.destroy(device);
         this.rootNode.destroy(device);
     }
 
