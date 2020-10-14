@@ -111,9 +111,9 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("HomingKiller",                   HomingKillerLauncher),
     _("Torpedo",                        HomingKillerLauncher),
     _("MagnumKiller",                   HomingKillerLauncher),
-    _("DinoPackun",                      DinoPackun),
-    _("DinoPackunVs1",                      DinoPackun),
-    _("DinoPackunVs2",                      DinoPackun),
+    _("DinoPackun",                     DinoPackun),
+    _("DinoPackunVs1",                  DinoPackun),
+    _("DinoPackunVs2",                  DinoPackun),
 
     // NPCs
     _("Butler",                         Butler),
