@@ -9988,7 +9988,7 @@ export class HomingKillerLauncher extends LiveActor<HomingKillerLauncherNrv> {
 
 export class DinoPackun extends LiveActor {
 
-    public tail: PartsModel|null;
+    public tail: PartsModel;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, 'DinoPackun');
