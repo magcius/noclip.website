@@ -9985,3 +9985,25 @@ export class HomingKillerLauncher extends LiveActor<HomingKillerLauncherNrv> {
         }
     }
 }
+
+export class DinoPackun extends LiveActor {
+
+    public tail: PartsModel|null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'DinoPackun');
+        this.initModelManagerWithAnm(sceneObjHolder, "DinoPackun");
+        connectToSceneEnemy(sceneObjHolder, this);
+        initLightCtrl(sceneObjHolder, this);
+        this.initBinder(150, 150,0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.tail = createPartsModelEnemyAndFix(sceneObjHolder,this, "DinoPackunTailBall",null,null,null, "Tail7");
+        startBck(this,"wait");
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        sceneObjHolder.modelCache.requestObjectData('DinoPackunTailBall');
+    }
+}
