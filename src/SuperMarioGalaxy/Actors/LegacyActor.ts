@@ -431,11 +431,6 @@ export class NoclipLegacyActorSpawner {
                 spawnGraph(`WorldMap03Sky`, SceneGraphTag.Skybox);
                 break;
 
-            case 'DinoPackunVs1':
-            case 'DinoPackunVs2':
-                spawnGraph(`DinoPackun`);
-                break;
-
             case 'Mogucchi':
                 spawnGraph(name, SceneGraphTag.Normal, { bck: 'walk.bck' });
                 return;
