@@ -430,6 +430,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.execute(passRenderer, DrawType.AstroDomeOrbit);
         this.execute(passRenderer, DrawType.Fur);
         this.execute(passRenderer, DrawType.OceanSphere);
+        this.execute(passRenderer, DrawType.WhirlPoolAccelerator);
         this.execute(passRenderer, DrawType.Flag);
 
         this.drawOpa(passRenderer, 0x18);

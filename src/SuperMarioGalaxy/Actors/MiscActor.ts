@@ -340,7 +340,6 @@ function checkPass(old: number, new_: number, thresh: number): boolean {
 }
 
 const enum StarPieceNrv { Floating, RailMove }
-
 export class StarPiece extends LiveActor<StarPieceNrv> {
     private type: number = 0;
     private effectCounter: number = 0;
@@ -2434,7 +2433,6 @@ export class CoconutTreeLeafGroup extends LiveActor {
 }
 
 const enum AirBubbleNrv { Wait, Move, KillWait }
-
 export class AirBubble extends LiveActor<AirBubbleNrv> {
     private lifetime: number = 180;
     private spawnLocation = vec3.create();
@@ -10005,5 +10003,186 @@ export class DinoPackun extends LiveActor {
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         sceneObjHolder.modelCache.requestObjectData('DinoPackunTailBall');
+    }
+}
+
+class WhirlPoolPoint {
+    public position = vec3.create();
+    public axisZ = vec3.create();
+    public axisX = vec3.create();
+
+    constructor(position: ReadonlyVec3, axisY: ReadonlyVec3, axisZ: ReadonlyVec3, public radius: number, public texCoordS: number, public alpha: number) {
+        vec3.copy(this.position, position);
+
+        vec3.cross(this.axisX, axisY, axisZ);
+        vec3.normalize(this.axisX, this.axisX);
+        vec3.cross(this.axisZ, this.axisX, axisY);
+        vec3.normalize(this.axisZ, this.axisZ);
+    }
+}
+
+export class WhirlPoolAccelerator extends LiveActor {
+    private width: number;
+    private height: number;
+    private axisY = vec3.create();
+    private texture: BTIData;
+    private center = vec3.create();
+    private points: WhirlPoolPoint[] = [];
+    private materialHelper: GXMaterialHelperGfx;
+    private ddraw = new TDDraw();
+    private texCoordS = 0;
+    private texCoordT = 0;
+    private rotY = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, CalcAnimType.None, DrawBufferType.None, DrawType.WhirlPoolAccelerator);
+        initDefaultPos(sceneObjHolder, this, infoIter);
+
+        this.width = this.scale[0] * 100.0;
+        this.height = this.scale[1] * 100.0;
+
+        makeMtxTRFromActor(scratchMatrix, this);
+        getMatrixAxisY(this.axisY, scratchMatrix);
+        this.initPoints();
+
+        const arc = sceneObjHolder.modelCache.getObjectData('Whirlpool');
+        this.texture = loadBTIData(sceneObjHolder, arc, `Whirlpool.bti`);
+
+        vec3.scaleAndAdd(this.center, this.translation, Vec3UnitY, this.height * 0.5);
+
+        sceneObjHolder.create(SceneObj.WaterAreaHolder);
+        sceneObjHolder.waterAreaHolder!.entryWhirlPoolAccelerator(this);
+
+        this.makeActorAppeared(sceneObjHolder);
+
+        const mb = new GXMaterialBuilder('WhirlPoolAccelerator');
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX3x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.C0, GX.CC.C1, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.RASA, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.OR, GX.CompareType.GREATER, 0);
+        mb.setZMode(true, GX.CompareType.LEQUAL, true);
+        mb.setCullMode(GX.CullMode.NONE);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.CLR0, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.CLR0, GX.CompCnt.CLR_RGBA);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+    }
+
+    private initPoints(): void {
+        const pointCount = ((this.height / 50.0) | 0) + 1;
+
+        computeModelMatrixR(scratchMatrix, 0.0, -10.0 * MathConstants.DEG_TO_RAD, 0.0);
+        vec3.copy(scratchVec3a, Vec3UnitZ);
+
+        let texCoordAngle = 360.0;
+        for (let i = 0; i < pointCount; i++) {
+            vec3.scaleAndAdd(scratchVec3, this.translation, this.axisY, this.height - 50.0 * i);
+
+            const easeT = getEaseInValue((pointCount - i) / pointCount);
+            const distance = this.width * (easeT + (0.6 * (1.0 - easeT)));
+
+            let alpha = 0xFF;
+            const alphaPointNum = 2;
+            if (i < alphaPointNum)
+                alpha = lerp(0x32, 0xFF, i / alphaPointNum);
+            else if (i >= pointCount - alphaPointNum)
+                alpha = lerp(0x32, 0xFF, (pointCount - i - 1) / alphaPointNum);
+            const texCoordS = texCoordAngle / 360.0;
+            this.points.push(new WhirlPoolPoint(scratchVec3, this.axisY, scratchVec3a, distance, texCoordS, alpha));
+            texCoordAngle -= 10.0;
+
+            transformVec3Mat4w0(scratchVec3a, scratchMatrix, scratchVec3a);
+        }
+    }
+
+    private drawPlane(ddraw: TDDraw, x0: number, z0: number, x1: number, z1: number, texCoordS0: number, texCoordS1: number): void {
+        vec3.set(scratchVec3, 0.0, 0.0, 30.0);
+        computeModelMatrixR(scratchMatrix, 0.0, this.rotY, 0.0);
+        transformVec3Mat4w0(scratchVec3, scratchMatrix, scratchVec3);
+
+        computeModelMatrixR(scratchMatrix, 0.0, 25.0 * MathConstants.DEG_TO_RAD, 0.0);
+        this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+        let texCoordT = this.texCoordT;
+        for (let i = 0; i < this.points.length; i++) {
+            const point = this.points[i];
+
+            vec3.add(scratchVec3a, point.position, scratchVec3);
+            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisX, point.radius * x0);
+            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisZ, point.radius * z0);
+
+            ddraw.position3vec3(scratchVec3a);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, point.alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, point.texCoordS + texCoordS0, texCoordT);
+
+            vec3.add(scratchVec3a, point.position, scratchVec3);
+            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisX, point.radius * x1);
+            vec3.scaleAndAdd(scratchVec3a, scratchVec3a, point.axisZ, point.radius * z1);
+
+            ddraw.position3vec3(scratchVec3a);
+            ddraw.color4rgba8(GX.Attr.CLR0, 0xFF, 0xFF, 0xFF, point.alpha);
+            ddraw.texCoord2f32(GX.Attr.TEX0, point.texCoordS + texCoordS1, texCoordT);
+
+            transformVec3Mat4w0(scratchVec3, scratchMatrix, scratchVec3);
+            texCoordT += 0.02;
+        }
+        this.ddraw.end();
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        const device = sceneObjHolder.modelCache.device;
+
+        this.ddraw.beginDraw();
+        this.drawPlane(this.ddraw,  0.5,  Math.SQRT1_2, -0.5,  Math.SQRT1_2, this.texCoordS + 0/6, this.texCoordS + 1/6);
+        this.drawPlane(this.ddraw, -0.5,  Math.SQRT1_2, -1.0,  0.0,          this.texCoordS + 1/6, this.texCoordS + 2/6);
+        this.drawPlane(this.ddraw, -1.0,  0.0,          -0.5, -Math.SQRT1_2, this.texCoordS + 2/6, this.texCoordS + 3/6);
+        this.drawPlane(this.ddraw, -0.5, -Math.SQRT1_2,  0.5, -Math.SQRT1_2, this.texCoordS + 3/6, this.texCoordS + 4/6);
+        this.drawPlane(this.ddraw,  0.5, -Math.SQRT1_2,  1.0,  0.0,          this.texCoordS + 4/6, this.texCoordS + 5/6);
+        this.drawPlane(this.ddraw,  1.0,  0.0,           0.5,  Math.SQRT1_2, this.texCoordS + 5/6, this.texCoordS + 6/6);
+        const renderInst = this.ddraw.endDraw(device, renderInstManager);
+
+        this.texture.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x003452FF);
+        colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x7CA9BDFF);
+
+        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+
+        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        this.rotY -= 10.0 * MathConstants.DEG_TO_RAD * deltaTimeFrames;
+        this.texCoordS += 0.01 * deltaTimeFrames;
+        this.texCoordT -= -0.025 * deltaTimeFrames;
+
+        this.texCoordS = this.texCoordS % 1.0;
+        this.texCoordT = this.texCoordT % 1.0;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.texture.destroy(device);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('Whirlpool');
     }
 }
