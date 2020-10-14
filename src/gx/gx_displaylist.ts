@@ -544,11 +544,8 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
             input = allocateVertexInput(VertexAttributeInput.POS, inputFormat);
             fieldCompOffset = 3;
             fieldFormat = input.format;
-        } else if (isVtxAttribNrm(vtxAttrib) && isVatLayoutNBT(vatLayouts[0]!, vtxAttrib)) {
-            // TODO(jstpierre): I have no clue how it works for VAT layouts if one has NBT and the others don't.
-            // I think NBT is a weird quirk of GX and the hardware maps it to something different.
-
-            // NBT. Allocate layouts for all of NRM, BINRM, TANGENT.
+        } else if (isVtxAttribNrm(vtxAttrib) && vatLayouts.some((vatLayout) => vatLayout !== undefined && isVatLayoutNBT(vatLayout, vtxAttrib))) {
+            // NBT. Allocate inputs for all of NRM, BINRM, TANGENT.
             input = allocateVertexInput(VertexAttributeInput.NRM, inputFormat);
             allocateVertexInput(VertexAttributeInput.BINRM, inputFormat);
             allocateVertexInput(VertexAttributeInput.TANGENT, inputFormat);

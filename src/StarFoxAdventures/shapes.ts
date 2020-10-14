@@ -119,7 +119,7 @@ export class ShapeGeometry {
     constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
         this.loadedVertexData = this.vtxLoader.parseDisplayList(displayList);
-        // this.vtxLoader = compilePartialVtxLoader(this.vtxLoader, this.loadedVertexData);
+        this.vtxLoader = compilePartialVtxLoader(this.vtxLoader, this.loadedVertexData);
         this.reloadVertices();
     }
 
