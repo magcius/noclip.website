@@ -21,7 +21,6 @@ import { GallerySceneRenderer } from './Gallery';
 import { ObjectRenderer, CameraGameState, updateCameraGameState, KDLayer } from './objects';
 import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './render';
 import { parseAnimationList, ObjectAnimationList } from './animation';
-import { MenuSceneRenderer } from './menu';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -574,18 +573,6 @@ class KatamariGallerySceneDesc implements Viewer.SceneDesc {
         return renderer;
     }
 }
-class KatmariMenuSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string, public cameraSpeedMult: number = 1) {
-    }
-
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        const modelData = await context.dataFetcher.fetchData(`${pathBase}/133d6d.bin`);
-        const objects = BIN.parseHomePlanetModels(modelData);
-
-        const renderer = new MenuSceneRenderer(context, objects);
-        return renderer;
-    }
-}
 
 const id = 'katamari_damacy';
 const name = 'Katamari Damacy';
@@ -644,9 +631,6 @@ const sceneDescs = [
     new KatamariLevelSceneDesc('slvl28', 28, "Tutorial"),
     new KatamariLevelSceneDesc('slvl29', 29, "Credits"),
     // new KatamariLevelSceneDesc('slvl30', 30, "Load"), same as snow?
-    new KatmariMenuSceneDesc('home', "Home Planet"),
-    new KatmariMenuSceneDesc('earth', "Earth"),
-    new KatmariMenuSceneDesc('mushroom', "Space Mushroom"),
 
     "Multiplayer",
     new KatamariLevelSceneDesc('mplvl1', 31, "Multiplayer Level 1"),

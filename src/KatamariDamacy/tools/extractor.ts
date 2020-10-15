@@ -223,18 +223,15 @@ function extractFileTable(outPath: string, isoFilename: string, elf: ArrayBuffer
     mkdirSync(outFolderPath, { recursive: true });
 
     let idx = fileTableOffs;
-    for (let i = 0; i < count; i++, idx += 0x10)
-        writeSingleFile(outFolderPath, isoFilename, elf, idx, baseLBA);
-}
+    for (let i = 0; i < count; i++, idx += 0x10) {
+        const file = extractFile(isoFilename, elf, idx, baseLBA);
 
-function writeSingleFile(outPath: string, isoFilename: string, elf: ArrayBufferSlice, offs: number, baseLBA = 0): void {
-    const file = extractFile(isoFilename, elf, offs, baseLBA);
+        const filename = `${file.lba.toString(16)}.bin`;
+        const outFilePath = `${outFolderPath}/${filename}`;
 
-    const filename = `${file.lba.toString(16)}.bin`;
-    const outFilePath = `${outPath}/${filename}`;
-
-    console.log('Extracted', outFilePath);
-    writeFileSync(outFilePath, Buffer.from(file.buffer));
+        console.log('Extracted', outFilePath);
+        writeFileSync(outFilePath, Buffer.from(file.buffer));
+    }
 }
 
 const pathBaseIn  = `../../../data/katamari_damacy_raw`;
@@ -247,32 +244,27 @@ function main() {
     extractGalleryIndex(pathBaseOut, elf);
     // dumpObjectNames(elf);
 
-    // extractFileTable(pathBaseOut, isoFilename, elf, 0x17C340, 0x4);
-    // extractFileTable(pathBaseOut, isoFilename, elf, 0x17F100, 0x17);
-    // extractFileTable(pathBaseOut, isoFilename, elf, 0x17F590, 0x18C);
-    // extractFileTable(pathBaseOut, isoFilename, elf, 0x1879B0, 0x3D, 0x0);
+    extractFileTable(pathBaseOut, isoFilename, elf, 0x17C340, 0x4);
+    extractFileTable(pathBaseOut, isoFilename, elf, 0x17F100, 0x17);
+    extractFileTable(pathBaseOut, isoFilename, elf, 0x17F590, 0x18C);
+    extractFileTable(pathBaseOut, isoFilename, elf, 0x1879B0, 0x3D, 0x0);
 
-    // const objectFileTableOffs = 0x180E50;
-    // const objectBaseLBA = 0x136B8D;
-    // const objectCount = 1718;
-    // extractFileTable(pathBaseOut, isoFilename, elf, objectFileTableOffs, objectCount, objectBaseLBA);
+    const objectFileTableOffs = 0x180E50;
+    const objectBaseLBA = 0x136B8D;
+    const objectCount = 1718;
+    extractFileTable(pathBaseOut, isoFilename, elf, objectFileTableOffs, objectCount, objectBaseLBA);
 
-    // writeBufferSync(`${pathBaseOut}/tutorialBlock.bin`,     elf.slice(0xB8470, 0xB85B0));
-    // writeBufferSync(`${pathBaseOut}/levelBlock.bin`,        elf.slice(0xBF1A0, 0xC0034));
-    // writeBufferSync(`${pathBaseOut}/objectBlock.bin`,       elf.slice(0xCDF70, 0xDD108));
-    // writeBufferSync(`${pathBaseOut}/collectionBlock.bin`,   elf.slice(0xDD108, 0xE06B8));
-    // writeBufferSync(`${pathBaseOut}/transformBlock.bin`,    elf.slice(0x111260, 0x112FFC));
-    // writeBufferSync(`${pathBaseOut}/randomBlock.bin`,       elf.slice(0x116980, 0x117238));
-    // writeBufferSync(`${pathBaseOut}/pathBlock.bin`,         elf.slice(0x117290, 0X1607B0)); // maybe split this up?
-    // writeBufferSync(`${pathBaseOut}/movementBlock.bin`,     elf.slice(0x161D90, 0X162CF4));
-    // writeBufferSync(`${pathBaseOut}/parentBlock.bin`,       elf.slice(0x162EC0, 0X168850));
-    // writeBufferSync(`${pathBaseOut}/missionBlock.bin`,      elf.slice(0x180340, 0X180E50));
-    // writeBufferSync(`${pathBaseOut}/animationBlock.bin`,    elf.slice(0x30DC00, 0X386C54));
-
-    // menu-specific data
-    const menuFile = new ArrayBufferSlice(extractFile(isoFilename, elf, 0x17C340).buffer);
-    writeSingleFile(pathBaseOut, isoFilename, menuFile, 0x37AE60);
-    writeBufferSync(`${pathBaseOut}/menuBlock.bin`, menuFile.slice(0x3FCC0, 0x37A360));
+    writeBufferSync(`${pathBaseOut}/tutorialBlock.bin`,     elf.slice(0xB8470, 0xB85B0));
+    writeBufferSync(`${pathBaseOut}/levelBlock.bin`,        elf.slice(0xBF1A0, 0xC0034));
+    writeBufferSync(`${pathBaseOut}/objectBlock.bin`,       elf.slice(0xCDF70, 0xDD108));
+    writeBufferSync(`${pathBaseOut}/collectionBlock.bin`,   elf.slice(0xDD108, 0xE06B8));
+    writeBufferSync(`${pathBaseOut}/transformBlock.bin`,    elf.slice(0x111260, 0x112FFC));
+    writeBufferSync(`${pathBaseOut}/randomBlock.bin`,       elf.slice(0x116980, 0x117238));
+    writeBufferSync(`${pathBaseOut}/pathBlock.bin`,         elf.slice(0x117290, 0X1607B0)); // maybe split this up?
+    writeBufferSync(`${pathBaseOut}/movementBlock.bin`,     elf.slice(0x161D90, 0X162CF4));
+    writeBufferSync(`${pathBaseOut}/parentBlock.bin`,       elf.slice(0x162EC0, 0X168850));
+    writeBufferSync(`${pathBaseOut}/missionBlock.bin`,      elf.slice(0x180340, 0X180E50));
+    writeBufferSync(`${pathBaseOut}/animationBlock.bin`,    elf.slice(0x30DC00, 0X386C54));
 }
 
 main();

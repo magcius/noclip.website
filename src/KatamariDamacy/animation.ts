@@ -87,10 +87,9 @@ export function parseAnimationList(data: ArrayBufferSlice, id: number): ObjectAn
     const view = data.createDataView();
 
     const objectListOffs = 0x482FC0 - animationBlockStart;
-    const curveTableOffs = 0x41B740 - animationBlockStart;
 
     const animations: ObjectAnimation[] = [];
-    let bindPose: PartTransform[] = [];
+    const bindPose: PartTransform[] = [];
 
     const tableCount = view.getUint16(objectListOffs, true);
     for (let i = 0; i < tableCount; i++) {
@@ -105,58 +104,47 @@ export function parseAnimationList(data: ArrayBufferSlice, id: number): ObjectAn
             tableOffs += 4;
 
             const fps = speed * 30;
-            
-            const curveStart = curveTableOffs + view.getUint32(curveTableOffs + 4 + 4 * curveIndex, true);
-            animations.push(parseAnimation(data, fps, curveStart));
+
+            animations.push(parseAnimation(data, fps, curveIndex));
         }
-        bindPose = parseBindPose(view, 4+4*i);
+
+        let bindPoseOffset = view.getUint32(4 * i + 4, true);
+        const partCount = view.getUint16(bindPoseOffset + 0x0A, true);
+        bindPoseOffset += 0x10;
+        for (let j = 0; j < partCount; j++) {
+            const partIndex = view.getUint8(bindPoseOffset + 0x0C);
+            const parent = view.getUint8(bindPoseOffset + 0x0D) - 1;
+            assert(partIndex === j && parent < j);
+            const pos = vec3.fromValues(
+                view.getFloat32(bindPoseOffset + 0x00, true),
+                view.getFloat32(bindPoseOffset + 0x04, true),
+                view.getFloat32(bindPoseOffset + 0x08, true),
+            );
+            const rot = quat.fromValues(
+                view.getFloat32(bindPoseOffset + 0x10, true),
+                view.getFloat32(bindPoseOffset + 0x14, true),
+                view.getFloat32(bindPoseOffset + 0x18, true),
+                -view.getFloat32(bindPoseOffset + 0x1C, true),
+            );
+            bindPoseOffset += 0x20;
+
+            const reference = mat4.create();
+            mat4.fromRotationTranslation(reference, rot, pos);
+            if (parent >= 0)
+                mat4.mul(reference, bindPose[parent].reference, reference);
+
+            bindPose.push({ parent, pos, rot, reference });
+        }
     }
     return { animations, bindPose };
 }
 
-export function parseDirectAnimation(data: ArrayBufferSlice, fps: number, animOffs: number, poseOffs: number): ObjectAnimationList {
-    const view = data.createDataView();
-    const bindPose = parseBindPose(view, poseOffs);
-    const animations: ObjectAnimation[] = [];
-    animations.push(parseAnimation(data, fps, animOffs));
-    return {bindPose, animations};
-}
-
-function parseBindPose(view: DataView, offs: number): PartTransform[] {
-    const bindPose: PartTransform[] = [];
-    let bindPoseOffset = view.getUint32(offs, true);
-    const partCount = view.getUint16(bindPoseOffset + 0x0A, true);
-    bindPoseOffset += 0x10;
-    for (let i = 0; i < partCount; i++) {
-        const partIndex = view.getUint8(bindPoseOffset + 0x0C);
-        const parent = view.getUint8(bindPoseOffset + 0x0D) - 1;
-        assert(partIndex === i && parent < i);
-        const pos = vec3.fromValues(
-            view.getFloat32(bindPoseOffset + 0x00, true),
-            view.getFloat32(bindPoseOffset + 0x04, true),
-            view.getFloat32(bindPoseOffset + 0x08, true),
-        );
-        const rot = quat.fromValues(
-            view.getFloat32(bindPoseOffset + 0x10, true),
-            view.getFloat32(bindPoseOffset + 0x14, true),
-            view.getFloat32(bindPoseOffset + 0x18, true),
-            -view.getFloat32(bindPoseOffset + 0x1C, true),
-        );
-        bindPoseOffset += 0x20;
-
-        const reference = mat4.create();
-        mat4.fromRotationTranslation(reference, rot, pos);
-        if (parent >= 0)
-            mat4.mul(reference, bindPose[parent].reference, reference);
-
-        bindPose.push({ parent, pos, rot, reference });
-    }
-    return bindPose;
-}
-
-function parseAnimation(data: ArrayBufferSlice, fps: number, curveStart: number): ObjectAnimation {
+function parseAnimation(data: ArrayBufferSlice, fps: number, curveIndex: number): ObjectAnimation {
     const view = data.createDataView();
 
+    const curveTableOffs = 0x41B740 - animationBlockStart;
+
+    const curveStart = curveTableOffs + view.getUint32(curveTableOffs + 4 + 4 * curveIndex, true);
     const segmentCount = view.getUint16(curveStart + 0x00, true);
     const curveCount = view.getUint16(curveStart + 0x02, true);
     const frameInterval = view.getUint16(curveStart + 0x04, true) / 0xA0; // everything is done in terms of these 0xA0-"frame" steps

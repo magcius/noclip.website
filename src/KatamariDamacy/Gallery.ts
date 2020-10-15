@@ -13,7 +13,7 @@ import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque } from '../gf
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
-import { TextureMapping, FakeTextureHolder } from '../TextureHolder';
+import { TextureMapping } from '../TextureHolder';
 import { assertExists, nArray } from '../util';
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import * as BIN from "./bin";
@@ -119,7 +119,6 @@ export class GallerySceneRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
     public modelSectorData: BINModelSectorData[] = [];
     public objectRenderers: ObjectRenderer[] = [];
-    public textureHolder = new FakeTextureHolder([]);
     public framebufferTextureMapping = new TextureMapping();
 
     private circle: GalleryCircleRenderer;

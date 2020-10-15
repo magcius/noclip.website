@@ -1,13 +1,12 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, hexzero, assertExists, readString, nArray, hexdump } from "../util";
+import { assert, hexzero, assertExists, readString, nArray } from "../util";
 import { Color, colorNewFromRGBA, colorFromRGBA, colorEqual } from "../Color";
 import { AABB } from "../Geometry";
 import { mat4, quat, vec3 } from "gl-matrix";
 import { GSRegister, GSRegisterTEX0, GSMemoryMap, getGSRegisterTEX0, gsMemoryMapUploadImage, gsMemoryMapReadImagePSMT4_PSMCT32, gsMemoryMapReadImagePSMT8_PSMCT32, GSPixelStorageFormat, GSTextureColorComponent, GSTextureFunction, GSCLUTPixelStorageFormat, psmToString, gsMemoryMapNew } from "../Common/PS2/GS";
 import { Endianness } from "../endian";
-import { MathConstants, computeModelMatrixSRT, setMatrixTranslation } from "../MathHelpers";
-import { parseDirectAnimation, ObjectAnimationList } from "./animation";
+import { MathConstants, computeModelMatrixSRT } from "../MathHelpers";
 
 const enum VifUnpackVN {
     S = 0x00,
@@ -149,8 +148,7 @@ function parseDIRECT(map: GSMemoryMap, buffer: ArrayBufferSlice): number {
         else if (id === 6) // ret
             lastPacket = true;
         else
-            debugger
-            // throw `unknown DMAtag ID ${id}`;
+            throw `unknown DMAtag ID ${id}`;
         const tag2 = view.getUint8(texDataIdx + 0x0F);
         assert(tag2 === 0x50, "TAG"); // DIRECT
         const texDataSize = view.getUint16(texDataIdx + 0x0C, true) * 0x10;
@@ -404,14 +402,13 @@ function parseModelSector(buffer: ArrayBufferSlice, gsMemoryMap: GSMemoryMap[], 
             // VU1 program. The address of the destination data is relative to 0x8000.
             if ((cmd & 0x60) === 0x60) { // UNPACK
                 const format = (cmd & 0x0F);
+
                 const isVertexData = (imm >= expectedPositionsOffs);
                 const isPositions = (imm === expectedPositionsOffs);
 
                 // If this is not vertex data (not writing to address 0x8000 or higher), then we skip
                 // for now. Perhaps we'll have a use for this in the future.
                 if (!isVertexData) {
-                    console.log("non vertex", hexzero(format, 1), hexzero(qwd, 4), hexzero(imm, 4))
-                    hexdump(buffer, packetsIdx)
                     packetsIdx += qwd * getVifUnpackFormatByteSize(format);
                     continue;
                 }
@@ -1244,14 +1241,6 @@ export interface PartTransform {
     rotation: vec3;
 }
 
-export function debugParseTex(data: ArrayBufferSlice, idx: number, tex0: number, tex1: number): BINTexture {
-    const map = gsMemoryMapNew();
-    const view = data.createDataView();
-    const offs = view.getUint32(4+4*idx, true)
-    parseDIRECT(map, data.slice(offs));
-    return decodeTexture([map], tex0, tex1, "debug");
-}
-
 export function parseObjectModel(gsMemoryMap: GSMemoryMap[], buffer: ArrayBufferSlice, firstSectorIndex: number, transformBuffer: ArrayBufferSlice, objectId: number, def?: ObjectDefinition): ObjectModel | null {
     const view = buffer.createDataView();
 
@@ -1532,152 +1521,4 @@ export function parseTutorialModels(map: GSMemoryMap, data: ArrayBufferSlice, sp
     models.push({ pos, sector: model });
 
     return models;
-}
-
-const enum MenuPlanetID {
-    Skybox,
-    Planet,
-    Background,
-    Star,
-    Statue,
-    House,
-    Tree,
-    Bird,
-    Phonograph,
-}
-
-interface SimpleObjectSpawn {
-    id: number;
-    matrix: mat4;
-    sector: BINModelSector;
-}
-
-interface ComplicatedObjectSpawn{
-    id: number;
-    spawn: MissionSetupObjectSpawn;
-    model: ObjectModel;
-    animation: ObjectAnimationList;
-}
-
-export interface HomePlanetData {
-    name: "home";
-
-    objects: SimpleObjectSpawn[];
-    // bird has animations, so treat it as a "normal" object
-    complicated: ComplicatedObjectSpawn[];
-
-    notes: BINModelSector[],
-    cloud: BINModelSector,
-}
-
-const homePlanetIndices = [0x1B, 0x1C, 0x1D, 0x1E, 0x26, 0x1F, 0x20];
-
-export function parseHomePlanetModels(modelData: ArrayBufferSlice): HomePlanetData {
-    const objects: SimpleObjectSpawn[] = [];
-    const view = modelData.createDataView();
-
-    const map = gsMemoryMapNew();
-
-    function parseTexture(index: number): void {
-        const view = modelData.createDataView();
-        const textureOffs = view.getUint32(4 + 4*index, true);
-        parseDIRECT(map, modelData.slice(textureOffs));
-    }
-
-    function parseSector(index: number, name = ''): BINModelSector {
-        const view = modelData.createDataView();
-        const modelOffs = view.getUint32(4 + 4*index, true);
-        return assertExists(parseModelSector(modelData, [map], name, modelOffs));
-    }
-
-
-    parseTexture(0x87);
-    objects.push({id: MenuPlanetID.Skybox, sector: parseSector(0x2B, 'skybox'),  matrix: mat4.create()});
-    
-    // parseTexture(0xEC);
-    // objects.push({id: MenuPlanetID.Background, sector: parseSector(0xED, 'background'),  matrix: mat4.create()});
-    
-    parseTexture(0x88);
-    objects.push({id: MenuPlanetID.Star, sector: parseSector(0x2C, 'star'),  matrix: mat4.create()});
-    
-    parseTexture(0x5A);
-    objects.push({id: MenuPlanetID.Planet, sector: parseSector(0x21, 'planet'),  matrix: mat4.create()});
-
-    let poseOffs = view.getUint32(4 + 4*0x2F, true);
-    parseTexture(0x59); // shared for all the objects
-
-    const vec = vec3.create();
-    for (let index of homePlanetIndices) {
-        const sector = parseSector(index, index.toString());
-
-        vec3.set(vec, 
-            view.getFloat32(poseOffs + 0x00, true),
-            view.getFloat32(poseOffs + 0x04, true),
-            view.getFloat32(poseOffs + 0x08, true),
-        );
-        const angle = view.getFloat32(poseOffs + 0x0C, true);
-        const matrix = mat4.create();
-        mat4.fromRotation(matrix, angle, vec);
-        vec3.set(vec, 
-            view.getFloat32(poseOffs + 0x10, true),
-            view.getFloat32(poseOffs + 0x14, true),
-            view.getFloat32(poseOffs + 0x18, true),
-        );
-        setMatrixTranslation(matrix, vec);
-        objects.push({sector, id: index, matrix});
-    }
-
-    const birdModelOffs = view.getUint32(4, true);
-    const birdPartOffs = view.getUint32(birdModelOffs, true) + birdModelOffs;
-    const birdSector = assertExists(parseModelSector(modelData, [map], 'bird', birdPartOffs));
-    // const birdAnimation = parseDirectAnimation(modelData, 30, view.getUint32(4+4*0xE1, true), view.getUint32(4+4*0xE2, true));
-
-    const skinning: SkinningMatrix[][] = [];
-    for (let skinningOffs = birdModelOffs + 0x10; skinningOffs < birdPartOffs; skinningOffs += 0x20) {
-        const pairCount = view.getUint8(skinningOffs + 0x0D);
-        const weights: SkinningMatrix[] = [];
-        const jointIndices = modelData.createTypedArray(Int8Array, skinningOffs, 4);
-
-        for (let i = 0; i < pairCount; i++) {
-            const matrixIndex = view.getInt8(skinningOffs + 0x04 + i);
-            assert(matrixIndex >= 0 && matrixIndex < 4 && jointIndices[matrixIndex] >= 0);
-            const weight = view.getUint16(skinningOffs + 0x0E + 2 * i, true) / (1 << 15);
-            assert(0 < weight && weight <= 1)
-            weights.push({ index: jointIndices[matrixIndex], weight });
-        }
-        skinning.push(weights);
-    }
-    const bird: ObjectModel = {
-        id: MenuPlanetID.Bird,
-        sector: birdSector,
-        bbox: computeObjectAABBFromRawSector(modelData, view.getUint32(4+4*0x26, true), []),
-        transforms: [],
-        skinning,
-    }
-
-    const complicated: ComplicatedObjectSpawn[] = [];
-    //  = [{
-    //     id: MenuPlanetID.Bird,
-    //     model: bird,
-    //     animation: birdAnimation,
-    //     spawn: {
-    //         objectId: -1,
-    //         modelIndex: -1,
-    //         dispOnAreaNo: -1,
-    //         dispOffAreaNo: -1,
-    //         modelMatrix: mat4.create(),
-    //         moveType: -1,
-    //         linkAction: -1,
-    //         tableIndex: -1,
-    //     },
-    // }];
-
-    const notes: BINModelSector[] = [
-        parseSector(0x23, 'note'),
-        parseSector(0x24, 'note'),
-    ];
-
-    const cloud = parseSector(0x25, 'cloud');
-
-    return {name: "home", objects, notes, cloud, complicated};
 }
