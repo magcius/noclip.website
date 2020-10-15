@@ -493,7 +493,7 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
                 let runOffs = 7;
                 assert(currentEffect !== LevelEffectType.ENV_MAP);
                 if (unpackDest !== expectedTexCoordOffs) {
-                    assert(unpackDest === expectedExtraOffs && currentEffect === LevelEffectType.UV_LERP);
+                    assert(unpackDest === expectedExtraOffs && (currentEffect as LevelEffectType) === LevelEffectType.UV_LERP);
                     runOffs = 9;
                 }
                 assert(signExtend);
@@ -509,7 +509,7 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
                     assert(currentEffect === LevelEffectType.ENV_MAP);
                     runOffs = 9;
                 } else if (unpackDest !== expectedPositionOffs) {
-                    assert(unpackDest === expectedExtraOffs && currentEffect === LevelEffectType.POSITIONS);
+                    assert(unpackDest === expectedExtraOffs && (currentEffect as LevelEffectType) === LevelEffectType.POSITIONS);
                     runOffs = 9;
                 }
                 for (let j = 0; j < qwc; j++) {
@@ -522,7 +522,7 @@ function parseLevelModel(view: DataView, offs: number, gsMap: GSMemoryMap, textu
             } else if (format === VifUnpackFormat.V4_8) {
                 let runOffs = 3;
                 if (unpackDest !== expectedColorOffs) {
-                    assert(unpackDest === expectedExtraOffs && currentEffect === LevelEffectType.COLORS);
+                    assert(unpackDest === expectedExtraOffs && (currentEffect as LevelEffectType) === LevelEffectType.COLORS);
                     runOffs = 9;
                 }
                 for (let j = 0; j < qwc; j++) {
