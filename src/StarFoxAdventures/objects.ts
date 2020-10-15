@@ -848,10 +848,16 @@ export class ObjectInstance {
         
         this.setModelNum(0);
 
-        if (objClass in SFA_CLASSES)
-            SFA_CLASSES[objClass].setup(this, objParams);
-        else
+        if (objClass in SFA_CLASSES) {
+            try {
+                SFA_CLASSES[objClass].setup(this, objParams);
+            } catch (e) {
+                console.warn(`Failed to setup object class ${objClass} type ${typeNum} due to exception:`);
+                console.error(e);
+            }
+        } else {
             console.log(`Don't know how to setup object class ${objClass} objType ${typeNum}`);
+        }
     }
 
     public mount() {
