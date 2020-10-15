@@ -2,14 +2,15 @@ import * as BIN from "./bin";
 import * as Viewer from '../viewer';
 import { BasicRenderTarget, makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { FakeTextureHolder } from '../TextureHolder';
-import { hexzero } from '../util';
-import { FFXProgram, LevelModelData, LevelPartInstance, TextureData } from "./render";
+import { assertExists, hexzero } from '../util';
+import { FFXProgram, findTextureIndex, LevelModelData, LevelPartInstance, TextureData } from "./render";
 import { CameraController } from "../Camera";
 import { mat4 } from "gl-matrix";
+import AnimationController from "../AnimationController";
 
 const pathBase = `ffx`;
 
@@ -23,9 +24,13 @@ class FFXRenderer implements Viewer.SceneGfx {
     public partRenderers: LevelPartInstance[] = [];
     public modelData: LevelModelData[] = [];
     public textureData: TextureData[] = [];
+    public animatedTextures: BIN.AnimatedTexture[] = [];
+    public textureRemaps: GfxTexture[] = [];
 
     public lightDirection = mat4.create();
     public clearPass = standardFullClearRenderPassDescriptor;
+
+    private animationController = new AnimationController(60);
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
@@ -54,6 +59,7 @@ class FFXRenderer implements Viewer.SceneGfx {
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(.1);
+        this.animationController.setTimeFromViewerInput(viewerInput);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
@@ -62,8 +68,19 @@ class FFXRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
         fillMatrix4x3(sceneParamsMapped, offs, this.lightDirection);
 
+        for (let i = 0; i < this.animatedTextures.length; i++) {
+            if (this.animatedTextures[i].effect === null)
+                continue;
+            const currIndex = findTextureIndex(this.animationController.getTimeInFrames(), this.animatedTextures[i].effect);
+            for (let j = 0; j < this.animatedTextures[i].textureIndices.length; j++) {
+                const baseIndex = this.animatedTextures[i].textureIndices[j][0];
+                const newIndex = this.animatedTextures[i].textureIndices[j][currIndex];
+                this.textureRemaps[baseIndex] = this.textureData[newIndex].gfxTexture;
+            }
+        }
+
         for (let i = 0; i < this.partRenderers.length; i++)
-            this.partRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput);
+            this.partRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, this.textureRemaps);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
@@ -93,8 +110,8 @@ class FFXLevelSceneDesc implements Viewer.SceneDesc {
         const geometryData = await context.dataFetcher.fetchData(`${pathBase}/13/${hexzero(2 * this.index + 1, 4)}.bin`);
 
         const renderer = new FFXRenderer(device);
-        const gsMap = BIN.parseLevelTextures(textureData);
-        const level = BIN.parseLevelGeometry(geometryData, gsMap, this.id);
+        const textures = BIN.parseLevelTextures(textureData);
+        const level = BIN.parseLevelGeometry(geometryData, textures);
         const cache = renderer.renderHelper.getCache();
 
         renderer.clearPass = makeClearRenderPassDescriptor(true, level.clearColor);
@@ -115,8 +132,15 @@ class FFXLevelSceneDesc implements Viewer.SceneDesc {
                 modelData.push(data);
             }
             const partRenderer = new LevelPartInstance(device, cache, p, modelData, renderer.textureData);
+            for (let index of p.effectIndices)
+                partRenderer.effects.push(assertExists(level.effects[index]));
             renderer.partRenderers.push(partRenderer);
         }
+
+        renderer.animatedTextures = level.animatedTextures;
+        for (let tex of level.animatedTextures)
+            for (let list of tex.textureIndices)
+                renderer.textureRemaps[list[0]] = renderer.textureData[list[0]].gfxTexture;
 
         return renderer;
     }
@@ -194,8 +218,8 @@ const sceneDescs = [
     new FFXLevelSceneDesc(106, "Kilika - Offshore"),
     "Kilika",
     new FFXLevelSceneDesc(115, "Kilika Port"),
-    new FFXLevelSceneDesc(116, "Kilika - Dock"),
-    new FFXLevelSceneDesc(122, "Kilika - Dock (airship)"),
+    new FFXLevelSceneDesc(116, "Kilika - Dock (sunset)"),
+    new FFXLevelSceneDesc(122, "Kilika - Dock"),
     // new FFXLevelSceneDesc(124, "Kilika - Tavern"),
     new FFXLevelSceneDesc(125, "Kilika - Ruined Square"),
     // new FFXLevelSceneDesc(126, "Kilika - Residential Area"),
@@ -249,14 +273,14 @@ const sceneDescs = [
     new FFXLevelSceneDesc(177, "Theater - Main Hall"),
     "Mi'ihen highroad",
     new FFXLevelSceneDesc(210, "Highroad - South End"),
+    new FFXLevelSceneDesc(217, "Highroad - South"),
+    new FFXLevelSceneDesc(218, "Highroad - Central"),
+    new FFXLevelSceneDesc(216, "Highroad - North End"),
     new FFXLevelSceneDesc(211, "Highroad - Agency, Front (sunset)"),
     new FFXLevelSceneDesc(212, "Highroad - Agency, Front"),
     // new FFXLevelSceneDesc(213, "Highroad - Agency"),
     new FFXLevelSceneDesc(214, "Highroad - Newroad, South"),
     new FFXLevelSceneDesc(215, "Highroad - Newroad, North"),
-    new FFXLevelSceneDesc(216, "Highroad - North End"),
-    new FFXLevelSceneDesc(217, "Highroad - South"),
-    new FFXLevelSceneDesc(218, "Highroad - Central"),
     "Mushroom Rock",
     new FFXLevelSceneDesc(220, "Mushroom Rock - Plateau"),
     new FFXLevelSceneDesc(221, "Mushroom Rock - Valley"),
@@ -283,14 +307,14 @@ const sceneDescs = [
     new FFXLevelSceneDesc(245, "Moonflow - South Bank Road"),
     new FFXLevelSceneDesc(246, "Moonflow - South Bank"),
     new FFXLevelSceneDesc(247, "Moonflow - South Wharf"),
-    new FFXLevelSceneDesc(249, "Moonflow - South Wharf"),
-    new FFXLevelSceneDesc(250, "Moonflow - South Wharf"),
-    new FFXLevelSceneDesc(251, "Moonflow - South Wharf"),
+    // new FFXLevelSceneDesc(249, "Moonflow - South Wharf"), // identical, for now?
+    // new FFXLevelSceneDesc(250, "Moonflow - South Wharf"),
+    // new FFXLevelSceneDesc(251, "Moonflow - South Wharf"),
     new FFXLevelSceneDesc(254, "Moonflow"),
     new FFXLevelSceneDesc(255, "Riding the Shoopuf"),
     new FFXLevelSceneDesc(256, "Moonflow - North Wharf"),
-    new FFXLevelSceneDesc(257, "Moonflow - North Wharf"),
-    new FFXLevelSceneDesc(258, "Moonflow - North Wharf"),
+    // new FFXLevelSceneDesc(257, "Moonflow - North Wharf"),
+    // new FFXLevelSceneDesc(258, "Moonflow - North Wharf"),
     new FFXLevelSceneDesc(260, "Moonflow - North Bank"),
     new FFXLevelSceneDesc(261, "Moonflow - North Bank Road"),
     "Guadosalam",
@@ -461,12 +485,12 @@ const sceneDescs = [
     // new FFXLevelSceneDesc(6, '6'),
     // new FFXLevelSceneDesc(7, '7'),
     // new FFXLevelSceneDesc(10, '10'),
-    new FFXLevelSceneDesc(1, '1'),
-    new FFXLevelSceneDesc(2, '2'),
-    new FFXLevelSceneDesc(3, '3'),
-    new FFXLevelSceneDesc(4, 'blitzball stadium'),
+    new FFXLevelSceneDesc(1, 'grid'),
+    new FFXLevelSceneDesc(2, 'effect test'),
+    new FFXLevelSceneDesc(3, 'blitzball test'),
+    new FFXLevelSceneDesc(4, 'unused blitzball stadium'),
     // new FFXLevelSceneDesc(600, '600'),
-    new FFXLevelSceneDesc(604, '604'),
+    new FFXLevelSceneDesc(604, 'labelled grid'),
     new FFXLevelSceneDesc(620, 'besaid (no water)'),
     // new FFXLevelSceneDesc(621, '621'),
     new FFXLevelSceneDesc(650, 'via purifico '),
