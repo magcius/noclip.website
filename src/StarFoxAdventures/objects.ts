@@ -209,7 +209,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     },
     [298]: { // WM_krazoast
         setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum === 888 || obj.objType.typeNum === 889) {
+            if (obj.objType.typeNum === 482) {
+            } else if (obj.objType.typeNum === 888 || obj.objType.typeNum === 889) {
                 commonSetup(obj, data, 0x18);
             }
         },

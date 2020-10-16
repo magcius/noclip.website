@@ -11,7 +11,7 @@ import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy } from '../Color';
+import { colorFromRGBA, Color, colorCopy, colorFromARGB8, colorFromRGBA8 } from '../Color';
 import { EnvfxManager } from './envfx';
 import { TextureMapping } from '../TextureHolder';
 import { SceneRenderContext } from './render';
@@ -324,6 +324,10 @@ function getKonstColorSel(kcolor: KonstColor): GX.KonstColorSel {
     return GX.KonstColorSel.KCSEL_K0 + kcolor.id;
 }
 
+function getKonstAlphaSel(kcolor: KonstColor): GX.KonstAlphaSel {
+    return GX.KonstAlphaSel.KASEL_K0_A + kcolor.id;
+}
+
 abstract class MaterialBase implements SFAMaterial {
     protected mb: GXMaterialBuilder;
     protected texMtx: TexMtxFunc[] = [];
@@ -531,7 +535,7 @@ export class StandardMaterial extends MaterialBase {
                 return dst;
             }
     
-            if ((this.shader.flags & ShaderFlags.Lava) != 0) {
+            if (this.shader.flags & ShaderFlags.Lava) {
                 this.addTevStagesForLava();
             } else {
                 this.addTevStagesForNonLava();
@@ -823,9 +827,15 @@ export class StandardMaterial extends MaterialBase {
         this.mb.setIndTexScale(getIndTexStageID(indStage1), GX.IndTexScale._1, GX.IndTexScale._1);
         this.mb.setTevIndirect(stage2.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
-        // TODO: set and use tev kcolor
-        this.mb.setTevKAlphaSel(stage0.id, GX.KonstAlphaSel.KASEL_4_8); // TODO
-        this.mb.setTevKColorSel(stage1.id, GX.KonstColorSel.KCSEL_4_8); // TODO
+        const kcnum = this.genKonstColor((dst: Color, matCtx: MaterialRenderContext) => {
+            const animSin = Math.sin(3.142 * matCtx.sceneCtx.animController.envAnimValue0);
+            const factor = 0.5 * animSin + 0.5;
+            colorFromRGBA(dst, 64 * factor / 0xff, 0, 0, 0xc0 / 0xff);
+        });
+
+        this.mb.setTevKAlphaSel(stage0.id, getKonstAlphaSel(kcnum));
+
+        this.mb.setTevKColorSel(stage1.id, getKonstColorSel(kcnum));
 
         this.mb.setTevDirect(stage0.id);
         this.setTevOrder(stage0, texCoord0, texMap2, GX.RasColorChannelID.COLOR0A0);
