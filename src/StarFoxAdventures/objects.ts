@@ -15,6 +15,7 @@ import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 import { SceneRenderContext } from './render';
 import { colorNewFromRGBA } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
+import { computeViewMatrix } from '../Camera';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
@@ -819,6 +820,8 @@ export interface Light {
 
 const scratchQuat0 = quat.create();
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
+const scratchVec0 = vec3.create();
+const scratchMtx0 = mat4.create();
 
 export class ObjectInstance {
     public modelInst: ModelInstance | null = null;
@@ -1015,11 +1018,15 @@ export class ObjectInstance {
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
             const mtx = this.getWorldSRT();
+            const viewMtx = scratchMtx0;
+            computeViewMatrix(viewMtx, objectCtx.sceneCtx.viewerInput.camera);
+            const viewPos = scratchVec0;
+            vec3.transformMat4(viewPos, this.position, viewMtx);
             this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
             this.modelInst.prepareToRender(device, renderInstManager, {
                 ...objectCtx,
                 outdoorAmbientColor: scratchColor0,
-            }, mtx);
+            }, mtx, -viewPos[2]);
 
             // Draw bones
             const drawBones = false;

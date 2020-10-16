@@ -3,7 +3,7 @@ import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, makeSortKeyTranslucent } from "../gfx/render/GfxRenderer";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, makeSortKeyTranslucent, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DataFetcher } from '../DataFetcher';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
@@ -154,7 +154,7 @@ class ModelShapes {
             mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
             mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            shapes[i].prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, boneMatrices);
+            shapes[i].prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, boneMatrices, this.model.isMapBlock);
         }
     }
     
@@ -165,7 +165,7 @@ class ModelShapes {
             mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
             mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
-            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette);
+            water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette, this.model.isMapBlock);
         }
     }
 
@@ -190,7 +190,7 @@ class ModelShapes {
                 fur.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {
                     overrideIndMtx: [scratchMtx1],
                     furLayer: j,
-                }, matrixPalette);
+                }, matrixPalette, this.model.isMapBlock);
             }
         }
     }
@@ -583,13 +583,12 @@ export class Model {
         // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
         const originalPosBuffer = blockData.subarray(posOffset, posCount * 6);
         this.originalPosBuffer = originalPosBuffer.createDataView();
-        // this.posBuffer = new DataView(originalPosBuffer.copyToBuffer());
 
         let nrmBuffer = blockData;
         let nrmTypeFlags = 0;
         if (fields.hasNormals) {
-            const nrmCount = blockDv.getUint16(fields.nrmCount);
             const nrmOffset = blockDv.getUint32(fields.nrmOffset);
+            const nrmCount = blockDv.getUint16(fields.nrmCount);
             // console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
             nrmBuffer = blockData.subarray(nrmOffset);
             nrmTypeFlags = blockDv.getUint8(0x24);
@@ -690,7 +689,6 @@ export class Model {
                 dlInfos.push({
                     offset: readUint32(blockDv, dlOffsetsOffs, i),
                     size: readUint16(blockDv, dlSizesOffs, i),
-                    specialBitAddress: -1,
                 });
             }
         } else {
@@ -1045,7 +1043,7 @@ export class ModelInstance {
         this.skinningDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, sortDepth?: number) {
         this.updateSkinning();
 
         if (this.modelShapes.shapes.length !== 0) {
@@ -1058,6 +1056,8 @@ export class ModelInstance {
                     // All objects are sorted by depth and drawn after all map opaques.
                     template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT + 1);
                 }
+                if (sortDepth !== undefined)
+                    template.sortKey = setSortKeyDepth(template.sortKey, sortDepth);
                 this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i);
                 renderInstManager.popTemplateRenderInst();
             }
