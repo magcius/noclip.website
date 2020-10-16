@@ -21,7 +21,7 @@ class ModelPart {
 class LOD {
     public modelParts: ModelPart[];
     public f: number;
-    public b2: number;
+    public billboard: boolean;
 }
 
 export class UVMD {
@@ -81,7 +81,7 @@ export class UVMD {
             const partCount = view.getUint8(curPos);
             assert(partCount === partsPerLOD);
             // TODO: what do these do?
-            const b2 = view.getUint8(curPos + 1);
+            const billboard = view.getUint8(curPos + 1) !== 0;
             let f = view.getFloat32(curPos + 2);
             f = f * f;
             curPos += 6;
@@ -128,7 +128,7 @@ export class UVMD {
                 modelParts.push({ materials, b5, b6, b7, vec1, vec2, unknownBool });
             }
 
-            this.lods.push({ modelParts, f, b2 });
+            this.lods.push({ modelParts, f, billboard });
         }
 
         this.matrices = [];
@@ -154,11 +154,28 @@ export class UVMDRenderer {
         }
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput,
-        placementMatrix: mat4) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, placementMatrix: mat4) {
         const lod0 = this.uvmd.lods[0];
 
-        // TODO: I think lod0.b2 -> model is always rotated towards the camera
+        // TODO: one of the pots in SS (near the end) is rotated incorrectly
+        // billboard = rotate so that it points towards the camera position
+        if(lod0.billboard) {
+            let camPos = vec3.create();
+            mat4.getTranslation(camPos, viewerInput.camera.worldMatrix);
+
+            // swap around so it's in BAR-space
+            camPos = vec3.fromValues(camPos[2], camPos[0], camPos[1]);
+            
+            let objPos = vec3.create();
+            mat4.getTranslation(objPos, placementMatrix);
+
+            let vecToCam = vec3.create();
+            vec3.subtract(vecToCam, camPos, objPos);
+
+            let out = mat4.create();
+            mat4.rotateZ(out, placementMatrix, (3 * Math.PI/2) + Math.atan2(vecToCam[1], vecToCam[0]));
+            placementMatrix = out;
+        }
 
         for(let part of lod0.modelParts) {
             // TODO: bad
