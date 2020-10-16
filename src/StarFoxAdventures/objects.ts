@@ -660,7 +660,27 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [660]: commonClass(0x18),
     [661]: templeClass(),
     [662]: templeClass(),
-    [663]: templeClass(),
+    [663]: { // WCTempleBri
+        setup: (obj: ObjectInstance, data: DataView) => {
+            commonSetup(obj, data, 0x18);
+            obj.setModelNum(data.getInt8(0x19));
+            // Caution: This will modify the materials for all instances of the model.
+            // TODO: find a cleaner way to do this
+            const mats = obj.modelInst!.getMaterials();
+            for (let i = 0; i < mats.length; i++) {
+                const mat = mats[i];
+                if (mat !== undefined && mat instanceof StandardMaterial) {
+                    mat.setBlendOverride({
+                        setup: (mb: GXMaterialBuilder) => {
+                            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+                            mb.setZMode(true, GX.CompareType.LEQUAL, false);
+                        },
+                    });
+                    mat.rebuild();
+                }
+            }
+        },
+    },
     [664]: { // WCFloorTile
         setup: (obj: ObjectInstance, data: DataView) => {
             obj.yaw = angle16ToRads(-0x4000);

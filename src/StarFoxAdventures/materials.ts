@@ -862,7 +862,7 @@ export class StandardMaterial extends MaterialBase {
             0.008, 0.0,   0.0,   0.8 * 0.01 * mapOriginX,
             0.0,   0.008, 0.0,   0.0,
             0.0,   0.0,   0.008, 0.8 * 0.01 * mapOriginZ,
-            0.0,   0.0,   0.0,   0.1
+            0.0,   0.0,   0.0,   1.0
         );
         const postRotate0 = mat4.create();
         mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
@@ -877,7 +877,7 @@ export class StandardMaterial extends MaterialBase {
             0.005, 0.0,   0.0,   0.5 * 0.01 * mapOriginX,
             0.0,   0.005, 0.0,   0.0,
             0.0,   0.0,   0.005, 0.5 * 0.01 * mapOriginZ,
-            0.0,   0.0,   0.0,   0.1
+            0.0,   0.0,   0.0,   1.0
         );
         const postRotate1 = mat4.create();
         mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
@@ -981,9 +981,8 @@ export class StandardMaterial extends MaterialBase {
             const texCoord1 = this.genScrollableTexCoord(texMap1, this.shader.layers[1].scrollingTexMtx);
 
             this.addTevStageForTexture(0, texMap0, texCoord0);
-            if (this.shader.flags & ShaderFlags.Reflective) {
+            if (this.shader.flags & ShaderFlags.Reflective)
                 this.addTevStagesForReflectiveFloor();
-            }
             this.addTevStagesForTextureWithMode(9, texMap1, texCoord1);
             this.addTevStageForMultColor0A0();
         } else {
@@ -993,16 +992,14 @@ export class StandardMaterial extends MaterialBase {
                 const texMap = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
                 const texCoord = this.genScrollableTexCoord(texMap, layer.scrollingTexMtx);
 
-                if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
+                if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend)
                     this.addTevStagesForIndoorOutdoorBlend(texMap, texCoord);
-                } else {
+                else
                     this.addTevStagesForTextureWithMode(layer.tevMode & 0x7f, texMap, texCoord);
-                }
             }
 
-            if (this.shader.flags & ShaderFlags.Reflective) {
+            if (this.shader.flags & ShaderFlags.Reflective)
                 this.addTevStagesForReflectiveFloor();
-            }
         }
     }
 }
