@@ -140,7 +140,7 @@ export class ShapeGeometry {
     }
 
     public setOnRenderInst(device: GfxDevice, material: ShapeMaterial, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst,
-        matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[], camera: Camera)
+        matrix: ReadonlyMat4, matrixPalette: ReadonlyMat4[], camera: Camera, setSortDepthFromAabb: boolean)
     {
         if (this.shapeHelper === null) {
             this.shapeHelper = new MyShapeHelper(device, renderInstManager.gfxRenderCache,
@@ -163,7 +163,7 @@ export class ShapeGeometry {
         const modelViewMtx = scratchMtx1;
         mat4.mul(modelViewMtx, viewMtx, matrix);
 
-        if (this.aabb !== undefined) {
+        if (setSortDepthFromAabb && this.aabb !== undefined) {
             const center = scratchVec0;
             this.aabb.centerPoint(center);
             // FIXME: Should aabb.transform be used instead?
@@ -288,14 +288,14 @@ export class Shape {
         this.geom.reloadVertices();
     }
 
-    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[]) {
-        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera);
+    public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], setSortDepthFromAabb: boolean) {
+        this.geom.setOnRenderInst(device, this.material, renderInstManager, renderInst, modelMatrix, matrixPalette, modelCtx.sceneCtx.viewerInput.camera, setSortDepthFromAabb);
         this.material.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[]) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions, matrixPalette: ReadonlyMat4[], setSortDepthFromAabb: boolean) {
         const renderInst = renderInstManager.newRenderInst();
-        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions, matrixPalette);
+        this.setOnRenderInst(device, renderInstManager, renderInst, modelMatrix, modelCtx, matOptions, matrixPalette, setSortDepthFromAabb);
         renderInstManager.submitRenderInst(renderInst);
     }
 }
