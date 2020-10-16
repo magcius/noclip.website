@@ -108,6 +108,7 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         },
     },
     [240]: commonClass(0x18),
+    [244]: commonClass(0x18), // VFP_RoundDo
     [248]: commonClass(),
     [249]: { // ProjectileS
         setup: (obj: ObjectInstance, data: DataView) => {
@@ -134,6 +135,7 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         },
     },
     [256]: commonClass(0x1a),
+    [258]: commonClass(), // StayPoint
     [259]: { // CurveFish
         setup: (obj: ObjectInstance, data: DataView) => {
             obj.scale *= data.getUint8(0x18) / 100;
@@ -207,7 +209,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     },
     [298]: { // WM_krazoast
         setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum === 888 || obj.objType.typeNum === 889) {
+            if (obj.objType.typeNum === 482) {
+            } else if (obj.objType.typeNum === 888 || obj.objType.typeNum === 889) {
                 commonSetup(obj, data, 0x18);
             }
         },
@@ -544,6 +547,16 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             }
         },
     },
+    [541]: commonClass(0x18), // VFPLift2
+    [542]: commonClass(0x18), // VFP_Block1
+    [543]: commonClass(0x18), // VFPLavaBloc
+    [544]: { // VFP_DoorSwi
+        setup: (obj: ObjectInstance, data: DataView) => {
+            commonSetup(obj, data, 0x18, 0x19);
+            // Roll is 16 bits
+            obj.roll = angle16ToRads(data.getInt16(0x1c));
+        },
+    },
     [549]: commonClass(),
     [550]: { // VFP_lavapoo
         setup: (obj: ObjectInstance, data: DataView) => {
@@ -553,6 +566,12 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             obj.scale = 1 / (scaleParam / getRandomInt(600, 1000));
         },
     },
+    [551]: { // VFP_lavasta
+        setup: (obj: ObjectInstance, data: DataView) => {
+            obj.position[1] += data.getInt16(0x1a);
+        },
+    },
+    [552]: commonClass(0x18), // VFPSpPl
     [576]: commonClass(),
     [579]: commonClass(0x18),
     [597]: commonClass(0x18),
@@ -848,10 +867,16 @@ export class ObjectInstance {
         
         this.setModelNum(0);
 
-        if (objClass in SFA_CLASSES)
-            SFA_CLASSES[objClass].setup(this, objParams);
-        else
+        if (objClass in SFA_CLASSES) {
+            try {
+                SFA_CLASSES[objClass].setup(this, objParams);
+            } catch (e) {
+                console.warn(`Failed to setup object class ${objClass} type ${typeNum} due to exception:`);
+                console.error(e);
+            }
+        } else {
             console.log(`Don't know how to setup object class ${objClass} objType ${typeNum}`);
+        }
     }
 
     public mount() {
