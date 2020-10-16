@@ -324,7 +324,7 @@ const sceneDescs = [
     new SFAWorldSceneDesc('dragrock', 'dragrock', 2, 'Dragon Rock'),
     new SFAWorldSceneDesc('temple', 'volcano', 4, 'Volcano Force Point Temple'),
     // new SFAWorldSceneDesc('bossdrakorflatr', 'bossdrakor', 44, 'Boss Drakor'),
-    new SFAWorldSceneDesc('dfshrine', 'dfshrine', 31, 'Krazoa Shrine (Test of Combat)'),
+    new SFAWorldSceneDesc('dfshrine', ['dfshrine', 'warlock' /* FIXME: needs another directory */], 31, 'Krazoa Shrine (Test of Combat)'),
     new SFAWorldSceneDesc('mmshrine', 'mmshrine', 32, 'Krazoa Shrine (Test of Fear)'),
     new SFAWorldSceneDesc('ecshrine', 'ecshrine', 33, 'Krazoa Shrine (Test of Observation)'),
     new SFAWorldSceneDesc('gpshrine', 'gpshrine', 34, 'Krazoa Shrine (Test of Knowledge)'),
@@ -339,7 +339,7 @@ const sceneDescs = [
     new SFAWorldSceneDesc('linkg', 'linkg', 71, 'LightFoot Village Link'),
     new SFAWorldSceneDesc('linkh', 'linkh', 72, 'Cape Claw Link'),
     new SFAWorldSceneDesc('linkj', 'linkj', 73, 'Ocean Force Point Link'),
-    new SFAWorldSceneDesc('linki', 'linki', 74, 'CloudRunner Fortress 2?'),
+    new SFAWorldSceneDesc('linki', 'linki', 74, 'CloudRunner Fortress Link?'),
     new SFAWorldSceneDesc('animtest', 'animtest', 26, 'Test Map (animtest)'),
 
     // 'Miscellaneous',
