@@ -476,10 +476,8 @@ export class UVTXRenderHelper {
     private texel1TextureData: TextureData;
 
     //TODO: better
-    private shiftS1: number;
-    private shiftT1: number;
-    private shiftS2: number;
-    private shiftT2: number;
+    private texel0TileState: RDP.TileState;
+    private texel1TileState: RDP.TileState;
 
     constructor(public uvtx: UVTX, device: GfxDevice) {
         this.hasPairedTexture = this.uvtx.otherUVTX !== null;
@@ -496,10 +494,8 @@ export class UVTXRenderHelper {
             this.texel0TextureData = new TextureData(device, this.uvtx);
         }
 
-        this.shiftS1 = uvtx.rspState.primitiveTile.shifts;
-        this.shiftT1 = uvtx.rspState.primitiveTile.shiftt;
-        this.shiftS2 = uvtx.rspState.tileAfterPrimitiveTile.shifts;
-        this.shiftT2 = uvtx.rspState.tileAfterPrimitiveTile.shiftt;
+        this.texel0TileState = uvtx.rspState.primitiveTile;
+        this.texel1TileState = uvtx.rspState.tileAfterPrimitiveTile;
     }
 
     public getTextureMappings() {
@@ -511,34 +507,44 @@ export class UVTXRenderHelper {
     }
 
     public fillTexMatrices(drawParams: Float32Array, drawParamsOffs: number) {
-        drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, this.makeMat(this.texel0TextureData, this.uvtx.scrollAnim1, this.shiftS1, this.shiftT1));
+        drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, UVTXRenderHelper.makeMat(this.texel0TextureData, this.uvtx.scrollAnim1, this.texel0TileState, this.uvtx.rspState.textureState.s, this.uvtx.rspState.textureState.t));
 
         if(this.hasPairedTexture) {
-            drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, this.makeMat(this.texel1TextureData, this.uvtx.scrollAnim2, this.shiftS2, this.shiftT2));
+            drawParamsOffs += fillMatrix4x2(drawParams, drawParamsOffs, UVTXRenderHelper.makeMat(this.texel1TextureData, this.uvtx.scrollAnim2, this.texel1TileState, this.uvtx.rspState.textureState.s, this.uvtx.rspState.textureState.t));
         }
     }
 
-    private makeMat(texData: TextureData, scrollAnim: TexScrollAnim | null, shiftS: number, shiftT: number) {
-        // TODO: mask s,t?
-
-        // TODO: double check that this is the correct way of implementing the shift values
-        let shiftSMult = 1 << shiftS;
-        if(shiftS > 10) {
-            shiftSMult = Math.pow(2, shiftS - 16);
+    private static makeMat(texData: TextureData, scrollAnim: TexScrollAnim | null, tileState: RDP.TileState, scaleS: number, scaleT: number) {
+        let shiftSMult = 1 << tileState.shifts;
+        if(tileState.shifts > 10) {
+            shiftSMult = Math.pow(2, tileState.shifts - 16);
         }
 
-        let shiftTMult = 1 << shiftT;
-        if(shiftT > 10) {
-            shiftTMult = Math.pow(2, shiftT - 16);
+        let shiftTMult = 1 << tileState.shiftt;
+        if(tileState.shiftt > 10) {
+            shiftTMult = Math.pow(2, tileState.shiftt - 16);
         }
         
-        // TODO: implement scale
-        // TODO: adjust for the 0.5 (if necessary)
+        // TODO: figure out why the skyboxes all render weirdly
+
+        // s - uls                                            // Adjust for tile position
+        // (s - uls) / (scaleS * shiftSMult)                  // Adjust for scale & shift
+        // (s - uls) / (scaleS * shiftSMult * texData.width)  // Adjust for modern graphics api coordinate scheme
+        //
+        // all in all ->
+        // s / (scaleS * shiftSMult * texData.width) - uls / (scaleS * shiftSMult * texData.width)
+
+        const sDiv = scaleS * shiftSMult * texData.width;
+        const tDiv = scaleT * shiftTMult * texData.height;
+
+        // TODO: adjust for the 0.5 (see the chandelier in WW to check that you have it right)
+        // TODO: check this logic
+        // TODO: implement mask?
         let texMatrix = mat4.fromValues(
-            1 / (shiftSMult * texData.width), 0, 0, 0,
-            0, 1 / (shiftTMult * texData.height), 0, 0,
+            1 / sDiv, 0, 0, 0,
+            0, 1 / tDiv, 0, 0,
             0, 0, 1, 0,
-            0, 0, 0, 1
+            -tileState.uls / sDiv, -tileState.ult / tDiv, 0, 1
         );
 
         if(scrollAnim !== null) {

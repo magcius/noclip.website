@@ -4,7 +4,7 @@ import { TexSeqAnimMode, UVTX } from "./UVTX";
 
 class UVTSFrame {
     public uvtx: UVTX | null;
-    public uvtxIndex: number; // Loading UVTX directly causes infinite recursion. We load this now and load the uvtx later. TODO: better solution?
+    public uvtxIndex: number; // Loading UVTX directly causes infinite recursion. We load this now and load the uvtx later.
     public unk_sbyte: number;
     public frameLengthUnits: number;
 }
