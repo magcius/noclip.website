@@ -1,9 +1,9 @@
 
 import { mat4, quat, ReadonlyMat4, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZeroVec3, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3Zero } from '../../MathHelpers';
+import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3Zero } from '../../MathHelpers';
 import { fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorEye, addVelocityMoveToDirection, blendQuatUpFront, calcGravity, calcGravityVector, calcPerpendicFootToLine, calcRailPointPos, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, excludeCalcShadowToMyCollision, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getPlayerPos, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, invalidateShadowAll, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isOnSwitchA, isSameDirection, isValidSwitchA, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, rotateQuatRollBall, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBtp, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateHitSensors, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorEye, addVelocityMoveToDirection, blendQuatUpFront, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailPointPos, calcUpVec, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, excludeCalcShadowToMyCollision, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getPlayerPos, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, invalidateShadowAll, isActionEnd, isActionStart, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchDead, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, rotateQuatRollBall, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBtp, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateHitSensors, validateShadowAll, vecKillElement } from '../ActorUtil';
 import { CollisionKeeperCategory, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isFloorPolygonAngle, isGroundCodeDamage, isGroundCodeDamageFire, isOnGround, isWallPolygonAngle, Triangle, TriangleFilterFunc } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, isEffectValid, setEffectHostMtx } from '../EffectSystem';
 import { initFur } from '../Fur';
@@ -14,8 +14,8 @@ import { isDead, LiveActor, makeMtxTRFromActor, MessageType, ZoneAndLayer } from
 import { getDeltaTimeFrames, getObjectName, SceneObjHolder } from '../Main';
 import { isInWater } from '../MiscMap';
 import { DrawBufferType } from '../NameObj';
-import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, setShadowDropLength } from '../Shadow';
-import { isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
+import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, setShadowDropLength } from '../Shadow';
+import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
 import { isEqualStageName, PartsModel } from './MiscActor';
 import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
 
@@ -2004,5 +2004,180 @@ export class DinoPackun extends LiveActor {
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         super.requestArchives(sceneObjHolder, infoIter);
         sceneObjHolder.modelCache.requestObjectData('DinoPackunTailBall');
+    }
+}
+
+export function turnVecToVecRadian(dst: vec3, src: ReadonlyVec3, target: ReadonlyVec3, speed: number, up: ReadonlyVec3): number {
+    const dot = vec3.dot(src, target);
+
+    const diffAngle = Math.acos(dot);
+    if (isNearZero(diffAngle, 0.001))
+        return 0.0;
+
+    const turnAngle = Math.min(speed, diffAngle);
+    const remaining = diffAngle - turnAngle;
+
+    const canTurnTowardsTarget = dot >= 0 || !isSameDirection(src, target, 0.01);
+    if (canTurnTowardsTarget) {
+        quatSetRotate(scratchQuat, src, target, turnAngle / diffAngle);
+    } else {
+        quat.setAxisAngle(scratchQuat, up, turnAngle);
+    }
+
+    vec3.transformQuat(dst, src, scratchQuat);
+    return remaining;
+}
+
+const enum TakoboNrv { Wait, Move, Attack }
+const enum TakoboMoveDir { XForward, XBack, ZForward, ZBack }
+export class Takobo extends LiveActor<TakoboNrv> {
+    private frontVec = vec3.create();
+    private moveDir = vec3.create();
+    private moveIsGoingBack: boolean;
+    private moveTime: number;
+    private moveDistance: number;
+    private moveTimeStep: number;
+    private moveDistanceStart: number;
+    private moveDistanceEnd: number;
+    private initPos = vec3.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'Takobo');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        vec3.copy(this.initPos, this.translation);
+        const arg0 = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'Takobo');
+        connectToSceneEnemy(sceneObjHolder, this);
+
+        const baseMtx = this.getBaseMtx()!;
+        getMatrixAxisZ(this.frontVec, baseMtx);
+        getMatrixAxisY(this.gravityVector, baseMtx);
+        vec3.negate(this.gravityVector, this.gravityVector);
+
+        const moveDir: TakoboMoveDir = fallback(getJMapInfoArg1(infoIter), TakoboMoveDir.ZForward);
+        if (moveDir === TakoboMoveDir.XForward) {
+            getMatrixAxisX(this.moveDir, baseMtx);
+            this.moveIsGoingBack = false;
+        } else if (moveDir === TakoboMoveDir.XBack) {
+            getMatrixAxisX(this.moveDir, baseMtx);
+            this.moveIsGoingBack = true;
+        } else if (moveDir === TakoboMoveDir.ZForward) {
+            getMatrixAxisZ(this.moveDir, baseMtx);
+            this.moveIsGoingBack = false;
+        } else if (moveDir === TakoboMoveDir.ZBack) {
+            getMatrixAxisZ(this.moveDir, baseMtx);
+            this.moveIsGoingBack = true;
+        }
+        this.moveTime = fallback(getJMapInfoArg2(infoIter), 5.0);
+        this.moveDistance = fallback(getJMapInfoArg3(infoIter), 500.0);
+
+        // declareStarPiece
+        // declareCoin
+        // initSound
+        this.initBinder(80.0 * this.scale[1], 60.0 * this.scale[1], 0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSensor()
+        this.initHitSensor();
+        vec3.set(scratchVec3, 0.0, 70.0 * this.scale[1], 0.0);
+        addHitSensor(sceneObjHolder, this, 'body', HitSensorType.Takobo, 32, scratchVec3[1], scratchVec3);
+        // addHitSensorAtJointEnemyAttack
+
+        initShadowVolumeSphere(sceneObjHolder, this, 70.0 * this.scale[1]);
+        onCalcShadow(this);
+
+        this.initNerve(TakoboNrv.Wait);
+        initLightCtrl(sceneObjHolder, this);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        calcGravity(sceneObjHolder, this);
+        this.calcBinderFlag = false;
+    }
+
+    public calcAndSetBaseMtx(): void {
+        calcMtxFromGravityAndZAxis(this.modelInstance!.modelMatrix, this, this.gravityVector, this.frontVec);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TakoboNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === TakoboNrv.Wait) {
+            if (isFirstStep(this)) {
+                startBck(this, 'Wait');
+                vec3.zero(this.velocity);
+            }
+
+            if (isGreaterEqualStep(this, 60)) {
+                this.setNerve(TakoboNrv.Move);
+            }
+        } else if (currentNerve === TakoboNrv.Move) {
+            if (isFirstStep(this)) {
+                vec3.scale(scratchVec3, this.moveDir, this.moveDistance);
+                vec3.sub(scratchVec3, this.initPos, scratchVec3);
+                vec3.sub(scratchVec3, this.translation, scratchVec3);
+
+                if (this.moveIsGoingBack) {
+                    this.moveDistanceStart = -this.moveDistance;
+                    this.moveDistanceEnd = -this.moveDistance + vec3.dot(scratchVec3, this.moveDir);
+                } else {
+                    this.moveDistanceEnd = this.moveDistance;
+                    this.moveDistanceStart = -this.moveDistance +  vec3.dot(scratchVec3, this.moveDir);
+                }
+                this.moveTimeStep = (this.moveDistanceEnd - this.moveDistanceStart) / this.moveTime;
+                this.moveTimeStep = (this.moveTimeStep * 1.3) | 0;
+            }
+
+            let moveT = calcNerveRate(this, this.moveTimeStep);
+            if (this.moveIsGoingBack)
+                moveT = 1.0 - moveT;
+
+            const distance = getEaseInOutValue(moveT, this.moveDistanceStart, this.moveDistanceEnd);
+            vec3.scaleAndAdd(scratchVec3, this.initPos, this.moveDir, distance);
+            vec3.sub(this.velocity, scratchVec3, this.translation);
+
+            if (isGreaterEqualStep(this, this.moveTimeStep)) {
+                this.moveIsGoingBack = !this.moveIsGoingBack;
+                this.setNerve(TakoboNrv.Move);
+            } else {
+                getPlayerPos(scratchVec3, sceneObjHolder);
+                vec3.sub(scratchVec3, scratchVec3, this.translation);
+                const distance = vec3.length(scratchVec3);
+                vecKillElement(scratchVec3, scratchVec3, this.gravityVector);
+                vec3.normalize(scratchVec3, scratchVec3);
+
+                if (distance <= 250.0) {
+                    const distance = turnVecToVecRadian(this.frontVec, this.frontVec, scratchVec3, 0.05, this.gravityVector);
+                    if (distance < 0.1) {
+                        this.setNerve(TakoboNrv.Attack);
+                    }
+                } else if (distance < 800.0) {
+                    turnVecToVecRadian(this.frontVec, this.frontVec, scratchVec3, 0.05, this.gravityVector);
+                }
+            }
+        } else if (currentNerve === TakoboNrv.Attack) {
+            if (isFirstStep(this)) {
+                startAction(this, 'Attack');
+            }
+
+            vec3.zero(this.velocity);
+            if (isActionEnd(this)) {
+                this.setNerve(TakoboNrv.Wait);
+            } else if (isGreaterEqualStep(this, 90)) {
+                // invalidate attack sensor
+            } else if (isGreaterEqualStep(this, 85)) {
+                setBckRate(this, 1.0);
+                // validate attack sensor
+            }
+        }
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        emitEffect(sceneObjHolder, this, 'TakoboDeath');
+        if (isValidSwitchDead(this))
+            this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
+        super.makeActorDead(sceneObjHolder);
     }
 }

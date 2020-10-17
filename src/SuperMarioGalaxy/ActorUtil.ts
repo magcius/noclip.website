@@ -498,6 +498,10 @@ export function isActionStart(actor: LiveActor, action: string): boolean {
         return isBckPlaying(actor, action);
 }
 
+export function isActionEnd(actor: LiveActor): boolean {
+    return isBckStopped(actor);
+}
+
 export function tryStartAction(actor: LiveActor, action: string): boolean {
     if (isActionStart(actor, action))
         return false;
