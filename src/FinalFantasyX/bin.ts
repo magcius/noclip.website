@@ -96,6 +96,7 @@ export interface LevelPart {
     layer: number;
     position: vec3;
     euler: vec3;
+    eulerOrder: number;
     models: LevelModel[];
     effectIndices: number[];
 }
@@ -725,6 +726,8 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelT
             const layer = view.getUint16(offs + 0x04, true);
             const euler = vec3FromView(view, offs + 0x10, true);
             const position = vec3FromView(view, offs + 0x20, true);
+            const eulerOrder = view.getUint16(offs + 0x30, true);
+            assert(eulerOrder === 0 || eulerOrder === 5)
             const effectCount = view.getUint32(offs + 0x34, true);
             assert(effectCount <= 4);
             const effectIndices: number[] = [];
@@ -737,6 +740,7 @@ export function parseLevelGeometry(buffer: ArrayBufferSlice, textureData: LevelT
                 euler,
                 models: [],
                 effectIndices,
+                eulerOrder,
             }
             parts.push(currPart);
         } else if (sectionType === MapSectionType.MODEL) {

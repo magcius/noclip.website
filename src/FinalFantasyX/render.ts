@@ -410,8 +410,17 @@ export function findTextureIndex(frame: number, effect: BIN.PartEffect): number 
     return key.data[1][0];
 }
 
+const enum EulerOrder{
+    XYZ,
+    YXZ,
+    ZXY,
+    XZY,
+    YZX,
+    ZYX,
+}
+
 const scratchVec = vec3.create();
-function applyEffect(dst: mat4, params: vec3, frame: number, effect: BIN.PartEffect): void {
+function applyEffect(dst: mat4, params: vec3, frame: number, effect: BIN.PartEffect, eulerOrder: EulerOrder): void {
     frame = frame % effect.length;
     let key = effect.keyframes[0];
     for (let i = 0; i < effect.keyframes.length; i++) {
@@ -441,7 +450,14 @@ function applyEffect(dst: mat4, params: vec3, frame: number, effect: BIN.PartEff
         } break;
         case BIN.EffectType.ROTATION: {
             mat4.copy(scratchMatrix, dst);
-            computeModelMatrixR(dst, scratchVec[0], scratchVec[1], scratchVec[2]);
+            if (eulerOrder === EulerOrder.XYZ)
+                computeModelMatrixR(dst, scratchVec[0], scratchVec[1], scratchVec[2]);
+            else if (eulerOrder === EulerOrder.ZYX) {
+                mat4.fromXRotation(dst, scratchVec[0]);
+                mat4.rotateY(dst, dst, scratchVec[1]);
+                mat4.rotateZ(dst, dst, scratchVec[2]);
+            }
+
             dst[12] = scratchMatrix[12];
             dst[13] = scratchMatrix[13];
             dst[14] = scratchMatrix[14];
@@ -478,7 +494,7 @@ export class LevelPartInstance {
 
         vec3.copy(paramScratch, Vec3Zero);
         for (let i = 0; i < this.effects.length; i++)
-            applyEffect(this.modelMatrix, paramScratch, this.animationController.getTimeInFrames(), this.effects[i]);
+            applyEffect(this.modelMatrix, paramScratch, this.animationController.getTimeInFrames(), this.effects[i], this.part.eulerOrder);
 
         for (let i = 0; i < this.models.length; i++)
             this.models[i].prepareToRender(renderInstManager, viewerInput, this.modelMatrix, paramScratch, textureRemaps);
