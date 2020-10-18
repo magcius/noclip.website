@@ -996,9 +996,10 @@ class DiskGravity extends PlanetGravity {
     }
 }
 
+const enum DiskTorusGravityEdgeType { None, Inside, Outside, Both }
 class DiskTorusGravity extends PlanetGravity {
     private bothSide = false;
-    private edgeType = 3;
+    private edgeType = DiskTorusGravityEdgeType.Both;
     private diskRadius = 0;
     private radius = 2000.0;
     private position = vec3.create();
@@ -1011,7 +1012,7 @@ class DiskTorusGravity extends PlanetGravity {
         this.bothSide = v;
     }
 
-    public setEdgeType(v: number): void {
+    public setEdgeType(v: DiskTorusGravityEdgeType): void {
         this.edgeType = v;
     }
 
@@ -1057,7 +1058,7 @@ class DiskTorusGravity extends PlanetGravity {
 
         let dist: number;
         if (length >= this.worldRadius) {
-            if (this.edgeType === 0 || this.edgeType === 1)
+            if (this.edgeType === DiskTorusGravityEdgeType.None || this.edgeType === DiskTorusGravityEdgeType.Inside)
                 return -1;
 
             vec3.scaleAndAdd(scratchVec3a, this.worldPosition, scratchVec3b, this.worldRadius);
@@ -1073,7 +1074,7 @@ class DiskTorusGravity extends PlanetGravity {
 
             dist = Math.abs(dot);
         } else {
-            if (this.edgeType === 0 || this.edgeType === 2)
+            if (this.edgeType === DiskTorusGravityEdgeType.None || this.edgeType === DiskTorusGravityEdgeType.Outside)
                 return -1;
 
             vec3.scaleAndAdd(scratchVec3a, this.worldPosition, scratchVec3b, this.worldRadius - this.diskRadius);
@@ -1572,7 +1573,7 @@ export function createGlobalDiskTorusGravityObj(zoneAndLayer: ZoneAndLayer, scen
 
     // DiskTorusGravityCreator::settingFromJMapArgs
     const arg0 = fallback(getJMapInfoArg0(infoIter), -1);
-    const arg1 = fallback(getJMapInfoArg1(infoIter), -1);
+    const arg1: DiskTorusGravityEdgeType = fallback(getJMapInfoArg1(infoIter), -1);
     const arg2 = fallback(getJMapInfoArg2(infoIter), -1);
 
     gravity.setBothSide(arg0 !== 0);
