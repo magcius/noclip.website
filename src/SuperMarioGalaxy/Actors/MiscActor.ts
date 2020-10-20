@@ -1427,7 +1427,6 @@ export class Sky extends LiveActor {
 }
 
 const enum AirNrv { In, Out }
-
 export class Air extends LiveActor<AirNrv> {
     private distInThresholdSq: number;
     private distOutThresholdSq: number;
@@ -1508,7 +1507,6 @@ export class PriorDrawAir extends Air {
 }
 
 const enum ShootingStarNrv { PreShooting, Shooting, WaitForNextShoot }
-
 export class ShootingStar extends LiveActor<ShootingStarNrv> {
     private delay: number;
     private distance: number;
@@ -1727,7 +1725,6 @@ export class CrystalCage extends LiveActor {
 }
 
 const enum LavaSteamNrv { Wait, Steam }
-
 export class LavaSteam extends LiveActor<LavaSteamNrv> {
     private effectScale = vec3.create();
 
@@ -2044,7 +2041,6 @@ function explerp(dst: vec3, target: vec3, k: number): void {
 }
 
 const enum SeaGullNrv { HoverFront, HoverLeft, HoverRight }
-
 class SeaGull extends LiveActor<SeaGullNrv> {
     private direction: boolean;
     private updatePosCounter: number;
@@ -2517,7 +2513,6 @@ export class AirBubbleHolder extends LiveActorGroup<AirBubble> {
 }
 
 const enum AirBubbleGeneratorNrv { Wait, Generate }
-
 export class AirBubbleGenerator extends LiveActor<AirBubbleGeneratorNrv> {
     private delay: number;
     private lifetime: number;
@@ -2606,7 +2601,7 @@ export class TreasureBoxCracked extends LiveActor<TreasureBoxNrv> {
             }
         } else if (currentNerve === TreasureBoxNrv.AlwaysOpen) {
             if (isFirstStep(this)) {
-                invalidateHitSensors(this);
+                // invalidateHitSensors(this);
                 startBck(this, 'Open');
                 setBckFrameAndStop(this, getBckFrameMax(this));
             }
@@ -2652,7 +2647,6 @@ export class SubmarineSteam extends LiveActor {
 }
 
 const enum PalmIslandNrv { Wait, Float }
-
 export class PalmIsland extends LiveActor<PalmIslandNrv> {
     private floatDelay: number;
     private rippleTranslation = vec3.create();
@@ -3319,7 +3313,6 @@ export class StarPieceGroup extends LiveActor<StarPieceGroupNrv> {
 }
 
 const enum ShellfishNrv { Wait, Open, OpenWait, CloseSignal, Close }
-
 const shellfishChipOffset = vec3.fromValues(0, 100, 50);
 const shellfishCoinOffset = vec3.fromValues(0, 50, 30);
 export class Shellfish extends LiveActor<ShellfishNrv> {
@@ -5800,7 +5793,6 @@ export class ElectricRailMoving extends LiveActor implements ElectricRailBase {
 }
 
 const enum FluffWindEffectNrv { Init, BrowWind }
-
 class FluffWindEffect extends LiveActor<FluffWindEffectNrv> {
     private effectHostMtx = mat4.create();
     private effectName: string;
@@ -6210,7 +6202,6 @@ export class MovieStarter extends LiveActor {
 }
 
 const enum WaterLeakPipeNrv { Wait, Freeze }
-
 export class WaterLeakPipe extends LiveActor<WaterLeakPipeNrv> {
     private jointTop: mat4;
     private jointBottom: mat4;
@@ -7097,7 +7088,6 @@ class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
 }
 
 const enum AstroDomeSkyNrv { Wait }
-
 export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
     private static skyNames: string[] = [
         'AstroDomeSkyA',
