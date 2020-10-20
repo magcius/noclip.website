@@ -894,9 +894,9 @@ export class ModelCache {
 
     private fetchFile(path: string, cacheBust: number = 0): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
-        let fetchPath = path;
+        let fetchPath = `${pathBase}/${path}`;
         if (cacheBust > 0)
-            fetchPath = `${path}?cache_bust=${cacheBust}`;
+            fetchPath = `${fetchPath}?cache_bust=${cacheBust}`;
         const p = this.dataFetcher.fetchData(fetchPath, { abortedCallback: () => {
             this.filePromiseCache.delete(path);
         } });
@@ -923,7 +923,8 @@ export class ModelCache {
     }
 
     private async requestArchiveDataInternal(archivePath: string): Promise<RARC.JKRArchive> {
-        let buffer: ArrayBufferSlice = await this.dataFetcher.fetchData(archivePath, { abortedCallback: () => {
+        let fetchPath = `${pathBase}/${archivePath}`;
+        let buffer: ArrayBufferSlice = await this.dataFetcher.fetchData(fetchPath, { abortedCallback: () => {
             this.archivePromiseCache.delete(archivePath);
         } });
 
@@ -950,18 +951,28 @@ export class ModelCache {
     }
 
     public async fetchObjectData(arcName: string): Promise<RARC.JKRArchive> {
-        const archive = await this.fetchArchive(`${pathBase}/Object/${arcName}.arc`);
+        const archive = await this.fetchArchive(`Object/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resObj);
         return archive;
     }
 
     public async fetchMsgData(arcName: string) {
-        const archive = await this.fetchArchive(`${pathBase}/Msg/${arcName}.arc`);
+        const archive = await this.fetchArchive(`Msg/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resSystem);
     }
 
+    public requestFileData(path: string): cPhs__Status {
+        if (this.fileDataCache.has(path))
+            return cPhs__Status.Complete;
+
+        if (!this.filePromiseCache.has(path))
+            this.fetchFileData(path);
+
+        return cPhs__Status.Loading;
+    }
+
     public requestObjectData(arcName: string): cPhs__Status {
-        const archivePath = `${pathBase}/Object/${arcName}.arc`;
+        const archivePath = `Object/${arcName}.arc`;
 
         if (this.archiveCache.has(archivePath))
             return cPhs__Status.Complete;
@@ -973,7 +984,7 @@ export class ModelCache {
     }
 
     public requestMsgData(arcName: string): cPhs__Status {
-        const archivePath = `${pathBase}/Msg/${arcName}.arc`;
+        const archivePath = `Msg/${arcName}.arc`;
 
         if (this.archiveCache.has(archivePath))
             return cPhs__Status.Complete;
@@ -985,7 +996,7 @@ export class ModelCache {
     }
 
     public async fetchStageData(arcName: string): Promise<void> {
-        const archive = await this.fetchArchive(`${pathBase}/Stage/${this.currentStage}/${arcName}.arc`);
+        const archive = await this.fetchArchive(`Stage/${this.currentStage}/${arcName}.arc`);
         this.resCtrl.mountRes(this.device, this.cache, arcName, archive, this.resCtrl.resStg);
     }
 
@@ -1073,11 +1084,11 @@ class SceneDesc {
         modelCache.fetchObjectData(`Always`);
         modelCache.fetchStageData(`Stage`);
 
-        modelCache.fetchFileData(`${pathBase}/extra.crg1_arc`, 8);
-        modelCache.fetchFileData(`${pathBase}/f_pc_profiles.crg1_arc`);
+        modelCache.fetchFileData(`extra.crg1_arc`, 8);
+        modelCache.fetchFileData(`f_pc_profiles.crg1_arc`);
 
         const particleArchives = [
-            `${pathBase}/Particle/common.jpc`,
+            `Particle/common.jpc`,
         ];
 
         for (let i = 0; i < particleArchives.length; i++)
@@ -1091,7 +1102,7 @@ class SceneDesc {
 
         await modelCache.waitForLoad();
 
-        const f_pc_profiles = BYML.parse<fpc_pc__ProfileList>(modelCache.getFileData(`${pathBase}/f_pc_profiles.crg1_arc`), BYML.FileType.CRG1);
+        const f_pc_profiles = BYML.parse<fpc_pc__ProfileList>(modelCache.getFileData(`f_pc_profiles.crg1_arc`), BYML.FileType.CRG1);
         const framework = new fGlobals(f_pc_profiles);
 
         fpcPf__Register(framework, fpc__ProcessName.d_s_play, d_s_play);
@@ -1100,7 +1111,7 @@ class SceneDesc {
         d_a__RegisterConstructors(framework);
         LegacyActor__RegisterFallbackConstructor(framework);
 
-        const symbolMap = new SymbolMap(modelCache.getFileData(`${pathBase}/extra.crg1_arc`));
+        const symbolMap = new SymbolMap(modelCache.getFileData(`extra.crg1_arc`));
         const globals = new dGlobals(context, modelCache, symbolMap, framework);
         globals.stageName = this.stageDir;
 

@@ -1587,6 +1587,57 @@ class dDlst_2DNumber_c extends dDlst_2DBase_c {
     }
 }
 
+class mgameboard_sectx {
+    public ctx: AudioContext;
+
+    constructor() {
+        this.ctx = new AudioContext();
+    }
+
+    public destroy(): void {
+        this.ctx.close();
+    }
+
+    public playRes(res: mgameboard_seres): void {
+        this.ctx.resume();
+
+        assert(res.buffer !== null);
+        const node = this.ctx.createBufferSource();
+        node.buffer = res.buffer;
+        node.connect(this.ctx.destination);
+        node.start();
+    }
+}
+
+class mgameboard_seres {
+    public buffer: AudioBuffer | null = null;
+    private decodeState: cPhs__Status = cPhs__Status.Started;
+
+    constructor(private filename: string) {
+    }
+
+    public subload(globals: dGlobals, ctx: mgameboard_sectx): cPhs__Status {
+        let status = globals.modelCache.requestFileData(this.filename);
+
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        if (this.decodeState === cPhs__Status.Started) {
+            ctx.ctx.decodeAudioData(globals.modelCache.getFileData(this.filename).arrayBuffer).then((buffer) => {
+                this.buffer = buffer;
+                this.decodeState = cPhs__Status.Complete;
+            });
+
+            this.decodeState = cPhs__Status.Loading;
+        }
+
+        if (this.decodeState === cPhs__Status.Complete)
+            assert(this.buffer !== null);
+
+        return this.decodeState;
+    }
+}
+
 class d_a_mgameboard extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_mgameboard;
 
@@ -1610,6 +1661,10 @@ class d_a_mgameboard extends fopAc_ac_c {
     private minigameResetTimer = -1;
     private minigameActive = false;
 
+    private sectx = new mgameboard_sectx();
+    private seres_kbm = new mgameboard_seres('Extra/shop_0.aw_0000000d.wav');
+    private seres_spl = new mgameboard_seres('Extra/shop_0.aw_0000000e.wav');
+
     public subload(globals: dGlobals): cPhs__Status {
         let status: cPhs__Status;
 
@@ -1622,6 +1677,14 @@ class d_a_mgameboard extends fopAc_ac_c {
             return status;
 
         status = this.highscoreNum.subload(globals);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = this.seres_kbm.subload(globals, this.sectx);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        status = this.seres_spl.subload(globals, this.sectx);
         if (status !== cPhs__Status.Complete)
             return status;
 
@@ -1725,8 +1788,10 @@ class d_a_mgameboard extends fopAc_ac_c {
 
         if (ret === -1) {
             // Miss.
+            this.sectx.playRes(this.seres_spl);
         } else {
             // Hit ship.
+            this.sectx.playRes(this.seres_kbm);
         }
     }
 
