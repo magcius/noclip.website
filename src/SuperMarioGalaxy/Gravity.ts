@@ -258,9 +258,9 @@ class ParallelGravity extends PlanetGravity {
     private pos = vec3.create();
     private distanceCalcType = ParallelGravityDistanceCalcType.None;
 
-    public setPlane(normal: ReadonlyVec3, translation: ReadonlyVec3): void {
+    public setPlane(normal: ReadonlyVec3, pos: ReadonlyVec3): void {
         vec3.normalize(this.planeNormal, normal);
-        vec3.copy(this.pos, translation);
+        vec3.copy(this.pos, pos);
     }
 
     public setBaseDistance(v: number): void {
@@ -275,9 +275,9 @@ class ParallelGravity extends PlanetGravity {
         this.rangeType = rangeType;
     }
 
-    public setRangeCylinder(scaleX: number, scaleY: number): void {
-        this.cylinderRadius = scaleX;
-        this.cylinderHeight = scaleY;
+    public setRangeCylinder(radius: number, height: number): void {
+        this.cylinderRadius = radius;
+        this.cylinderHeight = height;
     }
 
     public setRangeBox(mtx: ReadonlyMat4): void {
