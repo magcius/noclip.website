@@ -2047,7 +2047,8 @@ export class BreakableCage extends LiveActor<BreakableCageNrv> {
         }
 
         // initModel()
-        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+        const modelName = BreakableCage.getModelName(this.name);
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
         if (this.isTypeCage()) {
             this.breakModel = createModelObjMapObjStrongLight(zoneAndLayer, sceneObjHolder, 'BreakableCageBreak', 'BreakableCageBreak', this.baseMtx);
             vec3.copy(this.breakModel.scale, this.scale);
@@ -2062,7 +2063,7 @@ export class BreakableCage extends LiveActor<BreakableCageNrv> {
         connectToSceneMapObjStrongLight(sceneObjHolder, this);
         this.initHitSensor();
         const bodySensor = addHitSensor(sceneObjHolder, this, 'body', HitSensorType.BreakableCage, 8, radius, Vec3Zero);
-        initCollisionParts(sceneObjHolder, this, this.name, bodySensor, null);
+        initCollisionParts(sceneObjHolder, this, modelName, bodySensor, null);
 
         // setClippingTypeSphere
         // setGroupClipping
@@ -2194,9 +2195,14 @@ export class BreakableCage extends LiveActor<BreakableCageNrv> {
         return super.receiveMessage(sceneObjHolder, msgType, thisSensor, otherSensor);
     }
 
+    public static getModelName(objName: string): string {
+        return 'BreakableCageRotate' ? 'BreakableCage' : objName;
+    }
+
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        super.requestArchives(sceneObjHolder, infoIter);
-        if (getObjectName(infoIter) !== 'BreakableFixation')
+        const objName = getObjectName(infoIter);
+        sceneObjHolder.modelCache.requestObjectData(BreakableCage.getModelName(objName));
+        if (objName !== 'BreakableFixation')
             sceneObjHolder.modelCache.requestObjectData('BreakableCageBreak');
     }
 }
