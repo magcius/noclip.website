@@ -7,6 +7,8 @@ import { GfxDevice } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../viewer";
 import { RendererStore } from "../Scenes";
+import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../../DebugJunk";
+import { White } from "../../Color";
 
 
 class ModelPart {
@@ -157,7 +159,6 @@ export class UVMDRenderer {
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, placementMatrix: mat4) {
         const lod0 = this.uvmd.lods[0];
 
-        // TODO: one of the pots in SS (near the end) is rotated incorrectly
         // billboard = rotate so that it points towards the camera position
         if(lod0.billboard) {
             let camPos = vec3.create();
@@ -172,9 +173,15 @@ export class UVMDRenderer {
             let vecToCam = vec3.create();
             vec3.subtract(vecToCam, camPos, objPos);
 
-            let out = mat4.create();
-            mat4.rotateZ(out, placementMatrix, (3 * Math.PI/2) + Math.atan2(vecToCam[1], vecToCam[0]));
-            placementMatrix = out;
+            let angle = Math.atan2(vecToCam[1], vecToCam[0]);
+
+            // TODO: check that this is accurate to how it's done in the game, some of the objects seem weirdly skewed at certain angles?
+            let xlen = Math.sqrt(placementMatrix[0] * placementMatrix[0] + placementMatrix[1] * placementMatrix[1]);
+            let ylen = Math.sqrt(placementMatrix[4] * placementMatrix[4] + placementMatrix[5] * placementMatrix[5]);
+            placementMatrix[0] = Math.sin(angle) * xlen;
+            placementMatrix[1] = -Math.cos(angle) * xlen;
+            placementMatrix[4] = Math.cos(angle) * ylen;
+            placementMatrix[5] = Math.sin(angle) * ylen;          
         }
 
         for(let part of lod0.modelParts) {
