@@ -110,6 +110,7 @@ class BARRenderer implements SceneGfx {
     // TODO: show collision data (if that's easy to find)?
     // TODO: Differences between last lap and other laps?
     // TODO: Option to hide the boxes
+    // TODO: show underground temple on SS
     public createPanels(): UI.Panel[] {
         const debuggingToolsPanel = new UI.Panel();
 
@@ -122,8 +123,44 @@ class BARRenderer implements SceneGfx {
         };
         debuggingToolsPanel.contents.appendChild(showTextureIndicesCheckbox.elem);
 
+        // const renderHacksPanel = new UI.Panel();
+
+        // renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        // renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        // const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
+        // enableCullingCheckbox.onchanged = () => {
+        //     for (let i = 0; i < this.modelRenderers.length; i++)
+        //         this.modelRenderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
+        // };
+        // renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
+        // const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
+        // enableVertexColorsCheckbox.onchanged = () => {
+        //     for (let i = 0; i < this.modelRenderers.length; i++)
+        //         this.modelRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+        // };
+        // renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
+        // const enableTextures = new UI.Checkbox('Enable Textures', true);
+        // enableTextures.onchanged = () => {
+        //     for (let i = 0; i < this.modelRenderers.length; i++)
+        //         this.modelRenderers[i].setTexturesEnabled(enableTextures.checked);
+        //     this.globals.particles.setTexturesEnabled(enableTextures.checked);
+        // };
+        // renderHacksPanel.contents.appendChild(enableTextures.elem);
+        // const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
+        // enableMonochromeVertexColors.onchanged = () => {
+        //     for (let i = 0; i < this.modelRenderers.length; i++)
+        //         this.modelRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+        // };
+        // renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
+        // const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
+        // enableAlphaVisualizer.onchanged = () => {
+        //     for (let i = 0; i < this.modelRenderers.length; i++)
+        //         this.modelRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+        //     this.globals.particles.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+        // };
+        // renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
+
         if(this.trackDataRenderer !== undefined) {
-            // TODO: only create this panel if it's possible to load track data
             const trackDataPanel = new UI.Panel();
 
             trackDataPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
@@ -139,6 +176,7 @@ class BARRenderer implements SceneGfx {
 
             addCheckBox("Show track path", val => this.trackDataRenderer.showTrack = val);
             addCheckBox("Also show up direction and width", val => this.trackDataRenderer.alsoShowTrackUpVectorAndWidthVector = val);
+            addCheckBox("Show first progress val next to each point", val => this.trackDataRenderer.showProgressValuesNextToTrackPoints = val);
             // TODO: no
             trackDataPanel.contents.appendChild(new UI.TextField().elem);
             addCheckBox("Show special reset zones", val => this.trackDataRenderer.showSpecialResetZones = val);
@@ -299,6 +337,9 @@ class BARRenderer implements SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
+        if(this.trackDataRenderer !== undefined) {
+            this.trackDataRenderer.destroy(device);
+        }
     }
 }
 
