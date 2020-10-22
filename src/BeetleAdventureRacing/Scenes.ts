@@ -1,4 +1,3 @@
-
 import { CameraController } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
@@ -88,7 +87,7 @@ class BARRenderer implements SceneGfx {
         }
 
         if (uven === null) {
-            this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(1, 0, 1));
+            this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(0.1, 0.1, 0.1));
         } else {
             this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
         }
@@ -125,43 +124,6 @@ class BARRenderer implements SceneGfx {
         };
         debuggingToolsPanel.contents.appendChild(showTextureIndicesCheckbox.elem);
 
-        // const renderHacksPanel = new UI.Panel();
-
-        // renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        // renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
-        // const enableCullingCheckbox = new UI.Checkbox('Enable Culling', true);
-        // enableCullingCheckbox.onchanged = () => {
-        //     for (let i = 0; i < this.modelRenderers.length; i++)
-        //         this.modelRenderers[i].setBackfaceCullingEnabled(enableCullingCheckbox.checked);
-        // };
-        // renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
-        // const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
-        // enableVertexColorsCheckbox.onchanged = () => {
-        //     for (let i = 0; i < this.modelRenderers.length; i++)
-        //         this.modelRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
-        // };
-        // renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
-        // const enableTextures = new UI.Checkbox('Enable Textures', true);
-        // enableTextures.onchanged = () => {
-        //     for (let i = 0; i < this.modelRenderers.length; i++)
-        //         this.modelRenderers[i].setTexturesEnabled(enableTextures.checked);
-        //     this.globals.particles.setTexturesEnabled(enableTextures.checked);
-        // };
-        // renderHacksPanel.contents.appendChild(enableTextures.elem);
-        // const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
-        // enableMonochromeVertexColors.onchanged = () => {
-        //     for (let i = 0; i < this.modelRenderers.length; i++)
-        //         this.modelRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
-        // };
-        // renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
-        // const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
-        // enableAlphaVisualizer.onchanged = () => {
-        //     for (let i = 0; i < this.modelRenderers.length; i++)
-        //         this.modelRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
-        //     this.globals.particles.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
-        // };
-        // renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
-
         if (this.trackDataRenderer !== undefined) {
             const trackDataPanel = new UI.Panel();
 
@@ -179,86 +141,86 @@ class BARRenderer implements SceneGfx {
             addCheckBox("Track path", val => this.trackDataRenderer.showTrack = val);
             addCheckBox("Track up directions and widths", val => this.trackDataRenderer.alsoShowTrackUpVectorAndWidthVector = val);
             addCheckBox("First progress val of each point", val => this.trackDataRenderer.showProgressValuesNextToTrackPoints = val);
-            // TODO: no
-            trackDataPanel.contents.appendChild(new UI.TextField().elem);
+            (<HTMLElement>trackDataPanel.contents.children.item(trackDataPanel.contents.children.length - 1)).style.marginBottom = "20px";
             addCheckBox("Special reset zones", val => this.trackDataRenderer.showSpecialResetZones = val);
             addCheckBox('Progress correction zones', val => this.trackDataRenderer.showProgressFixZones = val);
             addCheckBox("Progress values of each zone point", val => this.trackDataRenderer.showProgressFixZoneValues = val);
-            // TODO: no
-            trackDataPanel.contents.appendChild(new UI.TextField().elem);
+            (<HTMLElement>trackDataPanel.contents.children.item(trackDataPanel.contents.children.length - 1)).style.marginBottom = "20px";
             addCheckBox("Track segment begin planes", val => this.trackDataRenderer.showTrackSegmentBeginPlanes = val);
             addCheckBox("Track segment end planes", val => this.trackDataRenderer.showTrackSegmentEndPlanes = val);
+            trackDataPanel.contents.append(this.buildMinMaxSegmentInputs());
+            (<HTMLElement>trackDataPanel.contents.children.item(trackDataPanel.contents.children.length - 1)).style.marginBottom = "20px";
+            trackDataPanel.contents.append(this.buildProgressValsInput());
 
-            let gridDiv = document.createElement('div');
-            gridDiv.style.display = "grid";
-            gridDiv.style.gridTemplateColumns = "1fr 1fr 1fr 1fr 0.1fr";
-            gridDiv.style.alignItems = "center";
-            gridDiv.style.cursor = "pointer";
-            gridDiv.style.gridGap = "10px"
-
-            let l1 = document.createElement('div');
-            l1.style.userSelect = 'none';
-            l1.style.fontWeight = '';
-            l1.style.color = '#aaa';
-            l1.textContent = "Min seg."
-
-            gridDiv.appendChild(l1);
-
-            let mintf = new UI.TextField();
-            let maxtf = new UI.TextField();
-            mintf.elem.oninput = () => {
-                this.trackDataRenderer.setMinAndMaxSegmentIndices(parseInt(mintf.getValue()), parseInt(maxtf.getValue()));
-            };
-            maxtf.elem.oninput = () => {
-                this.trackDataRenderer.setMinAndMaxSegmentIndices(parseInt(mintf.getValue()), parseInt(maxtf.getValue()));
-            };
-
-            gridDiv.appendChild(mintf.elem);
-
-            let l2 = document.createElement('div');
-            l2.style.userSelect = 'none';
-            l2.style.fontWeight = '';
-            l2.style.color = '#aaa';
-            l2.textContent = "Max seg."
-
-            gridDiv.appendChild(l2);
-            gridDiv.appendChild(maxtf.elem);
-
-            trackDataPanel.contents.append(gridDiv);
-
-
-            let gridDiv2 = document.createElement('div');
-            gridDiv2.style.display = "grid";
-            gridDiv2.style.gridTemplateColumns = "1fr 1fr 0.1fr";
-            gridDiv2.style.alignItems = "center";
-            gridDiv2.style.cursor = "pointer";
-            gridDiv2.style.gridGap = "10px"
-
-            let v1 = document.createElement('div');
-            v1.style.userSelect = 'none';
-            v1.style.fontWeight = '';
-            v1.style.color = '#aaa';
-            v1.textContent = "Show progress vals:"
-
-            gridDiv2.appendChild(v1);
-
-            let progtf = new UI.TextField();
-            progtf.elem.oninput = () => {
-                this.trackDataRenderer.progressValuesToShow = progtf.getValue().split(",").map(s => parseInt(s)).filter(n => !isNaN(n));
-            };
-
-
-            gridDiv2.appendChild(progtf.elem);
-
-            trackDataPanel.contents.append(gridDiv2);
-
-            return [debuggingToolsPanel, trackDataPanel];
+            return [trackDataPanel, debuggingToolsPanel];
         } else {
             return [debuggingToolsPanel];
         }
     }
 
+    private buildMinMaxSegmentInputs() {
+        let gridDiv = document.createElement('div');
+        gridDiv.style.display = "grid";
+        gridDiv.style.gridTemplateColumns = "1fr 1fr 1fr 1fr 0.1fr";
+        gridDiv.style.alignItems = "center";
+        gridDiv.style.cursor = "pointer";
+        gridDiv.style.gridGap = "10px";
 
+        let l1 = document.createElement('div');
+        l1.style.userSelect = 'none';
+        l1.style.fontWeight = '';
+        l1.style.color = '#aaa';
+        l1.textContent = "Min seg.";
+
+        gridDiv.appendChild(l1);
+
+        let mintf = new UI.TextField();
+        let maxtf = new UI.TextField();
+        mintf.elem.oninput = () => {
+            this.trackDataRenderer.setMinAndMaxSegmentIndices(parseInt(mintf.getValue()), parseInt(maxtf.getValue()));
+        };
+        maxtf.elem.oninput = () => {
+            this.trackDataRenderer.setMinAndMaxSegmentIndices(parseInt(mintf.getValue()), parseInt(maxtf.getValue()));
+        };
+
+        gridDiv.appendChild(mintf.elem);
+
+        let l2 = document.createElement('div');
+        l2.style.userSelect = 'none';
+        l2.style.fontWeight = '';
+        l2.style.color = '#aaa';
+        l2.textContent = "Max seg.";
+
+        gridDiv.appendChild(l2);
+        gridDiv.appendChild(maxtf.elem);
+        return gridDiv;
+    }
+
+    private buildProgressValsInput() {
+        let gridDiv = document.createElement('div');
+        gridDiv.style.display = "grid";
+        gridDiv.style.gridTemplateColumns = "1fr 1fr 0.1fr";
+        gridDiv.style.alignItems = "center";
+        gridDiv.style.cursor = "pointer";
+        gridDiv.style.gridGap = "10px";
+        gridDiv.style.paddingBottom = "5px";
+
+        let v1 = document.createElement('div');
+        v1.style.userSelect = 'none';
+        v1.style.fontWeight = '';
+        v1.style.color = '#aaa';
+        v1.textContent = "Show progress vals:";
+
+        gridDiv.appendChild(v1);
+
+        let progtf = new UI.TextField();
+        progtf.elem.oninput = () => {
+            this.trackDataRenderer.progressValuesToShow = progtf.getValue().split(",").map(s => parseInt(s)).filter(n => !isNaN(n));
+        };
+
+        gridDiv.appendChild(progtf.elem);
+        return gridDiv;
+    }
 
     // Builds a scene graph and uses the hostAccessPass to upload data to the GPU
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
@@ -293,6 +255,11 @@ class BARRenderer implements SceneGfx {
         // Upload uniform data to the GPU
         this.renderHelper.prepareToRender(device, hostAccessPass);
 
+        // For the extra track data display, check to see if we need to toggle the nearest plane on/off
+        this.checkCheckpointPlaneToggle(viewerInput);
+    }
+
+    private checkCheckpointPlaneToggle(viewerInput: ViewerRenderInput) {
         if (this.trackDataRenderer !== undefined && this.inputManager.isKeyDownEventTriggered('KeyC')) {
             let x = this.inputManager.mouseX;
             let y = this.inputManager.mouseY;
@@ -436,74 +403,32 @@ const sceneDescs = [
     new BARSceneDesc(0x18, 'Parkade'),
     new BARSceneDesc(0x19, 'Woods'),
     new BARSceneDesc(0x1A, '[Unused] MULT 10'),
-    'Other',
-    // TODO: The commented out ones cause errors, need to figure out why
-    //new BARSceneDesc(0x0, 'NONE'),
-    //new BARSceneDesc(0x1, 'TEST ROAD'),
+    'Test Levels',
+    new BARSceneDesc(0x1, 'TEST ROAD'),
     new BARSceneDesc(0x2, 'TEST GRID'),
     new BARSceneDesc(0x3, 'CHECKER BOARD'),
     new BARSceneDesc(0x4, 'ROUND TRACK'),
-    //new BARSceneDesc(0xF, 'DRAGSTRIP'),
-    //new BARSceneDesc(0x10, 'DERBY'),
-    new BARSceneDesc(0x21, 'FINISH'),
+    new BARSceneDesc(0xF, 'DRAGSTRIP'),
+    new BARSceneDesc(0x10, 'DERBY'),
+    new BARSceneDesc(null, 'CARS model viewer dragstrip', 13),
+    new BARSceneDesc(null, 'Test turning track', 15),
+    // this one seems to be completely empty
+    //new BARSceneDesc(0x21, 'FINISH'),
     'Menu backgrounds',
-    new BARSceneDesc(null, 'unk[ asdasd]', 0x1),
-    new BARSceneDesc(null, 'One Player[ asdasd]', 0x8),
-    new BARSceneDesc(null, 'Championship/Difficulty[ asdasd]', 0x9),
-    new BARSceneDesc(null, 'Main Menu[ asdasd]', 0xA),
-    new BARSceneDesc(null, ' Single Race/Beetle Battle Select Players[ asdasd]', 0xB),
-
+    new BARSceneDesc(null, 'Beetle Battle Car Color Select', 0x2),
+    new BARSceneDesc(null, 'Car Select', 0x3),
+    new BARSceneDesc(null, 'One Player', 0x8),
+    new BARSceneDesc(null, 'Championship/Difficulty', 0x9),
+    new BARSceneDesc(null, 'Main Menu', 0xA),
+    new BARSceneDesc(null, 'Single Race/Beetle Battle Select Players', 0xB),
+    new BARSceneDesc(null, '[Unused] Empty Mount Mayhem', 0x1),
     'Intro level sections',
     new BARSceneDesc(0x1B, 'INTRO1'),
     new BARSceneDesc(0x1C, 'INTRO2'),
     new BARSceneDesc(0x1D, 'INTRO3'),
     new BARSceneDesc(0x1E, 'INTRO4'),
     new BARSceneDesc(0x1F, 'INTRO5'),
-    new BARSceneDesc(0x20, 'INTRO6'),
-
-    // TODO:
-    /*
-    1: Empty Mount Mayhem menu track
-    2: Beetle Battle Car Color Select area
-    3: Car Select area
-    4: Intro track of Mount Mayhem (INTRO3)
-    5: Intro track of Sunset Sands (INTRO4)
-    6: Intro track of Inferno Isle (INTRO5)
-    7: Intro track of Metro Madness (INTRO6)
-    8: One Player menu track
-    9: Championship/Difficulty menu track
-    10: Main Menu menu track
-    11: Single Race/Beetle Battle Select Players menu track
-    12: DERBY
-    13: CARS model viewer dragstrip
-    14: DRAGSTRIP
-    15: "Test turning track"
-    18: TEST ROAD
-    38: Intro track of Coventry Cove (INTRO1)
-    39: Intro track of Wicked Woods (INTRO2)
-    */
-
-
-    //TODO?: There are other UVTRs that aren't part of a scene, are any of them interesting enough to include?
-
-    // 'Not Sure',
-    // new BARSceneDesc(0, '0'),
-    // new BARSceneDesc(2, 'Parkade duplicate??'),
-    // new BARSceneDesc(12, '12'),
-    // new BARSceneDesc(13, '13'),
-    // new BARSceneDesc(14, '14'),
-    // new BARSceneDesc(15, '15'), // bridge test level
-    // new BARSceneDesc(16, '16'), // big ring test level
-    // new BARSceneDesc(17, '17'), // checkerboard test level
-    // new BARSceneDesc(18, '18'),
-    // new BARSceneDesc(37, '37'),
-    // new BARSceneDesc(1, '1'), // blue tint
-    // new BARSceneDesc(3, '3'), // blue tint
-    // new BARSceneDesc(8, '8'), // blue tint
-    // new BARSceneDesc(9, '9'), // blue tint
-    // new BARSceneDesc(10, '10'), // blue tint
-    // new BARSceneDesc(11, '11'), // blue tint
-
+    new BARSceneDesc(0x20, 'INTRO6')
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };

@@ -10,7 +10,6 @@ import { UVTX, UVTXRenderHelper } from "./ParsedFiles/UVTX";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 
 import * as RDP from '../Common/N64/RDP';
-import { humanReadableCombineParams } from './Util';
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { DEBUGGING_TOOLS_STATE, RendererStore } from "./Scenes";
 import { Material, RenderOptionsFlags } from "./ParsedFiles/Common";
@@ -129,7 +128,7 @@ export class MaterialRenderer {
             if (DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null) {
                 console.log(program.frag);
                 console.log(this.uvtx);
-                console.log(humanReadableCombineParams(rspState.combineParams));
+                console.log(RDP.generateCombineParamsString(rspState.combineParams, true));
                 console.log(this.material);
                 console.log(this.material.renderOptions.toString(2));
             }

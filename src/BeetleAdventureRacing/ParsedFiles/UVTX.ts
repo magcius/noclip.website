@@ -475,7 +475,6 @@ export class UVTXRenderHelper {
     private texel0TextureData: TextureData;
     private texel1TextureData: TextureData;
 
-    //TODO: better
     private texel0TileState: RDP.TileState;
     private texel1TileState: RDP.TileState;
 
@@ -524,8 +523,6 @@ export class UVTXRenderHelper {
         if(tileState.shiftt > 10) {
             shiftTMult = Math.pow(2, tileState.shiftt - 16);
         }
-        
-        // TODO: figure out why the skyboxes all render weirdly
 
         // s - uls                                            // Adjust for tile position
         // (s - uls) / (scaleS * shiftSMult)                  // Adjust for scale & shift

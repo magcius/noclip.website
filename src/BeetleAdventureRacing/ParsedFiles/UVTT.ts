@@ -80,14 +80,13 @@ export class UVTT {
         }
     }
 
-    // TODO: double check this logic
     public getPointAlongTrack(progress: number): vec3 {
-        if(progress < 0) {
+        if (progress < 0) {
             throw new Error();
         }
 
-        for(let pntAndProgress of this.route) {
-            if(progress < pntAndProgress.progress + pntAndProgress.pnt.trackSectionLength) {
+        for (let pntAndProgress of this.route) {
+            if (progress < pntAndProgress.progress + pntAndProgress.pnt.trackSectionLength) {
                 let result = vec3.create();
                 vec3.scaleAndAdd(result, pntAndProgress.pnt.pos, pntAndProgress.pnt.fwd, (progress - pntAndProgress.progress))
                 return result;
