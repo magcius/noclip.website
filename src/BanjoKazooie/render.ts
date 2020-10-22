@@ -219,8 +219,9 @@ void main() {
             'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
         ];
 
+        // For now setting the LOD fraction to 0 should be fine since I don't think anyone cares about mipmaps
         const alphaMultInputs: string[] = [
-            'combAlpha', 't_Tex0', 't_Tex1', 'u_PrimColor.a',
+            '0.0' /* LOD_FRACTION */, 't_Tex0', 't_Tex1', 'u_PrimColor.a',
             'v_Color.a', 'u_EnvColor.a', 'u_MiscComb.r', '0.0'
         ];
 
