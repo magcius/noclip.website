@@ -127,7 +127,7 @@ export class MaterialRenderer {
             program.setDefineBool("TWO_CYCLE", true);
 
             if (DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null) {
-                console.log(this.program.frag);
+                console.log(program.frag);
                 console.log(this.uvtx);
                 console.log(humanReadableCombineParams(rspState.combineParams));
                 console.log(this.material);
