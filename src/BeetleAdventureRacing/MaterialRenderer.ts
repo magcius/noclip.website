@@ -10,7 +10,6 @@ import { UVTX, UVTXRenderHelper } from "./ParsedFiles/UVTX";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 
 import * as RDP from '../Common/N64/RDP';
-import { humanReadableCombineParams } from './Util';
 import { drawWorldSpaceText, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { DEBUGGING_TOOLS_STATE, RendererStore } from "./Scenes";
 import { Material, RenderOptionsFlags } from "./ParsedFiles/Common";
@@ -57,7 +56,6 @@ export class MaterialRenderer {
         // Rendering config
         const { stateFlags, otherModeLRenderMode } = this.translateRenderOptions();
         this.isTranslucent = !!((otherModeLRenderMode & (1 << RDP.OtherModeL_Layout.FORCE_BL)));
-
         this.stateFlagsFromGeomAndBlenderSettings = stateFlags;
         this.program = this.buildProgram(otherModeLRenderMode);
 
@@ -128,9 +126,9 @@ export class MaterialRenderer {
             program.setDefineBool("TWO_CYCLE", true);
 
             if (DEBUGGING_TOOLS_STATE.singleUVTXToRender !== null) {
-                console.log(this.program.frag);
+                console.log(program.frag);
                 console.log(this.uvtx);
-                console.log(humanReadableCombineParams(rspState.combineParams));
+                console.log(RDP.generateCombineParamsString(rspState.combineParams, true));
                 console.log(this.material);
                 console.log(this.material.renderOptions.toString(2));
             }
@@ -309,16 +307,13 @@ export class MaterialRenderer {
             return;
         }
 
-        // TODO: what's causing the "GL_INVALID_OPERATION: It is undefined behaviour to use a uniform buffer that is too small" errors?
-
-
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setMegaStateFlags(this.stateFlagsFromGeomAndBlenderSettings);
 
         renderInst.sortKey = makeSortKey(this.isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
 
-        // TODO: move this to template, it only needs to be set once
-        let sceneParamsOffset = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
+        // TODO: this doesn't always need to be 16+8, only when tex gen is enabled
+        let sceneParamsOffset = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16 + 8);
         const sceneParams = renderInst.mapUniformBufferF32(F3DEX_Program.ub_SceneParams);
         fillMatrix4x4(sceneParams, sceneParamsOffset, viewerInput.camera.projectionMatrix);
 
@@ -390,6 +385,7 @@ export class MaterialRenderer {
             if((this.uvtx.flagsAndIndex & 0xFFF) !== DEBUGGING_TOOLS_STATE.singleUVTXToRender)
                 return true;
         }
+
         return false;
     }
 

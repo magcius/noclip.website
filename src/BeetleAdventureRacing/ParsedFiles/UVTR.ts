@@ -45,8 +45,8 @@ export class UVTR {
             let mat;
             ({ mat, curPos: offs } = parseMatrix(view, offs));
 
+            // this is 0 for everything except a couple test courses
             const rotation = view.getInt8(offs + 0);
-            assert(rotation === 0x00);
             const contourIndex = view.getUint16(offs + 1);
             offs += 3;
 
