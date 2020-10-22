@@ -1,6 +1,7 @@
 import { mat4, vec3, vec4 } from "gl-matrix";
-import { Color, colorFromHSL, colorNewFromRGBA, OpaqueBlack, White } from "../Color";
-import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { divideByW } from "../Camera";
+import { Color, colorFromHSL, colorNewFromRGBA, OpaqueBlack, Red, White } from "../Color";
+import { drawViewportSpacePoint, drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -350,8 +351,6 @@ function BARVecToStandardVec(v: vec3) {
 }
 
 export class TrackDataRenderer {
-    // TODO: click to show checkpoint plane?
-
     public showTrack: boolean = false;
     public alsoShowTrackUpVectorAndWidthVector: boolean = false;
     public showProgressValuesNextToTrackPoints: boolean = false;
@@ -395,13 +394,49 @@ export class TrackDataRenderer {
             this.segmentIndicesToShow.push(i);
     }
 
-    public toggleSegment(index: number) {
-        const i = this.segmentIndicesToShow.indexOf(index);
+    public toggleSegment(segIndex: number) {
+        const i = this.segmentIndicesToShow.indexOf(segIndex);
         if (i === -1) {
-            this.segmentIndicesToShow.push(index);
+            this.segmentIndicesToShow.push(segIndex);
         } else {
-            this.segmentIndicesToShow.splice(index, 1);
+            this.segmentIndicesToShow.splice(i, 1);
         }
+    }
+
+    public findNearestSegment(mouseX: number, mouseY: number, viewerInput: ViewerRenderInput): number | null {
+        let ctx = getDebugOverlayCanvas2D();
+        const cw = ctx.canvas.width;
+        const ch = ctx.canvas.height;
+        mouseY = ch - mouseY;
+        let clipFromWorldMatrix = viewerInput.camera.clipFromWorldMatrix;
+
+        let v4: vec4 = vec4.create();
+
+        let closestSegmentIndex: null | number = null;
+        let closestPtDistance: number = Number.MAX_VALUE;
+
+        for (let i = 0; i < this.trackData.uvtt.pnts.length; i++) {
+            const pos = this.trackData.uvtt.pnts[i].pos;
+
+            vec4.set(v4, pos[1], pos[2], pos[0], 1.0);
+            vec4.transformMat4(v4, v4, clipFromWorldMatrix);
+            divideByW(v4, v4);
+
+            // Ignore if offscreen
+            if (v4[0] < -1 || v4[0] > 1 || v4[1] < -1 || v4[1] > 1 || v4[2] < -1 || v4[2] > 1)
+                continue;
+
+            const ptX = (v4[0] + 1) * cw / 2;
+            const ptY = (v4[1] + 1) * ch / 2;
+
+            let dist = Math.hypot(mouseX - ptX, mouseY - ptY);
+            if (dist < closestPtDistance) {
+                closestSegmentIndex = i;
+                closestPtDistance = dist;
+            }
+        }
+
+        return closestSegmentIndex;
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
@@ -421,8 +456,6 @@ export class TrackDataRenderer {
                     drawWorldSpaceVector(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(leftPos), BARVecToStandardVec(pnt.right), pnt.trackSectionWidth, colorNewFromRGBA(0, 0, 0.2, 1), 4);
                     drawWorldSpaceVector(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, pos, BARVecToStandardVec(pnt.up), 5, colorNewFromRGBA(1, 0, 1, 1), 4);
                 }
-
-
             }
         }
 
@@ -430,7 +463,7 @@ export class TrackDataRenderer {
             let drawnPnts = new Set<any>();
             for (let pntAndProgress of this.trackData.uvtt.route) {
                 if (!drawnPnts.has(pntAndProgress.pnt)) {
-                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(pntAndProgress.pnt.pos), pntAndProgress.progress.toFixed(3), -30, White, { outline: 6 });
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(pntAndProgress.pnt.pos), pntAndProgress.progress.toFixed(3), -20, White, { outline: 6 });
                     drawnPnts.add(pntAndProgress.pnt);
                 }
             }
@@ -446,8 +479,8 @@ export class TrackDataRenderer {
                 drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(maxVec), color, 30);
                 if (this.showProgressFixZoneValues) {
                     let opts = { outline: 6 };
-                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(minVec), specialResetZone.progressMin.toString(), -30, White, opts);
-                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(maxVec), specialResetZone.progressMax.toString(), -30, White, opts);
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(minVec), specialResetZone.progressMin.toString(), -20, White, opts);
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(maxVec), specialResetZone.progressMax.toString(), -20, White, opts);
                 }
             }
         }
@@ -537,9 +570,9 @@ export class TrackDataRenderer {
                 drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(newVec), color, 50);
                 if (this.showProgressFixZoneValues) {
                     let opts = { outline: 6 };
-                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(minVec), progressFixZone.progressMin.toString(), -30, White, opts);
-                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(maxVec), progressFixZone.progressMax.toString(), -30, White, opts);
-                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(newVec), progressFixZone.newProgress.toString(), -30, White, opts);
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(minVec), progressFixZone.progressMin.toString(), -20, White, opts);
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(maxVec), progressFixZone.progressMax.toString(), -20, White, opts);
+                    drawWorldSpaceText(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, BARVecToStandardVec(newVec), progressFixZone.newProgress.toString(), -20, White, opts);
                 }
             }
         }

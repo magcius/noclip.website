@@ -1,12 +1,11 @@
 
 import { CameraController } from "../Camera";
-import { Color, colorFromHSL, colorNewFromRGBA } from "../Color";
-import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
-import { AABB } from "../Geometry";
+import { colorNewFromRGBA } from "../Color";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
 import { executeOnPass } from "../gfx/render/GfxRenderer";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
+import InputManager from "../InputManager";
 import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import * as UI from '../ui';
 import { assert } from "../util";
@@ -16,13 +15,11 @@ import { UVEN, UVENRenderer } from "./ParsedFiles/UVEN";
 import { UVTR, UVTRRenderer } from "./ParsedFiles/UVTR";
 import { UVTS } from "./ParsedFiles/UVTS";
 import { TexScrollAnim, TexSeqAnim, UVTX } from "./ParsedFiles/UVTX";
-import { CourseTrackData, getTrackData, TrackDataRenderer, TranslucentPlaneRenderer } from "./TrackData";
-import { vec3, vec4 } from "gl-matrix";
-import { parse } from "../oot3d/cmb";
+import { getTrackData, TrackDataRenderer } from "./TrackData";
 
 export const DEBUGGING_TOOLS_STATE = {
     showTextureIndices: false,
-    singleUVTXToRender: null//0x270
+    singleUVTXToRender: null
 };
 
 export class RendererStore implements Destroyable {
@@ -64,7 +61,10 @@ class BARRenderer implements SceneGfx {
 
     private trackDataRenderer: TrackDataRenderer;
 
-    constructor(device: GfxDevice, rendererStore: RendererStore, uvtr: UVTR, uven: UVEN | null, private sceneIndex: number | null, private filesystem: Filesystem) {
+    private inputManager: InputManager;
+
+    // TODO: maybe make a context object for some of these parameters
+    constructor(device: GfxDevice, context: SceneContext, rendererStore: RendererStore, uvtr: UVTR, uven: UVEN | null, private sceneIndex: number | null, private filesystem: Filesystem) {
         this.renderHelper = new GfxRenderHelper(device);
 
         this.uvtrRenderer = rendererStore.getOrCreateRenderer(uvtr, () => new UVTRRenderer(uvtr, device, rendererStore))
@@ -95,11 +95,13 @@ class BARRenderer implements SceneGfx {
 
         // TODO: should this be lazy?
         let trackData = getTrackData(this.sceneIndex, this.filesystem);
-        if(trackData !== null) {
+        if (trackData !== null) {
             this.trackDataRenderer = new TrackDataRenderer(device, trackData)
         }
+
+        this.inputManager = context.inputManager;
     }
-        
+
 
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(0.02);
@@ -160,11 +162,11 @@ class BARRenderer implements SceneGfx {
         // };
         // renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
-        if(this.trackDataRenderer !== undefined) {
+        if (this.trackDataRenderer !== undefined) {
             const trackDataPanel = new UI.Panel();
 
             trackDataPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-            trackDataPanel.setTitle(UI.LAYER_ICON, 'Track Data');
+            trackDataPanel.setTitle(UI.LAYER_ICON, 'Display Track Data');
 
             let addCheckBox = (label: string, setMethod: ((val: boolean) => void)) => {
                 let chk = new UI.Checkbox(label);
@@ -174,22 +176,22 @@ class BARRenderer implements SceneGfx {
                 trackDataPanel.contents.appendChild(chk.elem);
             }
 
-            addCheckBox("Show track path", val => this.trackDataRenderer.showTrack = val);
-            addCheckBox("Also show up direction and width", val => this.trackDataRenderer.alsoShowTrackUpVectorAndWidthVector = val);
-            addCheckBox("Show first progress val next to each point", val => this.trackDataRenderer.showProgressValuesNextToTrackPoints = val);
+            addCheckBox("Track path", val => this.trackDataRenderer.showTrack = val);
+            addCheckBox("Track up directions and widths", val => this.trackDataRenderer.alsoShowTrackUpVectorAndWidthVector = val);
+            addCheckBox("First progress val of each point", val => this.trackDataRenderer.showProgressValuesNextToTrackPoints = val);
             // TODO: no
             trackDataPanel.contents.appendChild(new UI.TextField().elem);
-            addCheckBox("Show special reset zones", val => this.trackDataRenderer.showSpecialResetZones = val);
-            addCheckBox('Show "progress fix" zones', val => this.trackDataRenderer.showProgressFixZones = val);
-            addCheckBox("Show progress values next to points", val => this.trackDataRenderer.showProgressFixZoneValues = val);
+            addCheckBox("Special reset zones", val => this.trackDataRenderer.showSpecialResetZones = val);
+            addCheckBox('Progress correction zones', val => this.trackDataRenderer.showProgressFixZones = val);
+            addCheckBox("Progress values of each zone point", val => this.trackDataRenderer.showProgressFixZoneValues = val);
             // TODO: no
             trackDataPanel.contents.appendChild(new UI.TextField().elem);
-            addCheckBox("Show track segment begin planes", val => this.trackDataRenderer.showTrackSegmentBeginPlanes = val);
-            addCheckBox("Show track segment end planes", val => this.trackDataRenderer.showTrackSegmentEndPlanes = val);
+            addCheckBox("Track segment begin planes", val => this.trackDataRenderer.showTrackSegmentBeginPlanes = val);
+            addCheckBox("Track segment end planes", val => this.trackDataRenderer.showTrackSegmentEndPlanes = val);
 
             let gridDiv = document.createElement('div');
             gridDiv.style.display = "grid";
-            gridDiv.style.gridTemplateColumns = "1fr 1fr 1fr 1fr";
+            gridDiv.style.gridTemplateColumns = "1fr 1fr 1fr 1fr 0.1fr";
             gridDiv.style.alignItems = "center";
             gridDiv.style.cursor = "pointer";
             gridDiv.style.gridGap = "10px"
@@ -222,12 +224,12 @@ class BARRenderer implements SceneGfx {
             gridDiv.appendChild(l2);
             gridDiv.appendChild(maxtf.elem);
 
-            trackDataPanel.contents.append(gridDiv); 
+            trackDataPanel.contents.append(gridDiv);
 
 
             let gridDiv2 = document.createElement('div');
             gridDiv2.style.display = "grid";
-            gridDiv2.style.gridTemplateColumns = "2fr 3fr";
+            gridDiv2.style.gridTemplateColumns = "1fr 1fr 0.1fr";
             gridDiv2.style.alignItems = "center";
             gridDiv2.style.cursor = "pointer";
             gridDiv2.style.gridGap = "10px"
@@ -248,14 +250,12 @@ class BARRenderer implements SceneGfx {
 
             gridDiv2.appendChild(progtf.elem);
 
-            trackDataPanel.contents.append(gridDiv2); 
+            trackDataPanel.contents.append(gridDiv2);
 
             return [debuggingToolsPanel, trackDataPanel];
         } else {
             return [debuggingToolsPanel];
         }
-
-        
     }
 
 
@@ -284,7 +284,7 @@ class BARRenderer implements SceneGfx {
         if (this.uvenRenderer !== null)
             this.uvenRenderer.prepareToRender(device, renderInstManager, viewerInput);
 
-        if(this.trackDataRenderer !== undefined)
+        if (this.trackDataRenderer !== undefined)
             this.trackDataRenderer.prepareToRender(device, renderInstManager, viewerInput);
 
         // Not sure if this is strictly necessary but it can't hurt
@@ -292,6 +292,15 @@ class BARRenderer implements SceneGfx {
 
         // Upload uniform data to the GPU
         this.renderHelper.prepareToRender(device, hostAccessPass);
+
+        if (this.trackDataRenderer !== undefined && this.inputManager.isKeyDownEventTriggered('KeyC')) {
+            let x = this.inputManager.mouseX;
+            let y = this.inputManager.mouseY;
+            let segmentIndex: number | null = this.trackDataRenderer.findNearestSegment(x, y, viewerInput);
+            if (segmentIndex !== null) {
+                this.trackDataRenderer.toggleSegment(segmentIndex);
+            }
+        }
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass | null {
@@ -337,7 +346,7 @@ class BARRenderer implements SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        if(this.trackDataRenderer !== undefined) {
+        if (this.trackDataRenderer !== undefined) {
             this.trackDataRenderer.destroy(device);
         }
     }
@@ -397,7 +406,7 @@ class BARSceneDesc implements SceneDesc {
             return await new RendererStore();
         });
 
-        return new BARRenderer(device, rendererStore, uvtr, uven, this.sceneIndex, filesystem);
+        return new BARRenderer(device, context, rendererStore, uvtr, uven, this.sceneIndex, filesystem);
     }
 }
 
