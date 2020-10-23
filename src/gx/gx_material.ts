@@ -677,7 +677,7 @@ ${this.generateLightAttnFn(chan, lightName)}
             if (tg.type === GX.TexGenType.MTX2x4 || tg.type === GX.TexGenType.SRTG)
                 return `varying vec2 v_TexCoord${i};\n`;
             else if (tg.type === GX.TexGenType.MTX3x4)
-                return `varying vec3 v_TexCoord${i};\n`;
+                return `varying highp vec3 v_TexCoord${i};\n`;
             else
                 throw "whoops";
         }).join('');
