@@ -6,14 +6,20 @@ import ArrayBufferSlice from "../../ArrayBufferSlice";
 export const enum GSRegister {
     PRIM      = 0x00,
     TEX0_1    = 0x06,
+    TEX0_2    = 0x07,
     CLAMP_1   = 0x08,
+    CLAMP_2   = 0x09,
     TEX1_1    = 0x14,
     TEX2_1    = 0x16,
     TEXFLUSH  = 0x3F,
     MIPTBP1_1 = 0x34,
     MIPTBP2_1 = 0x36,
     ALPHA_1   = 0x42,
+    ALPHA_2   = 0x43,
     TEST_1    = 0x47,
+    TEST_2    = 0x48,
+    ZBUF_1    = 0x4E,
+    ZBUF_2    = 0x4F,
     BITBLTBUF = 0x50,
     TRXPOS    = 0x51,
     TRXREG    = 0x52,
@@ -180,7 +186,7 @@ export function getGSRegisterCLAMP(dataLower: number, dataUpper: number): GSRegi
         wmt:  getBitField(dataLower, 2, 3),
         minu: getBitField(dataLower, 4, 13),
         maxu: getBitField(dataLower, 14, 23),
-        minv: getBitField(dataLower, 24, 31) | (getBitField(dataUpper, 0, 1) << 2),
+        minv: getBitField(dataLower, 24, 31) | (getBitField(dataUpper, 0, 1) << 8),
         maxv: getBitField(dataUpper, 2, 11)
     };
 }
@@ -361,6 +367,24 @@ function getPixelAddressPSMCT32(block: number, width: number, x: number, y: numb
     return (addr << 2) & 0x003FFFFC;
 }
 
+function getBlockIdPSMCT16(block: number, x: number, y: number): number {
+    const blockY = (y >>> 3) & 0x07;
+    const blockX = (x >>> 4) & 0x03;
+    // PSMCT16 block layout is just the transpose of the PSMCT32 one
+    return block + ((x >>> 1) & ~0x1F) + blockTablePSMCT32[(blockX << 3) | blockY];
+}
+
+function getPixelAddressPSMCT16(block: number, width: number, x: number, y: number): number {
+    const page = ((block >>> 5) + (y >>> 6) * width + (x >>> 6));
+    const columnBase = ((y >>> 1) & 0x03) << 4;
+    const columnY = y & 0x01;
+    const columnX = x & 0x07;
+    // pixel layout in a column is two side-by-side copies of PSMCT32, using the upper and lower halves of the pixel
+    const column = columnBase + columnTablePSMCT32[(columnY << 3) | columnX];
+    const addr = ((page << 11) + (getBlockIdPSMCT16(block & 0x1F, x & 0x3F, y & 0x3F) << 6) + column);
+    return ((addr << 2) & 0x003FFFFC) + ((x & 0x08) >>> 2);
+}
+
 function getBlockIdPSMT8(block: number, x: number, y: number): number {
     const blockY = (y >>> 4) & 0x03;
     const blockX = (x >>> 4) & 0x07;
@@ -408,6 +432,20 @@ function gsMemoryMapUploadImagePSMCT32(map: GSMemoryMap, dbp: number, dbw: numbe
     }
 }
 
+function gsMemoryMapUploadImagePSMCT16(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    let srcIdx = 0;
+    for (let y = dsay; y < dsay + rrh; y++) {
+        for (let x = dsax; x < dsax + rrw; x++) {
+            const p = getPixelAddressPSMCT16(dbp, dbw, x, y);
+            map.data[p + 0x00] = view.getUint8(srcIdx + 0x00);
+            map.data[p + 0x01] = view.getUint8(srcIdx + 0x01);
+            srcIdx += 0x02;
+        }
+    }
+}
+
 function gsMemoryMapUploadImagePSMT8(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, buffer: ArrayBufferSlice): void {
     const view = buffer.createDataView();
 
@@ -435,13 +473,66 @@ function gsMemoryMapUploadImagePSMT4(map: GSMemoryMap, dbp: number, dbw: number,
     }
 }
 
+// for the H/L formats, pixel layout is the same as PSMCT32, but only some addresses are filled in
+function gsMemoryMapUploadImagePSMT8H(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    let srcIdx = 0;
+    for (let y = dsay; y < dsay + rrh; y++) {
+        for (let x = dsax; x < dsax + rrw; x++) {
+            const p = getPixelAddressPSMCT32(dbp, dbw, x, y);
+            map.data[p + 0x03] = view.getUint8(srcIdx++);
+        }
+    }
+}
+
+function gsMemoryMapUploadImagePSMT4HH(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    let srcIdx = 0;
+    for (let y = dsay; y < dsay + rrh; y++) {
+        for (let x = dsax; x < dsax + rrw; x++) {
+            const p = getPixelAddressPSMCT32(dbp, dbw, x, y);
+            const oldData = map.data[p + 0x03] & 0x0F;
+            const shift = (srcIdx & 1) ? 0 : 4;
+            const newNibble = (view.getUint8(srcIdx >>> 1) << shift) & 0xF0;
+            map.data[p + 0x03] = newNibble | oldData;
+            srcIdx++;
+        }
+    }
+}
+
+function gsMemoryMapUploadImagePSMT4HL(map: GSMemoryMap, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, buffer: ArrayBufferSlice): void {
+    const view = buffer.createDataView();
+
+    let srcIdx = 0;
+    for (let y = dsay; y < dsay + rrh; y++) {
+        for (let x = dsax; x < dsax + rrw; x++) {
+            const p = getPixelAddressPSMCT32(dbp, dbw, x, y);
+            const oldData = map.data[p + 0x03] & 0xF0;
+            const shift = (srcIdx & 1) ? 4 : 0;
+            const newNibble = (view.getUint8(srcIdx >>> 1) >>> shift) & 0x0F;
+            map.data[p + 0x03] = newNibble | oldData;
+            srcIdx++;
+        }
+    }
+}
+
 export function gsMemoryMapUploadImage(map: GSMemoryMap, dpsm: GSPixelStorageFormat, dbp: number, dbw: number, dsax: number, dsay: number, rrw: number, rrh: number, buffer: ArrayBufferSlice): void {
     if (dpsm === GSPixelStorageFormat.PSMCT32)
         gsMemoryMapUploadImagePSMCT32(map, dbp, dbw, dsax, dsay, rrw, rrh, buffer);
+    else if (dpsm === GSPixelStorageFormat.PSMCT16)
+        gsMemoryMapUploadImagePSMCT16(map, dbp, dbw, dsax, dsay, rrw, rrh, buffer);
     else if (dpsm === GSPixelStorageFormat.PSMT8)
         gsMemoryMapUploadImagePSMT8(map, dbp, dbw, dsax, dsay, rrw, rrh, buffer);
     else if (dpsm === GSPixelStorageFormat.PSMT4)
         gsMemoryMapUploadImagePSMT4(map, dbp, dbw, dsax, dsay, rrw, rrh, buffer);
+    else if (dpsm === GSPixelStorageFormat.PSMT8H)
+        gsMemoryMapUploadImagePSMT8H(map, dbp, dbw, dsax, dsay, rrw, rrh, buffer);
+    else if (dpsm === GSPixelStorageFormat.PSMT4HH)
+        gsMemoryMapUploadImagePSMT4HH(map, dbp, dbw, dsax, dsay, rrw, rrh, buffer);
+    else if (dpsm === GSPixelStorageFormat.PSMT4HL)
+        gsMemoryMapUploadImagePSMT4HL(map, dbp, dbw, dsax, dsay, rrw, rrh, buffer);
     else
         throw "whoops";
 }
@@ -494,10 +585,103 @@ export function gsMemoryMapReadImagePSMT8_PSMCT32(pixels: Uint8Array, map: GSMem
     }
 }
 
+export function gsMemoryMapReadImagePSMT8H_PSMCT32(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, cbp: number, alphaReg: number) {
+    let dstIdx = 0;
+    for (let y = 0; y < rrh; y++) {
+        for (let x = 0; x < rrw; x++) {
+            const addr = getPixelAddressPSMCT32(dbp, dbw, x, y);
+            const clutIndex = map.data[addr + 3];
+
+            let cy = (clutIndex & 0xE0) >>> 4;
+            if (clutIndex & 0x08)
+                cy++;
+            let cx = clutIndex & 0x07;
+            if (clutIndex & 0x10)
+                cx += 0x08;
+
+            const p = getPixelAddressPSMCT32(cbp, 1, cx, cy);
+            pixels[dstIdx + 0] = map.data[p + 0x00];
+            pixels[dstIdx + 1] = map.data[p + 0x01];
+            pixels[dstIdx + 2] = map.data[p + 0x02];
+            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
+
+            dstIdx += 0x04;
+        }
+    }
+}
+
+export function gsMemoryMapReadImagePSMT4HH_PSMCT32(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, cbp: number, csa: number, alphaReg: number) {
+    let dstIdx = 0;
+    for (let y = 0; y < rrh; y++) {
+        for (let x = 0; x < rrw; x++) {
+            const addr = getPixelAddressPSMCT32(dbp, dbw, x, y);
+            const clutIndex = map.data[addr + 3] >>> 4;
+
+            const cy = ((clutIndex >>> 3) & 0x1) + (csa & 0xE);
+            const cx = (clutIndex & 0x07) + ((csa & 0x1) << 3);
+            const p = getPixelAddressPSMCT32(cbp, 1, cx, cy);
+            pixels[dstIdx + 0] = map.data[p + 0x00];
+            pixels[dstIdx + 1] = map.data[p + 0x01];
+            pixels[dstIdx + 2] = map.data[p + 0x02];
+            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
+
+            dstIdx += 0x04;
+        }
+    }
+}
+
+export function gsMemoryMapReadImagePSMT4HL_PSMCT32(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, cbp: number, csa: number, alphaReg: number) {
+    let dstIdx = 0;
+    for (let y = 0; y < rrh; y++) {
+        for (let x = 0; x < rrw; x++) {
+            const addr = getPixelAddressPSMCT32(dbp, dbw, x, y);
+            const clutIndex = map.data[addr + 3] & 0xF;
+
+            const cy = ((clutIndex >>> 3) & 0x1) + (csa & 0xE);
+            const cx = (clutIndex & 0x07) + ((csa & 0x1) << 3);
+
+            const p = getPixelAddressPSMCT32(cbp, 1, cx, cy);
+            pixels[dstIdx + 0] = map.data[p + 0x00];
+            pixels[dstIdx + 1] = map.data[p + 0x01];
+            pixels[dstIdx + 2] = map.data[p + 0x02];
+            const rawAlpha = alphaReg == -1 ? map.data[p + 0x03] : alphaReg;
+            pixels[dstIdx + 3] = Math.min(0xFF, rawAlpha * 2);
+
+            dstIdx += 0x04;
+        }
+    }
+}
+
+export function gsMemoryMapReadImagePSMCT16(pixels: Uint8Array, map: GSMemoryMap, dbp: number, dbw: number, rrw: number, rrh: number, texa_0 = 0x80, texa_1 = 0x80) {
+    let dstIdx = 0;
+    for (let y = 0; y < rrh; y++) {
+        for (let x = 0; x < rrw; x++) {
+            const addr = getPixelAddressPSMCT16(dbp, dbw, x, y);
+            const p = map.data[addr + 0] | (map.data[addr + 1] << 8);
+            // the ps2 doesn't properly interpolate these values, just shifts
+            pixels[dstIdx + 0] = (p & 0x001F) << 3;
+            pixels[dstIdx + 1] = (p & 0x03E0) << 3;
+            pixels[dstIdx + 2] = (p & 0x7C00) << 3;
+            let alpha = (p >>> 15) ? (texa_0 & 0xFF) : (texa_1 & 0xFF);
+            if ((texa_0 & 0x8000) !== 0 && p === 0)
+                alpha = 0;
+            pixels[dstIdx + 3] = Math.min(0xFF, 2*alpha);
+
+            dstIdx += 0x04;
+        }
+    }
+}
+
 export function psmToString(psm: GSPixelStorageFormat): string {
     switch (psm) {
     case GSPixelStorageFormat.PSMT4: return 'PSMT4';
+    case GSPixelStorageFormat.PSMT4HH: return 'PSMT4HH';
+    case GSPixelStorageFormat.PSMT4HL: return 'PSMT4HL';
     case GSPixelStorageFormat.PSMT8: return 'PSMT8';
+    case GSPixelStorageFormat.PSMT8H: return 'PSMT8H';
+    case GSPixelStorageFormat.PSMCT16: return 'PSMCT16';
     default: return 'unknown';
     }
 }

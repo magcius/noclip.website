@@ -11,7 +11,7 @@ import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy } from '../Color';
+import { colorFromRGBA, Color, colorCopy, colorFromARGB8, colorFromRGBA8 } from '../Color';
 import { EnvfxManager } from './envfx';
 import { TextureMapping } from '../TextureHolder';
 import { SceneRenderContext } from './render';
@@ -324,6 +324,10 @@ function getKonstColorSel(kcolor: KonstColor): GX.KonstColorSel {
     return GX.KonstColorSel.KCSEL_K0 + kcolor.id;
 }
 
+function getKonstAlphaSel(kcolor: KonstColor): GX.KonstAlphaSel {
+    return GX.KonstAlphaSel.KASEL_K0_A + kcolor.id;
+}
+
 abstract class MaterialBase implements SFAMaterial {
     protected mb: GXMaterialBuilder;
     protected texMtx: TexMtxFunc[] = [];
@@ -531,17 +535,16 @@ export class StandardMaterial extends MaterialBase {
                 return dst;
             }
     
-            if ((this.shader.flags & ShaderFlags.Lava) != 0) {
+            if (this.shader.flags & ShaderFlags.Lava)
                 this.addTevStagesForLava();
-            } else {
+            else
                 this.addTevStagesForNonLava();
-            }
     
-            if (this.shader.flags & ShaderFlags.ReflectSkyscape) {
+            if (this.shader.flags & ShaderFlags.ReflectSkyscape)
                 console.log(`TODO: skyscape reflection?`);
-            } else if (this.shader.flags & ShaderFlags.Caustic) {
+            else if (this.shader.flags & ShaderFlags.Caustic)
                 this.addTevStagesForCaustic();
-            } else {
+            else {
                 // TODO
             }
 
@@ -590,11 +593,10 @@ export class StandardMaterial extends MaterialBase {
         } else {
             this.mb.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.ONE, GX.BlendFactor.ZERO, GX.LogicOp.NOOP);
             this.mb.setZMode(true, GX.CompareType.LEQUAL, true);
-            if (((this.shader.flags & ShaderFlags.AlphaCompare) != 0) && ((this.shader.flags & ShaderFlags.Lava) == 0)) {
+            if ((this.shader.flags & ShaderFlags.AlphaCompare) && !(this.shader.flags & ShaderFlags.Lava))
                 this.mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER, 0);
-            } else {
+            else
                 this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-            }
         }
     }
 
@@ -801,6 +803,8 @@ export class StandardMaterial extends MaterialBase {
 
         const postTexMtx2 = this.genPostTexMtx((dst: mat4) => {
             mat4.identity(dst); // TODO?
+            // FIXME: this matrix is used for scrollable textures.
+            // It is unknown whether scrollable textures are ever used on lava.
         });
 
         const texCoord0 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(postTexMtx2));
@@ -823,9 +827,15 @@ export class StandardMaterial extends MaterialBase {
         this.mb.setIndTexScale(getIndTexStageID(indStage1), GX.IndTexScale._1, GX.IndTexScale._1);
         this.mb.setTevIndirect(stage2.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
-        // TODO: set and use tev kcolor
-        this.mb.setTevKAlphaSel(stage0.id, GX.KonstAlphaSel.KASEL_4_8); // TODO
-        this.mb.setTevKColorSel(stage1.id, GX.KonstColorSel.KCSEL_4_8); // TODO
+        const kcnum = this.genKonstColor((dst: Color, matCtx: MaterialRenderContext) => {
+            const animSin = Math.sin(3.142 * matCtx.sceneCtx.animController.envAnimValue0);
+            const factor = 0.5 * animSin + 0.5;
+            colorFromRGBA(dst, 64 * factor / 0xff, 0, 0, 0xc0 / 0xff);
+        });
+
+        this.mb.setTevKAlphaSel(stage0.id, getKonstAlphaSel(kcnum));
+
+        this.mb.setTevKColorSel(stage1.id, getKonstColorSel(kcnum));
 
         this.mb.setTevDirect(stage0.id);
         this.setTevOrder(stage0, texCoord0, texMap2, GX.RasColorChannelID.COLOR0A0);
@@ -852,7 +862,7 @@ export class StandardMaterial extends MaterialBase {
             0.008, 0.0,   0.0,   0.8 * 0.01 * mapOriginX,
             0.0,   0.008, 0.0,   0.0,
             0.0,   0.0,   0.008, 0.8 * 0.01 * mapOriginZ,
-            0.0,   0.0,   0.0,   0.1
+            0.0,   0.0,   0.0,   1.0
         );
         const postRotate0 = mat4.create();
         mat4.fromRotation(postRotate0, 1.0, [3, -1, 1]);
@@ -867,7 +877,7 @@ export class StandardMaterial extends MaterialBase {
             0.005, 0.0,   0.0,   0.5 * 0.01 * mapOriginX,
             0.0,   0.005, 0.0,   0.0,
             0.0,   0.0,   0.005, 0.5 * 0.01 * mapOriginZ,
-            0.0,   0.0,   0.0,   0.1
+            0.0,   0.0,   0.0,   1.0
         );
         const postRotate1 = mat4.create();
         mat4.fromRotation(postRotate1, 1.0, [1, -1, 3]);
@@ -971,9 +981,8 @@ export class StandardMaterial extends MaterialBase {
             const texCoord1 = this.genScrollableTexCoord(texMap1, this.shader.layers[1].scrollingTexMtx);
 
             this.addTevStageForTexture(0, texMap0, texCoord0);
-            if (this.shader.flags & ShaderFlags.Reflective) {
+            if (this.shader.flags & ShaderFlags.Reflective)
                 this.addTevStagesForReflectiveFloor();
-            }
             this.addTevStagesForTextureWithMode(9, texMap1, texCoord1);
             this.addTevStageForMultColor0A0();
         } else {
@@ -983,16 +992,14 @@ export class StandardMaterial extends MaterialBase {
                 const texMap = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, this.shader.layers[i].texId!, true)));
                 const texCoord = this.genScrollableTexCoord(texMap, layer.scrollingTexMtx);
 
-                if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend) {
+                if (this.shader.flags & ShaderFlags.IndoorOutdoorBlend)
                     this.addTevStagesForIndoorOutdoorBlend(texMap, texCoord);
-                } else {
+                else
                     this.addTevStagesForTextureWithMode(layer.tevMode & 0x7f, texMap, texCoord);
-                }
             }
 
-            if (this.shader.flags & ShaderFlags.Reflective) {
+            if (this.shader.flags & ShaderFlags.Reflective)
                 this.addTevStagesForReflectiveFloor();
-            }
         }
     }
 }
@@ -1065,9 +1072,13 @@ class WaterMaterial extends MaterialBase {
         this.setIndTexOrder(indStage1, texCoord2, texMap1);
         this.mb.setTevIndirect(stage1.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
-        // TODO: GXSetTevKColor
-        this.mb.setTevKColorSel(stage1.id, GX.KonstColorSel.KCSEL_4_8); // TODO: these values depend on the environment
-        this.mb.setTevKAlphaSel(stage1.id, GX.KonstAlphaSel.KASEL_4_8); // TODO
+        const kcnum = this.genKonstColor((dst: Color, matCtx: MaterialRenderContext) => {
+            // FIXME: this color depends on envfx
+            colorFromRGBA(dst, 1.0, 1.0, 1.0, 0x60 / 0xff);
+        });
+
+        this.mb.setTevKAlphaSel(stage1.id, getKonstAlphaSel(kcnum));
+        this.mb.setTevKColorSel(stage1.id, getKonstColorSel(kcnum));
 
         this.setTevOrder(stage0);
         this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
@@ -1169,11 +1180,11 @@ class FurMaterial extends MaterialBase {
         // Stage 2: Distance fade
         const texMap3 = this.genTexMap(this.factory.getRampTexture());
         this.texMtx[2] = (dst: mat4, matCtx: MaterialRenderContext) => {
-            mat4.set(dst,
-                0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0,
-                1/30, 0.0, 0.0, 0.0,
-                25/3, 0.0, 0.0, 0.0 // TODO: this matrix can be tweaked to extend the draw distance, which may be desirable on high-res displays 
+            mat4SetRowMajor(dst,
+                0.0, 0.0, 1/30, 25/3, // TODO: This matrix can be tweaked to adjust the draw distance. This may be desirable on high-resolution displays.
+                0.0, 0.0,  0.0,  0.0,
+                0.0, 0.0,  0.0,  0.0,
+                0.0, 0.0,  0.0,  0.0
             );
             mat4.mul(dst, dst, matCtx.modelViewMtx);
         };
@@ -1200,9 +1211,8 @@ class FurMaterial extends MaterialBase {
         }
 
         // FIXME: Objects have different rules for color-channels than map blocks
-        if (this.isMapBlock) {
+        if (this.isMapBlock)
             this.mb.setChanCtrl(GX.ColorChannelID.ALPHA0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
-        }
 
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
 

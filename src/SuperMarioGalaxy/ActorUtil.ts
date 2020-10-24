@@ -498,6 +498,10 @@ export function isActionStart(actor: LiveActor, action: string): boolean {
         return isBckPlaying(actor, action);
 }
 
+export function isActionEnd(actor: LiveActor): boolean {
+    return isBckStopped(actor);
+}
+
 export function tryStartAction(actor: LiveActor, action: string): boolean {
     if (isActionStart(actor, action))
         return false;
@@ -680,6 +684,12 @@ export function moveCoordToNearestPos(actor: LiveActor): void {
 
 export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
     actor.railRider!.moveToNearestPos(actor.translation);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
+export function moveCoordAndTransToRailPoint(actor: LiveActor, i: number): void {
+    const coord = actor.railRider!.getPointCoord(i);
+    actor.railRider!.setCoord(coord);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 

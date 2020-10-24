@@ -6,7 +6,7 @@ import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, g
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { OceanRing, isEqualStageName, HeatHazeDirector } from "./Actors/MiscActor";
+import { OceanRing, isEqualStageName, HeatHazeDirector, WhirlPoolAccelerator } from "./Actors/MiscActor";
 import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";
@@ -89,6 +89,10 @@ export class WaterAreaHolder extends NameObj {
 
     public entryOceanSphere(oceanSphere: OceanSphere): void {
         this.oceanSphere.push(oceanSphere);
+    }
+
+    public entryWhirlPoolAccelerator(whirlPool: WhirlPoolAccelerator): void {
+        // TODO(jstpierre)
     }
 
     public getWaterAreaInfo(info: WaterInfo, pos: ReadonlyVec3, gravity: ReadonlyVec3): void {

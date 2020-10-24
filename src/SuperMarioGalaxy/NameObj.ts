@@ -105,6 +105,7 @@ export const enum DrawType {
     OceanRing                      = 0x08,
     OceanRingOutside               = 0x0A,
     OceanSphere                    = 0x0B,
+    WhirlPoolAccelerator           = 0x0D,
     ElectricRailHolder             = 0x0E,
     WarpPodPath                    = 0x18,
     WaterPlant                     = 0x1B,

@@ -63,6 +63,7 @@ import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
+import * as Scenes_FFX from './FinalFantasyX/scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -140,6 +141,7 @@ const sceneGroups = [
     Scenes_DonkeyKongCountryReturns.sceneGroup,
     Scenes_Elebits.sceneGroup,
     Scenes_Fez.sceneGroup,
+    Scenes_FFX.sceneGroup,
     Scenes_GTA.sceneGroup.vc,
     Scenes_GTA.sceneGroup.sa,
     Scenes_LuigisMansion3D.sceneGroup,

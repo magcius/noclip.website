@@ -15,6 +15,7 @@ import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 import { SceneRenderContext } from './render';
 import { colorNewFromRGBA } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
+import { computeViewMatrix } from '../Camera';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
@@ -108,6 +109,7 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         },
     },
     [240]: commonClass(0x18),
+    [244]: commonClass(0x18), // VFP_RoundDo
     [248]: commonClass(),
     [249]: { // ProjectileS
         setup: (obj: ObjectInstance, data: DataView) => {
@@ -134,6 +136,7 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         },
     },
     [256]: commonClass(0x1a),
+    [258]: commonClass(), // StayPoint
     [259]: { // CurveFish
         setup: (obj: ObjectInstance, data: DataView) => {
             obj.scale *= data.getUint8(0x18) / 100;
@@ -207,7 +210,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     },
     [298]: { // WM_krazoast
         setup: (obj: ObjectInstance, data: DataView) => {
-            if (obj.objType.typeNum === 888 || obj.objType.typeNum === 889) {
+            if (obj.objType.typeNum === 482) {
+            } else if (obj.objType.typeNum === 888 || obj.objType.typeNum === 889) {
                 commonSetup(obj, data, 0x18);
             }
         },
@@ -544,6 +548,16 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             }
         },
     },
+    [541]: commonClass(0x18), // VFPLift2
+    [542]: commonClass(0x18), // VFP_Block1
+    [543]: commonClass(0x18), // VFPLavaBloc
+    [544]: { // VFP_DoorSwi
+        setup: (obj: ObjectInstance, data: DataView) => {
+            commonSetup(obj, data, 0x18, 0x19);
+            // Roll is 16 bits
+            obj.roll = angle16ToRads(data.getInt16(0x1c));
+        },
+    },
     [549]: commonClass(),
     [550]: { // VFP_lavapoo
         setup: (obj: ObjectInstance, data: DataView) => {
@@ -553,6 +567,12 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
             obj.scale = 1 / (scaleParam / getRandomInt(600, 1000));
         },
     },
+    [551]: { // VFP_lavasta
+        setup: (obj: ObjectInstance, data: DataView) => {
+            obj.position[1] += data.getInt16(0x1a);
+        },
+    },
+    [552]: commonClass(0x18), // VFPSpPl
     [576]: commonClass(),
     [579]: commonClass(0x18),
     [597]: commonClass(0x18),
@@ -640,7 +660,27 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
     [660]: commonClass(0x18),
     [661]: templeClass(),
     [662]: templeClass(),
-    [663]: templeClass(),
+    [663]: { // WCTempleBri
+        setup: (obj: ObjectInstance, data: DataView) => {
+            commonSetup(obj, data, 0x18);
+            obj.setModelNum(data.getInt8(0x19));
+            // Caution: This will modify the materials for all instances of the model.
+            // TODO: find a cleaner way to do this
+            const mats = obj.modelInst!.getMaterials();
+            for (let i = 0; i < mats.length; i++) {
+                const mat = mats[i];
+                if (mat !== undefined && mat instanceof StandardMaterial) {
+                    mat.setBlendOverride({
+                        setup: (mb: GXMaterialBuilder) => {
+                            mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+                            mb.setZMode(true, GX.CompareType.LEQUAL, false);
+                        },
+                    });
+                    mat.rebuild();
+                }
+            }
+        },
+    },
     [664]: { // WCFloorTile
         setup: (obj: ObjectInstance, data: DataView) => {
             obj.yaw = angle16ToRads(-0x4000);
@@ -800,6 +840,8 @@ export interface Light {
 
 const scratchQuat0 = quat.create();
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
+const scratchVec0 = vec3.create();
+const scratchMtx0 = mat4.create();
 
 export class ObjectInstance {
     public modelInst: ModelInstance | null = null;
@@ -848,10 +890,16 @@ export class ObjectInstance {
         
         this.setModelNum(0);
 
-        if (objClass in SFA_CLASSES)
-            SFA_CLASSES[objClass].setup(this, objParams);
-        else
+        if (objClass in SFA_CLASSES) {
+            try {
+                SFA_CLASSES[objClass].setup(this, objParams);
+            } catch (e) {
+                console.warn(`Failed to setup object class ${objClass} type ${typeNum} due to exception:`);
+                console.error(e);
+            }
+        } else {
             console.log(`Don't know how to setup object class ${objClass} objType ${typeNum}`);
+        }
     }
 
     public mount() {
@@ -990,11 +1038,15 @@ export class ObjectInstance {
 
         if (this.modelInst !== null && this.modelInst !== undefined) {
             const mtx = this.getWorldSRT();
+            const viewMtx = scratchMtx0;
+            computeViewMatrix(viewMtx, objectCtx.sceneCtx.viewerInput.camera);
+            const viewPos = scratchVec0;
+            vec3.transformMat4(viewPos, this.position, viewMtx);
             this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
             this.modelInst.prepareToRender(device, renderInstManager, {
                 ...objectCtx,
                 outdoorAmbientColor: scratchColor0,
-            }, mtx);
+            }, mtx, -viewPos[2]);
 
             // Draw bones
             const drawBones = false;

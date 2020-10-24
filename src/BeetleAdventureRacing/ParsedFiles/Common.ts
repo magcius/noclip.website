@@ -143,7 +143,7 @@ function parseVertices(view: DataView, curPos: number, vertCount: number) {
         vertexData[j++] = view.getInt16(curPos + 0x04);
 
         /* skip the next short, it seems to be an index/uid of some sort? */
-        // texture coords (S and T) TODO: check format
+        // texture coords (S and T)
         vertexData[j++] = (view.getInt16(curPos + 0x08) / 0x20);
         vertexData[j++] = (view.getInt16(curPos + 0x0A) / 0x20);
 

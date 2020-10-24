@@ -50,6 +50,7 @@
     "build:zww": "cd src/WindWaker/tools && ts-node zww_extractor.ts",
     "build:dk64": "cd src/DonkeyKong64/tools && ts-node extractor.ts",
     "build:KatamariDamacy": "cd src/KatamariDamacy/tools && ts-node extractor.ts",
+    "build:ffx": "cd src/FinalFantasyX/tools && ts-node extractor.ts",
     "typecheck": "tsc -w --noEmit"
   },
   "bin": {

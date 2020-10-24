@@ -352,7 +352,7 @@ export class FPSCameraController implements CameraController {
 
         this.keyMoveSpeed = Math.max(this.keyMoveSpeed, 1);
         const isShiftPressed = inputManager.isKeyDown('ShiftLeft') || inputManager.isKeyDown('ShiftRight');
-        const isSlashPressed = inputManager.isKeyDown('IntlBackslash');
+        const isSlashPressed = inputManager.isKeyDown('IntlBackslash') || inputManager.isKeyDown('Backslash');
 
         let keyMoveMult = 1;
         if (isShiftPressed)
