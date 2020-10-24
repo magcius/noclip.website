@@ -1,7 +1,7 @@
 ﻿
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model, calcTexMtx, fx16 } from "../nns_g3d/NNS_G3D";
-import { mat4, mat2d, vec3 } from "gl-matrix";
+import { TexMtxMode, TEX0, fx32, TEX0Texture, TEX0Palette, MDL0Material, MDL0Shape, MDL0Node, MDL0Model } from "../nns_g3d/NNS_G3D";
+import { mat4, mat2d, vec3, vec2 } from "gl-matrix";
 import { Format } from "../SuperMario64DS/nitro_tex";
 import { readString } from "../util";
 import { colorNewFromRGBA } from "../Color";
@@ -69,7 +69,7 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
     const matrix_id = view.getInt32(0x64, true);
     const scaleS = fx32(view.getInt32(0x68, true));
     const scaleT = fx32(view.getInt32(0x6C, true));
-    const rot_Z = fx16(view.getUint16(0x70, true));
+    const rot_Z = view.getInt16(0x70, true) / 65536 * 2.0 * Math.PI;
     const field_0x72 = view.getInt16(0x72, true);
     const scaleWidth = fx32(view.getInt32(0x74, true));
     const scaleHeight = fx32(view.getInt32(0x78, true));
@@ -98,22 +98,27 @@ function parseMaterial(buffer: ArrayBufferSlice, texs:MPHTex[]): MDL0Material {
         width = texs[textureIndex].width;
         height = texs[textureIndex].height;
     }
-    let cosR = 1.0;
-    let sinR = 0.0;
+
+    const texScaleS = scaleS / width;
+    const texScaleT = scaleT / height;
+
+    const translationS = scaleWidth * scaleS;
+    const translationT = scaleHeight * scaleT;
+
+    let translate = vec2.create();
+    vec2.set(translate, translationS, translationT);
+    mat2d.translate(texMatrix, texMatrix, translate);
 
     if (Math.abs(rot_Z) > 0) {
-        const theta = rot_Z;
-        sinR = Math.sin(theta);
-        cosR = Math.cos(theta);
+        vec2.set(translate, 0.5, 0.5);
+        mat2d.translate(texMatrix, texMatrix, translate);
+        mat2d.rotate(texMatrix, texMatrix, rot_Z);
+        vec2.set(translate, -0.5, -0.5);
+        mat2d.translate(texMatrix, texMatrix, translate);
     }
-
-    const texScaleS = 1 / width;
-    const texScaleT = 1 / height;
-
-    const translationS = scaleWidth * width;
-    const translationT = scaleHeight * height;
-
-    calcTexMtx(texMatrix, TexMtxMode.MAYA, texScaleS, texScaleT, scaleS, scaleT, sinR, cosR, translationS, translationT);
+    let scale = vec2.create();
+    vec2.set(scale, texScaleS, texScaleT);
+    mat2d.scale(texMatrix, texMatrix, scale);
 
     return { name, textureName, paletteName, cullMode, alpha, polyAttribs, texParams, texMatrix, texScaleS, texScaleT };
 }
@@ -123,12 +128,10 @@ function parseShape(buffer: ArrayBufferSlice, shapeBuff: ArrayBufferSlice ,index
 
     const dlOffs = view.getUint32(0x00, true);
     const dlSize = view.getUint32(0x04, true);
-    const bboxMinX = view.getUint32(0x08, true);
-    const bboxMinY = view.getUint32(0x0C, true);
-    const bboxMinZ = view.getUint32(0x10, true);
-    const bboxMaxX = view.getUint32(0x14, true);
-    const bboxMaxY = view.getUint32(0x18, true);
-    const bboxMaxZ = view.getUint32(0x1C, true);
+    const bboxMin = vec3.create();
+    const bboxMax = vec3.create();
+    vec3.set(bboxMin,fx32(view.getUint32(0x08, true)), fx32(view.getUint32(0x0C, true)), fx32(view.getUint32(0x10, true)));
+    vec3.set(bboxMax, fx32(view.getUint32(0x14, true)), fx32(view.getUint32(0x18, true)), fx32(view.getUint32(0x1C, true)));
 
     const name = `polygon_${index}`;
     const dlBuffer = shapeBuff.slice(dlOffs, dlOffs + dlSize);
@@ -139,8 +142,8 @@ function parseShape(buffer: ArrayBufferSlice, shapeBuff: ArrayBufferSlice ,index
 function parseNode(buffer: ArrayBufferSlice): MPHNode {
     const view = buffer.createDataView();
 
-    const rotation = vec3.create();
     const scale = vec3.create();
+    const rotation = vec3.create();
     const position = vec3.create();
     let vec1 = vec3.create();
     let vec2 = vec3.create();
@@ -154,9 +157,11 @@ function parseNode(buffer: ArrayBufferSlice): MPHNode {
     const mesh_count = view.getInt16(0x4C, true);
     const meshID = view.getInt16(0x4E, true);
     vec3.set(scale, fx32(view.getInt32(0x50, true)), fx32(view.getInt32(0x54, true)), fx32(view.getInt32(0x58, true)));
-    // vec3.set(rotation, fx16(view.getInt16(0x5C, true)), fx16(view.getInt16(0x5E, true)), fx16(view.getInt16(0x60, true)));
+    //TODO: Aplly rotation
+    //vec3.set(rotation, view.getInt16(0x5C, true) / 65536 * 2.0 * Math.PI, view.getInt16(0x5E, true) / 65536 * 2.0 * Math.PI, view.getInt16(0x60, true) / 65536 * 2.0 * Math.PI);
     const field_0x62 = view.getInt16(0x62, true);
-    // vec3.set(position, fx32(view.getInt32(0x64, true)), fx32(view.getInt32(0x68, true)), fx32(view.getInt32(0x6C, true)));
+    //TODO: Aplly position
+    //vec3.set(position, fx32(view.getInt32(0x64, true)), fx32(view.getInt32(0x68, true)), fx32(view.getInt32(0x6C, true)));
     const cull_radius = view.getInt32(0x70, true);
 
     vec3.set(vec1, fx32(view.getInt32(0x74, true)), fx32(view.getInt32(0x78, true)), fx32(view.getInt32(0x7C, true)));
@@ -375,7 +380,6 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
     const sbcBuffer = buffer.slice(0, 0x10); // dummy sbc for reuse MDL0 codes
     const models: MDL0Model[] = [];
 
-    // TODO
     const nodes: MDL0Node[] = [];
     function computeNodeTransforms(scale: vec3, rotation:vec3, position:vec3): mat4{
         let sinAx = Math.sin(rotation[0]);
@@ -424,10 +428,8 @@ export function parseMPH_Model(buffer: ArrayBufferSlice): MPHbin {
         }
         for (let i = index; i != -1;) {
             let node = mphNode[i];
-            let position = vec3.create();
-            vec3.set(position, node.position[0]/node.scale[0], node.position[1]/node.scale[1], node.position[2]/node.scale[2]);
             let transform = mat4.create();
-            transform = computeNodeTransforms(node.scale, node.rotation, position);
+            transform = computeNodeTransforms(node.scale, node.rotation, node.position);
             if(node.parent == -1){
                 node.transform = transform;
             } else {
