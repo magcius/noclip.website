@@ -2,11 +2,11 @@
 // Misc MapObj actors.
 
 import { mat4, vec3, ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxisX, getMatrixAxisZ, computeModelMatrixR, Vec3UnitY } from '../../MathHelpers';
+import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxisX, getMatrixAxisZ, computeModelMatrixR, Vec3UnitY, computeEulerAngleRotationFromSRTMatrix, lerp, invlerp } from '../../MathHelpers';
 import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer, invalidateShadowAll, getBckFrameMax, getBckFrameMaxNamed, joinToGroupArray, getPlayerPos, turnVecToVecCosOnPlane, getEaseInValue, getJointMtxByName, connectToSceneMapObjStrongLight, isBckOneTimeAndStopped, makeMtxFrontSidePos, addHitSensorMapObj, useStageSwitchWriteDead, isValidSwitchA, isValidSwitchDead, invalidateCollisionPartsForActor, isValidSwitchB } from '../ActorUtil';
-import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded } from '../Collision';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer, invalidateShadowAll, getBckFrameMax, getBckFrameMaxNamed, joinToGroupArray, getPlayerPos, turnVecToVecCosOnPlane, getEaseInValue, getJointMtxByName, connectToSceneMapObjStrongLight, isBckOneTimeAndStopped, makeMtxFrontSidePos, addHitSensorMapObj, useStageSwitchWriteDead, isValidSwitchA, isValidSwitchDead, invalidateCollisionPartsForActor, isValidSwitchB, calcRailPointPos, calcGravityVector, validateShadowAll, moveCoordToRailPoint, moveCoordAndTransToRailPoint } from '../ActorUtil';
+import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded, isBindedGround } from '../Collision';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
 import { HitSensor, HitSensorType, isSensorMapObj } from '../HitSensor';
@@ -19,7 +19,7 @@ import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate } from '../Spine';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } from './ModelObj';
 import { initMultiFur } from '../Fur';
-import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength, initShadowVolumeBox, setShadowVolumeStartDropOffset, initShadowFromCSV } from '../Shadow';
+import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength, initShadowVolumeBox, setShadowVolumeStartDropOffset, initShadowFromCSV, setShadowVolumeSphereRadius } from '../Shadow';
 import { initLightCtrl } from '../LightData';
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../../DebugJunk';
 import { DrawBufferType, NameObj } from '../NameObj';
@@ -2231,7 +2231,7 @@ export class BreakableCage extends LiveActor<BreakableCageNrv> {
     }
 
     public static getModelName(objName: string): string {
-        return 'BreakableCageRotate' ? 'BreakableCage' : objName;
+        return objName === 'BreakableCageRotate' ? 'BreakableCage' : objName;
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -2364,5 +2364,330 @@ class LargeChainParts extends LiveActor {
         emitEffect(sceneObjHolder, this, 'Break');
         // startSound
         super.makeActorDead(sceneObjHolder);
+    }
+}
+
+const enum MeteorStrikeType { MeteorStrike, MeteorStrikeEnvironment, MeteorCannon }
+const enum MeteorStrikeNrv { Move, Break }
+export class MeteorStrike extends LiveActor<MeteorStrikeNrv> {
+    private speed: number;
+    private type: MeteorStrikeType;
+    private breakObj: ModelObj | null = null;
+    private effectHostMtx = mat4.create();
+    private frontVec = vec3.create();
+    private totalNumFramesToGround: number;
+    private numFramesToGround: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'MeteorStrike');
+
+        // initMapToolInfo()
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.speed = MeteorStrike.getSpeed(infoIter);
+        this.type = MeteorStrike.getType(infoIter);
+        // initModel()
+        this.initModelManagerWithAnm(sceneObjHolder, 'MeteorStrike');
+        if (this.type === MeteorStrikeType.MeteorStrike)
+            this.breakObj = createModelObjMapObjStrongLight(zoneAndLayer, sceneObjHolder, 'MeteorStrikeBreak', 'MeteorStrikeBreak', null);
+        else if (this.type === MeteorStrikeType.MeteorCannon)
+            this.breakObj = createModelObjMapObjStrongLight(zoneAndLayer, sceneObjHolder, 'MeteorCannonBreak', 'MeteorCannonBreak', null);
+
+        if (this.breakObj !== null) {
+            vec3.copy(this.breakObj.translation, this.translation);
+            this.breakObj.makeActorDead(sceneObjHolder);
+        }
+
+        connectToSceneNoShadowedMapObjStrongLight(sceneObjHolder, this);
+
+        if (this.type !== MeteorStrikeType.MeteorStrikeEnvironment) {
+            this.initHitSensor();
+            addHitSensorMapObj(sceneObjHolder, this, 'body', 8, 90.0, Vec3Zero);
+        }
+
+        this.initBinder(80.0, 0.0, 0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        setEffectHostMtx(this, 'LavaColumnAttrDefault', this.effectHostMtx);
+        setEffectHostMtx(this, 'LavaColumnAttrDamageFire', this.effectHostMtx);
+        this.initRailRider(sceneObjHolder, infoIter);
+
+        calcRailPointPos(scratchVec3a, this, 0);
+        calcRailPointPos(scratchVec3b, this, 1);
+        vec3.sub(this.frontVec, scratchVec3b, scratchVec3a);
+        vec3.normalize(this.frontVec, this.frontVec);
+
+        initShadowVolumeSphere(sceneObjHolder, this, 120.0);
+        setShadowDropLength(this, null, 3000.0);
+        // offShadowVisibleSyncHost(this, null);
+        invalidateShadowAll(this);
+
+        // initSound
+        this.initNerve(MeteorStrikeNrv.Move);
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        vec3.negate(scratchVec3a, this.gravityVector);
+        if (!isSameDirection(scratchVec3a, this.frontVec, 0.01))
+            makeMtxFrontUpPos(this.modelInstance!.modelMatrix, this.frontVec, scratchVec3a, this.translation);
+        else
+            makeMtxFrontNoSupportPos(this.modelInstance!.modelMatrix, this.frontVec, this.translation);
+
+        computeModelMatrixR(scratchMatrix, this.rotation[0], this.rotation[1], this.rotation[2]);
+        mat4.mul(this.modelInstance!.modelMatrix, this.modelInstance!.modelMatrix, scratchMatrix);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MeteorStrikeNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === MeteorStrikeNrv.Move) {
+            if (isFirstStep(this)) {
+                startBck(this, 'MeteorStrike');
+                vec3.scale(this.velocity, this.frontVec, this.speed);
+            }
+
+            if (isHiddenModel(this)) {
+                showModel(this);
+                emitEffect(sceneObjHolder, this, 'MeteorStrike');
+            }
+
+            this.rotation[0] += MathConstants.DEG_TO_RAD * -7.5 * deltaTimeFrames;
+
+            if (this.calcBinderFlag) {
+                // Update the shadow.
+
+                let shadowStep = this.getNerveStep();
+                if (this.numFramesToGround > 150)
+                    shadowStep += (150 - this.numFramesToGround);
+
+                if (shadowStep >= 0) {
+                    const shadowT = invlerp(0.0, Math.min(this.numFramesToGround, 150), shadowStep);
+                    const shadowRadius = lerp(0.0, 120.0, shadowT);
+                    setShadowVolumeSphereRadius(this, null, shadowRadius);
+                    validateShadowAll(this);
+                } else {
+                    invalidateShadowAll(this);
+                }
+            }
+
+            if (isBindedGround(this)) {
+                // Needs to die.
+                let didBreak = false;
+
+                if (!isHiddenModel(this)) {
+                    this.calcBreakPosture(this.effectHostMtx, this.binder!.floorHitInfo.faceNormal);
+                    emitEffect(sceneObjHolder, this, 'LavaColumn');
+
+                    if (!isBindedGroundDamageFire(sceneObjHolder, this)) {
+                        this.setNerve(MeteorStrikeNrv.Break);
+                        // startRumble
+                        didBreak = true;
+                    }
+                }
+
+                if (!didBreak) {
+                    this.makeActorDead(sceneObjHolder);
+                }
+            }
+        } else if (currentNerve === MeteorStrikeNrv.Break) {
+            if (isFirstStep(this)) {
+                vec3.zero(this.velocity);
+                hideModel(this);
+                this.calcGravityFlag = false;
+                invalidateShadowAll(this);
+                deleteEffect(sceneObjHolder, this, 'MeteorStrike');
+                emitEffect(sceneObjHolder, this, 'MeteorStrikeBreak')
+                // startRumble
+                this.breakObj!.makeActorAppeared(sceneObjHolder);
+                startBck(this.breakObj!, 'Break');
+                startBrk(this.breakObj!, 'Break');
+            }
+
+            if (isBckStopped(this.breakObj!))
+                this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    public getMovedPos(dst: vec3, frame: number): boolean {
+        if (frame <= this.totalNumFramesToGround) {
+            calcRailPointPos(dst, this, 0);
+            vec3.scaleAndAdd(dst, dst, this.frontVec, this.speed * frame);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private calcBreakPosture(dst: mat4, groundNormal: ReadonlyVec3): void {
+        makeMtxUpNoSupportPos(dst, groundNormal, this.translation);
+
+        if (this.breakObj !== null) {
+            vec3.copy(this.breakObj.translation, this.translation);
+            computeEulerAngleRotationFromSRTMatrix(this.breakObj.rotation, dst);
+        }
+    }
+
+    public appear(sceneObjHolder: SceneObjHolder, startFrame: number): void {
+        this.numFramesToGround = this.totalNumFramesToGround - startFrame;
+        this.getMovedPos(this.translation, startFrame);
+        vec3.zero(this.rotation);
+        this.calcGravityFlag = true;
+        this.makeActorAppeared(sceneObjHolder);
+        hideModel(this);
+        // invalidateClipping
+        invalidateShadowAll(this);
+        this.setNerve(MeteorStrikeNrv.Move);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+        if (this.breakObj !== null)
+            this.breakObj.makeActorDead(sceneObjHolder);
+        invalidateShadowAll(this);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        calcRailPointPos(scratchVec3a, this, 0);
+        calcGravityVector(sceneObjHolder, this, scratchVec3a, scratchVec3c);
+        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3c, 80.0);
+
+        calcRailPointPos(scratchVec3b, this, 1);
+        calcGravityVector(sceneObjHolder, this, scratchVec3b, scratchVec3c);
+        vec3.scaleAndAdd(scratchVec3b, scratchVec3b, scratchVec3c, 80.0);
+
+        vec3.sub(scratchVec3b, scratchVec3b, scratchVec3a);
+        if (!getFirstPolyOnLineToMap(sceneObjHolder, scratchVec3b, null, scratchVec3a, scratchVec3b))
+            this.calcBinderFlag = false;
+
+        const distanceToGround = vec3.distance(scratchVec3a, scratchVec3b);
+        this.totalNumFramesToGround = ((distanceToGround / this.speed) | 0) + 1;
+    }
+
+    public static getSpeed(infoIter: JMapInfoIter): number {
+        return fallback(getJMapInfoArg0(infoIter), 10.0);
+    }
+
+    public static getType(infoIter: JMapInfoIter): MeteorStrikeType {
+        const objectName = getObjectName(infoIter);
+        if (objectName === 'MeteorStrike')
+            return MeteorStrikeType.MeteorStrike;
+        else if (objectName === 'MeteorStrikeEnvironment')
+            return MeteorStrikeType.MeteorStrikeEnvironment;
+        else if (objectName === 'MeteorCannon')
+            return MeteorStrikeType.MeteorCannon;
+        else
+            throw "whoops";
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('MeteorStrike');
+
+        const type = MeteorStrike.getType(infoIter);
+        if (type === MeteorStrikeType.MeteorStrike)
+            sceneObjHolder.modelCache.requestObjectData('MeteorStrikeBreak');
+        else if (type === MeteorStrikeType.MeteorCannon)
+            sceneObjHolder.modelCache.requestObjectData('MeteorCannonBreak');
+    }
+}
+
+const enum MeteorStrikeLauncherNrv { Create, Interval }
+export class MeteorStrikeLauncher extends LiveActor<MeteorStrikeLauncherNrv> {
+    private meteors: MeteorStrike[] = [];
+    private interval: number;
+    private deadFrames: number;
+    private type: MeteorStrikeType;
+    private useRailSpawn: boolean;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'MeteorStrikeLauncher');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.interval = fallback(getJMapInfoArg1(infoIter), -1);
+        if (this.interval > 0)
+            this.interval *= 60;
+
+        this.type = MeteorStrike.getType(infoIter);
+        this.useRailSpawn = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
+
+        connectToSceneMapObjMovement(sceneObjHolder, this);
+        this.initRailRider(sceneObjHolder, infoIter);
+        moveCoordAndTransToRailPoint(this, 0);
+        this.initNerve(MeteorStrikeLauncherNrv.Create);
+
+        useStageSwitchReadAppear(sceneObjHolder, this, infoIter);
+        syncStageSwitchAppear(sceneObjHolder, this);
+
+        let meteorCount: number;
+        if (this.type === MeteorStrikeType.MeteorStrike && this.useRailSpawn) {
+            const speed = MeteorStrike.getSpeed(infoIter);
+            const totalLength = getRailTotalLength(this);
+            meteorCount = (totalLength / (speed * this.interval)) | 0 + 2;
+        } else if (this.type !== MeteorStrikeType.MeteorStrike && this.interval >= 0) {
+            meteorCount = 2;
+        } else {
+            meteorCount = 1;
+        }
+
+        for (let i = 0; i < meteorCount; i++)
+            this.meteors.push(new MeteorStrike(zoneAndLayer, sceneObjHolder, infoIter));
+
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    private create(sceneObjHolder: SceneObjHolder): boolean {
+        const meteor = this.getUnusedMeteorStrike();
+        if (meteor === null)
+            return false;
+
+        meteor.appear(sceneObjHolder, 0);
+        return true;
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MeteorStrikeLauncherNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === MeteorStrikeLauncherNrv.Create) {
+            if (isFirstStep(this))
+                this.deadFrames = 0;
+
+            if (this.create(sceneObjHolder)) {
+                if (this.interval >= 0)
+                    this.setNerve(MeteorStrikeLauncherNrv.Interval);
+                else
+                    this.makeActorDead(sceneObjHolder);
+            } else {
+                this.deadFrames += deltaTimeFrames;
+            }
+        } else if (currentNerve === MeteorStrikeLauncherNrv.Interval) {
+            if (isGreaterEqualStep(this, this.interval))
+                this.setNerve(MeteorStrikeLauncherNrv.Create);
+        }
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        this.setNerve(MeteorStrikeLauncherNrv.Create);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorDead(sceneObjHolder);
+
+        if (this.interval >= 0) {
+            for (let i = 0; i < this.meteors.length; i++)
+                if (!isDead(this.meteors[i]))
+                    this.meteors[i].makeActorDead(sceneObjHolder);
+        }
+    }
+
+    private getUnusedMeteorStrike(): MeteorStrike | null {
+        for (let i = 0; i < this.meteors.length; i++)
+            if (isDead(this.meteors[i]))
+                return this.meteors[i];
+        return null;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        MeteorStrike.requestArchives(sceneObjHolder, infoIter);
     }
 }

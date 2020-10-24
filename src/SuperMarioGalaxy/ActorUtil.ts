@@ -687,6 +687,12 @@ export function moveCoordAndTransToNearestRailPos(actor: LiveActor): void {
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 
+export function moveCoordAndTransToRailPoint(actor: LiveActor, i: number): void {
+    const coord = actor.railRider!.getPointCoord(i);
+    actor.railRider!.setCoord(coord);
+    vec3.copy(actor.translation, actor.railRider!.currentPos);
+}
+
 export function moveCoordAndTransToNearestRailPoint(actor: LiveActor): void {
     actor.railRider!.moveToNearestPoint(actor.translation);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
