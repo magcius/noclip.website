@@ -2002,7 +2002,7 @@ export class DinoPackun extends LiveActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        super.requestArchives(sceneObjHolder, infoIter);
+        sceneObjHolder.modelCache.requestObjectData('DinoPackun');
         sceneObjHolder.modelCache.requestObjectData('DinoPackunTailBall');
     }
 }
