@@ -25,7 +25,7 @@ import { colorFromRGBA } from "../Color";
 import { TextureMapping } from "../TextureHolder";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 
-function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
+export function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
 }
 
@@ -1142,16 +1142,19 @@ function addShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, info
 }
 
 export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveActor, filename: string = 'Shadow'): void {
-    actor.shadowControllerList = new ShadowControllerList();
-
-    let shadowFile: ArrayBufferSlice;
+    let shadowFile: ArrayBufferSlice | null;
 
     if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG1)
-        shadowFile = assertExists(actor.resourceHolder.arc.findFileData(`${filename}.bcsv`));
+        shadowFile = actor.resourceHolder.arc.findFileData(`${filename}.bcsv`);
     else if (sceneObjHolder.sceneDesc.gameBit === GameBits.SMG2)
-        shadowFile = assertExists(actor.resourceHolder.arc.findFileData(`ActorInfo/${filename}.bcsv`));
+        shadowFile = actor.resourceHolder.arc.findFileData(`ActorInfo/${filename}.bcsv`);
     else
         throw "whoops";
+
+    if (shadowFile === null)
+        return;
+
+    actor.shadowControllerList = new ShadowControllerList();
 
     const shadowData = createCsvParser(shadowFile);
     shadowData.mapRecords((infoIter) => {

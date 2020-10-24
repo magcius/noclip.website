@@ -13,13 +13,13 @@ import { HitSensor, HitSensorType, isSensorMapObj } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter, getJMapInfoArg2, getJMapInfoArg5, getJMapInfoBool, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg7 } from '../JMapInfo';
 import { LiveActor, MessageType, ZoneAndLayer, isDead, makeMtxTRFromActor, MsgSharedGroup, dynamicSpawnZoneAndLayer, isMsgTypeEnemyAttack } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
-import { getMapPartsArgMoveConditionType, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRotator, MoveConditionType, RailGuideType } from '../MapParts';
+import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRailPosture, MapPartsRotator, MoveConditionType, MovePostureType, RailGuideType } from '../MapParts';
 import { createIndirectPlanetModel, PartsModel } from './MiscActor';
 import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate } from '../Spine';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } from './ModelObj';
 import { initMultiFur } from '../Fur';
-import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength, initShadowVolumeBox, setShadowVolumeStartDropOffset } from '../Shadow';
+import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength, initShadowVolumeBox, setShadowVolumeStartDropOffset, initShadowFromCSV } from '../Shadow';
 import { initLightCtrl } from '../LightData';
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../../DebugJunk';
 import { DrawBufferType, NameObj } from '../NameObj';
@@ -72,9 +72,13 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     public texChangeFrame: number = -1;
     public rotator: boolean = false;
     public railMover: boolean = false;
+    public railPosture: boolean = false;
     public initNerve: TNerve | null = null;
     public initHitSensor: boolean = false;
     public initFur: boolean = false;
+    public calcGravity: boolean = false;
+    public initShadow: string | null = null;
+    public shadowDropLength: number = -1;
 
     public setupDefaultPos(): void {
         this.setDefaultPos = true;
@@ -101,8 +105,16 @@ class MapObjActorInitInfo<TNerve extends number = number> {
         this.railMover = true;
     }
 
+    public setupRailPosture(): void {
+        this.railPosture = true;
+    }
+
     public setupNerve(nerve: TNerve): void {
         this.initNerve = nerve;
+    }
+
+    public setupShadow(filename: string = 'Shadow'): void {
+        this.initShadow = filename;
     }
 }
 
@@ -111,6 +123,7 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
     private objName: string;
     protected rotator: MapPartsRotator | null = null;
     protected railMover: MapPartsRailMover | null = null;
+    protected railPosture: MapPartsRailPosture | null = null;
     protected railGuideDrawer: MapPartsRailGuideDrawer | null = null;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, initInfo: MapObjActorInitInfo<TNerve>) {
@@ -129,6 +142,13 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
             initLightCtrl(sceneObjHolder, this);
         if (initInfo.initEffect !== null)
             this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
+        if (initInfo.calcGravity)
+            this.calcGravityFlag = true;
+        if (initInfo.initShadow !== null) {
+            initShadowFromCSV(sceneObjHolder, this, initInfo.initShadow);
+            if (initInfo.shadowDropLength >= 0.0)
+                setShadowDropLength(this, null, initInfo.shadowDropLength);
+        }
         if (initInfo.initNerve !== null)
             this.initNerve(initInfo.initNerve as TNerve);
 
@@ -152,6 +172,11 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
             this.initRailRider(sceneObjHolder, infoIter);
         if (connectedWithRail && initInfo.railMover)
             this.railMover = new MapPartsRailMover(sceneObjHolder, this, infoIter);
+        if (connectedWithRail && initInfo.railPosture) {
+            const movePostureType = getMapPartsArgMovePosture(this);
+            if (movePostureType !== MovePostureType.None)
+                this.railPosture = new MapPartsRailPosture(sceneObjHolder, this, infoIter);
+        }
         if (initInfo.rotator)
             this.rotator = new MapPartsRotator(sceneObjHolder, this, infoIter);
 
@@ -275,6 +300,8 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
             this.rotator.start();
         if (this.railMover !== null)
             this.railMover.start();
+        if (this.railPosture !== null)
+            this.railPosture.start();
         if (this.railGuideDrawer !== null)
             this.railGuideDrawer.start(sceneObjHolder);
     }
@@ -284,6 +311,8 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
             this.rotator.end();
         if (this.railMover !== null)
             this.railMover.end();
+        if (this.railPosture !== null)
+            this.railPosture.end();
         if (this.railGuideDrawer !== null)
             this.railGuideDrawer.end(sceneObjHolder);
     }
@@ -291,8 +320,8 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
-        if (this.rotator !== null)
-            this.rotator.movement(sceneObjHolder, viewerInput);
+        if (this.railPosture !== null)
+            this.railPosture.movement(sceneObjHolder, viewerInput);
         if (this.railMover !== null) {
             this.railMover.movement(sceneObjHolder, viewerInput);
             if (this.railMover.isWorking()) {
@@ -300,23 +329,26 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
                 this.railMover.tryResetPositionRepeat(sceneObjHolder);
             }
         }
+        if (this.rotator !== null)
+            this.rotator.movement(sceneObjHolder, viewerInput);
         if (this.railGuideDrawer !== null)
             this.railGuideDrawer.movement(sceneObjHolder, viewerInput);
     }
 
     protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         const hasAnyMapFunction = (
-            (this.rotator !== null && this.rotator.isWorking())
+            (this.rotator !== null && this.rotator.isWorking()) ||
+            (this.railPosture !== null && this.railPosture.isWorking())
         );
 
         if (hasAnyMapFunction) {
             const m = this.modelInstance!.modelMatrix;
             mat4.identity(m);
 
+            if (this.railPosture !== null && this.railPosture.isWorking())
+                mat4.mul(m, m, this.railPosture.mtx);
             if (this.rotator !== null && this.rotator.isWorking())
                 mat4.mul(m, m, this.rotator.mtx);
-            if (this.railMover !== null && this.railMover.isWorking())
-                mat4.mul(m, m, this.railMover.mtx);
 
             setMatrixTranslation(m, this.translation);
         } else {
@@ -395,7 +427,8 @@ export class RailMoveObj extends MapObjActor<RailMoveObjNrv> {
         initInfo.setupConnectToScene();
         initInfo.setupEffect(null);
         initInfo.setupRailMover();
-        // initInfo.setupRailPosture();
+        initInfo.setupRailPosture();
+        initInfo.setupShadow();
         // initInfo.setupBaseMtxFollowTarget();
         initInfo.setupNerve(RailMoveObjNrv.Move);
         setupInitInfoTypical(initInfo, getObjectName(infoIter));
@@ -887,6 +920,8 @@ export class SideSpikeMoveStep extends MapObjActor<SideSpikeMoveStepNrv> {
         initInfo.setupDefaultPos();
         initInfo.setupConnectToScene();
         initInfo.setupRailMover();
+        initInfo.setupRailPosture();
+        initInfo.setupShadow();
         initInfo.setupNerve(SideSpikeMoveStepNrv.Wait);
         setupInitInfoTypical(initInfo, getObjectName(infoIter));
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);

@@ -512,7 +512,6 @@ export class DemoDirector extends NameObj {
 
     private startDemoExecutor(sceneObjHolder: SceneObjHolder, requester: NameObj, demoName: string, movementControlType: number, subPartName: string | null): void {
         const demoExecutor = this.executorHolder.findCastGroup(demoName);
-        console.log('starting demo', demoName, demoExecutor.sheetName);
         this.currentExecutor = demoExecutor;
 
         if (subPartName === null)

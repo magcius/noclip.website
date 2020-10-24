@@ -5,10 +5,11 @@ import { Spine, isFirstStep, getStep, isGreaterEqualStep } from './Spine';
 import { NameObj } from './NameObj';
 import { mat4, vec3 } from 'gl-matrix';
 import { JMapInfoIter } from './JMapInfo';
-import { computeModelMatrixR, MathConstants, isNearZero } from '../MathHelpers';
+import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from '../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
-import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord } from './ActorUtil';
+import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection } from './ActorUtil';
+import { calcDropShadowVectorOrZero } from './Shadow';
 
 export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
 
@@ -75,7 +76,9 @@ function getMapPartsArgRailInitPosType(actor: LiveActor): RailInitPosType {
 const enum AxisType { X, Y, Z }
 const enum AccelType { Normal, Reverse, Timed }
 
-const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
+const scratchVec3c = vec3.create();
 
 class MapPartsFunction<TNerve extends number> extends NameObj {
     public spine = new Spine<TNerve>();
@@ -98,7 +101,6 @@ class MapPartsFunction<TNerve extends number> extends NameObj {
 }
 
 const enum MapPartsRotatorNrv { NeverMove, Wait, RotateStart, Rotate, StopAtEnd }
-
 export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     private rotateAngle: number;
     private rotateAxis: AxisType;
@@ -171,10 +173,10 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     }
 
     private updateRotateMtx(): void {
-        this.calcRotateAxisDir(scratchVec3, this.rotateAxis);
-        vec3.normalize(scratchVec3, scratchVec3);
+        this.calcRotateAxisDir(scratchVec3a, this.rotateAxis);
+        vec3.normalize(scratchVec3a, scratchVec3a);
         mat4.identity(this.mtx);
-        mat4.rotate(this.mtx, this.mtx, MathConstants.DEG_TO_RAD * this.angle, scratchVec3);
+        mat4.rotate(this.mtx, this.mtx, MathConstants.DEG_TO_RAD * this.angle, scratchVec3a);
         mat4.mul(this.mtx, this.mtx, this.baseHostMtx);
     }
 
@@ -251,6 +253,74 @@ export class MapPartsRotator extends MapPartsFunction<MapPartsRotatorNrv> {
     }
 }
 
+export const enum MovePostureType { None, RailDirRail, RailDir, RailDirRailUseShadowGravity }
+export function getMapPartsArgMovePosture(actor: LiveActor): MovePostureType {
+    return fallback(actor.railRider!.bezierRail.railIter.getValueNumberNoInit('path_arg0'), MovePostureType.None);
+}
+
+const enum MapPartsRailPostureNrv { DoNothing, Move }
+export class MapPartsRailPosture extends MapPartsFunction<MapPartsRailPostureNrv> {
+    private movePostureType: MovePostureType;
+    public mtx = mat4.create();
+
+    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter) {
+        super(sceneObjHolder, actor, 'MapPartsRailPosture');
+
+        this.movePostureType = getMapPartsArgMovePosture(actor);
+
+        if (this.movePostureType !== MovePostureType.None)
+            this.spine.setNerve(MapPartsRailPostureNrv.Move);
+        else
+            this.spine.setNerve(MapPartsRailPostureNrv.DoNothing);
+    }
+
+    public updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: MapPartsRailPostureNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === MapPartsRailPostureNrv.Move) {
+            if (this.movePostureType === MovePostureType.RailDirRailUseShadowGravity) {
+                calcDropShadowVectorOrZero(sceneObjHolder, this.actor, this.actor.translation, scratchVec3b);
+            } else {
+                calcGravityVector(sceneObjHolder, this.actor, this.actor.translation, scratchVec3b);
+            }
+
+            getRailDirection(scratchVec3c, this.actor);
+
+            if (!isSameDirection(scratchVec3b, scratchVec3c, 0.01)) {
+                if (isRailGoingToEnd(this.actor))
+                    vec3.negate(scratchVec3c, scratchVec3c);
+
+                if (this.movePostureType === MovePostureType.RailDirRail || this.movePostureType === MovePostureType.RailDirRailUseShadowGravity) {
+                    vec3.negate(scratchVec3b, scratchVec3b);
+                    vec3.cross(scratchVec3a, scratchVec3b, scratchVec3c);
+                    vec3.cross(scratchVec3c, scratchVec3a, scratchVec3b);
+                } else if (this.movePostureType === MovePostureType.RailDir) {
+                    vec3.negate(scratchVec3b, scratchVec3b);
+                    vec3.cross(scratchVec3a, scratchVec3b, scratchVec3c);
+                    vec3.cross(scratchVec3b, scratchVec3c, scratchVec3a);
+                } else if (this.movePostureType === MovePostureType.None) {
+                    vec3.copy(scratchVec3a, Vec3UnitX);
+                    vec3.copy(scratchVec3b, Vec3UnitY);
+                    vec3.copy(scratchVec3c, Vec3UnitZ);
+                }
+
+                setMatrixAxis(this.mtx, scratchVec3a, scratchVec3b, scratchVec3c);
+            }
+        }
+    }
+
+    public isWorking(): boolean {
+        return this.spine.getCurrentNerve() === MapPartsRailPostureNrv.Move;
+    }
+
+    public start(): void {
+    }
+
+    public end(): void {
+        mat4.identity(this.mtx);
+    }
+}
+
 class MapPartsRailPointPassChecker {
     public currentRailPointId: number = -1;
 
@@ -310,7 +380,6 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
     private startMoveCoord: number = 0;
 
     public translation = vec3.create();
-    public mtx = mat4.create();
 
     constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter) {
         super(sceneObjHolder, actor, 'MapPartsRailMover');
@@ -443,7 +512,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
 
             if (!isNearZero(this.accel, 0.0001) && getStep(this) < this.accelTime)
                 this.moveSpeed += this.accel;
-            moveCoord(this.actor, this.moveSpeed);
+            moveCoord(this.actor, this.moveSpeed * deltaTimeFrames);
             getRailPos(this.translation, this.actor);
         } else if (currentNerve === MapPartsRailMoverNrv.MoveStart) {
             if (isFirstStep(this))
