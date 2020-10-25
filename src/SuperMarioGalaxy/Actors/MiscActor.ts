@@ -21,16 +21,16 @@ import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatri
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, appearStarPiece, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, isAnyAnimStopped, isBckOneTimeAndStopped, isBckStopped, isExistCollisionResource, isHiddenModel, isLoopRail, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
-import { calcMapGround, getFirstPolyOnLineToMap, isBinded, isWallCodeNoAction, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
+import { appearStarPiece, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, isAnyAnimStopped, isBckOneTimeAndStopped, isBckStopped, isExistCollisionResource, isHiddenModel, isLoopRail, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { isDemoLastStep, registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { initFurPlanet } from '../Fur';
-import { HitSensor, HitSensorType } from '../HitSensor';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
-import { dynamicSpawnZoneAndLayer, isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
+import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, getTimeFrames, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
 import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType } from '../MapParts';
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
@@ -41,7 +41,7 @@ import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep } from '.
 import { isExistStageSwitchSleep } from '../Switch';
 import { WorldmapPointInfo } from './LegacyActor';
 import { addBrightObj, BrightObjBase, BrightObjCheckArg } from './LensFlare';
-import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
+import { createModelObjBloomModel, createModelObjMapObj, createModelObjMapObjStrongLight, ModelObj } from './ModelObj';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -1586,28 +1586,80 @@ export class YellowChip extends ChipBase {
 }
 
 const enum CrystalCageSize { S, M, L }
-
-export class CrystalCage extends LiveActor {
+const enum CrystalCageNrv { Wait, Break, BreakAfter }
+export class CrystalCage extends LiveActor<CrystalCageNrv> {
     private size: CrystalCageSize;
+    private breakMtx = mat4.create();
+    private breakModel: ModelObj;
+    private sensorPos = vec3.create();
+    private binderOffsetVec = vec3.create();
+    private dummyDisplayModel: PartsModel | null = null;
+    private hasBinder = false;
+    private breakImmediately = false;
+    private powerStarId: number;
+    private groundPos = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPos(sceneObjHolder, this, infoIter);
 
-        if (this.name === 'CrystalCageS')
-            this.size = CrystalCageSize.S;
-        else if (this.name === 'CrystalCageM')
-            this.size = CrystalCageSize.M;
-        else if (this.name === 'CrystalCageL')
-            this.size = CrystalCageSize.L;
+        if (this.size === CrystalCageSize.L) {
+            this.powerStarId = fallback(getJMapInfoArg0(infoIter), -1);
+        } else {
+            this.hasBinder = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
+            this.breakImmediately = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
+        }
 
+        calcGravity(sceneObjHolder, this);
+
+        // initModel()
         this.initModelManagerWithAnm(sceneObjHolder, this.name);
+
+        vec3.negate(scratchVec3a, this.gravityVector);
+        makeMtxUpNoSupportPos(this.breakMtx, scratchVec3a, this.translation);
+        if (this.size === CrystalCageSize.L)
+            this.breakModel = createModelObjMapObjStrongLight(zoneAndLayer, sceneObjHolder, 'CrystalCageLBreak', 'CrystalCageLBreak', this.breakMtx);
+        else
+            this.breakModel = createModelObjMapObjStrongLight(zoneAndLayer, sceneObjHolder, 'CrystalCageSBreak', 'CrystalCageSBreak', this.breakMtx);
+        vec3.copy(this.breakModel.scale, this.scale);
+        // registerDemoSimpleCastAll
+        this.breakModel.makeActorDead(sceneObjHolder);
 
         connectToSceneCrystal(sceneObjHolder, this);
 
-        if (this.size === CrystalCageSize.L)
+        this.initHitSensor();
+        const bodySensor = addHitSensorPosMapObj(sceneObjHolder, this, 'body', 8, 130.0 * this.scale[0], this.sensorPos, Vec3Zero);
+        if (this.size !== CrystalCageSize.S)
+            invalidateHitSensors(this);
+
+        if (this.hasBinder) {
+            this.initBinder(50.0, 0.0, 0);
+            setBinderOffsetVec(this, this.binderOffsetVec);
+            setBinderExceptActor(this, this);
+        }
+
+        if (this.size !== CrystalCageSize.L)
             this.initEffectKeeper(sceneObjHolder, null);
+
+        initCollisionParts(sceneObjHolder, this, this.name, bodySensor);
+
+        // setClippingTypeSphere
+        // initSound
+
+        // dummyDisplayModel
+
+        startBva(this, this.name);
+        setBvaFrameAndStop(this, 0.0);
+
+        // RumbleCalculator
+
+        joinToGroupArray(sceneObjHolder, this, infoIter, null, 0x20);
+        this.initNerve(CrystalCageNrv.Wait);
+
+        const hasDemo = tryRegisterDemoCast(sceneObjHolder, this, infoIter);
+        if (hasDemo && this.dummyDisplayModel !== null)
+            tryRegisterDemoCast(sceneObjHolder, this.dummyDisplayModel, infoIter);
 
         if (this.size === CrystalCageSize.L) {
             this.makeActorAppeared(sceneObjHolder);
@@ -1620,6 +1672,125 @@ export class CrystalCage extends LiveActor {
         } else {
             this.makeActorAppeared(sceneObjHolder);
         }
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        if (!this.breakImmediately || this.hasBinder) {
+            calcUpVec(scratchVec3a, this);
+            const height = this.size === CrystalCageSize.L ? 1000.0 : 300.0;
+            vec3.scaleAndAdd(scratchVec3b, this.translation, scratchVec3a, height * this.scale[0]);
+            vec3.scale(scratchVec3c, scratchVec3a, -2.0 * height * this.scale[0]);
+
+            if (!getFirstPolyOnLineToMapExceptActor(sceneObjHolder, this.groundPos, null, scratchVec3b, scratchVec3c, this))
+                vec3.copy(this.groundPos, this.translation);
+
+            if (this.hasBinder) {
+                vec3.sub(this.binderOffsetVec, this.groundPos, this.translation);
+                vec3.scaleAndAdd(this.binderOffsetVec, this.binderOffsetVec, scratchVec3a, 50.0);
+                vec3.scale(this.velocity, scratchVec3a, -2.0);
+            }
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: CrystalCageNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === CrystalCageNrv.Wait) {
+            // RumbleCalculator
+
+            if (this.size === CrystalCageSize.S) {
+                calcUpVec(scratchVec3a, this);
+                vec3.scaleAndAdd(scratchVec3a, this.translation, scratchVec3a, -40.0);
+                calcUpVec(scratchVec3b, this);
+                vec3.scaleAndAdd(scratchVec3b, this.translation, scratchVec3b, 140.0);
+                getPlayerPos(scratchVec3c, sceneObjHolder);
+                calcPerpendicFootToLineInside(this.sensorPos, scratchVec3c, scratchVec3a, scratchVec3b);
+            }
+        } else if (currentNerve === CrystalCageNrv.Break) {
+            if (isFirstStep(this)) {
+                if (this.breakImmediately) {
+                    hideModel(this);
+                } else {
+                    const frame = this.size === CrystalCageSize.L ? 2 : 1;
+                    setBvaFrameAndStop(this, frame);
+                    vec3.copy(this.translation, this.groundPos);
+                }
+
+                if (this.hasBinder) {
+                    this.calcBinderFlag = false;
+                    vec3.zero(this.velocity);
+                }
+
+                this.breakModel.makeActorAppeared(sceneObjHolder);
+                startBck(this.breakModel, 'Break');
+
+                if (this.size === CrystalCageSize.L) {
+                    // startSound
+                    // requestPowerStarAppear
+                } else {
+                    emitEffect(sceneObjHolder, this, 'Break');
+                }
+
+                // appearCoinPop / startSound
+                // kill dummy model
+            }
+
+            this.tryOnSwitchDead(sceneObjHolder);
+            if (isBckStopped(this.breakModel)) {
+                if (this.breakImmediately)
+                    this.makeActorDead(sceneObjHolder);
+                else
+                    this.setNerve(CrystalCageNrv.BreakAfter);
+            }
+        } else if (currentNerve === CrystalCageNrv.BreakAfter) {
+            if (isFirstStep(this))
+                this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    private tryOnSwitchDead(sceneObjHolder: SceneObjHolder): void {
+        if (this.size !== CrystalCageSize.L && isValidSwitchDead(this)) {
+            let step = 0;
+            if (this.dummyDisplayModel !== null /* && getDummyDisplayModelId(this.dummyDisplayModel) === 3) */)
+                step = 10;
+            if (isGreaterEqualStep(this, step))
+                this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
+        }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (isMsgTypeEnemyAttack(messageType)) {
+            if (this.size === CrystalCageSize.L || !this.isNerve(CrystalCageNrv.Wait))
+                return false;
+
+            invalidateCollisionPartsForActor(sceneObjHolder, this);
+            invalidateHitSensors(this);
+            this.setNerve(CrystalCageNrv.Break);
+            return true;
+        } else {
+            return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+        }
+    }
+
+    public static getSize(infoIter: JMapInfoIter): CrystalCageSize {
+        const objName = getObjectName(infoIter);
+        if (objName === 'CrystalCageS')
+            return CrystalCageSize.S;
+        else if (objName === 'CrystalCageM')
+            return CrystalCageSize.M;
+        else if (objName === 'CrystalCageL')
+            return CrystalCageSize.L;
+        else
+            throw "whoops";
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        const size = CrystalCage.getSize(infoIter);
+        if (size === CrystalCageSize.L)
+            sceneObjHolder.modelCache.requestObjectData('CrystalCageLBreak');
+        else
+            sceneObjHolder.modelCache.requestObjectData('CrystalCageSBreak');
     }
 }
 

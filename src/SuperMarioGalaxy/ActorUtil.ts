@@ -533,34 +533,6 @@ export function getRandomInt(min: number, max: number): number {
     return getRandomFloat(min, max) | 0;
 }
 
-export function addHitSensor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensorType: HitSensorType, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
-    return actor.hitSensorKeeper!.add(sceneObjHolder, name, hitSensorType, pairwiseCapacity, radius, actor, offset);
-}
-
-export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor) {
-    return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
-}
-
-export function addBodyMessageSensorMapObjPress(sceneObjHolder: SceneObjHolder, actor: LiveActor) {
-    return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObjPress, 0, 0.0, actor, Vec3Zero);
-}
-
-export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
-    return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
-}
-
-export function addHitSensorEye(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
-    return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Eye, pairwiseCapacity, radius, actor, offset);
-}
-
-export function invalidateHitSensors(actor: LiveActor): void {
-    actor.hitSensorKeeper!.invalidate();
-}
-
-export function validateHitSensors(actor: LiveActor): void {
-    actor.hitSensorKeeper!.validate();
-}
-
 function calcCollisionMtx(dst: mat4, actor: LiveActor): void {
     mat4.copy(dst, assertExists(actor.getBaseMtx()));
     const scaleX = actor.scale[0];

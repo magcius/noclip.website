@@ -976,7 +976,7 @@ export class Binder {
     public useMovingReaction: boolean = false;
     public moveWithCollision: boolean = false;
 
-    public hostOffsetVec: vec3 | null = null;
+    public hostOffsetVec: ReadonlyVec3 | null = null;
     public fixReactionVec = vec3.create();
 
     public floorHitInfo = new HitInfo();
@@ -1199,6 +1199,10 @@ export class Binder {
         this.triangleFilter = filter;
     }
 
+    public setCollisionPartsFilter(filter: CollisionPartsFilterFunc): void {
+        this.partsFilter = filter;
+    }
+
     public setExCollisionParts(parts: CollisionParts | null): void {
         this.exCollisionParts = parts;
         this.exCollisionPartsValid = this.exCollisionParts !== null;
@@ -1246,6 +1250,16 @@ export function isBinded(actor: LiveActor): boolean {
 
 export function setBindTriangleFilter(actor: LiveActor, triFilter: TriangleFilterFunc): void {
     actor.binder!.setTriangleFilter(triFilter);
+}
+
+export function setBinderExceptActor(actor: LiveActor, except: LiveActor): void {
+    actor.binder!.setCollisionPartsFilter((sceneObjHolder, parts) => {
+        return except === parts.hitSensor.actor;
+    });
+}
+
+export function setBinderOffsetVec(actor: LiveActor, offsetVec: ReadonlyVec3): void {
+    actor.binder!.hostOffsetVec = offsetVec;
 }
 
 export function getBindedFixReactionVector(actor: LiveActor): ReadonlyVec3 {

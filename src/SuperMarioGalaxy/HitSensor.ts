@@ -1,12 +1,12 @@
 
-import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { LiveActor, isDead, MessageType, MsgSharedGroup } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
 import { connectToScene, getGroupFromArray } from "./ActorUtil";
 import { NameObj, MovementType } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { arrayRemove } from "../util";
-import { transformVec3Mat4w1, transformVec3Mat4w0 } from "../MathHelpers";
+import { transformVec3Mat4w1, transformVec3Mat4w0, Vec3Zero } from "../MathHelpers";
 
 export const enum HitSensorType {
     _Player_Start               = 0x00,
@@ -213,7 +213,7 @@ const scratchVec3 = vec3.create();
 export class HitSensorInfo {
     public offset = vec3.create();
 
-    constructor(public name: string, public sensor: HitSensor, private translation: vec3 | null, private baseMtx: mat4 | null, radius: number, offset: ReadonlyVec3, private useCallback: boolean) {
+    constructor(public name: string, public sensor: HitSensor, private translation: ReadonlyVec3 | null, private baseMtx: ReadonlyMat4 | null, radius: number, offset: ReadonlyVec3, private useCallback: boolean) {
         vec3.copy(this.offset, offset);
     }
 
@@ -252,11 +252,22 @@ export class HitSensorInfo {
 export class HitSensorKeeper {
     public sensorInfos: HitSensorInfo[] = [];
 
+    private registHitSensorInfo(sensorInfo: HitSensorInfo): void {
+        this.sensorInfos.push(sensorInfo);
+        sensorInfo.update();
+    }
+
     public add(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor, offset: ReadonlyVec3): HitSensor {
         const sensor = new HitSensor(sceneObjHolder, sensorType, pairwiseCapacity, radius, actor);
         const sensorInfo = new HitSensorInfo(name, sensor, null, null, radius, offset, false);
-        this.sensorInfos.push(sensorInfo);
-        sensorInfo.update();
+        this.registHitSensorInfo(sensorInfo);
+        return sensor;
+    }
+
+    public addPos(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor, pos: ReadonlyVec3, offset: ReadonlyVec3): HitSensor {
+        const sensor = new HitSensor(sceneObjHolder, sensorType, pairwiseCapacity, radius, actor);
+        const sensorInfo = new HitSensorInfo(name, sensor, pos, null, radius, offset, false);
+        this.registHitSensorInfo(sensorInfo);
         return sensor;
     }
 
@@ -469,4 +480,36 @@ export function sendMsgToGroupMember<T extends LiveActor>(sceneObjHolder: SceneO
 
 export function isSensorNear(a: HitSensor, b: HitSensor, radius: number): boolean {
     return vec3.squaredDistance(a.center, b.center) < (radius ** 2.0);
+}
+
+export function addHitSensor(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensorType: HitSensorType, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, name, hitSensorType, pairwiseCapacity, radius, actor, offset);
+}
+
+export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
+}
+
+export function addBodyMessageSensorMapObjPress(sceneObjHolder: SceneObjHolder, actor: LiveActor) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObjPress, 0, 0.0, actor, Vec3Zero);
+}
+
+export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor, offset);
+}
+
+export function addHitSensorPosMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, pos: ReadonlyVec3, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.addPos(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor, pos, offset);
+}
+
+export function addHitSensorEye(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Eye, pairwiseCapacity, radius, actor, offset);
+}
+
+export function invalidateHitSensors(actor: LiveActor): void {
+    actor.hitSensorKeeper!.invalidate();
+}
+
+export function validateHitSensors(actor: LiveActor): void {
+    actor.hitSensorKeeper!.validate();
 }
