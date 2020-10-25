@@ -126,7 +126,7 @@ class FixedPosition {
     private localTrans = vec3.create();
     private localRot = vec3.create();
 
-    constructor(private baseMtx: mat4, localTrans: ReadonlyVec3 | null = null, localRot: ReadonlyVec3 | null = null) {
+    constructor(private baseMtx: ReadonlyMat4, localTrans: ReadonlyVec3 | null = null, localRot: ReadonlyVec3 | null = null) {
         if (localTrans !== null)
             this.setLocalTrans(localTrans);
         if (localRot !== null)
@@ -142,14 +142,15 @@ class FixedPosition {
         mat4.mul(this.transformMatrix, this.baseMtx, scratchMatrix);
         computeModelMatrixT(scratchMatrix, this.localTrans[0], this.localTrans[1], this.localTrans[2]);
         mat4.mul(this.transformMatrix, this.transformMatrix, scratchMatrix);
-        computeMatrixWithoutScale(this.transformMatrix, this.transformMatrix);
+        if (this.normalizeScale)
+            computeMatrixWithoutScale(this.transformMatrix, this.transformMatrix);
     }
 }
 
 export class PartsModel extends LiveActor {
     public fixedPosition: FixedPosition | null = null;
     public hostMtx: ReadonlyMat4 | null = null;
-    public useParentMatrix: boolean = true;
+    public useHostMtx: boolean = true;
     public isAttached = false;
     private isDead = false;
 
@@ -184,12 +185,17 @@ export class PartsModel extends LiveActor {
         connectToScene(sceneObjHolder, this, movementType, calcAnimType, drawBufferType, -1);
     }
 
-    public initFixedPositionRelative(localTrans: vec3 | null): void {
+    public initFixedPositionMtxRelative(mtx: ReadonlyMat4, localTrans: ReadonlyVec3 | null): void {
+        this.fixedPosition = new FixedPosition(mtx, localTrans);
+        this.hostMtx = this.fixedPosition.transformMatrix;
+    }
+
+    public initFixedPositionRelative(localTrans: ReadonlyVec3 | null): void {
         this.fixedPosition = new FixedPosition(this.parentActor.modelInstance!.modelMatrix, localTrans);
         this.hostMtx = this.fixedPosition.transformMatrix;
     }
 
-    public initFixedPositionJoint(jointName: string | null, localTrans: vec3 | null, localRot: vec3 | null): void {
+    public initFixedPositionJoint(jointName: string | null, localTrans: ReadonlyVec3 | null, localRot: ReadonlyVec3 | null): void {
         if (jointName !== null) {
             this.fixedPosition = new FixedPosition(getJointMtxByName(this.parentActor, jointName)!, localTrans, localRot);
         } else {
@@ -206,7 +212,7 @@ export class PartsModel extends LiveActor {
     }
 
     protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
-        if (this.hostMtx !== null && this.useParentMatrix) {
+        if (this.hostMtx !== null && this.useHostMtx) {
             getMatrixTranslation(this.translation, this.hostMtx);
             mat4.copy(this.modelInstance!.modelMatrix, this.hostMtx);
         } else {

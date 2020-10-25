@@ -1115,6 +1115,13 @@ export function setEffectColor(actor: LiveActor, name: string, prmColor: Color, 
     emitter.setGlobalEnvColor(envColor, -1);
 }
 
+export function setEffectPrmColor(actor: LiveActor, name: string, color: Color): void {
+    if (actor.effectKeeper === null)
+        return;
+    const emitter = assertExists(actor.effectKeeper.getEmitter(name));
+    emitter.setGlobalPrmColor(color, -1);
+}
+
 export function setEffectEnvColor(actor: LiveActor, name: string, color: Color): void {
     if (actor.effectKeeper === null)
         return;

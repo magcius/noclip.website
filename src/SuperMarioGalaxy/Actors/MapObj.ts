@@ -1,35 +1,33 @@
 
 // Misc MapObj actors.
 
-import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, quat, mat3 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxisX, getMatrixAxisZ, computeModelMatrixR, Vec3UnitY, computeEulerAngleRotationFromSRTMatrix, lerp, invlerp, computeModelMatrixSRT, computeModelMatrixT, saturate, getMatrixAxis, Vec3One } from '../../MathHelpers';
-import { assertExists, fallback, assert, nArray } from '../../util';
+import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
+import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from '../../Color';
+import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
+import { ColorKind } from '../../gx/gx_render';
+import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixSRT, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
+import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer, invalidateShadowAll, getBckFrameMaxNamed, joinToGroupArray, getPlayerPos, turnVecToVecCosOnPlane, getJointMtxByName, connectToSceneMapObjStrongLight, isBckOneTimeAndStopped, makeMtxFrontSidePos, addHitSensorMapObj, useStageSwitchWriteDead, isValidSwitchDead, invalidateCollisionPartsForActor, isValidSwitchB, calcRailPointPos, calcGravityVector, validateShadowAll, moveCoordAndTransToRailPoint, connectToSceneIndirectMapObj, initCollisionPartsAutoEqualScaleOne, getRandomInt, validateCollisionPartsForActor, connectToSceneNoSilhouettedMapObj, calcDistToCamera, getRailPointNum, calcRailPosAtCoord, getRandomVector, getCamPos, attenuateVelocity, addVelocityToGravity, reboundVelocityFromCollision, restrictVelocity } from '../ActorUtil';
-import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded, isBindedGround, validateCollisionParts, isBindedRoof } from '../Collision';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateHitSensors, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateHitSensors, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { getFirstPolyOnLineToMap, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit } from '../Collision';
+import { registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
-import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll, emitEffectWithScale, setEffectColor, forceDeleteEffect } from '../EffectSystem';
+import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, isEffectValid, isRegisteredEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectPrmColor } from '../EffectSystem';
+import { initMultiFur } from '../Fur';
 import { HitSensor, HitSensorType, isSensorMapObj } from '../HitSensor';
-import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter, getJMapInfoArg2, getJMapInfoArg5, getJMapInfoBool, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg7 } from '../JMapInfo';
-import { LiveActor, MessageType, ZoneAndLayer, isDead, makeMtxTRFromActor, MsgSharedGroup, dynamicSpawnZoneAndLayer, isMsgTypeEnemyAttack, resetPosition, LiveActorGroup } from '../LiveActor';
+import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg7, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
+import { initLightCtrl } from '../LightData';
+import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, resetPosition, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRailPosture, MapPartsRotator, MoveConditionType, MovePostureType, RailGuideType } from '../MapParts';
-import { createBloomModel, createIndirectPlanetModel, PartsModel } from './MiscActor';
-import { isConnectedWithRail } from '../RailRider';
-import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate } from '../Spine';
-import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } from './ModelObj';
-import { initMultiFur } from '../Fur';
-import { initShadowVolumeSphere, initShadowVolumeCylinder, setShadowDropLength, initShadowVolumeBox, setShadowVolumeStartDropOffset, initShadowFromCSV, setShadowVolumeSphereRadius, onCalcShadow, onCalcShadowDropGravity } from '../Shadow';
-import { initLightCtrl } from '../LightData';
-import { drawWorldSpaceVector, getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../../DebugJunk';
-import { DrawBufferType, NameObj } from '../NameObj';
-import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { isInWater } from '../MiscMap';
+import { DrawBufferType, NameObj } from '../NameObj';
+import { isConnectedWithRail } from '../RailRider';
+import { initShadowFromCSV, initShadowVolumeBox, initShadowVolumeCylinder, initShadowVolumeSphere, setShadowDropLength, setShadowVolumeSphereRadius, setShadowVolumeStartDropOffset } from '../Shadow';
+import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
-import { registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
-import { Color, colorNewCopy, colorNewFromRGBA8, White } from '../../Color';
-import { ColorKind } from '../../gx/gx_render';
-import { MapInstance } from '../../StarFoxAdventures/maps';
+import { createBloomModel, createIndirectPlanetModel, PartsModel } from './MiscActor';
+import { createModelObjBloomModel, createModelObjMapObjStrongLight, ModelObj } from './ModelObj';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -1597,7 +1595,7 @@ export class WatchTowerRotateStep extends LiveActor<WatchTowerRotateStepNrv> {
     private initLift(sceneObjHolder: SceneObjHolder): void {
         for (let i = 0; i < 4; i++) {
             const lift = new PartsModel(sceneObjHolder, 'WatchTowerRotateStepLift', 'WatchTowerRotateStepLift', this, DrawBufferType.None, getJointMtx(this, i + 1));
-            lift.useParentMatrix = false;
+            lift.useHostMtx = false;
             initCollisionParts(sceneObjHolder, lift, 'WatchTowerRotateStepLift', this.getSensor('body')!);
             vec3.set(scratchVec3a, 600.0, 200.0, 400.0);
             initShadowVolumeBox(sceneObjHolder, lift, scratchVec3a, lift.getBaseMtx()!);
@@ -2744,10 +2742,10 @@ function blendMtx(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4, t: number): void 
     quatFromMat4(scratchQuata, a);
     quatFromMat4(scratchQuatb, b);
     quat.slerp(scratchQuata, scratchQuata, scratchQuatb, t);
-    mat4.fromQuat(dst, scratchQuata);
     getMatrixTranslation(scratchVec3a, a);
     getMatrixTranslation(scratchVec3b, b);
     vec3.lerp(scratchVec3a, scratchVec3a, scratchVec3b, t);
+    mat4.fromQuat(dst, scratchQuata);
     setMatrixTranslation(dst, scratchVec3a);
 }
 
@@ -3013,12 +3011,13 @@ function restrictVelocityMin(actor: LiveActor, minSpeed: number): void {
         normToLength(actor.velocity, minSpeed);
 }
 
+const scratchColor = colorNewCopy(White);
 const enum StarPieceType { StarPiece, StarPieceFloatingFromGroup, StarPieceRailFromGroup }
 const enum StarPieceNrv { Floating, RailMove, Fall, FallAfterReflect }
 export class StarPiece extends LiveActor<StarPieceNrv> {
+    public matColor: Color;
+
     private effectCounter = 0;
-    private effectPrmColor = colorNewCopy(White);
-    private effectEnvColor = colorNewCopy(White);
     private hostInfo: StarPieceHostInfo | null = null;
     private axisZ = vec3.clone(Vec3UnitZ);
     private isInWater = false;
@@ -3169,16 +3168,8 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
     }
 
     public setColor(index: number): void {
-        const color = assertExists(starPieceColorTable[index]);
-        this.modelInstance!.setColorOverride(ColorKind.MAT0, color);
-
-        this.effectPrmColor.r = saturate(this.effectPrmColor.r + 0xFF/0xFF);
-        this.effectPrmColor.g = saturate(this.effectPrmColor.g + 0xFF/0xFF);
-        this.effectPrmColor.b = saturate(this.effectPrmColor.b + 0xFF/0xFF);
-
-        this.effectEnvColor.r = saturate(this.effectEnvColor.r + 0x20/0xFF);
-        this.effectEnvColor.g = saturate(this.effectEnvColor.g + 0x20/0xFF);
-        this.effectEnvColor.b = saturate(this.effectEnvColor.b + 0x20/0xFF);
+        this.matColor = assertExists(starPieceColorTable[index]);
+        this.modelInstance!.setColorOverride(ColorKind.MAT0, this.matColor);
     }
 
     private tryGotJudge(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
@@ -3269,7 +3260,17 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
         if (calcDistToCamera(this, sceneObjHolder.viewerInput.camera) > 200)
             emitEffectWithScale(sceneObjHolder, this, 'GetAble', effectScale);
 
-        setEffectColor(this, 'GetAble', this.effectPrmColor, this.effectEnvColor);
+        colorCopy(scratchColor, this.matColor);
+        scratchColor.r = saturate(scratchColor.r + 0xFF/0xFF);
+        scratchColor.g = saturate(scratchColor.g + 0xFF/0xFF);
+        scratchColor.b = saturate(scratchColor.b + 0xFF/0xFF);
+        setEffectPrmColor(this, 'GetAble', scratchColor);
+
+        colorCopy(scratchColor, this.matColor);
+        scratchColor.r = saturate(scratchColor.r + 0x20/0xFF);
+        scratchColor.g = saturate(scratchColor.g + 0x20/0xFF);
+        scratchColor.b = saturate(scratchColor.b + 0x20/0xFF);
+        setEffectEnvColor(this, 'GetAble', scratchColor);
     }
 
     public static getColorNum(): number {
@@ -3397,5 +3398,188 @@ export class StarPieceGroup extends LiveActor<StarPieceGroupNrv> {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('StarPiece');
+    }
+}
+
+const enum ItemBubbleItemType { Coin, StarPiece }
+const enum ItemBubbleNrv { Wait, Break }
+export class ItemBubble extends LiveActor<ItemBubbleNrv> {
+    private parts: PartsModel[] = [];
+    private starPieces: StarPiece[]= [];
+    private partsMtx = mat4.create();
+    private partsPoseMtx = mat4.create();
+    private initPosition = vec3.create();
+    private railMoveSpeed = 1.0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'ItemBubble');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        vec3.copy(this.initPosition, this.translation);
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter))
+            syncStageSwitchAppear(sceneObjHolder, this);
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'ItemBubble');
+        connectToSceneMapObj(sceneObjHolder, this);
+        vec3.scale(this.scale, this.scale, 1.2);
+
+        computeModelMatrixSRT(this.partsMtx, this.scale[0], this.scale[1], this.scale[2],
+            0, 0, 0, this.translation[0], this.translation[1], this.translation[2]);
+        mat4.copy(this.partsPoseMtx, this.partsMtx);
+
+        this.initHitSensor();
+        addHitSensorMapObj(sceneObjHolder, this, 'body', 8, 120.0 * this.scale[0], Vec3Zero);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound
+        this.initNerve(ItemBubbleNrv.Wait);
+
+        const itemType: ItemBubbleItemType = ItemBubble.getItemType(infoIter);
+        const count = fallback(getJMapInfoArg1(infoIter), 1);
+
+        let didPosition = false;
+        for (let i = 0; i < count; i++) {
+            if (itemType === ItemBubbleItemType.Coin) {
+                const parts = new PartsModel(sceneObjHolder, 'Coin', 'Coin', this, DrawBufferType.NoSilhouettedMapObjStrongLight, null);
+                if (count === 1) {
+                    didPosition = true;
+
+                    if (i === 0)
+                        vec3.set(scratchVec3a, 0.0, -67.38, 0.0);
+                } else if (count === 2) {
+                    didPosition = true;
+
+                    if (i === 0)
+                        vec3.set(scratchVec3a, -55.66, -92.29, 0.0);
+                    else if (i === 1)
+                        vec3.set(scratchVec3a, 55.66, -43.95, 0.0);
+                } else if (count === 3) {
+                    didPosition = true;
+
+                    if (i === 0)
+                        vec3.set(scratchVec3a, 0.0, -19.04, 0.0);
+                    else if (i === 1)
+                        vec3.set(scratchVec3a, -55.66, -130.37, 0.0);
+                    else if (i === 2)
+                        vec3.set(scratchVec3a, 67.38, -130.37, 0.0);
+                }
+
+                if (didPosition)
+                    parts.initFixedPositionMtxRelative(this.partsMtx, scratchVec3a);
+
+                this.parts.push(parts);
+            } else if (itemType === ItemBubbleItemType.StarPiece) {
+                const starPiece = new StarPiece(zoneAndLayer, sceneObjHolder, null);
+                // TODO(jstpierre): Does the original game hide this in some other way?
+                starPiece.makeActorDead(sceneObjHolder);
+                this.starPieces.push(starPiece);
+
+                const parts = new PartsModel(sceneObjHolder, 'StarPiece', 'StarPiece', this, DrawBufferType.NoSilhouettedMapObj, null);
+                parts.modelInstance!.setColorOverride(ColorKind.MAT0, starPiece.matColor);
+
+                if (count === 1) {
+                    didPosition = true;
+
+                    if (i === 0)
+                        vec3.copy(scratchVec3a, Vec3Zero);
+                }
+
+                if (didPosition)
+                    parts.initFixedPositionMtxRelative(this.partsMtx, scratchVec3a);
+
+                this.parts.push(parts);
+            }
+        }
+
+        if (!didPosition) {
+            // Generic positioning fallback
+            mat4.fromRotation(scratchMatrix, MathConstants.TAU / count, Vec3UnitZ);
+            vec3.set(scratchVec3a, 0.0, 60.0, 0.0);
+
+            if (itemType === ItemBubbleItemType.Coin)
+                vec3.set(scratchVec3b, 0.0, -60.0, 0.0);
+            else
+                vec3.set(scratchVec3b, 0.0, 0.0, 0.0);
+
+            for (let i = 0; i < this.parts.length; i++) {
+                const parts = this.parts[i];
+                vec3.add(scratchVec3c, scratchVec3a, scratchVec3b);
+                parts.initFixedPositionMtxRelative(this.partsMtx, scratchVec3c);
+                transformVec3Mat4w0(scratchVec3a, scratchMatrix, scratchVec3a);
+            }
+        }
+
+        if (isConnectedWithRail(infoIter))
+            this.initRailRider(sceneObjHolder, infoIter);
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        if (isExistRail(this))
+            moveCoordAndTransToNearestRailPos(this);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+
+        if (isValidSwitchDead(this))
+            this.stageSwitchCtrl!.offSwitchDead(sceneObjHolder);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        if (isValidSwitchDead(this))
+            this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
+
+        // actually spawn item
+
+        super.makeActorDead(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: ItemBubbleNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === ItemBubbleNrv.Wait) {
+            const wave = Math.sin(MathConstants.TAU * (this.getNerveStep() / 120.0));
+
+            if (isExistRail(this)) {
+                if (isRailReachedGoal(this))
+                    reverseRailDirection(this);
+                const railMoveSpeed = getCurrentRailPointArg0(this);
+                if (railMoveSpeed !== null)
+                    this.railMoveSpeed = railMoveSpeed;
+                moveCoordAndFollowTrans(this, this.railMoveSpeed);
+            }
+
+            vec3.scaleAndAdd(this.translation, this.initPosition, Vec3UnitY, wave * 30.0);
+            setMatrixTranslation(this.partsPoseMtx, this.translation);
+
+            if (isExistRail(this)) {
+                mat4.copy(this.partsMtx, this.partsPoseMtx);
+            } else {
+                blendMtx(this.partsMtx, this.partsMtx, this.partsPoseMtx, 0.1 * deltaTimeFrames);
+            }
+
+            // This does nothing, because the PartsModel do not use their local rotation unless useFixedPosition is false...
+            for (let i = 0; i < this.parts.length; i++) {
+                const parts = this.parts[i];
+                parts.rotation[0] = 0.0;
+                parts.rotation[1] += 8.0 * MathConstants.DEG_TO_RAD * deltaTimeFrames;
+                parts.rotation[2] = 0.0;
+            }
+        }
+    }
+
+    public static getItemType(infoIter: JMapInfoIter): ItemBubbleItemType {
+        return fallback(getJMapInfoArg0(infoIter), ItemBubbleItemType.Coin);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        const itemType = ItemBubble.getItemType(infoIter);
+        if (itemType === ItemBubbleItemType.Coin)
+            sceneObjHolder.modelCache.requestObjectData('Coin');
+        if (itemType === ItemBubbleItemType.StarPiece)
+            sceneObjHolder.modelCache.requestObjectData('StarPiece');
     }
 }
