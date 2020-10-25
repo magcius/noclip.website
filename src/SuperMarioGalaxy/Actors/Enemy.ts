@@ -1,19 +1,20 @@
 
 import { mat4, quat, ReadonlyMat4, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3Zero } from '../../MathHelpers';
-import { fallback, nArray } from '../../util';
+import { sceneGroup } from '../../rres/Scenes_MarioKartWii';
+import { assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorEye, addVelocityMoveToDirection, blendQuatUpFront, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailPointPos, calcUpVec, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, excludeCalcShadowToMyCollision, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getPlayerPos, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, invalidateShadowAll, isActionEnd, isActionStart, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchDead, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, rotateQuatRollBall, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBtp, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateHitSensors, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorEye, addVelocityMoveToDirection, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailPointPos, calcSqDistanceToPlayer, calcUpVec, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, excludeCalcShadowToMyCollision, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getPlayerPos, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, invalidateShadowAll, isActionEnd, isActionStart, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, rotateQuatRollBall, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtp, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateHitSensors, validateShadowAll, vecKillElement } from '../ActorUtil';
 import { CollisionKeeperCategory, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isFloorPolygonAngle, isGroundCodeDamage, isGroundCodeDamageFire, isOnGround, isWallPolygonAngle, Triangle, TriangleFilterFunc } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, isEffectValid, setEffectHostMtx } from '../EffectSystem';
 import { initFur } from '../Fur';
-import { HitSensor, HitSensorType, isSensorEnemy, isSensorNear, isSensorPlayerOrRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion } from '../HitSensor';
+import { HitSensor, HitSensorType, isSensorEnemy, isSensorNear, isSensorPlayerOrRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgToGroupMember } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
-import { isDead, LiveActor, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
+import { isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObjHolder } from '../Main';
 import { isInWater } from '../MiscMap';
-import { DrawBufferType } from '../NameObj';
+import { DrawBufferType, NameObj } from '../NameObj';
 import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, setShadowDropLength } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
 import { isEqualStageName, PartsModel } from './MiscActor';
@@ -433,7 +434,7 @@ class RingBeam extends LiveActor<RingBeamNrv> {
     private speed: number = 20.0;
     private life: number = 100;
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, private parentActor: LiveActor, private useFancyPosCalc: boolean) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, private parentActor: LiveActor, private useFancyPosCalc: boolean, private useStaticShadow: boolean) {
         super(zoneAndLayer, sceneObjHolder, 'RingBeam');
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, 'JumpBeamerBeam');
@@ -565,7 +566,7 @@ export class BallBeamer extends LiveActor<BallBeamerNrv> {
         const life = fallback(getJMapInfoArg1(infoIter), 530);
         const useStaticShadow = getJMapInfoBool(fallback(getJMapInfoArg2(infoIter), -1));
         for (let i = 0; i < 12; i++) {
-            const ringBeam = new RingBeam(zoneAndLayer, sceneObjHolder, infoIter, this, true);
+            const ringBeam = new RingBeam(zoneAndLayer, sceneObjHolder, infoIter, this, true, useStaticShadow);
             ringBeam.setSpeed(speed);
             ringBeam.setLife(life);
             this.ringBeams.push(ringBeam);
@@ -648,6 +649,127 @@ export class BallBeamer extends LiveActor<BallBeamerNrv> {
 
         for (let i = 0; i < this.ringBeams.length; i++)
             this.ringBeams[i].makeActorDead(sceneObjHolder);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        RingBeam.requestArchives(sceneObjHolder);
+    }
+}
+
+function enableGroupAttack(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number, threshold: number): boolean {
+    if (isValidSwitchA(actor) && !actor.stageSwitchCtrl!.isOnSwitchA(sceneObjHolder))
+        return false;
+    if (isValidSwitchB(actor) && !actor.stageSwitchCtrl!.isOnSwitchB(sceneObjHolder))
+        return false;
+
+    const actorGroup = getGroupFromArray(sceneObjHolder, actor);
+    if (actorGroup !== null)
+        for (let i = 0; i < actorGroup.objArray.length; i++)
+            if (calcSqDistanceToPlayer(sceneObjHolder, actorGroup.objArray[i]) < calcSqDistanceToPlayer(sceneObjHolder, actor))
+                actor = actorGroup.objArray[i];
+
+    return isNearPlayerPose(sceneObjHolder, actor, radius, threshold);
+}
+
+const enum RingBeamerNrv { Wait, Attack, Inter }
+export class RingBeamer extends LiveActor<RingBeamerNrv> {
+    private ringBeam: RingBeam[] = [];
+    private currentAttackCount: number = 0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'RingBeamer');
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'RingBeamer');
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        connectToSceneEnemy(sceneObjHolder, this);
+        initLightCtrl(sceneObjHolder, this);
+        // this.initHitSensor();
+        // addHitSensorPush
+        // addHitSensorMtxEnemyAttack
+        initShadowVolumeSphere(sceneObjHolder, this, 120.0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound
+        this.initNerve(RingBeamerNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        if (useStageSwitchWriteB(sceneObjHolder, this, infoIter))
+            listenStageSwitchOnOffB(sceneObjHolder, this, this.syncSwitchOnB.bind(this), this.syncSwitchOffB.bind(this));
+        joinToGroupArray(sceneObjHolder, this, infoIter, null, 0x20);
+
+        const speed = fallback(getJMapInfoArg0(infoIter), 20.0);
+        const life = fallback(getJMapInfoArg1(infoIter), 100);
+
+        for (let i = 0; i < 3; i++) {
+            const ringBeam = new RingBeam(zoneAndLayer, sceneObjHolder, infoIter, this, false, false);
+            ringBeam.setSpeed(speed);
+            ringBeam.setLife(life);
+            this.ringBeam.push(ringBeam);
+        }
+
+        startBckWithInterpole(this, 'Open', 0);
+        setBckFrameAndStop(this, 0);
+        this.calcAnim(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RingBeamerNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === RingBeamerNrv.Wait) {
+            if (enableGroupAttack(sceneObjHolder, this, 3000.0, 500.0))
+                sendMsgToGroupMember(sceneObjHolder, MessageType.RingBeamer_SyncAttack, this, this.getSensor('body')!, 'body');
+        } else if (currentNerve === RingBeamerNrv.Attack) {
+            if (isFirstStep(this))
+                startBck(this, 'Open');
+
+            if (this.currentAttackCount >= 3) {
+                this.setNerve(RingBeamerNrv.Inter);
+            }
+
+            if (isFirstStep(this))
+                emitEffect(sceneObjHolder, this, 'Charge');
+
+            if (isGreaterEqualStep(this, 79)) {
+                deleteEffect(sceneObjHolder, this, 'Charge');
+                if (enableGroupAttack(sceneObjHolder, this, 3200.0, 500.0)) {
+                    const ringBeam = assertExists(this.ringBeam[this.currentAttackCount++]);
+                    ringBeam.makeActorAppeared(sceneObjHolder);
+                    this.setNerve(RingBeamerNrv.Attack);
+                } else {
+                    sendMsgToGroupMember(sceneObjHolder, MessageType.RingBeamer_SyncInter, this, this.getSensor('body')!, 'body');
+                }
+            }
+        } else if (currentNerve === RingBeamerNrv.Inter) {
+            if (isGreaterEqualStep(this, 80)) {
+                for (let i = 0; i < this.ringBeam.length; i++)
+                    if (!isDead(this.ringBeam[i]))
+                        return;
+
+                this.setNerve(RingBeamerNrv.Wait);
+            }
+        }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (messageType === MessageType.RingBeamer_SyncAttack) {
+            this.currentAttackCount = 0;
+            this.setNerve(RingBeamerNrv.Attack);
+            return true;
+        } else if (messageType === MessageType.RingBeamer_SyncInter) {
+            this.setNerve(RingBeamerNrv.Inter);
+            return true;
+        } else {
+            return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+        }
+    }
+
+    private syncSwitchOnB(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    private syncSwitchOffB(sceneObjHolder: SceneObjHolder): void {
+        this.setNerve(RingBeamerNrv.Inter);
+        for (let i = 0; i < this.ringBeam.length; i++)
+            this.ringBeam[i].makeActorDead(sceneObjHolder);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {

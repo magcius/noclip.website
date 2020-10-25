@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, DinoPackun, Dossun, HomingKillerLauncher, Kuribo, OnimasuJump, Takobo, Unizo } from './Actors/Enemy';
+import { BallBeamer, DinoPackun, Dossun, HomingKillerLauncher, Kuribo, OnimasuJump, RingBeamer, Takobo, Unizo } from './Actors/Enemy';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
@@ -101,6 +101,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
 
     // Enemies
     _("BallBeamer",                     BallBeamer),
+    _("RingBeamer",                     RingBeamer),
     _("Dossun",                         Dossun),
     _("Kuribo",                         Kuribo),
     _("Mogucchi",                       Mogucchi),

@@ -1458,7 +1458,7 @@ export class Air extends LiveActor<AirNrv> {
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AirNrv, deltaTimeFrames: number): void {
         super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
 
-        const distanceToPlayer = calcSqDistanceToPlayer(this, sceneObjHolder.viewerInput.camera);
+        const distanceToPlayer = calcSqDistanceToPlayer(sceneObjHolder, this);
 
         if (currentNerve === AirNrv.Out) {
             if (!isHiddenModel(this) && isAnyAnimStopped(this, 'Disappear'))
@@ -2402,7 +2402,7 @@ export class CoconutTreeLeafGroup extends LiveActor {
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
-        const dist = calcDistanceToPlayer(this, viewerInput.camera);
+        const dist = calcDistanceToPlayer(sceneObjHolder, this);
         let a = 0, b = 0;
 
         if (dist > 5000.0) {

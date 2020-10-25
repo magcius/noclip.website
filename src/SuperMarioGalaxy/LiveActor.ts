@@ -424,6 +424,8 @@ export const enum MessageType {
     _EnemyAttack_End                         = 0x65,
     Pressure_StartWait                       = 0x68,
     Pressure_StartSyncWait                   = 0x69,
+    RingBeamer_SyncAttack                    = 0x6A,
+    RingBeamer_SyncInter                     = 0x6C,
     StartDemo                                = 0x6F,
     InhaleBlackHole                          = 0x73,
     StartPowerStarGet                        = 0x74,
@@ -902,8 +904,8 @@ export class LiveActorGroup<T extends LiveActor> extends NameObjGroup<T> {
 
 export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
     private pendingMessageType: MessageType | null = null;
-    private pendingHitSensor: HitSensor | null = null;
-    private pendingSensorName: string | null = null;
+    private pendingSendSensor: HitSensor | null = null;
+    private pendingRecvSensorName: string | null = null;
 
     constructor(sceneObjHolder: SceneObjHolder, public zoneId: number, public infoId: number, name: string, maxCount: number) {
         super(sceneObjHolder, name, maxCount);
@@ -916,20 +918,20 @@ export class MsgSharedGroup<T extends LiveActor> extends LiveActorGroup<T> {
         if (this.pendingMessageType !== null) {
             for (let i = 0; i < this.objArray.length; i++) {
                 const actor = this.objArray[i];
-                const sensor = actor.getSensor(this.pendingSensorName!)!;
-                sensor.receiveMessage(sceneObjHolder, this.pendingMessageType, this.pendingHitSensor!);
+                const sensor = actor.getSensor(this.pendingRecvSensorName!)!;
+                sensor.receiveMessage(sceneObjHolder, this.pendingMessageType, this.pendingSendSensor!);
             }
 
             this.pendingMessageType = null;
-            this.pendingHitSensor = null;
-            this.pendingSensorName = null;
+            this.pendingSendSensor = null;
+            this.pendingRecvSensorName = null;
         }
     }
 
-    public sendMsgToGroupMember(messageType: MessageType, hitSensor: HitSensor, sensorName: string): void {
+    public sendMsgToGroupMember(messageType: MessageType, sendSensor: HitSensor, recvSensorName: string): void {
         this.pendingMessageType = messageType;
-        this.pendingHitSensor = hitSensor;
-        this.pendingSensorName = sensorName;
+        this.pendingSendSensor = sendSensor;
+        this.pendingRecvSensorName = recvSensorName;
     }
 }
 

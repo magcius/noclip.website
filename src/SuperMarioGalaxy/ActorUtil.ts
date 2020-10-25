@@ -14,7 +14,7 @@ import { CollisionScaleType, invalidateCollisionParts, validateCollisionParts, C
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { HitSensor, HitSensorType } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
-import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, makeMtxTRFromActor, MsgSharedGroup } from "./LiveActor";
+import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, LiveActorGroup, makeMtxTRFromActor, MsgSharedGroup } from "./LiveActor";
 import { SceneObj, SceneObjHolder, ResourceHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
 import { RailDirection } from "./RailRider";
@@ -1266,6 +1266,12 @@ export function joinToGroupArray<T extends LiveActor>(sceneObjHolder: SceneObjHo
     return sceneObjHolder.liveActorGroupArray!.entry(sceneObjHolder, actor, infoIter, groupName, maxCount);
 }
 
+export function getGroupFromArray<T extends LiveActor>(sceneObjHolder: SceneObjHolder, nameObj: T): LiveActorGroup<T> | null {
+    if (sceneObjHolder.liveActorGroupArray === null)
+        return null;
+    return sceneObjHolder.liveActorGroupArray.getLiveActorGroup(nameObj);
+}
+
 function getGroundNormal(actor: LiveActor): vec3 {
     return actor.binder!.floorHitInfo.faceNormal;
 }
@@ -1348,17 +1354,29 @@ export function calcDistToCamera(actor: LiveActor, camera: Camera, scratch: vec3
     return vec3.distance(actor.translation, scratch);
 }
 
-export function calcSqDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
-    getCamPos(scratch, camera);
-    return vec3.squaredDistance(actor.translation, scratch);
+export function calcSqDistanceToPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor): number {
+    getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
+    return vec3.squaredDistance(actor.translation, scratchVec3);
 }
 
-export function calcDistanceToPlayer(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
-    return calcDistToCamera(actor, camera, scratch);
+export function calcDistanceToPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor): number {
+    return calcDistToCamera(actor, sceneObjHolder.viewerInput.camera, scratchVec3);
 }
 
 export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): boolean {
-    return calcSqDistanceToPlayer(actor, sceneObjHolder.viewerInput.camera) <= radius ** 2.0;
+    return calcSqDistanceToPlayer(sceneObjHolder, actor) <= radius ** 2.0;
+}
+
+export function isNearPlayerPose(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number, threshold: number): boolean {
+    getPlayerPos(scratchVec3a, sceneObjHolder);
+    vec3.sub(scratchVec3a, scratchVec3a, actor.translation);
+
+    getMatrixAxisY(scratchVec3b, actor.getBaseMtx()!);
+    const dot = vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
+    if (Math.abs(dot) <= threshold)
+        return vec3.squaredLength(scratchVec3a) <= radius ** 2.0;
+    else
+        return false;
 }
 
 export function getJointNum(actor: LiveActor): number {

@@ -1,8 +1,8 @@
 
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
-import { LiveActor, isDead, MessageType } from "./LiveActor";
+import { LiveActor, isDead, MessageType, MsgSharedGroup } from "./LiveActor";
 import { SceneObjHolder, SceneObj } from "./Main";
-import { connectToScene } from "./ActorUtil";
+import { connectToScene, getGroupFromArray } from "./ActorUtil";
 import { NameObj, MovementType } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
 import { arrayRemove } from "../util";
@@ -457,6 +457,14 @@ export function sendMsgEnemyAttackExplosion(sceneObjHolder: SceneObjHolder, recv
 
 export function sendArbitraryMsg(sceneObjHolder: SceneObjHolder, messageType: MessageType, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
     return recvSensor.receiveMessage(sceneObjHolder, messageType, sendSensor);
+}
+
+export function sendMsgToGroupMember<T extends LiveActor>(sceneObjHolder: SceneObjHolder, messageType: MessageType, actor: T, sendSensor: HitSensor, recvSensorName: string): void {
+    const group = getGroupFromArray<T>(sceneObjHolder, actor) as MsgSharedGroup<T>;
+    if (group !== null)
+        group.sendMsgToGroupMember(messageType, sendSensor, recvSensorName);
+    else
+        actor.receiveMessage(sceneObjHolder, messageType, sendSensor, actor.getSensor(recvSensorName));
 }
 
 export function isSensorNear(a: HitSensor, b: HitSensor, radius: number): boolean {
