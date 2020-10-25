@@ -3,24 +3,23 @@
 
 import { mat4, quat, ReadonlyQuat, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Camera, texProjCameraSceneTex } from "../Camera";
-import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
+import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
-import { getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, Vec3UnitY, Vec3UnitZ, Vec3Zero, setMatrixAxis, getMatrixAxis, lerp, Vec3UnitX } from "../MathHelpers";
+import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
+import { getMatrixAxis, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
-import { CollisionScaleType, invalidateCollisionParts, validateCollisionParts, CollisionPartsFilterFunc, CollisionParts, Triangle, getFirstPolyOnLineToMapExceptActor } from "./Collision";
+import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { HitSensor, HitSensorType } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
 import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, LiveActorGroup, makeMtxTRFromActor, MsgSharedGroup } from "./LiveActor";
-import { SceneObj, SceneObjHolder, ResourceHolder } from "./Main";
+import { ResourceHolder, SceneObj, SceneObjHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
 import { RailDirection } from "./RailRider";
 import { addSleepControlForLiveActor, getSwitchWatcherHolder, isExistStageSwitchA, isExistStageSwitchAppear, isExistStageSwitchB, isExistStageSwitchDead, SwitchCallback, SwitchFunctorEventListener } from "./Switch";
-import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
-import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 const scratchVec3 = vec3.create();
 const scratchVec3a = vec3.create();
@@ -868,10 +867,12 @@ export function calcGravityVector(sceneObjHolder: SceneObjHolder, nameObj: NameO
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, coord, GravityTypeMask_Normal, dst, gravityInfo, attachmentFilter);
 }
 
-export function calcGravity(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+export function calcGravity(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
     calcGravityVector(sceneObjHolder, actor, actor.translation, scratchVec3);
-    if (!isNearZeroVec3(scratchVec3, 0.001))
-        vec3.copy(actor.gravityVector, scratchVec3);
+    if (isNearZeroVec3(scratchVec3, 0.001))
+        return false;
+    vec3.copy(actor.gravityVector, scratchVec3);
+    return true;
 }
 
 export function isZeroGravity(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {
@@ -1511,4 +1512,56 @@ export class MapObjConnector {
             getMatrixTranslation(actor.translation, dstMtx);
         }
     }
+}
+
+export function declareStarPiece(sceneObjHolder: SceneObjHolder, host: NameObj, count: number): void {
+    sceneObjHolder.create(SceneObj.StarPieceDirector);
+    sceneObjHolder.starPieceDirector!.declare(host, count);
+}
+
+export function addVelocityToGravity(actor: LiveActor, speed: number): void {
+    vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
+}
+
+export function reboundVelocityFromEachCollision(actor: LiveActor, floorBounce: number, wallBounce: number, ceilingBounce: number, cutoff: number, drag: number = 1.0): boolean {
+    if (!isBinded(actor))
+        return false;
+
+    const fixReaction = getBindedFixReactionVector(actor);
+    if (isNearZeroVec3(fixReaction, 0.001))
+        return false;
+
+    vec3.normalize(scratchVec3, fixReaction);
+    const dot = vec3.dot(scratchVec3, actor.velocity);
+    if (dot >= -cutoff) {
+        if (dot < 0.0)
+            vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
+        return false;
+    } else {
+        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
+        vec3.scale(actor.velocity, actor.velocity, drag);
+        const reactionAngle = vec3.dot(scratchVec3, actor.gravityVector);
+        const bounce = isFloorPolygonAngle(reactionAngle) ? floorBounce : isWallPolygonAngle(reactionAngle) ? wallBounce : ceilingBounce;
+        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot * bounce);
+        return true;
+    }
+}
+
+export function reboundVelocityFromCollision(actor: LiveActor, bounce: number, cutoff: number, drag: number): boolean {
+    return reboundVelocityFromEachCollision(actor, bounce, bounce, bounce, cutoff, drag);
+}
+
+export function restrictVelocity(actor: LiveActor, maxSpeed: number): void {
+    if (vec3.squaredLength(actor.velocity) >= maxSpeed ** 2)
+        normToLength(actor.velocity, maxSpeed);
+}
+
+export function attenuateVelocity(actor: LiveActor, drag: number): void {
+    vec3.scale(actor.velocity, actor.velocity, drag);
+}
+
+export function appearStarPiece(sceneObjHolder: SceneObjHolder, host: NameObj, translation: ReadonlyVec3, count: number, speedRange: number, speedUp: number, skipWaterCheck: boolean): void {
+    if (sceneObjHolder.starPieceDirector === null)
+        return;
+    sceneObjHolder.starPieceDirector.appearPiece(sceneObjHolder, host, translation, count, speedRange, speedUp, false, skipWaterCheck);
 }

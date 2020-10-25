@@ -1,20 +1,19 @@
 
 import { mat4, quat, ReadonlyMat4, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3Zero } from '../../MathHelpers';
-import { sceneGroup } from '../../rres/Scenes_MarioKartWii';
 import { assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorEye, addVelocityMoveToDirection, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailPointPos, calcSqDistanceToPlayer, calcUpVec, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, excludeCalcShadowToMyCollision, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getPlayerPos, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, invalidateShadowAll, isActionEnd, isActionStart, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, rotateQuatRollBall, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtp, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateHitSensors, validateShadowAll, vecKillElement } from '../ActorUtil';
-import { CollisionKeeperCategory, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isFloorPolygonAngle, isGroundCodeDamage, isGroundCodeDamageFire, isOnGround, isWallPolygonAngle, Triangle, TriangleFilterFunc } from '../Collision';
+import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorEye, addVelocityMoveToDirection, addVelocityToGravity, attenuateVelocity, blendQuatUpFront, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailPointPos, calcSqDistanceToPlayer, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, excludeCalcShadowToMyCollision, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getPlayerPos, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, invalidateShadowAll, isActionEnd, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, rotateQuatRollBall, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtp, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateHitSensors, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isOnGround, Triangle, TriangleFilterFunc } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, isEffectValid, setEffectHostMtx } from '../EffectSystem';
 import { initFur } from '../Fur';
 import { HitSensor, HitSensorType, isSensorEnemy, isSensorNear, isSensorPlayerOrRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgToGroupMember } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
-import { isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
+import { isDead, LiveActor, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObjHolder } from '../Main';
 import { isInWater } from '../MiscMap';
-import { DrawBufferType, NameObj } from '../NameObj';
+import { DrawBufferType } from '../NameObj';
 import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, setShadowDropLength } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
 import { isEqualStageName, PartsModel } from './MiscActor';
@@ -776,47 +775,6 @@ export class RingBeamer extends LiveActor<RingBeamerNrv> {
         super.requestArchives(sceneObjHolder, infoIter);
         RingBeam.requestArchives(sceneObjHolder);
     }
-}
-
-function addVelocityToGravity(actor: LiveActor, speed: number): void {
-    vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
-}
-
-function reboundVelocityFromEachCollision(actor: LiveActor, floorBounce: number, wallBounce: number, ceilingBounce: number, cutoff: number, drag: number = 1.0): boolean {
-    if (!isBinded(actor))
-        return false;
-
-    const fixReaction = getBindedFixReactionVector(actor);
-    if (isNearZeroVec3(fixReaction, 0.001))
-        return false;
-
-    vec3.normalize(scratchVec3, fixReaction);
-    const dot = vec3.dot(scratchVec3, actor.velocity);
-    if (dot >= -cutoff) {
-        if (dot < 0.0)
-            vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
-        return false;
-    } else {
-        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot);
-        vec3.scale(actor.velocity, actor.velocity, drag);
-        const reactionAngle = vec3.dot(scratchVec3, actor.gravityVector);
-        const bounce = isFloorPolygonAngle(reactionAngle) ? floorBounce : isWallPolygonAngle(reactionAngle) ? wallBounce : ceilingBounce;
-        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3, -dot * bounce);
-        return true;
-    }
-}
-
-function reboundVelocityFromCollision(actor: LiveActor, bounce: number, cutoff: number, drag: number): boolean {
-    return reboundVelocityFromEachCollision(actor, bounce, bounce, bounce, cutoff, drag);
-}
-
-function restrictVelocity(actor: LiveActor, maxSpeed: number): void {
-    if (vec3.squaredLength(actor.velocity) >= maxSpeed ** 2)
-        normToLength(actor.velocity, maxSpeed);
-}
-
-function attenuateVelocity(actor: LiveActor, drag: number): void {
-    vec3.scale(actor.velocity, actor.velocity, drag);
 }
 
 function trySetMoveLimitCollision(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {

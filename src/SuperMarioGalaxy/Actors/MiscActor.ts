@@ -17,26 +17,26 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';
 import { getVertexInputLocation } from '../../gx/gx_material';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../../gx/gx_render';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
+import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorMapObj, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectEnemy, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, excludeCalcShadowToMyCollision, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getEaseOutValue, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateHitSensors, isAnyAnimStopped, isBckOneTimeAndStopped, isBckStopped, isExistCollisionResource, isHiddenModel, isLoopRail, isNearPlayer, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToRailPoint, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaRate, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, setTextureMatrixST, showModel, startAction, startBck, startBckNoInterpole, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
-import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptSensor, isBinded, isWallCodeNoAction, setBindTriangleFilter, Triangle, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, appearStarPiece, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, isAnyAnimStopped, isBckOneTimeAndStopped, isBckStopped, isExistCollisionResource, isHiddenModel, isLoopRail, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { calcMapGround, getFirstPolyOnLineToMap, isBinded, isWallCodeNoAction, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { isDemoLastStep, registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
-import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, setEffectColor, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
+import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { initFurPlanet } from '../Fur';
 import { HitSensor, HitSensorType } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
-import { dynamicSpawnZoneAndLayer, isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, resetPosition, ZoneAndLayer } from '../LiveActor';
+import { dynamicSpawnZoneAndLayer, isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, getTimeFrames, SceneObj, SceneObjHolder, SpecialTextureType } from '../Main';
 import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType } from '../MapParts';
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
-import { addShadowVolumeCylinder, initShadowController, initShadowFromCSV, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr } from '../Shadow';
+import { addShadowVolumeCylinder, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { WorldmapPointInfo } from './LegacyActor';
@@ -316,116 +316,6 @@ export class RailPlanetMap extends PlanetMap {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, infoIter);
         this.initRailRider(sceneObjHolder, infoIter);
-    }
-}
-
-const starPieceColorTable = [
-    colorNewFromRGBA8(0x7F7F00FF),
-    colorNewFromRGBA8(0x800099FF),
-    colorNewFromRGBA8(0xE7A000FF),
-    colorNewFromRGBA8(0x46A108FF),
-    colorNewFromRGBA8(0x375AA0FF),
-    colorNewFromRGBA8(0xBE330BFF),
-    colorNewFromRGBA8(0x808080FF),
-];
-
-function checkPass(old: number, new_: number, thresh: number): boolean {
-    return old < thresh && new_ >= thresh;
-}
-
-const enum StarPieceNrv { Floating, RailMove }
-export class StarPiece extends LiveActor<StarPieceNrv> {
-    private type: number = 0;
-    private effectCounter: number = 0;
-    private effectPrmColor: Color;
-    private effectEnvColor: Color;
-
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null) {
-        super(zoneAndLayer, sceneObjHolder, 'StarPiece');
-
-        let starPieceColorIndex: number = -1;
-
-        if (infoIter !== null) {
-            initDefaultPos(sceneObjHolder, this, infoIter);
-            starPieceColorIndex = fallback(getJMapInfoArg3(infoIter), -1);
-        }
-
-        this.initModelManagerWithAnm(sceneObjHolder, this.name);
-        connectToSceneNoSilhouettedMapObj(sceneObjHolder, this);
-
-        if (starPieceColorIndex < 0 || starPieceColorIndex > 5)
-            starPieceColorIndex = getRandomInt(1, 7);
-
-        const color = starPieceColorTable[starPieceColorIndex];
-        this.effectPrmColor = colorNewCopy(color);
-        this.effectPrmColor.r = saturate(this.effectPrmColor.r + 0xFF/0xFF);
-        this.effectPrmColor.g = saturate(this.effectPrmColor.g + 0xFF/0xFF);
-        this.effectPrmColor.b = saturate(this.effectPrmColor.b + 0xFF/0xFF);
-
-        this.effectEnvColor = colorNewCopy(color);
-        this.effectEnvColor.r = saturate(this.effectEnvColor.r + 0x20/0xFF);
-        this.effectEnvColor.g = saturate(this.effectEnvColor.g + 0x20/0xFF);
-        this.effectEnvColor.b = saturate(this.effectEnvColor.b + 0x20/0xFF);
-
-        this.modelInstance!.setColorOverride(ColorKind.MAT0, color);
-        this.initEffectKeeper(sceneObjHolder, 'StarPiece');
-
-        // initSound
-        // initHitSensor
-        // addHitSensorEye
-        // addHitSensor
-
-        // TODO(jstpierre): Add shadows, but this might be a bit much. Probably want to add clipping before turning this on.
-        // initShadowVolumeSphere(sceneObjHolder, this, 30.0);
-        // onCalcShadowDropPrivateGravityOneTime(this);
-
-        if (this.type === 2) {
-            this.initNerve(StarPieceNrv.RailMove);
-        } else {
-            this.initNerve(StarPieceNrv.Floating);
-        }
-
-        this.calcGravityFlag = false;
-
-        startBtk(this, 'Gift');
-        setBtkFrameAndStop(this, 5);
-
-        if (this.type === 0)
-            this.makeActorAppeared(sceneObjHolder);
-        else
-            this.makeActorDead(sceneObjHolder);
-    }
-
-    private tryGotJudge(sceneObjHolder: SceneObjHolder, deltaTimeFrames: number): void {
-        const newCounter = this.effectCounter + deltaTimeFrames;
-        if (checkPass(this.effectCounter, newCounter, 20))
-            this.emitGettableEffect(sceneObjHolder, 4.0);
-        this.effectCounter = newCounter % 90;
-    }
-
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StarPieceNrv, deltaTimeFrames: number): void {
-        if (currentNerve === StarPieceNrv.Floating) {
-            if (isFirstStep(this)) {
-                // offBind
-                // tryCalcGravity
-                // shadow, clipping
-            }
-
-            this.rotation[1] += MathConstants.DEG_TO_RAD * 15.0 * deltaTimeFrames;
-            this.tryGotJudge(sceneObjHolder, deltaTimeFrames);
-        }
-    }
-
-    private emitGettableEffect(sceneObjHolder: SceneObjHolder, scale: number): void {
-        // Due to a bug in the original game, effectScale effectively does nothing, so it doesn't
-        // really make sense to calculate it.
-        // const effectScale = this.calcEffectScale(viewerInput, scale, 0.8, true);
-        const effectScale = 1.0;
-
-        if (calcDistToCamera(this, sceneObjHolder.viewerInput.camera) > 200)
-            emitEffectWithScale(sceneObjHolder, this, 'GetAble', effectScale);
-
-        setEffectColor(this, 'GetAble', this.effectPrmColor, this.effectEnvColor);
     }
 }
 
@@ -1512,6 +1402,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
     private distance: number;
     private axisY = vec3.create();
     private initialTranslation = vec3.create();
+    private starPieceCount = 0;
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -1521,7 +1412,9 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
         initDefaultPos(sceneObjHolder, this, infoIter);
         vec3.copy(this.initialTranslation, this.translation);
 
-        const numStarBits = fallback(getJMapInfoArg0(infoIter), 5);
+        this.starPieceCount = fallback(getJMapInfoArg0(infoIter), 5);
+        declareStarPiece(sceneObjHolder, this, this.starPieceCount);
+
         this.delay = fallback(getJMapInfoArg1(infoIter), 240);
         this.distance = fallback(getJMapInfoArg2(infoIter), 2000);
         this.initBinder(100.0, 0.0, 0);
@@ -1567,7 +1460,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
                 deleteEffect(sceneObjHolder, this, 'ShootingStarBlur');
             } else if (isBinded(this)) {
                 this.setNerve(ShootingStarNrv.WaitForNextShoot);
-                // appearStarPiece
+                appearStarPiece(sceneObjHolder, this, this.translation, this.starPieceCount, 15.0, 40.0, false);
                 deleteEffect(sceneObjHolder, this, 'ShootingStarBlur');
             }
         } else if (currentNerve === ShootingStarNrv.WaitForNextShoot) {
@@ -3189,126 +3082,6 @@ export class WaterPlant extends LiveActor {
     public destroy(device: GfxDevice): void {
         super.destroy(device);
         this.ddraw.destroy(device);
-    }
-}
-
-const enum StarPieceGroupNrv { Flow }
-export class StarPieceGroup extends LiveActor<StarPieceGroupNrv> {
-    private starPieces: StarPiece[] = [];
-    private isConnectedWithRail: boolean = false;
-    private spawnOnRailPoints: boolean = false;
-    private radius: number;
-    private flowSpeed: number;
-    private railCoords: number[] | null = null;
-
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
-
-        initDefaultPos(sceneObjHolder, this, infoIter);
-
-        const isStarPieceGroup = getObjectName(infoIter) === 'StarPieceGroup';
-
-        let starPieceCount: number;
-
-        if (isStarPieceGroup) {
-            starPieceCount = fallback(getJMapInfoArg0(infoIter), 6);
-            this.radius = fallback(getJMapInfoArg1(infoIter), 400);
-            this.spawnOnRailPoints = fallback(getJMapInfoArg2(infoIter), -1) === 1;
-        } else {
-            this.flowSpeed = fallback(getJMapInfoArg0(infoIter), 10.0);
-            starPieceCount = fallback(getJMapInfoArg1(infoIter), 1);
-            this.radius = 400.0;
-            this.spawnOnRailPoints = false;
-            this.railCoords = nArray(starPieceCount, () => 0);
-            this.initNerve(StarPieceGroupNrv.Flow);
-        }
-
-        if (isConnectedWithRail(infoIter)) {
-            this.initRailRider(sceneObjHolder, infoIter);
-            this.isConnectedWithRail = true;
-
-            if (this.spawnOnRailPoints)
-                starPieceCount = getRailPointNum(this);
-        }
-
-        for (let i = 0; i < starPieceCount; i++) {
-            const starPiece = new StarPiece(zoneAndLayer, sceneObjHolder, null);
-            this.starPieces.push(starPiece);
-        }
-
-        connectToSceneMapObjMovement(sceneObjHolder, this);
-
-        this.placementAllPiece();
-    }
-
-    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StarPieceGroupNrv, deltaTimeFrames: number): void {
-        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
-
-        if (currentNerve === StarPieceGroupNrv.Flow) {
-            const railTotalLength = getRailTotalLength(this);
-            const railCoords = assertExists(this.railCoords);
-            for (let i = 0; i < this.starPieces.length; i++) {
-                railCoords[i] = (railTotalLength + railCoords[i] + this.flowSpeed * deltaTimeFrames) % railTotalLength;
-                calcRailPosAtCoord(this.starPieces[i].translation, this, railCoords[i]);
-                resetPosition(sceneObjHolder, this.starPieces[i]);
-            }
-        }
-    }
-
-    private placementAllPiece(): void {
-        if (!this.isConnectedWithRail)
-            this.placementPieceOnCircle();
-        else if (this.spawnOnRailPoints)
-            this.placementPieceOnRailPoint();
-        else
-            this.placementPieceOnRail();
-    }
-
-    private placementPieceOnCircle(): void {
-        if (this.starPieces.length === 1) {
-            vec3.copy(this.starPieces[0].translation, this.translation);
-        } else {
-            makeMtxTRFromActor(scratchMatrix, this);
-            calcMtxAxis(scratchVec3a, null, scratchVec3b, scratchMatrix);
-
-            for (let i = 0; i < this.starPieces.length; i++) {
-                const starPiece = this.starPieces[i];
-                const theta = MathConstants.TAU * (i / this.starPieces.length);
-                vec3.scaleAndAdd(starPiece.translation, this.translation, scratchVec3a, Math.cos(theta) * this.radius);
-                vec3.scaleAndAdd(starPiece.translation, starPiece.translation, scratchVec3b, Math.sin(theta) * this.radius);
-            }
-        }
-    }
-
-    private placementPieceOnRailPoint(): void {
-        assert(this.starPieces.length === getRailPointNum(this));
-        for (let i = 0; i < this.starPieces.length; i++)
-            calcRailPointPos(this.starPieces[i].translation, this, i);
-    }
-
-    private placementPieceOnRail(): void {
-        const totalRailLength = getRailTotalLength(this);
-
-        let speed = 0.0;
-        if (this.starPieces.length > 1) {
-            let denom = this.starPieces.length;
-            if (!isLoopRail(this))
-                denom -= 1;
-
-            speed = totalRailLength / denom;
-        }
-
-        let coord = 0;
-        for (let i = 0; i < this.starPieces.length; i++) {
-            calcRailPosAtCoord(this.starPieces[i].translation, this, coord);
-            if (this.railCoords !== null)
-                this.railCoords[i] = coord;
-            coord += speed;
-        }
-    }
-
-    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
-        sceneObjHolder.modelCache.requestObjectData('StarPiece');
     }
 }
 

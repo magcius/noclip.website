@@ -1,26 +1,26 @@
 
-import { NameObj, NameObjGroup, MovementType } from "./NameObj";
-import { EffectKeeper } from "./EffectSystem";
-import { Spine } from "./Spine";
-import { ActorLightCtrl } from "./LightData";
-import { vec3, mat4 } from "gl-matrix";
-import { SceneObjHolder, getObjectName, getDeltaTimeFrames, ResourceHolder, SpecialTextureType } from "./Main";
-import { JMapInfoIter, createCsvParser, getJMapInfoTransLocal, getJMapInfoRotateLocal, getJMapInfoBool } from "./JMapInfo";
-import { computeModelMatrixSRT, computeEulerAngleRotationFromSRTMatrix } from "../MathHelpers";
+import { mat4, vec3 } from "gl-matrix";
 import { Camera } from "../Camera";
-import { LightType } from "./DrawBuffer";
-
-import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import * as Viewer from '../viewer';
-import { assertExists, fallback } from "../util";
-import { RailRider } from "./RailRider";
-import { BvaPlayer, BrkPlayer, BtkPlayer, BtpPlayer, XanimePlayer, BckCtrl } from "./Animation";
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-import { isBtkExist, isBtkPlaying, startBtk, isBrkExist, isBrkPlaying, startBrk, isBpkExist, isBpkPlaying, startBpk, isBtpExist, startBtp, isBtpPlaying, isBvaExist, isBvaPlaying, startBva, isBckExist, isBckPlaying, startBck, calcGravity, resetAllCollisionMtx, validateCollisionPartsForActor, invalidateCollisionPartsForActor, connectToScene } from "./ActorUtil";
+import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
+import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixSRT } from "../MathHelpers";
+import { assertExists, fallback } from "../util";
+import * as Viewer from '../viewer';
+import { calcGravity, connectToScene, invalidateCollisionPartsForActor, isBckExist, isBckPlaying, isBpkExist, isBpkPlaying, isBrkExist, isBrkPlaying, isBtkExist, isBtkPlaying, isBtpExist, isBtpPlaying, isBvaExist, isBvaPlaying, resetAllCollisionMtx, startBck, startBpk, startBrk, startBtk, startBtp, startBva, validateCollisionPartsForActor } from "./ActorUtil";
+import { BckCtrl, BrkPlayer, BtkPlayer, BtpPlayer, BvaPlayer, XanimePlayer } from "./Animation";
+import { Binder, CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, invalidateCollisionParts, setCollisionMtx } from "./Collision";
+import { LightType } from "./DrawBuffer";
+import { EffectKeeper } from "./EffectSystem";
 import { HitSensor, HitSensorKeeper } from "./HitSensor";
-import { CollisionParts, CollisionScaleType, createCollisionPartsFromLiveActor, Binder, invalidateCollisionParts, setCollisionMtx } from "./Collision";
-import { StageSwitchCtrl, createStageSwitchCtrl } from "./Switch";
+import { createCsvParser, getJMapInfoBool, getJMapInfoRotateLocal, getJMapInfoTransLocal, JMapInfoIter } from "./JMapInfo";
+import { ActorLightCtrl } from "./LightData";
+import { getDeltaTimeFrames, getObjectName, ResourceHolder, SceneObjHolder, SpecialTextureType } from "./Main";
+import { MovementType, NameObj, NameObjGroup } from "./NameObj";
+import { RailRider } from "./RailRider";
 import { ShadowControllerList } from "./Shadow";
+import { Spine } from "./Spine";
+import { createStageSwitchCtrl, StageSwitchCtrl } from "./Switch";
+
 
 class ActorAnimDataInfo {
     public Name: string;

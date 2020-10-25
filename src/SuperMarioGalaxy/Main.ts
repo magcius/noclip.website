@@ -48,7 +48,7 @@ import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
-import { WaterPressureBulletHolder } from './Actors/MapObj';
+import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
 
 // Galaxy ticks at 60fps.
@@ -1131,6 +1131,7 @@ export class SceneObjHolder {
     public planetGravityManager: PlanetGravityManager | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
+    public starPieceDirector: StarPieceDirector | null = null;
     public shadowControllerHolder: ShadowControllerHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
@@ -1198,6 +1199,8 @@ export class SceneObjHolder {
             return this.coinRotater;
         else if (sceneObj === SceneObj.AirBubbleHolder)
             return this.airBubbleHolder;
+        else if (sceneObj === SceneObj.StarPieceDirector)
+            return this.starPieceDirector;
         else if (sceneObj === SceneObj.ShadowControllerHolder)
             return this.shadowControllerHolder;
         else if (sceneObj === SceneObj.SwingRopeGroup)
@@ -1258,6 +1261,8 @@ export class SceneObjHolder {
             this.coinRotater = new CoinRotater(this);
         else if (sceneObj === SceneObj.AirBubbleHolder)
             this.airBubbleHolder = new AirBubbleHolder(this);
+        else if (sceneObj === SceneObj.StarPieceDirector)
+            this.starPieceDirector = new StarPieceDirector(this);
         else if (sceneObj === SceneObj.ShadowControllerHolder)
             this.shadowControllerHolder = new ShadowControllerHolder(this);
         else if (sceneObj === SceneObj.SwingRopeGroup)
@@ -1763,6 +1768,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         modelCache.requestArchiveData(`UsEnglish/MessageData/Message.arc`);
         modelCache.requestObjectData('PlanetMapDataTable');
         modelCache.requestObjectData('NPCData');
+        modelCache.requestObjectData('StarPiece');
 
         const sceneObjHolder = new SceneObjHolder();
         sceneObjHolder.sceneDesc = this;
@@ -1793,6 +1799,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         sceneObjHolder.objNameTable = this.getObjNameTable(modelCache);
 
         sceneObjHolder.create(SceneObj.EffectSystem);
+        sceneObjHolder.create(SceneObj.StarPieceDirector);
 
         if (modelCache.isArchiveExist(`UsEnglish/MessageData/Message.arc`))
             sceneObjHolder.messageDataHolder = new MessageDataHolder(modelCache.getArchive(`UsEnglish/MessageData/Message.arc`)!);
@@ -1808,6 +1815,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         spawner.place();
 
         // GameScene::init()
+        sceneObjHolder.starPieceDirector!.createStarPiece(sceneObjHolder);
         initSyncSleepController(sceneObjHolder);
 
         const renderer = new SMGRenderer(device, renderHelper, spawner, sceneObjHolder);
