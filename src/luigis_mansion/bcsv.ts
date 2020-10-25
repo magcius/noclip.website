@@ -76,6 +76,8 @@ const nameTable = [
     'PlanetAmbientR', 'PlanetAmbientG', 'PlanetAmbientB', 'PlanetAmbientA', 'PlanetAlpha2',
     // Shadow
     'Name', 'GroupName', 'Joint', 'DropOffsetX', 'DropOffsetY', 'DropOffsetZ', 'DropStart', 'DropLength', 'SyncShow', 'FollowScale', 'Collision', 'Gravity',
+    // GeneralPos
+    'PosName',
 ];
 
 const hashLookup = new Map<number, string>();

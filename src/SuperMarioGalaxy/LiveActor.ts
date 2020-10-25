@@ -366,8 +366,8 @@ export const enum LayerId {
 }
 
 export interface ZoneAndLayer {
-    zoneId: number;
-    layerId: LayerId;
+    readonly zoneId: number;
+    readonly layerId: LayerId;
 }
 
 export const dynamicSpawnZoneAndLayer: ZoneAndLayer = { zoneId: -1, layerId: LayerId.Common };

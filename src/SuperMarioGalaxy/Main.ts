@@ -24,14 +24,14 @@ import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../g
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { JMapInfoIter, createCsvParser } from './JMapInfo';
+import { JMapInfoIter, createCsvParser, JMapLinkInfo } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
 import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
-import { ZoneAndLayer, LayerId, LiveActorGroupArray } from './LiveActor';
+import { ZoneAndLayer, LayerId, LiveActorGroupArray, getJMapInfoTrans, getJMapInfoRotate } from './LiveActor';
 import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { BckCtrl } from './Animation';
 import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea } from './MiscMap';
@@ -1106,6 +1106,7 @@ export class SceneObjHolder {
     public modelCache: ModelCache;
     public spawner: SMGSpawner;
 
+    // Some of these should totally be SceneObj's... oops.
     public scenarioData: ScenarioData;
     public planetMapCreator: PlanetMapCreator;
     public lightDirector: LightDirector;
@@ -1126,6 +1127,7 @@ export class SceneObjHolder {
     public bloomEffect: BloomEffect | null = null;
     public lensFlareDirector: LensFlareDirector | null = null;
     public furDrawManager: FurDrawManager | null = null;
+    public namePosHolder: NamePosHolder | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
@@ -1176,6 +1178,10 @@ export class SceneObjHolder {
             return this.switchWatcherHolder;
         else if (sceneObj === SceneObj.SleepControllerHolder)
             return this.sleepControllerHolder;
+        else if (sceneObj === SceneObj.AreaObjContainer)
+            return this.areaObjContainer;
+        else if (sceneObj === SceneObj.LiveActorGroupArray)
+            return this.liveActorGroupArray;
         else if (sceneObj === SceneObj.ImageEffectSystemHolder)
             return this.imageEffectSystemHolder;
         else if (sceneObj === SceneObj.BloomEffect)
@@ -1184,10 +1190,8 @@ export class SceneObjHolder {
             return this.lensFlareDirector;
         else if (sceneObj === SceneObj.FurDrawManager)
             return this.furDrawManager;
-        else if (sceneObj === SceneObj.AreaObjContainer)
-            return this.areaObjContainer;
-        else if (sceneObj === SceneObj.LiveActorGroupArray)
-            return this.liveActorGroupArray;
+        else if (sceneObj === SceneObj.NamePosHolder)
+            return this.namePosHolder;
         else if (sceneObj === SceneObj.PlanetGravityManager)
             return this.planetGravityManager;
         else if (sceneObj === SceneObj.CoinRotater)
@@ -1234,6 +1238,10 @@ export class SceneObjHolder {
             this.switchWatcherHolder = new SwitchWatcherHolder(this);
         else if (sceneObj === SceneObj.SleepControllerHolder)
             this.sleepControllerHolder = new SleepControllerHolder(this);
+        else if (sceneObj === SceneObj.AreaObjContainer)
+            this.areaObjContainer = new AreaObjContainer(this);
+        else if (sceneObj === SceneObj.LiveActorGroupArray)
+            this.liveActorGroupArray = new LiveActorGroupArray(this);
         else if (sceneObj === SceneObj.ImageEffectSystemHolder)
             this.imageEffectSystemHolder = new ImageEffectSystemHolder(this);
         else if (sceneObj === SceneObj.BloomEffect)
@@ -1242,10 +1250,8 @@ export class SceneObjHolder {
             this.lensFlareDirector = new LensFlareDirector(this);
         else if (sceneObj === SceneObj.FurDrawManager)
             this.furDrawManager = new FurDrawManager(this);
-        else if (sceneObj === SceneObj.AreaObjContainer)
-            this.areaObjContainer = new AreaObjContainer(this);
-        else if (sceneObj === SceneObj.LiveActorGroupArray)
-            this.liveActorGroupArray = new LiveActorGroupArray(this);
+        else if (sceneObj === SceneObj.NamePosHolder)
+            this.namePosHolder = new NamePosHolder(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)
             this.planetGravityManager = new PlanetGravityManager(this);
         else if (sceneObj === SceneObj.CoinRotater)
@@ -1355,10 +1361,9 @@ class SMGSpawner {
     }
 
     private placeStageData(stageDataHolder: StageDataHolder, priority: boolean): void {
-        stageDataHolder.iterPlacement((infoIter, layerId) => {
+        stageDataHolder.iterPlacement((infoIter, zoneAndLayer) => {
             const actorTableEntry = this.getActorTableEntry(getObjectName(infoIter));
 
-            const zoneAndLayer: ZoneAndLayer = { zoneId: stageDataHolder.zoneId, layerId };
             if (actorTableEntry !== null) {
                 // Explicitly null, don't spawn anything.
                 if (actorTableEntry.factoryFunc === null)
@@ -1443,17 +1448,70 @@ class SMGSpawner {
     }
 }
 
+export class NamePosInfo {
+    public translation = vec3.create();
+    public rotation = vec3.create();
+    public linkInfo: JMapLinkInfo | null = null;
+    public linkObj: NameObj | null = null;
+
+    constructor(public zoneAndLayer: ZoneAndLayer, public name: string) {
+    }
+}
+
+class NamePosHolder extends NameObj {
+    private namePos: NamePosInfo[] = [];
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'NamePosHolder');
+
+        sceneObjHolder.stageDataHolder.iterGeneralPos((infoIter, layerId) => {
+            const name = assertExists(infoIter.getValueString('PosName'));
+            const namePos = new NamePosInfo(layerId, name);
+            getJMapInfoTrans(namePos.translation, sceneObjHolder, infoIter);
+            getJMapInfoRotate(namePos.rotation, sceneObjHolder, infoIter);
+            namePos.linkInfo = JMapLinkInfo.createLinkInfo(sceneObjHolder, infoIter);
+            this.namePos.push(namePos);
+        });
+    }
+
+    public find(nameObj: NameObj | null, name: string): NamePosInfo | null {
+        for (let i = 0; i < this.namePos.length; i++) {
+            const namePos = this.namePos[i];
+            if (namePos.name === name && (nameObj === null || namePos.linkInfo === null || namePos.linkObj === nameObj))
+                return namePos;
+        }
+        return null;
+    }
+
+    public tryRegisterLinkObj(sceneObjHolder: SceneObjHolder, nameObj: NameObj, infoIter: JMapInfoIter): boolean {
+        const link = JMapLinkInfo.createLinkedInfo(sceneObjHolder, infoIter);
+        if (link === null)
+            return false;
+
+        for (let i = 0; i < this.namePos.length; i++) {
+            const namePos = this.namePos[i];
+            if (namePos.linkInfo !== null && namePos.linkInfo.equals(link)) {
+                assert(namePos.linkObj === null);
+                namePos.linkObj = nameObj;
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
 interface JMapInfoIter_StageDataHolder extends JMapInfoIter {
     originalStageDataHolder: StageDataHolder;
 }
 
 function copyInfoIter(infoIter: JMapInfoIter): JMapInfoIter {
-    const iter = new JMapInfoIter(infoIter.bcsv, infoIter.record);
+    const iter = new JMapInfoIter(infoIter.filename, infoIter.bcsv, infoIter.record);
     (iter as JMapInfoIter_StageDataHolder).originalStageDataHolder = (infoIter as JMapInfoIter_StageDataHolder).originalStageDataHolder;
     return iter;
 }
 
-type LayerObjInfoCallback = (infoIter: JMapInfoIter, layerId: LayerId) => void;
+type LayerObjInfoCallback = (infoIter: JMapInfoIter, zoneAndLayer: ZoneAndLayer) => void;
 
 class StageDataHolder {
     private zoneArchive: RARC.JKRArchive;
@@ -1465,8 +1523,8 @@ class StageDataHolder {
         this.createLocalStageDataHolders(sceneDesc, modelCache, scenarioData);
     }
 
-    private createCsvParser(buffer: ArrayBufferSlice): JMapInfoIter {
-        const iter = createCsvParser(buffer);
+    private createCsvParser(buffer: ArrayBufferSlice, filename: string | null = null): JMapInfoIter {
+        const iter = createCsvParser(buffer, filename);
         (iter as JMapInfoIter_StageDataHolder).originalStageDataHolder = this;
         return iter;
     }
@@ -1486,20 +1544,21 @@ class StageDataHolder {
         return [commonPathInfo, pointInfo];
     }
 
-    private iterLayer(layerId: LayerId, callback: LayerObjInfoCallback, buffer: ArrayBufferSlice): void {
-        const iter = this.createCsvParser(buffer);
-
-        for (let i = 0; i < iter.getNumRecords(); i++) {
-            iter.setRecord(i);
-            callback(iter, layerId);
-        }
-    }
-
     private isPrioPlacementObjInfo(filename: string): boolean {
         return (filename === 'areaobjinfo' || filename === 'planetobjinfo' || filename === 'demoobjinfo' || filename === 'cameracubeinfo');
     }
 
-    private iterPlacementDir(priority: boolean | null, layerId: LayerId, callback: LayerObjInfoCallback, dir: RARC.RARCDir): void {
+    private iterJmpInfo(layerId: LayerId, callback: LayerObjInfoCallback, filename: string, buffer: ArrayBufferSlice): void {
+        const zoneAndLayer: ZoneAndLayer = { zoneId: this.zoneId, layerId };
+        const iter = this.createCsvParser(buffer, filename);
+
+        for (let i = 0; i < iter.getNumRecords(); i++) {
+            iter.setRecord(i);
+            callback(iter, zoneAndLayer);
+        }
+    }
+
+    private iterAllLayerJmpInfo(priority: boolean | null, layerId: LayerId, callback: LayerObjInfoCallback, dir: RARC.RARCDir): void {
         for (let i = 0; i < dir.files.length; i++) {
             const file = dir.files[i];
 
@@ -1513,7 +1572,7 @@ class StageDataHolder {
             if (priority !== null && (this.isPrioPlacementObjInfo(filename) !== priority))
                 continue;
 
-            this.iterLayer(layerId, callback, file.buffer);
+            this.iterJmpInfo(layerId, callback, filename, file.buffer);
         }
     }
 
@@ -1523,12 +1582,25 @@ class StageDataHolder {
 
             const placementDir = this.zoneArchive.findDir(`jmp/Placement/${layerDirName}`);
             if (placementDir !== null)
-                this.iterPlacementDir(priority, i, callback, placementDir);
+                this.iterAllLayerJmpInfo(priority, i, callback, placementDir);
 
             const mapPartsDir = this.zoneArchive.findDir(`jmp/MapParts/${layerDirName}`);
             if (mapPartsDir !== null)
-                this.iterPlacementDir(priority, i, callback, mapPartsDir);
+                this.iterAllLayerJmpInfo(priority, i, callback, mapPartsDir);
         }
+    }
+
+    public iterGeneralPos(callback: LayerObjInfoCallback): void {
+        for (let i = LayerId.Common; i <= LayerId.LayerMax; i++) {
+            const layerDirName = getLayerDirName(i);
+
+            const generalPosDir = this.zoneArchive.findDir(`jmp/GeneralPos/${layerDirName}`);
+            if (generalPosDir !== null)
+                this.iterAllLayerJmpInfo(null, i, callback, generalPosDir);
+        }
+
+        for (let i = 0; i < this.localStageDataHolders.length; i++)
+            this.localStageDataHolders[i].iterGeneralPos(callback);
     }
 
     public createLocalStageDataHolders(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {

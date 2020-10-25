@@ -1,12 +1,12 @@
 
 // Misc MapObj actors.
 
-import { mat4, vec3, ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
-import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxisX, getMatrixAxisZ, computeModelMatrixR, Vec3UnitY, computeEulerAngleRotationFromSRTMatrix, lerp, invlerp } from '../../MathHelpers';
+import { mat4, vec3, ReadonlyMat4, ReadonlyVec3, quat, mat3 } from 'gl-matrix';
+import { MathConstants, setMatrixTranslation, isNearZero, getMatrixAxisY, Vec3UnitZ, isNearZeroVec3, normToLength, Vec3Zero, getMatrixTranslation, getMatrixAxisX, getMatrixAxisZ, computeModelMatrixR, Vec3UnitY, computeEulerAngleRotationFromSRTMatrix, lerp, invlerp, computeModelMatrixSRT, computeModelMatrixT } from '../../MathHelpers';
 import { assertExists, fallback, assert } from '../../util';
 import * as Viewer from '../../viewer';
-import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, turnVecToVecCos, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer, invalidateShadowAll, getBckFrameMax, getBckFrameMaxNamed, joinToGroupArray, getPlayerPos, turnVecToVecCosOnPlane, getEaseInValue, getJointMtxByName, connectToSceneMapObjStrongLight, isBckOneTimeAndStopped, makeMtxFrontSidePos, addHitSensorMapObj, useStageSwitchWriteDead, isValidSwitchA, isValidSwitchDead, invalidateCollisionPartsForActor, isValidSwitchB, calcRailPointPos, calcGravityVector, validateShadowAll, moveCoordToRailPoint, moveCoordAndTransToRailPoint } from '../ActorUtil';
-import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded, isBindedGround } from '../Collision';
+import { addBodyMessageSensorMapObj, calcMtxFromGravityAndZAxis, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToScenePlanet, getBrkFrameMax, getRailDirection, initCollisionParts, initDefaultPos, isBckExist, isBtkExist, isBtpExist, isExistCollisionResource, isRailReachedGoal, listenStageSwitchOnOffA, listenStageSwitchOnOffB, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToNearestPos, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, connectToSceneMapObjMovement, getRailTotalLength, connectToSceneNoShadowedMapObjStrongLight, getRandomFloat, getNextRailPointArg2, isHiddenModel, moveCoord, getCurrentRailPointNo, getCurrentRailPointArg1, getEaseOutValue, hideModel, invalidateHitSensors, makeMtxUpFrontPos, isZeroGravity, calcGravity, showModel, validateHitSensors, vecKillElement, isLoopRail, isSameDirection, makeMtxFrontNoSupportPos, makeMtxUpNoSupportPos, getRailPos, getCurrentRailPointArg0, addHitSensor, isBckStopped, connectToSceneMapObj, getJointMtx, calcFrontVec, makeMtxFrontUpPos, isNearPlayer, invalidateShadowAll, getBckFrameMaxNamed, joinToGroupArray, getPlayerPos, turnVecToVecCosOnPlane, getJointMtxByName, connectToSceneMapObjStrongLight, isBckOneTimeAndStopped, makeMtxFrontSidePos, addHitSensorMapObj, useStageSwitchWriteDead, isValidSwitchDead, invalidateCollisionPartsForActor, isValidSwitchB, calcRailPointPos, calcGravityVector, validateShadowAll, moveCoordAndTransToRailPoint, connectToSceneIndirectMapObj, initCollisionPartsAutoEqualScaleOne, getRandomInt, validateCollisionPartsForActor } from '../ActorUtil';
+import { tryCreateCollisionMoveLimit, getFirstPolyOnLineToMap, isOnGround, isBindedGroundDamageFire, isBindedWall, isBinded, isBindedGround, validateCollisionParts } from '../Collision';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, emitEffect, isEffectValid, isRegisteredEffect, setEffectHostSRT, setEffectHostMtx, deleteEffectAll } from '../EffectSystem';
 import { HitSensor, HitSensorType, isSensorMapObj } from '../HitSensor';
@@ -14,7 +14,7 @@ import { getJMapInfoArg0, getJMapInfoArg1, JMapInfoIter, getJMapInfoArg2, getJMa
 import { LiveActor, MessageType, ZoneAndLayer, isDead, makeMtxTRFromActor, MsgSharedGroup, dynamicSpawnZoneAndLayer, isMsgTypeEnemyAttack } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRailPosture, MapPartsRotator, MoveConditionType, MovePostureType, RailGuideType } from '../MapParts';
-import { createIndirectPlanetModel, PartsModel } from './MiscActor';
+import { createBloomModel, createIndirectPlanetModel, PartsModel } from './MiscActor';
 import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate } from '../Spine';
 import { ModelObj, createModelObjBloomModel, createModelObjMapObjStrongLight } from './ModelObj';
@@ -33,6 +33,8 @@ const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
 const scratchMatrix = mat4.create();
+const scratchQuata = quat.create();
+const scratchQuatb = quat.create();
 
 function setupInitInfoSimpleMapObj(initInfo: MapObjActorInitInfo): void {
     initInfo.setDefaultPos = true;
@@ -2689,5 +2691,211 @@ export class MeteorStrikeLauncher extends LiveActor<MeteorStrikeLauncherNrv> {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         MeteorStrike.requestArchives(sceneObjHolder, infoIter);
+    }
+}
+
+function tryFindLinkNamePos(dst: mat4, sceneObjHolder: SceneObjHolder, nameObj: NameObj, name: string): boolean {
+    const namePos = sceneObjHolder.namePosHolder!.find(nameObj, name);
+    if (namePos === null)
+        return false;
+
+    computeModelMatrixSRT(dst, 1, 1, 1,
+        namePos.rotation[0], namePos.rotation[1], namePos.rotation[2],
+        namePos.translation[0], namePos.translation[1], namePos.translation[2]);
+    return true;
+}
+
+function quatFromMat4(out: quat, m: ReadonlyMat4): void {
+    // Algorithm in Ken Shoemake's article in 1987 SIGGRAPH course notes
+    // article "Quaternion Calculus and Fast Animation".
+    const fTrace = m[0] + m[5] + m[10];
+    let fRoot;
+    
+    if (fTrace > 0.0) {
+        // |w| > 1/2, may as well choose w > 1/2
+        fRoot = Math.sqrt(fTrace + 1.0); // 2w
+
+        out[3] = 0.5 * fRoot;
+        fRoot = 0.5 / fRoot; // 1/(4w)
+
+        out[0] = (m[6] - m[9]) * fRoot;
+        out[1] = (m[8] - m[2]) * fRoot;
+        out[2] = (m[1] - m[4]) * fRoot;
+    } else {
+        // |w| <= 1/2
+        let i = 0;
+        if (m[5] > m[0]) i = 1;
+        if (m[10] > m[i * 4 + i]) i = 2;
+        const j = (i + 1) % 3;
+        const k = (i + 2) % 3;
+        fRoot = Math.sqrt(m[i * 4 + i] - m[j * 4 + j] - m[k * 4 + k] + 1.0);
+        out[i] = 0.5 * fRoot;
+        fRoot = 0.5 / fRoot;
+        out[3] = (m[j * 4 + k] - m[k * 4 + j]) * fRoot;
+        out[j] = (m[j * 4 + i] + m[i * 4 + j]) * fRoot;
+        out[k] = (m[k * 4 + i] + m[i * 4 + k]) * fRoot;
+    }
+}
+
+function blendMtx(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4, t: number): void {
+    quatFromMat4(scratchQuata, a);
+    quatFromMat4(scratchQuatb, b);
+    quat.slerp(scratchQuata, scratchQuata, scratchQuatb, t);
+    mat4.fromQuat(dst, scratchQuata);
+    getMatrixTranslation(scratchVec3a, a);
+    getMatrixTranslation(scratchVec3b, b);
+    vec3.lerp(scratchVec3a, scratchVec3a, scratchVec3b, t);
+    setMatrixTranslation(dst, scratchVec3a);
+}
+
+const enum AssemblyBlockNrv { Wait, Assemble, AssembleWait, Timer, Return }
+export class AssemblyBlock extends LiveActor<AssemblyBlockNrv> {
+    private initPosMtx = mat4.create();
+    private assemblePosMtx = mat4.create();
+    private playerDistance: number;
+    private timer: number;
+    private isTimed: boolean;
+    private idleRotateSpeed: number;
+    private bloomModel: PartsModel | null;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        sceneObjHolder.create(SceneObj.NamePosHolder);
+        sceneObjHolder.namePosHolder!.tryRegisterLinkObj(sceneObjHolder, this, infoIter);
+
+        const hasNamePos = tryFindLinkNamePos(this.initPosMtx, sceneObjHolder, this, '合体ブロック故郷点');
+        if (!hasNamePos)
+            computeModelMatrixT(this.initPosMtx, this.translation[0] + 1000.0, this.translation[1], this.translation[2] + 1000.0);
+
+        // getMapPartsObjectNameIfExistShapeID
+        // I don't think ShapeID ever exists in Super Mario Galaxy 1...
+        const modelName = this.name;
+
+        this.initModelManagerWithAnm(sceneObjHolder, modelName);
+
+        const baseMtx = this.modelInstance!.modelMatrix;
+        mat4.copy(this.assemblePosMtx, baseMtx);
+        mat4.copy(baseMtx, this.initPosMtx);
+
+        if (this.name.includes('PartsIce'))
+            connectToSceneIndirectMapObj(sceneObjHolder, this);
+        else
+            connectToSceneMapObj(sceneObjHolder, this);
+
+        this.initHitSensor();
+        const bodySensor = addBodyMessageSensorMapObj(sceneObjHolder, this);
+        initCollisionPartsAutoEqualScaleOne(sceneObjHolder, this, modelName, bodySensor);
+
+        this.playerDistance = fallback(getJMapInfoArg0(infoIter), -1);
+        if (this.playerDistance <= 0.0) {
+            // TODO(jstpierre): calcModelBoundingRadius
+            this.playerDistance = 1000;
+        }
+
+        // noclip hacks
+        this.playerDistance *= 3;
+
+        this.timer = fallback(getJMapInfoArg1(infoIter), 300.0);
+        this.isTimed = getJMapInfoBool(fallback(getJMapInfoArg7(infoIter), -1));
+
+        this.idleRotateSpeed = (getRandomInt(0, 2) === 0 ? -0.1 : 0.1) * MathConstants.DEG_TO_RAD;
+
+        if (this.isTimed)
+            this.initEffectKeeper(sceneObjHolder, null);
+        else
+            this.initEffectKeeper(sceneObjHolder, 'AssemblyBlock');
+
+        if (this.name === 'AssemblyBlockPartsTimerA')
+            this.bloomModel = createBloomModel(sceneObjHolder, this, baseMtx);
+
+        tryStartAllAnim(this, 'Wait');
+        this.initNerve(AssemblyBlockNrv.Wait);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public calcAndSetBaseMtx(): void {
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: AssemblyBlockNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === AssemblyBlockNrv.Wait) {
+            if (isFirstStep(this)) {
+                if (isEffectValid(this, 'Blur'))
+                    deleteEffect(sceneObjHolder, this, 'Blur');
+                validateCollisionPartsForActor(sceneObjHolder, this);
+                validateHitSensors(this);
+            }
+
+            const baseMtx = this.modelInstance!.modelMatrix;
+            mat4.rotateX(baseMtx, baseMtx, this.idleRotateSpeed * deltaTimeFrames);
+            mat4.rotateY(baseMtx, baseMtx, this.idleRotateSpeed * deltaTimeFrames);
+            mat4.rotateZ(baseMtx, baseMtx, this.idleRotateSpeed * deltaTimeFrames);
+
+            this.tryStartAssemble(sceneObjHolder);
+        } else if (currentNerve === AssemblyBlockNrv.Assemble) {
+            if (isFirstStep(this)) {
+                emitEffect(sceneObjHolder, this, 'Blur');
+                invalidateCollisionPartsForActor(sceneObjHolder, this);
+                invalidateHitSensors(this);
+            }
+
+            const baseMtx = this.modelInstance!.modelMatrix;
+            blendMtx(baseMtx, this.initPosMtx, this.assemblePosMtx, calcNerveRate(this, 10.0));
+
+            if (isGreaterEqualStep(this, 10))
+                this.setNerve(AssemblyBlockNrv.AssembleWait);
+        } else if (currentNerve === AssemblyBlockNrv.AssembleWait) {
+            if (isFirstStep(this)) {
+                if (isEffectValid(this, 'Blur'))
+                    deleteEffect(sceneObjHolder, this, 'Blur');
+                validateCollisionPartsForActor(sceneObjHolder, this);
+                validateHitSensors(this);
+            }
+
+            if (this.isTimed)
+                this.setNerve(AssemblyBlockNrv.Timer);
+            else
+                this.tryStartReturn(sceneObjHolder);
+        } else if (currentNerve === AssemblyBlockNrv.Timer) {
+            if (isGreaterEqualStep(this, this.timer - 100)) {
+                tryStartAllAnim(this, 'Disappear');
+            } else if (isGreaterEqualStep(this, this.timer)) {
+                if (this.bloomModel !== null)
+                    this.bloomModel.makeActorDead(sceneObjHolder);
+
+                this.makeActorDead(sceneObjHolder);
+            }
+        } else if (currentNerve === AssemblyBlockNrv.Return) {
+            if (isFirstStep(this)) {
+                emitEffect(sceneObjHolder, this, 'Blur');
+                invalidateCollisionPartsForActor(sceneObjHolder, this);
+                invalidateHitSensors(this);
+            }
+
+            const baseMtx = this.modelInstance!.modelMatrix;
+            blendMtx(baseMtx, this.assemblePosMtx, this.initPosMtx, calcNerveRate(this, 10.0));
+
+            if (isGreaterEqualStep(this, 10))
+                this.setNerve(AssemblyBlockNrv.Wait);
+        }
+    }
+
+    private tryStartAssemble(sceneObjHolder: SceneObjHolder): void {
+        if (isNearPlayer(sceneObjHolder, this, this.playerDistance))
+            this.setNerve(AssemblyBlockNrv.Assemble);
+    }
+
+    private tryStartReturn(sceneObjHolder: SceneObjHolder): void {
+        if (!isNearPlayer(sceneObjHolder, this, 50.0 + this.playerDistance))
+            this.setNerve(AssemblyBlockNrv.Return);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        if (getObjectName(infoIter) === 'AssemblyBlockPartsTimerA')
+            sceneObjHolder.modelCache.requestObjectData('AssemblyBlockPartsTimerABloom');
     }
 }

@@ -594,6 +594,10 @@ export function initCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveAc
     actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, resourceHolder, hostMtx, CollisionScaleType.AutoScale);
 }
 
+export function initCollisionPartsAutoEqualScaleOne(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null = null, resourceHolder: ResourceHolder | null = null) {
+    actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, resourceHolder, hostMtx, CollisionScaleType.AutoEqualScale);
+}
+
 export function getRailTotalLength(actor: LiveActor): number {
     return actor.railRider!.getTotalLength();
 }

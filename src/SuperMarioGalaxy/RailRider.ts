@@ -198,7 +198,7 @@ export class BezierRail {
     constructor(sceneObjHolder: SceneObjHolder, railIter: JMapInfoIter, private pointsInfo: JMapInfoIter) {
         this.isClosed = railIter.getValueString('closed') === 'CLOSE';
 
-        this.railIter = new JMapInfoIter(railIter.bcsv, railIter.record);
+        this.railIter = new JMapInfoIter(railIter.filename, railIter.bcsv, railIter.record);
 
         this.pointRecordCount = pointsInfo.getNumRecords();
         const railPartCount = this.isClosed ? this.pointRecordCount : this.pointRecordCount - 1;
