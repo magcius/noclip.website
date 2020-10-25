@@ -1794,8 +1794,19 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
     }
 
     private updateVelocity(): void {
-        // noclip modification: Increase Torpedo speed by 3x to make it faster to hit the weight in Buoy Base.
-        const speed = this.type === HomingKillerType.Torpedo ? (3.0 * 5.0) : 12.0;
+        let speed: number;
+
+        if (this.type === HomingKillerType.Torpedo) {
+            // noclip modification: Increase Torpedo speed by 3x to make it faster to hit the weight in Buoy Base.
+            speed = 5.0 * 3.0;
+        } else if (this.type === HomingKillerType.HomingKiller) {
+            speed = 12.0;
+        } else if (this.type === HomingKillerType.MagnumKiller) {
+            speed = 12.0;
+        } else {
+            throw "whoops";
+        }
+
         vec3.scale(this.velocity, this.axisZ, speed);
     }
 
@@ -2018,6 +2029,18 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
         } else {
             makeMtxFrontUpPos(this.baseMtx, this.axisZ, this.axisY, this.translation);
         }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (isMsgTypeEnemyAttack(messageType)) {
+            if (!this.isNerve(HomingKillerNrv.Appear) && !this.isNerve(HomingKillerNrv.Break)) {
+                if (this.type !== HomingKillerType.MagnumKiller)
+                    this.setNerve(HomingKillerNrv.Break);
+                return true;
+            }
+        }
+
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
 }
 

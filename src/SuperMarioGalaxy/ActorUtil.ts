@@ -1532,8 +1532,14 @@ export function attenuateVelocity(actor: LiveActor, drag: number): void {
     vec3.scale(actor.velocity, actor.velocity, drag);
 }
 
-export function appearStarPiece(sceneObjHolder: SceneObjHolder, host: NameObj, translation: ReadonlyVec3, count: number, speedRange: number, speedUp: number, skipWaterCheck: boolean): void {
+export function appearStarPiece(sceneObjHolder: SceneObjHolder, host: NameObj, translation: ReadonlyVec3, count: number, speedRange: number, speedUp: number, skipWaterCheck: boolean = false): void {
     if (sceneObjHolder.starPieceDirector === null)
         return;
     sceneObjHolder.starPieceDirector.appearPiece(sceneObjHolder, host, translation, count, speedRange, speedUp, false, skipWaterCheck);
+}
+
+export function appearStarPieceToDirection(sceneObjHolder: SceneObjHolder, host: NameObj, translation: ReadonlyVec3, direction: ReadonlyVec3, count: number, speedRange: number, speedUp: number, skipWaterCheck: boolean = false): void {
+    if (sceneObjHolder.starPieceDirector === null)
+        return;
+    sceneObjHolder.starPieceDirector.appearPieceToDirection(sceneObjHolder, host, translation, direction, count, speedRange, speedUp, false, skipWaterCheck);
 }

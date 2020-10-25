@@ -1847,7 +1847,14 @@ export class LavaSteam extends LiveActor<LavaSteamNrv> {
     }
 }
 
-export class WoodBox extends LiveActor {
+const enum WoodBoxNrv { Wait, Hit, Killed }
+export class WoodBox extends LiveActor<WoodBoxNrv> {
+    private hitPoints = 1;
+    private coinCount = 0;
+    private starPieceCount = 0;
+    private useKilledNrv: boolean;
+    private breakModel: ModelObj;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
@@ -1855,17 +1862,118 @@ export class WoodBox extends LiveActor {
         this.initModelManagerWithAnm(sceneObjHolder, "WoodBox");
         connectToSceneMapObjStrongLight(sceneObjHolder, this);
         initLightCtrl(sceneObjHolder, this);
+        this.initNerve(WoodBoxNrv.Wait);
         this.initEffectKeeper(sceneObjHolder, null);
+
+        this.coinCount = fallback(getJMapInfoArg0(infoIter), 1);
+        this.useKilledNrv = !getJMapInfoBool(fallback(getJMapInfoArg1(infoIter), -1));
+        this.starPieceCount = fallback(getJMapInfoArg1(infoIter), 0);
 
         this.initHitSensor();
         const radius = 120.0 * this.scale[0];
         vec3.set(scratchVec3, 0, radius, 0);
         addHitSensor(sceneObjHolder, this, 'body', HitSensorType.PunchBox, 8, radius, scratchVec3);
+
+        this.breakModel = new ModelObj(zoneAndLayer, sceneObjHolder, 'WoodBoxBreak', 'WoodBoxBreak', this.getBaseMtx()!, DrawBufferType.NoSilhouettedMapObjStrongLight, -2, -2);
+        vec3.copy(this.breakModel.scale, this.scale);
+        initLightCtrl(sceneObjHolder, this.breakModel);
+        this.breakModel.makeActorDead(sceneObjHolder);
+
         initCollisionParts(sceneObjHolder, this, 'WoodBox', this.getSensor('body')!);
+
+        if (this.coinCount !== 0) {
+            // declareCoin
+        }
+
+        if (this.starPieceCount !== 0) {
+            declareStarPiece(sceneObjHolder, this, this.starPieceCount);
+        }
 
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
         useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
         this.makeActorAppeared(sceneObjHolder);
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        if (this.useKilledNrv) {
+            this.setNerve(WoodBoxNrv.Killed);
+            invalidateHitSensors(this);
+            invalidateCollisionPartsForActor(sceneObjHolder, this);
+        } else {
+            super.makeActorDead(sceneObjHolder);
+        }
+
+        this.breakModel.makeActorDead(sceneObjHolder);
+        // requestAppearPowerStar
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: WoodBoxNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === WoodBoxNrv.Hit) {
+            if (isFirstStep(this)) {
+                this.getSensor('body')!.invalidate();
+                // powerStarDemoModel
+            }
+
+            if (isGreaterEqualStep(this, 15)) {
+                if (this.coinCount > 0) {
+                    // appearCoinPop
+                }
+
+                if (this.starPieceCount > 0) {
+                    appearStarPiece(sceneObjHolder, this, this.translation, this.starPieceCount, 10.0, 40.0);
+                }
+
+                // 1-up
+
+                if (isValidSwitchDead(this))
+                    this.stageSwitchCtrl!.onSwitchDead(sceneObjHolder);
+            }
+
+            if (isBckStopped(this.breakModel))
+                this.makeActorDead(sceneObjHolder);
+        }
+    }
+
+    private doHit(sceneObjHolder: SceneObjHolder, otherSensor: HitSensor | null, thisSensor: HitSensor | null): void {
+        if (this.hitPoints <= 0)
+            return;
+
+        this.hitPoints--;
+
+        if (this.hitPoints === 0)
+            invalidateCollisionPartsForActor(sceneObjHolder, this);
+
+        this.breakModel.makeActorAppeared(sceneObjHolder);
+        startBck(this.breakModel, 'Break');
+        if (isInWater(sceneObjHolder, this.translation))
+            emitEffect(sceneObjHolder, this.breakModel, 'BreakWater');
+        else
+            emitEffect(sceneObjHolder, this.breakModel, 'Break');
+
+        if (this.useKilledNrv)
+            startBva(this, 'WoodBox');
+        else
+            hideModel(this);
+
+        this.setNerve(WoodBoxNrv.Hit);
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (isMsgTypeEnemyAttack(messageType)) {
+            if (this.hitPoints > 0) {
+                this.doHit(sceneObjHolder, otherSensor, thisSensor);
+                return true;
+            }
+        }
+
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        sceneObjHolder.modelCache.requestObjectData('WoodBoxBreak');
     }
 }
 

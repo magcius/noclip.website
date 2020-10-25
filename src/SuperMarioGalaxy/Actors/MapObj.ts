@@ -8,7 +8,7 @@ import { ColorKind } from '../../gx/gx_render';
 import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixSRT, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit } from '../Collision';
 import { registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
@@ -1000,7 +1000,7 @@ class Rock extends LiveActor<RockNrv> {
     private effectHostMtx = mat4.create();
     private front = vec3.clone(Vec3UnitZ);
 
-    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, private creator: RockCreator) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         this.type = Rock.getType(infoIter);
@@ -1437,6 +1437,35 @@ class Rock extends LiveActor<RockNrv> {
             return this.scale[0];
     }
 
+    private appearStarPiece(sceneObjHolder: SceneObjHolder): void {
+        vec3.negate(scratchVec3a, this.gravityVector);
+        const appearPieceNum = Rock.getAppearStarPieceNum(this.type);
+        appearStarPieceToDirection(sceneObjHolder, this.creator, this.translation, scratchVec3a, appearPieceNum, 10.0, 40.0);
+    }
+
+    private setNerveBreak(sceneObjHolder: SceneObjHolder, emitItem: boolean): void {
+        if (emitItem && (this.type === RockType.Rock || this.type === RockType.WanwanRolling))
+            this.appearStarPiece(sceneObjHolder);
+
+        this.setNerve(RockNrv.Break);
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
+        if (isMsgTypeEnemyAttack(messageType)) {
+            if (thisSensor === this.getSensor('body') && !this.isNerve(RockNrv.Break) && this.type !== RockType.WanwanRollingGold) {
+                if (messageType === MessageType.EnemyAttackExplosion) {
+                    this.setNerveBreak(sceneObjHolder, true);
+                    return true;
+                } else if (!otherSensor!.isType(HitSensorType.Rock) && !otherSensor!.isType(HitSensorType.Wanwan)) {
+                    this.setNerveBreak(sceneObjHolder, true);
+                    return true;
+                }
+            }
+        }
+
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+    }
+
     public static getType(infoIter: JMapInfoIter): RockType {
         const objectName = getObjectName(infoIter);
         if (objectName === 'WanwanRolling')
@@ -1451,6 +1480,13 @@ class Rock extends LiveActor<RockNrv> {
 
     public static getAppearFrame() {
         return 55;
+    }
+
+    public static getAppearStarPieceNum(type: RockType): number {
+        if (type === RockType.WanwanRollingMini)
+            return 1;
+        else
+            return 9;
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1500,17 +1536,21 @@ export class RockCreator extends LiveActor<RockCreatorNrv> {
 
         // invalidate on switch A
 
+        const appearPieceNum = Rock.getAppearStarPieceNum(type);
+
         const arg1 = getJMapInfoArg1(infoIter);
         if (arg1 !== null && arg1 > 0) {
             this.framesBetweenRocks = 60 * arg1;
             this.rockCount = (Rock.getAppearFrame() + ((getRailTotalLength(this) / this.arg0) | 0)) / this.framesBetweenRocks + 2;
+            declareStarPiece(sceneObjHolder, this, appearPieceNum * 3);
         } else {
             this.framesBetweenRocks = -1;
             this.rockCount = 1;
+            declareStarPiece(sceneObjHolder, this, appearPieceNum);
         }
 
         for (let i = 0; i < this.rockCount; i++) {
-            const rock = new Rock(zoneAndLayer, sceneObjHolder, infoIter);
+            const rock = new Rock(zoneAndLayer, sceneObjHolder, infoIter, this);
             rock.useBreak = this.useBreak;
             this.rocks.push(rock);
         }
@@ -1635,7 +1675,7 @@ export class TreasureSpot extends MapObjActor<TreasureSpotNrv> {
     }
 
     private switchEmitGlow(sceneObjHolder: SceneObjHolder): void {
-        if (isNearPlayer(sceneObjHolder, this, 2000.0)) {
+        if (isNearPlayer(sceneObjHolder, this, 2000.0) && !isEffectValid(this, 'Glow')) {
             emitEffect(sceneObjHolder, this, 'Glow');
         } else {
             deleteEffect(sceneObjHolder, this, 'Glow');
@@ -2926,7 +2966,8 @@ export class StarPieceDirector extends LiveActorGroup<StarPiece> {
     }
 
     public createStarPiece(sceneObjHolder: SceneObjHolder): void {
-        for (let i = 0; i < this.gettableCount; i++) {
+        const count = Math.min(this.gettableCount, 0x70);
+        for (let i = 0; i < count; i++) {
             const starPiece = new StarPiece(dynamicSpawnZoneAndLayer, sceneObjHolder, null, StarPieceType.StarPiece);
             starPiece.makeActorDead(sceneObjHolder);
             this.registerActor(starPiece);
@@ -2986,6 +3027,29 @@ export class StarPieceDirector extends LiveActorGroup<StarPiece> {
             starPiece.setHostInfo(hostInfo);
             hostInfo.aliveCount++;
             starPiece.launch(sceneObjHolder, translation, speedRange, speedUp, forceLandSpeed, forceEffectLight);
+            didLaunchOne = true;
+        }
+
+        return didLaunchOne;
+    }
+
+    public appearPieceToDirection(sceneObjHolder: SceneObjHolder, host: NameObj, translation: ReadonlyVec3, direction: ReadonlyVec3, count: number, speedRange: number, speedDirection: number, forceEffectLight: boolean, forceLandSpeed: boolean): boolean {
+        const hostInfo = this.findHostInfo(host);
+        if (hostInfo === null)
+            return false;
+
+        let didLaunchOne = false;
+        for (let i = 0; i < count; i++) {
+            if (!hostInfo.isAppearable())
+                continue;
+
+            const starPiece = this.getDeadStarPiece();
+            if (starPiece === null)
+                continue;
+
+            starPiece.setHostInfo(hostInfo);
+            hostInfo.aliveCount++;
+            starPiece.launchDirection(sceneObjHolder, translation, direction, speedRange, speedDirection, forceLandSpeed, forceEffectLight);
             didLaunchOne = true;
         }
 
@@ -3128,27 +3192,16 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
         return calcGravity(sceneObjHolder, this);
     }
 
-    private trySetGravityAndFront(sceneObjHolder: SceneObjHolder, gravityVector: ReadonlyVec3): void {
+    private trySetGravityAndFront(sceneObjHolder: SceneObjHolder, gravity: ReadonlyVec3): void {
         if (!this.tryCalcGravity(sceneObjHolder))
-            vec3.normalize(this.gravityVector, gravityVector);
+            vec3.normalize(this.gravityVector, gravity);
 
         if (isSameDirection(this.gravityVector, this.axisZ, 0.01)) {
             vec3.copy(this.axisZ, this.gravityVector);
         }
     }
 
-    public launch(sceneObjHolder: SceneObjHolder, translation: ReadonlyVec3, speedRange: number, speedUp: number, forceLandSpeed: boolean, forceEffectLight: boolean): void {
-        vec3.copy(this.translation, translation);
-        this.tryCalcGravity(sceneObjHolder);
-        if (isNearZeroVec3(this.gravityVector, 0.001)) {
-            calcUpVec(this.gravityVector, this);
-            vec3.negate(this.gravityVector, this.gravityVector);
-            this.trySetGravityAndFront(sceneObjHolder, this.gravityVector);
-        }
-
-        getRandomVector(this.velocity, speedRange);
-        vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, -speedUp);
-
+    public launchCommon(sceneObjHolder: SceneObjHolder, forceLandSpeed: boolean, forceEffectLight: boolean): void {
         if (!forceLandSpeed) {
             this.isInWater = isInWater(sceneObjHolder, this.translation);
             if (this.isInWater)
@@ -3165,6 +3218,31 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
 
         sceneObjHolder.starPieceDirector!.aliveCount++;
         this.isLaunched = true;
+    }
+
+    public launch(sceneObjHolder: SceneObjHolder, translation: ReadonlyVec3, speedRange: number, speedUp: number, forceLandSpeed: boolean, forceEffectLight: boolean): void {
+        vec3.copy(this.translation, translation);
+        this.tryCalcGravity(sceneObjHolder);
+        if (isNearZeroVec3(this.gravityVector, 0.001)) {
+            calcUpVec(this.gravityVector, this);
+            vec3.negate(this.gravityVector, this.gravityVector);
+            this.trySetGravityAndFront(sceneObjHolder, this.gravityVector);
+        }
+
+        getRandomVector(this.velocity, speedRange);
+        vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, -speedUp);
+
+        this.launchCommon(sceneObjHolder, forceLandSpeed, forceEffectLight);
+    }
+
+    public launchDirection(sceneObjHolder: SceneObjHolder, translation: ReadonlyVec3, direction: ReadonlyVec3, speedRange: number, speedDirection: number, forceLandSpeed: boolean, forceEffectLight: boolean): void {
+        vec3.copy(this.translation, translation);
+        vec3.negate(this.gravityVector, direction);
+        this.trySetGravityAndFront(sceneObjHolder, this.gravityVector);
+        getRandomVector(this.velocity, speedRange);
+        vec3.scaleAndAdd(this.velocity, this.velocity, direction, speedDirection);
+
+        this.launchCommon(sceneObjHolder, forceLandSpeed, forceEffectLight);
     }
 
     public setColor(index: number): void {
