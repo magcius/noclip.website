@@ -10,8 +10,9 @@ Open VSCode and input Ctrl-Shift-P.  Enter "git clone", select that option, and 
 ## Linux
 Run these commands in the terminal.
 ```bash
+sudo apt update
 sudo apt install git node yarn
-cd /whatever/directory/you/want/the/code/in/
+cd /path/to/directory/you/want/the/code/in/
 git clone https://github.com/magcius/noclip.website.git
 cd noclip.website
 ```
@@ -20,7 +21,7 @@ cd noclip.website
 Run the following commands in the terminal.  If you don't already have Homebrew installed, run this command first: `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"`.
 ```bash
 brew install git node yarn
-cd /whatever/directory/you/want/the/code/in/
+cd /path/to/directory/you/want/the/code/in/
 git clone https://github.com/magcius/noclip.website.git
 cd noclip.website
 ```
