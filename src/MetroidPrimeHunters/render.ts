@@ -289,10 +289,11 @@ export class MPHRenderer {
             const matIndex = mphModel.meshs[i].matID;
             const shapeIndex = mphModel.meshs[i].shapeID;
             const shape = model.shapes[shapeIndex];
-            //const nodeIndex = getNodeIndex(shape);
-            // TODO: Why isn't this working?
-            const nodeIndex = 0;
-
+            let index = getNodeIndex(shape);
+            if(index >= this.nodes.length){
+                index = 0;
+            }
+            const nodeIndex = index;
             this.shapeInstances.push(new ShapeInstance(device, this.materialInstances[matIndex], this.nodes[nodeIndex], shape, posScale));
         }
     }
