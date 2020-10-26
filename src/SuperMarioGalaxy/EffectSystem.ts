@@ -796,6 +796,11 @@ export class EffectKeeper {
             multiEmitter.forceDeleteEmitter(sceneObjHolder.effectSystem!);
     }
 
+    public forceDeleteEmitterAll(sceneObjHolder: SceneObjHolder): void {
+        for (let i = 0; i < this.multiEmitters.length; i++)
+            this.multiEmitters[i].forceDeleteEmitter(sceneObjHolder.effectSystem!);
+    }
+
     public deleteEmitterAll(): void {
         for (let i = 0; i < this.multiEmitters.length; i++)
             this.multiEmitters[i].deleteEmitter();
@@ -1139,6 +1144,12 @@ export function forceDeleteEffect(sceneObjHolder: SceneObjHolder, actor: LiveAct
     if (actor.effectKeeper === null)
         return;
     actor.effectKeeper.forceDeleteEmitter(sceneObjHolder, name);
+}
+
+export function forceDeleteEffectAll(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    if (actor.effectKeeper === null)
+        return;
+    actor.effectKeeper.forceDeleteEmitterAll(sceneObjHolder);
 }
 
 export function deleteEffectAll(actor: LiveActor): void {

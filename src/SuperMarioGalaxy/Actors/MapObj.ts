@@ -3015,7 +3015,7 @@ export class StarPieceDirector extends LiveActorGroup<StarPiece> {
         if (hostInfo === null)
             return false;
 
-        let didLaunchOne = false;
+        let didAppearOne = false;
         for (let i = 0; i < count; i++) {
             if (!hostInfo.isAppearable())
                 continue;
@@ -3027,10 +3027,10 @@ export class StarPieceDirector extends LiveActorGroup<StarPiece> {
             starPiece.setHostInfo(hostInfo);
             hostInfo.aliveCount++;
             starPiece.launch(sceneObjHolder, translation, speedRange, speedUp, forceLandSpeed, forceEffectLight);
-            didLaunchOne = true;
+            didAppearOne = true;
         }
 
-        return didLaunchOne;
+        return didAppearOne;
     }
 
     public appearPieceToDirection(sceneObjHolder: SceneObjHolder, host: NameObj, translation: ReadonlyVec3, direction: ReadonlyVec3, count: number, speedRange: number, speedDirection: number, forceEffectLight: boolean, forceLandSpeed: boolean): boolean {
@@ -3054,6 +3054,10 @@ export class StarPieceDirector extends LiveActorGroup<StarPiece> {
         }
 
         return didLaunchOne;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        StarPiece.requestArchives(sceneObjHolder);
     }
 }
 
@@ -3353,6 +3357,10 @@ export class StarPiece extends LiveActor<StarPieceNrv> {
 
     public static getColorNum(): number {
         return starPieceColorTable.length;
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('StarPiece');
     }
 }
 

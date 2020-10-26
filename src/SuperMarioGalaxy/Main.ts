@@ -29,7 +29,7 @@ import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector } from './Actors/MiscActor';
+import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray, getJMapInfoTrans, getJMapInfoRotate } from './LiveActor';
 import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
@@ -48,7 +48,7 @@ import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
-import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
+import { StarPiece, StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
 
 // Galaxy ticks at 60fps.
@@ -1129,6 +1129,7 @@ export class SceneObjHolder {
     public furDrawManager: FurDrawManager | null = null;
     public namePosHolder: NamePosHolder | null = null;
     public planetGravityManager: PlanetGravityManager | null = null;
+    public coinHolder: CoinHolder | null = null;
     public coinRotater: CoinRotater | null = null;
     public airBubbleHolder: AirBubbleHolder | null = null;
     public starPieceDirector: StarPieceDirector | null = null;
@@ -1195,6 +1196,8 @@ export class SceneObjHolder {
             return this.namePosHolder;
         else if (sceneObj === SceneObj.PlanetGravityManager)
             return this.planetGravityManager;
+        else if (sceneObj === SceneObj.CoinHolder)
+            return this.coinHolder;
         else if (sceneObj === SceneObj.CoinRotater)
             return this.coinRotater;
         else if (sceneObj === SceneObj.AirBubbleHolder)
@@ -1257,6 +1260,8 @@ export class SceneObjHolder {
             this.namePosHolder = new NamePosHolder(this);
         else if (sceneObj === SceneObj.PlanetGravityManager)
             this.planetGravityManager = new PlanetGravityManager(this);
+        else if (sceneObj === SceneObj.CoinHolder)
+            this.coinHolder = new CoinHolder(this);
         else if (sceneObj === SceneObj.CoinRotater)
             this.coinRotater = new CoinRotater(this);
         else if (sceneObj === SceneObj.AirBubbleHolder)
@@ -1289,6 +1294,8 @@ export class SceneObjHolder {
 
     public requestArchives(): void {
         ShadowControllerHolder.requestArchives(this);
+        StarPieceDirector.requestArchives(this);
+        CoinHolder.requestArchives(this);
     }
 
     public destroy(device: GfxDevice): void {
@@ -1768,7 +1775,6 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
         modelCache.requestArchiveData(`UsEnglish/MessageData/Message.arc`);
         modelCache.requestObjectData('PlanetMapDataTable');
         modelCache.requestObjectData('NPCData');
-        modelCache.requestObjectData('StarPiece');
 
         const sceneObjHolder = new SceneObjHolder();
         sceneObjHolder.sceneDesc = this;

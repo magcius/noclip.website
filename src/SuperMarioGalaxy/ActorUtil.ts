@@ -13,7 +13,7 @@ import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
 import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
-import { HitSensor, HitSensorType } from "./HitSensor";
+import { HitSensor } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
 import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, LiveActorGroup, makeMtxTRFromActor, MsgSharedGroup } from "./LiveActor";
 import { ResourceHolder, SceneObj, SceneObjHolder } from "./Main";
@@ -302,6 +302,10 @@ export function startBckNoInterpole(actor: LiveActor, name: string): void {
     actor.modelManager!.startBckWithInterpole(name, 0.0);
     if (actor.effectKeeper !== null)
         actor.effectKeeper.changeBck();
+}
+
+export function stopBck(actor: LiveActor): void {
+    actor.modelManager!.getBckCtrl().speedInFrames = 0.0;
 }
 
 export function startBtk(actor: LiveActor, name: string): void {
@@ -1493,6 +1497,15 @@ export function declareStarPiece(sceneObjHolder: SceneObjHolder, host: NameObj, 
 
 export function addVelocityToGravity(actor: LiveActor, speed: number): void {
     vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
+}
+
+export function calcReboundVelocity(velocity: vec3, faceNormal: ReadonlyVec3, bounce: number, drag: number): void {
+    const dot = vec3.dot(velocity, faceNormal);
+    if (dot < 0.0) {
+        vec3.scaleAndAdd(velocity, velocity, faceNormal, -dot);
+        vec3.scale(velocity, velocity, drag);
+        vec3.scaleAndAdd(velocity, velocity, faceNormal, -dot * bounce);
+    }
 }
 
 export function reboundVelocityFromEachCollision(actor: LiveActor, floorBounce: number, wallBounce: number, ceilingBounce: number, cutoff: number, drag: number = 1.0): boolean {

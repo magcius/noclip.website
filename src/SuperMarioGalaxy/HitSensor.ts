@@ -271,7 +271,9 @@ export class HitSensorKeeper {
         return sensor;
     }
 
-    public getSensor(name: string): HitSensor | null {
+    public getSensor(name: string | null): HitSensor | null {
+        if (this.sensorInfos.length === 1)
+            return this.sensorInfos[0].sensor;
         for (let i = 0; i < this.sensorInfos.length; i++)
             if (this.sensorInfos[i].name === name)
                 return this.sensorInfos[i].sensor;
@@ -454,6 +456,10 @@ export function isSensorRush(sensor: HitSensor): boolean {
     return sensor.sensorType > HitSensorType._RushObj_Start && sensor.sensorType < HitSensorType._RushObj_End;
 }
 
+export function isSensorPressObj(sensor: HitSensor): boolean {
+    return sensor.sensorType > HitSensorType._PressObj_Start && sensor.sensorType < HitSensorType._PressObj_End;
+}
+
 export function isSensorPlayerOrRide(sensor: HitSensor): boolean {
     return isSensorPlayer(sensor) || isSensorRide(sensor);
 }
@@ -506,10 +512,18 @@ export function addHitSensorEye(sceneObjHolder: SceneObjHolder, actor: LiveActor
     return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Eye, pairwiseCapacity, radius, actor, offset);
 }
 
+export function addHitSensorEnemy(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Enemy, pairwiseCapacity, radius, actor, offset);
+}
+
 export function invalidateHitSensors(actor: LiveActor): void {
     actor.hitSensorKeeper!.invalidate();
 }
 
 export function validateHitSensors(actor: LiveActor): void {
     actor.hitSensorKeeper!.validate();
+}
+
+export function setSensorRadius(actor: LiveActor, name: string, radius: number): void {
+    actor.hitSensorKeeper!.getSensor(name)!.radius = radius;
 }

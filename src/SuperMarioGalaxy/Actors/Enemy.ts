@@ -4,7 +4,7 @@ import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailPointPos, calcSqDistanceToPlayer, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, excludeCalcShadowToMyCollision, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getPlayerPos, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, rotateQuatRollBall, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtp, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcRailPointPos, calcSqDistanceToPlayer, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getPlayerPos, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, rotateQuatRollBall, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtp, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
 import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isOnGround, Triangle, TriangleFilterFunc } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, isEffectValid, setEffectHostMtx } from '../EffectSystem';
 import { initFur } from '../Fur';
@@ -17,7 +17,7 @@ import { isInWater } from '../MiscMap';
 import { DrawBufferType } from '../NameObj';
 import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, setShadowDropLength } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
-import { isEqualStageName, PartsModel } from './MiscActor';
+import { appearCoinPop, declareCoin, isEqualStageName, PartsModel } from './MiscActor';
 import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
 
 // Scratchpad
@@ -1800,7 +1800,7 @@ class HomingKiller extends LiveActor<HomingKillerNrv> {
             // noclip modification: Increase Torpedo speed by 3x to make it faster to hit the weight in Buoy Base.
             speed = 5.0 * 3.0;
         } else if (this.type === HomingKillerType.HomingKiller) {
-            speed = 12.0;
+            speed = 12.0 * 2;
         } else if (this.type === HomingKillerType.MagnumKiller) {
             speed = 12.0;
         } else {
@@ -2145,7 +2145,7 @@ class SpinHitController {
             return;
 
         if (this.itemIsCoin) {
-            // appearCoinPop
+            appearCoinPop(sceneObjHolder, actor, actor.translation, this.itemCount);
         } else {
             appearStarPiece(sceneObjHolder, actor, actor.translation, this.itemCount, 10.0, 40.0, false);
         }
@@ -2239,8 +2239,8 @@ export class Takobo extends LiveActor<TakoboNrv> {
         this.moveTime = fallback(getJMapInfoArg2(infoIter), 5.0);
         this.moveDistance = fallback(getJMapInfoArg3(infoIter), 500.0);
 
-        // declareStarPiece
-        // declareCoin
+        declareStarPiece(sceneObjHolder, this, 3);
+        declareCoin(sceneObjHolder, this, 1);
         // initSound
         this.initBinder(80.0 * this.scale[1], 60.0 * this.scale[1], 0);
         this.initEffectKeeper(sceneObjHolder, null);

@@ -24,6 +24,10 @@ export class Triangle {
     public pos2 = vec3.create();
     public faceNormal = vec3.create();
 
+    public calcForceMovePower(dst: vec3, pos: ReadonlyVec3): void {
+        this.collisionParts!.calcForceMovePower(dst, pos);
+    }
+
     public getAttributes(): JMapInfoIter | null {
         if (this.prismIdx !== null)
             return this.collisionParts!.collisionServer.getAttributes(this.prismIdx);
