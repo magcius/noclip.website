@@ -120,7 +120,7 @@ export interface GfxSamplerDescriptor {
 }
 
 export interface GfxAttachmentDescriptor {
-    format: GfxFormat;
+    pixelFormat: GfxFormat;
     width: number;
     height: number;
     numSamples: number;
@@ -268,12 +268,12 @@ export const enum GfxClipSpaceNearZ {
 }
 
 export interface GfxVendorInfo {
-    platformString: string;
-    bugQuirks: GfxBugQuirks;
-    glslVersion: string;
-    explicitBindingLocations: boolean;
-    separateSamplerTextures: boolean;
-    clipSpaceNearZ: GfxClipSpaceNearZ;
+    readonly platformString: string;
+    readonly bugQuirks: GfxBugQuirks;
+    readonly glslVersion: string;
+    readonly explicitBindingLocations: boolean;
+    readonly separateSamplerTextures: boolean;
+    readonly clipSpaceNearZ: GfxClipSpaceNearZ;
 }
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;

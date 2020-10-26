@@ -553,6 +553,7 @@ interface EXT_texture_compression_rgtc {
 class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     // Configuration
     private _shaderDebug = false;
+    private _contextAttributes: WebGLContextAttributes;
 
     // GL extension
     private _WEBGL_compressed_texture_s3tc: WEBGL_compressed_texture_s3tc | null = null;
@@ -566,7 +567,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _renderPassPool: GfxRenderPassP_GL[] = [];
 
     // Swap Chain
-    private _fullscreenCopyMegaState = fullscreenMegaState;
+    private _fullscreenCopyMegaState: GfxMegaStateDescriptor;
     private _fullscreenCopyProgram: GfxProgramP_GL;
     private _scWidth: number = 0;
     private _scHeight: number = 0;
@@ -579,7 +580,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _resourceCreationTracker: ResourceCreationTracker | null = null;
     private _resourceUniqueId = 0;
 
-    // Pass Execution
+    // Cached GL driver state
     private _currentColorAttachments: GfxAttachmentP_GL[] = [];
     private _currentColorResolveTos: (GfxTextureP_GL | null)[] = [];
     private _currentDepthStencilAttachment: GfxAttachmentP_GL | null;
@@ -592,6 +593,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _currentUniformBuffers: GfxBuffer[] = [];
     private _currentUniformBufferByteOffsets: number[] = [];
     private _currentUniformBufferByteSizes: number[] = [];
+
+    // Pass Execution
     private _debugGroupStack: GfxDebugGroup[] = [];
     private _resolveColorAttachmentsChanged: boolean = false;
     private _resolveColorReadFramebuffer: WebGLFramebuffer;
@@ -604,14 +607,16 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _blackTexture!: WebGLTexture;
 
     // GfxVendorInfo
-    public platformString: string = 'WebGL2';
-    public bugQuirks = new GfxBugQuirksImpl();
-    public glslVersion = `#version 300 es`;
-    public explicitBindingLocations = false;
-    public separateSamplerTextures = false;
-    public clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
+    public readonly platformString: string = 'WebGL2';
+    public readonly bugQuirks = new GfxBugQuirksImpl();
+    public readonly glslVersion = `#version 300 es`;
+    public readonly explicitBindingLocations = false;
+    public readonly separateSamplerTextures = false;
+    public readonly clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
 
     constructor(public gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config) {
+        this._contextAttributes = assertExists(gl.getContextAttributes());
+
         this._WEBGL_compressed_texture_s3tc = gl.getExtension('WEBGL_compressed_texture_s3tc');
         this._WEBGL_compressed_texture_s3tc_srgb = gl.getExtension('WEBGL_compressed_texture_s3tc_srgb');
         this._EXT_texture_compression_rgtc = gl.getExtension('EXT_texture_compression_rgtc');
@@ -641,6 +646,8 @@ void main() {
 
         const fullscreenProgramDescriptor = preprocessProgram_GLSL(this.queryVendorInfo(), fullscreenVS, fullscreenFS);
         this._fullscreenCopyProgram = this._createProgram(fullscreenProgramDescriptor);
+        this._fullscreenCopyMegaState = copyMegaState(fullscreenMegaState);
+        this._fullscreenCopyMegaState.attachmentsState[0]!.colorWriteMask = GfxColorWriteMask.ALL;
 
         this._resolveColorReadFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
         this._resolveColorDrawFramebuffer = this.ensureResourceExists(gl.createFramebuffer());
@@ -684,7 +691,8 @@ void main() {
             if (this._scTexture !== null)
                 this._destroyTexture(this._scTexture);
 
-            this._scTexture = this._createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_RT, this._scWidth, this._scHeight, 1));
+            const scTextureFormat = (this._contextAttributes.alpha === false) ? GfxFormat.U8_RGB_RT : GfxFormat.U8_RGBA_RT;
+            this._scTexture = this._createTexture(makeTextureDescriptor2D(scTextureFormat, this._scWidth, this._scHeight, 1));
             gl.bindTexture(gl.TEXTURE_2D, getPlatformTexture(this._scTexture));
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -752,6 +760,7 @@ void main() {
         case GfxFormat.U8_RG_NORM:
             return WebGL2RenderingContext.RG8;
         case GfxFormat.U8_RGB_NORM:
+        case GfxFormat.U8_RGB_RT:
             return WebGL2RenderingContext.RGB8;
         case GfxFormat.U8_RGB_SRGB:
             return WebGL2RenderingContext.SRGB8;
@@ -1026,7 +1035,7 @@ void main() {
     }
 
     public createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment {
-        const width = descriptor.width, height = descriptor.height, format = descriptor.format, numSamples = descriptor.numSamples;
+        const width = descriptor.width, height = descriptor.height, format = descriptor.pixelFormat, numSamples = descriptor.numSamples;
         const gl = this.gl;
 
         const gl_renderbuffer = this.ensureResourceExists(gl.createRenderbuffer());
@@ -1925,6 +1934,7 @@ void main() {
 
             if (colorResolveTo !== null) {
                 assert(colorResolveFrom.width === colorResolveTo.width && colorResolveFrom.height === colorResolveTo.height);
+                assert(colorResolveFrom.pixelFormat === colorResolveTo.pixelFormat);
                 assert(colorResolveFrom.gl_renderbuffer !== null);
 
                 gl.disable(gl.SCISSOR_TEST);
