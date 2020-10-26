@@ -286,6 +286,10 @@ export function tryStartBck(actor: LiveActor, name: string): boolean {
     }
 }
 
+export function isExistBck(actor: LiveActor, name: string): boolean {
+    return actor.resourceHolder.isExistRes(actor.resourceHolder.motionTable, name);
+}
+
 export function startBck(actor: LiveActor, name: string): void {
     actor.modelManager!.startBck(name);
     if (actor.effectKeeper !== null)

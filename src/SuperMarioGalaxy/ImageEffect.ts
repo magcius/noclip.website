@@ -333,8 +333,6 @@ export class BloomPostFXRenderer {
         renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
         renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, combinePassRenderer);
 
-        renderInstManager.returnRenderInst(renderInst);
-
         return combinePassRenderer;
     }
 

@@ -768,8 +768,6 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
         const shapeRenderInst = this.ddraw.endDraw(device, renderInstManager);
-        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
-        shapeRenderInst._flags &= ~(1 << 2);
 
         const front = renderInstManager.newRenderInst();
         front.setFromTemplate(shapeRenderInst);
@@ -780,6 +778,9 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
         back.setFromTemplate(shapeRenderInst);
         this.materialBack.setOnRenderInst(device, cache, back);
         renderInstManager.submitRenderInst(back);
+
+        // TODO(jstpierre): This is dumb hackery. Replace with a proper TDDraw API for setting on render insts...
+        shapeRenderInst.reset();
     }
 
     public loadDrawModelMtx(packetParams: PacketParams, viewerInput: ViewerRenderInput): void {

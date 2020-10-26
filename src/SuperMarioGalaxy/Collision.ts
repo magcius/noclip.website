@@ -803,6 +803,10 @@ export function getFirstPolyOnLineToMap(sceneObjHolder: SceneObjHolder, dst: vec
     return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, CollisionKeeperCategory.Map);
 }
 
+export function getFirstPolyOnLineToWaterSurface(sceneObjHolder: SceneObjHolder, dst: vec3, dstTriangle: Triangle | null, p0: ReadonlyVec3, dir: ReadonlyVec3): boolean {
+    return getFirstPolyOnLineCategory(sceneObjHolder, dst, dstTriangle, p0, dir, null, null, CollisionKeeperCategory.WaterSurface);
+}
+
 export function createCollisionPartsFilterActor(actor: LiveActor): CollisionPartsFilterFunc {
     return (sceneObjHolder: SceneObjHolder, parts: CollisionParts): boolean => {
         return parts.hitSensor.actor === actor;

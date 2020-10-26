@@ -37,6 +37,7 @@ import { GXMaterialBuilder } from "../../gx/GXMaterialBuilder";
 import { BTIData, BTI } from "./JUTTexture";
 import { VertexAttributeInput } from "../../gx/gx_displaylist";
 import { dfRange, dfShow } from "../../DebugFloaters";
+import { Frustum } from "../../Geometry";
 
 const SORT_PARTICLES = false;
 
@@ -846,6 +847,7 @@ class JPAEmitterWorkData {
     public ybbCamMtx = mat4.create();
     public posCamMtx = mat4.create();
     public texPrjMtx = mat4.create();
+    public frustum: Frustum | null = null;
     public deltaTime: number = 0;
 
     public prevParticlePos = vec3.create();
@@ -858,7 +860,8 @@ class JPAEmitterWorkData {
 
 export class JPADrawInfo {
     public posCamMtx: mat4;
-    public texPrjMtx: mat4 | null;
+    public texPrjMtx: mat4 | null = null;
+    public frustum: Frustum | null = null;
 }
 
 class StripeEntry {
@@ -1017,7 +1020,7 @@ export class JPAEmitterManager {
         dst[14] = posCamMtx[14];
     }
 
-    public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, drawInfo: JPADrawInfo, drawGroupId: number): void {
+    public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<JPADrawInfo>, drawGroupId: number): void {
         if (this.aliveEmitters.length < 1)
             return;
 
@@ -1027,6 +1030,7 @@ export class JPAEmitterManager {
             mat4.copy(this.workData.texPrjMtx, drawInfo.texPrjMtx);
         else
             mat4.identity(this.workData.texPrjMtx);
+        this.workData.frustum = drawInfo.frustum;
 
         for (let i = 0; i < this.aliveEmitters.length; i++) {
             const emitter = this.aliveEmitters[i];
@@ -3071,15 +3075,24 @@ export class JPABaseParticle {
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, depth);
         }
 
-        renderInstManager.submitRenderInst(renderInst);
-
         const globalRes = workData.emitterManager.globalRes;
         const shapeType = sp1.shapeType;
 
         const packetParams = workData.packetParams;
 
+        // We model all particles below as spheres with radius 25, which should cover all bases.
+        // Stripes (and lines) are an exception, but they are handled separately.
+        if (workData.frustum !== null) {
+            const scaleX = Math.abs(this.scale[0] * workData.globalScale2D[0]);
+            const scaleY = Math.abs(this.scale[1] * workData.globalScale2D[1]);
+            const radius = 25 * Math.max(scaleX, scaleY);
+            if (!workData.frustum.containsSphere(this.position, radius))
+                return;
+        }
+
         if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
+
             transformVec3Mat4w1(scratchVec3a, workData.posCamMtx, this.position);
             computeModelMatrixSRT(packetParams.u_PosMtx[0],
                 this.scale[0] * workData.globalScale2D[0],
@@ -3239,6 +3252,8 @@ export class JPABaseParticle {
         colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
         fillParticleRenderInst(device, renderInstManager, workData, renderInst, materialParams, packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public drawP(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {

@@ -48,7 +48,7 @@ import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
 import { FurDrawManager } from './Fur';
 import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
-import { StarPiece, StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
+import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
 
 // Galaxy ticks at 60fps.
@@ -239,7 +239,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
             }
 
-            effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
+            effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
             effectSystem.drawEmitters(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, drawType);
 
             this.renderHelper.renderInstManager.popTemplateRenderInst();
@@ -788,6 +788,10 @@ export class ResourceHolder {
 
     public getRes<T>(table: ResTable<T>, name: string): T | null {
         return nullify(table.get(name.toLowerCase()));
+    }
+
+    public isExistRes<T>(table: ResTable<T>, name: string): boolean {
+        return table.has(name.toLowerCase());
     }
 
     private initEachResTable<T>(table: ResTable<T>, extensions: string[], constructor: (file: RARC.RARCFile, ext: string, filenameWithoutExtension: string) => T): void {

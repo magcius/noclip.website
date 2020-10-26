@@ -27,7 +27,7 @@ import { TDDraw, TSDraw } from '../DDraw';
 import { isDemoLastStep, registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, forceDeleteEffectAll, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectName } from '../EffectSystem';
 import { initFurPlanet } from '../Fur';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, addHitSensorEye, sendArbitraryMsg } from '../HitSensor';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, addHitSensorEnemy, HitSensor, HitSensorType, addHitSensorPosMapObj, invalidateHitSensors, validateHitSensors, isSensorPressObj, setSensorRadius, sendArbitraryMsg } from '../HitSensor';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg6, getJMapInfoArg7, getJMapInfoBool, getJMapInfoGroupId, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, ZoneAndLayer } from '../LiveActor';
@@ -3028,14 +3028,20 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
         super(zoneAndLayer, sceneObjHolder, `AirBubble`);
 
         initDefaultPos(sceneObjHolder, this, infoIter);
-        vec3.copy(this.spawnLocation, this.translation);
         this.initModelManagerWithAnm(sceneObjHolder, 'AirBubble');
         connectToSceneItem(sceneObjHolder, this);
-
+        this.initHitSensor();
+        addHitSensorMapObj(sceneObjHolder, this, 'body', 8, 130.0 * this.scale[0], Vec3Zero);
         this.initEffectKeeper(sceneObjHolder, null);
         this.initNerve(AirBubbleNrv.Wait);
 
         startBck(this, 'Move');
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+
+        vec3.copy(this.spawnLocation, this.translation);
     }
 
     public appearMove(sceneObjHolder: SceneObjHolder, pos: vec3, lifetime: number): void {
@@ -3057,10 +3063,10 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
             // Nothing.
         } else if (currentNerve === AirBubbleNrv.Move) {
             if (isFirstStep(this)) {
+                this.calcGravityFlag = true;
                 calcGravity(sceneObjHolder, this);
 
-                vec3.negate(scratchVec3, this.gravityVector);
-                vec3.scale(this.velocity, scratchVec3, 7.0);
+                vec3.scale(this.velocity, this.gravityVector, -7.0);
             }
 
             mat4.fromRotation(scratchMatrix, MathConstants.DEG_TO_RAD * 1.5, this.gravityVector);
@@ -3077,6 +3083,7 @@ export class AirBubble extends LiveActor<AirBubbleNrv> {
             if (isGreaterStep(this, this.lifetime)) {
                 hideModel(this);
                 emitEffect(sceneObjHolder, this, 'RecoveryBubbleBreak');
+                this.calcGravityFlag = false;
                 this.setNerve(AirBubbleNrv.KillWait);
             }
         } else if (currentNerve === AirBubbleNrv.KillWait) {
