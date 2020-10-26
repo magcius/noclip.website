@@ -515,7 +515,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         // Do nothing by default.
     }
 
-    public getSensor(name: string): HitSensor | null {
+    public getSensor(name: string | null): HitSensor | null {
         if (this.hitSensorKeeper !== null)
             return this.hitSensorKeeper.getSensor(name);
         else
