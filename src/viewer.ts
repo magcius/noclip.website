@@ -5,9 +5,9 @@ import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
 import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
-import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
+import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
-import { downloadTextureToCanvas } from './Screenshot';
+import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
 import { ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
@@ -327,7 +327,7 @@ export class Viewer {
             // TODO(jstpierre): Implement in Gfx somehow.
             const gl = gfxDeviceGetImpl_GL(this.gfxDevice).gl;
             const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
-            downloadTextureToCanvas(gl, getPlatformTexture_GL(this.gfxSwapChain.getOnscreenTexture()), width, height, canvas, opaque);
+            downloadFrontBufferToCanvas(gl, width, height, canvas, opaque);
         }
 
         return canvas;
