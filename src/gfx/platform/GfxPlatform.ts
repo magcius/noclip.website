@@ -287,12 +287,12 @@ export interface GfxNormalizedViewportCoords {
 }
 
 export interface GfxSwapChain {
-    configureSwapChain(width: number, height: number): void;
-    getDevice(): GfxDevice;
-    getOnscreenTexture(): GfxTexture;
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
-    present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: GfxNormalizedViewportCoords): void;
+    configureSwapChain(width: number, height: number, platformFramebuffer?: GfxPlatformFramebuffer): void;
+    getDevice(): GfxDevice;
+    getOnscreenTexture(): GfxTexture;
+    present(): void;
     createWebXRLayer(webXRSession: XRSession): XRWebGLLayer;
 }
 
