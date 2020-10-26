@@ -1326,14 +1326,18 @@ export function getCamZdir(v: vec3, camera: Camera): void {
     vec3.negate(v, v);
 }
 
+export function calcSqDistToCamera(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
+    getCamPos(scratch, camera);
+    return vec3.squaredDistance(actor.translation, scratch);
+}
+
 export function calcDistToCamera(actor: LiveActor, camera: Camera, scratch: vec3 = scratchVec3): number {
     getCamPos(scratch, camera);
     return vec3.distance(actor.translation, scratch);
 }
 
 export function calcSqDistanceToPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor): number {
-    getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
-    return vec3.squaredDistance(actor.translation, scratchVec3);
+    return calcSqDistToCamera(actor, sceneObjHolder.viewerInput.camera, scratchVec3);
 }
 
 export function calcDistanceToPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor): number {

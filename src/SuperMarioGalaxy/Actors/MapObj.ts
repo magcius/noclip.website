@@ -6,10 +6,9 @@ import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from '../../
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { ColorKind } from '../../gx/gx_render';
 import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixSRT, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
-import { sceneGroup } from '../../rres/Scenes_MarioKartWii';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear } from '../ActorUtil';
+import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit } from '../Collision';
 import { registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
@@ -22,7 +21,7 @@ import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, Live
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRailPosture, MapPartsRotator, MoveConditionType, MovePostureType, RailGuideType } from '../MapParts';
 import { isInWater } from '../MiscMap';
-import { DrawBufferType, NameObj } from '../NameObj';
+import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
 import { initShadowFromCSV, initShadowVolumeBox, initShadowVolumeCylinder, initShadowVolumeSphere, setShadowDropLength, setShadowVolumeSphereRadius, setShadowVolumeStartDropOffset } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
@@ -3698,5 +3697,62 @@ export class ItemBubble extends LiveActor<ItemBubbleNrv> {
             sceneObjHolder.modelCache.requestObjectData('Coin');
         if (itemType === ItemBubbleItemType.StarPiece)
             sceneObjHolder.modelCache.requestObjectData('StarPiece');
+    }
+}
+
+// Combined Halo / PowerStarHalo, as ZoneHalo is unused.
+const enum PowerStarHaloNrv { Appear, Disappear }
+export class PowerStarHalo extends MapObjActor<PowerStarHaloNrv> {
+    private distInThresholdSq: number;
+    private distOutThresholdSq: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo<PowerStarHaloNrv>();
+        initInfo.setupDefaultPos();
+        initInfo.setupConnectToScene();
+        initInfo.setupNerve(PowerStarHaloNrv.Appear);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        const thresholdParam = fallback(getJMapInfoArg0(infoIter), 70.0);
+
+        const distInThreshold = 100.0 * thresholdParam;
+        this.distInThresholdSq = distInThreshold*distInThreshold;
+        const distOutThreshold = 100.0 * (20.0 + thresholdParam);
+        this.distOutThresholdSq = distOutThreshold*distOutThreshold;
+    }
+
+    protected connectToScene(sceneObjHolder: SceneObjHolder): void {
+        connectToScene(sceneObjHolder, this, MovementType.Sky, CalcAnimType.MapObj, DrawBufferType.Air, DrawType.None);
+    }
+
+    private getDistanceSq(sceneObjHolder: SceneObjHolder): number {
+        return calcSqDistToCamera(this, sceneObjHolder.viewerInput.camera);
+    }
+
+    private isDistanceDisappear(sceneObjHolder: SceneObjHolder): boolean {
+        return this.getDistanceSq(sceneObjHolder) < this.distInThresholdSq;
+    }
+
+    private isDistanceAppear(sceneObjHolder: SceneObjHolder): boolean {
+        return this.getDistanceSq(sceneObjHolder) > this.distOutThresholdSq;
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: PowerStarHaloNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === PowerStarHaloNrv.Appear) {
+            if (this.isDistanceDisappear(sceneObjHolder)) {
+                const hasDisappearAnim = tryStartAllAnim(this, 'Disappear');
+                if (!hasDisappearAnim)
+                    hideModel(this);
+                this.setNerve(PowerStarHaloNrv.Disappear);
+            }
+        } else if (currentNerve === PowerStarHaloNrv.Disappear) {
+            if (this.isDistanceAppear(sceneObjHolder)) {
+                showModel(this);
+                tryStartAllAnim(this, 'Appear');
+                this.setNerve(PowerStarHaloNrv.Appear);
+            }
+        }
     }
 }
