@@ -366,6 +366,8 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
         mat4.identity(packetParams.u_PosMtx[0]);
         this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

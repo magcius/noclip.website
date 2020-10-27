@@ -1847,7 +1847,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
     }
 }
 
-const enum ChipBaseNrv { Wait, Hide }
+const enum ChipBaseNrv { Wait, Hide, Controled }
 class ChipBase extends LiveActor<ChipBaseNrv> {
     private groupID: number = -1;
     private airBubble: PartsModel | null = null;
@@ -1946,6 +1946,8 @@ class ChipBase extends LiveActor<ChipBaseNrv> {
                 startBck(this, 'Wait');
                 validateHitSensors(this);
             }
+        } else if (currentNerve === ChipBaseNrv.Controled) {
+            vec3.zero(this.velocity);
         }
     }
 
@@ -1978,11 +1980,33 @@ class ChipBase extends LiveActor<ChipBaseNrv> {
         return false;
     }
 
+    private requestStartControl(sceneObjHolder: SceneObjHolder): boolean {
+        if (this.isNerve(ChipBaseNrv.Wait)) {
+            this.setNerve(ChipBaseNrv.Controled);
+            return true;
+        }
+
+        return false;
+    }
+
+    private requestEndControl(sceneObjHolder: SceneObjHolder): boolean {
+        if (this.isNerve(ChipBaseNrv.Controled)) {
+            this.setNerve(ChipBaseNrv.Wait);
+            return true;
+        }
+
+        return false;
+    }
+
     public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor | null, thisSensor: HitSensor | null): boolean {
         if (messageType === MessageType.Item_Hide)
             return this.requestHide(sceneObjHolder);
         else if (messageType === MessageType.Item_Show)
             return this.requestShow(sceneObjHolder);
+        else if (messageType === MessageType.Item_StartMove)
+            return this.requestStartControl(sceneObjHolder);
+        else if (messageType === MessageType.Item_EndMove)
+            return this.requestEndControl(sceneObjHolder);
 
         return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
@@ -3898,7 +3922,8 @@ export class Shellfish extends LiveActor<ShellfishNrv> {
 
             if (isGreaterEqualStep(this, 40)) {
                 sendArbitraryMsg(sceneObjHolder, MessageType.Item_Show, this.item.getSensor(null)!, this.getSensor('body')!);
-                this.startBindItem(sceneObjHolder);
+                if (!this.itemBound)
+                    this.startBindItem(sceneObjHolder);
             }
 
             if (this.itemBound && isGreaterStep(this, 40) && isLessStep(this, 100)) {
