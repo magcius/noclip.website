@@ -1398,13 +1398,20 @@ class Rock extends LiveActor<RockNrv> {
         } else if (currentNerve === RockNrv.Break) {
             if (isFirstStep(this)) {
                 // isInClippingRange
+                if (this.breakModel === null) {
+                    this.makeActorDead(sceneObjHolder);
+                    if (this.type === RockType.WanwanRollingMini)
+                        emitEffect(sceneObjHolder, this, 'MiniBreak');
+                    return;
+                }
+
                 hideModel(this);
                 invalidateHitSensors(this);
                 vec3.zero(this.rotation);
                 vec3.zero(this.velocity);
                 deleteEffectAll(this);
 
-                vec3.copy(this.breakModel!.translation, this.translation);
+                vec3.copy(this.breakModel.translation, this.translation);
                 this.calcBaseMtx(scratchMatrix);
 
                 // rotate break model
@@ -1413,7 +1420,7 @@ class Rock extends LiveActor<RockNrv> {
                 startBck(this.breakModel!, 'Break');
 
                 if (this.type === RockType.WanwanRolling)
-                    this.setBtkForEnvironmentMap(this.breakModel!, 'WanwanRollingBreak');
+                    this.setBtkForEnvironmentMap(this.breakModel, 'WanwanRollingBreak');
 
                 // rumblePadAndCamera
             }
