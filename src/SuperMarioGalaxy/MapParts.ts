@@ -321,7 +321,7 @@ export class MapPartsRailPosture extends MapPartsFunction<MapPartsRailPostureNrv
     }
 }
 
-class MapPartsRailPointPassChecker {
+export class MapPartsRailPointPassChecker {
     public currentRailPointId: number = -1;
 
     constructor(private actor: LiveActor) {

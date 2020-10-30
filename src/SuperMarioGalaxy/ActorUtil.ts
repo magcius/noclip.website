@@ -686,12 +686,13 @@ export function moveCoordAndTransToRailStartPoint(actor: LiveActor): void {
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
 
-export function moveCoord(actor: LiveActor, speed: number): void {
-    actor.railRider!.setSpeed(speed);
+export function moveCoord(actor: LiveActor, speed: number | null = null): void {
+    if (speed !== null)
+        actor.railRider!.setSpeed(speed);
     actor.railRider!.move();
 }
 
-export function moveCoordAndFollowTrans(actor: LiveActor, speed: number): void {
+export function moveCoordAndFollowTrans(actor: LiveActor, speed: number | null = null): void {
     moveCoord(actor, speed);
     vec3.copy(actor.translation, actor.railRider!.currentPos);
 }
@@ -967,6 +968,43 @@ export function quatGetAxisZ(dst: vec3, q: ReadonlyQuat): void {
     dst[0] = 2.0 * x * z + 2.0 * w * y;
     dst[1] = 2.0 * y * z - 2.0 * x * w;
     dst[2] = (1.0 - 2.0 * x * x) - 2.0 * y * y;
+}
+
+export function quatFromMat4(out: quat, m: ReadonlyMat4): void {
+    // Algorithm in Ken Shoemake's article in 1987 SIGGRAPH course notes
+    // article "Quaternion Calculus and Fast Animation".
+    const fTrace = m[0] + m[5] + m[10];
+    let fRoot;
+    
+    if (fTrace > 0.0) {
+        // |w| > 1/2, may as well choose w > 1/2
+        fRoot = Math.sqrt(fTrace + 1.0); // 2w
+
+        out[3] = 0.5 * fRoot;
+        fRoot = 0.5 / fRoot; // 1/(4w)
+
+        out[0] = (m[6] - m[9]) * fRoot;
+        out[1] = (m[8] - m[2]) * fRoot;
+        out[2] = (m[1] - m[4]) * fRoot;
+    } else {
+        // |w| <= 1/2
+        let i = 0;
+        if (m[5] > m[0]) i = 1;
+        if (m[10] > m[i * 4 + i]) i = 2;
+        const j = (i + 1) % 3;
+        const k = (i + 2) % 3;
+        fRoot = Math.sqrt(m[i * 4 + i] - m[j * 4 + j] - m[k * 4 + k] + 1.0);
+        out[i] = 0.5 * fRoot;
+        fRoot = 0.5 / fRoot;
+        out[3] = (m[j * 4 + k] - m[k * 4 + j]) * fRoot;
+        out[j] = (m[j * 4 + i] + m[i * 4 + j]) * fRoot;
+        out[k] = (m[k * 4 + i] + m[i * 4 + k]) * fRoot;
+    }
+}
+
+export function makeQuatFromVec(dst: quat, front: ReadonlyVec3, up: ReadonlyVec3): void {
+    makeMtxFrontUp(scratchMatrix, front, up);
+    quatFromMat4(dst, scratchMatrix);
 }
 
 export function isSameDirection(a: ReadonlyVec3, b: ReadonlyVec3, ep: number): boolean {

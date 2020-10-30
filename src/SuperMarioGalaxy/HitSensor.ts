@@ -499,6 +499,11 @@ export function addHitSensor(sceneObjHolder: SceneObjHolder, actor: LiveActor, n
     return actor.hitSensorKeeper!.add(sceneObjHolder, name, hitSensorType, pairwiseCapacity, radius, actor, offset);
 }
 
+export function addHitSensorAtJoint(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, jointName: string, hitSensorType: HitSensorType, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    const jointMtx = assertExists(getJointMtxByName(actor, jointName));
+    return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, hitSensorType, pairwiseCapacity, radius, actor, jointMtx, offset);
+}
+
 export function addBodyMessageSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor) {
     return actor.hitSensorKeeper!.add(sceneObjHolder, `body`, HitSensorType.MapObj, 0, 0.0, actor, Vec3Zero);
 }
@@ -530,6 +535,15 @@ export function addHitSensorEnemy(sceneObjHolder: SceneObjHolder, actor: LiveAct
 export function addHitSensorAtJointEnemy(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, jointName: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
     const jointMtx = assertExists(getJointMtxByName(actor, jointName));
     return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.Enemy, pairwiseCapacity, radius, actor, jointMtx, offset);
+}
+
+export function addHitSensorAtJointEnemyAttack(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, jointName: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    const jointMtx = assertExists(getJointMtxByName(actor, jointName));
+    return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.EnemyAttack, pairwiseCapacity, radius, actor, jointMtx, offset);
+}
+
+export function invalidateHitSensor(actor: LiveActor, name: string): void {
+    actor.hitSensorKeeper!.getSensor(name)!.invalidate();
 }
 
 export function invalidateHitSensors(actor: LiveActor): void {

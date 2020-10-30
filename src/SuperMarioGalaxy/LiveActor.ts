@@ -782,9 +782,6 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
-    protected updateSpineExecuteOnEnd(sceneObjHolder: SceneObjHolder, endingNerve: TNerve): void {
-    }
-
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
