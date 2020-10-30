@@ -782,6 +782,9 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
         }
     }
 
+    protected updateSpineExecuteOnEnd(sceneObjHolder: SceneObjHolder, endingNerve: TNerve): void {
+    }
+
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: TNerve, deltaTimeFrames: number): void {
     }
 
@@ -826,7 +829,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
                 this.initWaitPhase -= deltaTimeFrames;
             } else {
                 this.spine.changeNerve();
-                this.updateSpine(sceneObjHolder, this.getCurrentNerve(), deltaTimeFrames);
+                this.updateSpine(sceneObjHolder, this.spine.getCurrentNerve(), deltaTimeFrames);
                 this.spine.updateTick(deltaTimeFrames);
                 this.spine.changeNerve();
             }

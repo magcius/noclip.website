@@ -452,7 +452,7 @@ export class LightArea extends AreaObj {
 }
 
 export function createLightCtrlCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
+    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
 }
 
 export function createLightCtrlCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {

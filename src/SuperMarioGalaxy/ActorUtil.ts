@@ -1,17 +1,17 @@
 
 // Utilities for various actor implementations.
 
-import { mat4, quat, ReadonlyQuat, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { mat4, quat, ReadonlyMat4, ReadonlyQuat, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Camera, texProjCameraSceneTex } from "../Camera";
 import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
-import { getMatrixAxis, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
+import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
-import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
+import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isOnGround, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { HitSensor } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
@@ -1173,17 +1173,17 @@ export function syncStageSwitchAppear(sceneObjHolder: SceneObjHolder, actor: Liv
     getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(actor.stageSwitchCtrl!, eventListener);
 }
 
-export function listenStageSwitchOnOffA(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
+export function listenStageSwitchOnOffA(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback | null, cbOff: SwitchCallback | null): void {
     const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
     getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerA(actor.stageSwitchCtrl!, eventListener);
 }
 
-export function listenStageSwitchOnOffB(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
+export function listenStageSwitchOnOffB(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback | null, cbOff: SwitchCallback | null): void {
     const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
     getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerB(actor.stageSwitchCtrl!, eventListener);
 }
 
-export function listenStageSwitchOnOffAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback, cbOff: SwitchCallback): void {
+export function listenStageSwitchOnOffAppear(sceneObjHolder: SceneObjHolder, actor: LiveActor, cbOn: SwitchCallback | null, cbOff: SwitchCallback | null): void {
     const eventListener = new SwitchFunctorEventListener(cbOn, cbOff);
     getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(actor.stageSwitchCtrl!, eventListener);
 }
@@ -1255,16 +1255,6 @@ export function getGroupFromArray<T extends LiveActor>(sceneObjHolder: SceneObjH
 
 function getGroundNormal(actor: LiveActor): vec3 {
     return actor.binder!.floorHitInfo.faceNormal;
-}
-
-function isOnGround(actor: LiveActor): boolean {
-    if (actor.binder === null)
-        return false;
-
-    if (actor.binder.floorHitInfo.distance < 0.0)
-        return false;
-
-    return vec3.dot(actor.binder.floorHitInfo.faceNormal, actor.velocity) < 0.0;
 }
 
 function calcVelocityMoveToDirectionHorizon(dst: vec3, actor: LiveActor, direction: ReadonlyVec3, speed: number): void {
@@ -1563,4 +1553,31 @@ export function appearStarPieceToDirection(sceneObjHolder: SceneObjHolder, host:
     if (sceneObjHolder.starPieceDirector === null)
         return;
     sceneObjHolder.starPieceDirector.appearPieceToDirection(sceneObjHolder, host, translation, direction, count, speedRange, speedUp, false, skipWaterCheck);
+}
+
+export class FixedPosition {
+    public transformMatrix = mat4.create();
+    public normalizeScale = true;
+    private localTrans = vec3.create();
+    private localRot = vec3.create();
+
+    constructor(private baseMtx: ReadonlyMat4, localTrans: ReadonlyVec3 | null = null, localRot: ReadonlyVec3 | null = null) {
+        if (localTrans !== null)
+            this.setLocalTrans(localTrans);
+        if (localRot !== null)
+            vec3.copy(this.localRot, localRot);
+    }
+
+    public setLocalTrans(localTrans: ReadonlyVec3): void {
+        vec3.copy(this.localTrans, localTrans);
+    }
+
+    public calc(): void {
+        computeModelMatrixR(scratchMatrix, this.localRot[0], this.localRot[1], this.localRot[2]);
+        mat4.mul(this.transformMatrix, this.baseMtx, scratchMatrix);
+        computeModelMatrixT(scratchMatrix, this.localTrans[0], this.localTrans[1], this.localTrans[2]);
+        mat4.mul(this.transformMatrix, this.transformMatrix, scratchMatrix);
+        if (this.normalizeScale)
+            computeMatrixWithoutScale(this.transformMatrix, this.transformMatrix);
+    }
 }

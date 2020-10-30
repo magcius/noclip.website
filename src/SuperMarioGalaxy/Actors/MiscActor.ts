@@ -21,7 +21,7 @@ import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatri
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, isAnyAnimStopped, isBckOneTimeAndStopped, isBckStopped, isExistCollisionResource, isHiddenModel, isLoopRail, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addRandomVector, addVelocityToGravity, appearStarPiece, attenuateVelocity, calcActorAxis, calcDistanceToCurrentAndNextRailPoint, calcDistanceToPlayer, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxAxis, calcMtxFromGravityAndZAxis, calcPerpendicFootToLine, calcPerpendicFootToLineInside, calcRailDirectionAtCoord, calcRailEndPointPos, calcRailEndPos, calcRailPointPos, calcRailPosAtCoord, calcRailStartPointPos, calcRailStartPos, calcReboundVelocity, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneAir, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCrystal, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneEnvironment, connectToSceneIndirectMapObj, connectToSceneItem, connectToSceneItemStrongLight, connectToSceneMapObj, connectToSceneMapObjDecoration, connectToSceneMapObjDecorationStrongLight, connectToSceneMapObjMovement, connectToSceneMapObjNoCalcAnim, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObj, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToSceneNoSilhouettedMapObjStrongLight, connectToSceneNoSilhouettedMapObjWeakLightNoMovement, connectToScenePlanet, connectToSceneSky, connectToSceneSun, declareStarPiece, FixedPosition, getAreaObj, getBckFrameMax, getBrkFrameMax, getCamPos, getCamYdir, getCamZdir, getEaseInValue, getEaseOutValue, getJointMtx, getJointMtxByName, getJointNum, getPlayerPos, getRailCoord, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideMaterial, hideModel, initCollisionParts, initDefaultPos, invalidateCollisionPartsForActor, isAnyAnimStopped, isBckOneTimeAndStopped, isBckStopped, isExistCollisionResource, isHiddenModel, isLoopRail, isOnSwitchA, isOnSwitchB, isSameDirection, isValidDraw, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffAppear, listenStageSwitchOnOffB, loadBTIData, loadTexProjectionMtx, makeAxisVerticalZX, makeMtxFrontNoSupportPos, makeMtxFrontUpPos, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, MapObjConnector, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordToEndPos, moveCoordToNearestPos, moveCoordToStartPos, moveRailRider, moveTransToCurrentRailPos, moveTransToOtherActorRailPos, quatSetRotate, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBtkFrameAtRandom, setBtpFrameAndStop, setBvaFrameAndStop, setMtxAxisXYZ, setRailCoord, setRailCoordSpeed, setTextureMatrixST, showModel, startAction, startBck, startBpk, startBrk, startBrkIfExist, startBtk, startBtp, startBva, stopBck, syncStageSwitchAppear, tryStartAllAnim, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
 import { calcMapGround, getFirstPolyOnLineToMap, getFirstPolyOnLineToMapExceptActor, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, isWallCodeNoAction, setBinderExceptActor, setBinderOffsetVec, setBindTriangleFilter, tryCreateCollisionMoveLimit, tryCreateCollisionWaterSurface } from '../Collision';
 import { TDDraw, TSDraw } from '../DDraw';
 import { isDemoLastStep, registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
@@ -118,33 +118,6 @@ export function createIndirectPlanetModel(sceneObjHolder: SceneObjHolder, parent
 
 export function createBloomModel(sceneObjHolder: SceneObjHolder, parentActor: LiveActor, transformMatrix: mat4) {
     return createSubModel(sceneObjHolder, parentActor, 'Bloom', transformMatrix, DrawBufferType.BloomModel);
-}
-
-class FixedPosition {
-    public transformMatrix = mat4.create();
-    public normalizeScale = true;
-    private localTrans = vec3.create();
-    private localRot = vec3.create();
-
-    constructor(private baseMtx: ReadonlyMat4, localTrans: ReadonlyVec3 | null = null, localRot: ReadonlyVec3 | null = null) {
-        if (localTrans !== null)
-            this.setLocalTrans(localTrans);
-        if (localRot !== null)
-            vec3.copy(this.localRot, localRot);
-    }
-
-    public setLocalTrans(localTrans: ReadonlyVec3): void {
-        vec3.copy(this.localTrans, localTrans);
-    }
-
-    public calc(): void {
-        computeModelMatrixR(scratchMatrix, this.localRot[0], this.localRot[1], this.localRot[2]);
-        mat4.mul(this.transformMatrix, this.baseMtx, scratchMatrix);
-        computeModelMatrixT(scratchMatrix, this.localTrans[0], this.localTrans[1], this.localTrans[2]);
-        mat4.mul(this.transformMatrix, this.transformMatrix, scratchMatrix);
-        if (this.normalizeScale)
-            computeMatrixWithoutScale(this.transformMatrix, this.transformMatrix);
-    }
 }
 
 export class PartsModel extends LiveActor {

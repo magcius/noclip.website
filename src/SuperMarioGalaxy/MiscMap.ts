@@ -201,7 +201,7 @@ export function isCameraInWater(sceneObjHolder: SceneObjHolder): boolean {
 }
 
 export function createWaterAreaCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
+    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
 }
 
 export function createWaterAreaCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
@@ -211,8 +211,6 @@ export function createWaterAreaCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHold
 export function createWaterAreaSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
     return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Sphere);
 }
-
-const enum WaterCameraFilterNrv { Air, AirToWater, Water, WaterToAir }
 
 function computeRotationZAroundPoint(dst: mat4, theta: number, x: number, y: number): void {
     const sin = Math.sin(theta), cos = Math.cos(theta);
@@ -227,6 +225,8 @@ function computeRotationZAroundPoint(dst: mat4, theta: number, x: number, y: num
 }
 
 const packetParams = new PacketParams();
+
+const enum WaterCameraFilterNrv { Air, AirToWater, Water, WaterToAir }
 export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
     private angle: number = 0;
     private fade: number = 0;
@@ -435,7 +435,7 @@ export class SwitchArea extends AreaObj {
 }
 
 export function createSwitchCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SwitchArea {
-    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
+    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
 }
 
 export function createSwitchSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SwitchArea {
@@ -465,10 +465,27 @@ export class HazeCube extends AreaObj {
 }
 
 export function createHazeCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): HazeCube {
-    return new HazeCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
+    return new HazeCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
 }
 
 export function requestArchivesHazeCube(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     HazeCube.requestArchives(sceneObjHolder);
+}
+//#endregion
+
+//#region MeractorCube
+export class MercatorTransformCube extends AreaObj {
+    public sphereRadius: number;
+
+    protected parseArgs(infoIter: JMapInfoIter): void {
+        this.sphereRadius = fallback(getJMapInfoArg0(infoIter), 3000.0);
+    }
+
+    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    }
+}
+
+export function createMercatorCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): MercatorTransformCube {
+    return new MercatorTransformCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
 }
 //#endregion

@@ -697,7 +697,7 @@ export class ImageEffectAreaMgr extends AreaObjMgr<ImageEffectArea> {
 }
 
 export function createBloomCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CubeGround);
+    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
 }
 
 export function createBloomSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
