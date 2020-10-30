@@ -804,6 +804,11 @@ export function calcDistanceToCurrentAndNextRailPoint(dst: vec2, actor: LiveActo
     }
 }
 
+export function calcNearestRailDirection(dst: vec3, actor: LiveActor, translation: ReadonlyVec3): void {
+    const coord = actor.railRider!.calcNearestPos(translation);
+    actor.railRider!.calcDirectionAtCoord(dst, coord);
+}
+
 export function calcMtxAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, m: mat4): void {
     getMatrixAxis(axisX, axisY, axisZ, m);
 }
@@ -1529,6 +1534,13 @@ export class MapObjConnector {
 export function declareStarPiece(sceneObjHolder: SceneObjHolder, host: NameObj, count: number): void {
     sceneObjHolder.create(SceneObj.StarPieceDirector);
     sceneObjHolder.starPieceDirector!.declare(host, count);
+}
+
+export function addVelocityFromPushHorizon(actor: LiveActor, speed: number, otherSensor: HitSensor, thisSensor: HitSensor): void {
+    vec3.sub(scratchVec3a, thisSensor.center, otherSensor.center);
+    vecKillElement(scratchVec3a, scratchVec3a, actor.gravityVector);
+    normToLength(scratchVec3a, speed);
+    vec3.add(actor.velocity, actor.velocity, scratchVec3a);
 }
 
 export function addVelocityToGravity(actor: LiveActor, speed: number): void {

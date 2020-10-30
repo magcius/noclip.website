@@ -95,18 +95,6 @@ export class WaterAreaHolder extends NameObj {
         // TODO(jstpierre)
     }
 
-    public getWaterAreaInfo(info: WaterInfo, pos: ReadonlyVec3, gravity: ReadonlyVec3): void {
-        if (info.oceanBowl !== null) {
-            info.oceanBowl.calcWaterInfo(info, pos, gravity);
-        } else if (info.oceanSphere !== null) {
-            info.oceanSphere.calcWaterInfo(info, pos, gravity);
-        } else if (info.oceanRing !== null) {
-            info.oceanRing.calcWaterInfo(info, pos, gravity);
-        } else if (info.areaObj !== null) {
-            // TODO(jstpierre)
-        }
-    }
-
     public movement(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
         super.movement(sceneObjHolder, viewerInput);
 
@@ -127,7 +115,7 @@ export class WaterAreaHolder extends NameObj {
                 }
             }
 
-            this.getWaterAreaInfo(this.cameraWaterInfo, scratchVec3, Vec3NegY);
+            getWaterAreaInfo(this.cameraWaterInfo, scratchVec3, Vec3NegY);
             // TODO(jstpierre): WaterInfo
         } else {
             if (this.cameraInWater) {
@@ -146,7 +134,7 @@ export class WaterAreaHolder extends NameObj {
     }
 }
 
-function getWaterAreaObj(dst: WaterInfo | null, sceneObjHolder: SceneObjHolder, position: ReadonlyVec3): boolean {
+export function getWaterAreaObj(dst: WaterInfo | null, sceneObjHolder: SceneObjHolder, position: ReadonlyVec3): boolean {
     if (dst !== null)
         dst.reset();
 
@@ -188,6 +176,17 @@ function getWaterAreaObj(dst: WaterInfo | null, sceneObjHolder: SceneObjHolder, 
     }
 
     return false;
+}
+
+export function getWaterAreaInfo(info: WaterInfo, pos: ReadonlyVec3, gravity: ReadonlyVec3, recurse: boolean = false): void {
+    if (info.oceanBowl !== null) {
+        info.oceanBowl.calcWaterInfo(info, pos, gravity);
+    } else if (info.oceanSphere !== null) {
+        info.oceanSphere.calcWaterInfo(info, pos, gravity);
+    } else if (info.oceanRing !== null) {
+        info.oceanRing.calcWaterInfo(info, pos, gravity);
+    } else if (info.areaObj !== null) {
+    }
 }
 
 export function isInWater(sceneObjHolder: SceneObjHolder, position: ReadonlyVec3): boolean {

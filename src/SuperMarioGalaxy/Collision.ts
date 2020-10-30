@@ -1241,7 +1241,7 @@ export function isOnGround(actor: LiveActor): boolean {
     if (actor.binder.floorHitInfo.distance < 0.0)
         return false;
 
-    return vec3.dot(actor.binder.floorHitInfo.faceNormal, actor.velocity) < 0.0;
+    return vec3.dot(actor.binder.floorHitInfo.faceNormal, actor.velocity) <= 0.0;
 }
 
 export function isBindedRoof(actor: LiveActor): boolean {
@@ -1298,6 +1298,15 @@ export function isGroundCodeDamage(sceneObjHolder: SceneObjHolder, triangle: Tri
 
 export function isGroundCodeDamageFire(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
     return getGroundCode(sceneObjHolder, triangle) === FloorCode.DamageFire;
+}
+
+export function isGroundCodeAreaMove(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
+    return getGroundCode(sceneObjHolder, triangle) === FloorCode.AreaMove;
+}
+
+export function isGroundCodeRailMove(sceneObjHolder: SceneObjHolder, triangle: Triangle): boolean {
+    const groundCode = getGroundCode(sceneObjHolder, triangle);
+    return groundCode === FloorCode.RailMove;
 }
 
 export function isBindedGroundDamageFire(sceneObjHolder: SceneObjHolder, actor: LiveActor): boolean {

@@ -1275,6 +1275,10 @@ export function setShadowDropLength(actor: LiveActor, name: string | null, v: nu
     actor.shadowControllerList!.getController(name)!.setDropLength(v);
 }
 
+export function offCalcShadow(actor: LiveActor, name: string | null = null): void {
+    actor.shadowControllerList!.getController(name)!.setCalcCollisionMode(CalcCollisionMode.Off);
+}
+
 export function onCalcShadow(actor: LiveActor, name: string | null = null): void {
     actor.shadowControllerList!.getController(name)!.setCalcCollisionMode(CalcCollisionMode.On);
 }
@@ -1333,4 +1337,29 @@ export function getShadowProjectionPos(actor: LiveActor, name: string | null): R
 
 export function getShadowProjectedSensor(actor: LiveActor, name: string | null): HitSensor {
     return actor.shadowControllerList!.getController(name)!.triHitSensor!;
+}
+
+export function getShadowProjectionLength(actor: LiveActor, name: string | null): number | null {
+    const controller = actor.shadowControllerList!.getController(name)!;
+    if (controller.isProjected)
+        return controller.getProjectionLength();
+    else
+        return null;
+}
+
+export function isShadowProjectedAny(actor: LiveActor): boolean {
+    for (let i = 0; i < actor.shadowControllerList!.shadowControllers.length; i++)
+        if (actor.shadowControllerList!.shadowControllers[i].isProjected)
+            return true;
+    return false;
+}
+
+export function getShadowNearProjectionLength(actor: LiveActor): number | null {
+    let closestLength = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < actor.shadowControllerList!.shadowControllers.length; i++) {
+        const controller = actor.shadowControllerList!.shadowControllers[i];
+        if (controller.isProjected)
+            closestLength = Math.min(controller.getProjectionLength(), closestLength);
+    }
+    return closestLength === Number.POSITIVE_INFINITY ? null : closestLength;
 }
