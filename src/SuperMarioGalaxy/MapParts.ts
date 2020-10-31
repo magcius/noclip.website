@@ -387,7 +387,6 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         this.signMotionType = getMapPartsArgSignMotionType(infoIter);
 
         const initPosType = getMapPartsArgRailInitPosType(this.actor);
-        console.log(initPosType);
 
         if (initPosType === RailInitPosType.NearestPos) {
             moveCoordAndTransToNearestRailPos(this.actor);

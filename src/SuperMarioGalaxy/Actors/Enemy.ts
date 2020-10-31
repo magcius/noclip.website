@@ -4,7 +4,7 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, range, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
 import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
@@ -18,13 +18,13 @@ import { MapPartsRailMover, MapPartsRailPointPassChecker } from '../MapParts';
 import { getWaterAreaInfo, isInWater, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType } from '../NameObj';
 import { getRailArg, isConnectedWithRail } from '../RailRider';
-import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, offCalcShadow, setShadowDropLength, getShadowNearProjectionLength, getShadowProjectionLength } from '../Shadow';
+import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, offCalcShadow, setShadowDropLength, getShadowNearProjectionLength, getShadowProjectionLength, initShadowVolumeFlatModel, initShadowController, addShadowVolumeFlatModel, addShadowVolumeBox, setShadowDropPosition, setShadowVolumeBoxSize } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
 import { appearCoinPop, declareCoin, isEqualStageName, PartsModel } from './MiscActor';
 import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
 import { getWaterAreaObj } from '../MiscMap';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
-import { drawWorldSpaceFan, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpaceFan, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -3465,7 +3465,7 @@ export class NokonokoLand extends LiveActor<NokonokoLandNrv> {
     private effectAppearTrs = vec3.create();
     private pointPassChecker: MapPartsRailPointPassChecker;
     private poseQuat = quat.create();
-    private axisX = vec3.create();
+    private axisY = vec3.create();
 
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
@@ -3579,19 +3579,18 @@ export class NokonokoLand extends LiveActor<NokonokoLandNrv> {
             if (isFirstStep(this)) {
                 this.startBckBtp('TurnLoopStart', 'WalkWait');
                 const baseMtx = this.getBaseMtx()!;
-                getMatrixAxisX(this.axisX, baseMtx);
-                vec3.normalize(this.axisX, this.axisX);
+                getMatrixAxisY(this.axisY, baseMtx);
+                vec3.normalize(this.axisY, this.axisY);
             }
 
-            if (isBckOneTimeAndStopped(this)) {
+            if (isBckOneTimeAndStopped(this))
                 this.startBckBtp('TurnLoop', 'WalkWait');
 
-                quat.setAxisAngle(scratchQuat, this.axisX, 1.3 * deltaTimeFrames);
-                quat.mul(this.poseQuat, scratchQuat, this.poseQuat);
+            quat.setAxisAngle(scratchQuat, this.axisY, -0.02 * deltaTimeFrames);
+            quat.mul(this.poseQuat, scratchQuat, this.poseQuat);
 
-                if (this.isLookDirRailDirection())
-                    this.setNerve(NokonokoLandNrv.TurnEnd);
-            }
+            if (this.isLookDirRailDirection())
+                this.setNerve(NokonokoLandNrv.TurnEnd);
         } else if (currentNerve === NokonokoLandNrv.TurnEnd) {
             if (isFirstStep(this))
                 this.startBckBtp('TurnEnd', 'WalkWait');
@@ -3833,6 +3832,418 @@ export class KoteBug extends LiveActor<KoteBugNrv> {
             return false;
         } else {
             return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+        }
+    }
+}
+
+function turnDirectionToGround(front: vec3, actor: LiveActor): void {
+    if (isBindedGround(actor)) {
+        const groundNormal = actor.binder!.floorHitInfo.faceNormal;
+        vec3.negate(scratchVec3b, groundNormal);
+    } else {
+        vec3.copy(scratchVec3b, actor.gravityVector);
+    }
+
+    vecKillElement(front, front, scratchVec3b);
+    vec3.normalize(front, front);
+}
+
+function addVelocityToGravityOrGround(actor: LiveActor, gravitySpeed: number): void {
+    if (isBindedGround(actor)) {
+        const groundNormal = actor.binder!.floorHitInfo.faceNormal;
+        vecKillElement(actor.velocity, actor.velocity, groundNormal);
+    } else {
+        addVelocityToGravity(actor, gravitySpeed);
+    }
+}
+
+function moveAndTurnToDirection(front: vec3, actor: LiveActor, frontTarget: ReadonlyVec3, moveSpeed: number, gravitySpeed: number, velocityDamp: number, turnSpeedDegrees: number): void {
+    turnVecToVecCosOnPlane(front, front, frontTarget, actor.gravityVector, Math.cos(turnSpeedDegrees * MathConstants.DEG_TO_RAD));
+    turnDirectionToGround(front, actor);
+    calcVelocityMoveToDirection(scratchVec3b, actor, front, moveSpeed);
+    vec3.add(actor.velocity, actor.velocity, scratchVec3b);
+    vec3.scale(actor.velocity, actor.velocity, velocityDamp);
+    reboundVelocityFromCollision(actor, 0.0, 0.0, 1.0);
+    addVelocityToGravityOrGround(actor, gravitySpeed);
+}
+
+function calcRotate(actor: LiveActor, front: ReadonlyVec3, turnSpeedDegrees: number): void {
+    vec3.copy(scratchVec3c, front);
+
+    if (isBindedGround(actor)) {
+        const groundNormal = actor.binder!.floorHitInfo.faceNormal;
+        vec3.copy(scratchVec3a, groundNormal);
+    } else {
+        vec3.negate(scratchVec3a, actor.gravityVector);
+    }
+
+    calcUpVec(scratchVec3b, actor);
+    vec3.lerp(scratchVec3a, scratchVec3a, scratchVec3b, 0.1);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+    if (isNearZeroVec3(scratchVec3a, 0.001))
+        vec3.copy(scratchVec3a, scratchVec3b);
+
+    makeMtxUpFront(scratchMatrix, scratchVec3a, scratchVec3c);
+    computeEulerAngleRotationFromSRTMatrix(actor.rotation, scratchMatrix);
+}
+
+function moveAndTurnToTarget(actor: LiveActor, target: ReadonlyVec3, moveSpeed: number, gravitySpeed: number, velocityDamp: number, turnSpeedDegrees: number): void {
+    vec3.sub(scratchVec3b, target, actor.translation);
+    calcFrontVec(scratchVec3a, actor);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+    vec3.normalize(scratchVec3b, scratchVec3b);
+    moveAndTurnToDirection(scratchVec3a, actor, scratchVec3b, moveSpeed, gravitySpeed, velocityDamp, turnSpeedDegrees);
+    calcRotate(actor, scratchVec3a, turnSpeedDegrees);
+}
+
+function moveAndTurnToPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, moveSpeed: number, gravitySpeed: number, velocityDamp: number, turnSpeedDegrees: number): void {
+    getPlayerPos(scratchVec3a, sceneObjHolder);
+    moveAndTurnToTarget(actor, scratchVec3a, moveSpeed, gravitySpeed, velocityDamp, turnSpeedDegrees);
+}
+
+function isFaceToPlayerDegree(sceneObjHolder: SceneObjHolder, actor: LiveActor, degree: number): boolean {
+    calcFrontVec(scratchVec3a, actor);
+    getPlayerPos(scratchVec3b, sceneObjHolder);
+    vec3.sub(scratchVec3b, scratchVec3b, actor.translation);
+    vec3.normalize(scratchVec3b, scratchVec3b);
+    return vec3.dot(scratchVec3a, scratchVec3b) >= Math.cos(MathConstants.DEG_TO_RAD * degree);
+}
+
+const enum KaronNrv { Wait, FixWait, Walk, Turn, WalkOnRail, Search, Pursue }
+export class Karon extends LiveActor<KaronNrv> {
+    private territory = new TerritoryMover(500.0);
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'Karon');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+
+        if (isConnectedWithRail(infoIter))
+            this.initRailRider(sceneObjHolder, infoIter);
+
+        this.initModelManagerWithAnm(sceneObjHolder, 'Karon');
+        connectToSceneEnemy(sceneObjHolder, this);
+        this.initBinder(70.0, 70.0, 0);
+        this.calcGravityFlag = true;
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        // TODO(jstpierre): useStageSwitchReadA
+        this.initNerve(KaronNrv.Wait);
+
+        this.initHitSensor();
+        initShadowVolumeSphere(sceneObjHolder, this, 60.0);
+        initLightCtrl(sceneObjHolder, this);
+        declareStarPiece(sceneObjHolder, this, 3);
+
+        this.territory.setCenter(this.translation);
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KaronNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === KaronNrv.Wait) {
+            if (isFirstStep(this))
+                startAction(this, 'Wait');
+
+            if (isOnGround(this)) {
+                moveAndTurnToPlayer(sceneObjHolder, this, 0.0, 2.0 * deltaTimeFrames, 0.95, 0.0);
+            } else {
+                moveAndTurnToPlayer(sceneObjHolder, this, 0.0, 1.2 * deltaTimeFrames, 0.8, 0.0);
+            }
+
+            if (calcDistanceToPlayer(sceneObjHolder, this) <= 700.0 && isFaceToPlayerDegree(sceneObjHolder, this, 80.0)) {
+                this.setNerve(KaronNrv.Search);
+            } else {
+                const endStep = /* this.isNerve(KaronNrv.HitStarPieceWait) ? 120 : */ 60;
+                if (isGreaterStep(this, endStep)) {
+                    if (this.railRider !== null) {
+                        this.setNerve(KaronNrv.WalkOnRail);
+                    } else {
+                        this.territory.decideNextTargetPos(this);
+                        this.setNerve(KaronNrv.Walk);
+                    }
+                }
+            }
+        } else if (currentNerve === KaronNrv.Walk) {
+            if (isFirstStep(this))
+                startAction(this, 'Walk');
+
+            moveAndTurnToTarget(this, this.territory.targetPos, 0.12 * deltaTimeFrames, 1.2 * deltaTimeFrames, 0.95, 2.0 * deltaTimeFrames);
+
+            if (calcDistanceToPlayer(sceneObjHolder, this) <= 700.0 && isFaceToPlayerDegree(sceneObjHolder, this, 80.0))
+                this.setNerve(KaronNrv.Search);
+            else if (isGreaterStep(this, 180) && !this.territory.isReachedTarget(this, 40.0))
+                this.setNerve(KaronNrv.Wait);
+            else if (this.isFallNextMove(sceneObjHolder, true))
+                this.setNerve(KaronNrv.Turn);
+        } else if (currentNerve === KaronNrv.Turn) {
+            if (isFirstStep(this)) {
+                startAction(this, 'Walk');
+                this.territory.decideNextTargetPos(this);
+            }
+
+            moveAndTurnToTarget(this, this.territory.targetPos, 0.12 * deltaTimeFrames, 1.2 * deltaTimeFrames, 0.95, 2.0 * deltaTimeFrames);
+
+            if (calcDistanceToPlayer(sceneObjHolder, this) <= 700.0 && isFaceToPlayerDegree(sceneObjHolder, this, 80.0)) {
+                this.setNerve(KaronNrv.Search);
+            } else {
+                calcFrontVec(scratchVec3a, this);
+                if (isGreaterStep(this, 10) && isFaceToTargetHorizontalDegree(this, this.territory.targetPos, scratchVec3a, 2.0 * 2.0)) {
+                    if (this.isFallNextMove(sceneObjHolder, false)) {
+                        this.setNerve(KaronNrv.Turn);
+                    } else {
+                        this.setNerve(KaronNrv.Walk);
+                    }
+                }
+            }
+        } else if (currentNerve === KaronNrv.Search) {
+            if (isFirstStep(this))
+                startAction(this, 'Search');
+
+            moveAndTurnToPlayer(sceneObjHolder, this, 0.12 * deltaTimeFrames, 1.2 * deltaTimeFrames, 0.95, 2.0 * deltaTimeFrames);
+            if (isActionEnd(this))
+                this.setNerve(KaronNrv.Pursue);
+        } else if (currentNerve === KaronNrv.Pursue) {
+            if (isFirstStep(this)) {
+                startAction(this, 'Pursue');
+                vec3.scaleAndAdd(this.velocity, this.velocity, this.gravityVector, -10.0);
+            }
+
+            moveAndTurnToPlayer(sceneObjHolder, this, 0.25 * deltaTimeFrames, 1.2 * deltaTimeFrames, 0.95, 2.0 * deltaTimeFrames);
+            if (calcDistanceToPlayer(sceneObjHolder, this) > 1200.0 && isFaceToPlayerDegree(sceneObjHolder, this, 80.0))
+                this.setNerve(KaronNrv.Wait);
+        }
+    }
+
+    private isFallNextMove(sceneObjHolder: SceneObjHolder, useVelocity: boolean): boolean {
+        // TODO(jstpierre): isFallOrDangerNextMove
+        if (useVelocity) {
+            return isFallNextMoveActor(sceneObjHolder, this, 150.0, 140.0, 150.0);
+        } else {
+            calcFrontVec(scratchVec3a, this);
+            return isFallNextMove(sceneObjHolder, this.translation, scratchVec3a, this.gravityVector, 150.0, 140.0, 150.0);
+        }
+    }
+}
+
+interface SnakeheadDataTable {
+    bckWaitName: string;
+    bckWaylayName: string | null;
+    bckForwardName: string;
+    bckBackName: string;
+    waitEndStep: number;
+    restEndStep: number;
+}
+
+const enum SnakeheadType { Big, Small, BigRace, SmallRace }
+const enum SnakeheadNrv { Wait, Waylay, MoveForward, Rest, MoveBack }
+export class Snakehead extends LiveActor<SnakeheadNrv> {
+    private type: SnakeheadType;
+    private shadowMtx = mat4.create();
+    private forwardSpeed: number;
+    private backSpeed: number;
+    private distanceThreshold: number;
+
+    private static dataTable: SnakeheadDataTable[] = [
+        { bckWaitName: 'StraightWait', bckWaylayName: 'StraightAppear', bckForwardName: 'StraightForward', bckBackName: 'StraightBack', waitEndStep: 14, restEndStep: 100, },
+        { bckWaitName: 'Wait',         bckWaylayName: 'StraightAppear', bckForwardName: 'StraightForward', bckBackName: 'StraightBack', waitEndStep: 60, restEndStep: 120, },
+        { bckWaitName: 'Wait',         bckWaylayName: null,             bckForwardName: 'Forward',         bckBackName: 'Back',         waitEndStep: 14, restEndStep: 100, },
+        { bckWaitName: 'Wait',         bckWaylayName: null,             bckForwardName: 'Forward',         bckBackName: 'Back',         waitEndStep: 60, restEndStep: 120, },
+    ];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, this.name);
+
+        this.forwardSpeed = fallback(getJMapInfoArg0(infoIter), 15.0);
+        this.backSpeed = fallback(getJMapInfoArg1(infoIter), 10.0);
+        this.distanceThreshold = fallback(getJMapInfoArg2(infoIter), 1000.0);
+
+        this.type = Snakehead.getType(infoIter);
+        connectToSceneEnemy(sceneObjHolder, this);
+
+        if (this.type === SnakeheadType.Big || this.type === SnakeheadType.BigRace) {
+            initShadowController(this);
+            addShadowVolumeFlatModel(sceneObjHolder, this, 'Head', 'SnakeheadShadow', this.shadowMtx);
+            vec3.set(scratchVec3a, 480.0, 300.0, 680.0);
+            addShadowVolumeBox(sceneObjHolder, this, 'Body', scratchVec3a);
+        } else {
+            initShadowVolumeFlatModel(sceneObjHolder, this, 'SnakeheadSmallShadow', this.shadowMtx);
+            setShadowDropLength(this, 'SnakeheadSmallShadow', 500.0);
+        }
+
+        initLightCtrl(sceneObjHolder, this);
+
+        this.initRailRider(sceneObjHolder, infoIter);
+        setRailCoord(this, 300.0);
+        moveTransToCurrentRailPos(this)
+
+        // addToAttributeGroupSearchTurtle
+
+        if (this.type === SnakeheadType.BigRace || this.type === SnakeheadType.SmallRace) {
+            this.initNerve(SnakeheadNrv.Wait);
+        } else {
+            this.initNerve(SnakeheadNrv.Waylay);
+            hideModel(this);
+            invalidateShadowAll(this);
+        }
+
+        this.makeActorAppeared(sceneObjHolder);
+    }
+
+    private getDataTable(): SnakeheadDataTable {
+        return assertExists(Snakehead.dataTable[this.type]);
+    }
+
+    private choiceAndStartBck(name: string): void {
+        const dataTable = this.getDataTable();
+
+        let bckName: string | null;
+        if (name === 'Wait')
+            bckName = dataTable.bckWaitName;
+        else if (name === 'Waylay')
+            bckName = dataTable.bckWaylayName;
+        else if (name === 'Forward')
+            bckName = dataTable.bckForwardName;
+        else if (name === 'Back')
+            bckName = dataTable.bckBackName;
+        else
+            throw "whoops";
+
+        if (bckName === null)
+            return;
+
+        if (name === 'Waylay')
+            startBckNoInterpole(this, bckName);
+        else
+            startBck(this, bckName);
+
+        if (isExistBtk(this, bckName)) {
+            startBtk(this, bckName);
+        } else if (isExistBtk(this, 'Wait')) {
+            startBtk(this, 'Wait');
+            setBtkFrameAndStop(this, 0);
+        }
+    }
+
+    private isNearPlayerFromRail(sceneObjHolder: SceneObjHolder): boolean {
+        getPlayerPos(scratchVec3a, sceneObjHolder);
+        calcNearestRailPos(scratchVec3b, this, scratchVec3a);
+        return vec3.distance(scratchVec3a, scratchVec3b) <= this.distanceThreshold;
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        const body04Mtx = getJointMtxByName(this, 'Body04')!;
+        getMatrixTranslation(scratchVec3a, body04Mtx);
+        setMatrixTranslation(this.shadowMtx, scratchVec3a);
+
+        if (this.type === SnakeheadType.Big || this.type === SnakeheadType.BigRace) {
+            const body01Mtx = getJointMtxByName(this, 'Body01')!;
+            getMatrixTranslation(scratchVec3b, body01Mtx);
+            const distance = vec3.distance(scratchVec3a, scratchVec3b);
+            vec3.lerp(scratchVec3a, scratchVec3a, scratchVec3b, 0.5);
+            setShadowDropPosition(this, 'Body', scratchVec3a);
+            vec3.set(scratchVec3a, 480.0, 300.0, distance);
+            setShadowVolumeBoxSize(this, 'Body', scratchVec3a);
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SnakeheadNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === SnakeheadNrv.Wait) {
+            if (isFirstStep(this))
+                this.choiceAndStartBck('Wait');
+
+            const dataTable = this.getDataTable();
+
+            if (isGreaterEqualStep(this, dataTable.waitEndStep)) {
+                const isRace = this.type === SnakeheadType.BigRace || this.type === SnakeheadType.SmallRace;
+                if (isRace || this.isNearPlayerFromRail(sceneObjHolder))
+                    this.setNerve(SnakeheadNrv.MoveForward);
+            }
+        } else if (currentNerve === SnakeheadNrv.Waylay) {
+            if (isFirstStep(this)) {
+                this.choiceAndStartBck('Waylay');
+                setBckFrameAndStop(this, 0.0);
+                mat4.copy(this.shadowMtx, getJointMtxByName(this, 'Body04')!);
+            }
+
+            if (this.isNearPlayerFromRail(sceneObjHolder) && getBckFrame(this) === 0.0) {
+                this.choiceAndStartBck('Waylay');
+                setBckFrame(this, 1.0);
+                showModel(this);
+            }
+
+            if (getBckFrame(this) >= 2.0)
+                validateShadowAll(this);
+
+            if (isBckStopped(this))
+                this.setNerve(SnakeheadNrv.MoveForward);
+        } else if (currentNerve === SnakeheadNrv.MoveForward) {
+            if (isFirstStep(this)) {
+                this.choiceAndStartBck('Forward');
+                setRailDirectionToEnd(this);
+            }
+
+            const isRace = this.type === SnakeheadType.BigRace || this.type === SnakeheadType.SmallRace;
+            if (isRace || !isRailReachedNearGoal(this, 300.0))
+                moveCoordAndFollowTrans(this, this.forwardSpeed * deltaTimeFrames);
+            else
+                moveCoordAndFollowTrans(this, this.forwardSpeed / 1.5 * deltaTimeFrames);
+
+            if (isRailReachedGoal(this))
+                this.setNerve(SnakeheadNrv.Rest);
+        } else if (currentNerve === SnakeheadNrv.Rest) {
+            const dataTable = this.getDataTable();
+
+            if (isGreaterEqualStep(this, dataTable.restEndStep))
+                this.setNerve(SnakeheadNrv.MoveBack);
+        } else if (currentNerve === SnakeheadNrv.MoveBack) {
+            if (isFirstStep(this)) {
+                this.choiceAndStartBck('Back');
+                setRailDirectionToStart(this);
+            }
+
+            moveCoordAndFollowTrans(this, this.backSpeed * deltaTimeFrames);
+
+            if (isRailReachedNearGoal(this, 300.0)) {
+                setRailCoord(this, 300.0);
+                moveTransToCurrentRailPos(this);
+                this.setNerve(SnakeheadNrv.Wait);
+            }
+        }
+    }
+
+    private static getType(infoIter: JMapInfoIter): SnakeheadType {
+        const objectName = getObjectName(infoIter);
+        const subtype = fallback(getJMapInfoArg3(infoIter), 0);
+        if (objectName === 'Snakehead' && subtype === 0)
+            return SnakeheadType.Big;
+        else if (objectName === 'SnakeheadSmall' && subtype === 0)
+            return SnakeheadType.Small;
+        else if (objectName === 'Snakehead' && subtype === 1)
+            return SnakeheadType.BigRace;
+        else if (objectName === 'SnakeheadSmall' && subtype === 1)
+            return SnakeheadType.SmallRace;
+        else
+            throw "whoops";
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        const type = Snakehead.getType(infoIter);
+        if (type === SnakeheadType.Big || type === SnakeheadType.BigRace) {
+            sceneObjHolder.modelCache.requestObjectData('Snakehead');
+            sceneObjHolder.modelCache.requestObjectData('SnakeheadShadow');
+        } else {
+            sceneObjHolder.modelCache.requestObjectData('SnakeheadSmall');
+            sceneObjHolder.modelCache.requestObjectData('SnakeheadSmallShadow');
         }
     }
 }

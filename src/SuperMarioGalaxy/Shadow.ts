@@ -24,6 +24,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { colorFromRGBA } from "../Color";
 import { TextureMapping } from "../TextureHolder";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 export function calcDropShadowVectorOrZero(sceneObjHolder: SceneObjHolder, nameObj: NameObj, pos: ReadonlyVec3, dst: vec3, gravityInfo: GravityInfo | null = null, attachmentFilter: any | null = null): boolean {
     return calcGravityVectorOrZero(sceneObjHolder, nameObj, pos, GravityTypeMask.Shadow, dst, gravityInfo, attachmentFilter);
@@ -62,6 +63,7 @@ class ShadowController {
     private calcDropGravityMode = CalcDropGravityMode.Off;
 
     private dropPosMtxRef: ReadonlyMat4 | null = null;
+    private dropPosTxformMtxRef: ReadonlyMat4 | null = null;
     private dropPosRef: ReadonlyVec3 | null = null;
     private dropPosFix = vec3.create();
     private dropDirRef: ReadonlyVec3 | null = null;
@@ -83,8 +85,8 @@ class ShadowController {
     public getDropPos(dst: vec3): void {
         if (this.dropPosRef !== null)
             vec3.copy(dst, this.dropPosRef);
-        else if (this.dropPosMtxRef !== null)
-            transformVec3Mat4w1(dst, this.dropPosMtxRef, this.dropPosFix);
+        else if (this.dropPosTxformMtxRef !== null)
+            transformVec3Mat4w1(dst, this.dropPosTxformMtxRef, this.dropPosFix);
         else
             vec3.copy(dst, this.dropPosFix);
     }
@@ -121,6 +123,7 @@ class ShadowController {
 
     public setDropPosMtxPtr(mtx: ReadonlyMat4 | null, offs: ReadonlyVec3): void {
         this.dropPosMtxRef = mtx;
+        this.dropPosTxformMtxRef = mtx;
         vec3.copy(this.dropPosFix, offs);
     }
 
@@ -130,6 +133,8 @@ class ShadowController {
 
     public setDropPosFix(v: ReadonlyVec3): void {
         vec3.copy(this.dropPosFix, v);
+        this.dropPosRef = null;
+        this.dropPosTxformMtxRef = null;
     }
 
     public setDropPosPtr(v: ReadonlyVec3): void {
@@ -615,8 +620,9 @@ class ShadowVolumeBox extends ShadowVolumeDrawer {
     }
 
     private makeVertexBuffer(): void {
-        const dropPosMtx = this.controller.getDropPosMtxPtr()!;
         this.calcBaseDropPosition(scratchVec3d);
+
+        const dropPosMtx = this.controller.getDropPosMtxPtr()!;
         getMatrixAxis(scratchVec3a, scratchVec3b, scratchVec3c, dropPosMtx);
 
         const dropDir = this.controller.getDropDir();
@@ -1213,7 +1219,7 @@ export function addShadowVolumeCylinder(sceneObjHolder: SceneObjHolder, actor: L
     controller.setCalcCollisionMode(CalcCollisionMode.Off);
 }
 
-export function addShadowVolumeBox(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, size: ReadonlyVec3, dropMtxPtr: ReadonlyMat4): void {
+export function addShadowVolumeBox(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, size: ReadonlyVec3, dropMtxPtr: ReadonlyMat4 = actor.getBaseMtx()!): void {
     const controller = createShadowControllerVolumeParam(sceneObjHolder, actor, name);
     const drawer = new ShadowVolumeBox(sceneObjHolder, controller);
     vec3.copy(drawer.size, size);
@@ -1311,12 +1317,20 @@ function getShadowVolumeSphere(actor: LiveActor, name: string | null): ShadowVol
     return getShadowVolumeDrawer(actor, name) as ShadowVolumeSphere;
 }
 
+function getShadowVolumeBox(actor: LiveActor, name: string | null): ShadowVolumeBox {
+    return getShadowVolumeDrawer(actor, name) as ShadowVolumeBox;
+}
+
 export function setShadowVolumeSphereRadius(actor: LiveActor, name: string | null, v: number): void {
     getShadowVolumeSphere(actor, name).radius = v;
 }
 
 export function setShadowVolumeStartDropOffset(actor: LiveActor, name: string | null, v: number): void {
     getShadowVolumeDrawer(actor, name).startDrawShapeOffset = v;
+}
+
+export function setShadowVolumeBoxSize(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
+    vec3.copy(getShadowVolumeBox(actor, name).size, v);
 }
 
 export function isExistShadow(actor: LiveActor, name: string | null): boolean {

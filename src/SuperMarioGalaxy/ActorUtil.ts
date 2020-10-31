@@ -202,6 +202,11 @@ export function isBckStopped(actor: LiveActor): boolean {
     return actor.modelManager!.isBckStopped();
 }
 
+export function getBckFrame(actor: LiveActor): number {
+    const bckCtrl = actor.modelManager!.getBckCtrl();
+    return bckCtrl.currentTimeInFrames;
+}
+
 export function getBckFrameMax(actor: LiveActor): number {
     const bckCtrl = actor.modelManager!.getBckCtrl();
     return bckCtrl.endFrame;
@@ -314,6 +319,10 @@ export function stopBck(actor: LiveActor): void {
 
 export function startBtk(actor: LiveActor, name: string): void {
     actor.modelManager!.startBtk(name);
+}
+
+export function isExistBtk(actor: LiveActor, name: string): boolean {
+    return actor.resourceHolder.isExistRes(actor.resourceHolder.btkTable, name);
 }
 
 export function startBrk(actor: LiveActor, name: string): void {
@@ -621,6 +630,13 @@ export function isRailReachedGoal(actor: LiveActor): boolean {
     return actor.railRider!.isReachedGoal();
 }
 
+export function isRailReachedNearGoal(actor: LiveActor, distance: number): boolean {
+    if (isRailGoingToEnd(actor))
+        return actor.railRider!.coord >= getRailTotalLength(actor) - distance;
+    else
+        return actor.railRider!.coord < distance;
+}
+
 export function reverseRailDirection(actor: LiveActor): void {
     actor.railRider!.reverse();
 }
@@ -745,6 +761,11 @@ export function setRailCoord(actor: LiveActor, coord: number): void {
     actor.railRider!.setCoord(coord);
 }
 
+export function setRailDirectionToStart(actor: LiveActor): void {
+    if (actor.railRider!.direction === RailDirection.TowardsEnd)
+        actor.railRider!.reverse();
+}
+
 export function setRailDirectionToEnd(actor: LiveActor): void {
     if (actor.railRider!.direction === RailDirection.TowardsStart)
         actor.railRider!.reverse();
@@ -802,6 +823,11 @@ export function calcDistanceToCurrentAndNextRailPoint(dst: vec2, actor: LiveActo
     } else {
         dst[1] = Math.abs(nextPointCoord - currCoord);
     }
+}
+
+export function calcNearestRailPos(dst: vec3, actor: LiveActor, translation: ReadonlyVec3): void {
+    const coord = actor.railRider!.calcNearestPos(translation);
+    actor.railRider!.calcPosAtCoord(dst, coord);
 }
 
 export function calcNearestRailDirection(dst: vec3, actor: LiveActor, translation: ReadonlyVec3): void {
@@ -1445,7 +1471,7 @@ export function turnVecToVecCos(dst: vec3, src: ReadonlyVec3, target: ReadonlyVe
         vecKillElement(scratchVec3a, target, src);
         if (!isNearZeroVec3(scratchVec3a, 0.001)) {
             vec3.normalize(scratchVec3a, scratchVec3a);
-            vec3.scale(dst, src, dot);
+            vec3.scale(dst, src, speed);
             vec3.scaleAndAdd(dst, dst, scratchVec3a, Math.sqrt(1.0 - speed ** 2.0));
             vec3.normalize(dst, dst);
             return false;
