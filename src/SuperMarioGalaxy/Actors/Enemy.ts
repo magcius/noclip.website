@@ -24,6 +24,7 @@ import { appearCoinPop, declareCoin, isEqualStageName, PartsModel } from './Misc
 import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
 import { getWaterAreaObj } from '../MiscMap';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
+import { drawWorldSpaceFan, getDebugOverlayCanvas2D } from '../../DebugJunk';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -1315,8 +1316,8 @@ function isFallNextMove(sceneObjHolder: SceneObjHolder, position: ReadonlyVec3, 
     return numHitInfo === 0;
 }
 
-function isFallNextMoveActor(sceneObjHolder: SceneObjHolder, actor: Readonly<LiveActor>, a: number, b: number, c: number, filter: TriangleFilterFunc | null = null): boolean {
-    return isFallNextMove(sceneObjHolder, actor.translation, actor.velocity, actor.gravityVector, a, b, c, filter);
+function isFallNextMoveActor(sceneObjHolder: SceneObjHolder, actor: Readonly<LiveActor>, horizontalSpeed: number, upPosDistance: number, downSearchDistance: number, filter: TriangleFilterFunc | null = null): boolean {
+    return isFallNextMove(sceneObjHolder, actor.translation, actor.velocity, actor.gravityVector, horizontalSpeed, upPosDistance, downSearchDistance, filter);
 }
 
 enum WalkerStateWanderNrv { Wait, Walk }
@@ -2850,13 +2851,15 @@ function calcVecToPlayerH(dst: vec3, sceneObjHolder: SceneObjHolder, actor: Live
 }
 
 function isNearAngleRadianHV(delta: ReadonlyVec3, front: ReadonlyVec3, h: ReadonlyVec3, angleH: number, angleV: number): boolean {
+    angleV = Math.min(angleV, MathConstants.TAU / 4);
+
     vec3.normalize(scratchVec3a, delta);
     // Vertical cone check
-    if (vec3.dot(scratchVec3a, front) > Math.sin(angleV))
+    if (Math.abs(vec3.dot(scratchVec3a, front)) < Math.sin(angleV))
         return false;
     vecKillElement(scratchVec3b, scratchVec3a, h);
     // Horizontal cone check
-    if (vec3.dot(scratchVec3b, front) > Math.cos(angleH))
+    if (vec3.dot(scratchVec3b, front) < Math.cos(angleH))
         return false;
     return true;
 }
@@ -2872,6 +2875,7 @@ function isFaceToPlayerDegreeHV(sceneObjHolder: SceneObjHolder, actor: LiveActor
 }
 
 function isInSightFanPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, front: ReadonlyVec3, radius: number, angleH: number, angleV: number): boolean {
+    // drawWorldSpaceFan(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, actor.translation, radius, front, angleH * MathConstants.DEG_TO_RAD, actor.gravityVector);
     return isNearPlayer(sceneObjHolder, actor, radius) && isFaceToPlayerDegreeHV(sceneObjHolder, actor, front, angleH, angleV);
 }
 

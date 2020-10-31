@@ -372,7 +372,7 @@ export class CollisionParts {
     public calcForceMovePower(dst: vec3, pos: ReadonlyVec3): void {
         mat4.invert(scratchMatrix, this.oldWorldMtx);
         transformVec3Mat4w1(dst, scratchMatrix, pos);
-        transformVec3Mat4w1(dst, this.worldMtx, pos);
+        transformVec3Mat4w1(dst, this.worldMtx, dst);
         vec3.sub(dst, dst, pos);
     }
 }
@@ -982,7 +982,7 @@ export class Binder {
 
     public expandDistance: boolean = false;
     public useMovingReaction: boolean = false;
-    public moveWithCollision: boolean = false;
+    public moveWithCollision: boolean = true;
 
     public hostOffsetVec: ReadonlyVec3 | null = null;
     public fixReactionVec = vec3.create();
