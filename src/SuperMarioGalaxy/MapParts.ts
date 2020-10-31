@@ -13,7 +13,6 @@ import { calcDropShadowVectorOrZero } from './Shadow';
 import { getRailArg } from './RailRider';
 
 export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
-
 export function getMapPartsArgMoveConditionType(infoIter: JMapInfoIter): MoveConditionType {
     return fallback(infoIter.getValueNumberNoInit('MoveConditionType'), MoveConditionType.Unconditionally);
 }
@@ -30,13 +29,11 @@ function hasMapPartsMoveStartSignMotion(signMotionType: SignMotionType): boolean
 }
 
 const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish }
-
 function getMapPartsArgMoveStopType(actor: LiveActor): MoveStopType {
     return fallback(getRailArg(actor.railRider!, 'path_arg1'), MoveStopType.Mirror);
 }
 
 export const enum RailGuideType { None, Draw, DrawForward, DrawPoints }
-
 export function getMapPartsArgRailGuideType(actor: LiveActor): RailGuideType {
     return fallback(getRailArg(actor.railRider!, 'path_arg2'), RailGuideType.None);
 }
@@ -69,7 +66,7 @@ function getMoveStartSignalTime(): number {
 
 const enum RailInitPosType { NearestPos, NearestPoint, Point0 }
 function getMapPartsArgRailInitPosType(actor: LiveActor): RailInitPosType {
-    return fallback(getRailArg(actor.railRider!, 'path_arg1'), RailInitPosType.NearestPos);
+    return fallback(getRailArg(actor.railRider!, 'path_arg4'), RailInitPosType.NearestPos);
 }
 
 const enum AxisType { X, Y, Z }
@@ -390,6 +387,7 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
         this.signMotionType = getMapPartsArgSignMotionType(infoIter);
 
         const initPosType = getMapPartsArgRailInitPosType(this.actor);
+        console.log(initPosType);
 
         if (initPosType === RailInitPosType.NearestPos) {
             moveCoordAndTransToNearestRailPos(this.actor);
