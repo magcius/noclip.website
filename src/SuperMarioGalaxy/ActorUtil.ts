@@ -10,7 +10,7 @@ import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
-import { AreaObj } from "./AreaObj";
+import { AreaObj, isInAreaObj } from "./AreaObj";
 import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isOnGround, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { HitSensor, sendMsgPush } from "./HitSensor";
@@ -1665,4 +1665,8 @@ export function sendMsgPushAndKillVelocityToTarget(sceneObjHolder: SceneObjHolde
     } else {
         return false;
     }
+}
+
+export function isInDeath(sceneObjHolder: SceneObjHolder, pos: ReadonlyVec3): boolean {
+    return isInAreaObj(sceneObjHolder, 'DeathArea', pos);
 }

@@ -34,7 +34,7 @@ import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry
 import { ZoneAndLayer, LayerId, LiveActorGroupArray, getJMapInfoTrans, getJMapInfoRotate } from './LiveActor';
 import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
 import { BckCtrl } from './Animation';
-import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea, MercatorTransformCube } from './MiscMap';
+import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea, MercatorTransformCube, DeathArea } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
 import { AreaObjMgr, AreaObj } from './AreaObj';
@@ -965,6 +965,7 @@ class AreaObjContainer extends NameObj {
         this.managers.push(new AreaObjMgr<SwitchArea>(sceneObjHolder, 'SwitchArea'));
         this.managers.push(new AreaObjMgr<HazeCube>(sceneObjHolder, 'HazeCube'));
         this.managers.push(new AreaObjMgr<MercatorTransformCube>(sceneObjHolder, 'MercatorCube'));
+        this.managers.push(new AreaObjMgr<DeathArea>(sceneObjHolder, 'DeathArea'));
     }
 
     public getManager(managerName: string): AreaObjMgr<AreaObj> {

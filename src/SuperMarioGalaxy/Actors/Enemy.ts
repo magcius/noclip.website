@@ -4,12 +4,12 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, range, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
-import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc } from '../Collision';
+import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
 import { initFur } from '../Fur';
-import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors } from '../HitSensor';
+import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { isDead, isMsgTypeEnemyAttack, LiveActor, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
@@ -1582,8 +1582,8 @@ function calcVelocityAreaOrRailMoveOnGround(dst: vec3, sceneObjHolder: SceneObjH
 
 const enum KuriboNrv { AppearFromBox, Wander, FindPlayer, Chase }
 export class Kuribo extends LiveActor<KuriboNrv> {
-    private quat = quat.create();
-    private front = vec3.create();
+    private poseQuat = quat.create();
+    private axisZ = vec3.create();
     private manualGravity: boolean = false;
     private stateWander: WalkerStateWander;
     private stateFindPlayer: WalkerStateFindPlayer;
@@ -1596,14 +1596,14 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         this.initModelManagerWithAnm(sceneObjHolder, 'Kuribo');
         connectToSceneEnemy(sceneObjHolder, this);
         initLightCtrl(sceneObjHolder, this);
-        makeQuatAndFrontFromRotate(this.quat, this.front, this);
+        makeQuatAndFrontFromRotate(this.poseQuat, this.axisZ, this);
 
         if (infoIter !== null)
             this.manualGravity = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
 
         if (this.manualGravity) {
             this.calcGravityFlag = false;
-            quatGetAxisY(this.gravityVector, this.quat);
+            quatGetAxisY(this.gravityVector, this.poseQuat);
         } else {
             this.calcGravityFlag = true;
         }
@@ -1631,12 +1631,54 @@ export class Kuribo extends LiveActor<KuriboNrv> {
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         super.initAfterPlacement(sceneObjHolder);
 
-        turnQuatUpToGravity(this.quat, this.quat, this);
+        turnQuatUpToGravity(this.poseQuat, this.poseQuat, this);
         trySetMoveLimitCollision(sceneObjHolder, this);
     }
 
+    private initState(): void {
+        const param: WalkerStateParam = {
+            gravitySpeed: 1.5,
+            velDragAir: 0.99,
+            velDragGround: 0.93,
+            sightFanRadius: 1000.0,
+            sightFanAngleH: 70.0,
+            sightFanAngleV: 30.0,
+        };
+
+        this.stateWander = new WalkerStateWander(this, this.axisZ, param, {
+            walkSpeed: 0.2,
+            waitStep: 120,
+            walkStep: 120,
+            turnSpeedDegrees: 3.0,
+            targetRadius: 20.0,
+        });
+
+        this.stateFindPlayer = new WalkerStateFindPlayer(this, this.axisZ, param, {
+            turnSpeedDegrees: 5.0,
+            jumpStartStep: 14,
+            jumpVelocity: 20.0,
+        });
+
+        this.stateChase = new WalkerStateChase(this, this.axisZ, param, {
+            speed: 0.4,
+            turnSpeedDegrees: 2.0,
+            loseSightEndStep: 130,
+            forceEndStep: 300,
+            endStep: 14,
+        });
+    }
+
+    private initAppearState(infoIter: JMapInfoIter): void {
+        const appearState = fallback(getJMapInfoArg1(infoIter), -1);
+        if (appearState === 0) {
+            // TODO(jstpierre): AppearFromBox
+            // this.setNerve(KuriboNrv.AppearFromBox);
+            quatGetAxisZ(this.axisZ, this.poseQuat);
+        }
+    }
+
     protected calcAndSetBaseMtx(): void {
-        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.quat, this.translation);
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
     }
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -1646,7 +1688,7 @@ export class Kuribo extends LiveActor<KuriboNrv> {
             calcGravity(sceneObjHolder, this);
 
         const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
-        blendQuatFromGroundAndFront(this.quat, this, this.front, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
+        blendQuatFromGroundAndFront(this.poseQuat, this, this.axisZ, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
 
         if (calcVelocityAreaOrRailMoveOnGround(scratchVec3a, sceneObjHolder, this))
             vec3.add(this.velocity, this.velocity, scratchVec3a);
@@ -1716,48 +1758,6 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         addHitSensor(sceneObjHolder, this, 'attack', HitSensorType.EnemyAttack, 8, 45.8 * this.scale[1], scratchVec3a);
     }
 
-    private initState(): void {
-        const param: WalkerStateParam = {
-            gravitySpeed: 1.5,
-            velDragAir: 0.99,
-            velDragGround: 0.93,
-            sightFanRadius: 1000.0,
-            sightFanAngleH: 70.0,
-            sightFanAngleV: 30.0,
-        };
-
-        this.stateWander = new WalkerStateWander(this, this.front, param, {
-            walkSpeed: 0.2,
-            waitStep: 120,
-            walkStep: 120,
-            turnSpeedDegrees: 3.0,
-            targetRadius: 20.0,
-        });
-
-        this.stateFindPlayer = new WalkerStateFindPlayer(this, this.front, param, {
-            turnSpeedDegrees: 5.0,
-            jumpStartStep: 14,
-            jumpVelocity: 20.0,
-        });
-
-        this.stateChase = new WalkerStateChase(this, this.front, param, {
-            speed: 0.4,
-            turnSpeedDegrees: 2.0,
-            loseSightEndStep: 130,
-            forceEndStep: 300,
-            endStep: 14,
-        });
-    }
-
-    private initAppearState(infoIter: JMapInfoIter): void {
-        const appearState = fallback(getJMapInfoArg1(infoIter), -1);
-        if (appearState === 0) {
-            // TODO(jstpierre): AppearFromBox
-            // this.setNerve(KuriboNrv.AppearFromBox);
-            quatGetAxisZ(this.front, this.quat);
-        }
-    }
-
     private tryFind(sceneObjHolder: SceneObjHolder): boolean {
         if (this.stateFindPlayer.isInSightPlayer(sceneObjHolder)) {
             this.setNerve(KuriboNrv.FindPlayer);
@@ -1770,6 +1770,185 @@ export class Kuribo extends LiveActor<KuriboNrv> {
     private tryNonActive(sceneObjHolder: SceneObjHolder): boolean {
         // TODO(jstpierre)
         return false;
+    }
+}
+
+const enum KuriboMiniNrv { Wander, FindPlayer, Chase }
+export class KuriboMini extends LiveActor<KuriboMiniNrv> {
+    private poseQuat = quat.create();
+    private axisZ = vec3.create();
+    private stateWander: WalkerStateWander;
+    private stateFindPlayer: WalkerStateFindPlayer;
+    private stateChase: WalkerStateChase;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'KuriboMini');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'KuriboMini');
+        connectToSceneEnemy(sceneObjHolder, this);
+
+        makeQuatAndFrontFromRotate(this.poseQuat, this.axisZ, this);
+        this.calcGravityFlag = true;
+        initLightCtrl(sceneObjHolder, this);
+        declareStarPiece(sceneObjHolder, this, 3);
+        declareCoin(sceneObjHolder, this, 1);
+
+        // ItemGenerator
+        // AnimScaleController
+        // initSound
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initStarPointerTarget
+        initShadowVolumeSphere(sceneObjHolder, this, 40.0);
+        this.initHitSensor();
+        vec3.set(scratchVec3a, 0.0, 60.0, 0.0);
+        addHitSensorEnemy(sceneObjHolder, this, 'body', 8, 60.0, scratchVec3a);
+        addHitSensorEnemyAttack(sceneObjHolder, this, 'attack', 8, 40.0, scratchVec3a);
+
+        this.initBinder(60.0, 60.0, 0);
+        this.initNerve(KuriboMiniNrv.Wander);
+        this.initState();
+
+        useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
+        useStageSwitchSleep(sceneObjHolder, this, infoIter);
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        super.initAfterPlacement(sceneObjHolder);
+        trySetMoveLimitCollision(sceneObjHolder, this);
+    }
+
+    private initState(): void {
+        const param: WalkerStateParam = {
+            gravitySpeed: 1.5,
+            velDragAir: 0.99,
+            velDragGround: 0.93,
+            sightFanRadius: 1000.0,
+            sightFanAngleH: 70.0,
+            sightFanAngleV: 30.0,
+        };
+
+        this.stateWander = new WalkerStateWander(this, this.axisZ, param, {
+            walkSpeed: 0.1,
+            waitStep: 120,
+            walkStep: 120,
+            turnSpeedDegrees: 3.0,
+            targetRadius: 20.0,
+        });
+
+        this.stateFindPlayer = new WalkerStateFindPlayer(this, this.axisZ, param, {
+            turnSpeedDegrees: 5.0,
+            jumpStartStep: 14,
+            jumpVelocity: 10.0,
+        });
+
+        this.stateChase = new WalkerStateChase(this, this.axisZ, param, {
+            speed: 0.2,
+            turnSpeedDegrees: 2.0,
+            loseSightEndStep: 130,
+            forceEndStep: 300,
+            endStep: 14,
+        });
+    }
+
+
+    protected calcAndSetBaseMtx(): void {
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        const deltaTimeFrames = getDeltaTimeFrames(viewerInput);
+        blendQuatFromGroundAndFront(this.poseQuat, this, this.axisZ, 0.05 * deltaTimeFrames, 0.5 * deltaTimeFrames);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: KuriboMiniNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === KuriboMiniNrv.Wander) {
+            updateActorState(sceneObjHolder, this, this.stateWander, deltaTimeFrames);
+
+            if (this.tryFind(sceneObjHolder))
+                return;
+            if (this.tryDeadMap(sceneObjHolder))
+                return;
+        } else if (currentNerve === KuriboMiniNrv.FindPlayer) {
+            if (updateActorStateAndNextNerve(sceneObjHolder, this, this.stateFindPlayer, KuriboMiniNrv.Chase, deltaTimeFrames))
+                return;
+            if (this.tryDeadMap(sceneObjHolder))
+                return;
+        } else if (currentNerve === KuriboMiniNrv.Chase) {
+            if (updateActorStateAndNextNerve(sceneObjHolder, this, this.stateChase, KuriboMiniNrv.Wander, deltaTimeFrames))
+                this.stateWander.setWanderCenter(this.translation);
+            if (this.tryDeadMap(sceneObjHolder))
+                return;
+        }
+    }
+
+    private tryFind(sceneObjHolder: SceneObjHolder): boolean {
+        if (this.stateFindPlayer.isInSightPlayer(sceneObjHolder)) {
+            this.setNerve(KuriboMiniNrv.FindPlayer);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private tryDeadMap(sceneObjHolder: SceneObjHolder): boolean {
+        if (isInDeath(sceneObjHolder, this.translation) || isBindedGroundDamageFire(sceneObjHolder, this) || isInWater(sceneObjHolder, this.translation)) {
+            this.makeActorDead(sceneObjHolder);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private isEnableAttack(): boolean {
+        return this.isNerve(KuriboMiniNrv.Wander) || this.isNerve(KuriboMiniNrv.FindPlayer) || this.isNerve(KuriboMiniNrv.Chase);
+    }
+
+    private isEnablePushMove(): boolean {
+        // FlatDown, HipDropDown, PressDown, BlowDown
+        return true;
+    }
+
+    private requestAttackSuccess(sceneObjHolder: SceneObjHolder): void {
+        // should never happen in practice
+        throw "whoops";
+    }
+
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        if (!thisSensor.isType(HitSensorType.Kuribo)) {
+            if (isSensorEnemy(otherSensor) || (!this.isEnableAttack() && isSensorPlayer(otherSensor)) && this.isEnablePushMove())
+                sendMsgPushAndKillVelocityToTarget(sceneObjHolder, this, otherSensor, thisSensor);
+        }
+
+        if (this.isEnableAttack()) {
+            if (isSensorPlayer(otherSensor) && thisSensor.isType(HitSensorType.EnemyAttack)) {
+                if (/* isPlayerHipDropFalling(sceneObjHolder) || */ !sendMsgEnemyAttack(sceneObjHolder, otherSensor, thisSensor))
+                    sendMsgPush(sceneObjHolder, otherSensor, thisSensor);
+                else
+                    this.requestAttackSuccess(sceneObjHolder);
+            }
+        }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
+        if (thisSensor.isType(HitSensorType.EnemyAttack))
+            return false;
+
+        if (isSensorEnemy(otherSensor) || isSensorRide(otherSensor) || (!this.isEnableAttack() && isSensorPlayer(thisSensor)) || this.isEnablePushMove())
+            addVelocityFromPush(this, 1.5, otherSensor, thisSensor);
+
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
     }
 }
 
@@ -3518,7 +3697,7 @@ export class KoteBug extends LiveActor<KoteBugNrv> {
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
 
-        if (isInWater(sceneObjHolder, this.translation) /* || isInDeath(this) */) {
+        if (isInWater(sceneObjHolder, this.translation) || isInDeath(sceneObjHolder, this.translation)) {
             this.makeActorDead(sceneObjHolder);
             return;
         }

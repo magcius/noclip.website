@@ -2,7 +2,7 @@
 import { NameObj, MovementType, DrawType } from "./NameObj";
 import { OceanBowl } from "./Actors/OceanBowl";
 import { SceneObjHolder, SpecialTextureType, getDeltaTimeFrames, SceneObj } from "./Main";
-import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST } from "./ActorUtil";
+import { connectToSceneScreenEffectMovement, getCamPos, connectToSceneAreaObj, getPlayerPos, connectToScene, loadBTIData, setTextureMatrixST, isValidSwitchA } from "./ActorUtil";
 import { ViewerRenderInput } from "../viewer";
 import { AreaObjMgr, AreaObj, AreaFormType } from "./AreaObj";
 import { vec3, mat4, ReadonlyVec3 } from "gl-matrix";
@@ -486,5 +486,34 @@ export class MercatorTransformCube extends AreaObj {
 
 export function createMercatorCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): MercatorTransformCube {
     return new MercatorTransformCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+}
+//#endregion
+
+//#region DeathArea
+export class DeathArea extends AreaObj {
+    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+        connectToSceneAreaObj(sceneObjHolder, this);
+    }
+
+    public isInVolume(v: ReadonlyVec3) {
+        // TODO(jstpierre): SwitchA
+        return super.isInVolume(v);
+    }
+
+    public getManagerName(): string {
+        return 'DeathArea';
+    }
+}
+
+export function createDeathCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+}
+
+export function createDeathSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Sphere);
+}
+
+export function createDeathCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
 }
 //#endregion
