@@ -4,12 +4,12 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, range, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isHiddenModel, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
 import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
 import { initFur } from '../Fur';
-import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors } from '../HitSensor';
+import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { isDead, isMsgTypeEnemyAttack, LiveActor, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
@@ -1580,7 +1580,7 @@ function calcVelocityAreaOrRailMoveOnGround(dst: vec3, sceneObjHolder: SceneObjH
     return false;
 }
 
-const enum KuriboNrv { Wander, FindPlayer, Chase }
+const enum KuriboNrv { AppearFromBox, Wander, FindPlayer, Chase }
 export class Kuribo extends LiveActor<KuriboNrv> {
     private quat = quat.create();
     private front = vec3.create();
@@ -1611,9 +1611,11 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         const radius = 70.0 * this.scale[1];
         this.initBinder(radius, radius, 0);
         this.initEffectKeeper(sceneObjHolder, null);
+        this.initSensor(sceneObjHolder);
         initShadowVolumeSphere(sceneObjHolder, this, 60.0);
         this.initState();
         this.initNerve(KuriboNrv.Wander);
+        this.initAppearState(infoIter);
 
         useStageSwitchWriteDead(sceneObjHolder, this, infoIter);
         useStageSwitchSleep(sceneObjHolder, this, infoIter);
@@ -1667,6 +1669,53 @@ export class Kuribo extends LiveActor<KuriboNrv> {
         }
     }
 
+    private isEnableAttack(): boolean {
+        return this.isNerve(KuriboNrv.Wander) || this.isNerve(KuriboNrv.FindPlayer) || this.isNerve(KuriboNrv.Chase);
+    }
+
+    private isEnablePushMove(): boolean {
+        // FlatDown, HipDropDown, PressDown, BlowDown
+        return true;
+    }
+
+    private requestAttackSuccess(sceneObjHolder: SceneObjHolder): void {
+        // should never happen in practice
+        throw "whoops";
+    }
+
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        if (!thisSensor.isType(HitSensorType.Kuribo)) {
+            if (isSensorEnemy(otherSensor) || (!this.isEnableAttack() && isSensorPlayer(otherSensor)) && this.isEnablePushMove())
+                sendMsgPushAndKillVelocityToTarget(sceneObjHolder, this, otherSensor, thisSensor);
+        }
+
+        if (this.isEnableAttack()) {
+            if (isSensorPlayer(otherSensor) && thisSensor.isType(HitSensorType.EnemyAttack)) {
+                if (/* isPlayerHipDropFalling(sceneObjHolder) || */ !sendMsgEnemyAttack(sceneObjHolder, otherSensor, thisSensor))
+                    sendMsgPush(sceneObjHolder, otherSensor, thisSensor);
+                else
+                    this.requestAttackSuccess(sceneObjHolder);
+            }
+        }
+    }
+
+    public receiveMessage(sceneObjHolder: SceneObjHolder, messageType: MessageType, otherSensor: HitSensor, thisSensor: HitSensor): boolean {
+        if (thisSensor.isType(HitSensorType.EnemyAttack))
+            return false;
+
+        if (isSensorEnemy(otherSensor) || isSensorRide(otherSensor) || (!this.isEnableAttack() && isSensorPlayer(thisSensor)) || this.isEnablePushMove())
+            addVelocityFromPush(this, 1.5, otherSensor, thisSensor);
+
+        return super.receiveMessage(sceneObjHolder, messageType, otherSensor, thisSensor);
+    }
+
+    private initSensor(sceneObjHolder: SceneObjHolder): void {
+        this.initHitSensor();
+        vec3.set(scratchVec3a, 0.0, 75.0 * this.scale[1], 0.0);
+        addHitSensor(sceneObjHolder, this, 'body', HitSensorType.Kuribo, 8, scratchVec3a[1], scratchVec3a);
+        addHitSensor(sceneObjHolder, this, 'attack', HitSensorType.EnemyAttack, 8, 45.8 * this.scale[1], scratchVec3a);
+    }
+
     private initState(): void {
         const param: WalkerStateParam = {
             gravitySpeed: 1.5,
@@ -1698,6 +1747,15 @@ export class Kuribo extends LiveActor<KuriboNrv> {
             forceEndStep: 300,
             endStep: 14,
         });
+    }
+
+    private initAppearState(infoIter: JMapInfoIter): void {
+        const appearState = fallback(getJMapInfoArg1(infoIter), -1);
+        if (appearState === 0) {
+            // TODO(jstpierre): AppearFromBox
+            // this.setNerve(KuriboNrv.AppearFromBox);
+            quatGetAxisZ(this.front, this.quat);
+        }
     }
 
     private tryFind(sceneObjHolder: SceneObjHolder): boolean {

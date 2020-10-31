@@ -13,7 +13,7 @@ import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj } from "./AreaObj";
 import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isOnGround, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
-import { HitSensor } from "./HitSensor";
+import { HitSensor, sendMsgPush } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
 import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, LiveActorGroup, makeMtxTRFromActor, MsgSharedGroup } from "./LiveActor";
 import { ResourceHolder, SceneObj, SceneObjHolder } from "./Main";
@@ -1543,6 +1543,29 @@ export function addVelocityFromPushHorizon(actor: LiveActor, speed: number, othe
     vec3.add(actor.velocity, actor.velocity, scratchVec3a);
 }
 
+export function addVelocityLimit(actor: LiveActor, addVel: ReadonlyVec3): void {
+    const addSpeed = vec3.length(addVel);
+    vec3.normalize(scratchVec3a, scratchVec3a);
+
+    if (isNearZeroVec3(scratchVec3a, 0.001))
+        return;
+
+    const dot = vec3.dot(actor.velocity, scratchVec3a);
+    if (dot < addSpeed)
+        vec3.scaleAndAdd(actor.velocity, actor.velocity, scratchVec3a, (addSpeed - dot));
+}
+
+export function addVelocityFromPush(actor: LiveActor, speed: number, otherSensor: HitSensor, thisSensor: HitSensor): void {
+    vec3.sub(scratchVec3a, thisSensor.center, otherSensor.center);
+    vec3.negate(scratchVec3b, actor.gravityVector);
+
+    if (speed < vec3.dot(actor.velocity, scratchVec3b))
+        vecKillElement(scratchVec3a, scratchVec3a, actor.gravityVector);
+
+    normToLength(scratchVec3a, speed);
+    addVelocityLimit(actor, scratchVec3a);
+}
+
 export function addVelocityToGravity(actor: LiveActor, speed: number): void {
     vec3.scaleAndAdd(actor.velocity, actor.velocity, actor.gravityVector, speed);
 }
@@ -1629,5 +1652,17 @@ export class FixedPosition {
         mat4.mul(this.transformMatrix, this.transformMatrix, scratchMatrix);
         if (this.normalizeScale)
             computeMatrixWithoutScale(this.transformMatrix, this.transformMatrix);
+    }
+}
+
+export function sendMsgPushAndKillVelocityToTarget(sceneObjHolder: SceneObjHolder, actor: LiveActor, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
+    if (sendMsgPush(sceneObjHolder, recvSensor, sendSensor)) {
+        vec3.sub(scratchVec3a, sendSensor.center, recvSensor.center);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+        if (vec3.dot(scratchVec3a, actor.velocity) > 0.0)
+            vecKillElement(actor.velocity, actor.velocity, scratchVec3a);
+        return true;
+    } else {
+        return false;
     }
 }
