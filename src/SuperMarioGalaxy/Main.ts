@@ -127,7 +127,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     private imageEffectTexture1 = new ColorTexture();
 
     private currentScenarioIndex: number = -1;
-    private scenarioSelect: UI.SingleSelect | null;
+    private scenarioSelect: UI.SingleSelect | null = null;
 
     private scenarioNoToIndex: number[] = [];
 
