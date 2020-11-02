@@ -1116,7 +1116,7 @@ export class Binder {
             const dstHitInfo = this.hitInfos[this.hitInfoCount + i];
             dstHitInfo.copy(keeper.strikeInfo[i]);
 
-            if (expandDistance)
+            if (!expandDistance)
                 dstHitInfo.distance += 1.2;
         }
 

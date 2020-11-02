@@ -24,7 +24,8 @@ import { appearCoinPop, declareCoin, isEqualStageName, PartsModel } from './Misc
 import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
 import { getWaterAreaObj } from '../MiscMap';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
-import { drawWorldSpaceFan, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpaceFan, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { Green, Red } from '../../Color';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -1313,6 +1314,7 @@ function isFallNextMove(sceneObjHolder: SceneObjHolder, position: ReadonlyVec3, 
 
     vec3.scale(scratchVec3b, gravity, upPosDistance + downSearchDistance);
     const numHitInfo = sceneObjHolder.collisionDirector.keepers[0].checkStrikeLine(sceneObjHolder, scratchVec3a, scratchVec3b, null, filter);
+    // drawWorldSpaceVector(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b, 1.0, numHitInfo ? Green : Red);
     return numHitInfo === 0;
 }
 
@@ -3851,7 +3853,7 @@ function turnDirectionToGround(front: vec3, actor: LiveActor): void {
 function addVelocityToGravityOrGround(actor: LiveActor, gravitySpeed: number): void {
     if (isBindedGround(actor)) {
         const groundNormal = actor.binder!.floorHitInfo.faceNormal;
-        vecKillElement(actor.velocity, actor.velocity, groundNormal);
+        vec3.scaleAndAdd(actor.velocity, actor.velocity, groundNormal, -gravitySpeed);
     } else {
         addVelocityToGravity(actor, gravitySpeed);
     }
