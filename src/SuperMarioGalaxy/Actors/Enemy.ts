@@ -5071,7 +5071,11 @@ export class Petari extends LiveActor<PetariNrv> {
         this.setNerve(PetariNrv.JumpOut);
         return true;
 
+<<<<<<< HEAD
 enum CocoNutBallNrv { Throw }
+=======
+enum CocoNutBallNrv { Throw };
+>>>>>>> 32f5bcd7 (SQUASH add to NameObjFactory)
 
 class CocoNutBall extends LiveActor<CocoNutBallNrv> {
 
