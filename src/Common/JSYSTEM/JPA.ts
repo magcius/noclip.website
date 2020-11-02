@@ -1302,7 +1302,7 @@ export class JPABaseEmitter {
         copy_rndm(this.random, this.emitterManager.workData.random);
         mat4.identity(this.globalRotation);
         vec3.set(this.globalScale, 1, 1, 1);
-        vec3.set(this.globalTranslation, 0, 0, 0);
+        vec3.zero(this.globalTranslation);
         vec2.set(this.globalScale2D, 1, 1);
         colorCopy(this.globalColorPrm, White);
         colorCopy(this.globalColorEnv, White);
@@ -1462,7 +1462,7 @@ export class JPABaseEmitter {
     }
 
     private calcVolumePoint(workData: JPAEmitterWorkData): void {
-        vec3.set(workData.volumePos, 0, 0, 0);
+        vec3.zero(workData.volumePos);
         const rndX = get_rndm_f(this.random) - 0.5;
         const rndY = get_rndm_f(this.random) - 0.5;
         const rndZ = get_rndm_f(this.random) - 0.5;
@@ -2241,7 +2241,7 @@ export class JPABaseParticle {
         this.position[1] = this.globalPosition[1] + this.localPosition[1] * workData.globalScale[1];
         this.position[2] = this.globalPosition[2] + this.localPosition[2] * workData.globalScale[2];
 
-        vec3.set(this.baseVel, 0, 0, 0);
+        vec3.zero(this.baseVel);
 
         if (baseEmitter.initialVelOmni !== 0)
             normToLengthAndAdd(this.baseVel, workData.velOmni, baseEmitter.initialVelOmni);
@@ -2283,7 +2283,7 @@ export class JPABaseParticle {
         const accel = bem1.accel * (1.0 + (get_r_zp(baseEmitter.random) * bem1.accelRndm));
         normToLength(this.accel, accel);
 
-        vec3.set(this.fieldAccel, 0, 0, 0);
+        vec3.zero(this.fieldAccel);
 
         this.drag = 1.0;
         this.airResist = Math.min(bem1.airResist + (bem1.airResistRndm * get_r_zh(baseEmitter.random)), 1);
@@ -2610,7 +2610,7 @@ export class JPABaseParticle {
 
         const dist = vec3.length(scratchVec3a);
         if (dist === 0) {
-            vec3.set(scratchVec3a, 0, 0, 0);
+            vec3.zero(scratchVec3a);
         } else {
             const scale = field.refDistanceSq / dist;
             vec3.scale(scratchVec3a, scratchVec3a, scale);
@@ -2735,7 +2735,7 @@ export class JPABaseParticle {
         if (!!(this.flags & 0x20))
             vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
 
-        vec3.set(this.fieldVel, 0, 0, 0);
+        vec3.zero(this.fieldVel);
         vec3.scaleAndAdd(this.baseVel, this.baseVel, this.accel, workData.deltaTime);
 
         if (!(this.flags & 0x40))
@@ -2860,7 +2860,7 @@ export class JPABaseParticle {
                 vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
 
             this.baseVel[1] -= ssp1.gravity;
-            vec3.set(this.fieldVel, 0, 0, 0);
+            vec3.zero(this.fieldVel);
 
             if (!(this.flags & 0x40))
                 this.calcField(workData);

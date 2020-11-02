@@ -1141,7 +1141,7 @@ class CircleCoinGroup extends CoinGroup {
         const coinCount = this.coinArray.length;
         for (let i = 0; i < coinCount; i++) {
             const theta = (i / coinCount) * MathConstants.TAU;
-            vec3.set(scratchVec3, 0, 0, 0);
+            vec3.zero(scratchVec3);
             vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3a, this.radius * Math.cos(theta));
             vec3.scaleAndAdd(scratchVec3, scratchVec3, scratchVec3b, this.radius * Math.sin(theta));
             vec3.add(scratchVec3, scratchVec3, this.translation);
@@ -1348,7 +1348,7 @@ export class SimpleEffectObj extends LiveActor {
     }
 
     protected getClippingCenterOffset(v: vec3): void {
-        vec3.set(v, 0, 0, 0);
+        vec3.zero(v);
     }
 
     protected isSyncClipping(): boolean {
@@ -1813,7 +1813,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
             if (isFirstStep(this)) {
                 hideModel(this);
                 emitEffect(sceneObjHolder, this, 'ShootingStarBreak');
-                vec3.set(this.velocity, 0, 0, 0);
+                vec3.zero(this.velocity);
             }
 
             if (isGreaterStep(this, this.delay)) {
@@ -6675,7 +6675,7 @@ export class PlantGroup extends LiveActor {
     }
 
     private placeOnCollisionFormCircle(sceneObjHolder: SceneObjHolder, center: vec3, gravity: vec3): void {
-        vec3.set(center, 0, 0, 0);
+        vec3.zero(center);
 
         let angle = MathConstants.TAU;
         let plantsPerRing = 0;

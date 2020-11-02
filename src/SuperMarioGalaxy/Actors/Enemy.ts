@@ -315,7 +315,7 @@ abstract class Onimasu extends LiveActor<OnimasuNrv> {
         // startRumbleWithShakeCameraNormalWeak
         const nextPointNo = this.getNextPointNo();
         calcRailPointPos(this.translation, this, nextPointNo);
-        vec3.set(this.velocity, 0, 0, 0);
+        vec3.zero(this.velocity);
         moveCoordToRailPoint(this, nextPointNo);
     }
 
@@ -914,7 +914,7 @@ export class Unizo extends LiveActor<UnizoNrv> {
 
         quatFromEulerRadians(this.rollRotation, this.rotation[0], this.rotation[1], this.rotation[2]);
         quat.normalize(this.rollRotation, this.rollRotation);
-        vec3.set(this.rotation, 0, 0, 0);
+        vec3.zero(this.rotation);
 
         this.isInAir = true;
     }
