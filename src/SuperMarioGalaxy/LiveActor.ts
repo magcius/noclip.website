@@ -548,7 +548,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     public makeActorDead(sceneObjHolder: SceneObjHolder): void {
-        vec3.set(this.velocity, 0, 0, 0);
+        vec3.zero(this.velocity);
         if (this.hitSensorKeeper !== null) {
             this.hitSensorKeeper.clear();
             this.hitSensorKeeper.invalidateBySystem();
@@ -596,7 +596,7 @@ export class LiveActor<TNerve extends number = number> extends NameObj {
     }
 
     protected offScenario(sceneObjHolder: SceneObjHolder): void {
-        vec3.set(this.velocity, 0, 0, 0);
+        // vec3.zero(this.velocity, 0, 0, 0);
         if (this.hitSensorKeeper !== null) {
             this.hitSensorKeeper.clear();
             this.hitSensorKeeper.invalidateBySystem();
