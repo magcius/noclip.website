@@ -722,7 +722,6 @@ class Coin extends LiveActor<CoinNrv> {
     public initialize(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null = null): void {
         if (this.isNeedBubble) {
             this.airBubble = createPartsModelNoSilhouettedMapObj(sceneObjHolder, this, "AirBubble", vec3.fromValues(0, 70, 0));
-            this.airBubble.initFixedPositionJoint(null, null, null);
             this.airBubble.makeActorDead(sceneObjHolder);
             startBck(this.airBubble, 'Move');
         }
@@ -735,7 +734,8 @@ class Coin extends LiveActor<CoinNrv> {
         if (infoIter === null) {
             this.makeActorDead(sceneObjHolder);
         } else {
-            if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            // TODO(jstpierre): Figure out what triggers the appear switch in Gateway Galaxy
+            if (false && useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
                 syncStageSwitchAppear(sceneObjHolder, this);
                 this.makeActorDead(sceneObjHolder);
             } else {
@@ -810,7 +810,7 @@ class Coin extends LiveActor<CoinNrv> {
         } else {
             setSensorRadius(this, 'coin', 150.0);
         }
-        this.flashingCtrl.end()
+        this.flashingCtrl.end();
 
         this.setCalcShadowMode();
         validateShadowAll(this);
@@ -994,7 +994,7 @@ function addToCoinHolder(sceneObjHolder: SceneObjHolder, host: NameObj, coin: Co
 export function createDirectSetCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
     const coin = new Coin(zoneAndLayer, sceneObjHolder, infoIter, false);
     addToCoinHolder(sceneObjHolder, coin, coin);
-    coin.initialize(sceneObjHolder);
+    coin.initialize(sceneObjHolder, infoIter);
     return coin;
 }
 
@@ -1004,8 +1004,10 @@ export function createCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjH
     return coin;
 }
 
-export function createPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
-    return new Coin(zoneAndLayer, sceneObjHolder, infoIter, true);
+export function createDirectSetPurpleCoin(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter | null): Coin {
+    const coin = new Coin(zoneAndLayer, sceneObjHolder, infoIter, true);
+    coin.initialize(sceneObjHolder, infoIter);
+    return coin;
 }
 
 export function requestArchivesCoin(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1033,7 +1035,7 @@ abstract class CoinGroup extends LiveActor<CoinGroupNrv> {
 
         for (let i = 0; i < coinCount; i++) {
             if (this.isPurpleCoin) {
-                this.coinArray.push(createPurpleCoin(zoneAndLayer, sceneObjHolder, null));
+                this.coinArray.push(createDirectSetPurpleCoin(zoneAndLayer, sceneObjHolder, null));
             } else {
                 this.coinArray.push(createCoin(zoneAndLayer, sceneObjHolder, this, null));
             }
