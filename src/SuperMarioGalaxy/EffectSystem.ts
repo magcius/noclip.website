@@ -845,12 +845,16 @@ export class EffectKeeper {
         const isCreateOneTime = isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.OneTime, this.changeBckReset, deltaTimeFrames);
         const isCreateForever = isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.Forever, this.changeBckReset, deltaTimeFrames);
         if (isCreateOneTime || isCreateForever) {
+            let createEmitter = multiEmitter;
             if (multiEmitter.name.includes('Attr'))
-                multiEmitter = this.getEmitter(makeAttributeEffectBaseName(multiEmitter.name))!;
-            if (isCreateOneTime)
-                multiEmitter.createOneTimeEmitter(effectSystem);
-            if (isCreateForever)
-                multiEmitter.createForeverEmitter(effectSystem);
+                createEmitter = this.getEmitter(makeAttributeEffectBaseName(multiEmitter.name))!;
+
+            if (createEmitter !== null) {
+                if (isCreateOneTime)
+                    createEmitter.createOneTimeEmitter(effectSystem);
+                if (isCreateForever)
+                    createEmitter.createForeverEmitter(effectSystem);
+            }
         }
 
         if (isDelete(multiEmitter, this.currentBckName, xanimePlayer, deltaTimeFrames))
