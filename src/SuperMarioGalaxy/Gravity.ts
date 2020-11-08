@@ -8,7 +8,7 @@ import { computeModelMatrixR, computeModelMatrixSRT, MathConstants, getMatrixAxi
 import { calcMtxAxis, calcPerpendicFootToLineInside, getRandomFloat, useStageSwitchWriteA, useStageSwitchWriteB, isValidSwitchA, isValidSwitchB, connectToSceneMapObjMovement, useStageSwitchSleep, isOnSwitchA, isOnSwitchB, makeAxisVerticalZX, makeMtxUpNoSupportPos, vecKillElement } from "./ActorUtil";
 import { NameObj } from "./NameObj";
 import { ViewerRenderInput } from "../viewer";
-import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { drawWorldSpaceLine, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { Red, Green } from "../Color";
 import { RailRider } from "./RailRider";
 
@@ -1259,7 +1259,7 @@ class WireGravity extends PlanetGravity {
         let bestSquaredDist = Infinity;
 
         for (let i = 0; i < this.points.length - 1; i++) {
-            calcPerpendicFootToLineInside(scratchVec3a, pos, this.points[i], this.points[i + 1]);
+            calcPerpendicFootToLineInside(scratchVec3a, pos, this.points[i], this.points[i + 1], scratchVec3h);
 
             const squaredDist = vec3.squaredDistance(scratchVec3a, pos);
             if (squaredDist < bestSquaredDist) {
@@ -1278,6 +1278,12 @@ class WireGravity extends PlanetGravity {
     }
 
     protected generateOwnRandomPoint(dst: vec3): void {
+    }
+
+    public drawDebug(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        for (let i = 0; i < this.points.length - 1; i++) {
+            drawWorldSpaceLine(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.points[i], this.points[i + 1]);
+        }
     }
 }
 

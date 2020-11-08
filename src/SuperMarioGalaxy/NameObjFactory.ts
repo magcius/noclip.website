@@ -8,7 +8,7 @@ import { createLightCtrlCube, createLightCtrlCylinder } from './LightData';
 import { ZoneAndLayer } from './LiveActor';
 import { SceneObjHolder } from "./Main";
 import { Air, AirBubble, AirBubbleGenerator, AstroCountDownPlate, AstroDomeSky, AstroEffectObj, BlackHole, BlueChip, BrightObj, BrightSun, ChooChooTrain, CoconutTree, CoconutTreeLeafGroup, createCircleCoinGroup, createDirectSetCoin, createPurpleCircleCoinGroup, createDirectSetPurpleCoin, createPurpleRailCoin, createRailCoin, createSuperSpinDriverGreen, createSuperSpinDriverPink, createSuperSpinDriverYellow, CrystalCage, EarthenPipe, EffectObj10x10x10SyncClipping, EffectObj20x20x10SyncClipping, EffectObj50x50x10SyncClipping, EffectObjR1000F50, EffectObjR100F50SyncClipping, EffectObjR500F50, ElectricRail, ElectricRailMoving, FirePressureRadiate, FishGroup, Flag, FluffWind, Fountain, FountainBig, FurPlanetMap, GCaptureTarget, HatchWaterPlanet, LavaGeyser, LavaProminence, LavaSteam, MiniatureGalaxy, Mogucchi, MovieStarter, OceanFloaterLandParts, OceanRing, PalmIsland, PhantomTorch, PlanetMap, PlantGroup, Pole, PriorDrawAir, PunchBox, QuestionCoin, RailPlanetMap, RandomEffectObj, requestArchivesCoin, requestArchivesPurpleCoin, requestArchivesSuperSpinDriver, ScrewSwitch, ScrewSwitchReverse, SeaGullGroup, Shellfish, ShootingStar, SimpleEffectObj, Sky, SubmarineSteam, SurprisedGalaxy, SwingRope, TimerSwitch, Trapeze, TreasureBoxCracked, UFOBreakable, UFOSolid, WarpPod, WaterLeakPipe, WaterPlant, WoodBox, YellowChip, Creeper, WhirlPoolAccelerator } from "./Actors/MiscActor";
-import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo } from './Actors/MapObj';
+import { AstroCore, AstroDome, AstroMapObj, CollapsePlane, DriftWood, OceanWaveFloater, PeachCastleGardenPlanet, RailMoveObj, RotateMoveObj, SideSpikeMoveStep, SimpleEnvironmentObj, SimpleMapObj, Tsukidashikun, UFOKinoko, UFOKinokoUnderConstruction, RockCreator, WatchTowerRotateStep, TreasureSpot, WaterPressure, BreakableCage, LargeChain, MeteorStrikeLauncher, AssemblyBlock, StarPiece, StarPieceGroup, ItemBubble, PowerStarHalo, FireBar } from './Actors/MapObj';
 import { Butler, Kinopio, KinopioAstro, Peach, Penguin, PenguinRacer, Rosetta, SignBoard, Tico, TicoAstro, TicoComet, TicoRail } from './Actors/NPC';
 import { createDeathCube, createHazeCube, createMercatorCube, createSwitchCube, createSwitchCylinder, createSwitchSphere, createWaterAreaCube, createWaterAreaCylinder, createWaterAreaSphere, requestArchivesHazeCube, requestArchivesWaterArea } from './MiscMap';
 import { NameObj, GameBits } from './NameObj';
@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, DinoPackun, Dossun, EyeBeamer, HomingKillerLauncher, Karon, KoteBug, Kuribo, KuriboMini, Mogu, NokonokoLand, OnimasuJump, RingBeamer, Snakehead, Takobo, Unizo } from './Actors/Enemy';
+import { BallBeamer, DinoPackun, Dossun, EyeBeamer, Hanachan, HomingKillerLauncher, Karon, KoteBug, Kuribo, KuriboMini, Mogu, NokonokoLand, OnimasuJump, RingBeamer, Snakehead, Takobo, Unizo } from './Actors/Enemy';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
@@ -123,6 +123,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("Karon",                          Karon),
     _("Snakehead",                      Snakehead),
     _("SnakeheadSmall",                 Snakehead),
+    _("Hanachan",                       Hanachan),
 
     // NPCs
     _("Butler",                         Butler),
@@ -172,6 +173,7 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("EarthenPipeInWater",             EarthenPipe),
     _("ElectricRail",                   ElectricRail),
     _("ElectricRailMoving",             ElectricRailMoving),
+    _("FireBar",                        FireBar),
     _("FirePressureRadiate",            FirePressureRadiate),
     _("Flag",                           Flag),
     _("FlagKoopaA",                     Flag),

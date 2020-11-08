@@ -835,6 +835,13 @@ export function calcNearestRailDirection(dst: vec3, actor: LiveActor, translatio
     actor.railRider!.calcDirectionAtCoord(dst, coord);
 }
 
+export function calcNearestRailPosAndDirection(dstPos: vec3, dstDirection: vec3, actor: LiveActor, translation: ReadonlyVec3): number {
+    const coord = actor.railRider!.calcNearestPos(translation);
+    actor.railRider!.calcPosAtCoord(dstPos, coord);
+    actor.railRider!.calcDirectionAtCoord(dstDirection, coord);
+    return coord;
+}
+
 export function calcMtxAxis(axisX: vec3 | null, axisY: vec3 | null, axisZ: vec3 | null, m: mat4): void {
     getMatrixAxis(axisX, axisY, axisZ, m);
 }
@@ -974,6 +981,8 @@ export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: nu
     if (sin > MathConstants.EPSILON) {
         const cos = vec3.dot(v0, v1);
         const theta = Math.atan2(sin, cos);
+        // normalize
+        vec3.scale(scratch, scratch, 1.0 / sin);
         quat.setAxisAngle(q, scratch, theta * t);
     } else {
         quat.identity(q);
@@ -1082,9 +1091,13 @@ export function blendQuatUpFront(dst: quat, q: ReadonlyQuat, up: ReadonlyVec3, f
     if (vec3.dot(axisZ, axisY) < 0.0 && isSameDirection(axisZ, axisY, 0.01))
         turnRandomVector(axisZ, axisZ, 0.001);
 
+    const v0 = vec3.clone(axisZ);
+    const v1 = vec3.clone(axisY);
     quatSetRotate(scratchQuat, axisZ, axisY, speedFront, scratch);
     quat.mul(dst, scratchQuat, dst);
     quat.normalize(dst, dst);
+    quatGetAxisZ(scratch, dst);
+    const ret = vec3.clone(scratch);
 }
 
 export function turnQuat(dst: quat, q: ReadonlyQuat, v0: ReadonlyVec3, v1: ReadonlyVec3, rad: number): void {

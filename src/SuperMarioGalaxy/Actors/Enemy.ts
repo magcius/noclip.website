@@ -1,10 +1,10 @@
 
 import { mat4, quat, ReadonlyMat4, ReadonlyQuat, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
-import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, range, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
+import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, range, saturate, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
 import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
@@ -25,7 +25,7 @@ import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './Mode
 import { getWaterAreaObj } from '../MiscMap';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { drawWorldSpaceFan, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
-import { Green, Red } from '../../Color';
+import { Blue, Green, Red } from '../../Color';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -2612,7 +2612,7 @@ export class DinoPackun extends LiveActor {
 }
 
 export function turnVecToVecRadian(dst: vec3, src: ReadonlyVec3, target: ReadonlyVec3, speed: number, up: ReadonlyVec3): number {
-    const dot = vec3.dot(src, target);
+    const dot = Math.min(vec3.dot(src, target), 1.0);
 
     const diffAngle = Math.acos(dot);
     if (isNearZero(diffAngle, 0.001))
@@ -4247,5 +4247,239 @@ export class Snakehead extends LiveActor<SnakeheadNrv> {
             sceneObjHolder.modelCache.requestObjectData('SnakeheadSmall');
             sceneObjHolder.modelCache.requestObjectData('SnakeheadSmallShadow');
         }
+    }
+}
+
+const enum HanachanPartsType { Head, Body, BodyS }
+const enum HanachanPartsNrv { Walk }
+class HanachanParts extends LiveActor<HanachanPartsNrv> {
+    private type: HanachanPartsType;
+    public fallVelocity = vec3.create();
+    public moveVelocity = vec3.create();
+    public poseQuat = quat.create();
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, partsName: string, private partsIndex: number) {
+        super(zoneAndLayer, sceneObjHolder, 'HanachanParts');
+
+        this.initModelManagerWithAnm(sceneObjHolder, partsName);
+        if (partsName === 'HanachanHead')
+            this.type = HanachanPartsType.Head;
+        else if (partsName === 'HanachanBody')
+            this.type = HanachanPartsType.Body;
+        else if (partsName === 'HanachanBodyS')
+            this.type = HanachanPartsType.BodyS;
+        else
+            throw "whoops";
+
+        this.initNerve(HanachanPartsNrv.Walk);
+        this.initHitSensor();
+        if (this.type === HanachanPartsType.Head)
+            addHitSensorEnemy(sceneObjHolder, this, 'body', 32, 85.0, vec3.set(scratchVec3a, 0, 100.0, 0.0));
+        else if (this.type === HanachanPartsType.Body)
+            addHitSensorEnemy(sceneObjHolder, this, 'body', 32, 85.0, vec3.set(scratchVec3a, 0, 85.0, 0.0));
+        else if (this.type === HanachanPartsType.BodyS)
+            addHitSensorEnemy(sceneObjHolder, this, 'body', 32, 85.0, vec3.set(scratchVec3a, 0, 100.0, 0.0));
+
+        connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.MapObjDecoration, DrawBufferType.Enemy, DrawType.None);
+        this.initBinder(100.0, 100.0, 0);
+        this.initEffectKeeper(sceneObjHolder, null);
+        initLightCtrl(sceneObjHolder, this);
+        this.calcGravityFlag = true;
+        initShadowVolumeSphere(sceneObjHolder, this, 70.0);
+        startBrk(this, 'Normal');
+
+        if (this.type === HanachanPartsType.Head)
+            startBva(this, 'normal');
+    }
+
+    protected calcAndSetBaseMtx(): void {
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HanachanPartsNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === HanachanPartsNrv.Walk) {
+            if (isFirstStep(this)) {
+                startAction(this, 'Walk');
+                getBckFrameMax(this);
+                setBckFrame(this, this.partsIndex * 8);
+            }
+
+            vec3.copy(this.velocity, this.fallVelocity);
+            vec3.add(this.velocity, this.velocity, this.moveVelocity);
+
+            if (isOnGround(this)) {
+                vec3.zero(this.fallVelocity);
+            } else {
+                const commonGravity = this.getCommonGravity();
+                vec3.scaleAndAdd(this.fallVelocity, this.fallVelocity, commonGravity, 0.5);
+                vec3.scale(this.fallVelocity, this.fallVelocity, 0.98);
+            }
+        }
+    }
+
+    private getCommonGravity(): ReadonlyVec3 {
+        // TODO(jstpierre)
+        return this.gravityVector;
+    }
+}
+
+function calcMovingDirectionAlongRail(dst: vec3, actor: LiveActor, pos: ReadonlyVec3, v1: number, killGravity: boolean): number {
+    const nearestCoord = calcNearestRailPosAndDirection(scratchVec3a, scratchVec3b, actor, pos);
+    actor.railRider!.setCoord(nearestCoord);
+
+    if (!isLoopRail(actor) && isRailReachedGoal(actor)) {
+        reverseRailDirection(actor);
+        // TODO(jstpierre): return DidReachGoal.
+    }
+
+    if (!isRailGoingToEnd(actor))
+        vec3.negate(scratchVec3b, scratchVec3b);
+
+    vec3.sub(scratchVec3a, scratchVec3a, pos);
+
+    if (killGravity) {
+        vecKillElement(scratchVec3a, scratchVec3a, actor.gravityVector);
+        vecKillElement(scratchVec3b, scratchVec3b, actor.gravityVector);
+    }
+
+    const distance = vec3.length(scratchVec3a);
+    vec3.scale(scratchVec3a, scratchVec3a, 1.0 / v1);
+    vec3.add(dst, scratchVec3a, scratchVec3b);
+    vec3.normalize(dst, dst);
+    return distance;
+}
+
+const enum HanachanNrv { Walk }
+export class Hanachan extends LiveActor<HanachanNrv> {
+    private parts: HanachanParts[] = [];
+    private partsHead: HanachanParts;
+    private partsBodyS1: HanachanParts;
+    private partsBody1: HanachanParts;
+    private partsBodyS2: HanachanParts;
+    private partsBody2: HanachanParts;
+    private axisZ = vec3.clone(Vec3UnitZ);
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'Hanachan');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initRailRider(sceneObjHolder, infoIter);
+        connectToSceneEnemyMovement(sceneObjHolder, this);
+        this.initNerve(HanachanNrv.Walk);
+        declareStarPiece(sceneObjHolder, this, 6);
+
+        this.partsHead = new HanachanParts(zoneAndLayer, sceneObjHolder, 'HanachanHead', 0);
+        this.parts.push(this.partsHead);
+        this.partsBodyS1 = new HanachanParts(zoneAndLayer, sceneObjHolder, 'HanachanBodyS', 1);
+        this.parts.push(this.partsBodyS1);
+        this.partsBody1 = new HanachanParts(zoneAndLayer, sceneObjHolder, 'HanachanBody', 2);
+        this.parts.push(this.partsBody1);
+        this.partsBodyS2 = new HanachanParts(zoneAndLayer, sceneObjHolder, 'HanachanBodyS', 3);
+        this.parts.push(this.partsBodyS2);
+        this.partsBody2 = new HanachanParts(zoneAndLayer, sceneObjHolder, 'HanachanBody', 4);
+        this.parts.push(this.partsBody2);
+
+        moveCoordToNearestPos(this);
+
+        // Position segments
+        reverseRailDirection(this);
+        moveTransToOtherActorRailPos(this.partsHead, this);
+        moveCoord(this, lerp(this.partsHead.getSensor('body')!.radius, this.partsBodyS1.getSensor('body')!.radius, 0.5));
+        moveTransToOtherActorRailPos(this.partsBodyS1, this);
+        moveCoord(this, lerp(this.partsBodyS1.getSensor('body')!.radius, this.partsBody1.getSensor('body')!.radius, 0.5));
+        moveTransToOtherActorRailPos(this.partsBody1, this);
+        moveCoord(this, lerp(this.partsBody1.getSensor('body')!.radius, this.partsBodyS2.getSensor('body')!.radius, 0.5));
+        moveTransToOtherActorRailPos(this.partsBodyS2, this);
+        moveCoord(this, lerp(this.partsBodyS2.getSensor('body')!.radius, this.partsBody2.getSensor('body')!.radius, 0.5));
+        moveTransToOtherActorRailPos(this.partsBody2, this);
+        reverseRailDirection(this);
+
+        for (let i = 0; i < this.parts.length; i++)
+            this.parts[i].makeActorAppeared(sceneObjHolder);
+    }
+
+    public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
+        trySetMoveLimitCollision(sceneObjHolder, this.partsHead);
+    }
+
+    private setNerveAllParts(partsNerve: HanachanPartsNrv): void {
+        for (let i = 0; i < this.parts.length; i++)
+            this.parts[i].setNerve(partsNerve);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        for (let i = 0; i < this.parts.length; i++) {
+            const parts = this.parts[i];
+            if (isDead(parts))
+                continue;
+
+            parts.movement(sceneObjHolder, viewerInput);
+            vec3.zero(parts.moveVelocity);
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HanachanNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === HanachanNrv.Walk) {
+            if (isFirstStep(this))
+                this.setNerveAllParts(HanachanPartsNrv.Walk);
+
+            this.moveHeadAlongRail(sceneObjHolder, 4.0, deltaTimeFrames);
+            this.moveBodyAlongHead(deltaTimeFrames);
+        }
+    }
+
+    private moveHeadAlongRail(sceneObjHolder: SceneObjHolder, speed: number, deltaTimeFrames: number): void {
+        quatGetAxisZ(this.axisZ, this.partsHead.poseQuat);
+        const distance = calcMovingDirectionAlongRail(scratchVec3a, this, this.partsHead.translation, 800.0, false);
+
+        if (distance <= 2000.0) {
+            vecKillElement(scratchVec3a, scratchVec3a, this.partsHead.gravityVector);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+            if (!isNearZeroVec3(scratchVec3a, 0.001))
+                turnVecToVecRadian(this.axisZ, this.axisZ, scratchVec3a, 0.08 * deltaTimeFrames, this.partsHead.gravityVector);
+            vec3.scaleAndAdd(this.partsHead.moveVelocity, this.partsHead.moveVelocity, this.axisZ, speed * deltaTimeFrames);
+            vec3.negate(scratchVec3b, this.partsHead.gravityVector);
+
+            blendQuatUpFront(this.partsHead.poseQuat, this.partsHead.poseQuat, scratchVec3b, this.axisZ, 0.5 * deltaTimeFrames, 0.5 * deltaTimeFrames);
+        } else {
+            this.moveHeadToPlayer(sceneObjHolder, speed, 0.04, deltaTimeFrames);
+        }
+    }
+
+    private moveHeadToPlayer(sceneObjHolder: SceneObjHolder, speed: number, speed2: number, deltaTimeFrames: number): void {
+        // TODO(jstpierre)
+    }
+
+    private moveBodyAlongHead(deltaTimeFrames: number): void {
+        for (let i = 1; i < this.parts.length; i++) {
+            const p0 = this.parts[i - 1];
+            const p1 = this.parts[i];
+
+            const s0 = p0.getSensor('body')!;
+            const s1 = p1.getSensor('body')!;
+
+            // Solve spring system
+            vec3.sub(scratchVec3a, s1.center, s0.center);
+            normToLength(scratchVec3a, 2.0 + lerp(s0.radius, s1.radius, 0.5));
+            vec3.add(p1.moveVelocity, p1.moveVelocity, scratchVec3a);
+            vec3.sub(scratchVec3b, s0.center, s1.center);
+            vec3.add(p1.moveVelocity, p1.moveVelocity, scratchVec3b);
+
+            // Adjust facing direction
+            vec3.sub(scratchVec3a, s0.center, s1.center);
+            vec3.normalize(scratchVec3a, scratchVec3a);
+            vec3.negate(scratchVec3b, p1.gravityVector);
+            blendQuatUpFront(p1.poseQuat, p1.poseQuat, scratchVec3b, scratchVec3a, 0.3, 0.5);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('HanachanHead');
+        sceneObjHolder.modelCache.requestObjectData('HanachanBody');
+        sceneObjHolder.modelCache.requestObjectData('HanachanBodyS');
     }
 }

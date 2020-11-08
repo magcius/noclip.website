@@ -4,7 +4,7 @@
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { Color, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from '../../Color';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
-import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { ColorKind } from '../../gx/gx_render';
 import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixSRT, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
@@ -34,6 +34,7 @@ import { createModelObjBloomModel, createModelObjMapObjStrongLight, ModelObj } f
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
 const scratchVec3c = vec3.create();
+const scratchVec3d = vec3.create();
 const scratchMatrix = mat4.create();
 const scratchQuata = quat.create();
 const scratchQuatb = quat.create();
@@ -2020,8 +2021,8 @@ class WaterPressureBullet extends LiveActor<WaterPressureBulletNrv> {
 
             // isPadSwing
 
-            if (!isBinded(this) && isInWater(sceneObjHolder, this.translation)) {
-                if (!this.liveInWater /*|| this.sufferer === null*/ /*|| !isBindedGroundSand(this)*/) {
+            if (isBinded(this) || isInWater(sceneObjHolder, this.translation)) {
+                if (!this.liveInWater || true /* this.sufferer === null*/ /*|| !isBindedGroundSand(this)*/) {
                     this.makeActorDead(sceneObjHolder);
                 } else {
                     vecKillElement(this.velocity, this.velocity, this.gravityVector);
@@ -3726,5 +3727,88 @@ export class PowerStarHalo extends MapObjActor<PowerStarHaloNrv> {
                 this.setNerve(PowerStarHaloNrv.Appear);
             }
         }
+    }
+}
+
+export class FireBarBall extends ModelObj {
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'FireBarBall', 'FireBarBall', null, DrawBufferType.NoShadowedMapObj, -2, -2);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('FireBarBall');
+    }
+}
+
+const enum FireBarNrv { Wait }
+export class FireBar extends LiveActor<FireBarNrv> {
+    private numSpokes: number;
+    private numFireBalls: number;
+    private distanceFromCenter: number;
+    private rotateSpeedDegrees: number;
+    private axisZ = vec3.create();
+    private balls: FireBarBall[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'FireBar');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'FireBarCore');
+        connectToSceneMapObj(sceneObjHolder, this);
+        this.initEffectKeeper(sceneObjHolder, null);
+
+        calcGravity(sceneObjHolder, this);
+
+        this.numFireBalls = fallback(getJMapInfoArg0(infoIter), 5);
+        this.numSpokes = fallback(getJMapInfoArg7(infoIter), 1);
+        this.distanceFromCenter = fallback(getJMapInfoArg5(infoIter), 140.0);
+        this.rotateSpeedDegrees = fallback(getJMapInfoArg1(infoIter), -1.0) * 0.1;
+
+        calcFrontVec(this.axisZ, this);
+
+        // initFireBarBall
+        const totalNumBalls = this.numFireBalls * this.numSpokes;
+        for (let i = 0; i < totalNumBalls; i++) {
+            const ball = new FireBarBall(zoneAndLayer, sceneObjHolder, infoIter);
+            startBtk(ball, 'FireBarBall');
+            this.balls.push(ball);
+        }
+        this.fixFireBarBall();
+
+        this.makeActorAppeared(sceneObjHolder);
+        this.initNerve(FireBarNrv.Wait);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: FireBarNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === FireBarNrv.Wait) {
+            calcUpVec(scratchVec3a, this);
+            rotateVecDegree(this.axisZ, scratchVec3a, this.rotateSpeedDegrees * deltaTimeFrames);
+            this.fixFireBarBall();
+        }
+    }
+
+    private fixFireBarBall(): void {
+        calcUpVec(scratchVec3a, this);
+        vec3.scale(scratchVec3c, this.axisZ, 100.0);
+
+        for (let y = 0; y < this.numSpokes; y++) {
+            rotateVecDegree(scratchVec3c, scratchVec3a, 360.0 / this.numSpokes);
+            vec3.normalize(scratchVec3d, scratchVec3c);
+            vec3.scaleAndAdd(scratchVec3b, this.translation, scratchVec3d, this.distanceFromCenter);
+            vec3.scaleAndAdd(scratchVec3b, scratchVec3b, scratchVec3a, 50.0);
+
+            for (let x = 0; x < this.numFireBalls; x++) {
+                const ball = this.balls[y * this.numFireBalls + x];
+                vec3.copy(ball.translation, scratchVec3b);
+                vec3.add(scratchVec3b, scratchVec3b, scratchVec3c);
+            }
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('FireBarCore');
+        FireBarBall.requestArchives(sceneObjHolder);
     }
 }

@@ -707,6 +707,10 @@ function getEffectAttributeName(floorCode: FloorCode): string {
         return 'Default';
 }
 
+function makeAttributeEffectBaseName(name: string): string {
+    return name.slice(0, name.indexOf('Attr'));
+}
+
 export class EffectKeeper {
     public multiEmitters: MultiEmitter[] = [];
     public changeBckReset: boolean = false;
@@ -838,10 +842,17 @@ export class EffectKeeper {
         if (multiEmitter.animNames === null)
             return;
 
-        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.OneTime, this.changeBckReset, deltaTimeFrames))
-            multiEmitter.createOneTimeEmitter(effectSystem);
-        if (isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.Forever, this.changeBckReset, deltaTimeFrames))
-            multiEmitter.createForeverEmitter(effectSystem);
+        const isCreateOneTime = isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.OneTime, this.changeBckReset, deltaTimeFrames);
+        const isCreateForever = isCreate(multiEmitter, this.currentBckName, xanimePlayer, EmitterLoopMode.Forever, this.changeBckReset, deltaTimeFrames);
+        if (isCreateOneTime || isCreateForever) {
+            if (multiEmitter.name.includes('Attr'))
+                multiEmitter = this.getEmitter(makeAttributeEffectBaseName(multiEmitter.name))!;
+            if (isCreateOneTime)
+                multiEmitter.createOneTimeEmitter(effectSystem);
+            if (isCreateForever)
+                multiEmitter.createForeverEmitter(effectSystem);
+        }
+
         if (isDelete(multiEmitter, this.currentBckName, xanimePlayer, deltaTimeFrames))
             multiEmitter.deleteEmitter();
 
@@ -876,7 +887,7 @@ export class EffectKeeper {
                 const multiEmitter = this.multiEmitters[i];
                 if (multiEmitter.isValid() && !multiEmitter.isExistOneTimeEmitter()) {
                     multiEmitter.deleteForeverEmitter();
-                    const emitterBaseName = multiEmitter.name.slice(0, multiEmitter.name.indexOf('Attr'));
+                    const emitterBaseName = makeAttributeEffectBaseName(multiEmitter.name);
                     this.createEmitter(sceneObjHolder, emitterBaseName);
                     break;
                 }
