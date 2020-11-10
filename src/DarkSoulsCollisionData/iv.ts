@@ -1,5 +1,5 @@
  
-import { Color, colorNew } from "../Color";
+import { Color, colorNewFromRGBA } from "../Color";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 
 // Parser for the .iv file used by the Dark Souls Model Viewer
@@ -24,7 +24,7 @@ export function parseIV(buffer: NamedArrayBufferSlice): IV {
     const r = view.getFloat32(0x04, true);
     const g = view.getFloat32(0x08, true);
     const b = view.getFloat32(0x0C, true);
-    const color = colorNew(r, g, b);
+    const color = colorNewFromRGBA(r, g, b);
 
     const chunks: Chunk[] = [];
     let chunkTableIdx = 0x10;

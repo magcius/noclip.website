@@ -3,7 +3,7 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource } from "./GfxPlatformImpl";
+import { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 
 export enum GfxCompareMode {
@@ -92,7 +92,7 @@ export interface GfxInputLayoutBufferDescriptor {
 }
 
 export const enum GfxTextureDimension {
-    n2D, n2D_ARRAY
+    n2D, n2DArray, Cube,
 }
 
 export interface GfxTextureDescriptor {
@@ -104,7 +104,6 @@ export interface GfxTextureDescriptor {
     numLevels: number;
 }
 
-// TODO(jstpierre): Should this be moved to ../helpers?
 export function makeTextureDescriptor2D(pixelFormat: GfxFormat, width: number, height: number, numLevels: number): GfxTextureDescriptor {
     const dimension = GfxTextureDimension.n2D, depth = 1;
     return { dimension, pixelFormat, width, height, depth, numLevels };
@@ -120,6 +119,13 @@ export interface GfxSamplerDescriptor {
     maxLOD: number;
 }
 
+export interface GfxAttachmentDescriptor {
+    pixelFormat: GfxFormat;
+    width: number;
+    height: number;
+    numSamples: number;
+}
+
 export interface GfxBufferBinding {
     buffer: GfxBuffer;
     wordOffset: number;
@@ -129,6 +135,7 @@ export interface GfxBufferBinding {
 export interface GfxSamplerBinding {
     gfxTexture: GfxTexture | null;
     gfxSampler: GfxSampler | null;
+    lateBinding: string | null;
 }
 
 export interface GfxBindingLayoutDescriptor {
@@ -149,6 +156,7 @@ export interface GfxProgramDescriptorSimple {
 
 export interface GfxProgramDescriptor extends GfxProgramDescriptorSimple {
     ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
+    associate(device: GfxDevice, program: GfxProgram): void;
 }
 
 export interface GfxInputLayoutDescriptor {
@@ -204,8 +212,8 @@ export interface GfxMegaStateDescriptor {
 }
 
 export interface GfxRenderTargetDescriptor {
-    colorAttachment: GfxColorAttachment | null;
-    depthStencilAttachment: GfxDepthStencilAttachment | null;
+    colorAttachment: GfxAttachment | null;
+    depthStencilAttachment: GfxAttachment | null;
 }
 
 export interface GfxRenderPipelineDescriptor {
@@ -226,10 +234,12 @@ export interface GfxColor {
 
 // TODO(jstpierre): Support MRT. This might be tricksy.
 export interface GfxRenderPassDescriptor {
-    colorAttachment: GfxColorAttachment | null;
+    colorAttachment: GfxAttachment | null;
+    colorResolveTo: GfxTexture | null;
     colorLoadDisposition: GfxLoadDisposition;
     colorClearColor: GfxColor;
-    depthStencilAttachment: GfxDepthStencilAttachment | null;
+    depthStencilAttachment: GfxAttachment | null;
+    depthStencilResolveTo: GfxTexture | null;
     depthLoadDisposition: GfxLoadDisposition;
     depthClearValue: number;
     stencilLoadDisposition: GfxLoadDisposition;
@@ -250,30 +260,45 @@ export interface GfxDebugGroup {
 }
 
 export interface GfxBugQuirks {
-    rowMajorMatricesBroken: boolean;
+}
+
+export const enum GfxClipSpaceNearZ {
+    NegativeOne,
+    Zero,
 }
 
 export interface GfxVendorInfo {
-    bugQuirks: GfxBugQuirks;
-    glslVersion: string;
-    explicitBindingLocations: boolean;
-    separateSamplerTextures: boolean;
+    readonly platformString: string;
+    readonly bugQuirks: GfxBugQuirks;
+    readonly glslVersion: string;
+    readonly explicitBindingLocations: boolean;
+    readonly separateSamplerTextures: boolean;
+    readonly clipSpaceNearZ: GfxClipSpaceNearZ;
 }
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;
 
+// Viewport in normalized coordinate space, from 0 to 1.
+export interface GfxNormalizedViewportCoords {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
 export interface GfxSwapChain {
-    configureSwapChain(width: number, height: number): void;
-    getDevice(): GfxDevice;
-    getOnscreenTexture(): GfxTexture;
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
-    present(platformFramebuffer?: GfxPlatformFramebuffer): void;
+    configureSwapChain(width: number, height: number, platformFramebuffer?: GfxPlatformFramebuffer): void;
+    getDevice(): GfxDevice;
+    getOnscreenTexture(): GfxTexture;
+    present(): void;
+    createWebXRLayer(webXRSession: XRSession): XRWebGLLayer;
 }
 
 export interface GfxHostAccessPass {
     // Transfer commands.
-    uploadBufferData(buffer: GfxBuffer, dstWordOffset: number, data: Uint8Array, srcWordOffset?: number, wordCount?: number): void;
+    uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void;
     uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
 }
 
@@ -290,36 +315,55 @@ export interface GfxRenderPass {
     draw(vertexCount: number, firstVertex: number): void;
     drawIndexed(indexCount: number, firstIndex: number): void;
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
-
-    // Pass resolution.
-    endPass(resolveColorAttachmentTo: GfxTexture | null): void;
 };
 
 export type GfxPass = GfxRenderPass | GfxHostAccessPass;
 
+/**
+ * GfxDevice represents a "virtual GPU"; this is something that, in the abstract, has a bunch of resources
+ * and can execute passes. In the concrete, this is a wrapper around a CanvasWebGL2RenderingContext for the
+ * WebGL 2 backend, or a GPUDevice for the WebGPU backend.
+ *
+ * A bit about the design of this API; all resources are "opaque", meaning you cannot look at the
+ * implementation details or underlying fields of the resources, and most objects cannot have their
+ * creation parameters modified after they are created. So, while buffers and textures can have their
+ * contents changed through data upload passes, they cannot be resized after creation. Create a new object
+ * and destroy the old one if you wish to "resize" it.
+ * 
+ * To upload data to the GPU, create and submit a {@type GfxHostAccessPass}. Note that the pass-based
+ * upload API is a bit ugly, and might change in the future. Specifically, it might be more advantageous
+ * to force a "upload all data at the beginning of the frame" style API, which is practically how the host
+ * access pass is used today for dynamic data management.
+ */
 export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
     createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
-    createColorAttachment(width: number, height: number, numSamples: number): GfxColorAttachment;
-    createDepthStencilAttachment(width: number, height: number, numSamples: number): GfxDepthStencilAttachment;
+    createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment;
+    createAttachmentFromTexture(texture: GfxTexture): GfxAttachment;
     createProgram(program: GfxProgramDescriptor): GfxProgram;
     createProgramSimple(program: GfxProgramDescriptorSimple): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
     createInputLayout(inputLayoutDescriptor: GfxInputLayoutDescriptor): GfxInputLayout;
     createInputState(inputLayout: GfxInputLayout, buffers: (GfxVertexBufferDescriptor | null)[], indexBuffer: GfxIndexBufferDescriptor | null): GfxInputState;
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
+    createReadback(elemCount: number): GfxReadback;
 
+    /**
+     * Destructors. You *must* call these on resources you create; they will not GC naturally. Call checkForLeaks()
+     * to ensure that you are not leaking any resources. (In the noclip codebase, this happens automatically if you
+     * set loadSceneDelta to 0 and switch scenes).
+     */
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
     destroySampler(o: GfxSampler): void;
-    destroyColorAttachment(o: GfxColorAttachment): void;
-    destroyDepthStencilAttachment(o: GfxDepthStencilAttachment): void;
+    destroyAttachment(o: GfxAttachment): void;
     destroyProgram(o: GfxProgram): void;
     destroyBindings(o: GfxBindings): void;
     destroyInputLayout(o: GfxInputLayout): void;
     destroyInputState(o: GfxInputState): void;
     destroyRenderPipeline(o: GfxRenderPipeline): void;
+    destroyReadback(o: GfxReadback): void;
 
     // Command submission.
     createHostAccessPass(): GfxHostAccessPass;
@@ -327,19 +371,27 @@ export interface GfxDevice {
     // Consumes and destroys the pass.
     submitPass(o: GfxPass): void;
 
+    // Readback system.
+    readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void;
+    submitReadback(o: GfxReadback): void;
+    queryReadbackFinished(dst: Uint32Array, dstOffs: number, o: GfxReadback): boolean;
+
+    // Information queries.
     queryLimits(): GfxDeviceLimits;
     queryTextureFormatSupported(format: GfxFormat): boolean;
     queryPipelineReady(o: GfxRenderPipeline): boolean;
     queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;
+    queryRenderPass(o: GfxRenderPass): GfxRenderPassDescriptor;
 
-    // Debugging and high-level queries.
+    // Debugging.
     setResourceName(o: GfxResource, s: string): void;
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;
+    programPatched(o: GfxProgram, descriptor: GfxProgramDescriptorSimple): void;
     pushDebugGroup(debugGroup: GfxDebugGroup): void;
     popDebugGroup(): void;
 }
 
-export { GfxBuffer, GfxTexture, GfxColorAttachment, GfxDepthStencilAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
+export { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
 export { GfxFormat };

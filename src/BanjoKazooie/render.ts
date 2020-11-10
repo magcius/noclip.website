@@ -1,22 +1,24 @@
-
 import * as Viewer from '../viewer';
+import * as RDP from '../Common/N64/RDP';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, getTextFiltFromOtherModeH, OtherModeL_Layout, fillCombineParams, translateBlendMode, RSP_Geometry, RSPSharedOutput, getCycleTypeFromOtherModeH, OtherModeH_CycleType, CCMUX, OtherModeH_Layout, ACMUX, CombineParams } from "./f3dex";
-import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
+import { ACMUX, CCMUX, CombineParams } from '../Common/N64/RDP';
+import { getImageFormatString, Vertex, DrawCall, translateBlendMode, RSP_Geometry, RSPSharedOutput } from "./f3dex";
+import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align, assertExists } from '../util';
 import { fillMatrix4x4, fillMatrix4x3, fillMatrix4x2, fillVec4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4, vec3, vec4, vec2 } from 'gl-matrix';
 import { computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { TextureMapping } from '../TextureHolder';
-import { GfxRenderInstManager, setSortKeyDepthKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
-import { clamp, lerp, MathConstants } from '../MathHelpers';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, scaleMatrix } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
+import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -30,14 +32,16 @@ export class F3DEX_Program extends DeviceProgram {
     public both = `
 precision mediump float;
 
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
-#ifdef TEXTURE_GEN
-    vec4 u_LookAtVectors[2];
+#ifdef LIGHTING
+    #ifdef TEXTURE_GEN
+        vec4 u_LookAtVectors[2];
+    #endif
 #endif
 };
 
-layout(row_major, std140) uniform ub_DrawParams {
+layout(std140) uniform ub_DrawParams {
     Mat4x3 u_BoneMatrix[BONE_MATRIX_COUNT];
     Mat4x2 u_TexMatrix[2];
 };
@@ -45,6 +49,11 @@ layout(row_major, std140) uniform ub_DrawParams {
 uniform ub_CombineParameters {
     vec4 u_PrimColor;
     vec4 u_EnvColor;
+#ifdef EXTRA_COMBINE
+    vec4 u_MiscComb;
+#else
+    #define u_MiscComb (vec4(0))
+#endif
 };
 
 uniform sampler2D u_Texture[2];
@@ -53,6 +62,7 @@ varying vec4 v_Color;
 varying vec4 v_TexCoord;
 
 const vec4 t_Zero = vec4(0.0);
+const vec4 t_Half = vec4(0.5);
 const vec4 t_One = vec4(1.0);
 `;
 
@@ -64,6 +74,14 @@ layout(location = ${F3DEX_Program.a_TexCoord}) in vec2 a_TexCoord;
 vec3 Monochrome(vec3 t_Color) {
     // NTSC primaries.
     return vec3(dot(t_Color.rgb, vec3(0.299, 0.587, 0.114)));
+}
+
+// Convert from 0...1 UNORM range to SNORM range
+vec3 ConvertToSignedInt(vec3 t_Input) {
+    ivec3 t_Num = ivec3(t_Input * 255.0);
+    // Sign extend
+    t_Num = t_Num << 24 >> 24;
+    return vec3(t_Num) / 127.0;
 }
 
 void main() {
@@ -82,12 +100,18 @@ void main() {
     v_TexCoord.xy = Mul(u_TexMatrix[0], vec4(a_TexCoord, 1.0, 1.0));
     v_TexCoord.zw = Mul(u_TexMatrix[1], vec4(a_TexCoord, 1.0, 1.0));
 
+    ${this.generateClamp()}
+
+#ifdef LIGHTING
+    // convert (unsigned) colors to normal vector components
+    vec4 t_Normal = vec4(ConvertToSignedInt(a_Color.rgb), 0.0);
+    t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
+
+    // TODO: find and pass in lighting data
+    v_Color = vec4(vec3(.6 + .4*t_Normal.y), a_Color.a);
+
 #ifdef TEXTURE_GEN
     // generate texture coordinates based on the vertex normal in screen space
-
-    // convert (unsigned) colors to normal vector components
-    vec4 t_Normal = vec4(2.0*a_Color.rgb - 2.0*trunc(2.0*a_Color.rgb), 0.0);
-    t_Normal = normalize(Mul(_Mat4x4(u_BoneMatrix[t_BoneIndex]), t_Normal));
     t_Normal.xy = vec2(dot(t_Normal, u_LookAtVectors[0]), dot(t_Normal, u_LookAtVectors[1]));
 
     // shift and rescale to tex coordinates - straight towards the camera is the center
@@ -99,22 +123,51 @@ void main() {
 
     v_TexCoord.zw = v_TexCoord.xy;
 #endif
+
+#endif
 }
 `;
 
-    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: vec4) {
+    constructor(private DP_OtherModeH: number, private DP_OtherModeL: number, combParams: CombineParams, private blendAlpha = .5, private tiles: RDP.TileState[] = []) {
         super();
-        if (getCycleTypeFromOtherModeH(DP_OtherModeH) === OtherModeH_CycleType.G_CYC_2CYCLE)
+        if (RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag(combParams);
+
+        // let twoCycle = RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE;
+        // if (RDP.combineParamsUseCombinedInFirstCycle(combParams) || RDP.combineParamsUseT1InFirstCycle(combParams)) {
+        //     console.log(RDP.generateCombineParamsString(combParams, twoCycle));
+        // } else if (twoCycle && RDP.combineParamsUseTexelsInSecondCycle(combParams)) {
+        //     console.log(RDP.generateCombineParamsString(combParams, twoCycle));
+        // }
+    }
+
+    private generateClamp(): string {
+        let out = "";
+        for (let i = 0; i < this.tiles.length; i++) {
+            const tile = this.tiles[i];
+            if (tile.cms & 0x2) {
+                const coordRatio = (((tile.lrs - tile.uls) >>> 2) + 1) / RDP.getTileWidth(tile);
+                const comp = i === 0 ? 'x' : 'z';
+                if (coordRatio > 1)
+                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio).toFixed(1)});\n`
+            }
+            if (tile.cmt & 0x2) {
+                const coordRatio = (((tile.lrt - tile.ult) >>> 2) + 1) / RDP.getTileHeight(tile);
+                const comp = i === 0 ? 'y' : 'w';
+                if (coordRatio > 1)
+                    out += `v_TexCoord.${comp} = clamp(v_TexCoord.${comp}, 0.0, ${(coordRatio).toFixed(1)});\n`
+            }
+        }
+        return out;
     }
 
     private generateAlphaTest(): string {
         const alphaCompare = (this.DP_OtherModeL >>> 0) & 0x03;
-        const cvgXAlpha = (this.DP_OtherModeL >>> OtherModeL_Layout.CVG_X_ALPHA) & 0x01;
+        const cvgXAlpha = (this.DP_OtherModeL >>> RDP.OtherModeL_Layout.CVG_X_ALPHA) & 0x01;
         let alphaThreshold = 0;
         if (alphaCompare === 0x01) {
-            alphaThreshold = 0.5; // actually blend color, seems to always be 0.5
+            alphaThreshold = this.blendAlpha;
         } else if (alphaCompare != 0x00) {
             alphaThreshold = .0125; // should be dither
         } else if (cvgXAlpha != 0x00) {
@@ -137,8 +190,8 @@ void main() {
         }
     }
 
-    private generateFrag(combParams: vec4): string {
-        const textFilt = getTextFiltFromOtherModeH(this.DP_OtherModeH);
+    private generateFrag(combParams: CombineParams): string {
+        const textFilt = RDP.getTextFiltFromOtherModeH(this.DP_OtherModeH);
         let texFiltStr: string;
         if (textFilt === TextFilt.G_TF_POINT)
             texFiltStr = 'Point';
@@ -158,7 +211,7 @@ void main() {
             't_CombColor.rgb', 't_Tex0.rgb', 't_Tex1.rgb', 'u_PrimColor.rgb',
             'v_Color.rgb', 'u_EnvColor.rgb', 't_Zero.rgb' /* key */, 't_CombColor.aaa',
             't_Tex0.aaa', 't_Tex1.aaa', 'u_PrimColor.aaa', 'v_Color.aaa',
-            'u_EnvColor.aaa', 't_Zero.rgb' /* LOD */, 't_Zero.rgb' /* prim LOD */, 't_Zero.rgb'
+            'u_EnvColor.aaa', 't_Zero.rgb' /* LOD */, 'u_MiscComb.rrr' /* prim LOD */, 't_Zero.rgb'
         ];
 
         const alphaInputs: string[] = [
@@ -166,58 +219,50 @@ void main() {
             'v_Color.a', 'u_EnvColor.a', '1.0', '0.0'
         ];
 
-        function unpackParams(params: number): {x: number, y: number, z: number, w: number} {
-            return {
-                x: (params >>> 12) & 0xf,
-                y: (params >>> 8) & 0xf,
-                z: (params >>> 4) & 0xf,
-                w: (params >>> 0) & 0xf
-            }
-        }
-
-        const px = unpackParams(combParams[0]);
-        const py = unpackParams(combParams[1]);
-        const pz = unpackParams(combParams[2]);
-        const pw = unpackParams(combParams[3]);
+        // For now setting the LOD fraction to 0 should be fine since I don't think anyone cares about mipmaps
+        const alphaMultInputs: string[] = [
+            '0.0' /* LOD_FRACTION */, 't_Tex0', 't_Tex1', 'u_PrimColor.a',
+            'v_Color.a', 'u_EnvColor.a', 'u_MiscComb.r', '0.0'
+        ];
 
         return `
-vec4 Texture2D_N64_Point(sampler2D t_Texture, vec2 t_TexCoord) {
-    return texture(t_Texture, t_TexCoord);
+vec4 Texture2D_N64_Point(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
+    return texture(PU_SAMPLER_2D(t_Texture), t_TexCoord);
 }
 
-vec4 Texture2D_N64_Average(sampler2D t_Texture, vec2 t_TexCoord) {
+vec4 Texture2D_N64_Average(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
     // Unimplemented.
-    return texture(t_Texture, t_TexCoord);
+    return texture(PU_SAMPLER_2D(t_Texture), t_TexCoord);
 }
 
 // Implements N64-style "triangle bilienar filtering" with three taps.
 // Based on ArthurCarvalho's implementation, modified by NEC and Jasper for noclip.
-vec4 Texture2D_N64_Bilerp(sampler2D t_Texture, vec2 t_TexCoord) {
-    vec2 t_Size = vec2(textureSize(t_Texture, 0));
+vec4 Texture2D_N64_Bilerp(PD_SAMPLER_2D(t_Texture), vec2 t_TexCoord) {
+    vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));
     vec2 t_Offs = fract(t_TexCoord*t_Size - vec2(0.5));
     t_Offs -= step(1.0, t_Offs.x + t_Offs.y);
-    vec4 t_S0 = texture(t_Texture, t_TexCoord - t_Offs / t_Size);
-    vec4 t_S1 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
-    vec4 t_S2 = texture(t_Texture, t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
+    vec4 t_S0 = texture(PU_SAMPLER_2D(t_Texture), t_TexCoord - t_Offs / t_Size);
+    vec4 t_S1 = texture(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x - sign(t_Offs.x), t_Offs.y) / t_Size);
+    vec4 t_S2 = texture(PU_SAMPLER_2D(t_Texture), t_TexCoord - vec2(t_Offs.x, t_Offs.y - sign(t_Offs.y)) / t_Size);
     return t_S0 + abs(t_Offs.x)*(t_S1-t_S0) + abs(t_Offs.y)*(t_S2-t_S0);
 }
 
 #define Texture2D_N64 Texture2D_N64_${texFiltStr}
 
 vec3 CombineColorCycle0(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return (${colorInputs[px.x]} - ${colorInputs[px.y]}) * ${multInputs[px.z]} + ${colorInputs[px.w]};
+    return (${colorInputs[combParams.c0.a]} - ${colorInputs[combParams.c0.b]}) * ${multInputs[combParams.c0.c]} + ${colorInputs[combParams.c0.d]};
 }
 
 float CombineAlphaCycle0(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[py.x]} - ${alphaInputs[py.y]}) * ${alphaInputs[py.z]} + ${alphaInputs[py.w]};
+    return (${alphaInputs[combParams.a0.a]} - ${alphaInputs[combParams.a0.b]}) * ${alphaMultInputs[combParams.a0.c]} + ${alphaInputs[combParams.a0.d]};
 }
 
 vec3 CombineColorCycle1(vec4 t_CombColor, vec4 t_Tex0, vec4 t_Tex1) {
-    return (${colorInputs[pz.x]} - ${colorInputs[pz.y]}) * ${multInputs[pz.z]} + ${colorInputs[pz.w]};
+    return (${colorInputs[combParams.c1.a]} - ${colorInputs[combParams.c1.b]}) * ${multInputs[combParams.c1.c]} + ${colorInputs[combParams.c1.d]};
 }
 
 float CombineAlphaCycle1(float combAlpha, float t_Tex0, float t_Tex1) {
-    return (${alphaInputs[pw.x]} - ${alphaInputs[pw.y]}) * ${alphaInputs[pw.z]} + ${alphaInputs[pw.w]};
+    return (${alphaInputs[combParams.a1.a]} - ${alphaInputs[combParams.a1.b]}) * ${alphaMultInputs[combParams.a1.c]} + ${alphaInputs[combParams.a1.d]};
 }
 
 void main() {
@@ -225,28 +270,33 @@ void main() {
     vec4 t_Tex0 = t_One, t_Tex1 = t_One;
 
 #ifdef USE_TEXTURE
-    t_Tex0 = Texture2D_N64(u_Texture[0], v_TexCoord.xy);
-    t_Tex1 = Texture2D_N64(u_Texture[1], v_TexCoord.zw);
-#endif
-
-    t_Color = vec4(
-        CombineColorCycle0(t_Zero, t_Tex0, t_Tex1),
-        CombineAlphaCycle0(t_Zero.a, t_Tex0.a, t_Tex1.a)
-    );
-
-#ifdef TWO_CYCLE
-    t_Color = vec4(
-        CombineColorCycle1(t_Color, t_Tex0, t_Tex1),
-        CombineAlphaCycle1(t_Color.a, t_Tex0.a, t_Tex1.a)
-    );
+    t_Tex0 = Texture2D_N64(PP_SAMPLER_2D(u_Texture[0]), v_TexCoord.xy);
+    #ifdef TWO_CYCLE
+        t_Tex1 = Texture2D_N64(PP_SAMPLER_2D(u_Texture[1]), v_TexCoord.zw);
+    #else
+        t_Tex1 = t_Tex0;
+    #endif
 #endif
 
 #ifdef ONLY_VERTEX_COLOR
     t_Color.rgba = v_Color.rgba;
+#else
+    t_Color = vec4(
+        CombineColorCycle0(t_Half, t_Tex0, t_Tex1),
+        CombineAlphaCycle0(t_Half.a, t_Tex0.a, t_Tex1.a)
+    );
+
+#ifdef TWO_CYCLE
+    // Note that in the second cycle, Tex0 and Tex1 are swapped
+    t_Color = vec4(
+        CombineColorCycle1(t_Color, t_Tex1, t_Tex0),
+        CombineAlphaCycle1(t_Color.a, t_Tex1.a, t_Tex0.a)
+    );
+#endif
 #endif
 
 #ifdef USE_ALPHA_VISUALIZER
-    t_Color.rgb = vec3(v_Color.a);
+    t_Color.rgb = vec3(t_Color.a);
     t_Color.a = 1.0;
 #endif
 
@@ -258,7 +308,7 @@ ${this.generateAlphaTest()}
     }
 }
 
-export function textureToCanvas(texture: Texture): Viewer.Texture {
+export function textureToCanvas(texture: RDP.Texture): Viewer.Texture {
     const canvas = document.createElement("canvas");
     canvas.width = texture.width;
     canvas.height = texture.height;
@@ -272,18 +322,6 @@ export function textureToCanvas(texture: Texture): Viewer.Texture {
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
     return { name: texture.name, surfaces, extraInfo };
-}
-
-const enum TexCM {
-    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,
-}
-
-function translateCM(cm: TexCM): GfxWrapMode {
-    switch (cm) {
-    case TexCM.WRAP:   return GfxWrapMode.REPEAT;
-    case TexCM.MIRROR: return GfxWrapMode.MIRROR;
-    case TexCM.CLAMP:  return GfxWrapMode.CLAMP;
-    }
 }
 
 function makeVertexBufferData(v: Vertex[]): Float32Array {
@@ -432,25 +470,19 @@ export class RenderData {
     public vertexBufferData: Float32Array;
     public indexBuffer: GfxBuffer;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput, dynamic = false) {
+    public dynamicBufferCopies: GfxBuffer[] = [];
+    public dynamicStateCopies: GfxInputState[] = [];
+
+    constructor(device: GfxDevice, cache: GfxRenderCache, public sharedOutput: RSPSharedOutput) {
         const textures = sharedOutput.textureCache.textures;
         for (let i = 0; i < textures.length; i++) {
             const tex = textures[i];
-            this.textures.push(this.translateTexture(device, tex));
-            this.samplers.push(this.translateSampler(device, cache, tex));
+            this.textures.push(RDP.translateToGfxTexture(device, tex));
+            this.samplers.push(RDP.translateSampler(device, cache, tex));
         }
 
         this.vertexBufferData = makeVertexBufferData(sharedOutput.vertices);
-        if (dynamic) {
-            // there are vertex effects, so the vertex buffer data will change
-            this.vertexBuffer = device.createBuffer(
-                align(this.vertexBufferData.byteLength, 4) / 4,
-                GfxBufferUsage.VERTEX,
-                GfxBufferFrequencyHint.DYNAMIC
-            );
-        } else {
-            this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
-        }
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, this.vertexBufferData.buffer);
         assert(sharedOutput.vertices.length <= 0xFFFFFFFF);
 
         const indexBufferData = new Uint32Array(sharedOutput.indices);
@@ -477,26 +509,6 @@ export class RenderData {
         ], { buffer: this.indexBuffer, byteOffset: 0 });
     }
 
-    private translateTexture(device: GfxDevice, texture: Texture): GfxTexture {
-        const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
-        device.setResourceName(gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [texture.pixels]);
-        device.submitPass(hostAccessPass);
-        return gfxTexture;
-    }
-
-    private translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Texture): GfxSampler {
-        return cache.createSampler(device, {
-            wrapS: translateCM(texture.tile.cms),
-            wrapT: translateCM(texture.tile.cmt),
-            minFilter: GfxTexFilterMode.POINT,
-            magFilter: GfxTexFilterMode.POINT,
-            mipFilter: GfxMipFilterMode.NO_MIP,
-            minLOD: 0, maxLOD: 0,
-        });
-    }
-
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.textures.length; i++)
             device.destroyTexture(this.textures[i]);
@@ -504,6 +516,10 @@ export class RenderData {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyInputLayout(this.inputLayout);
         device.destroyInputState(this.inputState);
+        for (let i = 0; i < this.dynamicBufferCopies.length; i++)
+            device.destroyBuffer(this.dynamicBufferCopies[i]);
+        for (let i = 0; i < this.dynamicStateCopies.length; i++)
+            device.destroyInputState(this.dynamicStateCopies[i]);
     }
 }
 
@@ -524,7 +540,7 @@ const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
 class DrawCallInstance {
-    private textureEntry: Texture[] = [];
+    private textureEntry: RDP.Texture[] = [];
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
     private monochromeVertexColorsEnabled = false;
@@ -553,8 +569,7 @@ class DrawCallInstance {
 
     private createProgram(): void {
         const combParams = vec4.create();
-        fillCombineParams(combParams, 0, this.drawCall.DP_Combine);
-        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, combParams);
+        const program = new F3DEX_Program(this.drawCall.DP_OtherModeH, this.drawCall.DP_OtherModeL, this.drawCall.DP_Combine);
         program.defines.set('BONE_MATRIX_COUNT', '2');
 
         if (this.texturesEnabled && this.drawCall.textureIndices.length)
@@ -563,6 +578,9 @@ class DrawCallInstance {
         const shade = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADE) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
+
+        if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING)
+            program.defines.set('LIGHTING', '1');
 
         if (this.drawCall.SP_GeometryMode & RSP_Geometry.G_TEXTURE_GEN)
             program.defines.set('TEXTURE_GEN', '1');
@@ -609,15 +627,8 @@ class DrawCallInstance {
 
     private computeTextureMatrix(m: mat4, textureEntryIndex: number): void {
         if (this.textureEntry[textureEntryIndex] !== undefined) {
-            // TODO(jstpierre): whatever this is
-            // const s = (0x7FFF / this.drawCall.SP_TextureState.s);
-            // const t = (0x7FFF / this.drawCall.SP_TextureState.t);
-
             const entry = this.textureEntry[textureEntryIndex];
-            const ss = 1 / (entry.width);
-            const st = 1 / (entry.height);
-            m[0] = ss;
-            m[5] = st;
+            calcTextureMatrixFromRSPState(m, this.drawCall.SP_TextureState.s, this.drawCall.SP_TextureState.t, entry.width, entry.height, entry.tile.shifts, entry.tile.shiftt);
         } else {
             mat4.identity(m);
         }
@@ -630,7 +641,7 @@ class DrawCallInstance {
         if (this.gfxProgram === null)
             this.gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, this.program);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setGfxProgram(this.gfxProgram);
         if (this.textureAnimator !== null) {
             for (let i = 0; i < this.drawCall.textureIndices.length && i < this.textureMappings.length; i++) {
@@ -668,6 +679,7 @@ class DrawCallInstance {
         // TODO: set these properly, this mostly just reproduces vertex*texture
         offs += fillVec4(comb, offs, 1, 1, 1, 1);   // primitive color
         offs += fillVec4(comb, offs, 1, 1, 1, this.envAlpha);   // environment color
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -736,8 +748,7 @@ export class BoneAnimator {
     public calcBoneToParentMtx(dst: mat4, translationScale: number, bone: Bone, timeInFrames: number, mode: AnimationMode): void {
         timeInFrames = getAnimFrame(this.animFile, timeInFrames, mode);
 
-        mat4.identity(scratchMatrix);
-
+        let rotX = 0, rotY = 0, rotZ = 0;
         let scaleX = 1, scaleY = 1, scaleZ = 1;
         let transX = 0, transY = 0, transZ = 0;
         for (let i = 0; i < this.animFile.tracks.length; i++) {
@@ -748,11 +759,11 @@ export class BoneAnimator {
             const value = sampleAnimationTrackLinear(track, timeInFrames);
 
             if (track.trackType === AnimationTrackType.RotationX)
-                mat4.rotateX(scratchMatrix, scratchMatrix, value * MathConstants.DEG_TO_RAD);
+                rotX = value * MathConstants.DEG_TO_RAD;
             else if (track.trackType === AnimationTrackType.RotationY)
-                mat4.rotateY(scratchMatrix, scratchMatrix, value * MathConstants.DEG_TO_RAD);
+                rotY = value * MathConstants.DEG_TO_RAD;
             else if (track.trackType === AnimationTrackType.RotationZ)
-                mat4.rotateZ(scratchMatrix, scratchMatrix, value * MathConstants.DEG_TO_RAD);
+                rotZ = value * MathConstants.DEG_TO_RAD;
             else if (track.trackType === AnimationTrackType.ScaleX)
                 scaleX = value;
             else if (track.trackType === AnimationTrackType.ScaleY)
@@ -774,10 +785,16 @@ export class BoneAnimator {
 
         mat4.translate(dst, dst, bone.offset);
 
+        mat4.identity(scratchMatrix);
+        if (rotZ !== 0)
+            mat4.rotateZ(scratchMatrix, scratchMatrix, rotZ);
+        if (rotY !== 0)
+            mat4.rotateY(scratchMatrix, scratchMatrix, rotY);
+        if (rotX !== 0)
+            mat4.rotateX(scratchMatrix, scratchMatrix, rotX);
         mat4.mul(dst, dst, scratchMatrix);
 
-        vec3.set(scratchVec3, scaleX, scaleY, scaleZ);
-        mat4.scale(dst, dst, scratchVec3);
+        scaleMatrix(dst, dst, scaleX, scaleY, scaleZ);
 
         vec3.negate(scratchVec3, bone.offset);
         mat4.translate(dst, dst, scratchVec3);
@@ -797,19 +814,22 @@ function getAnimFrame(anim: AnimationFile, frame: number, mode: AnimationMode): 
     const lastFrame = anim.endFrame - anim.startFrame;
     switch (mode) {
     case AnimationMode.Loop:
-        while (frame > lastFrame)
+        while (frame > lastFrame && lastFrame > 0)
             frame -= lastFrame;
         break;
     case AnimationMode.Once:
         if (frame > lastFrame)
             frame = lastFrame;
+        break;
+    case AnimationMode.None:
+        return anim.startFrame;
     }
     return frame + anim.startFrame;
 }
 
 // an animation controller that makes it easier to change fps
 // and preserve control over the new phase
-class AdjustableAnimationController {
+export class AdjustableAnimationController {
     private time = 0;
     private initialized = false;
     private phaseFrames = 0;
@@ -833,21 +853,29 @@ class AdjustableAnimationController {
         this.phaseFrames = newPhase;
     }
 
-    public adjust(newFPS: number, newPhase = 0) {
+    // adjust the framerate, while either preserving the current phase value or setting a new one
+    public adjust(newFPS: number, newPhase?: number) {
         // assume time is current, so just adjust the values now
+        if (newPhase !== undefined)
+            this.phaseFrames = newPhase - this.time * newFPS;
+        else // preserve old phase
+            this.phaseFrames += (this.fps - newFPS) * this.time;
         this.fps = newFPS;
-        this.phaseFrames = newPhase - this.time * this.fps;
     }
 
     public getTimeInFrames(): number {
+        if (!this.initialized)
+            return this.phaseFrames;
         return this.time*this.fps + this.phaseFrames;
     }
 
     public getTimeInSeconds(): number {
         if (this.fps === 0)
             return 0; // not sure what this should mean
-        else
+        else if (this.initialized)
             return this.time + this.phaseFrames/this.fps;
+        else
+            return this.phaseFrames/this.fps;
     }
 
     public resetPhase(): void {
@@ -858,8 +886,12 @@ class AdjustableAnimationController {
 
 export class GeometryData {
     public renderData: RenderData;
-    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry) {
-        this.renderData = new RenderData(device, cache, geo.sharedOutput, geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null);
+    public dynamic: boolean;
+
+    // forget any game specific data in the geometry, for now
+    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry<GeoNode>, private id = 0) {
+        this.renderData = new RenderData(device, cache, geo.sharedOutput);
+        this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null || (geo.softwareLighting !== undefined && geo.softwareLighting.length > 0) || !!geo.morphs;
     }
 }
 const geoNodeScratch = vec3.create();
@@ -947,22 +979,32 @@ class GeoNodeRenderer {
     }
 }
 
-export const enum ObjectFlags {
-    FinalLayer  = 0x00400000,
-    Translucent = 0x00020000,
-    LateOpaque  = 0x00000400,
+const enum ObjectFlags {
+    FinalLayer   = 0x00400000,
+    Translucent  = 0x00020000,
+    EarlyOpaque  = 0x00000400,
 
-    Blink       = 0x00000100,
+    AltAnimation = 0x00000800, // see extractor
+    Blink        = 0x00000100,
 }
 
-export function layerFromFlags(flags: number): GfxRendererLayer {
-    if (flags & ObjectFlags.FinalLayer)
-        return GfxRendererLayer.TRANSLUCENT + 2; // unused in our current data
+export const enum BKLayer {
+    Early,
+    Opaque,
+    LevelXLU,
+    Translucent,
+    Particles,
+}
+
+// multiple flags can be set, so order is important
+export function layerFromFlags(flags: number): BKLayer {
+    if (flags & ObjectFlags.FinalLayer) // unused in our current data
+        return BKLayer.Particles;
     if (flags & ObjectFlags.Translucent)
-        return GfxRendererLayer.TRANSLUCENT + 1; // render after translucent level geometry
-    if (flags & ObjectFlags.LateOpaque)
-        return GfxRendererLayer.OPAQUE + 1; // lighthouse railing, etc
-    return GfxRendererLayer.OPAQUE;
+        return BKLayer.Translucent;
+    if (flags & ObjectFlags.EarlyOpaque)
+        return BKLayer.Early;
+    return BKLayer.Opaque;
 }
 
 const enum BlinkState {
@@ -1046,10 +1088,8 @@ const depthScratch = vec3.create();
 const boneTransformScratch = vec3.create();
 const dummyTransform = mat4.create();
 const lookatScratch = vec3.create();
-const vec3up = vec3.fromValues(0, 1, 0);
-const vec3Zero = vec3.create();
 export class GeometryRenderer {
-    public visible = true;
+    private visible = true;
     private megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public isSkybox = false;
     public sortKeyBase: number;
@@ -1073,8 +1113,11 @@ export class GeometryRenderer {
     private animationSetup: AnimationSetup | null;
     private vertexEffects: VertexAnimationEffect[];
     private rootNodeRenderer: GeoNodeRenderer;
+    private vertexBuffer: GfxBuffer;
+    private vertexBufferData: Float32Array;
+    private inputState: GfxInputState;
 
-    constructor(private geometryData: GeometryData) {
+    constructor(device: GfxDevice, private geometryData: GeometryData) {
         this.megaStateFlags = {};
         setAttachmentStateSimple(this.megaStateFlags, {
             blendMode: GfxBlendMode.ADD,
@@ -1086,12 +1129,38 @@ export class GeometryRenderer {
         this.animationSetup = geo.animationSetup;
         this.vertexEffects = geo.vertexEffects;
 
-        if (geo.textureAnimationSetup !== null)
-            this.textureAnimator = new TextureAnimator(geo.textureAnimationSetup, geometryData.renderData.textures);
+        if (geo.textureAnimationSetup.length > 0) {
+            assert(geo.textureAnimationSetup.length === 1);
+            this.textureAnimator = new TextureAnimator(geo.textureAnimationSetup[0], geometryData.renderData.textures);
+        }
 
         if (geo.vertexBoneTable !== null) {
             const boneToModelMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
             this.boneToModelMatrixArray = nArray(boneToModelMatrixArrayCount, () => mat4.create());
+        }
+
+
+        if (this.geometryData.dynamic) {
+            // there are vertex effects, so the vertex buffer data will change
+            // make a copy for this renderer
+            this.vertexBufferData = new Float32Array(this.geometryData.renderData.vertexBufferData);
+            this.vertexBuffer = device.createBuffer(
+                align(this.vertexBufferData.byteLength, 4) / 4,
+                GfxBufferUsage.VERTEX,
+                GfxBufferFrequencyHint.DYNAMIC
+            );
+            this.inputState = device.createInputState(this.geometryData.renderData.inputLayout,
+                [{ buffer: this.vertexBuffer, byteOffset: 0, }],
+                { buffer: this.geometryData.renderData.indexBuffer, byteOffset: 0 }
+            );
+
+            // allow the render data to destroy the copies later
+            this.geometryData.renderData.dynamicBufferCopies.push(this.vertexBuffer);
+            this.geometryData.renderData.dynamicStateCopies.push(this.inputState);
+        } else {
+            this.vertexBufferData = this.geometryData.renderData.vertexBufferData; // shouldn't be necessary
+            this.vertexBuffer = this.geometryData.renderData.vertexBuffer;
+            this.inputState = this.geometryData.renderData.inputState;
         }
 
         const boneToWorldMatrixArrayCount = geo.animationSetup !== null ? geo.animationSetup.bones.length : 1;
@@ -1116,10 +1185,8 @@ export class GeometryRenderer {
         const geoNodeRenderer = new GeoNodeRenderer(node);
 
         if (node.rspOutput !== null) {
-            const drawMatrix = [
-                this.boneToWorldMatrixArray[node.boneIndex],
-                this.boneToWorldMatrixArray[node.boneIndex],
-            ];
+            const baseMat = node.boneIndex === -1 ? this.modelMatrix : this.boneToWorldMatrixArray[node.boneIndex];
+            const drawMatrix = [baseMat, baseMat];
 
             // Skinned meshes need the parent bone as the second draw matrix.
             const animationSetup = this.animationSetup;
@@ -1169,7 +1236,7 @@ export class GeometryRenderer {
         this.rootNodeRenderer.setEnvironmentAlpha(a);
     }
 
-    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector: number): SpawnedObjects {
+    public additionalSetup(spawner: (id: number) => SpawnedObjects, id: number, selector: number): void {
         if (selector > 0) {
             const maxValue =
                 id === 0x203 ? 12 : // note doors
@@ -1198,7 +1265,6 @@ export class GeometryRenderer {
             this.modelMatrix[13] = -2620;
             this.modelMatrix[14] = -20;
         }
-        return [];
     }
 
     protected movement(viewerInput: Viewer.ViewerRenderInput): void {
@@ -1224,7 +1290,7 @@ export class GeometryRenderer {
         const animator = this.boneAnimators[newIndex];
         if (animator === undefined)
             throw `bad animation index ${newIndex}`;
-        this.animationController.adjust(animator.fps());
+        this.animationController.adjust(animator.fps(), 0);
     }
 
     public animationPhaseTrigger(phase: number): boolean {
@@ -1320,19 +1386,16 @@ export class GeometryRenderer {
         this.calcModelPoints();
         this.calcSelectorState();
 
-        const renderData = this.geometryData.renderData;
-
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
-        template.setInputLayoutAndState(renderData.inputLayout, renderData.inputState);
+        template.setInputLayoutAndState(this.geometryData.renderData.inputLayout, this.inputState);
         template.setMegaStateFlags(this.megaStateFlags);
 
         template.filterKey = this.isSkybox ? BKPass.SKYBOX : BKPass.MAIN;
 
         mat4.getTranslation(depthScratch, viewerInput.camera.worldMatrix);
         mat4.getTranslation(lookatScratch, this.modelMatrix);
-        vec3.sub(depthScratch, depthScratch, lookatScratch);
-        template.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.len(depthScratch));
+        template.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.distance(depthScratch, lookatScratch));
 
         const computeLookAt = (this.geometryData.geo.geoFlags & GeoFlags.ComputeLookAt) !== 0;
         const sceneParamsSize = 16 + (computeLookAt ? 8 : 0);
@@ -1346,7 +1409,7 @@ export class GeometryRenderer {
             mat4.getTranslation(lookatScratch, this.modelMatrix);
             vec3.transformMat4(lookatScratch, lookatScratch, viewerInput.camera.viewMatrix);
 
-            mat4.lookAt(modelViewScratch, vec3Zero, lookatScratch, vec3up);
+            mat4.lookAt(modelViewScratch, Vec3Zero, lookatScratch, Vec3UnitY);
             offs += fillVec4(mappedF32, offs, modelViewScratch[0], modelViewScratch[4], modelViewScratch[8]);
             offs += fillVec4(mappedF32, offs, modelViewScratch[1], modelViewScratch[5], modelViewScratch[9]);
         }
@@ -1361,7 +1424,7 @@ export class GeometryRenderer {
                 const effect = this.vertexEffects[i];
                 updateVertexEffectState(effect, viewerInput.time / 1000, viewerInput.deltaTime / 1000);
                 for (let j = 0; j < effect.vertexIndices.length; j++) {
-                    applyVertexEffect(effect, renderData.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
+                    applyVertexEffect(effect, this.vertexBufferData, effect.baseVertexValues[j], effect.vertexIndices[j]);
                 }
             }
         }
@@ -1374,15 +1437,15 @@ export class GeometryRenderer {
                 vec3.transformMat4(boneTransformScratch, boneEntries[i].position, this.boneToModelMatrixArray[boneEntries[i].boneID]);
                 for (let j = 0; j < boneEntries[i].vertexIDs.length; j++) {
                     const vertexID = boneEntries[i].vertexIDs[j];
-                    renderData.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
-                    renderData.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
-                    renderData.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
+                    this.vertexBufferData[vertexID * 10 + 0] = boneTransformScratch[0];
+                    this.vertexBufferData[vertexID * 10 + 1] = boneTransformScratch[1];
+                    this.vertexBufferData[vertexID * 10 + 2] = boneTransformScratch[2];
                 }
             }
         }
-        if (reuploadVertices) {
+        if (this.geometryData.dynamic) {
             const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadBufferData(renderData.vertexBuffer, 0, new Uint8Array(renderData.vertexBufferData.buffer));
+            hostAccessPass.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
             device.submitPass(hostAccessPass);
         }
 
@@ -1411,8 +1474,8 @@ const emittedParticleCombine: CombineParams = {
     a1: { a: ACMUX.TEXEL0, b: ACMUX.ZERO, c: ACMUX.PRIMITIVE, d: ACMUX.ZERO },
 };
 
-const baseFlipbookOtherModeH = TextFilt.G_TF_BILERP << OtherModeH_Layout.G_MDSFT_TEXTFILT;
-const baseFlipbookOtherModeL = 1 << OtherModeL_Layout.Z_CMP
+const baseFlipbookOtherModeH = TextFilt.G_TF_BILERP << RDP.OtherModeH_Layout.G_MDSFT_TEXTFILT;
+const baseFlipbookOtherModeL = 1 << RDP.OtherModeL_Layout.Z_CMP
 
 export class FlipbookData {
     public renderData: RenderData;
@@ -1431,8 +1494,9 @@ interface FlipbookAnimationParams {
 }
 
 const texMappingScratch = nArray(1, () => new TextureMapping());
+const flipbookScratch = nArray(2, () => vec3.create());
 export class FlipbookRenderer {
-    private textureEntry: Texture[] = [];
+    private textureEntry: RDP.Texture[] = [];
     private vertexColorsEnabled = true;
     private texturesEnabled = true;
     private monochromeVertexColorsEnabled = false;
@@ -1497,10 +1561,8 @@ export class FlipbookRenderer {
         let otherModeL = baseFlipbookOtherModeL;
         if (this.mode === FlipbookMode.AlphaTest)
             otherModeL |= 1; // alpha test against blend
-        const comb = vec4.create();
         const combine = this.mode === FlipbookMode.EmittedParticle ? emittedParticleCombine : defaultFlipbookCombine;
-        fillCombineParams(comb, 0, combine);
-        const program = new F3DEX_Program(otherModeH, otherModeL, comb);
+        const program = new F3DEX_Program(otherModeH, otherModeL, combine);
 
         program.defines.set('BONE_MATRIX_COUNT', '1');
 
@@ -1588,12 +1650,15 @@ export class FlipbookRenderer {
         this.animationController.setTimeFromViewerInput(viewerInput);
         this.animateFlipbook(texMappingScratch, texMatrixScratch);
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setBindingLayouts(bindingLayouts);
         renderInst.setInputLayoutAndState(this.flipbookData.renderData.inputLayout, this.flipbookData.renderData.inputState);
         renderInst.setMegaStateFlags(this.megaStateFlags);
 
-        renderInst.sortKey = this.sortKeyBase;
+        mat4.getTranslation(flipbookScratch[0], viewerInput.camera.worldMatrix);
+        mat4.getTranslation(flipbookScratch[1], this.modelMatrix);
+        vec3.sub(flipbookScratch[0], flipbookScratch[0], flipbookScratch[1]);
+        renderInst.sortKey = setSortKeyDepth(this.sortKeyBase, vec3.len(flipbookScratch[0]));
         renderInst.filterKey = BKPass.MAIN;
 
         let offs = renderInst.allocateUniformBuffer(F3DEX_Program.ub_SceneParams, 16);
@@ -1622,5 +1687,6 @@ export class FlipbookRenderer {
         const comb = renderInst.mapUniformBufferF32(F3DEX_Program.ub_CombineParams);
         offs += fillVec4v(comb, offs, this.primColor);
         offs += fillVec4v(comb, offs, this.envColor);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }

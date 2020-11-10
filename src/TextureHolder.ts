@@ -2,7 +2,6 @@
 import * as Viewer from './viewer';
 import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform';
 
-// Used mostly by indirect texture FB installations...
 export interface TextureOverride {
     gfxTexture: GfxTexture;
     gfxSampler?: GfxSampler;
@@ -20,6 +19,9 @@ export interface TextureBase {
 export class TextureMapping {
     public gfxTexture: GfxTexture | null = null;
     public gfxSampler: GfxSampler | null = null;
+    public lateBinding: string | null = null;
+    // These are not used when binding to samplers, and are conveniences for custom behavior.
+    // TODO(jstpierre): Are any of these really worth anything?
     public width: number = 0;
     public height: number = 0;
     public lodBias: number = 0;
@@ -30,6 +32,7 @@ export class TextureMapping {
     public reset(): void {
         this.gfxTexture = null;
         this.gfxSampler = null;
+        this.lateBinding = null;
         this.width = 0;
         this.height = 0;
         this.lodBias = 0;
@@ -49,6 +52,7 @@ export class TextureMapping {
     public copy(other: TextureMapping): void {
         this.gfxTexture = other.gfxTexture;
         this.gfxSampler = other.gfxSampler;
+        this.lateBinding = other.lateBinding;
         this.width = other.width;
         this.height = other.height;
         this.lodBias = other.lodBias;

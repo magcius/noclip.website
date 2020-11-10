@@ -1,7 +1,6 @@
 
 import { SaveManager, GlobalSaveManager } from "./SaveManager";
 import { GlobalGrabManager } from './GrabManager';
-import { vec2 } from 'gl-matrix';
 
 declare global {
     interface HTMLElement {
@@ -33,6 +32,16 @@ const enum TouchGesture {
     Pinch, // 2-finger pinch in and out
 }
 
+export const enum DraggingMode {
+    // Not dragging.
+    None,
+    // "Normal" dragging. We need to set the UI to have pointer-events: none;
+    Dragging,
+    // Pointer locked dragging. Since the pointer is locked to the canvas, we
+    // don't need to touch the UI styles (a big perf improvement).
+    PointerLocked,
+}
+
 export default class InputManager {
     public invertY = false;
     public invertX = false;
@@ -40,13 +49,15 @@ export default class InputManager {
     public toplevel: HTMLElement;
     // tristate. non-existent = not pressed, false = pressed but not this frame, true = pressed this frame.
     public keysDown: Map<string, boolean>;
+    public mouseX: number = -1;
+    public mouseY: number = -1;
     public dx: number;
     public dy: number;
     public dz: number;
-    public button: number = -1;
-    public onisdraggingchanged: (() => void) | null = null;
-    private listeners: Listener[] = [];
+    public buttons: number = 0;
+    public ondraggingmodechanged: (() => void) | null = null;
     private scrollListeners: Listener[] = [];
+    private keyTriggerListeners = new Map<string, Listener[]>();
     private usePointerLock: boolean = true;
     public isInteractive: boolean = true;
 
@@ -57,6 +68,7 @@ export default class InputManager {
     private dTouchX: number = 0;
     private dTouchY: number = 0;
     private dPinchDist: number = 0;
+    private releaseOnMouseUp: boolean = true;
 
     constructor(toplevel: HTMLElement) {
         document.body.tabIndex = -1;
@@ -69,14 +81,24 @@ export default class InputManager {
         document.addEventListener('keydown', this._onKeyDown, { capture: true });
         document.addEventListener('keyup', this._onKeyUp, { capture: true });
         window.addEventListener('blur', this._onBlur);
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
         this.toplevel.addEventListener('wheel', this._onWheel, { passive: false });
         this.toplevel.addEventListener('mousedown', (e) => {
             if (!this.isInteractive)
                 return;
-            this.button = e.button;
-            GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: true });
-            if (this.onisdraggingchanged !== null)
-                this.onisdraggingchanged();
+            this.buttons = e.buttons;
+            GlobalGrabManager.takeGrab(this, e, { takePointerLock: this.usePointerLock, useGrabbingCursor: true, releaseOnMouseUp: this.releaseOnMouseUp });
+            if (this.ondraggingmodechanged !== null)
+                this.ondraggingmodechanged();
+        });
+        this.toplevel.addEventListener('mousemove', (e) => {
+            this.mouseX = e.clientX;
+            this.mouseY = e.clientY;
+        });
+        this.toplevel.addEventListener('mouseup', (e) => {
+            this.buttons = e.buttons;
         });
 
         this.toplevel.addEventListener('touchstart', this._onTouchChange);
@@ -93,10 +115,6 @@ export default class InputManager {
         GlobalSaveManager.addSettingListener('InvertX', (saveManager: SaveManager, key: string) => {
             this.invertX = saveManager.loadSetting<boolean>(key, false);
         });
-    }
-
-    public addListener(listener: Listener): void {
-        this.listeners.push(listener);
     }
 
     public addScrollListener(listener: Listener): void {
@@ -133,8 +151,26 @@ export default class InputManager {
         return this.keysDown.has(key);
     }
 
+    public getDraggingMode(): DraggingMode {
+        if (this.touchGesture !== TouchGesture.None)
+            return DraggingMode.Dragging;
+
+        const grabOptions = GlobalGrabManager.getGrabListenerOptions(this);
+        if (grabOptions !== null)
+            return grabOptions.takePointerLock ? DraggingMode.PointerLocked : DraggingMode.Dragging;
+
+        return DraggingMode.None;
+    }
+
     public isDragging(): boolean {
-        return this.touchGesture != TouchGesture.None || GlobalGrabManager.hasGrabListener(this);
+        return this.getDraggingMode() !== DraggingMode.None;
+    }
+
+    public registerKeyTrigger(key: string, func: Listener): void {
+        if (!this.keyTriggerListeners.has(key))
+            this.keyTriggerListeners.set(key, []);
+
+        this.keyTriggerListeners.get(key)!.push(func);
     }
 
     public afterFrame() {
@@ -147,6 +183,13 @@ export default class InputManager {
 
         // Go through and mark all keys as non-event-triggered.
         this.keysDown.forEach((v, k) => {
+            if (v) {
+                const triggers = this.keyTriggerListeners.get(k);
+                if (triggers)
+                    for (let i = 0; i < triggers.length; i++)
+                        triggers[i](this);
+            }
+
             this.keysDown.set(k, false);
         });
     }
@@ -157,11 +200,6 @@ export default class InputManager {
 
     private _hasFocus() {
         return document.activeElement === document.body || document.activeElement === this.toplevel;
-    }
-
-    private callListeners(): void {
-        for (let i = 0; i < this.listeners.length; i++)
-            this.listeners[i](this);
     }
 
     private callScrollListeners(): void {
@@ -177,17 +215,14 @@ export default class InputManager {
         }
 
         this.keysDown.set(e.code, !e.repeat);
-        this.callListeners();
     };
 
     private _onKeyUp = (e: KeyboardEvent) => {
         this.keysDown.delete(e.code);
-        this.callListeners();
     };
 
     private _onBlur = () => {
         this.keysDown.clear();
-        this.callListeners();
     };
 
     private _onWheel = (e: WheelEvent) => {
@@ -273,9 +308,13 @@ export default class InputManager {
         this.dy += dy;
     }
 
-    public onGrabReleased () {
-        this.button = -1;
-        if (this.onisdraggingchanged !== null)
-            this.onisdraggingchanged();
+    public setCursor(cursor: string): void {
+        GlobalGrabManager.setCursor(cursor);
+    }
+
+    public onGrabReleased() {
+        this.buttons = 0;
+        if (this.ondraggingmodechanged !== null)
+            this.ondraggingmodechanged();
     }
 }

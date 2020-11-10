@@ -3,6 +3,7 @@
 // http://read.pudn.com/downloads4/sourcecode/zip/14045/LZSS.C__.htm
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
+import { readString } from "../../util";
 
 export function decompress(srcView: DataView) {
     let uncompressedSize = srcView.getUint32(0x08, true);
@@ -41,4 +42,11 @@ export function decompress(srcView: DataView) {
                 return new ArrayBufferSlice(dstBuffer.buffer);
         }
     }
+}
+
+export function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
+    if (readString(buffer, 0x00, 0x04) === 'LzS\x01')
+        return decompress(buffer.createDataView());
+    else
+        return buffer;
 }

@@ -5,7 +5,7 @@ import { mat4, vec4 } from 'gl-matrix';
 import { TextureFormat, decodeTexture, computeTextureByteSize, getTextureFormatFromGLFormat } from './pica_texture';
 import { GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxCompareMode, GfxColorWriteMask, GfxChannelBlendState } from '../gfx/platform/GfxPlatform';
 import { makeMegaState } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { Color, colorNewFromRGBA8, colorNew } from '../Color';
+import { Color, colorNewFromRGBA8, colorNewFromRGBA } from '../Color';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
 export interface VatrChunk {
@@ -430,7 +430,7 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
         const blendColorG = view.getFloat32(offs + 0x150, true);
         const blendColorB = view.getFloat32(offs + 0x154, true);
         const blendColorA = view.getFloat32(offs + 0x158, true);
-        const blendConstant = colorNew(blendColorR, blendColorG, blendColorB, blendColorA);
+        const blendConstant = colorNewFromRGBA(blendColorR, blendColorG, blendColorB, blendColorA);
 
         const isTransparent = blendEnabled;
         const renderFlags = makeMegaState({
@@ -441,12 +441,13 @@ function readMatsChunk(cmb: CMB, buffer: ArrayBufferSlice) {
                     alphaBlendState,
                 },
             ],
+            blendConstant,
             depthCompare: reverseDepthForCompareMode(depthTestFunction),
             depthWrite: depthWriteEnabled,
             cullMode,
         });
 
-        const combinerBufferColor = colorNew(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
+        const combinerBufferColor = colorNewFromRGBA(bufferColorR, bufferColorG, bufferColorB, bufferColorA);
         const textureEnvironment = { textureCombiners, combinerBufferColor };
         cmb.materials.push({ index: i, textureBindings, textureCoordinators, constantColors, textureEnvironment, alphaTestFunction, alphaTestReference, renderFlags, isTransparent, polygonOffset });
 
@@ -483,7 +484,8 @@ export function parseTexChunk(buffer: ArrayBufferSlice, texData: ArrayBufferSlic
     for (let i = 0; i < count; i++) {
         const size = view.getUint32(offs + 0x00, true);
         const maxLevel = view.getUint16(offs + 0x04, true);
-        const unk06 = view.getUint16(offs + 0x06, true);
+        const isETC1 = view.getUint8(offs + 0x06);
+        const isCubeMap = view.getUint8(offs + 0x07);
         const width = view.getUint16(offs + 0x08, true);
         const height = view.getUint16(offs + 0x0A, true);
         const glFormat = view.getUint32(offs + 0x0C, true);
@@ -550,9 +552,8 @@ function readVatrChunk(cmb: CMB, buffer: ArrayBufferSlice): void {
 
     const colorByteOffset = readSlice(baseOffs);
     const texCoord0ByteOffset = readSlice(baseOffs);
-    // TODO(jstpierre): Figure out how tex coords work, 'cuz this ain't it chief.
-    const texCoord1ByteOffset = -1; readSlice(baseOffs);
-    const texCoord2ByteOffset = -1; readSlice(baseOffs);
+    const texCoord1ByteOffset = readSlice(baseOffs);
+    const texCoord2ByteOffset = readSlice(baseOffs);
 
     const boneIndicesByteOffset = readSlice(baseOffs);
     const boneWeightsByteOffset = readSlice(baseOffs);

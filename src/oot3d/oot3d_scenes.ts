@@ -12,17 +12,18 @@ import * as UI from '../ui';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { RoomRenderer, CtrTextureHolder, CmbInstance, CmbData, fillSceneParamsDataOnTemplate } from './render';
 import { SceneGroup } from '../viewer';
-import { assert, assertExists, hexzero, readString } from '../util';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { assert, assertExists, hexzero } from '../util';
+import { DataFetcher } from '../DataFetcher';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
-import { TransparentBlack, colorNew, White } from '../Color';
+import { TransparentBlack, colorNewFromRGBA, White } from '../Color';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
-import { MathConstants } from "../MathHelpers";
+import { MathConstants, scaleMatrix } from "../MathHelpers";
+import { CameraController } from '../Camera';
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numSamplers: 3, numUniformBuffers: 3 }];
 
@@ -34,6 +35,10 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: CtrTextureHolder, public zsi: ZSI.ZSIScene, public modelCache: ModelCache) {
         this.renderHelper = new GfxRenderHelper(device);
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(12/60);
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -58,7 +63,6 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, OoT3DPass.SKYBOX);
-        skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
@@ -125,13 +129,6 @@ export class OoT3DRenderer implements Viewer.SceneGfx {
     }
 }
 
-export function maybeDecompress(buffer: ArrayBufferSlice): ArrayBufferSlice {
-    if (readString(buffer, 0x00, 0x04) === 'LzS\x01')
-        return LzS.decompress(buffer.createDataView());
-    else
-        return buffer;
-}
-
 export class ModelCache {
     private filePromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     private fileDataCache = new Map<string, ArrayBufferSlice>();
@@ -147,22 +144,22 @@ export class ModelCache {
         return Promise.all(v);
     }
 
-    private fetchFile(path: string, flags: DataFetcherFlags): Promise<ArrayBufferSlice> {
+    private fetchFile(path: string, allow404: boolean): Promise<ArrayBufferSlice> {
         assert(!this.filePromiseCache.has(path));
-        const p = this.dataFetcher.fetchData(path, flags, () => {
+        const p = this.dataFetcher.fetchData(path, { allow404, abortedCallback: () => {
             this.filePromiseCache.delete(path);
             this.archivePromiseCache.delete(path);
-        });
+        } });
         this.filePromiseCache.set(path, p);
         return p;
     }
 
-    public fetchFileData(path: string, flags: DataFetcherFlags = DataFetcherFlags.NONE): Promise<ArrayBufferSlice> {
+    public fetchFileData(path: string, allow404: boolean = false): Promise<ArrayBufferSlice> {
         const p = this.filePromiseCache.get(path);
         if (p !== undefined) {
             return p.then(() => this.getFileData(path));
         } else {
-            return this.fetchFile(path, flags).then((data) => {
+            return this.fetchFile(path, allow404).then((data) => {
                 this.fileDataCache.set(path, data);
                 return data;
             });
@@ -183,7 +180,7 @@ export class ModelCache {
             p = this.fetchFileData(archivePath).then((data) => {
                 return data;
             }).then((data) => {
-                const arc = ZAR.parse(maybeDecompress(data));
+                const arc = ZAR.parse(LzS.maybeDecompress(data));
                 this.archiveCache.set(archivePath, arc);
                 return arc;
             });
@@ -755,7 +752,7 @@ class SceneDesc implements Viewer.SceneDesc {
             cmbRenderer.animationController.fps = 20;
             cmbRenderer.setConstantColor(1, TransparentBlack);
             cmbRenderer.name = `${hexzero(actor.actorId, 4)} / ${hexzero(actor.variable, 4)} / ${modelPath}`;
-            mat4.scale(cmbRenderer.modelMatrix, actor.modelMatrix, [scale, scale, scale]);
+            scaleMatrix(cmbRenderer.modelMatrix, actor.modelMatrix, scale);
             roomRenderer.objectRenderers.push(cmbRenderer);
             return cmbRenderer;
         }
@@ -787,15 +784,18 @@ class SceneDesc implements Viewer.SceneDesc {
             const itemId = (actor.variable & 0xFF);
             if (itemId === 0x00 || itemId === 0x01 || itemId === 0x02) { // Rupees
                 const b = buildModel(zar, `item00/model/drop_gi_rupy.cmb`, 0.015);
+                b.setVertexColorScale(characterLightScale);
                 b.modelMatrix[13] += 10;
                 for (let i = 0; i < b.shapeInstances.length; i++)
                     b.shapeInstances[i].visible = false;
                 const whichShape = itemId;
                 b.shapeInstances[whichShape].visible = true;
             } else if (itemId === 0x03) { // Recovery Heart
-                buildModel(zar, `item00/model/drop_gi_heart.cmb`, 0.02);
+                const b = buildModel(zar, `item00/model/drop_gi_heart.cmb`, 0.04);
+                b.setVertexColorScale(characterLightScale);
             } else if (itemId === 0x06) { // Heart Piece ( stuck in the ground a bit ? )
-                buildModel(zar, `item00/model/drop_gi_hearts_1.cmb`, 0.05);
+                const b = buildModel(zar, `item00/model/drop_gi_hearts_1.cmb`, 0.05);
+                b.setVertexColorScale(characterLightScale);
             } else console.warn(`Unknown Item00 drop: ${hexzero(actor.variable, 4)}`);
         } else if (actor.actorId === ActorId.Bg_Haka_Trap) {
             const zar = await fetchArchive(`zelda_haka_objects.zar`);
@@ -900,7 +900,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.shapeInstances[3].visible = chest === Chest.SMALL_WOODEN || chest === Chest.LARGE_WOODEN;
 
                 if (chest === Chest.BOSS || chest === Chest.LARGE_WOODEN)
-                    mat4.scale(b.modelMatrix, b.modelMatrix, [2, 2, 2]);
+                    scaleMatrix(b.modelMatrix, b.modelMatrix, 2);
             }
 
             const whichBox = ((actor.variable) >>> 12) & 0x0F;
@@ -1070,6 +1070,10 @@ class SceneDesc implements Viewer.SceneDesc {
             } else {
                 throw "starschulz";
             }
+        } else if (actor.actorId === ActorId.Bg_Gate_Shutter) { // kakariko guard gate
+            const zar = await fetchArchive(`zelda_spot01_matoyab.zar`);
+            const b = buildModel(zar, 'model/c_s01tomegate_model.cmb', 1);  // kakariko guard gate
+            b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.Obj_Mure2) {
             const zar = await fetchArchive(`zelda_field_keep.zar`); // grass and rock circles. only the middle one spawns?
             const whichModel = actor.variable & 0xF;
@@ -1365,9 +1369,14 @@ class SceneDesc implements Viewer.SceneDesc {
             const whichModel = actor.variable & 0x00FF;
             // TODO(jstpierre): Why don't these tree models display correctly?
             if (whichModel === 0x00) { // "Large Tree"
-                buildModel(zar, `model/tree01_model.cmb`, 1.5);
+                const b = buildModel(zar, `model/tree01_model.cmb`, 1.5);
+                b.setVertexColorScale(characterLightScale);
+            } else if (whichModel === 0x01) { // "Medium Tree"
+                const b = buildModel(zar, `model/tree01_model.cmb`, 1);
+                b.setVertexColorScale(characterLightScale);
             } else if (whichModel === 0x02) { // "Small Tree"
-                buildModel(zar, `model/tree03_model.cmb`, 0.5);
+                const b = buildModel(zar, `model/tree03_model.cmb`, 0.5);
+                b.setVertexColorScale(characterLightScale);
             } else {
                 console.warn(`Unknown En_Wood02 model ${whichModel}`);
             }
@@ -1415,6 +1424,14 @@ class SceneDesc implements Viewer.SceneDesc {
 
             const b2 = buildModel(zar, `model/c_s03shibuki_modelT.cmb`, 0.1);
             b2.bindCMAB(parseCMAB(zar, `misc/c_s03shibuki_modelT.cmab`));
+        } else if (actor.actorId === ActorId.Obj_Lift) {
+                const zar = await fetchArchive(`zelda_d_lift.zar`);
+                const b = buildModel(zar, `model/lift_l_model.cmb`, 0.1);
+                b.setVertexColorScale(characterLightScale);
+        } else if (actor.actorId === ActorId.Bg_Spot07_Taki) {
+            const zar = await fetchArchive(`zelda_spot07_object.zar`);
+            const b = buildModel(zar, `model/obj_s07taki01_modelT.cmb`, 0.1);
+            b.bindCMAB(parseCMAB(zar, `misc/obj_s07taki01_modelT.cmab`));
         } else if (actor.actorId === ActorId.En_A_Obj) {
             const whichObject = actor.variable & 0xFF;
             if (whichObject === 0x0A) {
@@ -1720,8 +1737,13 @@ class SceneDesc implements Viewer.SceneDesc {
             b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Owl) {
             const zar = await fetchArchive(`zelda_owl.zar`);
-            const b = buildModel(zar, `model/kaeporagaebora1.cmb`);
+            const b = buildModel(zar, `model/kaeporagaebora1.cmb`, 0.025);
             b.bindCSAB(parseCSAB(zar, `anim/owl_wait.csab`));
+            b.setVertexColorScale(characterLightScale);
+        } else if (actor.actorId === ActorId.En_Ms) {
+            const zar = await fetchArchive(`zelda_ms.zar`);
+            const b = buildModel(zar, `model/beanmaster.cmb`);
+            b.bindCSAB(parseCSAB(zar, `anim/ms_matsu.csab`));
             b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Okuta) {
             const zar = await fetchArchive(`zelda_oc2.zar`);
@@ -1813,15 +1835,15 @@ class SceneDesc implements Viewer.SceneDesc {
             b.setVertexColorScale(characterLightScale);
             const whichPalette = actor.variable & 0x000F;
             if (whichPalette === 0x00) {
-                b.setConstantColor(1, colorNew(0.39216, 0.5098, 0.92157));
-                b.setConstantColor(2, colorNew(0.11765, 0.94118, 0.78431));
-                b.setConstantColor(3, colorNew(0.62745, 0.98039, 0.23529));
-                b.setConstantColor(4, colorNew(0.35294, 0.23529, 0.03992));
+                b.setConstantColor(1, colorNewFromRGBA(0.39216, 0.5098, 0.92157));
+                b.setConstantColor(2, colorNewFromRGBA(0.11765, 0.94118, 0.78431));
+                b.setConstantColor(3, colorNewFromRGBA(0.62745, 0.98039, 0.23529));
+                b.setConstantColor(4, colorNewFromRGBA(0.35294, 0.23529, 0.03992));
             } else if (whichPalette === 0x01) {
-                b.setConstantColor(1, colorNew(0.35294, 0.23529, 0.03992));
-                b.setConstantColor(2, colorNew(0.62745, 0.98039, 0.23529));
-                b.setConstantColor(3, colorNew(0.11765, 0.94118, 0.78431));
-                b.setConstantColor(4, colorNew(0.35294, 0.23529, 0.03992));
+                b.setConstantColor(1, colorNewFromRGBA(0.35294, 0.23529, 0.03992));
+                b.setConstantColor(2, colorNewFromRGBA(0.62745, 0.98039, 0.23529));
+                b.setConstantColor(3, colorNewFromRGBA(0.11765, 0.94118, 0.78431));
+                b.setConstantColor(4, colorNewFromRGBA(0.35294, 0.23529, 0.03992));
             } else {
                 throw "whoops";
             }
@@ -1856,7 +1878,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 // TODO(jstpierre): Animate on path
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
-                b.setConstantColor(3, colorNew(0.21568, 0.21568, 1));
+                b.setConstantColor(3, colorNewFromRGBA(0.21568, 0.21568, 1));
                 b.setConstantColor(4, White);
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_5.csab`));
                 b.setVertexColorScale(characterLightScale);
@@ -1868,7 +1890,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_ahg.zar`);
                 const b = buildModel(zar, `model/hyliaman2.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
-                b.setConstantColor(3, colorNew(1, 0, 0));
+                b.setConstantColor(3, colorNewFromRGBA(1, 0, 0));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 8; i++)
                     b.shapeInstances[i].visible = false;
@@ -1876,8 +1898,8 @@ class SceneDesc implements Viewer.SceneDesc {
             } else if (whichNPC === 0x05) { // "Begging man"
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
-                b.setConstantColor(3, colorNew(0.19608, 0.31373, 0));
-                b.setConstantColor(4, colorNew(0.19608, 0.31373, 0));
+                b.setConstantColor(3, colorNewFromRGBA(0.19608, 0.31373, 0));
+                b.setConstantColor(4, colorNewFromRGBA(0.19608, 0.31373, 0));
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_9.csab`));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 12; i++)
@@ -1893,7 +1915,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/hyliaoldman.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/bji_matsu.csab`));
                 b.setConstantColor(3, White);
-                b.setConstantColor(4, colorNew(0, 0.1968, 0.62745));
+                b.setConstantColor(4, colorNewFromRGBA(0, 0.1968, 0.62745));
                 b.setVertexColorScale(characterLightScale);
                 b.shapeInstances[5].visible = false;
             } else if (whichNPC === 0x08) { // "Thin woman in lilac"
@@ -1901,15 +1923,15 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/hylialady.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/cne_n_wait.csab`));
                 b.setVertexColorScale(characterLightScale);
-                b.setConstantColor(2, colorNew(0.62734, 0.70588, 1));
-                b.setConstantColor(3, colorNew(0.62734, 0.70588, 1));
-                b.setConstantColor(4, colorNew(0.62734, 0.70588, 1));
+                b.setConstantColor(2, colorNewFromRGBA(0.62734, 0.70588, 1));
+                b.setConstantColor(3, colorNewFromRGBA(0.62734, 0.70588, 1));
+                b.setConstantColor(4, colorNewFromRGBA(0.62734, 0.70588, 1));
                 b.shapeInstances[5].visible = false;
             } else if (whichNPC === 0x09) { // "Laughing man in red & white"
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
                 b.setConstantColor(3, White);
-                b.setConstantColor(4, colorNew(0.86275, 0, 0.31373));
+                b.setConstantColor(4, colorNewFromRGBA(0.86275, 0, 0.31373));
                 b.bindCSAB(parseCSAB(zar, `anim/boj_13.csab`));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 6; i < 12; i++)
@@ -1918,7 +1940,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
                 b.setConstantColor(3, White);
-                b.setConstantColor(4, colorNew(0, 0.5098, 0.86275));
+                b.setConstantColor(4, colorNewFromRGBA(0, 0.5098, 0.86275));
                 b.bindCSAB(parseCSAB(zar, `anim/boj_14.csab`));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 6; i < 12; i++)
@@ -1929,14 +1951,14 @@ class SceneDesc implements Viewer.SceneDesc {
                 b.bindCSAB(parseCSAB(zar, `anim/cne2_15.csab`));
                 b.setVertexColorScale(characterLightScale);
                 b.setConstantColor(2, White);
-                b.setConstantColor(3, colorNew(1, 1, 0.39216));
-                b.setConstantColor(4, colorNew(0.27451, 0.62734, 0.90196));
+                b.setConstantColor(3, colorNewFromRGBA(1, 1, 0.39216));
+                b.setConstantColor(4, colorNewFromRGBA(0.27451, 0.62734, 0.90196));
                 b.shapeInstances[4].visible = false;
             } else if (whichNPC === 0x0C) { // "Looking man in crimson"
                 const zar = await fetchArchive(`zelda_boj.zar`);
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
-                b.setConstantColor(3, colorNew(1, 0.94118, 0.58824));
-                b.setConstantColor(4, colorNew(0.58824, 0.23529, 0.35294));
+                b.setConstantColor(3, colorNewFromRGBA(1, 0.94118, 0.58824));
+                b.setConstantColor(4, colorNewFromRGBA(0.58824, 0.23529, 0.35294));
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_17.csab`));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 12; i++)
@@ -1946,8 +1968,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_ahg.zar`);
                 const b = buildModel(zar, `model/hyliaman2.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
-                b.setConstantColor(3, colorNew(0.78431, 0.70588, 1));
-                b.setConstantColor(4, colorNew(0.78431, 0.70588, 1));
+                b.setConstantColor(3, colorNewFromRGBA(0.78431, 0.70588, 1));
+                b.setConstantColor(4, colorNewFromRGBA(0.78431, 0.70588, 1));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 8; i++)
                     b.shapeInstances[i].visible = false;
@@ -1957,7 +1979,7 @@ class SceneDesc implements Viewer.SceneDesc {
                 const b = buildModel(zar, `model/hyliaman1.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/boj2_19.csab`));
                 b.setConstantColor(3, White);
-                b.setConstantColor(4, colorNew(0.54901, 1, 0.43137));
+                b.setConstantColor(4, colorNewFromRGBA(0.54901, 1, 0.43137));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 12; i++)
                     b.shapeInstances[i].visible = false;
@@ -1966,8 +1988,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_bji.zar`);
                 const b = buildModel(zar, `model/hyliaoldman.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
-                b.setConstantColor(3, colorNew(0.50980, 0.70577, 1));
-                b.setConstantColor(4, colorNew(0.50980, 0.27450, 0.07843));
+                b.setConstantColor(3, colorNewFromRGBA(0.50980, 0.70577, 1));
+                b.setConstantColor(4, colorNewFromRGBA(0.50980, 0.27450, 0.07843));
                 b.setVertexColorScale(characterLightScale);
                 b.shapeInstances[3].visible = false;
                 b.shapeInstances[4].visible = false;
@@ -1975,8 +1997,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_bji.zar`);
                 const b = buildModel(zar, `model/hyliaoldman.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/bji2_20.csab`));
-                b.setConstantColor(3, colorNew(0.27450, 0.50980, 0.82352));
-                b.setConstantColor(4, colorNew(0.62754, 0, 0.39215));
+                b.setConstantColor(3, colorNewFromRGBA(0.27450, 0.50980, 0.82352));
+                b.setConstantColor(4, colorNewFromRGBA(0.62754, 0, 0.39215));
                 b.setVertexColorScale(characterLightScale);
                 b.shapeInstances[3].visible = false;
                 b.shapeInstances[4].visible = false;
@@ -1984,8 +2006,8 @@ class SceneDesc implements Viewer.SceneDesc {
                 const zar = await fetchArchive(`zelda_ahg.zar`);
                 const b = buildModel(zar, `model/hyliaman2.cmb`);
                 b.bindCSAB(parseCSAB(zar, `anim/ahg2_18.csab`));
-                b.setConstantColor(3, colorNew(0, 0.58823, 0.43137));
-                b.setConstantColor(4, colorNew(0.62745, 0.90196, 0));
+                b.setConstantColor(3, colorNewFromRGBA(0, 0.58823, 0.43137));
+                b.setConstantColor(4, colorNewFromRGBA(0.62745, 0.90196, 0));
                 b.setVertexColorScale(characterLightScale);
                 for (let i = 3; i < 8; i++)
                     b.shapeInstances[i].visible = false;
@@ -2022,9 +2044,10 @@ class SceneDesc implements Viewer.SceneDesc {
         // Enemies
         } else if (actor.actorId === ActorId.En_Hintnuts) {
             const zar = await fetchArchive(`zelda_hintnuts.zar`);
-            const b = buildModel(zar, `model/dekunuts.cmb`);
-            b.bindCSAB(parseCSAB(zar, `anim/dnh_wait.csab`));
-            b.setVertexColorScale(characterLightScale);
+            const body = buildModel(zar, `model/dekunuts.cmb`);
+            body.bindCSAB(parseCSAB(zar, `anim/dnh_wait.csab`));
+            body.setVertexColorScale(characterLightScale);
+            body.modelMatrix[13] += 8;
         } else if (actor.actorId === ActorId.En_Shopnuts) {
             const zar = await fetchArchive(`zelda_shopnuts.zar`);
             const b = buildModel(zar, `model/akindonuts.cmb`);
@@ -2040,6 +2063,7 @@ class SceneDesc implements Viewer.SceneDesc {
             const b = buildModel(zar, `model/okorinuts.cmb`);
             b.bindCSAB(parseCSAB(zar, `anim/dn_wait.csab`));
             b.setVertexColorScale(characterLightScale);
+            b.modelMatrix[13] += 6;
         } else if (actor.actorId === ActorId.En_Am) {
             const zar = await fetchArchive('zelda_am.zar');
             const b = buildModel(zar, `model/amos.cmb`, 0.015);
@@ -2159,16 +2183,12 @@ class SceneDesc implements Viewer.SceneDesc {
             // Assembled Deku Baba
         } else if (actor.actorId === ActorId.En_Sw) {
             const zar = await fetchArchive('zelda_st.zar');
-            const whichSkulltula = (actor.variable >>> 12) & 0x07;
-            if (whichSkulltula === 0x00)  { // Skullwalltula
+            const whichSkulltula = actor.variable;
+            if (whichSkulltula === 0x0000)  { // Skullwalltula
                 const b = buildModel(zar, `model/staltula.cmb`, 0.02);
                 b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
                 b.setVertexColorScale(characterLightScale);
-            } else if (whichSkulltula === 0x04) { // Golden Skulltula
-                const b = buildModel(zar, `model/staltula_gold.cmb`, 0.02);
-                b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
-                b.setVertexColorScale(characterLightScale);
-            } else if (whichSkulltula === 0x05) { // Golden Skulltula (only spawns at night)
+            } else { // Golden Skulltula
                 const b = buildModel(zar, `model/staltula_gold.cmb`, 0.02);
                 b.bindCSAB(parseCSAB(zar, `anim/st_matsu.csab`));
                 b.setVertexColorScale(characterLightScale);
@@ -2178,18 +2198,21 @@ class SceneDesc implements Viewer.SceneDesc {
             const whichSkulltula = actor.variable & 0xFFFF;
             if (whichSkulltula === 0x00)  { // Flying Peahat
                 const b = buildModel(zar, `model/peehat.cmb`, 0.05);
+                b.bindCSAB(parseCSAB(zar, `anim/ph_end.csab`));
                 b.setVertexColorScale(characterLightScale);
             } else if (whichSkulltula === 0x01) { // PeahatLarva
                 const b = buildModel(zar, `model/peehat_tail.cmb`, 0.05);
                 b.setVertexColorScale(characterLightScale);
             } else if (whichSkulltula === 0xFFFF) { // Burrowed Peahat
                 const b = buildModel(zar, `model/peehat.cmb`, 0.05);
+                b.bindCSAB(parseCSAB(zar, `anim/ph_end.csab`));
                 b.setVertexColorScale(characterLightScale);
             }
         } else if (actor.actorId === ActorId.En_Dekubaba) {
             const zar = await fetchArchive(`zelda_dekubaba.zar`);
             // The Deku Baba lies in hiding...
-            buildModel(zar, `model/db_ha_model.cmb`);
+            const b = buildModel(zar, `model/db_ha_model.cmb`);
+            b.setVertexColorScale(characterLightScale);
         } else if (actor.actorId === ActorId.En_Tite) {
             const zar = await fetchArchive(`zelda_tt.zar`);
             const b = buildModel(zar, `model/tectite.cmb`);
@@ -2318,7 +2341,7 @@ class SceneDesc implements Viewer.SceneDesc {
         const textureHolder = dataHolder.textureHolder;
 
         const [zarBuffer, zsiBuffer] = await Promise.all([
-            modelCache.fetchFileData(path_zar, DataFetcherFlags.ALLOW_404),
+            modelCache.fetchFileData(path_zar, true),
             modelCache.fetchFileData(path_info_zsi),
         ]);
 
@@ -2387,7 +2410,7 @@ class SceneDesc implements Viewer.SceneDesc {
 }
 
 const id = "oot3d";
-const name = "Ocarina of Time 3D";
+const name = "The Legend of Zelda: Ocarina of Time 3D";
 // Courses organized by Starschulz
 const sceneDescs = [
     "Kokiri Forest",

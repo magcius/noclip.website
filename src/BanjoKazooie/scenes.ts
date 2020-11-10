@@ -8,9 +8,9 @@ import * as Actors from './actors';
 
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
-import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags } from './render';
+import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { transparentBlackFullClearRenderPassDescriptor, depthClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { depthClearRenderPassDescriptor, BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
@@ -18,8 +18,9 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assert, hexzero, assertExists, hexdump } from '../util';
 import { DataFetcher } from '../DataFetcher';
-import { MathConstants } from '../MathHelpers';
-import { Emitter, EmitterManager, ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter, LavaRockEmitter, fireballIndex, lavaSmokeIndex, snowballSplashIndex } from './particles';
+import { MathConstants, scaleMatrix } from '../MathHelpers';
+import { ConfigurableEmitter, quicksandConfig, WaterfallEmitter, emitAlongLine, torchSmokeConfig, torchSparkleConfig, ScaledEmitter, LavaRockEmitter, SceneEmitterHolder } from './particles';
+import { CameraController } from '../Camera';
 
 const pathBase = `BanjoKazooie`;
 
@@ -27,7 +28,7 @@ class BKRenderer implements Viewer.SceneGfx {
     public geoRenderers: GeometryRenderer[] = [];
     public flipbookRenderers: FlipbookRenderer[] = [];
     public geoDatas: RenderData[] = [];
-    public emitterManager: EmitterManager;
+    public sceneEmitters: SceneEmitterHolder;
     public rails: Actors.Rail[] = [];
 
     public renderTarget = new BasicRenderTarget();
@@ -35,17 +36,11 @@ class BKRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public objectData: ObjectData) {
         this.renderHelper = new GfxRenderHelper(device);
-        // load all particle files
-        const particleData: FlipbookData[] = [];
-        // TODO: figure out what's wrong with 0x06 and 0x07
-        for (let i of [0x03, 0x04, 0x05])
-            particleData[i] = objectData.ensureFlipbookData(device, i + 0x700)!;
-        for (let i = 0x08; i <= 0x1b; i++)
-            particleData[i] = objectData.ensureFlipbookData(device, i + 0x700)!;
-        particleData[snowballSplashIndex] = objectData.ensureFlipbookData(device, 0x42a)!;
-        particleData[fireballIndex] = objectData.ensureFlipbookData(device, 0x4a0)!;
-        particleData[lavaSmokeIndex] = objectData.ensureFlipbookData(device, 0x6c1)!;
-        this.emitterManager = new EmitterManager(300, particleData);
+        this.sceneEmitters = new SceneEmitterHolder(device, objectData);
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(30/60);
     }
 
     public createPanels(): UI.Panel[] {
@@ -67,8 +62,7 @@ class BKRenderer implements Viewer.SceneGfx {
                 this.geoRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
             for (let i = 0; i < this.flipbookRenderers.length; i++)
                 this.flipbookRenderers[i].setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
-            for (let i = 0; i < this.emitterManager.particlePool.length; i++)
-                this.emitterManager.particlePool[i].flipbook.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
+            this.sceneEmitters.setVertexColorsEnabled(enableVertexColorsCheckbox.checked);
         };
         renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
         const enableTextures = new UI.Checkbox('Enable Textures', true);
@@ -77,8 +71,7 @@ class BKRenderer implements Viewer.SceneGfx {
                 this.geoRenderers[i].setTexturesEnabled(enableTextures.checked);
             for (let i = 0; i < this.flipbookRenderers.length; i++)
                 this.flipbookRenderers[i].setTexturesEnabled(enableTextures.checked);
-            for (let i = 0; i < this.emitterManager.particlePool.length; i++)
-                this.emitterManager.particlePool[i].flipbook.setTexturesEnabled(enableTextures.checked);
+            this.sceneEmitters.setTexturesEnabled(enableTextures.checked);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
         const enableMonochromeVertexColors = new UI.Checkbox('Grayscale Vertex Colors', false);
@@ -87,8 +80,7 @@ class BKRenderer implements Viewer.SceneGfx {
                 this.geoRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
             for (let i = 0; i < this.flipbookRenderers.length; i++)
                 this.flipbookRenderers[i].setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
-            for (let i = 0; i < this.emitterManager.particlePool.length; i++)
-                this.emitterManager.particlePool[i].flipbook.setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
+            this.sceneEmitters.setMonochromeVertexColorsEnabled(enableMonochromeVertexColors.checked);
         };
         renderHacksPanel.contents.appendChild(enableMonochromeVertexColors.elem);
         const enableAlphaVisualizer = new UI.Checkbox('Visualize Vertex Alpha', false);
@@ -97,8 +89,7 @@ class BKRenderer implements Viewer.SceneGfx {
                 this.geoRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
             for (let i = 0; i < this.flipbookRenderers.length; i++)
                 this.flipbookRenderers[i].setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
-            for (let i = 0; i < this.emitterManager.particlePool.length; i++)
-                this.emitterManager.particlePool[i].flipbook.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
+            this.sceneEmitters.setAlphaVisualizerEnabled(enableAlphaVisualizer.checked);
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
@@ -111,7 +102,7 @@ class BKRenderer implements Viewer.SceneGfx {
             this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         for (let i = 0; i < this.flipbookRenderers.length; i++)
             this.flipbookRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.emitterManager.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+        this.sceneEmitters.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -125,9 +116,8 @@ class BKRenderer implements Viewer.SceneGfx {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         executeOnPass(renderInstManager, device, skyboxPassRenderer, BKPass.SKYBOX);
-        skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
@@ -233,7 +223,7 @@ function setLevelGeoSelector(geo: GeometryRenderer, id: number) {
         geo.selectorState.values[valueList[i][0]] = valueList[i][1];
 }
 
-function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
+export function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
     const view = buffer.createDataView();
 
     const startFrame = view.getUint16(0x00);
@@ -246,7 +236,7 @@ function parseAnimationFile(buffer: ArrayBufferSlice): AnimationFile {
     for (let i = 0; i < trackCount; i++) {
         const w = view.getUint16(trackTableIdx + 0x00);
         const boneID = (w >>> 4);
-        const trackType: AnimationTrackType = (w & 0x0F);
+        const trackType: AnimationTrackType = (w & 0x0F) % 9; // tooie uses higher values for angles sometimes
         const keyframeCount = view.getUint16(trackTableIdx + 0x02);
 
         trackTableIdx += 0x04;
@@ -292,10 +282,10 @@ class ObjectData {
             const magic = view.getUint32(0x00);
 
             if (magic === 0x0000000B) {
-                // Z and opacity modes are sometimes set on the fly,
-                // so allow transparency in the one case where we need it
-                const opaque = geoFileID !== 0x37a
-                const geo = Geo.parse(geoData, Geo.RenderZMode.OPA, opaque);
+                // Z and opacity modes can be set dynamically,
+                // but most objects support switching beteween opaque and translucent,
+                // so setting translucent by default seems safe
+                const geo = Geo.parseBK(geoData, Geo.RenderZMode.OPA, false);
                 this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
             } else {
                 return this.ensureFlipbookData(device, geoFileID);
@@ -324,7 +314,7 @@ class ObjectData {
         }
     }
 
-    public spawnFlipbookByFileID(device: GfxDevice, emitters: Emitter[], fileID: number, pos: vec3, phase = 0, initialMirror = false, scale = 1): FlipbookRenderer | null {
+    public spawnFlipbookByFileID(device: GfxDevice, emitters: SceneEmitterHolder, fileID: number, pos: vec3, phase = 0, initialMirror = false, scale = 1): FlipbookRenderer | null {
         const flipbookData = this.ensureFlipbookData(device, fileID);
         if (flipbookData === null) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
@@ -332,29 +322,29 @@ class ObjectData {
         }
 
         const renderer = new FlipbookRenderer(flipbookData, phase, initialMirror);
-        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Opaque);
         mat4.fromTranslation(renderer.modelMatrix, pos);
-        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
+        scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, scale);
         return renderer;
     }
 
-    public spawnObjectByFileID(device: GfxDevice, emitters: Emitter[], fileID: number, pos: vec3, yaw = 0, roll = 0, scale = 1): GeometryRenderer | FlipbookRenderer | null {
+    public spawnObjectByFileID(device: GfxDevice, emitters: SceneEmitterHolder, fileID: number, pos: vec3, yaw = 0, roll = 0, scale = 1): GeometryRenderer | FlipbookRenderer | null {
         return this.baseSpawnObject(device, emitters, -1 /* no object ID */, fileID, pos, yaw, roll, scale);
     }
 
-    private baseSpawnObject(device: GfxDevice, emitters: Emitter[], objectID: number, fileID: number, pos: vec3, yaw = 0, roll = 0, scale = 1): GeometryRenderer | FlipbookRenderer | null {
+    private baseSpawnObject(device: GfxDevice, emitters: SceneEmitterHolder, objectID: number, fileID: number, pos: vec3, yaw = 0, roll = 0, scale = 1): GeometryRenderer | FlipbookRenderer | null {
         const geoData = this.ensureGeoData(device, fileID);
         if (geoData === null) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
             return null;
         }
-        const renderer = geoData instanceof FlipbookData ? new FlipbookRenderer(geoData) : Actors.createRenderer(emitters, objectID, geoData);
+        const renderer = geoData instanceof FlipbookData ? new FlipbookRenderer(geoData) : Actors.createRenderer(device, emitters, objectID, geoData);
 
-        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.OPAQUE);
+        renderer.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.Opaque);
         mat4.fromTranslation(renderer.modelMatrix, pos);
         mat4.rotateY(renderer.modelMatrix, renderer.modelMatrix, yaw * MathConstants.DEG_TO_RAD);
         mat4.rotateZ(renderer.modelMatrix, renderer.modelMatrix, roll * MathConstants.DEG_TO_RAD);
-        mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [scale, scale, scale]);
+        scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, scale);
         return renderer;
     }
 
@@ -366,7 +356,7 @@ class ObjectData {
         [0x2e2, 0x2df],     // lighthouse
     ]);
 
-    private spawnDependentObjects(device: GfxDevice, emitters: Emitter[], id: number, pos: vec3, yaw = 0): (GeometryRenderer | FlipbookRenderer)[] {
+    private spawnDependentObjects(device: GfxDevice, emitters: SceneEmitterHolder, id: number, pos: vec3, yaw = 0): (GeometryRenderer | FlipbookRenderer)[] {
         const pairedID = ObjectData.pairedIDs.get(id);
         const pairedObjects: (GeometryRenderer | FlipbookRenderer)[] = [];
         const posCopy = vec3.clone(pos);
@@ -383,7 +373,7 @@ class ObjectData {
                     return [];
                 const steamEmitter = new ConfigurableEmitter(quicksandConfig);
                 mat4.fromTranslation(steamEmitter.modelMatrix, pos);
-                emitters.push(steamEmitter);
+                emitters.flipbookManager.emitters.push(steamEmitter);
                 return [];
             case 0x383:
                 // TODO: finally figure out scale, also this doesn't look right yet
@@ -391,16 +381,11 @@ class ObjectData {
                 mat4.fromTranslation(smokeEmitter.modelMatrix, pos);
                 const sparkleEmitter = new ScaledEmitter(.5, torchSparkleConfig);
                 mat4.fromTranslation(sparkleEmitter.modelMatrix, pos);
-                emitters.push(smokeEmitter, sparkleEmitter);
+                emitters.flipbookManager.emitters.push(smokeEmitter, sparkleEmitter);
                 return [];
             case 0x377:
-                const lavaEmitter = new LavaRockEmitter(pos);
-                emitters.push(lavaEmitter);
-                if (LavaRockEmitter.rockPool.length < 2) {
-                    const newRock = this.spawnObject(device, emitters, 0x3bb, pos)![0];
-                    LavaRockEmitter.rockPool.push(newRock as Actors.LavaRock);
-                    return [newRock];
-                }
+                const lavaEmitter = new LavaRockEmitter(pos, emitters.lavaRockManager.emitters);
+                emitters.lavaRockManager.emitters.push(lavaEmitter);
         }
         if (pairedID === undefined)
             return [];
@@ -410,12 +395,13 @@ class ObjectData {
     private getObjectAnimations(spawnEntry: ObjectLoadEntry): number[] {
         switch (spawnEntry.SpawnID) {
             case 0x0e6: return [2, 4]; // gloop
+            case 0x123: return [1,2,3,4]; // magic carpet
             case 0x124: return [1, 2]; // sir slush
         }
         return [spawnEntry.AnimationStartIndex];
     }
 
-    public spawnObject(device: GfxDevice, emitters: Emitter[], id: number, pos: vec3, yaw = 0, selector = 0): SpawnedObjects {
+    public spawnObject(device: GfxDevice, emitters: SceneEmitterHolder, id: number, pos: vec3, yaw = 0, selector = 0): SpawnedObjects {
         const spawnEntry = this.objectSetupData.ObjectSetupTable.find((entry) => entry.SpawnID === id);
         if (spawnEntry === undefined) {
             console.warn(`Unknown object ID ${hexzero(id, 4)}`);
@@ -426,7 +412,8 @@ class ObjectData {
         const renderer = spawnEntry.GeoFileID !== 0 ? this.baseSpawnObject(device, emitters, id, spawnEntry.GeoFileID, pos, yaw) : null;
         if (renderer !== null) {
             (renderer as any).spawnEntry = spawnEntry;
-            renderer.sortKeyBase = makeSortKey(layerFromFlags(spawnEntry.Flags));
+            // the game sorts everything back-to-front, so do everything in the "translucent" layer
+            renderer.sortKeyBase = makeSortKey( GfxRendererLayer.TRANSLUCENT + layerFromFlags(spawnEntry.Flags));
             if (spawnEntry.AnimationTable.length > 0) {
                 if (renderer instanceof GeometryRenderer) {
                     const indices = this.getObjectAnimations(spawnEntry);
@@ -447,7 +434,7 @@ class ObjectData {
             if (renderer instanceof GeometryRenderer) {
                 renderer.objectFlags = spawnEntry.Flags;
                 const simpleSpawner = (x: number) => this.spawnObject(device, emitters, x, pos);
-                allObjects.push(...renderer.additionalSetup(simpleSpawner, id, selector));
+                renderer.additionalSetup(simpleSpawner, id, selector);
             }
         }
         // an object with no geometry can still spawn others
@@ -457,7 +444,7 @@ class ObjectData {
     }
 
     public spawnDebugSphere(device: GfxDevice, pos: vec3): GeometryRenderer {
-        return this.baseSpawnObject(device, [], 0x288, 0x402, pos)! as GeometryRenderer;
+        return this.baseSpawnObject(device, null!, 0x288, 0x402, pos)! as GeometryRenderer;
     }
 
     public destroy(device: GfxDevice): void {
@@ -472,7 +459,7 @@ class ObjectData {
 }
 
 async function fetchObjectData(dataFetcher: DataFetcher, device: GfxDevice): Promise<ObjectData> {
-    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=9`)!;
+    const objectData = await dataFetcher.fetchData(`${pathBase}/objectSetup_arc.crg1?cache_bust=10`)!;
     const objectSetup = BYML.parse<ObjectSetupData>(objectData, BYML.FileType.CRG1);
     return new ObjectData(objectSetup);
 }
@@ -505,13 +492,13 @@ class SceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string) {
     }
 
-    private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry): GeometryRenderer {
+    private addGeo(device: GfxDevice, cache: GfxRenderCache, viewerTextures: Viewer.Texture[], sceneRenderer: BKRenderer, geo: Geo.Geometry<Geo.BKGeoNode>): GeometryRenderer {
         for (let i = 0; i < geo.sharedOutput.textureCache.textures.length; i++)
             viewerTextures.push(textureToCanvas(geo.sharedOutput.textureCache.textures[i]));
 
         const geoData = new GeometryData(device, cache, geo);
         sceneRenderer.geoDatas.push(geoData.renderData);
-        const geoRenderer = new GeometryRenderer(geoData);
+        const geoRenderer = new GeometryRenderer(device, geoData);
         sceneRenderer.geoRenderers.push(geoRenderer);
         return geoRenderer;
     }
@@ -575,7 +562,7 @@ class SceneDesc implements Viewer.SceneDesc {
                             else if (id >= 0xf9 && id <= 0x100)
                                 continue; // just for handling the timed ring challenge inside Clanker
                             else {
-                                const objRenderers = objectSetupTable.spawnObject(device, sceneRenderer.emitterManager.emitters, id, pos, yaw, selectorValue);
+                                const objRenderers = objectSetupTable.spawnObject(device, sceneRenderer.sceneEmitters, id, pos, yaw, selectorValue);
                                 for (let obj of objRenderers) {
                                     if (obj instanceof GeometryRenderer) {
                                         sceneRenderer.geoRenderers.push(obj);
@@ -611,7 +598,7 @@ class SceneDesc implements Viewer.SceneDesc {
                                 const startFrame = view.getUint8(offs + 0x0A) >>> 3; // gets overwritten by the computed frame
                                 const phase = (view.getUint16(offs + 0x0A) >>> 6) & 0x1f;
 
-                                const flipbook = objectSetupTable.spawnFlipbookByFileID(device, sceneRenderer.emitterManager.emitters,
+                                const flipbook = objectSetupTable.spawnFlipbookByFileID(device, sceneRenderer.sceneEmitters,
                                     fileIDBase + 0x572, pos, phase, !!initialMirror, scale);
                                 if (flipbook) {
                                     flipbook.primColor = vec4.fromValues(r, g, b, 1);
@@ -621,7 +608,7 @@ class SceneDesc implements Viewer.SceneDesc {
                                 const yaw = view.getUint8(offs + 0x02) * 2;
                                 const roll = view.getUint8(offs + 0x03) * 2;
                                 const scale = view.getUint8(offs + 0x0A) / 100.0;
-                                const objRenderer = objectSetupTable.spawnObjectByFileID(device, sceneRenderer.emitterManager.emitters,
+                                const objRenderer = objectSetupTable.spawnObjectByFileID(device, sceneRenderer.sceneEmitters,
                                     fileIDBase + 0x2d1, pos, yaw, roll, scale);
                                 if (objRenderer !== null) {
                                     if (objRenderer instanceof GeometryRenderer)
@@ -659,7 +646,7 @@ class SceneDesc implements Viewer.SceneDesc {
 
         // only in Spiral Mountain
         if (waterfallEndpoints.length === 2)
-            emitAlongLine(sceneRenderer.emitterManager, new WaterfallEmitter(), waterfallEndpoints[0], waterfallEndpoints[1], 10);
+            emitAlongLine(sceneRenderer.sceneEmitters.flipbookManager, new WaterfallEmitter(), waterfallEndpoints[0], waterfallEndpoints[1], 10);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -667,61 +654,59 @@ class SceneDesc implements Viewer.SceneDesc {
             return await fetchObjectData(context.dataFetcher, device);
         });
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=2`).then((data) => {
-            const obj: any = BYML.parse(data!, BYML.FileType.CRG1);
+        const obj: any = BYML.parse(await dataFetcher.fetchData(`${pathBase}/${this.id}_arc.crg1?cache_bust=2`)!, BYML.FileType.CRG1);
 
-            const viewerTextures: Viewer.Texture[] = [];
-            const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
-            const sceneRenderer = new BKRenderer(device, fakeTextureHolder, objectData);
-            const cache = sceneRenderer.renderHelper.getCache();
+        const viewerTextures: Viewer.Texture[] = [];
+        const fakeTextureHolder = new FakeTextureHolder(viewerTextures);
+        const sceneRenderer = new BKRenderer(device, fakeTextureHolder, objectData);
+        const cache = sceneRenderer.renderHelper.getCache();
 
-            const opaFile = findFileByID(obj, obj.OpaGeoFileId);
-            if (opaFile !== null) {
-                const geo = Geo.parse(opaFile.Data, Geo.RenderZMode.OPA, true);
-                const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                opa.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
-                setLevelGeoSelector(opa, obj.SceneID);
+        const opaFile = findFileByID(obj, obj.OpaGeoFileId);
+        if (opaFile !== null) {
+            const geo = Geo.parseBK(opaFile.Data, Geo.RenderZMode.OPA, true);
+            const opa = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+            opa.sortKeyBase = makeSortKey(GfxRendererLayer.BACKGROUND);
+            setLevelGeoSelector(opa, obj.SceneID);
+        }
+
+        const xluFile = findFileByID(obj, obj.XluGeoFileId);
+        if (xluFile !== null) {
+            const geo = Geo.parseBK(xluFile.Data, Geo.RenderZMode.XLU, false);
+            const xlu = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+            xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT + BKLayer.LevelXLU);
+        }
+
+        const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileId);
+        if (opaSkybox !== null) {
+            const geo = Geo.parseBK(opaSkybox.Data, Geo.RenderZMode.OPA, true);
+            const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+            renderer.isSkybox = true;
+            scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, obj.OpaSkyboxScale);
+        }
+
+        const xluSkybox = findFileByID(obj, obj.XluSkyboxFileId);
+        if (xluSkybox !== null) {
+            const geo = Geo.parseBK(xluSkybox.Data, Geo.RenderZMode.XLU, false);
+            const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
+            renderer.isSkybox = true;
+            scaleMatrix(renderer.modelMatrix, renderer.modelMatrix, obj.XluSkyboxScale);
+        }
+
+        const setupFile = assertExists(findFileByID(obj, obj.SetupFileId));
+        this.addObjects(device, setupFile.Data, objectData, sceneRenderer);
+        if (obj.SceneID == 0x0b) {
+            const clanker = objectData.spawnObject(device, sceneRenderer.sceneEmitters, Actors.clankerID, vec3.fromValues(5500, 1100 /* or 0 */, 0))[0]! as GeometryRenderer;
+            clanker.animationController.init(15); // seems slower than others, not sure the source
+            // TODO: make sure Clanker renders before the parts
+            for (let object of sceneRenderer.geoRenderers) {
+                if (object instanceof Actors.ClankerBolt)
+                    object.clankerVector = assertExists(clanker.modelPointArray[5]);
+                else if (object instanceof Actors.ClankerTooth)
+                    object.movementController = new Actors.ModelPin(clanker.modelPointArray, object.index);
             }
-
-            const xluFile = findFileByID(obj, obj.XluGeoFileId);
-            if (xluFile !== null) {
-                const geo = Geo.parse(xluFile.Data, Geo.RenderZMode.XLU, false);
-                const xlu = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                xlu.sortKeyBase = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-            }
-
-            const opaSkybox = findFileByID(obj, obj.OpaSkyboxFileId);
-            if (opaSkybox !== null) {
-                const geo = Geo.parse(opaSkybox.Data, Geo.RenderZMode.OPA, true);
-                const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                renderer.isSkybox = true;
-                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.OpaSkyboxScale, obj.OpaSkyboxScale, obj.OpaSkyboxScale]);
-            }
-
-            const xluSkybox = findFileByID(obj, obj.XluSkyboxFileId);
-            if (xluSkybox !== null) {
-                const geo = Geo.parse(xluSkybox.Data, Geo.RenderZMode.XLU, false);
-                const renderer = this.addGeo(device, cache, viewerTextures, sceneRenderer, geo);
-                renderer.isSkybox = true;
-                mat4.scale(renderer.modelMatrix, renderer.modelMatrix, [obj.XluSkyboxScale, obj.XluSkyboxScale, obj.XluSkyboxScale]);
-            }
-
-            const setupFile = assertExists(findFileByID(obj, obj.SetupFileId));
-            this.addObjects(device, setupFile.Data, objectData, sceneRenderer);
-            if (obj.SceneID == 0x0b) {
-                const clanker = objectData.spawnObject(device, sceneRenderer.emitterManager.emitters, Actors.clankerID, vec3.fromValues(5500, 1100 /* or 0 */, 0))[0]! as GeometryRenderer;
-                clanker.animationController.init(15); // seems slower than others, not sure the source
-                // TODO: make sure Clanker renders before the parts
-                for (let object of sceneRenderer.geoRenderers) {
-                    if (object instanceof Actors.ClankerBolt)
-                        object.clankerVector = assertExists(clanker.modelPointArray[5]);
-                    else if (object instanceof Actors.ClankerTooth)
-                        object.movementController = new Actors.ModelPin(clanker.modelPointArray, object.index);
-                }
-                sceneRenderer.geoRenderers.push(clanker);
-            }
-            return sceneRenderer;
-        });
+            sceneRenderer.geoRenderers.push(clanker);
+        }
+        return sceneRenderer;
     }
 }
 

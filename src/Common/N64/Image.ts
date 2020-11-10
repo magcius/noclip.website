@@ -1,5 +1,6 @@
 
 import { assert } from "../../util";
+import { texturePadWidth } from "./RDP";
 
 export const enum ImageFormat {
     G_IM_FMT_RGBA = 0x00,
@@ -23,7 +24,7 @@ export const enum TextureLUT {
 }
 
 export const enum TexCM {
-    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02,
+    WRAP = 0x00, MIRROR = 0x01, CLAMP = 0x02, MIRROR_CLAMP = 0x03,
 }
 
 export const enum TextFilt {
@@ -53,15 +54,15 @@ export function getTLUTSize(siz: ImageSize) {
 }
 
 function expand3to8(n: number): number {
-    return (n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8));
+    return ((n << (8 - 3)) | (n << (8 - 6)) | (n >>> (9 - 8))) & 0xFF;
 }
 
 function expand4to8(n: number): number {
-    return (n << (8 - 4)) | (n >>> (8 - 8));
+    return ((n << (8 - 4)) | (n >>> (8 - 8))) & 0xFF;
 }
 
 function expand5to8(n: number): number {
-    return (n << (8 - 5)) | (n >>> (10 - 8));
+    return ((n << (8 - 5)) | (n >>> (10 - 8))) & 0xFF;
 }
 
 function r5g5b5a1(dst: Uint8Array, dstOffs: number, p: number) {
@@ -81,7 +82,7 @@ function copyTLUTColor(dst: Uint8Array, dstOffs: number, colorTable: Uint8Array,
 export function decodeTex_RGBA16(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {
     let dstIdx = 0;
     let srcIdx = 0;
-    const padW = (line !== 0) ? (((line << 2) - tileW) << 1) : 0x00;
+    const padW = texturePadWidth(ImageSize.G_IM_SIZ_16b, line, tileW);
     for (let y = 0; y < tileH; y++) {
         const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x++) {
@@ -96,6 +97,7 @@ export function decodeTex_RGBA16(dst: Uint8Array, view: DataView, srcOffs: numbe
 
 export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number): void {
     let dstIdx = 0;
+    const padW = 0;
     for (let y = 0; y < tileH; y++) {
         for (let x = 0; x < tileW; x++) {
             const p = view.getUint32(srcIdx);
@@ -106,38 +108,47 @@ export function decodeTex_RGBA32(dst: Uint8Array, view: DataView, srcIdx: number
             srcIdx += 0x04;
             dstIdx += 0x04;
         }
+        srcIdx += padW;
     }
 }
 
-export function decodeTex_CI4(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array): void {
+export function decodeTex_CI4(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, tlutColorTable: Uint8Array, line = 0, deinterleave = false): void {
     let dstIdx = 0;
+    let srcIdx = 0;
+    const padW = texturePadWidth(ImageSize.G_IM_SIZ_4b, line, tileW);
     for (let y = 0; y < tileH; y++) {
+        const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x += 2) {
-            const b = view.getUint8(srcIdx);
+            const b = view.getUint8(srcOffs + (srcIdx ^ di));
             copyTLUTColor(dst, dstIdx + 0, tlutColorTable, (b >>> 4) & 0x0F);
             copyTLUTColor(dst, dstIdx + 4, tlutColorTable, (b >>> 0) & 0x0F);
             srcIdx += 0x01;
             dstIdx += 0x08;
         }
+        srcIdx += padW;
     }
 }
 
-export function decodeTex_CI8(dst: Uint8Array, view: DataView, srcIdx: number, tileW: number, tileH: number, tlutColorTable: Uint8Array): void {
+export function decodeTex_CI8(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, tlutColorTable: Uint8Array, line = 0, deinterleave = false): void {
     let dstIdx = 0;
+    let srcIdx = 0;
+    const padW = texturePadWidth(ImageSize.G_IM_SIZ_8b, line, tileW);
     for (let y = 0; y < tileH; y++) {
+        const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x++) {
-            const b = view.getUint8(srcIdx);
+            const b = view.getUint8(srcOffs + (srcIdx ^ di));
             copyTLUTColor(dst, dstIdx + 0, tlutColorTable, b);
             srcIdx += 0x01;
             dstIdx += 0x04;
         }
+        srcIdx += padW;
     }
 }
 
 export function decodeTex_IA4(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {
     let dstIdx = 0;
     let srcIdx = 0;
-    const padW = (line !== 0) ? (((line << 4) - tileW) >>> 1) : 0x00;
+    const padW = texturePadWidth(ImageSize.G_IM_SIZ_4b, line, tileW);
     for (let y = 0; y < tileH; y++) {
         const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x += 2) {
@@ -164,7 +175,7 @@ export function decodeTex_IA4(dst: Uint8Array, view: DataView, srcOffs: number, 
 export function decodeTex_IA8(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {
     let dstIdx = 0;
     let srcIdx = 0;
-    const padW = (line !== 0) ? ((line << 3) - tileW) : 0x00;
+    const padW = texturePadWidth(ImageSize.G_IM_SIZ_8b, line, tileW);
     for (let y = 0; y < tileH; y++) {
         const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x++) {
@@ -185,7 +196,7 @@ export function decodeTex_IA8(dst: Uint8Array, view: DataView, srcOffs: number, 
 export function decodeTex_IA16(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {
     let dstIdx = 0;
     let srcIdx = 0;
-    const padW = (line !== 0) ? (((line << 2) - tileW) << 1) : 0x00;
+    const padW = texturePadWidth(ImageSize.G_IM_SIZ_16b, line, tileW);
     for (let y = 0; y < tileH; y++) {
         const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x++) {
@@ -205,7 +216,7 @@ export function decodeTex_IA16(dst: Uint8Array, view: DataView, srcOffs: number,
 export function decodeTex_I4(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {
     let dstIdx = 0;
     let srcIdx = 0;
-    const padW = (line !== 0) ? (((line << 4) - tileW) >>> 1) : 0x00;
+    const padW = texturePadWidth(ImageSize.G_IM_SIZ_4b, line, tileW);
     for (let y = 0; y < tileH; y++) {
         const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x += 2) {
@@ -230,7 +241,7 @@ export function decodeTex_I4(dst: Uint8Array, view: DataView, srcOffs: number, t
 export function decodeTex_I8(dst: Uint8Array, view: DataView, srcOffs: number, tileW: number, tileH: number, line: number = 0, deinterleave: boolean = false): void {
     let dstIdx = 0;
     let srcIdx = 0;
-    const padW = (line !== 0) ? (((line << 3) - tileW) << 1) : 0x00;
+    const padW = texturePadWidth(ImageSize.G_IM_SIZ_8b, line, tileW);
     for (let y = 0; y < tileH; y++) {
         const di = deinterleave ? ((y & 1) << 2) : 0;
         for (let x = 0; x < tileW; x++) {
@@ -246,8 +257,8 @@ export function decodeTex_I8(dst: Uint8Array, view: DataView, srcOffs: number, t
     }
 }
 
-// TODO(jstpierre): non-RGBA16 TLUT modes (comes from TEXTLUT field in SETOTHERMODE_H)
 export function parseTLUT(dst: Uint8Array, view: DataView, idx: number, siz: ImageSize, lutMode: TextureLUT): number {
+    // TODO(jstpierre): non-RGBA16 TLUT modes (comes from TEXTLUT field in SETOTHERMODE_H)
     assert(lutMode === TextureLUT.G_TT_RGBA16);
 
     const tlutSize = getTLUTSize(siz);

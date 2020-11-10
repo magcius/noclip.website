@@ -1,6 +1,15 @@
-Applies to all code in src/
+NOTE
 
-All other files belong to their respective owners.
+Some implementations of game softwares were reverse-engineered, and not in a "clean-room"
+manner. The re-interpretations of these original game softwares are available under the
+MIT License.
+
+Some files written specifically for the noclip project have not been reverse engineered,
+and are available solely under the MIT License as displayed below. Please contact
+Jasper St. Pierre at jstpierre@mecheye.net for further details on which source files are
+completely clean from a reverse-engineering standpoint, and which are not.
+
+
 
 MIT License
 

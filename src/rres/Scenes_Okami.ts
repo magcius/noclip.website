@@ -13,9 +13,23 @@ import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from "../gx/gx_rende
 import AnimationController from "../AnimationController";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
-import { computeModelMatrixYBillboard } from "../Camera";
+import { CameraController, Camera } from "../Camera";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { SceneContext } from "../SceneBase";
+
+function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
+    mat4.identity(out);
+
+    // Right vector
+    out[0] = camera.worldMatrix[0];
+    out[4] = camera.worldMatrix[4];
+    out[8] = camera.worldMatrix[8];
+
+    // Forward vector
+    out[2] = camera.worldMatrix[2];
+    out[6] = camera.worldMatrix[6];
+    out[10] = camera.worldMatrix[10];
+}
 
 const pathBase = `okami`;
 
@@ -265,6 +279,10 @@ export class OkamiRenderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
+    
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(8/60);
+    }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
@@ -336,9 +354,9 @@ const enum OkamiPass {
 function patchMaterialSetAlpha(material: BRRES.MDL0_MaterialEntry, alpha: number): void {
     if (alpha === 0x44) {
         // 0x44; SrcA*Src + (1.0-SrcA)*Dst
-        material.gxMaterial.ropInfo.blendMode.type = GX.BlendMode.BLEND;
-        material.gxMaterial.ropInfo.blendMode.srcFactor = GX.BlendFactor.SRCALPHA;
-        material.gxMaterial.ropInfo.blendMode.dstFactor = GX.BlendFactor.INVSRCALPHA;
+        material.gxMaterial.ropInfo.blendMode = GX.BlendMode.BLEND;
+        material.gxMaterial.ropInfo.blendSrcFactor = GX.BlendFactor.SRCALPHA;
+        material.gxMaterial.ropInfo.blendDstFactor = GX.BlendFactor.INVSRCALPHA;
     } else {
         // TODO(jstpierre): Rest of them.
         throw "whoops";
@@ -796,9 +814,9 @@ const sceneDescs = [
     new OkamiSceneDesc('r119', 'Divine Spring 6'),
     new OkamiSceneDesc('r11c', 'Divine Spring 7'),
     new OkamiSceneDesc('r11d', 'Divine Spring 8'),
-    new OkamiSceneDesc('r113', 'Spider Queen Arena (Refight 1)'),
-    new OkamiSceneDesc('r11a', 'Spider Queen Arena (Refight 2)'),
-    new OkamiSceneDesc('r11b', 'Spider Queen Arena (Refight 3)'),
+    new OkamiSceneDesc('r113', 'Bandit Spider and Devil Gate Arena 1'),
+    new OkamiSceneDesc('r11a', 'Bandit Spider and Devil Gate Arena 2'),
+    new OkamiSceneDesc('r11b', 'Bandit Spider and Devil Gate Arena 3'),
     new OkamiSceneDesc('r120', 'Moon Cave - Orochi Arena (No Bell)'),
     new OkamiSceneDesc('r200', "Sei'an City - Arisocratic Quarter (Cursed)"),
     new OkamiSceneDesc('r201', "Sei'an City - Commoner's Quarter"),
@@ -847,7 +865,7 @@ const sceneDescs = [
     new OkamiSceneDesc('rf11', "Kamui (Cursed)"),
     new OkamiSceneDesc('rf12', "Kamui"),
     new OkamiSceneDesc('rf13', "Kamui (Ezofuji)"),
-    new OkamiSceneDesc('rf20', "Shinshu Field (Beta Version)"),
+    new OkamiSceneDesc('rf20', "Shinshu Field (Spirit Gate)"),
     new OkamiSceneDesc('rf21', "Moon Cave (Exterior, Cursed, Less Wind)"),
     new OkamiSceneDesc('re00', "Ending Credits: Sei'an City - Gojo Bridge"),
     new OkamiSceneDesc('re01', "Ending Credits: Sei'an City - Aristocratic Quarter"),

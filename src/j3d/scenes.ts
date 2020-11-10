@@ -7,13 +7,15 @@ import * as Viewer from '../viewer';
 
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { J3DModelInstanceSimple, J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { readBTI_Texture } from '../Common/JSYSTEM/JUTTexture';
+import { J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate, GXTextureHolder } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { GXMaterialHacks } from '../gx/gx_material';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import * as JPAExplorer from '../interactive_examples/JPAExplorer';
+import * as JPAExplorer from '../InteractiveExamples/JPAExplorer';
 import { SceneContext } from '../SceneBase';
 
 export class BasicRenderer implements Viewer.SceneGfx {
@@ -21,6 +23,7 @@ export class BasicRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
     public modelInstances: J3DModelInstanceSimple[] = [];
     public rarc: RARC.JKRArchive[] = [];
+    public textureHolder = new GXTextureHolder();
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -94,7 +97,7 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
     const bmdModel = new J3DModelData(device, cache, bmd);
     const scene = new J3DModelInstanceSimple(bmdModel, materialHacks);
     if (bmt !== null)
-        scene.setModelMaterialData(new BMDModelMaterialData(device, cache, bmt));
+        scene.setModelMaterialDataOwned(new BMDModelMaterialData(device, cache, bmt));
 
     if (btkFile !== null) {
         const btk = BTK.parse(btkFile.buffer);
@@ -114,42 +117,48 @@ export function createModelInstance(device: GfxDevice, cache: GfxRenderCache, bm
     return scene;
 }
 
-function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buffer: ArrayBufferSlice): J3DModelInstanceSimple[] {
-    if (readString(buffer, 0, 4) === 'RARC') {
+function createScenesFromBuffer(device: GfxDevice, renderer: BasicRenderer, buffer: ArrayBufferSlice): void {
+    if (['RARC', 'CRAR'].includes(readString(buffer, 0x00, 0x04))) {
         const rarc = RARC.parse(buffer);
         renderer.rarc.push(rarc);
-        const bmdFiles = rarc.files.filter((f) => f.name.endsWith('.bmd') || f.name.endsWith('.bdl'));
-        let scenes = bmdFiles.map((bmdFile) => {
-            // Find the corresponding btk.
-            const basename = bmdFile.name.split('.')[0];
-            const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`) || null;
-            const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`) || null;
-            const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
-            const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
-            let scene;
-            try {
-                scene = createModelInstance(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmdFile, btkFile, brkFile, bckFile, bmtFile);
-            } catch(e) {
-                console.warn(`File ${basename} failed to parse:`, e);
-                return null;
-            }
-            scene.name = basename;
-            if (basename.includes('_sky'))
-                scene.isSkybox = true;
-            return scene;
-        });
 
-        return scenes.filter((scene) => scene !== null) as J3DModelInstanceSimple[];
+        for (let i = 0; i < rarc.files.length; i++) {
+            const file = rarc.files[i];
+
+            if (file.name.endsWith('.bmd') || file.name.endsWith('.bdl')) {
+                // Find the corresponding btk.
+                const basename = file.name.split('.')[0];
+                const btkFile = rarc.files.find((f) => f.name === `${basename}.btk`) || null;
+                const brkFile = rarc.files.find((f) => f.name === `${basename}.brk`) || null;
+                const bckFile = rarc.files.find((f) => f.name === `${basename}.bck`) || null;
+                const bmtFile = rarc.files.find((f) => f.name === `${basename}.bmt`) || null;
+                let modelInstance;
+                try {
+                    modelInstance = createModelInstance(device, renderer.renderHelper.renderInstManager.gfxRenderCache, file, btkFile, brkFile, bckFile, bmtFile);
+                } catch(e) {
+                    console.warn(`File ${basename} failed to parse:`, e);
+                    continue;
+                }
+
+                modelInstance.name = basename;
+                if (basename.includes('_sky'))
+                    modelInstance.isSkybox = true;
+                renderer.addModelInstance(modelInstance);
+                renderer.textureHolder.addTextures(device, modelInstance.modelMaterialData.tex1Data!.tex1.textureDatas);
+            } else if (file.name.endsWith('.bti')) {
+                const texture = readBTI_Texture(file.buffer, file.name);
+                renderer.textureHolder.addTextures(device, [texture]);
+            }
+        }
     }
 
     if (['J3D2bmd3', 'J3D2bdl4'].includes(readString(buffer, 0, 8))) {
         const bmd = BMD.parse(buffer);
         const bmdModel = new J3DModelData(device, renderer.renderHelper.renderInstManager.gfxRenderCache, bmd);
         const modelInstance = new J3DModelInstanceSimple(bmdModel);
-        return [modelInstance];
+        renderer.addModelInstance(modelInstance);
+        renderer.textureHolder.addTextures(device, modelInstance.modelMaterialData.tex1Data!.tex1.textureDatas);
     }
-
-    return [];
 }
 
 export function createSceneFromBuffer(context: SceneContext, buffer: ArrayBufferSlice): Viewer.SceneGfx {
@@ -163,8 +172,6 @@ export function createSceneFromBuffer(context: SceneContext, buffer: ArrayBuffer
 
     const device = context.device;
     const renderer = new BasicRenderer(device);
-    const scenes = createScenesFromBuffer(device, renderer, buffer);
-    for (let i = 0; i < scenes.length; i++)
-        renderer.addModelInstance(scenes[i]);
+    createScenesFromBuffer(device, renderer, buffer);
     return renderer;
 }

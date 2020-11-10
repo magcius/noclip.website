@@ -7,13 +7,9 @@ import { Texture } from "../../viewer";
 import { TextureMapping } from "../../TextureHolder";
 import { GfxRenderCache } from "../../gfx/render/GfxRenderCache";
 import { translateTexFilterGfx, translateWrapModeGfx, loadTextureFromMipChain } from "../../gx/gx_render";
-import { calcMipChain } from "../../gx/gx_texture";
+import { calcMipChain, TextureInputGX } from "../../gx/gx_texture";
 
-export interface BTI_Texture {
-    name: string;
-    format: GX.TexFormat;
-    width: number;
-    height: number;
+export interface BTI_Texture extends TextureInputGX {
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
     minFilter: GX.TexFilter;
@@ -21,15 +17,9 @@ export interface BTI_Texture {
     minLOD: number;
     maxLOD: number;
     lodBias: number;
-    mipCount: number;
-    data: ArrayBufferSlice | null;
-
-    // Palette data
-    paletteFormat: GX.TexPalette;
-    paletteData: ArrayBufferSlice | null;
 }
 
-export function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Texture {
+export function readBTI_Texture(buffer: ArrayBufferSlice, name: string, copyData: boolean = false): BTI_Texture {
     const view = buffer.createDataView();
 
     const format: GX.TexFormat = view.getUint8(0x00);
@@ -52,11 +42,11 @@ export function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Tex
 
     let data: ArrayBufferSlice | null = null;
     if (dataOffs !== 0)
-        data = buffer.slice(dataOffs);
+        data = buffer.slice(dataOffs, undefined, copyData);
 
     let paletteData: ArrayBufferSlice | null = null;
     if (paletteOffs !== 0)
-        paletteData = buffer.subarray(paletteOffs, paletteCount * 2);
+        paletteData = buffer.subarray(paletteOffs, paletteCount * 2, copyData);
 
     return { name, format, width, height, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD, mipCount, lodBias, data, paletteFormat, paletteData };
 }
@@ -64,9 +54,9 @@ export function readBTI_Texture(buffer: ArrayBufferSlice, name: string): BTI_Tex
 export class BTI {
     public texture: BTI_Texture;
 
-    public static parse(buffer: ArrayBufferSlice, name: string): BTI {
+    public static parse(buffer: ArrayBufferSlice, name: string, copyData: boolean = false): BTI {
         const bti = new BTI();
-        bti.texture = readBTI_Texture(buffer, name);
+        bti.texture = readBTI_Texture(buffer, name, copyData);
         return bti;
     }
 }
@@ -109,6 +99,7 @@ export class BTIData {
     }
 
     public fillTextureMapping(m: TextureMapping): boolean {
+        m.lateBinding = null;
         m.gfxTexture = this.gfxTexture;
         m.gfxSampler = this.gfxSampler;
         m.lodBias = this.btiTexture.lodBias;
@@ -121,4 +112,3 @@ export class BTIData {
         device.destroyTexture(this.gfxTexture);
     }
 }
-

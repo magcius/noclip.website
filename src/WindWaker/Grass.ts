@@ -4,23 +4,31 @@ import { nArray } from '../util';
 import { mat4, vec3 } from 'gl-matrix';
 import * as GX from '../gx/gx_enum';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { dGlobals } from './zww_scenes';
-import { WindWakerRenderer } from './zww_scenes';
-import * as DZB from './DZB';
 import { Endianness } from '../endian';
 
 import { BTIData, BTI_Texture } from '../Common/JSYSTEM/JUTTexture';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, getAttributeByteSize } from '../gx/gx_displaylist';
-import { parseMaterial } from '../gx/gx_material';
+import { parseMaterial, GXMaterial } from '../gx/gx_material';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
-import { ColorKind, PacketParams, MaterialParams, ub_MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
+import { ColorKind, PacketParams, MaterialParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
 import { GXShapeHelperGfx, GXMaterialHelperGfx } from '../gx/gx_render';
 import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { ViewerRenderInput } from '../viewer';
 import { colorCopy, colorFromRGBA } from '../Color';
+import { dKy_GxFog_set } from './d_kankyo';
+import { cBgS_GndChk } from './d_bg';
+import { getMatrixTranslation } from '../MathHelpers';
+
+function createMaterialHelper(material: GXMaterial): GXMaterialHelperGfx {
+    // Patch material.
+    material.ropInfo.fogType = GX.FogType.PERSP_LIN;
+    material.ropInfo.fogAdjEnabled = true;
+    material.hasFogBlock = true;
+    return new GXMaterialHelperGfx(material);
+}
 
 function parseGxVtxAttrFmtV(buffer: ArrayBufferSlice) {
     const attrFmts = buffer.createTypedArray(Uint32Array, 0, buffer.byteLength / 4, Endianness.BIG_ENDIAN);
@@ -102,18 +110,25 @@ const materialParams = new MaterialParams();
 
 // The game uses unsigned shorts to index into cos/sin tables.
 // The max short value (2^16-1 = 65535) corresponds to 2PI
-const kUshortTo2PI = Math.PI * 2.0 / 65535.0;
+const kUshortTo2PI = Math.PI / 0x7FFF;
 export function uShortTo2PI(x: number) {
     return x * kUshortTo2PI;
 }
 
 // @NOTE: The game has separate checkGroundY functions for trees, grass, and flowers
-function checkGroundY(context: WindWakerRenderer, roomIdx: number, pos: vec3) {
-    const dzb = context.getRoomDZB(roomIdx);
 
-    const down = vec3.set(scratchVec3b, 0, -1, 0);
-    const hit = DZB.raycast(scratchVec3b, dzb, pos, down);
-    return hit ? scratchVec3b[1] : pos[1];
+const chk = new cBgS_GndChk();
+function checkGroundY(globals: dGlobals, roomIdx: number, pos: vec3) {
+    chk.Reset();
+    vec3.copy(chk.pos, pos);
+    chk.pos[1] += 50;
+
+    const y = globals.scnPlay.bgS.GroundCross(chk);
+    if (y > -Infinity) {
+        return y;
+    } else {
+        return pos[1];
+    }
 }
 
 function setColorFromRoomNo(globals: dGlobals, materialParams: MaterialParams, roomNo: number): void {
@@ -152,23 +167,27 @@ interface FlowerAnim {
     matrix: mat4;
 }
 
-class FlowerModel {
-    public pinkTextureMapping = nArray(1, () => new TextureMapping());
-    public pinkTextureData: BTIData;
-    public pinkMaterial: GXMaterialHelperGfx;
-    public whiteTextureMapping = nArray(1, () => new TextureMapping());
-    public whiteTextureData: BTIData;
-    public whiteMaterial: GXMaterialHelperGfx;
-    public bessouTextureMapping = nArray(1, () => new TextureMapping());
-    public bessouTextureData: BTIData;
-    public bessouMaterial: GXMaterialHelperGfx;
+class DynamicModel {
+    public textureMapping = nArray(1, () => new TextureMapping());
+    public materialHelper: GXMaterialHelperGfx;
+    public shapes: GXShapeHelperGfx[] = [];
 
-    public shapeWhiteUncut: GXShapeHelperGfx;
-    public shapeWhiteCut: GXShapeHelperGfx;
-    public shapePinkUncut: GXShapeHelperGfx;
-    public shapePinkCut: GXShapeHelperGfx;
-    public shapeBessouUncut: GXShapeHelperGfx;
-    public shapeBessouCut: GXShapeHelperGfx;
+    constructor(public textureData: BTIData, material: GXMaterial) {
+        this.textureData.fillTextureMapping(this.textureMapping[0]);
+        this.materialHelper = createMaterialHelper(material);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (let i = 0; i < this.shapes.length; i++)
+            this.shapes[i].destroy(device);
+        this.textureData.destroy(device);
+    }
+}
+
+class FlowerModel {
+    public pink: DynamicModel;
+    public white: DynamicModel;
+    public bessou: DynamicModel;
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
 
@@ -186,22 +205,16 @@ class FlowerModel {
         displayListRegistersInitGX(matRegisters);
 
         displayListRegistersRun(matRegisters, l_matDL);
-        this.whiteMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL'));
-        const whiteTex = createTexture(matRegisters, l_Txo_ob_flower_white_64x64TEX, 'l_Txo_ob_flower_white_64x64TEX');
-        this.whiteTextureData = new BTIData(device, cache, whiteTex);
-        this.whiteTextureData.fillTextureMapping(this.whiteTextureMapping[0]);
+        const whiteTextureData = new BTIData(device, cache, createTexture(matRegisters, l_Txo_ob_flower_white_64x64TEX, 'l_Txo_ob_flower_white_64x64TEX'));
+        this.white = new DynamicModel(whiteTextureData, parseMaterial(matRegisters, 'l_matDL'));
 
         displayListRegistersRun(matRegisters, l_matDL2);
-        this.pinkMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL2'));
-        const pinkTex = createTexture(matRegisters, l_Txo_ob_flower_pink_64x64TEX, 'l_Txo_ob_flower_pink_64x64TEX');
-        this.pinkTextureData = new BTIData(device, cache, pinkTex);
-        this.pinkTextureData.fillTextureMapping(this.pinkTextureMapping[0]);
+        const pinkTextureData = new BTIData(device, cache, createTexture(matRegisters, l_Txo_ob_flower_pink_64x64TEX, 'l_Txo_ob_flower_pink_64x64TEX'));
+        this.pink = new DynamicModel(pinkTextureData, parseMaterial(matRegisters, 'l_matDL2'));
 
         displayListRegistersRun(matRegisters, l_matDL3);
-        this.bessouMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'l_matDL3'));
-        const bessouTexture = createTexture(matRegisters, l_Txq_bessou_hanaTEX, 'l_Txq_bessou_hanaTEX');
-        this.bessouTextureData = new BTIData(device, cache, bessouTexture);
-        this.bessouTextureData.fillTextureMapping(this.bessouTextureMapping[0]);
+        const bessouTextureData = new BTIData(device, cache, createTexture(matRegisters, l_Txq_bessou_hanaTEX, 'l_Txq_bessou_hanaTEX'));
+        this.bessou = new DynamicModel(bessouTextureData, parseMaterial(matRegisters, 'l_matDL3'));
 
         // White
         const l_pos = globals.findExtraSymbolData(`d_flower.o`, `l_pos`);
@@ -230,7 +243,7 @@ class FlowerModel {
         vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compShift: 0, compType: GX.CompType.F32 };
         vatFormat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compShift: 0, compType: GX.CompType.F32 };
         vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compShift: 0, compType: GX.CompType.RGBA8 };
-         const vcd: GX_VtxDesc[] = [];
+        const vcd: GX_VtxDesc[] = [];
         vcd[GX.Attr.POS] = { type: GX.AttrType.INDEX8 };
         vcd[GX.Attr.CLR0] = { type: GX.AttrType.INDEX8 };
         vcd[GX.Attr.TEX0] = { type: GX.AttrType.INDEX8 };
@@ -256,24 +269,22 @@ class FlowerModel {
         // Coalesce all VBs and IBs into single buffers and upload to the GPU
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ lWhiteUncut, lWhiteCut, lPinkUncut, lPinkCut, lBessouUncut, lBessouCut ]);
 
+        const b = this.bufferCoalescer.coalescedBuffers;
+
         // Build an input layout and input state from the vertex layout and data
-        this.shapeWhiteUncut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, lWhiteUncut);
-        this.shapeWhiteCut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, lWhiteCut);
-        this.shapePinkUncut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[2], vtxLoader.loadedVertexLayout, lPinkUncut);
-        this.shapePinkCut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[3], vtxLoader.loadedVertexLayout, lPinkCut);
-        this.shapeBessouUncut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[4], vtxLoader.loadedVertexLayout, lBessouUncut);
-        this.shapeBessouCut = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[5], vtxLoader.loadedVertexLayout, lBessouCut);
+        this.white.shapes.push(new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, lWhiteUncut));
+        this.white.shapes.push(new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, lWhiteCut));
+        this.pink.shapes.push(new GXShapeHelperGfx(device, cache, b[2].vertexBuffers, b[2].indexBuffer, vtxLoader.loadedVertexLayout, lPinkUncut));
+        this.pink.shapes.push(new GXShapeHelperGfx(device, cache, b[3].vertexBuffers, b[3].indexBuffer, vtxLoader.loadedVertexLayout, lPinkCut));
+        this.bessou.shapes.push(new GXShapeHelperGfx(device, cache, b[4].vertexBuffers, b[4].indexBuffer, vtxLoader.loadedVertexLayout, lBessouUncut));
+        this.bessou.shapes.push(new GXShapeHelperGfx(device, cache, b[5].vertexBuffers, b[5].indexBuffer, vtxLoader.loadedVertexLayout, lBessouCut));
     }
 
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
-        this.shapeWhiteUncut.destroy(device);
-        this.shapeWhiteCut.destroy(device);
-        this.shapePinkUncut.destroy(device);
-        this.shapePinkCut.destroy(device);
-
-        this.whiteTextureData.destroy(device);
-        this.pinkTextureData.destroy(device);
+        this.white.destroy(device);
+        this.pink.destroy(device);
+        this.bessou.destroy(device);
     }
 }
 
@@ -356,7 +367,7 @@ export class FlowerPacket {
 
                 // Perform ground checks for some limited number of flowers
                 if ((data.flags & FlowerFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                    data.pos[1] = checkGroundY(globals.renderer, roomIdx, data.pos);
+                    data.pos[1] = checkGroundY(globals, roomIdx, data.pos);
                     data.flags &= ~FlowerFlags.needsGroundCheck;
                     ++groundChecksThisFrame;
                 }
@@ -371,97 +382,49 @@ export class FlowerPacket {
         }
     }
 
-    private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, device: GfxDevice): void {
+    private drawFlowers(globals: dGlobals, roomIdx: number, type: FlowerType, model: DynamicModel, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        const camera = viewerInput.camera;
+
+        getMatrixTranslation(scratchVec3a, camera.worldMatrix);
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        template.setSamplerBindingsFromTextureMappings(model.textureMapping);
+        setColorFromRoomNo(globals, materialParams, roomIdx);
+        dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+        model.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
+        model.materialHelper.setOnRenderInst(globals.modelCache.device, renderInstManager.gfxRenderCache, template);
+
         const room = this.rooms[roomIdx];
+        for (let i = 0; i < room.length; i++) {
+            const data = room[i];
 
-        if (room.length === 0)
-            return;
+            if (data.flags & FlowerFlags.isFrustumCulled || data.type !== type)
+                continue;
+            if (distanceCull(scratchVec3a, data.pos))
+                continue;
 
-        let template;
-
-        const worldToView = viewerInput.camera.viewMatrix;
-        const worldCamPos = mat4.getTranslation(scratchVec3b, viewerInput.camera.worldMatrix);
-
-        // Draw white flowers
-        template = renderInstManager.pushTemplateRenderInst();
-        {
-            template.setSamplerBindingsFromTextureMappings(this.flowerModel.whiteTextureMapping);
-            const materialParamsOffs = this.flowerModel.whiteMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
-            setColorFromRoomNo(globals, materialParams, roomIdx);
-            this.flowerModel.whiteMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
-            this.flowerModel.whiteMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-
-            for (let i = 0; i < room.length; i++) {
-                const data = room[i];
-
-                if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.WHITE)
-                    continue;
-                if (distanceCull(worldCamPos, data.pos))
-                    continue;
-
-                const renderInst = this.flowerModel.shapeWhiteUncut.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
-                this.flowerModel.shapeWhiteUncut.fillPacketParams(packetParams, renderInst);
-            }
+            const renderInst = renderInstManager.newRenderInst();
+            model.shapes[0].setOnRenderInst(renderInst);
+            mat4.mul(packetParams.u_PosMtx[0], camera.viewMatrix, data.modelMatrix);
+            model.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+            renderInstManager.submitRenderInst(renderInst);
         }
-        renderInstManager.popTemplateRenderInst();
 
-        // Draw pink flowers
-        template = renderInstManager.pushTemplateRenderInst();
-        {
-            template.setSamplerBindingsFromTextureMappings(this.flowerModel.pinkTextureMapping);
-            const materialParamsOffs = this.flowerModel.pinkMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
-            setColorFromRoomNo(globals, materialParams, roomIdx);
-            this.flowerModel.pinkMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
-            this.flowerModel.pinkMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-
-            for (let i = 0; i < room.length; i++) {
-                const data = room[i];
-
-                if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.PINK)
-                    continue;
-                if (distanceCull(worldCamPos, data.pos))
-                    continue;
-
-                const renderInst = this.flowerModel.shapePinkUncut.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
-                this.flowerModel.shapePinkUncut.fillPacketParams(packetParams, renderInst);
-            }
-        }
-        renderInstManager.popTemplateRenderInst();
-
-        // Draw bessou flowers
-        template = renderInstManager.pushTemplateRenderInst();
-        {
-            template.setSamplerBindingsFromTextureMappings(this.flowerModel.bessouTextureMapping);
-            const materialParamsOffs = this.flowerModel.bessouMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
-            setColorFromRoomNo(globals, materialParams, roomIdx);
-            this.flowerModel.bessouMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
-            this.flowerModel.bessouMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-
-            for (let i = 0; i < room.length; i++) {
-                const data = room[i];
-
-                if (data.flags & FlowerFlags.isFrustumCulled || data.type !== FlowerType.BESSOU)
-                    continue;
-                if (distanceCull(worldCamPos, data.pos))
-                    continue;
-
-                const renderInst = this.flowerModel.shapeBessouUncut.pushRenderInst(renderInstManager);
-                mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMatrix);
-                this.flowerModel.shapeBessouUncut.fillPacketParams(packetParams, renderInst);
-            }
-        }
         renderInstManager.popTemplateRenderInst();
     }
 
+    private drawRoom(globals: dGlobals, roomIdx: number, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (this.rooms[roomIdx].length === 0)
+            return;
+
+        this.drawFlowers(globals, roomIdx, FlowerType.WHITE, this.flowerModel.white, renderInstManager, viewerInput);
+        this.drawFlowers(globals, roomIdx, FlowerType.PINK, this.flowerModel.pink, renderInstManager, viewerInput);
+        this.drawFlowers(globals, roomIdx, FlowerType.BESSOU, this.flowerModel.bessou, renderInstManager, viewerInput);
+    }
+
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
-        const device = globals.modelCache.device;
         for (let i = 0; i < this.rooms.length; i++)
-            this.drawRoom(globals, i, renderInstManager, viewerInput, device);
+            this.drawRoom(globals, i, renderInstManager, viewerInput);
     }
 
     public destroy(device: GfxDevice): void {
@@ -510,17 +473,8 @@ interface TreeAnim {
 }
 
 class TreeModel {
-    public shadowTextureMapping = nArray(1, () => new TextureMapping());
-    public shadowTextureData: BTIData;
-    public shadowMaterial: GXMaterialHelperGfx;
-
-    public woodTextureMapping = nArray(1, () => new TextureMapping());
-    public woodTextureData: BTIData;
-    public woodMaterial: GXMaterialHelperGfx;
-
-    public shapeMain: GXShapeHelperGfx;
-    public shapeTop: GXShapeHelperGfx;
-    public shapeShadow: GXShapeHelperGfx;
+    public shadow: DynamicModel;
+    public main: DynamicModel;
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
 
@@ -557,20 +511,15 @@ class TreeModel {
         // Tree material
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_matDL);
-        this.woodMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_tree::l_matDL'));
-        const woodTexture = createTexture(matRegisters, l_Txa_swood_aTEX, 'l_Txa_swood_aTEX');
-        this.woodTextureData = new BTIData(device, cache, woodTexture);
-        this.woodTextureData.fillTextureMapping(this.woodTextureMapping[0]);
+        const woodTextureData = new BTIData(device, cache, createTexture(matRegisters, l_Txa_swood_aTEX, 'l_Txa_swood_aTEX'));
+        this.main = new DynamicModel(woodTextureData, parseMaterial(matRegisters, 'd_tree::l_matDL'));
 
         // Shadow material
         displayListRegistersInitGX(matRegisters);
         displayListRegistersRun(matRegisters, l_shadowMatDL);
-        const shadowMat = parseMaterial(matRegisters, 'd_tree::l_shadowMatDL');
 
-        this.shadowMaterial = new GXMaterialHelperGfx(shadowMat);
-        const shadowTexture = createTexture(matRegisters, l_Txa_kage_32TEX, 'l_Txa_kage_32TEX');
-        this.shadowTextureData = new BTIData(device, cache, shadowTexture);
-        this.shadowTextureData.fillTextureMapping(this.shadowTextureMapping[0]);
+        const shadowTextureData = new BTIData(device, cache, createTexture(matRegisters, l_Txa_kage_32TEX, 'l_Txa_kage_32TEX'));
+        this.shadow = new DynamicModel(shadowTextureData, parseMaterial(matRegisters, 'd_tree::l_shadowMatDL'));
 
         // Shadow vert format
         const shadowVatFormat = parseGxVtxAttrFmtV(l_shadowVtxAttrFmtList);
@@ -601,22 +550,19 @@ class TreeModel {
         // // const vtx_l_Oba_swood_a_cutuDL = vtxLoader.runVertices(vtxArrays, l_Oba_swood_a_cutuDL);
 
         // Coalesce all VBs and IBs into single buffers and upload to the GPU
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_shadowDL, vtx_l_Oba_swood_a_hapaDL, vtx_l_Oba_swood_a_mikiDL ]);
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_swood_a_mikiDL, vtx_l_Oba_swood_a_hapaDL, vtx_l_shadowDL ]);
 
         // Build an input layout and input state from the vertex layout and data
-        this.shapeTop = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_hapaDL);
-        this.shapeMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[2], vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_mikiDL);
-        this.shapeShadow = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL);
+        const b = this.bufferCoalescer.coalescedBuffers;
+        this.main.shapes.push(new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_hapaDL));
+        this.main.shapes.push( new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_swood_a_mikiDL));
+        this.shadow.shapes.push(new GXShapeHelperGfx(device, cache, b[2].vertexBuffers, b[2].indexBuffer, shadowVtxLoader.loadedVertexLayout, vtx_l_shadowDL));
     }
 
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
-        this.shapeMain.destroy(device);
-        this.shapeTop.destroy(device);
-        this.shapeShadow.destroy(device);
-
-        this.woodTextureData.destroy(device);
-        this.shadowTextureData.destroy(device);
+        this.shadow.destroy(device);
+        this.main.destroy(device);
     }
 }
 
@@ -647,15 +593,21 @@ export class TreePacket {
         }
     }
 
-    private checkGroundY(context: WindWakerRenderer, roomIdx: number, treeData: TreeData): number {
-        const dzb = context.getRoomDZB(roomIdx);
+    private checkGroundY(globals: dGlobals, roomIdx: number, treeData: TreeData): number {
+        chk.Reset();
+        vec3.copy(chk.pos, treeData.pos);
+        chk.pos[1] += 50;
+    
+        const y = globals.scnPlay.bgS.GroundCross(chk);
+        if (y > -Infinity) {
+            treeData.pos[1] = y;
+            globals.scnPlay.bgS.GetTriPla(chk.polyInfo.bgIdx, chk.polyInfo.triIdx).getNormal(scratchVec3a);
+        } else {
+            treeData.pos[1] = y;
+            vec3.set(scratchVec3a, 0, 1, 0);
+        }
 
-        const down = vec3.set(scratchVec3b, 0, -1, 0);
-        const hit = DZB.raycast(scratchVec3b, dzb, treeData.pos, down, scratchVec3a);
-
-        const normal = hit ? scratchVec3a : vec3.set(scratchVec3a, 0, 1, 0);
-        const groundHeight = hit ? scratchVec3b[1] : treeData.pos[1];
-
+        const normal = scratchVec3a;
         const right = vec3.set(scratchVec3c, 1, 0, 0);
         const forward = vec3.cross(scratchVec3d, normal, right);
         vec3.cross(right, normal, forward);
@@ -669,7 +621,7 @@ export class TreePacket {
         treeData.shadowModelMtx[4] = normal[0];
         treeData.shadowModelMtx[5] = normal[1];
         treeData.shadowModelMtx[6] = normal[2];
-        treeData.shadowModelMtx[7] = 1.0 + groundHeight;
+        treeData.shadowModelMtx[7] = 1.0 + y;
 
         treeData.shadowModelMtx[8]  = forward[0];
         treeData.shadowModelMtx[9]  = forward[1];
@@ -678,7 +630,7 @@ export class TreePacket {
 
         mat4.transpose(treeData.shadowModelMtx, treeData.shadowModelMtx);
 
-        return groundHeight;
+        return y;
     }
 
     public newData(pos: vec3, initialStatus: TreeStatus, roomIdx: number): TreeData {
@@ -716,9 +668,44 @@ export class TreePacket {
         // @TODO: Hit checks
     }
 
-    public update(globals: dGlobals): void {
-        let groundChecksThisFrame = 0;
+    private updateRoom(globals: dGlobals, roomIdx: number, groundChecksThisFrame: number): number {
+        const room = this.rooms[roomIdx];
+        for (let i = 0; i < room.length; i++) {
+            const data = room[i];
 
+            if (groundChecksThisFrame >= kMaxGroundChecksPerFrame)
+                break;
+
+            // Perform ground checks for some limited number of data
+            if (!!(data.flags & GrassFlags.needsGroundCheck)) {
+                data.pos[1] = this.checkGroundY(globals, roomIdx, data);
+                data.flags &= ~TreeFlags.needsGroundCheck;
+                ++groundChecksThisFrame;
+            }
+
+            // @TODO: Frustum culling
+
+            if (!(data.flags & TreeFlags.isFrustumCulled)) {
+                // Update model matrix for all non-culled objects
+                const anim = this.anims[data.animIdx];
+
+                // Top matrix (Leafs)
+                if ((data.flags & TreeFlags.unk8) === 0) {
+                    const translation = vec3.add(scratchVec3a, data.pos, anim.offset);
+                    mat4.mul(data.topModelMtx, mat4.fromTranslation(scratchMat4a, translation), anim.topMtx);
+                } else {
+                    mat4.copy(data.topModelMtx, data.unkMatrix);
+                }
+
+                // Trunk matrix
+                mat4.mul(data.trunkModelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.trunkMtx);
+            }
+        }
+
+        return groundChecksThisFrame;
+    }
+
+    public update(globals: dGlobals): void {
         // Update all animation matrices
         for (let i = 0; i < 8 + kDynamicAnimCount; i++) {
             const anim = this.anims[i];
@@ -731,36 +718,18 @@ export class TreePacket {
             mat4.rotateY(anim.trunkMtx, anim.trunkMtx, uShortTo2PI(anim.initialRotationShort) - anim.trunkFallYaw);
         }
 
+        // Update grass packets
+        let groundChecksThisFrame = 0;
+
+        // Start with current room. Then prioritize others.
+        groundChecksThisFrame = this.updateRoom(globals, globals.mStayNo, groundChecksThisFrame);
+
         for (let roomIdx = 0; roomIdx < this.rooms.length; roomIdx++) {
-            const room = this.rooms[roomIdx];
-            for (let i = 0; i < room.length; i++) {
-                const data = room[i];
-
-                // Perform ground checks for some limited number of data
-                if ((data.flags & TreeFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                    data.pos[1] = this.checkGroundY(globals.renderer, roomIdx, data);
-                    data.flags &= ~TreeFlags.needsGroundCheck;
-                    ++groundChecksThisFrame;
-                }
-
-                // @TODO: Frustum culling
-
-                if (!(data.flags & TreeFlags.isFrustumCulled)) {
-                    // Update model matrix for all non-culled objects
-                    const anim = this.anims[data.animIdx];
-
-                    // Top matrix (Leafs)
-                    if ((data.flags & TreeFlags.unk8) === 0) {
-                        const translation = vec3.add(scratchVec3a, data.pos, anim.offset);
-                        mat4.mul(data.topModelMtx, mat4.fromTranslation(scratchMat4a, translation), anim.topMtx);
-                    } else {
-                        mat4.copy(data.topModelMtx, data.unkMatrix);
-                    }
-
-                    // Trunk matrix
-                    mat4.mul(data.trunkModelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.trunkMtx);
-                }
-            }
+            if (groundChecksThisFrame > kMaxGroundChecksPerFrame)
+                break;
+            if (roomIdx === globals.mStayNo)
+                continue;
+            groundChecksThisFrame = this.updateRoom(globals, roomIdx, groundChecksThisFrame);
         }
     }
 
@@ -780,22 +749,24 @@ export class TreePacket {
         {
             // Set transparent
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
-            const materialParamsOffs = this.treeModel.woodMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
             setColorFromRoomNo(globals, materialParams, roomIdx);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             // Set the shadow color. Pulled from d_tree::l_shadowColor$4656
             colorFromRGBA(materialParams.u_Color[ColorKind.C0], 0, 0, 0, 0x64/0xFF);
-            this.treeModel.shadowMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
-            this.treeModel.shadowMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-            template.setSamplerBindingsFromTextureMappings(this.treeModel.shadowTextureMapping);
+            this.treeModel.shadow.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
+            this.treeModel.shadow.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            template.setSamplerBindingsFromTextureMappings(this.treeModel.shadow.textureMapping);
 
             for (let i = 0; i < room.length; i++) {
                 const data = room[i];
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
-                const shadowRenderInst = this.treeModel.shapeShadow.pushRenderInst(renderInstManager);
+
+                const shadowRenderInst = renderInstManager.newRenderInst();
+                this.treeModel.shadow.shapes[0].setOnRenderInst(shadowRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.shadowModelMtx);
-                this.treeModel.shapeShadow.fillPacketParams(packetParams, shadowRenderInst);
+                this.treeModel.shadow.materialHelper.allocatePacketParamsDataOnInst(shadowRenderInst, packetParams);
+                renderInstManager.submitRenderInst(shadowRenderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -803,14 +774,13 @@ export class TreePacket {
         // Draw tree trunks
         template = renderInstManager.pushTemplateRenderInst();
         {
-            const materialParamsOffs = this.treeModel.woodMaterial.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
             setColorFromRoomNo(globals, materialParams, roomIdx);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
             // Set the tree alpha. This fades after the tree is cut. This is multiplied with the texture alpha at the end of TEV stage 1.
             colorFromRGBA(materialParams.u_Color[ColorKind.C2], 0, 0, 0, 1);
-            this.treeModel.woodMaterial.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
-            this.treeModel.woodMaterial.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-            template.setSamplerBindingsFromTextureMappings(this.treeModel.woodTextureMapping);
+            this.treeModel.main.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
+            this.treeModel.main.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            template.setSamplerBindingsFromTextureMappings(this.treeModel.main.textureMapping);
 
             for (let i = 0; i < room.length; i++) {
                 const data = room[i];
@@ -820,13 +790,17 @@ export class TreePacket {
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
 
-                const trunkRenderInst = this.treeModel.shapeMain.pushRenderInst(renderInstManager);
+                const trunkRenderInst = renderInstManager.newRenderInst();
+                this.treeModel.main.shapes[0].setOnRenderInst(trunkRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.trunkModelMtx);
-                this.treeModel.shapeMain.fillPacketParams(packetParams, trunkRenderInst);
+                this.treeModel.main.materialHelper.allocatePacketParamsDataOnInst(trunkRenderInst, packetParams);
+                renderInstManager.submitRenderInst(trunkRenderInst);
 
-                const topRenderInst = this.treeModel.shapeTop.pushRenderInst(renderInstManager);
+                const topRenderInst = renderInstManager.newRenderInst();
+                this.treeModel.main.shapes[1].setOnRenderInst(topRenderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.topModelMtx);
-                this.treeModel.shapeTop.fillPacketParams(packetParams, topRenderInst);
+                this.treeModel.main.materialHelper.allocatePacketParamsDataOnInst(trunkRenderInst, packetParams);
+                renderInstManager.submitRenderInst(topRenderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();
@@ -867,16 +841,8 @@ interface GrassAnim {
 }
 
 class GrassModel {
-    public grassTextureMapping = new TextureMapping();
-    public grassTextureData: BTIData;
-    public grassMaterial: GXMaterialHelperGfx;
-
-    public vmoriTextureMapping = new TextureMapping();
-    public vmoriTextureData: BTIData;
-    public vmoriMaterial: GXMaterialHelperGfx;
-
-    public shapeVmori: GXShapeHelperGfx;
-    public shapeMain: GXShapeHelperGfx;
+    public main: DynamicModel;
+    public vmori: DynamicModel;
 
     public bufferCoalescer: GfxBufferCoalescerCombo;
 
@@ -908,16 +874,12 @@ class GrassModel {
         displayListRegistersInitGX(matRegisters);
 
         displayListRegistersRun(matRegisters, l_matDL);
-        this.grassMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_grass::l_matDL'));
-        const grassTexture = createTexture(matRegisters, l_Txa_ob_kusa_aTEX, 'l_Txa_ob_kusa_aTEX');
-        this.grassTextureData = new BTIData(device, cache, grassTexture);
-        this.grassTextureData.fillTextureMapping(this.grassTextureMapping);
+        const grassTextureData = new BTIData(device, cache, createTexture(matRegisters, l_Txa_ob_kusa_aTEX, 'l_Txa_ob_kusa_aTEX'));
+        this.main = new DynamicModel(grassTextureData, parseMaterial(matRegisters, 'd_grass::l_matDL'));
 
         displayListRegistersRun(matRegisters, l_Vmori_matDL);
-        this.vmoriMaterial = new GXMaterialHelperGfx(parseMaterial(matRegisters, 'd_grass::l_Vmori_matDL'));
-        const vmoriTexture = createTexture(matRegisters, l_K_kusa_00TEX, 'l_K_kusa_00TEX');
-        this.vmoriTextureData = new BTIData(device, cache, vmoriTexture);
-        this.vmoriTextureData.fillTextureMapping(this.vmoriTextureMapping);
+        const vmoriTextureData = new BTIData(device, cache, createTexture(matRegisters, l_K_kusa_00TEX, 'l_K_kusa_00TEX'));
+        this.vmori = new DynamicModel(vmoriTextureData, parseMaterial(matRegisters, 'd_grass::l_Vmori_matDL'));
 
         // Grass Vert Format
         const vatFormat = parseGxVtxAttrFmtV(l_vtxAttrFmtList$4529);
@@ -940,17 +902,15 @@ class GrassModel {
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, [ vtx_l_Oba_kusa_aDL, vtx_l_Vmori_00DL ]);
 
         // Build an input layout and input state from the vertex layout and data
-        this.shapeMain = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[0], vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL);
-        this.shapeVmori = new GXShapeHelperGfx(device, cache, this.bufferCoalescer.coalescedBuffers[1], vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL);
+        const b = this.bufferCoalescer.coalescedBuffers;
+        this.main.shapes.push(new GXShapeHelperGfx(device, cache, b[0].vertexBuffers, b[0].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL));
+        this.vmori.shapes.push(new GXShapeHelperGfx(device, cache, b[1].vertexBuffers, b[1].indexBuffer, vtxLoader.loadedVertexLayout, vtx_l_Oba_kusa_aDL));
     }
 
     public destroy(device: GfxDevice): void {
         this.bufferCoalescer.destroy(device);
-        this.shapeMain.destroy(device);
-        this.shapeVmori.destroy(device);
-
-        this.grassTextureData.destroy(device);
-        this.vmoriTextureData.destroy(device);
+        this.main.destroy(device);
+        this.vmori.destroy(device);
     }
 }
 
@@ -960,21 +920,15 @@ export class GrassPacket {
     private anims: GrassAnim[] = new Array(8 + kDynamicAnimCount);
 
     private model: GrassModel;
-    private material: GXMaterialHelperGfx;
-    private textureMapping = nArray(1, () => new TextureMapping());
-    private shape: GXShapeHelperGfx;
+    private grassModel: DynamicModel;
 
     constructor(globals: dGlobals) {
         this.model = new GrassModel(globals);
 
         if (globals.stageName.startsWith(`kin`) || globals.stageName === `Xboss1`) {
-            this.material = this.model.vmoriMaterial;
-            this.textureMapping[0].copy(this.model.vmoriTextureMapping);
-            this.shape = this.model.shapeVmori;
+            this.grassModel = this.model.vmori;
         } else {
-            this.material = this.model.grassMaterial;
-            this.textureMapping[0].copy(this.model.grassTextureMapping);
-            this.shape = this.model.shapeMain;
+            this.grassModel = this.model.main;
         }
 
         // Random starting rotation for each idle anim
@@ -1020,9 +974,38 @@ export class GrassPacket {
         // @TODO: Hit checks
     }
 
-    public update(globals: dGlobals): void {
-        let groundChecksThisFrame = 0;
+    private updateRoom(globals: dGlobals, roomIdx: number, groundChecksThisFrame: number): number {
+        const room = this.rooms[roomIdx];
+        for (let i = 0; i < room.length; i++) {
+            const data = room[i];
 
+            if (groundChecksThisFrame >= kMaxGroundChecksPerFrame)
+                break;
+
+            // Perform ground checks for some limited number of data
+            if (!!(data.flags & GrassFlags.needsGroundCheck)) {
+                data.pos[1] = checkGroundY(globals, roomIdx, data.pos);
+                data.flags &= ~GrassFlags.needsGroundCheck;
+                ++groundChecksThisFrame;
+            }
+
+            // @TODO: Frustum culling
+
+            if (!(data.flags & GrassFlags.isFrustumCulled)) {
+                // Update model matrix for all non-culled objects
+                if (data.animIdx < 0) {
+                    // @TODO: Draw cut grass
+                } else {
+                    const anim = this.anims[data.animIdx];
+                    mat4.mul(data.modelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.modelMtx);
+                }
+            }
+        }
+
+        return groundChecksThisFrame;
+    }
+
+    public update(globals: dGlobals): void {
         // Update all animation matrices
         for (let i = 0; i < 8 + kDynamicAnimCount; i++) {
             const anim = this.anims[i];
@@ -1031,31 +1014,18 @@ export class GrassPacket {
             mat4.rotateY(anim.modelMtx, anim.modelMtx, anim.rotationY);
         }
 
+        // Update grass packets
+        let groundChecksThisFrame = 0;
+
+        // Start with current room. Then prioritize others.
+        groundChecksThisFrame = this.updateRoom(globals, globals.mStayNo, groundChecksThisFrame);
+
         for (let roomIdx = 0; roomIdx < this.rooms.length; roomIdx++) {
-            const room = this.rooms[roomIdx];
-
-            for (let i = 0; i < room.length; i++) {
-                const data = room[i];
-
-                // Perform ground checks for some limited number of data
-                if ((data.flags & GrassFlags.needsGroundCheck) && groundChecksThisFrame < kMaxGroundChecksPerFrame) {
-                    data.pos[1] = checkGroundY(globals.renderer, roomIdx, data.pos);
-                    data.flags &= ~GrassFlags.needsGroundCheck;
-                    ++groundChecksThisFrame;
-                }
-
-                // @TODO: Frustum culling
-
-                if (!(data.flags & GrassFlags.isFrustumCulled)) {
-                    // Update model matrix for all non-culled objects
-                    if (data.animIdx < 0) {
-                        // @TODO: Draw cut grass
-                    } else {
-                        const anim = this.anims[data.animIdx];
-                        mat4.mul(data.modelMtx, mat4.fromTranslation(scratchMat4a, data.pos), anim.modelMtx);
-                    }
-                }
-            }
+            if (groundChecksThisFrame > kMaxGroundChecksPerFrame)
+                break;
+            if (roomIdx === globals.mStayNo)
+                continue;
+            groundChecksThisFrame = this.updateRoom(globals, roomIdx, groundChecksThisFrame);
         }
     }
 
@@ -1072,12 +1042,11 @@ export class GrassPacket {
 
         template = renderInstManager.pushTemplateRenderInst();
         {
-            template.setSamplerBindingsFromTextureMappings(this.textureMapping);
-            const materialParamsOffs = this.material.allocateMaterialParams(template);
-            // TODO(jstpierre): Pull the proper material colors. For now, just render with room 0.
+            template.setSamplerBindingsFromTextureMappings(this.grassModel.textureMapping);
             setColorFromRoomNo(globals, materialParams, roomIdx);
-            this.material.fillMaterialParamsDataOnInst(template, materialParamsOffs, materialParams);
-            this.material.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+            dKy_GxFog_set(globals.g_env_light, materialParams.u_FogBlock, viewerInput.camera);
+            this.grassModel.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
+            this.grassModel.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
             for (let i = 0; i < room.length; i++) {
                 const data = room[i];
@@ -1087,9 +1056,11 @@ export class GrassPacket {
                 if (distanceCull(worldCamPos, data.pos))
                     continue;
 
-                const renderInst = this.shape.pushRenderInst(renderInstManager);
+                const renderInst = renderInstManager.newRenderInst();
+                this.grassModel.shapes[0].setOnRenderInst(renderInst);
                 mat4.mul(packetParams.u_PosMtx[0], worldToView, data.modelMtx);
-                this.shape.fillPacketParams(packetParams, renderInst);
+                this.grassModel.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+                renderInstManager.submitRenderInst(renderInst);
             }
         }
         renderInstManager.popTemplateRenderInst();

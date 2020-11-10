@@ -1,40 +1,40 @@
 
-import { vec3, mat4 } from "gl-matrix";
+import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { JMapInfoIter, getJMapInfoScale } from "./JMapInfo";
-import { SceneObjHolder, getObjectName } from "./Main";
+import { SceneObjHolder, getObjectName, SceneObj } from "./Main";
 import { getJMapInfoTrans, getJMapInfoRotate, ZoneAndLayer } from "./LiveActor";
-import { computeModelMatrixR } from "../MathHelpers";
+import { computeModelMatrixR, setMatrixTranslation } from "../MathHelpers";
 import { AABB } from "../Geometry";
-import { vecKillElement } from "./MiscActor";
 import { NameObj } from "./NameObj";
+import { vecKillElement } from "./ActorUtil";
+import { StageSwitchCtrl, createStageSwitchCtrl, getSwitchWatcherHolder, SwitchFunctorEventListener } from "./Switch";
+import { drawWorldSpaceAABB, drawWorldSpaceCylinder, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 interface AreaFormBase {
     // TODO(jstpierre): followMtx
-    isInVolume(v: vec3): boolean;
+    isInVolume(v: ReadonlyVec3): boolean;
+    debugDraw(sceneObjHolder: SceneObjHolder): void;
 }
 
 export const enum AreaFormType {
     Cube,
-    CubeGround,
+    OriginCube,
     Sphere,
     Cylinder,
     Bowl,
 }
 
 const scratchVec3a = vec3.create();
-const scratchVec3b = vec3.create();
 const scratchMatrix = mat4.create();
 
 function makeWorldMtxFromPlacement(dst: mat4, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
     getJMapInfoRotate(scratchVec3a, sceneObjHolder, infoIter);
     computeModelMatrixR(dst, scratchVec3a[0], scratchVec3a[1], scratchVec3a[2]);
     getJMapInfoTrans(scratchVec3a, sceneObjHolder, infoIter);
-    dst[12] = scratchVec3a[0];
-    dst[13] = scratchVec3a[1];
-    dst[14] = scratchVec3a[2];
+    setMatrixTranslation(dst, scratchVec3a);
 }
 
-function multTranspose(dst: vec3, a: vec3, m: mat4): void {
+function multTranspose(dst: vec3, a: ReadonlyVec3, m: ReadonlyMat4): void {
     const dx = a[0] - m[12];
     const dy = a[1] - m[13];
     const dz = a[2] - m[14];
@@ -58,15 +58,22 @@ class AreaFormCube implements AreaFormBase {
         this.aabb.maxY =  0.5 * scratchVec3a[1] * 1000;
         this.aabb.maxZ =  0.5 * scratchVec3a[2] * 1000;
 
-        if (type === AreaFormType.CubeGround)
+        if (type === AreaFormType.OriginCube) {
             this.aabb.minY += 0.5 * scratchVec3a[1] * 1000;
+            this.aabb.maxY += 0.5 * scratchVec3a[1] * 1000;
+        }
+    }
+
+    public debugDraw(sceneObjHolder: SceneObjHolder): void {
+        const ctx = getDebugOverlayCanvas2D();
+        drawWorldSpaceAABB(ctx, sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.aabb, this.worldMatrix);
     }
 
     private calcWorldMtx(dst: mat4): void {
         mat4.copy(dst, this.worldMatrix);
     }
 
-    public isInVolume(v: vec3): boolean {
+    public isInVolume(v: ReadonlyVec3): boolean {
         this.calcWorldMtx(scratchMatrix);
         multTranspose(scratchVec3a, v, scratchMatrix);
         return this.aabb.containsPoint(scratchVec3a);
@@ -89,12 +96,15 @@ class AreaFormSphere implements AreaFormBase {
         vec3.copy(dst, this.pos);
     }
 
-    public isInVolume(v: vec3): boolean {
+    public isInVolume(v: ReadonlyVec3): boolean {
         this.calcPos(scratchVec3a);
 
         vec3.sub(scratchVec3a, scratchVec3a, v);
         const mag = vec3.squaredLength(scratchVec3a);
         return mag < this.radiusSq;
+    }
+
+    public debugDraw(): void {
     }
 }
 
@@ -120,20 +130,9 @@ class AreaFormCylinder implements AreaFormBase {
         this.height = scratchVec3a[1] * 500;
     }
 
-    private calcPos(dst: vec3): void {
-        vec3.copy(dst, this.pos);
-    }
-
-    private calcUpVec(dst: vec3): void {
-        vec3.copy(dst, this.upVec);
-    }
-
-    public isInVolume(v: vec3): boolean {
-        this.calcPos(scratchVec3a);
-        this.calcUpVec(scratchVec3b);
-
-        vec3.sub(scratchVec3a, scratchVec3a, v);
-        const dot = vecKillElement(scratchVec3a, scratchVec3a, scratchVec3b);
+    public isInVolume(v: ReadonlyVec3): boolean {
+        vec3.sub(scratchVec3a, v, this.pos);
+        const dot = vecKillElement(scratchVec3a, scratchVec3a, this.upVec);
         if (dot >= 0.0 && dot <= this.height) {
             const mag = vec3.squaredLength(scratchVec3a);
             if (mag < this.radiusSq)
@@ -141,6 +140,10 @@ class AreaFormCylinder implements AreaFormBase {
         }
 
         return false;
+    }
+
+    public debugDraw(sceneObjHolder: SceneObjHolder): void {
+        drawWorldSpaceCylinder(getDebugOverlayCanvas2D(), sceneObjHolder.viewerInput.camera.clipFromWorldMatrix, this.pos, Math.sqrt(this.radiusSq), this.height, this.upVec);
     }
 }
 
@@ -164,7 +167,7 @@ class AreaFormBowl implements AreaFormBase {
         this.radiusSq = radius * radius;
     }
 
-    public isInVolume(v: vec3): boolean {
+    public isInVolume(v: ReadonlyVec3): boolean {
         vec3.sub(scratchVec3a, this.pos, v);
 
         const mag = vec3.squaredLength(scratchVec3a);
@@ -176,19 +179,25 @@ class AreaFormBowl implements AreaFormBase {
 
         return false;
     }
+
+    public debugDraw(): void {
+    }
 }
 
 export class AreaObj extends NameObj {
     private form: AreaFormBase;
     private aliveScenario: boolean = true;
+    protected switchCtrl: StageSwitchCtrl;
+    public isValid: boolean = true;
+    public isAwake: boolean = true;
 
     constructor(private zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
         super(sceneObjHolder, getObjectName(infoIter));
 
         if (formType === AreaFormType.Cube)
             this.form = new AreaFormCube(sceneObjHolder, infoIter, AreaFormType.Cube);
-        else if (formType === AreaFormType.CubeGround)
-            this.form = new AreaFormCube(sceneObjHolder, infoIter, AreaFormType.CubeGround);
+        else if (formType === AreaFormType.OriginCube)
+            this.form = new AreaFormCube(sceneObjHolder, infoIter, AreaFormType.OriginCube);
         else if (formType === AreaFormType.Sphere)
             this.form = new AreaFormSphere(sceneObjHolder, infoIter);
         else if (formType === AreaFormType.Cylinder)
@@ -196,15 +205,59 @@ export class AreaObj extends NameObj {
         else if (formType === AreaFormType.Bowl)
             this.form = new AreaFormBowl(sceneObjHolder, infoIter);
 
-        // TODO(jstpierre): Push to AreaObjMgr?
+        this.switchCtrl = createStageSwitchCtrl(sceneObjHolder, infoIter);
+        if (this.switchCtrl.isValidSwitchAppear()) {
+            const eventListener = new SwitchFunctorEventListener(this.validate.bind(this), this.invalidate.bind(this));
+            getSwitchWatcherHolder(sceneObjHolder).joinSwitchEventListenerAppear(this.switchCtrl, eventListener);
+            this.isValid = false;
+        }
+
+        this.parseArgs(infoIter);
+
+        sceneObjHolder.create(SceneObj.AreaObjContainer);
+        const areaObjMgr = sceneObjHolder.areaObjContainer!.getManager(this.getManagerName());
+        areaObjMgr.entry(this);
+
+        // TODO(jstpierre): addSleepControl
+        // addSleepControlForLiveActor
+
+        this.postCreate(sceneObjHolder);
+    }
+
+    protected parseArgs(infoIter: JMapInfoIter): void {
+    }
+
+    protected postCreate(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public awake(sceneObjHolder: SceneObjHolder): void {
+        this.isAwake = true;
+    }
+
+    public sleep(sceneObjHolder: SceneObjHolder): void {
+        this.isAwake = false;
+    }
+
+    public validate(sceneObjHolder: SceneObjHolder): void {
+        this.isValid = true;
+    }
+
+    public invalidate(sceneObjHolder: SceneObjHolder): void {
+        this.isValid = false;
     }
 
     public scenarioChanged(sceneObjHolder: SceneObjHolder): void {
         this.aliveScenario = sceneObjHolder.spawner.checkAliveScenario(this.zoneAndLayer);
     }
 
-    public isInVolume(v: vec3): boolean {
-        return this.aliveScenario && this.form.isInVolume(v);
+    public isInVolume(v: ReadonlyVec3): boolean {
+        if (!this.isValid || !this.aliveScenario)
+            return false;
+        return this.form.isInVolume(v);
+    }
+
+    public getManagerName(): string {
+        return this.name;
     }
 }
 
@@ -219,10 +272,16 @@ export class AreaObjMgr<T extends AreaObj> extends NameObj {
         this.areaObj.push(areaObj);
     }
 
-    public find_in(v: vec3): T | null {
+    public find_in(v: ReadonlyVec3): T | null {
         for (let i = 0; i < this.areaObj.length; i++)
             if (this.areaObj[i].isInVolume(v))
                 return this.areaObj[i];
         return null;
     }
+}
+
+export function isInAreaObj(sceneObjHolder: SceneObjHolder, managerName: string, pos: ReadonlyVec3): boolean {
+    if (sceneObjHolder.areaObjContainer === null)
+        return false;
+    return sceneObjHolder.areaObjContainer.getAreaObj(managerName, pos) !== null;
 }

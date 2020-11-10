@@ -8,7 +8,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { assertExists } from '../util';
 import { mat4, } from 'gl-matrix';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { BTK } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';

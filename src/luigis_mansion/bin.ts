@@ -188,10 +188,10 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
         const tevStage0: GX_Material.TevStage = {
             channelId: GX.RasColorChannelID.COLOR0A0,
 
-            alphaInA: GX.CombineAlphaInput.ZERO,
-            alphaInB: GX.CombineAlphaInput.ZERO,
-            alphaInC: GX.CombineAlphaInput.ZERO,
-            alphaInD: GX.CombineAlphaInput.TEXA,
+            alphaInA: GX.CA.ZERO,
+            alphaInB: GX.CA.ZERO,
+            alphaInC: GX.CA.ZERO,
+            alphaInD: GX.CA.TEXA,
             alphaOp: GX.TevOp.ADD,
             alphaBias: GX.TevBias.ZERO,
             alphaClamp: false,
@@ -199,10 +199,10 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
             alphaRegId: GX.Register.PREV,
             konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
 
-            colorInA: GX.CombineColorInput.ZERO,
-            colorInB: GX.CombineColorInput.ZERO,
-            colorInC: GX.CombineColorInput.ZERO,
-            colorInD: GX.CombineColorInput.TEXC,
+            colorInA: GX.CC.ZERO,
+            colorInB: GX.CC.ZERO,
+            colorInC: GX.CC.ZERO,
+            colorInD: GX.CC.TEXC,
             colorOp: GX.TevOp.ADD,
             colorBias: GX.TevBias.ZERO,
             colorClamp: false,
@@ -234,18 +234,18 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
             referenceB: 0.0,
         };
 
-        const blendMode: GX_Material.BlendMode = {
-            type: GX.BlendMode.NONE,
-            srcFactor: GX.BlendFactor.ONE,
-            dstFactor: GX.BlendFactor.ONE,
-            logicOp: GX.LogicOp.CLEAR,
-        };
-
         const ropInfo: GX_Material.RopInfo = {
-            blendMode,
+            fogType: GX.FogType.NONE,
+            fogAdjEnabled: false,
+            blendMode: GX.BlendMode.NONE,
+            blendSrcFactor: GX.BlendFactor.ONE,
+            blendDstFactor: GX.BlendFactor.ONE,
+            blendLogicOp: GX.LogicOp.CLEAR,
             depthFunc: GX.CompareType.LESS,
             depthTest: true,
             depthWrite: true,
+            colorUpdate: true,
+            alphaUpdate: false,
         };
 
         const gxMaterial: GX_Material.GXMaterial = {

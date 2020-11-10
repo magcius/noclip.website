@@ -15,6 +15,7 @@ import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
+import { CameraController } from '../Camera';
 
 const id = 'klonoa';
 const name = "Klonoa";
@@ -39,6 +40,10 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GXRenderHelperGfx(device);
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(6/60);
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -74,15 +79,13 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, KlonoaPass.SKYBOX);
-        skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
 
-        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
+        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
         executeOnPass(this.renderHelper.renderInstManager, device, opaquePassRenderer, KlonoaPass.MAIN);
 
         let lastPassRenderer: GfxRenderPass;
         if (hasAnyVisible(this.renderHelper.renderInstManager, KlonoaPass.INDIRECT)) {
-            opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
             const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture!, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };

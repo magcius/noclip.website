@@ -23,7 +23,7 @@ class SkyBackgroundProgram extends DeviceProgram {
     public static ub_Params = 0;
 
     public both: string = `
-layout(row_major, std140) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
     vec4 u_Misc[1];
 };
@@ -50,7 +50,7 @@ void main() {
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor = vec4(color.rgb, u_Alpha);
 }
 `;
@@ -106,6 +106,7 @@ export class SkyData {
     }
 
     public destroy(device: GfxDevice): void {
+        device.destroyProgram(this.backgroundProgram);
         device.destroyTexture(this.backgroundTexture);
         if (this.starsTexture !== null)
             device.destroyTexture(this.starsTexture);
@@ -194,7 +195,7 @@ export class SkyRenderer {
         const dayFraction = ((viewerInput.time / 40000) + 0.5) % 1.0;
 
         // Sky.
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND + 0, this.skyData.backgroundProgram.ResourceUniqueId);
         renderInst.setSamplerBindingsFromTextureMappings(this.skyData.backgroundTextureMapping);
         const scaleS = 0.0001;
@@ -204,7 +205,7 @@ export class SkyRenderer {
         if (this.skyData.starsTexture !== null) {
             const starsOpacity = getPhaseContribution(DayPhase.Night, dayFraction);
             if (starsOpacity > 0.0) {
-                const renderInst = renderInstManager.pushRenderInst();
+                const renderInst = renderInstManager.newRenderInst();
                 renderInst.sortKey = makeSortKeyOpaque(GfxRendererLayer.BACKGROUND + 1, this.skyData.backgroundProgram.ResourceUniqueId);
                 setAttachmentStateSimple(renderInst.getMegaStateFlags(), { blendMode: GfxBlendMode.ADD, blendSrcFactor: GfxBlendFactor.SRC_ALPHA, blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA });
                 renderInst.setSamplerBindingsFromTextureMappings(this.skyData.starsTextureMapping);
@@ -213,9 +214,11 @@ export class SkyRenderer {
                 const o = (Math.atan2(-view[2], view[0]) / MathConstants.TAU) * 4;
 
                 fillBackgroundParams(renderInst, viewerInput, 0.5, 0.5, o, 0, starsOpacity);
+                renderInstManager.submitRenderInst(renderInst);
             }
         }
 
+        renderInstManager.submitRenderInst(renderInst);
         renderInstManager.popTemplateRenderInst();
     }
 }

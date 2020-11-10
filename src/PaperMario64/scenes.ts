@@ -11,6 +11,7 @@ import * as BYML from '../byml';
 import { ScriptExecutor } from './script';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { CameraController } from '../Camera';
 
 const pathBase = `pm64`;
 
@@ -28,6 +29,10 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
         this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(8/60);
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

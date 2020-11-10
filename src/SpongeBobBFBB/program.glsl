@@ -18,7 +18,7 @@ struct Light {
 
 #define LIGHT_COUNT 8
 
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x3 u_ViewMatrix;
     vec4 u_FogColor;
@@ -36,7 +36,7 @@ layout(row_major, std140) uniform ub_SceneParams {
 #define u_Lights u_ObjectLights
 #endif
 
-layout(row_major, std140) uniform ub_ModelParams {
+layout(std140) uniform ub_ModelParams {
     Mat4x3 u_ModelMatrix;
     vec4 u_ModelColor;
 };
@@ -100,7 +100,7 @@ void main() {
 
 #ifdef USE_TEXTURE
     if (USE_TEXTURE == 1)
-        t_Color *= texture(u_Texture, v_TexCoord);
+        t_Color *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
 #endif
 
     t_Color *= u_ModelColor;

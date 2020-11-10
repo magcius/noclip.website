@@ -23,11 +23,11 @@ export class GeometryData {
         const normals = vertices.map((v) => v.normal);
         const texcoords = vertices.map((v) => v.texcoord);
 
-        this.bbox.set(positions);
+        this.bbox.setFromPoints(positions);
 
-        const posF32A = flat(positions);
-        const normalF32A = flat(normals);
-        const texcoordF32A = flat(texcoords);
+        const posF32A = flat(positions as Float32Array[]);
+        const normalF32A = flat(normals as Float32Array[]);
+        const texcoordF32A = flat(texcoords as Float32Array[]);
 
         const indices = Uint32Array.from(geometry.indices);
         this.indexCount = indices.length;
@@ -62,6 +62,7 @@ export class GeometryData {
     public destroy(device: GfxDevice): void {
         device.destroyBuffer(this.indexBuffer);
         device.destroyBuffer(this.positionBuffer);
+        device.destroyBuffer(this.normalBuffer);
         device.destroyBuffer(this.texcoordBuffer);
         device.destroyInputState(this.inputState);
     }

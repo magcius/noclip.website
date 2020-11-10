@@ -2,84 +2,42 @@
 // Helpers to manage GPU buffer data...
 
 import ArrayBufferSlice from "../../ArrayBufferSlice";
-import { assert, align } from "../../util";
+import { align } from "../../util";
 import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
+import { assert } from "../platform/GfxPlatformUtil";
 
 export interface GfxCoalescedBuffer {
     buffer: GfxBuffer;
-    wordOffset: number;
-    wordCount: number;
-}
-
-export interface GfxCoalescedBuffers {
-    vertexBuffer: GfxCoalescedBuffer;
-    indexBuffer: GfxCoalescedBuffer;
+    byteOffset: number;
+    byteCount: number;
 }
 
 export function coalesceBuffer(device: GfxDevice, usage: GfxBufferUsage, datas: ArrayBufferSlice[]): GfxCoalescedBuffer[] {
     let dataLength = 0;
-    for (let i = 0; i < datas.length; i++) {
+    for (let i = 0; i < datas.length; i++)
         dataLength += datas[i].byteLength;
-        dataLength = align(dataLength, 4);
-    }
 
-    const wordCount = dataLength / 4;
+    const wordCount = align(dataLength, 4) / 4;
     const buffer = device.createBuffer(wordCount, usage, GfxBufferFrequencyHint.STATIC);
-    const hostAccessPass = device.createHostAccessPass();
 
     const coalescedBuffers: GfxCoalescedBuffer[] = [];
-
-    let wordOffset: number = 0;
+    const combinedData = new Uint8Array(dataLength);
+    let byteOffset: number = 0;
     for (let i = 0; i < datas.length; i++) {
         const data = datas[i];
-        const size = align(data.byteLength, 4);
-        const wordCount: number = size / 4;
-        coalescedBuffers.push({ buffer, wordOffset, wordCount });
-        hostAccessPass.uploadBufferData(buffer, wordOffset, data.createTypedArray(Uint8Array));
-        wordOffset += wordCount;
+        combinedData.set(data.createTypedArray(Uint8Array), byteOffset);
+        coalescedBuffers.push({ buffer, byteOffset, byteCount: data.byteLength });
+        byteOffset += data.byteLength;
     }
 
+    const hostAccessPass = device.createHostAccessPass();
+    hostAccessPass.uploadBufferData(buffer, 0, combinedData);
     device.submitPass(hostAccessPass);
+
     return coalescedBuffers;
 }
 
 // TODO(jstpierre): Remove the buffer coalescer... it doesn't really help as much as I thought it did.
-// At least remove everything but the combo version...
-
-export class GfxBufferCoalescer {
-    public coalescedBuffers: GfxCoalescedBuffers[];
-    private vertexBuffer: GfxBuffer | null = null;
-    private indexBuffer: GfxBuffer | null = null;
-
-    constructor(device: GfxDevice, vertexDatas: ArrayBufferSlice[], indexDatas: ArrayBufferSlice[]) {
-        assert(vertexDatas.length === indexDatas.length);
-
-        // Don't do anything if we have no data to care about.
-        if (vertexDatas.length === 0)
-            return;
-
-        const vertexCoalescedBuffers = coalesceBuffer(device, GfxBufferUsage.VERTEX, vertexDatas);
-        const indexCoalescedBuffers = coalesceBuffer(device, GfxBufferUsage.INDEX, indexDatas);
-
-        const coalescedBuffers = [];
-        for (let i = 0; i < vertexCoalescedBuffers.length; i++) {
-            const vertexBuffer = vertexCoalescedBuffers[i];
-            const indexBuffer = indexCoalescedBuffers[i];
-            coalescedBuffers.push({ vertexBuffer, indexBuffer });
-        }
-
-        this.coalescedBuffers = coalescedBuffers;
-        this.vertexBuffer = this.coalescedBuffers[0].vertexBuffer.buffer;
-        this.indexBuffer = this.coalescedBuffers[0].indexBuffer.buffer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        if (this.vertexBuffer !== null)
-            device.destroyBuffer(this.vertexBuffer);
-        if (this.indexBuffer !== null)
-            device.destroyBuffer(this.indexBuffer);
-    }
-}
 
 export interface GfxCoalescedBuffersCombo {
     vertexBuffers: GfxCoalescedBuffer[];
@@ -87,7 +45,7 @@ export interface GfxCoalescedBuffersCombo {
 }
 
 export class GfxBufferCoalescerCombo {
-    public coalescedBuffers: GfxCoalescedBuffersCombo[];
+    public coalescedBuffers: GfxCoalescedBuffersCombo[] = [];
     private vertexBuffer: GfxBuffer | null = null;
     private indexBuffer: GfxBuffer | null = null;
 
@@ -98,22 +56,45 @@ export class GfxBufferCoalescerCombo {
         if (vertexDatas.length === 0)
             return;
 
+        // We need to pack all of the [0] buffers together, all of the [1] buffers together, etc.
+        // I call these "slices".
         const allVertexDatas: ArrayBufferSlice[] = [];
-        for (let i = 0; i < vertexDatas.length; i++)
-            for (let j = 0; j < vertexDatas[i].length; j++)
-                allVertexDatas.push(vertexDatas[i][j]);
+        let maxSlice = 0;
+        while (true) {
+            let sliceHasBuffer = false;
+            for (let i = 0; i < vertexDatas.length; i++) {
+                if (vertexDatas[i][maxSlice] === undefined)
+                    continue;
+
+                allVertexDatas.push(vertexDatas[i][maxSlice]);
+                sliceHasBuffer = true;
+            }
+
+            if (!sliceHasBuffer)
+                break;
+
+            maxSlice++;
+        }
 
         const vertexCoalescedBuffers = coalesceBuffer(device, GfxBufferUsage.VERTEX, allVertexDatas);
         const indexCoalescedBuffers = coalesceBuffer(device, GfxBufferUsage.INDEX, indexDatas);
 
         const coalescedBuffers: GfxCoalescedBuffersCombo[] = [];
+
         let z = 0;
         for (let i = 0; i < vertexDatas.length; i++) {
-            const vertexBuffers: GfxCoalescedBuffer[] = [];
-            for (let j = 0; j < vertexDatas[i].length; j++)
-                vertexBuffers.push(vertexCoalescedBuffers[z++]);
+            const vertexBuffers: GfxCoalescedBuffer[] = [vertexCoalescedBuffers[z++]];
             const indexBuffer = indexCoalescedBuffers[i];
             coalescedBuffers.push({ vertexBuffers, indexBuffer });
+        }
+
+        for (let slice = 1; slice < maxSlice; slice++) {
+            for (let i = 0; i < vertexDatas.length; i++) {
+                if (vertexDatas[i][slice] === undefined)
+                    continue;
+
+                coalescedBuffers[i].vertexBuffers.push(vertexCoalescedBuffers[z++]);
+            }
         }
 
         this.coalescedBuffers = coalescedBuffers;

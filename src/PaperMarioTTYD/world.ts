@@ -7,11 +7,11 @@ import * as GX_Material from '../gx/gx_material';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert, readString, assertExists } from "../util";
-import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas, compileLoadedVertexLayout } from '../gx/gx_displaylist';
+import { GX_VtxAttrFmt, GX_VtxDesc, compileVtxLoader, GX_Array, LoadedVertexData, LoadedVertexLayout, coalesceLoadedDatas, compileLoadedVertexLayout, LoadedVertexDraw } from '../gx/gx_displaylist';
 import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
 import AnimationController from '../AnimationController';
-import { GfxMegaStateDescriptor, GfxFormat } from '../gfx/platform/GfxPlatform';
+import { GfxMegaStateDescriptor } from '../gfx/platform/GfxPlatform';
 import { colorNewFromRGBA8, Color } from '../Color';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
 import { getPointHermite } from '../Spline';
@@ -22,9 +22,18 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 export interface TTYDWorld {
     information: Information;
     textureNameTable: string[];
+    fogData: FogData;
     rootNode: SceneGraphNode;
     materials: Material[];
     animations: AnimationEntry[];
+}
+
+export interface FogData {
+    enabled: boolean;
+    mode: number; // TODO(jstpierre): Fog modes
+    startZ: number;
+    endZ: number;
+    color: Color;
 }
 
 export interface Information {
@@ -143,8 +152,8 @@ interface MaterialAnimation {
 interface MaterialAnimationTrack {
     materialName: string;
     texGenIndex: number;
-    skewS: number;
-    skewT: number;
+    centerS: number;
+    centerT: number;
     frames: MaterialAnimationTrackKeyframe[];
 }
 
@@ -157,20 +166,204 @@ interface MaterialAnimationTrackKeyframe {
     rotation: AnimationTrackComponent;
 }
 
-const trans1 = mat4.create(), trans2 = mat4.create(), rot = mat4.create(), scale = mat4.create();
+const trans = mat4.create(), rot = mat4.create(), scale = mat4.create();
 
-const _t: number[] = [0, 0, 0];
-function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, skewS: number, skewT: number): void {
-    function t(x: number, y: number, z: number = 0): number[] { _t[0] = x; _t[1] = y; _t[2] = z; return _t; }
-    mat4.fromTranslation(dst, t(0.5 * skewS * scaleS, (0.5 * skewT - 1.0) * scaleT, 0.0));
-    mat4.fromZRotation(rot, MathConstants.DEG_TO_RAD * -rotation);
-    mat4.fromTranslation(trans1, t(-0.5 * skewS * scaleS, -(0.5 * skewT - 1.0) * scaleT, 0.0));
+function calcTexMtx(dst: mat4, translationS: number, translationT: number, scaleS: number, scaleT: number, rotation: number, centerS: number, centerT: number): void {
+    const theta = MathConstants.DEG_TO_RAD * -rotation;
+    const sinR = Math.sin(theta);
+    const cosR = Math.cos(theta);
+
+    dst[12] = scaleS * (0.5 * centerS);
+    dst[13] = scaleT * (0.5 * centerT - 1.0);
+
+    rot[0]  =  cosR;
+    rot[4]  = -sinR;
+
+    rot[1]  =  sinR;
+    rot[5]  =  cosR;
+
+    trans[12] = scaleS * -(0.5 * centerS);
+    trans[13] = scaleT * -(0.5 * centerT - 1.0);
+
+    scale[0] = scaleS;
+    scale[5] = scaleT;
+
     mat4.mul(rot, rot, dst);
-    mat4.mul(rot, trans1, rot);
-    mat4.fromScaling(scale, t(scaleS, scaleT, 1.0));
-    mat4.fromTranslation(trans2, t(translationS, -translationT, 0.0));
+    mat4.mul(rot, trans, rot);
     mat4.mul(dst, scale, rot);
-    mat4.mul(dst, trans2, dst);
+
+    dst[12] += translationS;
+    dst[13] += -translationT;
+}
+
+export function mapSetMaterialTev(mb: GXMaterialBuilder, texCount: number, tevMode: number): void {
+    if (texCount === 0) {
+        // rgba = ras.rgba
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.RASC);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    } else if (tevMode === 0x00) {
+        // rgba = tex0.rgba * ras.rgba
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.RASC, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    } else if (tevMode === 0x01) {
+        // rgba = vec4(mix(tex0.rgb * tex1.rgb, tex1.a), tex0.a) * ras.rgba
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.TEXC, GX.CC.TEXA, GX.CC.ZERO);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        // Modulate against RASC
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.APREV, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    } else if (tevMode === 0x02) {
+        // rgba = tex0.rgba * tex1.aaaa * ras.rgba
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXA, GX.CC.ZERO);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.APREV, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        // Modulate against RASC
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.APREV, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    } else if (tevMode === 0x03) {
+        // rgba = tex0.rgba * (1.0 - tex1.aaaa) * ras.rgba
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.ZERO, GX.CC.TEXA, GX.CC.ZERO);
+        mb.setTevAlphaIn(1, GX.CA.APREV, GX.CA.ZERO, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        // Modulate against RASC
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.APREV, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    } else if (tevMode === 0x04) {
+        // rgba = tex0.rgba * (1.0 - tex1.aaaa) * ras.rgba
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.APREV, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(2, GX.CC.TEXC, GX.CC.CPREV, GX.CC.APREV, GX.CC.ZERO);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        // No modulation against RASC? wtf?
+    } else if (tevMode === 0x05) {
+        // rgba = mix(tex0.rgba, tex1.rgba, tex2.aaaa) * ras.rgba
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG1);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG1);
+
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(2, GX.CC.C0, GX.CC.C1, GX.CC.TEXA, GX.CC.ZERO);
+        mb.setTevAlphaIn(2, GX.CA.A0, GX.CA.A1, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(3, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(3, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(3, GX.CA.ZERO, GX.CA.APREV, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    } else if (tevMode === 0x06) {
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.TEXC, GX.CC.APREV, GX.CC.ZERO);
+        mb.setTevAlphaIn(1, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.APREV, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    } else if (tevMode === 0x07) {
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setTevColorIn(1, GX.CC.CPREV, GX.CC.TEXC, GX.CC.TEXA, GX.CC.ZERO);
+        mb.setTevAlphaIn(1, GX.CA.APREV, GX.CA.ZERO, GX.CA.TEXA, GX.CA.TEXA);
+        mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+
+        mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(2, GX.CC.ZERO, GX.CC.CPREV, GX.CC.RASC, GX.CC.ZERO);
+        mb.setTevAlphaIn(2, GX.CA.ZERO, GX.CA.APREV, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    } else {
+        console.error(`Unimplemented TEV mode ${tevMode}`);
+
+        // Push a tev mode 0.
+        // rgba = tex0.rgba * ras.rgba
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.RASC, GX.CC.TEXC, GX.CC.ZERO);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.TEXA, GX.CA.ZERO);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+    }
 }
 
 export function parse(buffer: ArrayBufferSlice): TTYDWorld {
@@ -226,6 +419,21 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
         textureNameTable[i] = textureName;
         textureTableIdx += 0x04;
     }
+    //#endregion
+
+    //#region fog_table
+    const fogEnabled = !!view.getUint32(fog_tableOffs + 0x00);
+    const fogMode = view.getUint32(fog_tableOffs + 0x04);
+    const fogStartZ = view.getFloat32(fog_tableOffs + 0x08);
+    const fogEndZ = view.getFloat32(fog_tableOffs + 0x0C);
+    const fogColor = colorNewFromRGBA8(view.getUint32(fog_tableOffs + 0x10));
+    const fogData: FogData = {
+        enabled: fogEnabled,
+        mode: fogMode,
+        startZ: fogStartZ,
+        endZ: fogEndZ,
+        color: fogColor,
+    };
     //#endregion
 
     //#region animation_table
@@ -321,8 +529,8 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 const materialNameOffs = mainDataOffs + view.getUint32(trackEntryIdx + 0x00);
                 const materialName = readString(buffer, materialNameOffs, 0x40, true);
                 const texGenIndex = view.getUint32(trackEntryIdx + 0x04);
-                const skewS = view.getFloat32(trackEntryIdx + 0x08);
-                const skewT = view.getFloat32(trackEntryIdx + 0x0C);
+                const centerS = view.getFloat32(trackEntryIdx + 0x08);
+                const centerT = view.getFloat32(trackEntryIdx + 0x0C);
                 const frameCount = view.getUint32(trackEntryIdx + 0x10);
                 trackEntryIdx += 0x14;
 
@@ -349,7 +557,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                 }
 
                 materialTrackTableIdx += 0x04;
-                tracks.push({ materialName, texGenIndex, skewS, skewT, frames });
+                tracks.push({ materialName, texGenIndex, centerS, centerT, frames });
             }
 
             materialAnimation = { tracks };
@@ -435,10 +643,10 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             const scaleS = view.getFloat32(xformTableIdx + 0x08);
             const scaleT = view.getFloat32(xformTableIdx + 0x0C);
             const rotation = view.getFloat32(xformTableIdx + 0x10);
-            const skewS = view.getFloat32(xformTableIdx + 0x14);
-            const skewT = view.getFloat32(xformTableIdx + 0x18);
+            const centerS = view.getFloat32(xformTableIdx + 0x14);
+            const centerT = view.getFloat32(xformTableIdx + 0x18);
             texMtx[backwardsIndex] = mat4.create();
-            calcTexMtx(texMtx[backwardsIndex], translationS, translationT, scaleS, scaleT, rotation, skewS, skewT);
+            calcTexMtx(texMtx[backwardsIndex], translationS, translationT, scaleS, scaleT, rotation, centerS, centerT);
 
             samplerEntryTableIdx += 0x04;
             xformTableIdx += 0x1C;
@@ -453,175 +661,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             tevMode = view.getUint8(tevConfigOffs + 0x00);
         }
 
-        const tevStages: GX_Material.TevStage[] = [];
-        if (samplerEntryTableCount === 0) {
-            // rgba = ras.rgba
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        } else if (tevMode === 0x00) {
-            // rgba = tex0.rgba * ras.rgba
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        } else if (tevMode === 0x01) {
-            // rgba = vec4(mix(tex0.rgb * tex1.rgb, tex1.a), tex0.a) * ras.rgba
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(1, GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV);
-            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            // Modulate against RASC
-            mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(2, GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(2, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        } else if (tevMode === 0x02) {
-            // rgba = tex0.rgba * tex1.aaaa * ras.rgba
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(1, GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            // Modulate against RASC
-            mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(2, GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(2, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        } else if (tevMode === 0x03) {
-            // rgba = tex0.rgba * (1.0 - tex1.aaaa) * ras.rgba
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(1, GX.CombineColorInput.CPREV, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(1, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            // Modulate against RASC
-            mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(2, GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(2, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        } else if (tevMode === 0x04) {
-            // rgba = tex0.rgba * (1.0 - tex1.aaaa) * ras.rgba
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(1, GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(2, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(2, GX.CombineColorInput.TEXC, GX.CombineColorInput.CPREV, GX.CombineColorInput.APREV, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(2, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            // No modulation against RASC? wtf?
-        } else if (tevMode === 0x05) {
-            // rgba = mix(tex0.rgba, tex1.rgba, tex2.aaaa) * ras.rgba
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
-
-            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(1, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-            mb.setTevAlphaIn(1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG1);
-            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG1);
-
-            mb.setTevOrder(2, GX.TexCoordID.TEXCOORD2, GX.TexMapID.TEXMAP2, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(2, GX.CombineColorInput.C0, GX.CombineColorInput.C1, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(2, GX.CombineAlphaInput.A0, GX.CombineAlphaInput.A1, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(3, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(3, GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(3, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(3, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        } else if (tevMode === 0x06) {
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(1, GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.APREV, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(1, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(2, GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(2, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        } else if (tevMode === 0x07) {
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(1, GX.TexCoordID.TEXCOORD1, GX.TexMapID.TEXMAP1, GX.RasColorChannelID.COLOR_ZERO);
-            mb.setTevColorIn(1, GX.CombineColorInput.CPREV, GX.CombineColorInput.TEXC, GX.CombineColorInput.TEXA, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(1, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.TEXA);
-            mb.setTevColorOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(1, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-            mb.setTevOrder(2, GX.TexCoordID.TEXCOORD_NULL, GX.TexMapID.TEXMAP_NULL, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(2, GX.CombineColorInput.ZERO, GX.CombineColorInput.CPREV, GX.CombineColorInput.RASC, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(2, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.APREV, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(2, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-
-        } else {
-            console.error(`Unimplemented TEV mode ${tevMode}`);
-
-            // Push a tev mode 0.
-            // rgba = tex0.rgba * ras.rgba
-            mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
-            mb.setTevColorIn(0, GX.CombineColorInput.ZERO, GX.CombineColorInput.RASC, GX.CombineColorInput.TEXC, GX.CombineColorInput.ZERO);
-            mb.setTevAlphaIn(0, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.RASA, GX.CombineAlphaInput.TEXA, GX.CombineAlphaInput.ZERO);
-            mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-            mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        }
+        mapSetMaterialTev(mb, samplerEntryTableCount, tevMode);
 
         if (materialLayer === MaterialLayer.OPAQUE) {
             // Opaque.
@@ -739,7 +779,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
             vtxArrays[GX.Attr.NRM] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x04) + 0x04, stride: 0x06 };
 
             const clrCount = view.getUint32(modelVcdTableOffs + 0x08);
-            assert(clrCount === 0x01);
+            assert(clrCount <= 0x01);
 
             vtxArrays[GX.Attr.CLR0] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x0C) + 0x04, stride: 0x04 };
             // vtxArrays[GX.VertexAttribute.CLR1] = { buffer, offs: mainDataOffs + view.getUint32(modelVcdTableOffs + 0x10) + 0x04, stride: 0x04 };
@@ -834,7 +874,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     displayListTableIdx += 0x08;
                 }
 
-                const loadedVertexData = coalesceLoadedDatas(loadedVertexLayout, loadedDatas);
+                const loadedVertexData = coalesceLoadedDatas(loadedDatas);
                 const batch: Batch = { loadedVertexLayout, loadedVertexData };
 
                 parts.push({ material, batch });
@@ -889,7 +929,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         // const tex7Idx = view.getUint16(rawIdx + 0x16);
 
                         assert(posIdx !== 0xFFFF);
-                        const posAttr = loadedVertexLayout.vertexAttributeLayouts[0];
+                        const posAttr = loadedVertexLayout.singleVertexInputLayouts[0];
                         const posOffs = vtxArrays[GX.Attr.POS].offs + (posIdx * 0x0C);
                         const posX = view.getFloat32(posOffs + 0x00);
                         const posY = view.getFloat32(posOffs + 0x04);
@@ -899,7 +939,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         dstView.setFloat32(dstIdx + posAttr.bufferOffset + 0x08, posZ, littleEndian);
 
                         if (nrmIdx !== 0xFFFF) {
-                            const nrmAttr = loadedVertexLayout.vertexAttributeLayouts[1];
+                            const nrmAttr = loadedVertexLayout.singleVertexInputLayouts[1];
                             const nrmOffs = vtxArrays[GX.Attr.NRM].offs + (nrmIdx * 0x0C);
                             const nrmX = view.getFloat32(nrmOffs + 0x00);
                             const nrmY = view.getFloat32(nrmOffs + 0x04);
@@ -910,7 +950,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         }
 
                         if (clr0Idx !== 0xFFFF) {
-                            const clr0Attr = loadedVertexLayout.vertexAttributeLayouts[2];
+                            const clr0Attr = loadedVertexLayout.singleVertexInputLayouts[2];
                             const clr0Offs = vtxArrays[GX.Attr.CLR0].offs + (clr0Idx * 0x04);
                             const clr0R = view.getUint8(clr0Offs + 0x00);
                             const clr0G = view.getUint8(clr0Offs + 0x01);
@@ -923,7 +963,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         }
 
                         if (tex0Idx !== 0xFFFF) {
-                            const tex0Attr = loadedVertexLayout.vertexAttributeLayouts[3];
+                            const tex0Attr = loadedVertexLayout.singleVertexInputLayouts[3];
                             const tex0Offs = vtxArrays[GX.Attr.TEX0].offs + (tex0Idx * 0x08);
                             const tex0S = view.getFloat32(tex0Offs + 0x00);
                             const tex0T = view.getFloat32(tex0Offs + 0x04);
@@ -932,7 +972,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         }
 
                         if (tex1Idx !== 0xFFFF) {
-                            const tex1Attr = loadedVertexLayout.vertexAttributeLayouts[4];
+                            const tex1Attr = loadedVertexLayout.singleVertexInputLayouts[4];
                             const tex1Offs = vtxArrays[GX.Attr.TEX1].offs + (tex1Idx * 0x08);
                             const tex1S = view.getFloat32(tex1Offs + 0x00);
                             const tex1T = view.getFloat32(tex1Offs + 0x04);
@@ -941,7 +981,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                         }
 
                         if (tex2Idx !== 0xFFFF) {
-                            const tex2Attr = loadedVertexLayout.vertexAttributeLayouts[5];
+                            const tex2Attr = loadedVertexLayout.singleVertexInputLayouts[5];
                             const tex2Offs = vtxArrays[GX.Attr.TEX2].offs + (tex2Idx * 0x08);
                             const tex2S = view.getFloat32(tex2Offs + 0x00);
                             const tex2T = view.getFloat32(tex2Offs + 0x04);
@@ -958,12 +998,17 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     const totalIndexCount = indexBuffer.length;
                     const indexData = indexBuffer.buffer;
                     const totalVertexCount = vertexCount;
-                    const vertexBuffers: ArrayBuffer[] = [ vertexData ];
-                    loadedDatas.push({ indexData, packets: [], totalIndexCount, totalVertexCount, vertexBuffers, vertexId });
+                    const packet: LoadedVertexDraw = {
+                        indexOffset: 0, indexCount: totalIndexCount,
+                        posNrmMatrixTable: Array(10).fill(0xFFFF),
+                        texMatrixTable: Array(10).fill(0xFFFF),
+                    };
+                    const vertexBuffers: ArrayBuffer[] = [vertexData];
+                    loadedDatas.push({ indexData, draws: [packet], totalIndexCount, totalVertexCount, vertexBuffers, vertexId, drawCalls: null, dlView: null });
                     displayListTableIdx += 0x04;
                 }
 
-                const loadedVertexData = coalesceLoadedDatas(loadedVertexLayout, loadedDatas);
+                const loadedVertexData = coalesceLoadedDatas(loadedDatas);
                 const batch: Batch = { loadedVertexLayout, loadedVertexData };
 
                 parts.push({ material, batch });
@@ -997,7 +1042,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
     const information = { versionStr, aNodeStr, sNodeStr, dateStr };
     //#endregion
 
-    return { information, textureNameTable, rootNode, materials, animations };
+    return { information, textureNameTable, fogData, rootNode, materials, animations };
 }
 
 export const enum LoopMode {
@@ -1121,14 +1166,14 @@ export class MaterialAnimator {
 
         const d = (k1.time - k0.time);
         let t = d > 0 ? (animFrame - k0.time) / d : 0;
-        const skewS = this.track.skewS;
-        const skewT = this.track.skewT;
+        const centerS = this.track.centerS;
+        const centerT = this.track.centerT;
         const scaleS = interpKeyframes(k0.scaleS, k1.scaleT, t, d);
         const scaleT = interpKeyframes(k0.scaleT, k1.scaleT, t, d);
         const rotation = interpKeyframes(k0.rotation, k1.rotation, t, d);
         const translationS = interpKeyframes(k0.translationS, k1.translationS, t, d);
         const translationT = interpKeyframes(k0.translationT, k1.translationT, t, d);
-        calcTexMtx(dst, translationS, translationT, scaleS, scaleT, rotation, skewS, skewT);
+        calcTexMtx(dst, translationS, translationT, scaleS, scaleT, rotation, centerS, centerT);
     }
 }
 

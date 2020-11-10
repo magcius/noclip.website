@@ -4,6 +4,7 @@ import { SceneGfx, ViewerRenderInput } from "./viewer";
 import { DataFetcher } from "./DataFetcher";
 import { DataShare } from "./DataShare";
 import { GfxRenderInstManager } from "./gfx/render/GfxRenderer";
+import InputManager from "./InputManager";
 
 export interface ProgressMeter {
     setProgress(progress: number): void;
@@ -23,6 +24,7 @@ export interface SceneContext {
     dataShare: DataShare;
     uiContainer: HTMLElement;
     destroyablePool: Destroyable[];
+    inputManager: InputManager;
 }
 
 export interface SceneDesc {
@@ -37,6 +39,7 @@ export interface SceneGroup {
     sceneDescs: (string | SceneDesc)[];
     sceneIdMap?: Map<string, string>;
     hidden?: boolean;
+    altName?: string;
 }
 
 export function getSceneDescs(sceneGroup: SceneGroup): SceneDesc[] {

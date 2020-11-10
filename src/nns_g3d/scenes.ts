@@ -1,5 +1,5 @@
 
-import { MDL0Renderer } from "./render";
+import { MDL0Renderer, nnsG3dBindingLayouts } from "./render";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { FakeTextureHolder } from "../TextureHolder";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
@@ -9,6 +9,8 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
 import { assertExists } from "../util";
 import { parseNSBMD } from "./NNS_G3D";
+import { NITRO_Program } from "../SuperMario64DS/render";
+import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 
 class BasicNSBMDRenderer implements SceneGfx {
     public renderTarget = new BasicRenderTarget();
@@ -24,6 +26,12 @@ class BasicNSBMDRenderer implements SceneGfx {
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
+
+        template.setBindingLayouts(nnsG3dBindingLayouts);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
+        const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+
         for (let i = 0; i < this.mdl0Renderers.length; i++)
             this.mdl0Renderers[i].prepareToRender(this.renderInstManager, viewerInput);
         this.renderInstManager.popTemplateRenderInst();

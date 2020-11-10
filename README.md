@@ -26,6 +26,7 @@ If you would like contribute, there is a Getting Started guide in the [Official 
 	- WASD/Arrow Keys: Move camera
 	- IJKL/Drag Mouse: Pan/tilt camera
 	- Shift: Increase camera speed
+	- Backslash: Reduce camera speed
 	- Q/Page Down/Ctrl+Space: Move camera down
 	- E/Page Up/Space: Move camera up
 	- Scroll Wheel: Change camera speed
@@ -46,3 +47,4 @@ If you would like contribute, there is a Getting Started guide in the [Official 
 	- WASD: Move camera
 	- Shift+WASD: Rotate camera
 	- Scroll Wheel: zoom
+

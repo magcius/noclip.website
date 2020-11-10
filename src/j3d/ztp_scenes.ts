@@ -1,12 +1,13 @@
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 
 import { BMD, BMT, BTK, BRK, BCK } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { J3DModelData, J3DModelInstanceSimple, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData, BMDModelMaterialData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { BTIData, BTI_Texture, BTI } from '../Common/JSYSTEM/JUTTexture';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { EFB_WIDTH, EFB_HEIGHT, GXMaterialHacks } from '../gx/gx_material';
@@ -19,6 +20,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
 import { mat4 } from 'gl-matrix';
+import { CameraController } from '../Camera';
 
 class ZTPExtraTextures {
     public extraTextures: BTIData[] = [];
@@ -98,6 +100,10 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
         this.renderHelper = new GXRenderHelperGfx(device);
     }
 
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(36/60);
+    }
+
     private setMirrored(mirror: boolean): void {
         const negScaleMatrix = mat4.create();
         computeModelMatrixS(negScaleMatrix, -1, 1, 1);
@@ -161,29 +167,27 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
 
+        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
         this.setIndirectTextureOverride();
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-
         const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
         renderInstManager.setVisibleByFilterKeyExact(ZTPPass.SKYBOX);
         renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
-        skyboxPassRenderer.endPass(null);
         device.submitPass(skyboxPassRenderer);
 
-        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
+        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
         renderInstManager.setVisibleByFilterKeyExact(ZTPPass.OPAQUE);
         renderInstManager.drawOnPassRenderer(device, opaquePassRenderer);
 
         let lastPassRenderer: GfxRenderPass;
         renderInstManager.setVisibleByFilterKeyExact(ZTPPass.INDIRECT);
         if (renderInstManager.hasAnyVisible()) {
-            opaquePassRenderer.endPass(this.opaqueSceneTexture.gfxTexture);
             device.submitPass(opaquePassRenderer);
 
             const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
@@ -347,7 +351,7 @@ class TwilightPrincessSceneDesc implements Viewer.SceneDesc {
     }
 
     private async fetchRarc(path: string, dataFetcher: DataFetcher): Promise<RARC.JKRArchive | null> {
-        const buffer = await dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404);
+        const buffer = await dataFetcher.fetchData(path, { allow404: true });
         if (buffer.byteLength === 0)
             return null;
         const decompressed = await Yaz0.decompress(buffer);

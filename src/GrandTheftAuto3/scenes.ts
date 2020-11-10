@@ -1,15 +1,14 @@
 
 import * as rw from 'librw';
-//@ts-ignore
 import * as meta from './scenes.json';
 import { SceneDesc, SceneGroup, SceneGfx } from '../viewer';
 import { initializeBasis, BasisFile, BasisFormat } from '../vendor/basis_universal';
 import { inflate } from 'pako';
 import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
 import { SceneContext, Destroyable } from '../SceneBase';
-import { getTextDecoder, assert, assertExists, leftPad } from '../util';
+import { assert, assertExists, leftPad } from '../util';
 import { parseItemPlacement, ItemPlacement, parseItemDefinition, ItemDefinition, ObjectDefinition, parseZones, parseItemPlacementBinary, createItemInstance, ObjectFlags, INTERIOR_EVERYWHERE } from './item';
 import { parseTimeCycle, ColorSet } from './time';
 import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water';
@@ -25,7 +24,7 @@ import { decompressBC } from '../Common/bc_texture';
 
 function UTF8ToString(array: Uint8Array) {
     let length = 0; while (length < array.length && array[length]) length++;
-    return getTextDecoder('utf8')!.decode(array.subarray(0, length));
+    return new TextDecoder('utf8').decode(array.subarray(0, length));
 }
 
 class AssetCache extends Map<string, ArrayBufferSlice> implements Destroyable {
@@ -66,7 +65,7 @@ interface GameMetadata {
     basisTextures: boolean;
     map: {
         name: string;
-        interiors: [string, number, string][];
+        interiors: { name: string, interior: number, suffix: string }[];
     };
 }
 
@@ -119,7 +118,7 @@ export class GTA3SceneDesc implements SceneDesc {
         path = `${this.meta.id}/${path}`;
         let buffer = this.assetCache.get(path);
         if (buffer === undefined) {
-            buffer = await dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404);
+            buffer = await dataFetcher.fetchData(path, { allow404: true });
             if (buffer.byteLength === 0) {
                 console.error('Not found', path);
                 return null;
@@ -131,7 +130,7 @@ export class GTA3SceneDesc implements SceneDesc {
 
     private async fetchText(dataFetcher: DataFetcher, path:string): Promise<string> {
         const buffer = await this.fetch(dataFetcher, path);
-        return getTextDecoder('utf8')!.decode(buffer!.createDataView());
+        return new TextDecoder('utf8').decode(buffer!.createDataView());
     }
 
     private async fetchIDE(dataFetcher: DataFetcher, id: string): Promise<ItemDefinition> {
@@ -485,7 +484,7 @@ function makeSceneGroup(meta: GameMetadata) {
     };
     if (meta.map.interiors.length > 0) {
         sceneGroup.sceneDescs.push('Interiors');
-        for (const [name, interior, suffix] of meta.map.interiors) {
+        for (const { name, interior, suffix } of meta.map.interiors) {
             const id = (suffix === '') ? String(interior) : `${interior}/${suffix.toLowerCase()}`;
             sceneGroup.sceneDescs.push(new GTA3SceneDesc(meta, name, interior, id));
         }

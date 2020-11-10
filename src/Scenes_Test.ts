@@ -1,18 +1,24 @@
 
 import * as Viewer from "./viewer";
 import { GfxDevice, GfxRenderPass } from "./gfx/platform/GfxPlatform";
-import { IS_DEVELOPMENT } from "./BuildVersion";
 import { SceneContext } from "./SceneBase";
 
 import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
 import * as H3D from "./Common/CTR_H3D/H3D";
-import * as PVRT from "./Common/DC/PVRT";
 import { CtrTextureHolder } from "./oot3d/render";
-import { decompress, ContentReader } from "./Fez/XNB";
-import { FezContentTypeReaderManager } from "./Fez/XNB_Fez";
+import * as NARC from "./nns_g3d/narc";
 
 const id = 'test';
 const name = "Test Scenes";
+
+export class EmptyScene implements Viewer.SceneGfx {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        return null as unknown as GfxRenderPass;
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
 
 class BasicRRESSceneDesc implements Viewer.SceneDesc {
     constructor(public dataPath: string, public id: string = dataPath, public name: string = dataPath) {}
@@ -25,65 +31,41 @@ class BasicRRESSceneDesc implements Viewer.SceneDesc {
     }
 }
 
-class H3DScene implements Viewer.SceneGfx {
+class H3DScene extends EmptyScene {
     public textureHolder = new CtrTextureHolder();
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        return null as unknown as GfxRenderPass;
-    }
-
-    public destroy(device: GfxDevice): void {
-    }
 }
 
 class H3DSceneDesc implements Viewer.SceneDesc {
     constructor(public dataPath: string, public id: string = dataPath, public name: string = dataPath) {}
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(this.dataPath).then((data) => {
-            const h3d = H3D.parse(data);
-            const renderer = new H3DScene();
-            renderer.textureHolder.addTextures(device, h3d.textures);
-            return renderer;
-        });
+        const data = await dataFetcher.fetchData(this.dataPath);
+        const h3d = H3D.parse(data);
+        const renderer = new H3DScene();
+        renderer.textureHolder.addTextures(device, h3d.textures);
+        return renderer;
     }
 }
 
-export class JetSetRadioScene implements Viewer.SceneGfx {
-    public textureHolder = new PVRT.PVRTextureHolder();
-    
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        return null as unknown as GfxRenderPass;
-    }
-
-    public destroy(device: GfxDevice): void {
-    }
-}
-
-class XNBTest implements Viewer.SceneDesc {
+class NARCSceneDesc implements Viewer.SceneDesc {
     constructor(public dataPath: string, public id: string = dataPath, public name: string = dataPath) {}
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        return dataFetcher.fetchData(this.dataPath).then((data) => {
-            const decompressed = decompress(data);
-            const typeReaderManager = new FezContentTypeReaderManager();
-            const stream = new ContentReader(typeReaderManager, decompressed);
-            const obj = stream.ReadAsset();
-            console.log(obj);
-            return new JetSetRadioScene();
-        });
+        const data = await dataFetcher.fetchData(this.dataPath);
+        const narc = NARC.parse(data);
+        console.log(narc);
+        return new EmptyScene();
     }
 }
 
 const sceneDescs = [
     new BasicRRESSceneDesc('test/dthro_cmn1.brres'),
     new H3DSceneDesc('test/cave_Common.bch'),
-    //new JetSetRadioSceneDesc('jsr/DPTEX/FLAGTEX001.PVR'),
-    new XNBTest('test/1_bit_doorao.xnb'),
+    new NARCSceneDesc('test/land_data.narc'),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = {
-    id, name, sceneDescs, hidden: !IS_DEVELOPMENT,
+    id, name, sceneDescs, hidden: true,
 };

@@ -9,9 +9,9 @@ import * as Viewer from '../viewer';
 import { DeviceProgram } from '../Program';
 import AnimationController from '../AnimationController';
 import { mat4, vec3, vec4 } from 'gl-matrix';
-import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxBuffer, GfxBufferUsage, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxSampler, GfxDevice, GfxVertexBufferDescriptor, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxHostAccessPass, GfxInputState, GfxInputLayout, GfxCompareMode, GfxProgram, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { fillMatrix4x4, fillVec4, fillColor, fillMatrix4x3, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { colorNew, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
+import { colorNewFromRGBA, Color, colorNewCopy, colorCopy, TransparentBlack } from '../Color';
 import { getTextureFormatName } from './pica_texture';
 import { TextureHolder, LoadedTexture, TextureMapping } from '../TextureHolder';
 import { nArray, assert } from '../util';
@@ -83,12 +83,12 @@ class DMPProgram extends DeviceProgram {
 
     public static BindingsDefinition = `
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
 // Expected to change with each material.
-layout(row_major, std140) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     vec4 u_ConstantColor[6];
     Mat4x3 u_TexMtx[3];
     vec4 u_MatMisc[1];
@@ -97,7 +97,7 @@ layout(row_major, std140) uniform ub_MaterialParams {
 // xyz are used by GenerateTextureCoord
 #define u_DepthOffset      (u_MatMisc[0].w)
 
-layout(row_major, std140) uniform ub_PrmParams {
+layout(std140) uniform ub_PrmParams {
     Mat4x3 u_BoneMatrix[16];
     Mat4x3 u_ViewMatrix;
     vec4 u_PrmMisc[2];
@@ -151,11 +151,11 @@ uniform sampler2D u_Texture[3];
 
         switch (which) {
         case 0: // Texture 0 has TexCoord 0
-            return `texture(u_Texture[0], v_TexCoord0)`;
+            return `texture(SAMPLER_2D(u_Texture[0]), v_TexCoord0)`;
         case 1: // Texture 1 has TexCoord 1
-            return `texture(u_Texture[1], v_TexCoord1)`;
+            return `texture(SAMPLER_2D(u_Texture[1]), v_TexCoord1)`;
         case 2: // Texture 2 has either TexCoord 1 or 2 as input. TODO(jstpierre): Add a material setting for this.
-            return `texture(u_Texture[2], v_TexCoord2)`;
+            return `texture(SAMPLER_2D(u_Texture[2]), v_TexCoord2)`;
         case 3: // Texture 3 is the procedural texture unit. We don't support this yet; return white.
             console.warn("Accessing procedural texture slot");
             return `vec4(1.0)`;
@@ -272,7 +272,6 @@ in vec2 v_TexCoord0;
 in vec2 v_TexCoord1;
 in vec2 v_TexCoord2;
 
-in vec3 v_Lighting;
 in vec3 v_FogColor;
 in vec3 v_Normal;
 in float v_Depth;
@@ -326,8 +325,6 @@ out vec2 v_TexCoord2;
 out vec3 v_FogColor;
 out vec3 v_Normal;
 out float v_Depth;
-out float v_DrawDistance;
-out float v_FogStart;
 
 vec3 Monochrome(vec3 t_Color) {
     // NTSC primaries.
@@ -459,7 +456,7 @@ export function fillSceneParamsDataOnTemplate(template: GfxRenderInst, camera: C
 
 const scratchMatrix = mat4.create();
 const scratchVec4 = vec4.create();
-const scratchColor = colorNew(0, 0, 0, 1);
+const scratchColor = colorNewFromRGBA(0, 0, 0, 1);
 class MaterialInstance {
     private textureMappings: TextureMapping[] = nArray(3, () => new TextureMapping());
     private gfxSamplers: GfxSampler[] = [];
@@ -689,7 +686,7 @@ function translateDataType(dataType: CMB.DataType, size: number, normalized: boo
 
     const formatTypeFlags = translateDataTypeFlags(dataType);
     const formatCompFlags = size as FormatCompFlags;
-    const formatFlags = normalized ? FormatFlags.NORMALIZED : FormatFlags.NONE;
+    const formatFlags = (formatTypeFlags !== FormatTypeFlags.F32 && normalized) ? FormatFlags.NORMALIZED : FormatFlags.NONE;
     return makeFormat(formatTypeFlags, formatCompFlags, formatFlags);
 }
 
@@ -740,7 +737,7 @@ class SepdData {
 
         let perInstanceBinding: GfxVertexBufferDescriptor | null = null;
         if (perInstanceBufferWordOffset !== 0) {
-            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(perInstanceBufferData.buffer));
+            this.perInstanceBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, new Uint8Array(perInstanceBufferData.buffer).buffer);
             perInstanceBinding = { buffer: this.perInstanceBuffer, byteOffset: 0 };
         }
 
@@ -824,7 +821,7 @@ class ShapeInstance {
         for (let i = 0; i < this.sepdData.sepd.prms.length; i++) {
             const prmsData = this.sepdData.prmsData[i];
             const prms = prmsData.prms;
-            const renderInst = renderInstManager.pushRenderInst();
+            const renderInst = renderInstManager.newRenderInst();
             renderInst.drawIndexes(prms.prm.count, prmsData.indexBufferOffset);
 
             let offs = renderInst.allocateUniformBuffer(DMPProgram.ub_PrmParams, 12*16+12+4*2);
@@ -849,6 +846,8 @@ class ShapeInstance {
 
             offs += fillVec4(prmParamsMapped, offs, sepd.position.scale, sepd.texCoord0.scale, sepd.texCoord1.scale, sepd.texCoord2.scale);
             offs += fillVec4(prmParamsMapped, offs, sepd.boneWeights.scale, sepd.boneDimension, this.sepdData.useVertexColor ? 1 : 0);
+
+            renderInstManager.submitRenderInst(renderInst);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -999,7 +998,7 @@ export class CmbInstance {
                 vec3.set(scratchVec3b, 0, 0, 0);
                 vec3.transformMat4(scratchVec3b, scratchVec3b, this.boneMatrices[bone.boneId]);
 
-                drawWorldSpaceLine(ctx, viewerInput.camera, scratchVec3a, scratchVec3b);
+                drawWorldSpaceLine(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b);
             }
         }
 

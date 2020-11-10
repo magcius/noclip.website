@@ -7,7 +7,7 @@ import * as GX_Texture from '../gx/gx_texture';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assert } from "../util";
 
-export interface TPLTexture extends GX_Texture.Texture {
+export interface TPLTexture extends GX_Texture.TextureInputGX {
     wrapS: GX.WrapMode;
     wrapT: GX.WrapMode;
     minFilter: GX.TexFilter;
@@ -30,8 +30,8 @@ export function parse(buffer: ArrayBufferSlice, textureNames?: string[]): TPL {
     const headerSize = view.getUint32(0x08);
     assert(headerSize === 0x0C);
 
-    if (textureNames !== undefined)
-        assert(textureNames.length === numTextures);
+    // if (textureNames !== undefined)
+    //     assert(textureNames.length === numTextures);
 
     let textureTableIdx = headerSize;
     const textures: TPLTexture[] = [];
@@ -68,7 +68,7 @@ export function parse(buffer: ArrayBufferSlice, textureNames?: string[]): TPL {
             paletteData = buffer.subarray(paletteDataOffs, paletteDataSize);
         }
 
-        const name = textureNames !== undefined ? textureNames[i] : `Texture${i}`;
+        const name = textureNames !== undefined && textureNames[i] !== undefined ? textureNames[i] : `Texture${i}`;
 
         textures.push({
             name, mipCount, data, width, height, format,

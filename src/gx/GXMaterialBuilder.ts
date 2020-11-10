@@ -1,5 +1,5 @@
 
-import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo, BlendMode } from "./gx_material";
+import { TevStage, IndTexStage, TexGen, ColorChannelControl, GXMaterial, LightChannelControl, AlphaTest, RopInfo, SwapTable } from "./gx_material";
 import * as GX from "./gx_enum";
 import { autoOptimizeMaterial } from "./gx_render";
 
@@ -64,6 +64,8 @@ function copyTevStage(tevStage: TevStage): TevStage {
         indTexWrapT: tevStage.indTexWrapT,
         indTexAddPrev: tevStage.indTexAddPrev,
         indTexUseOrigLOD: tevStage.indTexUseOrigLOD,
+        texSwapTable: tevStage.texSwapTable,
+        rasSwapTable: tevStage.rasSwapTable,
     };
 }
 
@@ -76,21 +78,20 @@ function copyIndTexStage(indStage: IndTexStage): IndTexStage {
     };
 }
 
-function copyBlendMode(blendMode: BlendMode): BlendMode {
-    return {
-        type: blendMode.type,
-        srcFactor: blendMode.srcFactor,
-        dstFactor: blendMode.dstFactor,
-        logicOp: blendMode.logicOp,
-    }
-}
-
 function copyRopInfo(ropInfo: RopInfo): RopInfo {
     return {
-        blendMode: copyBlendMode(ropInfo.blendMode),
+        fogType: ropInfo.fogType,
+        fogAdjEnabled: ropInfo.fogAdjEnabled,
+        blendMode: ropInfo.blendMode,
+        blendSrcFactor: ropInfo.blendSrcFactor,
+        blendDstFactor: ropInfo.blendDstFactor,
+        blendLogicOp: ropInfo.blendLogicOp,
         depthTest: ropInfo.depthTest,
         depthFunc: ropInfo.depthFunc,
         depthWrite: ropInfo.depthWrite,
+        dstAlpha: ropInfo.dstAlpha,
+        colorUpdate: ropInfo.colorUpdate,
+        alphaUpdate: ropInfo.alphaUpdate,
     }
 }
 
@@ -105,7 +106,7 @@ function copyAlphaTest(alphaTest: AlphaTest): AlphaTest {
 }
 
 export class GXMaterialBuilder {
-    private cullMode: GX.CullMode = GX.CullMode.NONE;
+    private cullMode: GX.CullMode;
     private lightChannels: LightChannelControl[] = [];
     private texGens: TexGen[] = [];
     private tevStages: TevStage[] = [];
@@ -115,14 +116,28 @@ export class GXMaterialBuilder {
     private usePnMtxIdx?: boolean;
 
     constructor(private name: string | null = null) {
+        this.reset();
+    }
+
+    public reset(): void {
+        this.cullMode = GX.CullMode.NONE;
+        this.lightChannels.length = 0;
+        this.texGens.length = 0;
+        this.tevStages.length = 0;
+        this.indTexStages.length = 0;
+
         this.alphaTest = {} as AlphaTest;
         this.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
 
         this.ropInfo = {
-            blendMode: {} as BlendMode,
         } as RopInfo;
+        this.setFog(GX.FogType.NONE, false);
         this.setBlendMode(GX.BlendMode.NONE, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA, GX.LogicOp.CLEAR);
         this.setZMode(true, GX.CompareType.LEQUAL, true);
+        this.setColorUpdate(true);
+        this.setAlphaUpdate(false);
+
+        this.usePnMtxIdx = undefined;
     }
 
     public setCullMode(cullMode: GX.CullMode): void {
@@ -190,10 +205,10 @@ export class GXMaterialBuilder {
 
             this.setTevColorOp(idx, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
             this.setTevAlphaOp(idx, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV),
-            this.setTevColorIn(idx, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.ZERO, GX.CombineColorInput.TEXC),
-            this.setTevAlphaIn(idx, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.ZERO, GX.CombineAlphaInput.TEXA),
+            this.setTevColorIn(idx, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC),
+            this.setTevAlphaIn(idx, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA),
 
-            this.setTevKColorSel(idx, GX.KonstColorSel.KCSEL_1_4);
+            this.setTevKColorSel(idx, GX.KonstColorSel.KCSEL_2_8);
             this.setTevKAlphaSel(idx, GX.KonstAlphaSel.KASEL_1);
 
             this.setTevDirect(idx);
@@ -227,7 +242,7 @@ export class GXMaterialBuilder {
         tevStage.alphaRegId = alphaRegId;
     }
 
-    public setTevColorIn(idx: number, colorInA: GX.CombineColorInput, colorInB: GX.CombineColorInput, colorInC: GX.CombineColorInput, colorInD: GX.CombineColorInput): void {
+    public setTevColorIn(idx: number, colorInA: GX.CC, colorInB: GX.CC, colorInC: GX.CC, colorInD: GX.CC): void {
         const tevStage = this.ensureTevStage(idx);
         tevStage.colorInA = colorInA;
         tevStage.colorInB = colorInB;
@@ -235,7 +250,7 @@ export class GXMaterialBuilder {
         tevStage.colorInD = colorInD;
     }
 
-    public setTevAlphaIn(idx: number, alphaInA: GX.CombineAlphaInput, alphaInB: GX.CombineAlphaInput, alphaInC: GX.CombineAlphaInput, alphaInD: GX.CombineAlphaInput): void {
+    public setTevAlphaIn(idx: number, alphaInA: GX.CA, alphaInB: GX.CA, alphaInC: GX.CA, alphaInD: GX.CA): void {
         const tevStage = this.ensureTevStage(idx);
         tevStage.alphaInA = alphaInA;
         tevStage.alphaInB = alphaInB;
@@ -251,6 +266,12 @@ export class GXMaterialBuilder {
     public setTevKAlphaSel(idx: number, sel: GX.KonstAlphaSel): void {
         const tevStage = this.ensureTevStage(idx);
         tevStage.konstAlphaSel = sel;
+    }
+
+    public setTevSwapMode(idx: number, rasSwapTable: SwapTable | undefined, texSwapTable: SwapTable | undefined): void {
+        const tevStage = this.ensureTevStage(idx);
+        tevStage.rasSwapTable = rasSwapTable;
+        tevStage.texSwapTable = texSwapTable;
     }
 
     public setTevIndirect(tevStageIdx: number, indTexStage: GX.IndTexStageID, format: GX.IndTexFormat, biasSel: GX.IndTexBiasSel, matrixSel: GX.IndTexMtxID, wrapS: GX.IndTexWrap, wrapT: GX.IndTexWrap, addPrev: boolean, utcLod: boolean, alphaSel: GX.IndTexAlphaSel): void {
@@ -305,17 +326,34 @@ export class GXMaterialBuilder {
         this.alphaTest.referenceB = referenceB / 0xFF;
     }
 
+    public setFog(fogType: GX.FogType, fogAdjEnabled: boolean): void {
+        this.ropInfo.fogType = fogType;
+        this.ropInfo.fogAdjEnabled = fogAdjEnabled;
+    }
+
     public setBlendMode(blendMode: GX.BlendMode, srcFactor: GX.BlendFactor, dstFactor: GX.BlendFactor, logicOp: GX.LogicOp = GX.LogicOp.CLEAR): void {
-        this.ropInfo.blendMode.type = blendMode;
-        this.ropInfo.blendMode.srcFactor = srcFactor;
-        this.ropInfo.blendMode.dstFactor = dstFactor;
-        this.ropInfo.blendMode.logicOp = logicOp;
+        this.ropInfo.blendMode = blendMode;
+        this.ropInfo.blendSrcFactor = srcFactor;
+        this.ropInfo.blendDstFactor = dstFactor;
+        this.ropInfo.blendLogicOp = logicOp;
     }
 
     public setZMode(depthTest: boolean, depthFunc: GX.CompareType, depthWrite: boolean): void {
         this.ropInfo.depthTest = depthTest;
         this.ropInfo.depthFunc = depthFunc;
         this.ropInfo.depthWrite = depthWrite;
+    }
+
+    public setDstAlpha(v?: number): void {
+        this.ropInfo.dstAlpha = v;
+    }
+
+    public setColorUpdate(v: boolean): void {
+        this.ropInfo.colorUpdate = v;
+    }
+
+    public setAlphaUpdate(v: boolean): void {
+        this.ropInfo.alphaUpdate = v;
     }
 
     public setUsePnMtxIdx(v: boolean): void {

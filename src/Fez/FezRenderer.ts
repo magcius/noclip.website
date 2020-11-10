@@ -5,11 +5,11 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKeyOpaque } from "../gfx/render/GfxRenderer";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, vec3, vec2, vec4, quat } from "gl-matrix";
-import { computeViewMatrix } from "../Camera";
-import { nArray, assertExists, assert } from "../util";
+import { mat4, vec3, vec2, vec4 } from "gl-matrix";
+import { computeViewMatrix, CameraController } from "../Camera";
+import { nArray, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
-import { MathConstants } from "../MathHelpers";
+import { MathConstants, scaleMatrix } from "../MathHelpers";
 import { TrilesetData } from "./TrileData";
 import { ArtObjectData } from "./ArtObjectData";
 import { BackgroundPlaneData, BackgroundPlaneStaticData } from "./BackgroundPlaneData";
@@ -26,11 +26,11 @@ class FezProgram {
     public static ub_ShapeParams = 1;
 
     public both = `
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
-layout(row_major, std140) uniform ub_ShapeParams {
+layout(std140) uniform ub_ShapeParams {
     Mat4x3 u_BoneMatrix[1];
     vec4 u_LightDirection;
     vec4 u_TexScaleBiasPre;
@@ -70,7 +70,7 @@ in vec3 v_Normal;
 void main() {
     vec2 t_DiffuseTexCoord = mod(v_TexCoord, vec2(1.0, 1.0));
     t_DiffuseTexCoord = t_DiffuseTexCoord.xy * u_TexScaleBiasPost.xy + u_TexScaleBiasPost.zw;
-    vec4 t_DiffuseMapColor = texture(u_Texture[0], t_DiffuseTexCoord.xy);
+    vec4 t_DiffuseMapColor = texture(SAMPLER_2D(u_Texture[0]), t_DiffuseTexCoord.xy);
 
     float t_LightFalloff = clamp(dot(u_LightDirection.xyz, v_Normal.xyz), 0.0, 1.0);
     float t_Illum = clamp(t_LightFalloff + u_BaseAmbient, 0.0, 1.0);
@@ -81,7 +81,7 @@ void main() {
     // Add in the shadow texture
     vec2 t_ShadowTexCoord = ((v_ShadowTexCoord.xy / v_ShadowTexCoord.z) * vec2(0.5)) + vec2(0.5);
     t_ShadowTexCoord = t_ShadowTexCoord.xy * u_ShadowTexScaleBias.xy + u_ShadowTexScaleBias.zw;
-    vec4 t_ShadowMapColor = texture(u_Texture[1], t_ShadowTexCoord);
+    vec4 t_ShadowMapColor = texture(SAMPLER_2D(u_Texture[1]), t_ShadowTexCoord);
     vec4 t_ShadowMul = 1.0 - (t_ShadowMapColor * 0.25);
     gl_FragColor.rgb *= t_ShadowMul.rgb;
 }
@@ -182,7 +182,11 @@ export class FezRenderer implements Viewer.SceneGfx {
         this.levelRenderData.baseDiffuse = level.baseDiffuse;
         this.levelRenderData.baseAmbient = level.baseAmbient;
     }
-    
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(16/60);
+    }
+
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput, renderInstManager: GfxRenderInstManager) {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
@@ -260,7 +264,7 @@ export class FezObjectRenderer {
         if (!viewerInput.camera.frustum.contains(bboxScratch))
             return;
 
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.geometryData.inputLayout, this.geometryData.inputState);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
@@ -279,16 +283,8 @@ export class FezObjectRenderer {
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.drawIndexes(this.geometryData.indexCount);
+        renderInstManager.submitRenderInst(renderInst);
     }
-}
-
-function parseBoolean(str: string): boolean {
-    if (str === 'True')
-        return true;
-    else if (str === 'False')
-        return false;
-    else
-        throw "whoops";
 }
 
 const scratchVec3 = vec3.create();
@@ -324,7 +320,7 @@ export class BackgroundPlaneRenderer {
         const scaleY = this.planeData.dimensions[1] / 16;
         mat4.mul(this.modelMatrix, this.modelMatrix, rotationMatrix);
         mat4.scale(this.modelMatrix, this.modelMatrix, backgroundPlane.scale);
-        mat4.scale(this.modelMatrix, this.modelMatrix, [scaleX, scaleY, 1]);
+        scaleMatrix(this.modelMatrix, this.modelMatrix, scaleX, scaleY, 1.0);
 
         this.megaStateFlags.frontFace = GfxFrontFaceMode.CW;
 
@@ -359,7 +355,7 @@ export class BackgroundPlaneRenderer {
     }
 
     public prepareToRender(levelRenderData: FezLevelRenderData, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.staticData.inputLayout, this.staticData.inputState);
         textureMappingScratch[0].copy(this.textureMapping);
         textureMappingScratch[1].copy(levelRenderData.shadowTextureMapping);
@@ -382,6 +378,7 @@ export class BackgroundPlaneRenderer {
         offs += fillVec4(d, offs, levelRenderData.baseDiffuse, levelRenderData.baseAmbient, 0, 0);
 
         renderInst.drawIndexes(this.staticData.indexCount);
+        renderInstManager.submitRenderInst(renderInst);
     }
 
     public destroy(device: GfxDevice): void {

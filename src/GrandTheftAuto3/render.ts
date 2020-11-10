@@ -11,13 +11,13 @@ import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, quat, vec3, vec2, vec4 } from "gl-matrix";
-import { computeViewSpaceDepthFromWorldSpaceAABB, FPSCameraController } from "../Camera";
+import { computeViewSpaceDepthFromWorldSpaceAABB, FPSCameraController, CameraController } from "../Camera";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
 import { assert } from "../util";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ItemInstance, ObjectDefinition } from "./item";
-import { colorNew, White, colorNewCopy, Color, colorCopy } from "../Color";
+import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color";
 import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -145,7 +145,7 @@ export class TextureArray extends TextureMapping {
         }
 
         const gfxTexture = device.createTexture({
-            dimension: GfxTextureDimension.n2D_ARRAY, pixelFormat,
+            dimension: GfxTextureDimension.n2DArray, pixelFormat,
             width, height, depth: textures.length, numLevels: mipmaps.length
         });
         const hostAccessPass = device.createHostAccessPass();
@@ -170,6 +170,8 @@ export class TextureArray extends TextureMapping {
     }
 
     public destroy(device: GfxDevice): void {
+        if (this.gfxTexture !== null)
+            device.destroyTexture(this.gfxTexture);
         if (this.gfxSampler !== null)
             device.destroySampler(this.gfxSampler);
     }
@@ -222,7 +224,7 @@ class BaseRenderer {
     constructor(protected program: DeviceProgram, protected atlas?: TextureArray) {}
 
     protected prepare(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
-        const renderInst = renderInstManager.pushRenderInst();
+        const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
         renderInst.drawIndexes(this.indices);
 
@@ -276,6 +278,7 @@ export class SkyRenderer extends BaseRenderer {
             return;
         const renderInst = super.prepare(device, renderInstManager);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.BACKGROUND);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -303,7 +306,7 @@ class RWMeshFragData implements MeshFragData {
         if (texture)
             this.texName = txdName + '/' + texture.name.toLowerCase();
         if (color)
-            this.baseColor = colorNew(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
+            this.baseColor = colorNewFromRGBA(color[0] / 0xFF, color[1] / 0xFF, color[2] / 0xFF, color[3] / 0xFF);
         for (let i = 0; i < 8; i++) {
             const ip = uvAnim.interp(i);
             if (ip === null) continue;
@@ -571,6 +574,7 @@ export class SceneRenderer extends BaseRenderer {
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, this.bbox);
         const renderInst = super.prepare(device, renderInstManager);
         renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
+        renderInstManager.submitRenderInst(renderInst);
     }
 }
 
@@ -619,10 +623,8 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public createCameraController() {
-        const controller = new FPSCameraController();
-        controller.sceneKeySpeedMult = 0.5;
-        return controller;
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(0.01);
     }
 
     public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

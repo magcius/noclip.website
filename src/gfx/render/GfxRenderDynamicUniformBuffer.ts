@@ -37,6 +37,8 @@ export class GfxRenderDynamicUniformBuffer {
             wordOffset = alignNonPowerOfTwo(wordOffset, this.uniformBufferMaxPageWordSize);
 
         this.currentWordOffset = wordOffset + wordCount;
+        this.ensureShadowBuffer(wordOffset, wordCount);
+
         return wordOffset;
     }
 
@@ -55,12 +57,17 @@ export class GfxRenderDynamicUniformBuffer {
             newBuffer.set(this.shadowBufferU8, 0);
             this.shadowBufferU8 = newBuffer;
             this.shadowBufferF32 = new Float32Array(this.shadowBufferU8.buffer);
+
+            if (!(this.currentWordOffset <= newWordCount))
+                throw new Error(`Assert fail: this.currentWordOffset [${this.currentWordOffset}] <= newWordCount [${newWordCount}]`);
         }
     }
 
-    // TODO(jstpierre): This API is kind of bad for initial performance...
-    public mapBufferF32(wordOffset: number, wordCount: number): Float32Array {
-        this.ensureShadowBuffer(wordOffset, wordCount);
+    /**
+     * Return the CPU data buffer used internally. Fill this in to submit data to the CPU. Write to
+     * it with the offset that was returned from {@see allocateChunk}.
+     */
+    public mapBufferF32(): Float32Array {
         return assertExists(this.shadowBufferF32);
     }
 
@@ -82,8 +89,11 @@ export class GfxRenderDynamicUniformBuffer {
         }
 
         const wordCount = alignNonPowerOfTwo(this.currentWordOffset, this.uniformBufferMaxPageWordSize);
+        if (!(wordCount <= this.currentBufferWordSize))
+            throw new Error(`Assert fail: wordCount [${wordCount}] (${this.currentWordOffset} aligned ${this.uniformBufferMaxPageWordSize}) <= this.currentBufferWordSize [${this.currentBufferWordSize}]`);
+
         const gfxBuffer = assertExists(this.gfxBuffer);
-        hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount);
+        hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount * 4);
 
         // Reset the offset for next frame.
         // TODO(jstpierre): Should this be a separate step?
