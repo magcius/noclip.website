@@ -428,7 +428,7 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
         return makeErrorMessageUI(`
 <p>This application requires hardware acceleration to be enabled.
 <p>Please enable hardware acceleration in your's browser settings.
-<p>If you have enabled hardware acceleration and are still getting this error message, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
+<p>If you have enabled hardware acceleration and are still getting this error message, try restarting your browser and computer.
 <p style="text-align: right">Thanks, Jasper.
 `);
     else if (errorCode === InitErrorCode.GARBAGE_WEBGL2_GENERIC)
