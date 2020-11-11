@@ -731,8 +731,10 @@ class d_a_vrbox2 extends fopAc_ac_c {
 
         let mtx: mat4;
         const backMat0 = this.backCloud.materialInstances[0].materialData.material;
-        mtx = backMat0.texMatrices[0]!.matrix;
-        mtx[12] = (mtx[12] + scrollSpeed0) % 1.0;
+
+        // Even though the original code modifies MTX0, we don't, since the model data sets it to IDENTITY.
+        // mtx = backMat0.texMatrices[0]!.matrix;
+        // mtx[12] = (mtx[12] + scrollSpeed0) % 1.0;
 
         mtx = backMat0.texMatrices[1]!.matrix;
         mtx[12] = (mtx[12] + scrollSpeed0) % 1.0;
@@ -740,18 +742,12 @@ class d_a_vrbox2 extends fopAc_ac_c {
         const scrollSpeed1 = scrollSpeed0 * 0.8;
 
         const backMat1 = this.backCloud.materialInstances[1].materialData.material;
-        mtx = backMat1.texMatrices[0]!.matrix;
-        mtx[12] = (mtx[12] + scrollSpeed1) % 1.0;
-
         mtx = backMat1.texMatrices[1]!.matrix;
         mtx[12] = (mtx[12] + scrollSpeed1) % 1.0;
 
         const scrollSpeed2 = scrollSpeed0 * 0.6;
 
         const backMat2 = this.backCloud.materialInstances[2].materialData.material;
-        mtx = backMat2.texMatrices[0]!.matrix;
-        mtx[12] = (mtx[12] + scrollSpeed2) % 1.0;
-
         mtx = backMat2.texMatrices[1]!.matrix;
         mtx[12] = (mtx[12] + scrollSpeed0 + scrollSpeed2) % 1.0;
 
@@ -793,19 +789,16 @@ class d_a_vrbox2 extends fopAc_ac_c {
 
         if (this.usoUmi !== null) {
             mat4.copy(this.usoUmi.modelMatrix, calc_mtx);
-            dKy_setLight__OnModelInstance(envLight, this.usoUmi, viewerInput.camera);
             mDoExt_modelUpdateDL(globals, this.usoUmi, renderInstManager, viewerInput, globals.dlst.sky);
         }
 
         if (this.kasumiMae !== null) {
             mat4.copy(this.kasumiMae.modelMatrix, calc_mtx);
-            dKy_setLight__OnModelInstance(envLight, this.kasumiMae, viewerInput.camera);
             mDoExt_modelUpdateDL(globals, this.kasumiMae, renderInstManager, viewerInput, globals.dlst.sky);
         }
 
         calc_mtx[13] += 100.0;
         mat4.copy(this.backCloud.modelMatrix, calc_mtx);
-        dKy_setLight__OnModelInstance(envLight, this.backCloud, viewerInput.camera);
         mDoExt_modelUpdateDL(globals, this.backCloud, renderInstManager, viewerInput, globals.dlst.sky);
     }
 }

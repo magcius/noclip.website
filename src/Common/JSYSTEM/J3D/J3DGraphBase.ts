@@ -1153,10 +1153,7 @@ export class J3DModelInstance {
      *
      * It is currently not possible to specify a color override per-material.
      *
-     * By default, the alpha value in {@param color} is not used. Set {@param useAlpha}
-     * to true to obey the alpha color override.
-     *
-     * To unset a color override, pass {@constant undefined} as for {@param color}.
+     * To unset a color override, pass {@constant null} as for {@param color}.
      */
     public setColorOverride(colorKind: ColorKind, color: Color | null): void {
         for (let i = 0; i < this.materialInstances.length; i++)

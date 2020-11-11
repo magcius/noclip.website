@@ -84,6 +84,9 @@ export class mDoExt_bvaAnm extends mDoExt_baseAnm<VAF1> {
 }
 
 export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelInstance, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
+    if (!modelInstance.visible)
+        return;
+
     const device = globals.modelCache.device;
 
     if (drawListSet === null)
