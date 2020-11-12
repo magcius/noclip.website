@@ -4,8 +4,7 @@ import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { clamp, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, normToLengthAndAdd, quatFromEulerRadians, range, saturate, setMatrixTranslation, transformVec3Mat4w0, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-
-import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, turnQuatYDirRad, setMtxQuat, calcRailEndPointDirection, connectToSceneNoSilhouettedMapObjStrongLight } from '../ActorUtil';
+import { addVelocityFromPush, addVelocityFromPushHorizon, addVelocityMoveToDirection, addVelocityToGravity, appearStarPiece, attenuateVelocity, blendQuatUpFront, calcDistanceToPlayer, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcNearestRailPos, calcNearestRailDirection, calcPerpendicFootToLine, calcRailPointPos, calcRailStartPos, calcSqDistanceToPlayer, calcUpVec, calcVelocityMoveToDirection, connectToScene, connectToSceneCollisionEnemyNoShadowedMapObjStrongLight, connectToSceneCollisionEnemyStrongLight, connectToSceneEnemy, connectToSceneEnemyMovement, connectToSceneIndirectEnemy, declareStarPiece, excludeCalcShadowToMyCollision, FixedPosition, getBckFrameMax, getBrkFrameMax, getCamYdir, getCamZdir, getCurrentRailPointArg0, getEaseInOutValue, getEaseInValue, getGroupFromArray, getJointMtxByName, getPlayerPos, getRailDirection, getRailPointNum, getRandomInt, getRandomVector, hideModel, initCollisionParts, initDefaultPos, invalidateShadowAll, isActionEnd, isBckOneTimeAndStopped, isBckPlaying, isBckStopped, isBrkStopped, isBtpStopped, isExistBck, isHiddenModel, isInDeath, isNearPlayer, isNearPlayerPose, isOnSwitchA, isSameDirection, isValidSwitchA, isValidSwitchAppear, isValidSwitchB, isValidSwitchDead, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontUp, makeMtxFrontUpPos, makeMtxTRFromQuatVec, makeMtxUpFront, makeMtxUpFrontPos, makeMtxUpNoSupportPos, makeQuatFromVec, makeQuatUpFront, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailStartPoint, moveCoordToRailPoint, moveCoordToStartPos, moveTransToCurrentRailPos, quatFromMat4, quatGetAxisX, quatGetAxisY, quatGetAxisZ, quatSetRotate, reboundVelocityFromCollision, reboundVelocityFromEachCollision, restrictVelocity, reverseRailDirection, rotateQuatRollBall, sendMsgPushAndKillVelocityToTarget, setBckFrameAndStop, setBckRate, setBrkFrameAndStop, setBvaRate, setRailCoord, setRailCoordSpeed, setRailDirectionToEnd, showModel, startAction, startBck, startBckNoInterpole, startBckWithInterpole, startBpk, startBrk, startBtk, startBtp, startBtpIfExist, startBva, syncStageSwitchAppear, tryStartBck, turnVecToVecCos, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateShadowAll, vecKillElement, isExistBtk, setBtkFrameAndStop, getBckFrame, setBckFrame, isRailReachedGoal, isRailReachedNearGoal, setRailDirectionToStart, moveCoordToNearestPos, moveTransToOtherActorRailPos, moveCoord, calcNearestRailPosAndDirection, isLoopRail, isRailGoingToEnd, getRandomFloat, calcVecToPlayerH, calcVecFromPlayerH, calcDistanceToPlayerH, makeQuatSideUp, connectToSceneNoSilhouettedMapObjStrongLight, setBckFrameAtRandom, turnQuatYDirRad, setMtxQuat, calcRailEndPointDirection } from '../ActorUtil';
 import { isInAreaObj } from '../AreaObj';
 import { CollisionKeeperCategory, getFirstPolyOnLineToMapExceptSensor, isBinded, isBindedGround, isBindedRoof, isBindedWall, isGroundCodeDamage, isGroundCodeDamageFire, isGroundCodeAreaMove, isGroundCodeRailMove, isOnGround, Triangle, TriangleFilterFunc, isBindedGroundDamageFire, isBindedGroundWaterBottomH, isBindedGroundWaterBottomM, isBindedWallOfMoveLimit, isBindedGroundWaterBottomL } from '../Collision';
 import { deleteEffect, deleteEffectAll, emitEffect, forceDeleteEffect, isEffectValid, setEffectHostMtx, setEffectHostSRT } from '../EffectSystem';
@@ -28,7 +27,7 @@ import { getWaterAreaObj } from '../MiscMap';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { drawWorldSpaceFan, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { Blue, Green, Red } from '../../Color';
-import { tryRegisterDemoCast } from "../Demo"
+import { tryRegisterDemoCast } from '../Demo';
 
 // Scratchpad
 const scratchVec3a = vec3.create();
@@ -5070,12 +5069,10 @@ export class Petari extends LiveActor<PetariNrv> {
 
         this.setNerve(PetariNrv.JumpOut);
         return true;
+    }
+}
 
-<<<<<<< HEAD
-enum CocoNutBallNrv { Throw }
-=======
 enum CocoNutBallNrv { Throw };
->>>>>>> 32f5bcd7 (SQUASH add to NameObjFactory)
 
 class CocoNutBall extends LiveActor<CocoNutBallNrv> {
 
@@ -5110,6 +5107,33 @@ class CocoNutBall extends LiveActor<CocoNutBallNrv> {
     processApproachToPlayer() {
         throw new Error('Method not implemented.');
     }
+}
+
+enum OtaKingLongFootNrv { Wait }
+
+export class OtaKingLongFoot extends PartsModel<OtaKingLongFootNrv>{
+    private stepOffset: number;
+    constructor(sceneObjHolder:SceneObjHolder, infoIter:JMapInfoIter,parent: OtaKing, stepOffset: number){
+        super(sceneObjHolder, "OtaKingLongFoot", "OtaKingLongFoot", parent , DrawBufferType.EnemyDecoration);
+        this.stepOffset = stepOffset
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        initLightCtrl(sceneObjHolder, this);
+        showModel(this);
+        startBck(this,"Wait");
+        setBckFrameAtRandom(this);
+        //setBckFrameAndStop(this, 0)
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.translation);
+
+    }
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        super.requestArchives(sceneObjHolder, infoIter);
+        sceneObjHolder.modelCache.requestObjectData('OtaKingLongFoot');
+    }
+
 }
 
 enum OtaKingNrv { Wait, ThrowCocoNut, ThrowFireBall }
@@ -5166,6 +5190,25 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
         tryStartBck(this.feet[1], "WaitR");
     }
 
+
+    public initLongFoot(sceneObjHolder:SceneObjHolder, infoIter: JMapInfoIter){
+        this.longFeet = new Array<OtaKingLongFoot>();
+        if (!this.isLv2){
+            let stepOffset = [3,8,0xE,0x12];
+            for (let i = 0; i < 4; i++){
+                let longFoot = new OtaKingLongFoot(sceneObjHolder, infoIter, this, stepOffset[i]);
+                this.longFeet[i] = longFoot;
+                vec3.copy(longFoot.scale,[1.0, 0.9, 0.8]);
+            }
+
+            this.longFeet[0].initFixedPositionRelative(vec3.set(scratchVec3a, 735.0, 80.0, -55.0), vec3.set(scratchVec3b, -9.0*MathConstants.DEG_TO_RAD, 266.0*MathConstants.DEG_TO_RAD, 0.0));
+            this.longFeet[1].initFixedPositionRelative(vec3.set(scratchVec3a, -959.0,130.0, 0.0), vec3.set(scratchVec3b, 0.0, 107.0*MathConstants.DEG_TO_RAD, 14.0*MathConstants.DEG_TO_RAD))
+            this.longFeet[2].initFixedPositionRelative(vec3.set(scratchVec3a, 0.0, 43.0, 884.0), vec3.set(scratchVec3b, -8.0*MathConstants.DEG_TO_RAD, 159.0*MathConstants.DEG_TO_RAD, 0.0))
+            this.longFeet[3].initFixedPositionRelative(vec3.set(scratchVec3a, 55.0, 55.0, -896.0), vec3.set(scratchVec3b, -9.0*MathConstants.DEG_TO_RAD, -14.0*MathConstants.DEG_TO_RAD, 0.0))
+        }
+    }
+
+
     public initModel(sceneObjHolder:SceneObjHolder, infoIter: JMapInfoIter){
         this.initModelManagerWithAnm(sceneObjHolder, getObjectName(infoIter));
         if (getObjectName(infoIter) === 'OtaKing'){
@@ -5187,6 +5230,11 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
         startBck(this, 'wait');
 
 
+        this.initLongFoot(sceneObjHolder, infoIter);
+        //this.magma = createPartsModelEnemyAndFix(sceneObjHolder, this, 'OtaKingMagma',null,null,null,null);
+        this.magmaBloom = new PartsModel(sceneObjHolder, 'OtaKingMagmaBloom', 'OtaKingMagmaBloom', this, DrawBufferType.BloomModel, null);
+        this.magmaBloom.initFixedPositionJoint(null, this.translation, null);
+        //startBck(this.magma, 'wait');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -5196,6 +5244,7 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
             sceneObjHolder.modelCache.requestObjectData('OtaKingFoot');
             sceneObjHolder.modelCache.requestObjectData('OtaKingMagma');
             sceneObjHolder.modelCache.requestObjectData('OtaKingMagmaBloom');
+            sceneObjHolder.modelCache.requestObjectData('OtaKingFoot');
             sceneObjHolder.modelCache.requestObjectData('OtaKingLongFoot');
         } else if (objectName === 'OtaKingLv2') {
             sceneObjHolder.modelCache.requestObjectData('OtaKingFootLv2');

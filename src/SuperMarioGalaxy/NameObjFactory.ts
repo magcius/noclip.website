@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, DinoPackun, Dossun, EyeBeamer, Hanachan, HomingKillerLauncher, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Mogu, NokonokoLand, OnimasuJump, Petari, RingBeamer, Snakehead, Takobo, Unizo,  OtaKing} from './Actors/Enemy';
+import { BallBeamer, DinoPackun, Dossun, EyeBeamer, Hanachan, HomingKillerLauncher, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Mogu, NokonokoLand, OnimasuJump, Petari, RingBeamer, Snakehead, Takobo, Unizo, OtaKing} from './Actors/Enemy';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
