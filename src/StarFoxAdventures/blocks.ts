@@ -5,7 +5,8 @@ import { TextureFetcher, FakeTextureFetcher } from './textures';
 import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
 import { MaterialFactory } from './materials';
-import { Model, ModelInstance, ModelVersion } from './models';
+import { Model, ModelInstance } from './models';
+import { loadModel, ModelVersion } from './modelloader';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { readUint32 } from './util';
@@ -50,7 +51,8 @@ export class BlockCollection {
             if (uncomp === null)
                 return null;
 
-            this.blockModels[num] = new ModelInstance(new Model(this.materialFactory, uncomp, this.texFetcher, this.modelVersion));
+            const model = loadModel(uncomp.createDataView(), this.texFetcher, this.materialFactory, this.modelVersion);
+            this.blockModels[num] = new ModelInstance(model);
         }
 
         return this.blockModels[num];

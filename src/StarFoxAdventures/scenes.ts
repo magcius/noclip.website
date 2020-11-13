@@ -2,7 +2,6 @@ import * as Viewer from '../viewer';
 
 import { SFAMapSceneDesc, SwapcircleSceneDesc, AncientMapSceneDesc } from './maps';
 import { SFAWorldSceneDesc } from './world';
-import { ModelVersion } from './models';
 import { SFAModelExhibitSceneDesc } from './modelexhibit';
 
 export interface GameInfo {
