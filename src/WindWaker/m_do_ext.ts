@@ -6,8 +6,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { dGlobals, dDlst_list_Set } from "./zww_scenes";
 import { mat4, quat, ReadonlyVec3, vec3 } from "gl-matrix";
-import { nArray } from "../util";
-import { quatFromEulerRadians, setMatrixTranslation } from "../MathHelpers";
+import { quatFromEulerRadians } from "../MathHelpers";
 
 abstract class mDoExt_baseAnm<T extends AnimationBase> {
     public frameCtrl = new J3DFrameCtrl(0);
@@ -119,12 +118,7 @@ export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelI
     mDoExt_modelEntryDL(globals, modelInstance, renderInstManager, viewerInput, drawListSet);
 }
 
-function quatFromEulerVec(dst: quat, v: ReadonlyVec3): void {
-    quatFromEulerRadians(dst, v[0], v[1], v[2]);
-}
-
 const scratchTransform = new JointTransformInfo();
-const scratchQuat = quat.create();
 export class mDoExt_McaMorf implements JointMatrixCalc {
     public modelInstance: J3DModelInstance;
     public frameCtrl = new J3DFrameCtrl(0);
@@ -132,7 +126,6 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
     private curMorf: number = 0.0;
     private morfStepPerFrame: number =  1.0;
     private transformInfos: JointTransformInfo[] = [];
-    private quats: quat[] = [];
 
     constructor(modelData: J3DModelData, private callback1: any = null, private callback2: any = null, private anm: ANK1 | null = null, loopMode: LoopMode, speedInFrames: number = 1.0, startFrame: number = 0, duration: number = -1) {
         this.modelInstance = new J3DModelInstance(modelData);
@@ -144,50 +137,38 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
             const j = new JointTransformInfo();
             j.copy(modelData.bmd.jnt1.joints[i].transform);
             this.transformInfos.push(j);
-            const q = quat.create();
-            quatFromEulerVec(q, j.rotation);
-            this.quats.push(q);
         }
     }
 
     public calcJointMatrix(dst: mat4, modelData: J3DModelData, jointIndex: number, shapeInstanceState: ShapeInstanceState): void {
         const dstTransform = this.transformInfos[jointIndex];
-        const dstQuat = this.quats[jointIndex];
 
         const jnt1 = modelData.bmd.jnt1.joints[jointIndex];
         const animFrame = this.frameCtrl.currentTimeInFrames;
         const loadFlags = modelData.bmd.inf1.loadFlags;
 
         if (this.anm !== null) {
+            const duration = this.frameCtrl.endFrame;
+
             if (this.curMorf >= 1.0) {
-                calcJointAnimationTransform(dstTransform, this.anm.jointAnimationEntries[jointIndex], animFrame);
+                calcJointAnimationTransform(dstTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, duration);
                 // callback1
-                calcJointMatrixFromTransform(dst, dstTransform, loadFlags, jnt1, shapeInstanceState);
-                quatFromEulerVec(dstQuat, dstTransform.rotation);
             } else {
                 // callback1
                 let amt = (this.curMorf - this.prevMorf) / (1.0 - this.prevMorf);
 
                 if (amt > 0.0) {
-                    calcJointAnimationTransform(scratchTransform, this.anm.jointAnimationEntries[jointIndex], animFrame);
-
-                    quatFromEulerVec(scratchQuat, scratchTransform.rotation);
-                    vec3.lerp(dstTransform.translation, dstTransform.translation, scratchTransform.translation, amt);
-                    vec3.lerp(dstTransform.scale, dstTransform.scale, scratchTransform.scale, amt);
-                    quat.slerp(dstQuat, dstQuat, scratchQuat, amt);
-                    mat4.fromQuat(dst, dstQuat);
-                    mat4.scale(dst, dst, dstTransform.scale);
-                    setMatrixTranslation(dst, dstTransform.translation);
+                    calcJointAnimationTransform(scratchTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, duration);
+                    dstTransform.lerp(dstTransform, scratchTransform, amt);
                 }
             }
         } else {
             dstTransform.copy(jnt1.transform);
             // callback1
-            calcJointMatrixFromTransform(dst, dstTransform, loadFlags, jnt1, shapeInstanceState);
-            quatFromEulerVec(dstQuat, dstTransform.rotation);
         }
 
         // callback2
+        calcJointMatrixFromTransform(dst, dstTransform, loadFlags, jnt1, shapeInstanceState);
     }
 
     public calc(): void {
