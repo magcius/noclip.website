@@ -136,6 +136,10 @@ export class J3DFrameCtrl {
             return false;
         }
     }
+
+    public hasStopped(): boolean {
+        return this.currentTimeInFrames === 0 || !!(this.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped);
+    }
 }
 
 export function VAF1_getVisibility(vaf1: VAF1, shapeIndex: number, animFrame: number): boolean {
@@ -343,6 +347,7 @@ export class J3DJointMatrixAnm {
 
     public set(frameCtrl: J3DFrameCtrl, ank1: ANK1): void {
         this.frameCtrl = frameCtrl;
+        this.ank1 = ank1;
     }
 
     public calcJointMatrix(dst: mat4, modelData: J3DModelData, i: number, shapeInstanceState: ShapeInstanceState): void {

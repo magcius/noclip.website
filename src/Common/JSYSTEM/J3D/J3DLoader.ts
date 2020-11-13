@@ -313,6 +313,12 @@ export class JointTransformInfo {
     public scale = vec3.fromValues(1.0, 1.0, 1.0);
     public rotation = vec3.create();
     public translation = vec3.create();
+
+    public copy(o: Readonly<JointTransformInfo>): void {
+        vec3.copy(this.scale, o.scale);
+        vec3.copy(this.rotation, o.rotation);
+        vec3.copy(this.translation, o.translation);
+    }
 }
 
 export interface Joint {

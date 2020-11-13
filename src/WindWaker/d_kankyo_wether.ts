@@ -2,7 +2,7 @@
 import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addcol_amb_set, dKy_actor_addcol_dif_set, dKy_bg_addcol_amb_set, dKy_bg_addcol_dif_set, dKy_bg1_addcol_amb_set, dKy_bg1_addcol_dif_set, dKy_vrbox_addcol_sky0_set, dKy_vrbox_addcol_kasumi_set, dKy_addcol_fog_set, dKy_set_actcol_ratio, dKy_set_bgcol_ratio, dKy_set_fogcol_ratio, dKy_set_vrboxcol_ratio, dKy_get_dayofweek, dKy_checkEventNightStop, dKy_get_seacolor, dKy_GxFog_sea_set } from "./d_kankyo";
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
-import { vec3, mat4, vec4, vec2 } from "gl-matrix";
+import { vec3, mat4, vec4, vec2, ReadonlyVec3 } from "gl-matrix";
 import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from "../Color";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
@@ -27,6 +27,7 @@ import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
 import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
+import { _T } from "../gfx/platform/GfxPlatformImpl";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -1537,7 +1538,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
 
     const pkt = envLight.windline!;
     const windVec = dKyw_get_wind_vec(envLight);
-    const windPow = dKyw_get_wind_pow(envLight);
+    const windPow = saturate(dKyw_get_wind_pow(envLight));
 
     const hasCustomWindPower = envLight.customWindPower > 0.0;
 
@@ -2236,7 +2237,7 @@ export function dKyw_wind_set(globals: dGlobals): void {
     envLight.windPower = cLib_addCalc(envLight.windPower, targetWindPower, 0.1, 1.0, 0.005);
 }
 
-export function dKyw_get_wind_vec(envLight: dScnKy_env_light_c): vec3 {
+export function dKyw_get_wind_vec(envLight: dScnKy_env_light_c): ReadonlyVec3 {
     return envLight.windVec;
 }
 
@@ -2246,6 +2247,11 @@ export function dKyw_get_wind_pow(envLight: dScnKy_env_light_c): number {
 
 export function dKyw_get_wind_vecpow(dst: vec3, envLight: dScnKy_env_light_c): void {
     vec3.scale(dst, envLight.windVec, envLight.windPower);
+}
+
+export function dKyw_get_AllWind_vecpow(dst: vec3, envLight: dScnKy_env_light_c, pos: ReadonlyVec3): void {
+    // dKyw_pntwind_get_info()
+    dKyw_get_wind_vecpow(dst, envLight);
 }
 
 export function dKy_wave_chan_init(globals: dGlobals): void {

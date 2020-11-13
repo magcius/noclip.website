@@ -19,6 +19,9 @@ export function cLib_addCalc2(src: number, target: number, speed: number, maxVel
 }
 
 export function cLib_addCalcAngleRad(src: number, target: number, speed: number, maxVel: number, minVel: number): number {
+    if (speed === 0.0)
+        return src;
+
     const da = (target - src) % MathConstants.TAU;
     const delta = (2*da) % MathConstants.TAU - da;
     const vel = clampAbs(delta / speed, minVel, maxVel);
@@ -29,6 +32,9 @@ export function cLib_addCalcAngleRad(src: number, target: number, speed: number,
 }
 
 export function cLib_addCalcAngleRad2(src: number, target: number, speed: number, maxVel: number): number {
+    if (speed === 0.0)
+        return src;
+
     const da = (target - src) % MathConstants.TAU;
     const delta = (2*da) % MathConstants.TAU - da;
     const vel = clampAbs(delta / speed, 0.0, maxVel);
@@ -39,6 +45,9 @@ export function cLib_addCalcAngleRad2(src: number, target: number, speed: number
 }
 
 export function cLib_addCalcAngleS2(src: number, target: number, speed: number, maxVel: number): number {
+    if (speed === 0.0)
+        return src;
+
     // this is not accurate
     const da = (target - src) % 0xFFFF;
     const delta = (2*da) % 0xFFFF - da;

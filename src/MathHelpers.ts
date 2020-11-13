@@ -454,7 +454,7 @@ export function computeProjectionMatrixFromCuboid(m: mat4, left: number, right: 
     m[15] = 1;
 }
 
-export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: mat4): void {
+export function computeEulerAngleRotationFromSRTMatrix(dst: vec3, m: ReadonlyMat4): void {
     // "Euler Angle Conversion", Ken Shoemake, Graphics Gems IV. http://www.gregslabaugh.net/publications/euler.pdf
 
     if (compareEpsilon(m[2], 1.0)) {
@@ -599,7 +599,7 @@ export function float32AsBits(x: number): number {
 /**
  * Reflects a given vector
  */
-export function reflectVec3(dst: vec3, source: vec3, normal: vec3): void {
+export function reflectVec3(dst: vec3, source: ReadonlyVec3, normal: ReadonlyVec3): void {
     const dot = -2.0 * vec3.dot(source, normal);
     vec3.scaleAndAdd(dst, source, normal, dot);
 }
