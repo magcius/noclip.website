@@ -17,7 +17,7 @@ import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFrom
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
 import { d_a_sea } from "./d_a_sea";
-import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, MathConstants, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers";
+import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
 import { TSDraw, TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
@@ -28,7 +28,6 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GlobalSaveManager } from "../SaveManager";
 import { TevDefaultSwapTables } from "../gx/gx_material";
 import { Endianness } from "../endian";
-import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 // Framework'd actors
 
@@ -324,6 +323,8 @@ class d_a_ep extends fopAc_ac_c {
             settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
             setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
             mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
+
+            // TODO(jstpierre): ga
         }
 
         const alphaModel0 = globals.dlst.alphaModel0;
@@ -552,6 +553,10 @@ class d_a_bg extends fopAc_ac_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        // TODO(jstpierre): Proper culling check
+        // if (!this.cullingCheck(viewerInput))
+        //     return;
+
         // force far plane to 100000.0 ?
 
         for (let i = 0; i < this.numBg; i++) {
@@ -1076,8 +1081,12 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
         this.btkAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Btk, `Ygush00`, btk_table[this.type]), true, LoopMode.REPEAT);
         this.bckAnm.init(this.model.modelData, resCtrl.getObjectRes(ResType.Bck, `Ygush00`, bck_table[this.type]), true, LoopMode.REPEAT);
 
+        this.cullMtx = this.model.modelMatrix;
         vec3.copy(this.model.baseScale, this.scale);
         mat4.translate(this.model.modelMatrix, this.model.modelMatrix, this.pos);
+
+        const scaleX = this.scale[0], scaleY = this.scale[1], scaleZ = this.scale[2];
+        this.setCullSizeBox(scaleX * -80.0, scaleY * 0.0, scaleZ * -80.0, scaleX * 80.0, scaleY * 125.0, scaleZ * 80.0);
 
         return cPhs__Status.Next;
     }
@@ -1094,6 +1103,9 @@ class d_a_obj_Ygush00 extends fopAc_ac_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput))
+            return;
+
         settingTevStruct(globals, LightType.BG1, this.pos, this.tevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
 
@@ -1122,6 +1134,10 @@ class d_a_obj_lpalm extends fopAc_ac_c {
         const resCtrl = globals.resCtrl;
         this.model = new J3DModelInstance(resCtrl.getObjectRes(ResType.Model, `Oyashi`, 0x04));
         this.model.jointMatrixCalcCallback = this.nodeCallBack;
+
+        this.cullMtx = this.model.modelMatrix;
+        this.cullFarDistanceRatio = 2.37;
+        this.setCullSizeBox(-350.0, -50.0, -350.0, 350.0, 1300.0, 350.0);
 
         mat4.translate(this.model.modelMatrix, this.model.modelMatrix, this.pos);
         mDoMtx_ZYXrotM(this.model.modelMatrix, this.rot);
@@ -1176,6 +1192,9 @@ class d_a_obj_lpalm extends fopAc_ac_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput))
+            return;
+
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
         mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput);
@@ -1216,6 +1235,9 @@ class d_a_obj_zouK1 extends fopAc_ac_c {
         for (let i = 0; i < this.model.materialInstances.length; i++)
             this.model.materialInstances[i].effectMtxCallback = this.effectMtxCallback;
 
+        this.cullMtx = this.model.modelMatrix;
+        this.setCullSizeBox(-1000.0, 0.0, -1000.0, 1000.0, 2800.0, 1000.0);
+
         return cPhs__Status.Next;
     }
 
@@ -1252,6 +1274,9 @@ class d_a_obj_zouK1 extends fopAc_ac_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput))
+            return;
+
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
         this.setEffectMtx(globals, this.pos, 0.5);
@@ -1283,6 +1308,7 @@ class d_a_swhit0 extends fopAc_ac_c {
 
         this.rot[2] = 0.0;
         this.setDrawMtx();
+        this.cullMtx = this.model.modelMatrix;
 
         return cPhs__Status.Next;
     }
@@ -1299,6 +1325,9 @@ class d_a_swhit0 extends fopAc_ac_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput))
+            return;
+
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
 
@@ -1691,8 +1720,11 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.highscorePad = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x11));
         this.highscoreLabel = new dDlst_2DObject_c(resCtrl.getObjectRes(ResType.Bti, `Kaisen_e`, 0x0E));
 
+        this.cullMtx = this.boardModel.modelMatrix;
+        this.setCullSizeBox(-600.0, -300.0, -500.0, 600.0, 300.0, 100.0);
+
         this.loadHighscore();
-        this.minigameInit(globals);
+        this.MiniGameInit(globals);
 
         this.setDrawMtx();
 
@@ -1711,7 +1743,7 @@ class d_a_mgameboard extends fopAc_ac_c {
         }
     }
 
-    private minigameInit(globals: dGlobals): void {
+    private MiniGameInit(globals: dGlobals): void {
         const resCtrl = globals.resCtrl;
 
         this.minigame.init(24, 3);
@@ -1894,7 +1926,7 @@ class d_a_mgameboard extends fopAc_ac_c {
         this.positionM(this.highscorePad.modelMatrix, 105, 128, 10, 20);
     }
 
-    private minigameMain(globals: dGlobals): void {
+    private MinigameMain(globals: dGlobals): void {
         const inputManager = globals.context.inputManager;
         if (inputManager.isKeyDownEventTriggered('ArrowDown'))
             this.down();
@@ -1913,7 +1945,7 @@ class d_a_mgameboard extends fopAc_ac_c {
 
     private minigameDeactivate(globals: dGlobals): void {
         // Generate a new board for next time.
-        this.minigameInit(globals);
+        this.MiniGameInit(globals);
         this.minigameResetTimer = -1;
         this.minigameActive = false;
     }
@@ -1938,7 +1970,7 @@ class d_a_mgameboard extends fopAc_ac_c {
         } else if (this.minigame.bulletNum === 0 || this.minigame.aliveShipNum === 0) {
             this.minigameDone(globals);
         } else if (this.minigameActive) {
-            this.minigameMain(globals);
+            this.MinigameMain(globals);
         } else {
             // happy easter!!!!!!!!!!!!!!!!!!!!!!!!!
             if (inputManager.isKeyDownEventTriggered('KeyF'))
@@ -1947,6 +1979,9 @@ class d_a_mgameboard extends fopAc_ac_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput))
+            return;
+
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
         setLightTevColorType(globals, this.boardModel, this.tevStr, viewerInput.camera);
         mDoExt_modelUpdateDL(globals, this.boardModel, renderInstManager, viewerInput);
@@ -2351,13 +2386,17 @@ class d_a_sie_flag extends fopAc_ac_c {
         this.cloth = new dCloth_packet_c(toonTex, flagTex, 5, 5, 700.0, 360.0, this.clothTevStr);
 
         vec3.copy(this.windvec, dKyw_get_wind_vec(globals.g_env_light));
-
         this.set_mtx();
+        this.cullMtx = this.model.modelMatrix;
+        this.setCullSizeBox(-700.0, 0.0, -700.0, 700.0, 1100.0, 700.0);
 
         return cPhs__Status.Next;
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput))
+            return;
+
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
         settingTevStruct(globals, LightType.Actor, this.pos, this.clothTevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
@@ -2432,11 +2471,15 @@ class d_a_tori_flag extends fopAc_ac_c {
         vec3.copy(this.windvec, dKyw_get_wind_vec(globals.g_env_light));
 
         this.set_mtx();
+        this.cullMtx = this.model.modelMatrix;
 
         return cPhs__Status.Next;
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput))
+            return;
+
         settingTevStruct(globals, LightType.BG0, this.pos, this.tevStr);
         settingTevStruct(globals, LightType.Actor, this.pos, this.clothTevStr);
         setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
@@ -2628,6 +2671,8 @@ class d_a_majuu_flag extends fopAc_ac_c {
         }
 
         this.set_mtx();
+        this.cullMtx = this.mtx;
+        this.setCullSizeBox(-300.0, -1500.0, -100.0, 300.0, 100.0, 1200.0);
 
         if (this.texType === 3) {
             // Spin for a bit
@@ -2739,6 +2784,9 @@ class d_a_majuu_flag extends fopAc_ac_c {
     }
 
     public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput))
+            return;
+
         // For reference.
         /*
         for (let i = 0; i < this.pointCount; i++) {
@@ -2988,8 +3036,9 @@ class d_a_kamome extends fopAc_ac_c {
         if (this.switch_arg !== 0xFF)
             this.switch_id = this.switch_arg + 1;
 
+        this.cullMtx = this.morf.model.modelMatrix;
         this.size = 1.0 + cM_rndF(1.0);
-        vec3.set(this.morf.modelInstance.baseScale, this.size, this.size, this.size);
+        vec3.set(this.morf.model.baseScale, this.size, this.size, this.size);
         this.daKamome_setMtx();
         vec3.copy(this.origPos, this.pos);
 
@@ -3155,8 +3204,11 @@ class d_a_kamome extends fopAc_ac_c {
         if (this.noDraw || this.switch_id !== 0)
             return;
 
+        if (!this.cullingCheck(viewerInput))
+            return;
+
         settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
-        setLightTevColorType(globals, this.morf.modelInstance, this.tevStr, viewerInput.camera);
+        setLightTevColorType(globals, this.morf.model, this.tevStr, viewerInput.camera);
         this.morf.entryDL(globals, renderInstManager, viewerInput);
 
         // drawWorldSpaceLine(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.pos, this.targetPos, Green, 2);
@@ -3178,8 +3230,8 @@ class d_a_kamome extends fopAc_ac_c {
         mDoMtx_YrotM(calc_mtx, this.rot[1] + this.rotY);
         mDoMtx_XrotM(calc_mtx, this.rot[0] + this.rotX);
         mDoMtx_ZrotM(calc_mtx, this.rot[2]);
-        mat4.copy(this.morf.modelInstance.modelMatrix, calc_mtx);
-        this.morf.modelInstance.jointMatrixCalcCallback = this.nodeCallBack;
+        mat4.copy(this.morf.model.modelMatrix, calc_mtx);
+        this.morf.model.jointMatrixCalcCallback = this.nodeCallBack;
         this.morf.calc();
     }
 }

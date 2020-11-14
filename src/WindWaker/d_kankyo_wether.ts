@@ -3,7 +3,7 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2, ReadonlyVec3 } from "gl-matrix";
-import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, Red, Green } from "../Color";
+import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, Red, Green, Magenta, Yellow, Blue } from "../Color";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -751,9 +751,17 @@ export class dKankyo_vrkumo_Packet {
                 ddraw.color4color(GX.Attr.CLR0, materialParams.u_Color[ColorKind.C0]);
                 ddraw.texCoord2f32(GX.Attr.TEX0, 0, 1);
 
-                // const ctx = getDebugOverlayCanvas2D();
-                // colorCopy(materialParams.u_Color[ColorKind.C0], Magenta, kumo.alpha);
-                // drawWorldSpacePoint(ctx, viewerInput.camera, kumo.position, materialParams.u_Color[ColorKind.C0], 300 * Math.abs(kumo.height));
+/*
+                const ctx = getDebugOverlayCanvas2D();
+                const c = textureIdx === 0 ? Magenta : textureIdx === 1 ? Green : Blue;
+                colorCopy(materialParams.u_Color[ColorKind.C0], c, kumo.alpha);
+                vec3.set(scratchVec3e, x, y, z);
+                vec3.scale(scratchVec3e, scratchVec3e, 10000);
+                scratchVec3e[0] += -196400;
+                scratchVec3e[1] = scratchVec3e[1] * 0.5 + 3000;
+                scratchVec3e[2] += 295960;
+                drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, scratchVec3e, materialParams.u_Color[ColorKind.C0], 50 * height);
+*/
             }
 
             ddraw.end();

@@ -1,10 +1,13 @@
 
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
-import { vec3 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assertExists, nArray, arrayRemove, assert } from "../util";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
+import { AABB, Frustum } from "../Geometry";
+import { computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera";
+import { transformVec3Mat4w1 } from "../MathHelpers";
 
 export const enum fpc__ProcessName {
     d_s_play            = 0x0007,
@@ -467,7 +470,10 @@ export class fopScn extends process_node_class {
 //#endregion
 
 //#region fopAc
-
+const scratchVec3a = vec3.create();
+const scratchAABB = new AABB();
+const scratchFrustum = new Frustum();
+const scratchScreenSpaceProjection = new ScreenSpaceProjection();
 export class fopAc_ac_c extends leafdraw_class {
     public pos = vec3.create();
     public rot = vec3.create();
@@ -476,10 +482,30 @@ export class fopAc_ac_c extends leafdraw_class {
     public subtype: number = 0xFF;
     public roomNo: number = -1;
     public tevStr = new dKy_tevstr_c();
+    protected cullSizeBox: AABB | null = null;
+    protected cullSizeSphere: vec4 | null = null;
+    protected cullMtx: mat4 | null = null;
+    protected cullFarDistanceRatio: number = 0.5;
     // noclip addition
     public roomLayer: number = -1;
 
     private loadInit: boolean = false;
+
+    constructor(globals: fGlobals, pcId: number, profile: DataView) {
+        super(globals, pcId, profile);
+
+        // Initialize our culling information from the profile...
+        const cullType = profile.getUint8(0x2D);
+        if (cullType < 0x0E) {
+            this.cullSizeBox = Object.freeze(fopAc_ac_c.cullSizeBox[cullType]);
+        } else if (cullType === 0x0E) {
+            this.cullSizeBox = new AABB();
+        } else if (cullType < 0x17) {
+            // this.cullSizeSphere = this.cullSizeSphere[cullType - 0x0F];
+        } else if (cullType === 0x17) {
+            this.cullSizeSphere = vec4.create();
+        }
+    }
 
     public load(globals: GlobalUserData, prm: fopAcM_prm_class | null): cPhs__Status {
         if (!this.loadInit) {
@@ -507,6 +533,79 @@ export class fopAc_ac_c extends leafdraw_class {
         if (status === cPhs__Status.Next)
             fopDwTg_ToDrawQ(globals.frameworkGlobals, this, this.drawPriority);
         return status;
+    }
+
+    private static cullSizeBox: AABB[] = [
+        new AABB(-40.0,    0.0, -40.0,     40.0, 125.0,  40.0), // 0x00
+        new AABB(-25.0,    0.0, -25.0,     25.0,  50.0,  25.0), // 0x01
+        new AABB(-50.0,    0.0, -50.0,     50.0, 100.0,  50.0), // 0x02
+        new AABB(-75.0,    0.0, -75.0,     75.0, 150.0,  75.0), // 0x03
+        new AABB(-100.0,   0.0, -100.0,   100.0, 800.0, 100.0), // 0x04
+        new AABB(-125.0,   0.0, -125.0,   125.0, 250.0, 125.0), // 0x05
+        new AABB(-150.0,   0.0, -150.0,   150.0, 300.0, 150.0), // 0x06
+        new AABB(-200.0,   0.0, -200.0,   200.0, 400.0, 200.0), // 0x07
+        new AABB(-600.0,   0.0, -600.0,   600.0, 900.0, 600.0), // 0x08
+        new AABB(-250.0,   0.0, -50.0,    250.0, 900.0,  50.0), // 0x09
+        new AABB(-60.0,    0.0, -20.0,     40.0, 130.0, 150.0), // 0x0A
+        new AABB(-75.0,    0.0, -75.0,     75.0, 210.0,  75.0), // 0x0B
+        new AABB(-70.0, -100.0, -80.0,     70.0, 240.0, 100.0), // 0x0C
+        new AABB(-60.0,  -20.0, -60.0,     60.0, 160.0,  60.0), // 0x0D
+    ];
+
+    protected setCullSizeBox(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): void {
+        assert(this.cullSizeBox !== null && !Object.isFrozen(this.cullSizeBox));
+        this.cullSizeBox.set(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
+    protected setCullSizeSphere(x: number, y: number, z: number, r: number): void {
+        assert(this.cullSizeSphere !== null && !Object.isFrozen(this.cullSizeSphere));
+        vec4.set(this.cullSizeSphere, x, y, z, r);
+    }
+
+    protected cullingCheck(viewerInput: ViewerRenderInput): boolean {
+        // Make sure that all culling matrices are filled in, before I forget...
+        if (this.cullMtx === null)
+            throw "whoops";
+
+        // Compute our view frustum. If we have a custom far distance, pull that in...
+        let frustum: Frustum; 
+        if (this.cullFarDistanceRatio < 1.0) {
+            scratchFrustum.copyViewFrustum(viewerInput.camera.frustum);
+            scratchFrustum.far *= this.cullFarDistanceRatio;
+            scratchFrustum.updateWorldFrustum(viewerInput.camera.worldMatrix);
+            frustum = scratchFrustum;
+        } else {
+            frustum = viewerInput.camera.frustum;
+        }
+
+        if (this.cullSizeBox !== null) {
+            // If the box is empty, that means I forgot to fill it in for a certain actor.
+            // Sound the alarms so that I fill it in!
+            if (this.cullSizeBox.isEmpty())
+                debugger;
+
+            scratchAABB.transform(this.cullSizeBox, this.cullMtx);
+
+            if (!frustum.contains(scratchAABB))
+                return false;
+
+            computeScreenSpaceProjectionFromWorldSpaceAABB(scratchScreenSpaceProjection, viewerInput.camera, scratchAABB);
+            if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
+                return false;
+        } else if (this.cullSizeSphere !== null) {
+            vec3.set(scratchVec3a, this.cullSizeSphere[0], this.cullSizeSphere[1], this.cullSizeSphere[2]);
+            transformVec3Mat4w1(scratchVec3a, this.cullMtx, scratchVec3a);
+            const radius = this.cullSizeSphere[3];
+
+            if (!frustum.containsSphere(scratchVec3a, radius))
+                return false;
+
+            computeScreenSpaceProjectionFromWorldSpaceSphere(scratchScreenSpaceProjection, viewerInput.camera, scratchVec3a, radius);
+            if (scratchScreenSpaceProjection.getScreenArea() <= 0.0002)
+                return false;
+        }
+
+        return true;
     }
 
     public delete(globals: GlobalUserData): void {

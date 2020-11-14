@@ -44,6 +44,7 @@ import { makeStaticDataBuffer, GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TSDraw } from '../SuperMarioGalaxy/DDraw';
+import { Frustum } from '../Geometry';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -571,9 +572,10 @@ class SimpleEffectSystem {
         }
     }
 
-    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
+    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null, frustum: Frustum): void {
         this.drawInfo.posCamMtx = posCamMtx;
         this.drawInfo.texPrjMtx = texPrjMtx;
+        this.drawInfo.frustum = frustum;
     }
 
     public calc(viewerInput: Viewer.ViewerRenderInput): void {
@@ -765,6 +767,19 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             }
         }
 
+        // Near/far planes are decided by the stage data.
+        const stag = this.globals.dStage_dt.stag;
+
+        // Pull in the near plane to decrease Z-fighting, some stages set it far too close...
+        let nearPlane = Math.max(stag.nearPlane, 5);
+        let farPlane = stag.farPlane;
+
+        // noclip modification: if this is the full sea map, push our far plane out.
+        if (this.globals.stageName === 'sea' && this.rooms.length !== 1)
+            farPlane *= 2;
+
+        viewerInput.camera.setClipPlanes(nearPlane, farPlane);
+
         this.globals.camera = viewerInput.camera;
 
         // Not sure exactly where this is ordered...
@@ -793,7 +808,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                     texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
                 }
 
-                this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
+                this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
                 renderInstManager.setCurrentRenderInstList(dlst.effect[group]);
                 this.effectSystem.draw(device, this.renderHelper.renderInstManager, group);
             }
