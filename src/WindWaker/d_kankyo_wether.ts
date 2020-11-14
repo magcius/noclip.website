@@ -3,7 +3,7 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2, ReadonlyVec3 } from "gl-matrix";
-import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from "../Color";
+import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, Red, Green } from "../Color";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -28,6 +28,7 @@ import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { _T } from "../gfx/platform/GfxPlatformImpl";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -839,11 +840,12 @@ export class dKankyo_rain_Packet {
         envLight.wetherCommonTextures.snowTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
 
         // To save on draw call count, all rain currently have the same alpha.
-        const alpha = this.instances[0].alpha * 14/0xFF;
+        const alpha = 14/0xFF;
         colorFromRGBA(materialParams.u_Color[ColorKind.C0], 1.0, 1.0, 1.0, alpha);
 
         for (let i = 0; i < this.rainCount; i++) {
             const rain = this.instances[i];
+            vec3.add(scratchVec3, rain.basePos, rain.pos);
 
             if (rain.alpha <= 0.001)
                 continue;
@@ -1770,6 +1772,20 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
     if (pkt.rainCount === 0)
         return;
 
+    let fadeMaxXZDist = 0;
+    let fadeMaxY = 0;
+
+    const roomType = (globals.dStage_dt.stag.roomTypeAndSchBit >>> 16) & 0x07;
+    if (roomType === 2 && globals.stageName !== 'Ocrogh' && globals.stageName !== 'Omori') {
+        if (globals.stageName === 'Orichh')
+            fadeMaxXZDist = 2300.0;
+        else
+            fadeMaxXZDist = 1200.0;
+
+        if (globals.stageName === 'Atorizk')
+            fadeMaxY = 1300.0;
+    }
+
     // TODO(jstpierre): Center delta
     // dKyr_get_vectle_calc(pkt.camEyePos)
 
@@ -1817,8 +1833,19 @@ function wether_move_rain(globals: dGlobals, deltaTimeInFrames: number): void {
             rain.initialized = true;
         }
 
-        // TODO(jstpierre): Set rain alpha
-        rain.alpha = 1.0;
+        let alpha = 1.0;
+
+        if (fadeMaxXZDist > 0.0) {
+            vec3.add(scratchVec3c, rain.basePos, rain.pos);
+
+            const distXZ = Math.hypot(scratchVec3c[0], scratchVec3c[2]);
+            if (distXZ < fadeMaxXZDist)
+                alpha = 0.0;
+            if (scratchVec3c[1] < fadeMaxY)
+                alpha = 0.0;
+        }
+
+        rain.alpha = alpha;
     }
 
     if (envLight.rainCount < pkt.rainCount)
