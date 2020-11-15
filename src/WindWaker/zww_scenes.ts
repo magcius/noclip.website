@@ -40,11 +40,12 @@ import { dBgS } from './d_bg';
 import { dfRange } from '../DebugFloaters';
 import { colorNewCopy, White, colorCopy } from '../Color';
 import { GX_Array, GX_VtxAttrFmt, compileVtxLoader, GX_VtxDesc } from '../gx/gx_displaylist';
-import { makeStaticDataBuffer, GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
+import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TSDraw } from '../SuperMarioGalaxy/DDraw';
 import { Frustum } from '../Geometry';
+import { d_a_sea } from './d_a_sea';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -357,6 +358,8 @@ export class dGlobals {
 
     private relNameTable: { [id: number]: string };
     private objectNameTable: dStage__ObjectNameTable;
+
+    public sea: d_a_sea | null = null;
 
     constructor(public context: SceneContext, public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
         this.resCtrl = this.modelCache.resCtrl;
@@ -760,9 +763,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
                 const ac = fwGlobals.dwQueue[i][j];
                 if (ac instanceof fopAc_ac_c) {
-                    ac.visible = this.getRoomVisible(ac.roomNo) && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
-                    if (ac.visible && !this.globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
-                        ac.visible = false;
+                    ac.roomVisible = this.getRoomVisible(ac.roomNo) && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
+                    if (ac.roomVisible && !this.globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
+                        ac.roomVisible = false;
                 }
             }
         }

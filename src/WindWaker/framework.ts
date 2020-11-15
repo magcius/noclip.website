@@ -15,6 +15,7 @@ export const enum fpc__ProcessName {
     d_envse             = 0x0017,
     d_a_sea             = 0x0028,
     d_a_mgameboard      = 0x0040,
+    d_a_obj_ikada       = 0x0046,
     d_a_obj_lpalm       = 0x004B,
     d_a_obj_Ygush00     = 0x0099,
     d_a_majuu_flag      = 0x00AF,
@@ -72,7 +73,6 @@ export class fGlobals {
 }
 
 //#region cPhs
-
 export const enum cPhs__Status {
     Started,
     Loading,
@@ -286,7 +286,6 @@ export function fpcLy_SetCurrentLayer(globals: fGlobals, layer: layer_class): vo
 //#endregion
 
 //#region fpcEx (framework process executor)
-
 function fpcEx_Handler(globals: fGlobals, globalUserData: GlobalUserData, deltaTimeInFrames: number): void {
     for (let i = 0; i < globals.liQueue.length; i++) {
         for (let j = 0; j < globals.liQueue[i].length; j++) {
@@ -377,10 +376,10 @@ export function fpcPf__RegisterFallback(globals: fGlobals, constructor: fpc_bs__
 //#endregion
 
 //#region fpcDw
-
 class process_node_class extends base_process_class {
     public layer: layer_class;
     public visible: boolean = true;
+    public roomVisible: boolean = true;
 
     constructor(globals: fGlobals, pcId: number, profile: DataView) {
         super(globals, pcId, profile);
@@ -397,6 +396,7 @@ class process_node_class extends base_process_class {
 class leafdraw_class extends base_process_class {
     public drawPriority: number;
     public visible: boolean = true;
+    public roomVisible: boolean = true;
 
     constructor(globals: fGlobals, pcId: number, profile: DataView) {
         super(globals, pcId, profile);
@@ -412,7 +412,7 @@ function fpcDw_Handler(globals: fGlobals, globalUserData: GlobalUserData, render
     for (let i = 0; i < globals.lyRoot.pcQueue.length; i++) {
         const pc = globals.lyRoot.pcQueue[i];
         if (pc instanceof leafdraw_class || pc instanceof process_node_class) {
-            if (!pc.visible)
+            if (!pc.visible || !pc.roomVisible)
                 continue;
             fpcLy_SetCurrentLayer(globals, pc.ly);
             pc.draw(globalUserData, renderInstManager, viewerInput);
@@ -423,7 +423,6 @@ function fpcDw_Handler(globals: fGlobals, globalUserData: GlobalUserData, render
 //#endregion
 
 //#region fpcM (Manager)
-
 export function fpcM_Management(globals: fGlobals, globalUserData: GlobalUserData, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
     fpcDt_Handler(globals, globalUserData);
     fpcCt_Handler(globals, globalUserData);
@@ -433,13 +432,10 @@ export function fpcM_Management(globals: fGlobals, globalUserData: GlobalUserDat
     fpcEx_Handler(globals, globalUserData, deltaTimeInFrames);
     fpcDw_Handler(globals, globalUserData, renderInstManager, viewerInput);
 }
-
 //#endregion
 
 //#region fop
-
 //#region fopDw (framework operation draw)
-
 export function fopDw_Draw(globals: fGlobals, globalUserData: GlobalUserData, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
     for (let i = 0; i < globals.dwQueue.length; i++) {
         for (let j = 0; j < globals.dwQueue[i].length; j++) {
@@ -459,14 +455,11 @@ function fopDwTg_ToDrawQ(globals: fGlobals, dw: leafdraw_class, priority: number
 function fopDwTg_DrawQTo(globals: fGlobals, dw: leafdraw_class, priority: number): void {
     arrayRemove(globals.dwQueue[priority], dw);
 }
-
 //#endregion
 
 //#region fopScn
-
 export class fopScn extends process_node_class {
 }
-
 //#endregion
 
 //#region fopAc
@@ -641,11 +634,9 @@ export function fopAcM_create(globals: fGlobals, pcName: fpc__ProcessName, param
 
     return fpcSCtRq_Request(globals, null, pcName, prm);
 }
-
 //#endregion
 
 //#region fopKy
-
 export class kankyo_class extends leafdraw_class {
     public pos = vec3.create();
     public scale = vec3.create();
@@ -697,7 +688,5 @@ export function fopKyM_create(globals: fGlobals, pcName: fpc__ProcessName, param
 export function fopKyM_Delete(globals: fGlobals, ky: kankyo_class): void {
     fpcDt_Delete(globals, ky);
 }
-
 //#endregion
-
 //#endregion

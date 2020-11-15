@@ -9,14 +9,14 @@ import { ViewerRenderInput } from "../viewer";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_setLight, dKy_setLight__OnMaterialParams } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm, mDoExt_McaMorf } from "./m_do_ext";
 import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
-import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s } from "./SComponent";
-import { dStage_Multi_c } from "./d_stage";
+import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad } from "./SComponent";
+import { dPath_GetRoomPath, dStage_Multi_c, dPath, dPath__Point } from "./d_stage";
 import { nArray, assertExists, assert } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8, Yellow, Magenta, Green, Red } from "../Color";
+import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8, Yellow, Magenta, Green, Red, Blue, White } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
-import { d_a_sea } from "./d_a_sea";
+import { dLib_getWaterY, d_a_sea } from "./d_a_sea";
 import { saturate, Vec3UnitY, Vec3Zero, computeModelMatrixS, computeMatrixWithoutTranslation, clamp, transformVec3Mat4w0, Vec3One, Vec3UnitZ, computeModelMatrixR, transformVec3Mat4w1, scaleMatrix, lerp } from "../MathHelpers";
 import { dBgW, cBgW_Flags } from "./d_bg";
 import { TSDraw, TDDraw } from "../SuperMarioGalaxy/DDraw";
@@ -28,6 +28,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GlobalSaveManager } from "../SaveManager";
 import { TevDefaultSwapTables } from "../gx/gx_material";
 import { Endianness } from "../endian";
+import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 // Framework'd actors
 
@@ -3236,6 +3237,294 @@ class d_a_kamome extends fopAc_ac_c {
     }
 }
 
+type ModeFunc = (globals: dGlobals, deltaTimeInFrames: number) => void;
+interface ModeFuncExec<T extends number> {
+    curMode: T;
+}
+
+function modeProcExec<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], deltaTimeInFrames: number): void {
+    const func = mode_tbl[actor.curMode * 2 + 1];
+    func.call(actor, globals, deltaTimeInFrames);
+}
+
+function modeProcInit<T extends number>(globals: dGlobals, actor: ModeFuncExec<T>, mode_tbl: ModeFunc[], mode: T): void {
+    actor.curMode = mode;
+    const func = mode_tbl[actor.curMode * 2 + 0];
+    func.call(actor, globals, 0);
+}
+
+type dPathMoveCB = (dst: vec3, curr: dPath__Point, next: dPath__Point, speed: number) => boolean;
+function dLib_pathMove(dst: vec3, pointIdxCurr: number, path: dPath, speed: number, callBack: dPathMoveCB | null = null): number {
+    const pointIdxNext = (pointIdxCurr + 1) % path.points.length;
+    const pointCurr = path.points[pointIdxCurr];
+    const pointNext = path.points[pointIdxNext];
+
+    if (callBack !== null) {
+        if (callBack(dst, pointCurr, pointNext, speed))
+            pointIdxCurr = pointIdxNext;
+    } else {
+        vec3.sub(scratchVec3a, pointNext.pos, pointCurr.pos);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        // todo
+        throw "whoops";
+    }
+
+    return pointIdxCurr;
+}
+
+const enum d_a_obj_ikada_mode { modeWait, modeStopTerry, modePathMoveTerry }
+class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mode> {
+    public static PROCESS_NAME = fpc__ProcessName.d_a_obj_ikada;
+
+    private type: number;
+    private path_id: number;
+    private model: J3DModelInstance;
+    private bckAnm = new mDoExt_bckAnm();
+    private path: dPath | null = null;
+    private waveAnim1Timer = 0;
+    private linkRideRockTimer = 0;
+    private linkRideRockAmpl = 0;
+    private velocityFwd: number = 0.0;
+    private velocityFwdTarget: number = 0.0;
+    private pathMovePos = vec3.create();
+
+    private craneMode: boolean = false;
+    private curPathPointIdx: number = 0;
+    private curPathP0 = vec3.create();
+    private curPathP1 = vec3.create();
+    private pathRotY: number;
+
+    public curMode = d_a_obj_ikada_mode.modeWait;
+
+    public subload(globals: dGlobals): cPhs__Status {
+        const status = dComIfG_resLoad(globals, `IkadaH`);
+        if (status !== cPhs__Status.Complete)
+            return status;
+
+        const resCtrl = globals.resCtrl;
+        this.type = this.parameters & 0x0F;
+
+        if (this.type === 4) {
+            this.path_id = (this.type >>> 16) & 0xFF;
+        } else {
+            const rx = this.rot[0];
+            this.path_id = (rx >>> 8) & 0xFF;
+        }
+
+        // _createHeap
+        const bdl = [0x08, 0x0B, 0x09, 0x0C, 0x0A];
+        const modelData = resCtrl.getObjectRes(ResType.Model, `IkadaH`, bdl[this.type]);
+        this.model = new J3DModelInstance(modelData);
+
+        if (this.type === 4) {
+            const bckRes = resCtrl.getObjectRes(ResType.Bck, `IkadaH`, 0x05);
+            this.bckAnm.init(modelData, bckRes, true, LoopMode.REPEAT);
+
+            this.model.jointMatrixCalcCallback = this.nodeControl_CB;
+        }
+
+        this.setMtx(globals);
+
+        // initialize BgW
+        // initialize rope / ropeEnd
+
+        // createInit
+        vec3.copy(this.pathMovePos, this.pos);
+        this.pathRotY = this.rot[1];
+
+        if (this.isShip() && this.path_id !== 0xFF) {
+            this.path = assertExists(dPath_GetRoomPath(globals, this.path_id, this.roomNo));
+        }
+
+        if (this.isTerry())
+            modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.modeStopTerry);
+
+        this.cullMtx = this.model.modelMatrix;
+        const scaleX = this.scale[0];
+        this.setCullSizeBox(scaleX * -1000.0, scaleX * -50.0, scaleX * -1000.0, scaleX * 1000.0, scaleX * 1000.0, scaleX * 1000.0);
+        this.cullFarDistanceRatio = 10.0;
+        return cPhs__Status.Next;
+    }
+
+    private nodeControl_CB(): void {
+    }
+
+    private isSv(): boolean {
+        return this.type === 4;
+    }
+
+    private isTerry(): boolean {
+        return this.type === 1 || this.type === 4;
+    }
+
+    private isShip(): boolean {
+        return this.isSv() || this.isTerry();
+    }
+
+    private setMtx(globals: dGlobals): void {
+        // TODO(jstpierre): wave
+        vec3.copy(this.model.baseScale, this.scale);
+
+        const waveAnim1 = Math.sin(cM__Short2Rad(this.waveAnim1Timer));
+        const waveAnim1X = 0xC8 * waveAnim1;
+        const waveAnim1Z = 0x3C * waveAnim1;
+
+        const rockAnimAmpl = Math.sin(this.linkRideRockTimer) * this.linkRideRockAmpl;
+        const rockAnimTheta = Math.cos(cM__Short2Rad(this.rot[1]));
+        const rockAnimX = rockAnimAmpl * Math.cos(rockAnimTheta);
+        const rockAnimZ = rockAnimAmpl * Math.sin(rockAnimTheta);
+
+        this.rot[0] = /* wave.rotX + */ waveAnim1X + rockAnimX;
+        this.rot[2] = /* wave.rotZ + */ waveAnim1Z + rockAnimZ;
+
+        MtxTrans(this.pos, false);
+        mDoMtx_XrotM(calc_mtx, this.rot[0]);
+        mDoMtx_ZrotM(calc_mtx, this.rot[2]);
+        mDoMtx_YrotM(calc_mtx, this.rot[1]);
+
+        if (this.isSv()) {
+            calc_mtx[13] += 30.0;
+            calc_mtx[14] += -260.0;
+        }
+
+        mat4.copy(this.model.modelMatrix, calc_mtx);
+
+        if (this.isSv()) {
+            // TODO(jstpierre): Sv
+
+            /*
+            MtxTrans(this.pos, false);
+            mDoMtx_XrotM(calc_mtx, this.rot[0]);
+            mDoMtx_ZrotM(calc_mtx, this.rot[2]);
+            mDoMtx_YrotM(calc_mtx, this.rot[1]);
+            mDoMtx_YrotM(calc_mtx, 0x4000);
+
+            for (let i = 0; i < 4; i++) {
+            }
+            */
+        }
+
+        if (this.isTerry()) {
+            // Light
+        }
+
+        if (this.isShip()) {
+            // wave / track pos
+        }
+    }
+
+    public draw(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
+        if (!this.cullingCheck(viewerInput))
+            return;
+
+        settingTevStruct(globals, LightType.Actor, this.pos, this.tevStr);
+        setLightTevColorType(globals, this.model, this.tevStr, viewerInput.camera);
+
+        if (this.isSv()) {
+            // update bck
+        }
+
+        mDoExt_modelUpdateDL(globals, this.model, renderInstManager, viewerInput, globals.dlst.main);
+
+        if (this.isSv()) {
+            // rope, rope end
+        }
+    }
+
+    private modeWaitInit(globals: dGlobals): void {
+    }
+
+    private modeWait(globals: dGlobals, deltaTimeInFrames: number): void {
+    }
+
+    private modeStopTerryInit(globals: dGlobals): void {
+        // this.timer = 210;
+    }
+
+    private modeStopTerry(globals: dGlobals, deltaTimeInFrames: number): void {
+        // stop for player, check tg hit
+        modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.modePathMoveTerry);
+    }
+
+    private modePathMoveTerryInit(globals: dGlobals): void {
+        // this.timer = 10;
+    }
+
+    private modePathMoveTerry(globals: dGlobals, deltaTimeInFrames: number): void {
+        // setCollision()
+        // checkTgHit()
+        if (this.type === 1)
+            this.velocityFwdTarget = 12.0;
+        else if (this.type === 3)
+            this.velocityFwdTarget = 15.0;
+
+        this.linkRideRockTimer = this.linkRideRockTimer + 0x1830 * deltaTimeInFrames;
+        this.linkRideRockAmpl = cLib_addCalcAngleS2(this.linkRideRockAmpl, 0, 10, 10 * deltaTimeInFrames);
+        if (this.linkRideRockAmpl <= 10)
+            this.linkRideRockAmpl = 0;
+
+        // check distance to player, stop if they get near
+        if (this.path !== null)
+            this.pathMove(globals, deltaTimeInFrames);
+    }
+
+    private pathMove_CB = (dst: vec3, curr: dPath__Point, next: dPath__Point, deltaTimeInFrames: number): boolean => {
+        this.craneMode = (next.arg3 !== 0xFF);
+
+        vec3.copy(this.curPathP0, curr.pos);
+        this.curPathP0[1] = this.pos[1];
+        vec3.copy(this.curPathP1, next.pos);
+        this.curPathP1[1] = this.pos[1];
+
+        vec3.sub(scratchVec3a, this.curPathP1, this.curPathP0);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        const rotTargetY = cM_atan2s(scratchVec3a[0], scratchVec3a[2]);
+        this.pathRotY = cLib_addCalcAngleS(this.pathRotY, rotTargetY, 8, 0x200 * deltaTimeInFrames, 8);
+        const fwdSpeed = this.velocityFwd * deltaTimeInFrames * Math.cos(cM__Short2Rad(rotTargetY - this.pathRotY));
+        cLib_chasePosXZ(dst, this.curPathP1, fwdSpeed);
+
+        vec3.sub(scratchVec3a, dst, this.curPathP1);
+        scratchVec3a[1] = 0.0;
+
+        if (vec3.length(scratchVec3a) < fwdSpeed) {
+            return true;
+        }
+
+        return false;
+    };
+
+    private pathMove(globals: dGlobals, deltaTimeInFrames: number): void {
+        this.velocityFwd = cLib_addCalc2(this.velocityFwd, this.velocityFwdTarget, 0.1, 2.0 * deltaTimeInFrames);
+        this.curPathPointIdx = dLib_pathMove(this.pathMovePos, this.curPathPointIdx, this.path!, deltaTimeInFrames, this.pathMove_CB);
+
+        cLib_addCalcPosXZ2(this.pos, this.pathMovePos, 0.01, this.velocityFwd * deltaTimeInFrames);
+        if (this.velocityFwd !== 0 && this.velocityFwdTarget !== 0) {
+            const rotTargetY = cLib_targetAngleY(this.pos, this.pathMovePos);
+            this.rot[1] = cLib_addCalcAngleS2(this.rot[1], rotTargetY, 8, 0x100 * deltaTimeInFrames);
+        }
+    }
+
+    private mode_tbl = [
+        this.modeWaitInit, this.modeWait,
+        this.modeStopTerryInit, this.modeStopTerry,
+        this.modePathMoveTerryInit, this.modePathMoveTerry,
+    ];
+
+    public execute(globals: dGlobals, deltaTimeInFrames: number): void {
+        super.execute(globals, deltaTimeInFrames);
+
+        this.waveAnim1Timer += 0x200 * deltaTimeInFrames;
+
+        modeProcExec(globals, this, this.mode_tbl, deltaTimeInFrames);
+        this.pos[1] = dLib_getWaterY(globals, this.pos, null);
+
+        this.setMtx(globals);
+        this.model.calcAnim();
+    }
+}
+
 interface constructor extends fpc_bs__Constructor {
     PROCESS_NAME: fpc__ProcessName;
 }
@@ -3262,4 +3551,5 @@ export function d_a__RegisterConstructors(globals: fGlobals): void {
     R(d_a_tori_flag);
     R(d_a_majuu_flag);
     R(d_a_kamome);
+    R(d_a_obj_ikada);
 }
