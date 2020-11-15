@@ -22,10 +22,10 @@ import { Endianness } from "../../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
-import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
+import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8, Blue, Green, Yellow } from "../../Color";
 import { MaterialParams, ColorKind, PacketParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0 } from "../../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero } from "../../MathHelpers";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
@@ -812,7 +812,7 @@ class JPAGlobalRes {
     }
 }
 
-class JPAEmitterWorkData {
+export class JPAEmitterWorkData {
     public emitterManager: JPAEmitterManager;
     public baseEmitter: JPABaseEmitter;
     public random: JPARandom = new_rndm();
@@ -836,7 +836,7 @@ class JPAEmitterWorkData {
     public emitterGlobalSR = mat4.create();
     public emitterGlobalScl = vec3.create();
     public emitterGlobalDir = vec3.create();
-    public emitterGlobalSRT = vec3.create();
+    public emitterGlobalPos = vec3.create();
     public globalRotation = mat4.create();
     public globalScale = vec3.create();
     public globalScale2D = vec2.create();
@@ -856,6 +856,55 @@ class JPAEmitterWorkData {
 
     public materialParams = new MaterialParams();
     public packetParams = new PacketParams();
+
+    public fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst): void {
+        const materialHelper = this.baseEmitter.resData.materialHelper;
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+
+        const materialParams = this.materialParams;
+        const packetParams = this.packetParams;
+
+        // These should be one allocation.
+        let materialOffs = renderInst.allocateUniformBuffer(GX_Program.ub_MaterialParams, materialHelper.materialParamsBufferSize);
+        let packetOffs = renderInst.allocateUniformBuffer(GX_Program.ub_PacketParams, materialHelper.packetParamsBufferSize);
+        const d = renderInst.getUniformBuffer().mapBufferF32();
+
+        // Since this is called quite a *lot*, we have hand-inlined variants of
+        // fillMaterialParamsDataWithOptimizations and fillPacketParamsDataWithOptimizations for speed here.
+
+        // Skip AMB0, AMB1, MAT0, MAT1, K0, K1, K2, K3, CPREV.
+        materialOffs += 4*9;
+        materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C0]);
+        materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C1]);
+        // Skip C2.
+        materialOffs += 4*1;
+
+        materialOffs += fillMatrix4x3(d, materialOffs, materialParams.u_TexMtx[0]);
+        // Skip u_TexMtx[1-9]
+        materialOffs += 4*3*9;
+
+        materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[0]);
+        // Skip u_TextureSize[1]
+        materialOffs += 2;
+        materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[2]);
+        materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[3]);
+        // Skip u_TextureSize[4-8]
+        materialOffs += 2*4;
+
+        materialOffs += fillTextureBias(d, materialOffs, materialParams.m_TextureMapping[0]);
+        // Skip u_TextureBias[1]
+        materialOffs += 1;
+        materialOffs += fillTextureBias(d, materialOffs, materialParams.m_TextureMapping[2]);
+        materialOffs += fillTextureBias(d, materialOffs, materialParams.m_TextureMapping[3]);
+        // Skip u_TextureBias[4-8]
+        materialOffs += 1*4;
+
+        materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
+
+        packetOffs += fillMatrix4x3(d, packetOffs, packetParams.u_PosMtx[0]);
+
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+    }
 }
 
 export class JPADrawInfo {
@@ -1062,13 +1111,6 @@ export const enum BaseEmitterFlags {
     TERMINATE_FLAGGED   = 0x0200,
 }
 
-function JPAGetXYZRotateMtx(m: mat4, v: vec3): void {
-    const v0 = Math.PI * v[0];
-    const v1 = Math.PI * v[1];
-    const v2 = Math.PI * v[2];
-    computeModelMatrixR(m, v0, v1, v2);
-}
-
 function JPAGetDirMtx(m: mat4, v: vec3, scratch: vec3 = scratchVec3a): void {
     // Perp
     vec3.set(scratch, v[1], -v[0], 0);
@@ -1197,8 +1239,15 @@ const enum TraverseOrder {
     Forward = 0x01,
 }
 
-export interface JPAEmitterCallBack {
-    execute(emitter: JPABaseEmitter): void;
+export class JPAEmitterCallBack {
+    public execute(emitter: JPABaseEmitter): void {
+    }
+
+    public executeAfter(emitter: JPABaseEmitter): void {
+    }
+
+    public draw(emitter: JPABaseEmitter, device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
+    }
 }
 
 const scratchVec3Points = nArray(4, () => vec3.create());
@@ -1264,7 +1313,7 @@ export class JPABaseEmitter {
 
     public emitterCallBack: JPAEmitterCallBack | null = null;
 
-    constructor(private emitterManager: JPAEmitterManager) {
+    constructor(public emitterManager: JPAEmitterManager) {
     }
 
     public setGlobalScale(s: vec3): void {
@@ -1437,7 +1486,7 @@ export class JPABaseEmitter {
         }
 
         const sizeXZ = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
-        let angle = (workData.volumeSweep * get_r_zh(this.random)) * MathConstants.TAU;
+        const angle = (workData.volumeSweep * get_r_zh(this.random)) * MathConstants.TAU;
         const height = workData.volumeSize * get_r_zp(this.random);
         vec3.set(workData.volumePos, sizeXZ * Math.sin(angle), height, sizeXZ * Math.cos(angle));
         vec3.mul(workData.velOmni, workData.volumePos, workData.emitterGlobalScl);
@@ -1477,7 +1526,8 @@ export class JPABaseEmitter {
         if (!!(bem1.flags & 0x02)) {
             // Fixed interval
             const idx = workData.volumeEmitIdx++;
-            angle = workData.volumeSweep * (idx / workData.volumeEmitCount) * MathConstants.TAU;
+            const idxS = (idx / workData.volumeEmitCount) - 0.5;
+            angle = workData.volumeSweep * idxS * MathConstants.TAU;
         } else {
             angle = workData.volumeSweep * get_r_zh(this.random) * MathConstants.TAU;
         }
@@ -1490,8 +1540,8 @@ export class JPABaseEmitter {
 
         const sizeXZ = workData.volumeSize * lerp(workData.volumeMinRad, 1.0, distance);
         vec3.set(workData.volumePos, sizeXZ * Math.sin(angle), 0, sizeXZ * Math.cos(angle));
-        vec3.mul(workData.velOmni, workData.volumePos, workData.emitterGlobalScl);
         vec3.set(workData.velAxis, workData.volumePos[0], 0, workData.volumePos[2]);
+        vec3.mul(workData.velOmni, workData.velAxis, workData.emitterGlobalScl);
     }
 
     private calcVolumeLine(workData: JPAEmitterWorkData): void {
@@ -1505,8 +1555,8 @@ export class JPABaseEmitter {
             vec3.set(workData.volumePos, 0, 0, bem1.volumeSize * get_r_zh(this.random));
         }
 
-        vec3.set(workData.velOmni, 0, 0, workData.volumePos[2] * workData.globalScale[2]);
         vec3.set(workData.velAxis, 0, 0, workData.volumePos[2]);
+        vec3.mul(workData.velOmni, workData.velAxis, workData.emitterGlobalScl);
     }
 
     private calcVolume(workData: JPAEmitterWorkData): void {
@@ -1634,7 +1684,7 @@ export class JPABaseEmitter {
 
         mat4.copy(workData.globalRotation, this.globalRotation);
 
-        JPAGetXYZRotateMtx(scratchMatrix, this.emitterRot);
+        computeModelMatrixR(scratchMatrix, this.emitterRot[0], this.emitterRot[1], this.emitterRot[2]);
         mat4.mul(workData.emitterGlobalRot, workData.globalRotation, scratchMatrix);
 
         mat4.fromScaling(scratchMatrix, this.emitterScl);
@@ -1646,17 +1696,14 @@ export class JPABaseEmitter {
 
         vec3.copy(workData.emitterTrs, this.emitterTrs);
 
-        mat4.fromScaling(scratchMatrix, this.globalScale);
-        mat4.mul(scratchMatrix, this.globalRotation, scratchMatrix);
-        scratchMatrix[12] = this.globalTranslation[0];
-        scratchMatrix[13] = this.globalTranslation[1];
-        scratchMatrix[14] = this.globalTranslation[2];
-        transformVec3Mat4w1(workData.emitterGlobalSRT, scratchMatrix, this.emitterTrs);
+        mat4.copy(scratchMatrix, workData.emitterGlobalSR);
+        setMatrixTranslation(scratchMatrix, this.globalTranslation);
+        transformVec3Mat4w1(workData.emitterGlobalPos, scratchMatrix, this.emitterTrs);
     }
 
     private calcWorkData_d(workData: JPAEmitterWorkData): void {
         // Set up the work data for drawing.
-        JPAGetXYZRotateMtx(scratchMatrix, this.emitterRot);
+        computeModelMatrixR(scratchMatrix, this.emitterRot[0], this.emitterRot[1], this.emitterRot[2]);
         mat4.mul(workData.emitterGlobalRot, this.globalRotation, scratchMatrix);
         transformVec3Mat4w0(workData.emitterGlobalDir, workData.emitterGlobalRot, this.emitterDir);
 
@@ -1702,6 +1749,8 @@ export class JPABaseEmitter {
                 this.create();
 
             // Emitter callback +0x10
+            if (this.emitterCallBack !== null)
+                this.emitterCallBack.executeAfter(this);
 
             for (let i = 0; i < this.aliveParticlesBase.length; i++) {
                 const particle = this.aliveParticlesBase[i];
@@ -1731,6 +1780,8 @@ export class JPABaseEmitter {
                 this.tick = 0.01;
         } else {
             // Emitter callback +0x10
+            if (this.emitterCallBack !== null)
+                this.emitterCallBack.executeAfter(this);
         }
 
         return true;
@@ -1750,27 +1801,21 @@ export class JPABaseEmitter {
         if (particleCount < 2)
             return;
 
-        const bsp1 = this.resData.res.bsp1;
-        const esp1 = this.resData.res.esp1;
-        const reverseOrder = bsp1.traverseOrder === TraverseOrder.Reverse;
-
-        const packetParams = workData.packetParams;
-        const materialParams = workData.materialParams;
-
-        mat4.copy(packetParams.u_PosMtx[0], workData.posCamMtx);
-
-        if (!calcTexCrdMtxPrj(materialParams.u_TexMtx[0], workData, workData.posCamMtx, materialParams.m_TextureMapping[0].flipY)) {
-            if (bsp1.isEnableTexScrollAnm)
-                calcTexCrdMtxAnm(materialParams.u_TexMtx[0], bsp1, workData.baseEmitter.tick);
+        const globalScaleX = 25 * workData.globalScale2D[0];
+        if (globalScaleX <= 0.0) {
+            // Nothing to do.
+            return;
         }
+    
+        const bsp1 = this.resData.res.bsp1;
+        const reverseOrder = bsp1.traverseOrder === TraverseOrder.Reverse;
 
         const needsPrevPos = sp1.dirType === DirType.PrevPctl;
         if (needsPrevPos)
             this.calcEmitterGlobalPosition(workData.prevParticlePos);
 
-        const globalScaleX = 25 * workData.globalScale2D[0];
-        const pivotX = (esp1 !== null && esp1.isEnableScale) ? (esp1.pivotX - 1.0) : 0.0;
-        const pivotY = (esp1 !== null && esp1.isEnableScale) ? (esp1.pivotY - 1.0) : 0.0;
+        const pivotX = workData.pivotX - 1.0;
+        const pivotY = workData.pivotY - 1.0;
 
         const px0 = globalScaleX * (1.0 + pivotX);
         const px1 = globalScaleX * (1.0 - pivotX);
@@ -1799,23 +1844,15 @@ export class JPABaseEmitter {
                 vec3.set(scratchVec3a, 0, 1, 0);
             else
                 vec3.normalize(scratchVec3a, scratchVec3a);
-            vec3.cross(scratchVec3b, p.prevAxis, scratchVec3a);
+            vec3.cross(scratchVec3b, p.axis, scratchVec3a);
             if (isNearZeroVec3(scratchVec3b, 0.001))
                 vec3.set(scratchVec3b, 1, 0, 0);
             else
                 vec3.normalize(scratchVec3b, scratchVec3b);
-            vec3.cross(p.prevAxis, scratchVec3a, scratchVec3b);
-            vec3.normalize(p.prevAxis, p.prevAxis);
+            vec3.cross(p.axis, scratchVec3a, scratchVec3b);
+            vec3.normalize(p.axis, p.axis);
 
-            scratchMatrix[0] = scratchVec3b[0];
-            scratchMatrix[1] = scratchVec3b[1];
-            scratchMatrix[2] = scratchVec3b[2];
-            scratchMatrix[4] = scratchVec3a[0];
-            scratchMatrix[5] = scratchVec3a[1];
-            scratchMatrix[6] = scratchVec3a[2];
-            scratchMatrix[8] = p.prevAxis[0];
-            scratchMatrix[9] = p.prevAxis[1];
-            scratchMatrix[10] = p.prevAxis[2];
+            setMatrixAxis(scratchMatrix, scratchVec3b, Vec3Zero, p.axis);
 
             const sx0 = px0 * -p.scale[0];
             const sx1 = px1 *  p.scale[0];
@@ -1867,7 +1904,7 @@ export class JPABaseEmitter {
         template.sortKey = workData.particleSortKey;
         template.setInputLayoutAndState(globalRes.inputLayout, entry.inputState);
 
-        fillParticleRenderInst(device, renderInstManager, workData, template, materialParams, packetParams);
+        workData.fillParticleRenderInst(device, renderInstManager, template);
 
         const oneStripIndexCount = getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, oneStripVertexCount);
 
@@ -1905,6 +1942,7 @@ export class JPABaseEmitter {
         // mpDrawEmitterFuncList
 
         const materialParams = workData.materialParams;
+        const packetParams = workData.packetParams;
 
         if (bsp1.texIdxAnimData === null)
             this.resData.fillTextureMapping(materialParams.m_TextureMapping[0], bsp1.texIdx);
@@ -1929,10 +1967,25 @@ export class JPABaseEmitter {
         else if (!bsp1.isEnableTexScrollAnm)
             calcTexCrdMtxIdt(materialParams.u_TexMtx[0], bsp1);
 
+        // Setup stripe info if we need to, before we call the user callback.
         if (bsp1.shapeType === ShapeType.Stripe || bsp1.shapeType === ShapeType.StripeCross) {
             colorMult(materialParams.u_Color[ColorKind.C0], this.colorPrm, workData.baseEmitter.globalColorPrm);
             colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
+            mat4.copy(packetParams.u_PosMtx[0], workData.posCamMtx);
+    
+            if (!calcTexCrdMtxPrj(materialParams.u_TexMtx[0], workData, workData.posCamMtx, materialParams.m_TextureMapping[0].flipY)) {
+                if (bsp1.isEnableTexScrollAnm)
+                    calcTexCrdMtxAnm(materialParams.u_TexMtx[0], bsp1, workData.baseEmitter.tick);
+            }
+        }
+
+        // Emitter Callback 0x18
+
+        if (this.emitterCallBack !== null)
+            this.emitterCallBack.draw(this, device, renderInstManager, workData);
+
+        if (bsp1.shapeType === ShapeType.Stripe || bsp1.shapeType === ShapeType.StripeCross) {
             this.drawStripe(device, renderInstManager, workData, this.aliveParticlesBase, bsp1);
         } else {
             const needsPrevPos = bsp1.dirType === DirType.PrevPctl;
@@ -1945,13 +1998,11 @@ export class JPABaseEmitter {
             for (let i = 0; i < n; i++) {
                 const index = (bsp1.traverseOrder === TraverseOrder.Reverse) ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                this.aliveParticlesBase[index].drawP(device, renderInstManager, workData, materialParams);
+                this.aliveParticlesBase[index].drawP(device, renderInstManager, workData);
                 if (needsPrevPos)
                     vec3.copy(workData.prevParticlePos, this.aliveParticlesBase[index].position);
             }
         }
-
-        // Emitter Callback 0x18
     }
 
     private drawC(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
@@ -1996,7 +2047,7 @@ export class JPABaseEmitter {
             for (let i = 0; i < n; i++) {
                 const index = (bsp1.traverseOrder === TraverseOrder.Reverse) ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
-                this.aliveParticlesChild[index].drawC(device, renderInstManager, workData, materialParams);
+                this.aliveParticlesChild[index].drawC(device, renderInstManager, workData);
                 if (needsPrevPos)
                     vec3.copy(workData.prevParticlePos, this.aliveParticlesChild[index].position);
             }
@@ -2129,52 +2180,6 @@ function applyDir(v: vec3, p: JPABaseParticle, dirType: DirType, workData: JPAEm
         vec3.sub(v, workData.prevParticlePos, p.position);
 }
 
-function fillParticleRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, renderInst: GfxRenderInst, materialParams: MaterialParams, packetParams: PacketParams): void {
-    const materialHelper = workData.baseEmitter.resData.materialHelper;
-    materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-
-    // These should be one allocation.
-    let materialOffs = renderInst.allocateUniformBuffer(GX_Program.ub_MaterialParams, materialHelper.materialParamsBufferSize);
-    let packetOffs = renderInst.allocateUniformBuffer(GX_Program.ub_PacketParams, materialHelper.packetParamsBufferSize);
-    const d = renderInst.getUniformBuffer().mapBufferF32();
-
-    // Since this is called quite a *lot*, we have hand-inlined variants of
-    // fillMaterialParamsDataWithOptimizations and fillPacketParamsDataWithOptimizations for speed here.
-
-    // Skip AMB0, AMB1, MAT0, MAT1, K0, K1, K2, K3, CPREV.
-    materialOffs += 4*9;
-    materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C0]);
-    materialOffs += fillColor(d, materialOffs, materialParams.u_Color[ColorKind.C1]);
-    // Skip C2.
-    materialOffs += 4*1;
-
-    materialOffs += fillMatrix4x3(d, materialOffs, materialParams.u_TexMtx[0]);
-    // Skip u_TexMtx[1-9]
-    materialOffs += 4*3*9;
-
-    materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[0]);
-    // Skip u_TextureSize[1]
-    materialOffs += 2;
-    materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[2]);
-    materialOffs += fillTextureSize(d, materialOffs, materialParams.m_TextureMapping[3]);
-    // Skip u_TextureSize[4-8]
-    materialOffs += 2*4;
-
-    materialOffs += fillTextureBias(d, materialOffs, materialParams.m_TextureMapping[0]);
-    // Skip u_TextureBias[1]
-    materialOffs += 1;
-    materialOffs += fillTextureBias(d, materialOffs, materialParams.m_TextureMapping[2]);
-    materialOffs += fillTextureBias(d, materialOffs, materialParams.m_TextureMapping[3]);
-    // Skip u_TextureBias[4-8]
-    materialOffs += 1*4;
-
-    materialOffs += fillMatrix4x2(d, materialOffs, materialParams.u_IndTexMtx[0]);
-
-    packetOffs += fillMatrix4x3(d, packetOffs, packetParams.u_PosMtx[0]);
-
-    renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-}
-
 const scratchMatrix = mat4.create();
 const scratchVec3a = vec3.create();
 const scratchVec3b = vec3.create();
@@ -2199,7 +2204,7 @@ export class JPABaseParticle {
     public baseVel = vec3.create();
     public fieldAccel = vec3.create();
     public fieldVel = vec3.create();
-    public prevAxis = vec3.create();
+    public axis = vec3.create();
     public accel = vec3.create();
 
     public scale = vec2.create();
@@ -2230,12 +2235,13 @@ export class JPABaseParticle {
 
         const lifeTimeRandom = get_rndm_f(baseEmitter.random);
         this.lifeTime = baseEmitter.lifeTime * (1.0 - lifeTimeRandom * bem1.lifeTimeRndm);
+
         transformVec3Mat4w0(this.localPosition, workData.emitterGlobalSR, workData.volumePos);
 
         if (!!(bem1.flags & 0x08))
             this.flags = this.flags | 0x20;
 
-        vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
+        vec3.copy(this.globalPosition, workData.emitterGlobalPos);
 
         this.position[0] = this.globalPosition[0] + this.localPosition[0] * workData.globalScale[0];
         this.position[1] = this.globalPosition[1] + this.localPosition[1] * workData.globalScale[1];
@@ -2251,8 +2257,7 @@ export class JPABaseParticle {
             const randZ = next_rndm(baseEmitter.random) >>> 16;
             const randY = get_r_zp(baseEmitter.random);
             mat4.identity(scratchMatrix);
-            mat4.rotateZ(scratchMatrix, scratchMatrix, randZ / 0xFFFF * Math.PI);
-            mat4.rotateY(scratchMatrix, scratchMatrix, baseEmitter.spread * randY * Math.PI);
+            computeModelMatrixR(scratchMatrix, 0.0, baseEmitter.spread * randY * Math.PI, randZ / 0xFFFF * Math.PI);
             mat4.mul(scratchMatrix, workData.emitterDirMtx, scratchMatrix);
             this.baseVel[0] += baseEmitter.initialVelDir * scratchMatrix[8];
             this.baseVel[1] += baseEmitter.initialVelDir * scratchMatrix[9];
@@ -2288,7 +2293,7 @@ export class JPABaseParticle {
         this.drag = 1.0;
         this.airResist = Math.min(bem1.airResist + (bem1.airResistRndm * get_r_zh(baseEmitter.random)), 1);
         this.moment = baseEmitter.moment * (1.0 - (bem1.momentRndm * get_rndm_f(baseEmitter.random)));
-        vec3.set(this.prevAxis, workData.emitterGlobalRot[4], workData.emitterGlobalRot[5], workData.emitterGlobalRot[6]);
+        vec3.set(this.axis, workData.emitterGlobalRot[4], workData.emitterGlobalRot[5], workData.emitterGlobalRot[6]);
 
         colorCopy(this.colorPrm, baseEmitter.colorPrm);
         colorCopy(this.colorEnv, baseEmitter.colorEnv);
@@ -2377,7 +2382,7 @@ export class JPABaseParticle {
         const totalMomentum = this.moment * this.drag;
         vec3.scale(this.velocity, this.velocity, totalMomentum);
 
-        vec3.copy(this.prevAxis, parent.prevAxis);
+        vec3.copy(this.axis, parent.axis);
 
         if (ssp1.isInheritedScale) {
             // isInheritedScale
@@ -2440,17 +2445,17 @@ export class JPABaseParticle {
         return 1;
     }
 
-    private calcFieldAffect(v: vec3, field: JPAFieldBlock): void {
+    private calcFieldAffect(v: vec3, field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
         if (!(this.flags & 0x04) && !!(field.sttFlag & 0x78)) {
             vec3.scale(v, v, this.calcFieldFadeAffect(field, this.time));
         }
 
         if (field.velType === FieldVelType.FieldAccel)
-            vec3.add(this.fieldAccel, this.fieldAccel, v);
+            vec3.scaleAndAdd(this.fieldAccel, this.fieldAccel, v, workData.deltaTime);
         else if (field.velType === FieldVelType.BaseVelocity)
-            vec3.add(this.baseVel, this.baseVel, v);
+            vec3.scaleAndAdd(this.baseVel, this.baseVel, v, workData.deltaTime);
         else if (field.velType === FieldVelType.FieldVelocity)
-            vec3.add(this.fieldVel, this.fieldVel, v);
+            vec3.scaleAndAdd(this.fieldVel, this.fieldVel, v, workData.deltaTime);
     }
 
     private calcFieldGravity(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2463,7 +2468,7 @@ export class JPABaseParticle {
         }
 
         // Calc
-        this.calcFieldAffect(scratchVec3a, field);
+        this.calcFieldAffect(scratchVec3a, field, workData);
     }
 
     private calcFieldAir(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2477,7 +2482,7 @@ export class JPABaseParticle {
         }
 
         // Calc
-        this.calcFieldAffect(scratchVec3a, field);
+        this.calcFieldAffect(scratchVec3a, field, workData);
     }
 
     private calcFieldMagnet(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2490,7 +2495,7 @@ export class JPABaseParticle {
         // Calc
         vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
         normToLength(scratchVec3a, field.mag);
-        this.calcFieldAffect(scratchVec3a, field);
+        this.calcFieldAffect(scratchVec3a, field, workData);
     }
 
     private calcFieldNewton(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2512,7 +2517,7 @@ export class JPABaseParticle {
             normToLength(scratchVec3a, refDistanceSq / sqDist * power);
         }
 
-        this.calcFieldAffect(scratchVec3a, field);
+        this.calcFieldAffect(scratchVec3a, field, workData);
     }
 
     private calcFieldVortex(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2548,7 +2553,7 @@ export class JPABaseParticle {
 
         vec3.cross(forceVec, forceVec, forceDir);
         vec3.scale(forceVec, forceVec, power);
-        this.calcFieldAffect(forceVec, field);
+        this.calcFieldAffect(forceVec, field, workData);
     }
 
     private calcFieldRandom(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2574,7 +2579,7 @@ export class JPABaseParticle {
             const z = get_r_zh(workData.baseEmitter.random);
             vec3.set(scratchVec3a, x, y, z);
             vec3.scale(scratchVec3a, scratchVec3a, field.mag);
-            this.calcFieldAffect(scratchVec3a, field);
+            this.calcFieldAffect(scratchVec3a, field, workData);
         }
     }
 
@@ -2620,7 +2625,7 @@ export class JPABaseParticle {
         vec3.cross(scratchVec3c, scratchVec3b, scratchVec3a);
         vec3.cross(scratchVec3a, scratchVec3c, scratchVec3d);
         normToLength(scratchVec3a, field.mag);
-        this.calcFieldAffect(scratchVec3a, field);
+        this.calcFieldAffect(scratchVec3a, field, workData);
     }
 
     private calcFieldSpin(field: JPAFieldBlock, workData: JPAEmitterWorkData): void {
@@ -2633,7 +2638,7 @@ export class JPABaseParticle {
         // Calc
         transformVec3Mat4w0(scratchVec3a, scratchMatrix, this.localPosition);
         vec3.sub(scratchVec3a, scratchVec3a, this.localPosition);
-        this.calcFieldAffect(scratchVec3a, field);
+        this.calcFieldAffect(scratchVec3a, field, workData);
     }
 
     private calcField(workData: JPAEmitterWorkData): void {
@@ -2733,7 +2738,7 @@ export class JPABaseParticle {
         this.time = this.tick / this.lifeTime;
 
         if (!!(this.flags & 0x20))
-            vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
+            vec3.copy(this.globalPosition, workData.emitterGlobalPos);
 
         vec3.zero(this.fieldVel);
         vec3.scaleAndAdd(this.baseVel, this.baseVel, this.accel, workData.deltaTime);
@@ -2857,7 +2862,7 @@ export class JPABaseParticle {
 
         if (this.tick != 0) {
             if (!!(this.flags & 0x20))
-                vec3.copy(this.globalPosition, workData.emitterGlobalSRT);
+                vec3.copy(this.globalPosition, workData.emitterGlobalPos);
 
             this.baseVel[1] -= ssp1.gravity;
             vec3.zero(this.fieldVel);
@@ -3060,9 +3065,19 @@ export class JPABaseParticle {
         }
     }
 
-    private drawCommon(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, materialParams: MaterialParams, sp1: CommonShapeTypeFields): void {
+    private drawCommon(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, sp1: CommonShapeTypeFields): void {
         if (!!(this.flags & 0x08))
             return;
+
+        // We model all particles below as spheres with radius 25, which should cover all bases.
+        // Stripes (and lines) are an exception, but they are handled separately.
+        if (workData.frustum !== null) {
+            const scaleX = Math.abs(this.scale[0] * workData.globalScale2D[0]);
+            const scaleY = Math.abs(this.scale[1] * workData.globalScale2D[1]);
+            const radius = 25 * Math.max(scaleX, scaleY);
+            if (!workData.frustum.containsSphere(this.position, radius))
+                return;
+        }
 
         const esp1 = workData.baseEmitter.resData.res.esp1;
         const isRot = esp1 !== null && esp1.isEnableRotate;
@@ -3078,17 +3093,8 @@ export class JPABaseParticle {
         const globalRes = workData.emitterManager.globalRes;
         const shapeType = sp1.shapeType;
 
+        const materialParams = workData.materialParams;
         const packetParams = workData.packetParams;
-
-        // We model all particles below as spheres with radius 25, which should cover all bases.
-        // Stripes (and lines) are an exception, but they are handled separately.
-        if (workData.frustum !== null) {
-            const scaleX = Math.abs(this.scale[0] * workData.globalScale2D[0]);
-            const scaleY = Math.abs(this.scale[1] * workData.globalScale2D[1]);
-            const radius = 25 * Math.max(scaleX, scaleY);
-            if (!workData.frustum.containsSphere(this.position, radius))
-                return;
-        }
 
         if (shapeType === ShapeType.Billboard) {
             const rotateAngle = isRot ? this.rotateAngle : 0;
@@ -3109,16 +3115,16 @@ export class JPABaseParticle {
             applyDir(scratchVec3a, this, sp1.dirType, workData);
             vec3.normalize(scratchVec3a, scratchVec3a);
 
-            vec3.cross(scratchVec3b, this.prevAxis, scratchVec3a);
+            vec3.cross(scratchVec3b, this.axis, scratchVec3a);
             vec3.normalize(scratchVec3b, scratchVec3b);
 
-            vec3.cross(this.prevAxis, scratchVec3a, scratchVec3b);
-            vec3.normalize(this.prevAxis, this.prevAxis);
+            vec3.cross(this.axis, scratchVec3a, scratchVec3b);
+            vec3.normalize(this.axis, this.axis);
 
             const dst = packetParams.u_PosMtx[0];
-            dst[0] = this.prevAxis[0];
-            dst[1] = this.prevAxis[1];
-            dst[2] = this.prevAxis[2];
+            dst[0] = this.axis[0];
+            dst[1] = this.axis[1];
+            dst[2] = this.axis[2];
             dst[4] = scratchVec3a[0];
             dst[5] = scratchVec3a[1];
             dst[6] = scratchVec3a[2];
@@ -3251,22 +3257,24 @@ export class JPABaseParticle {
         materialParams.u_Color[ColorKind.C0].a *= this.prmColorAlphaAnm;
         colorMult(materialParams.u_Color[ColorKind.C1], this.colorEnv, workData.baseEmitter.globalColorEnv);
 
-        fillParticleRenderInst(device, renderInstManager, workData, renderInst, materialParams, packetParams);
+        workData.fillParticleRenderInst(device, renderInstManager, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
     }
 
-    public drawP(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
+    public drawP(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
         const resData = workData.baseEmitter.resData;
         const bsp1 = resData.res.bsp1;
         const esp1 = resData.res.esp1;
 
         // mpDrawParticleFuncList
 
+        const materialParams = workData.materialParams;
+
         if (bsp1.texIdxAnimData !== null && !bsp1.texCalcOnEmitter)
             resData.fillTextureMapping(materialParams.m_TextureMapping[0], this.texAnmIdx);
 
-        if (esp1 !== null) {
+        if (esp1 !== null && esp1.isEnableScale) {
             workData.pivotX = esp1.pivotX;
             workData.pivotY = esp1.pivotY;
         } else {
@@ -3274,10 +3282,10 @@ export class JPABaseParticle {
             workData.pivotY = 1;
         }
 
-        this.drawCommon(device, renderInstManager, workData, materialParams, bsp1);
+        this.drawCommon(device, renderInstManager, workData, bsp1);
     }
 
-    public drawC(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData, materialParams: MaterialParams): void {
+    public drawC(device: GfxDevice, renderInstManager: GfxRenderInstManager, workData: JPAEmitterWorkData): void {
         const ssp1 = workData.baseEmitter.resData.res.ssp1!;
 
         // mpDrawParticleChildFuncList
@@ -3285,7 +3293,7 @@ export class JPABaseParticle {
         workData.pivotX = 1;
         workData.pivotY = 1;
 
-        this.drawCommon(device, renderInstManager, workData, materialParams, ssp1);
+        this.drawCommon(device, renderInstManager, workData, ssp1);
     }
 }
 //#endregion
@@ -3335,7 +3343,7 @@ function makeColorTable(buffer: ArrayBufferSlice, entryCount: number, duration: 
 }
 
 function JPAConvertFixToFloat(n: number): number {
-    return n * 1/0x8000;
+    return n / 0x8000;
 }
 
 function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
@@ -3362,7 +3370,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
         const blockSize = view.getUint32(tableIdx + 0x04);
 
         if (fourcc === 'BEM1') {
-            // J3DDynamicsBlock
+            // JPADynamicsBlock
             // Contains emitter settings and details about how the particle simulates.
 
             const emitterSclX = view.getFloat32(tableIdx + 0x0C);
@@ -3375,9 +3383,9 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const emitterTrsZ = view.getFloat32(tableIdx + 0x20);
             const emitterTrs = vec3.fromValues(emitterTrsX, emitterTrsY, emitterTrsZ);
 
-            const emitterRotX = view.getInt16(tableIdx + 0x24);
-            const emitterRotY = view.getInt16(tableIdx + 0x26);
-            const emitterRotZ = view.getInt16(tableIdx + 0x28);
+            const emitterRotX = (view.getInt16(tableIdx + 0x24) / 0x7FFF) * (MathConstants.TAU / 2.0);
+            const emitterRotY = (view.getInt16(tableIdx + 0x26) / 0x7FFF) * (MathConstants.TAU / 2.0);
+            const emitterRotZ = (view.getInt16(tableIdx + 0x28) / 0x7FFF) * (MathConstants.TAU / 2.0);
             const emitterRot = vec3.fromValues(emitterRotX, emitterRotY, emitterRotZ);
 
             const volumeType: VolumeType = view.getUint8(tableIdx + 0x2A);
@@ -3425,7 +3433,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
                 lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm, accel, accelRndm,
             };
         } else if (fourcc === 'BSP1') {
-            // J3DBaseShape
+            // JPABaseShape
             // Contains particle draw settings.
 
             const globalScale2DX = view.getFloat32(tableIdx + 0x18);
@@ -3545,7 +3553,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
                 colorCalcOnEmitter, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorAnimRndmMask,
             };
         } else if (fourcc === 'ESP1') {
-            // J3DExtraShape
+            // JPAExtraShape
             // Contains misc. extra particle draw settings.
 
             const alphaInTiming = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x14));
@@ -3632,7 +3640,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
                 rotateAngle, rotateAngleRandom, rotateSpeed, rotateSpeedRandom, rotateDirection,
             };
         } else if (fourcc === 'SSP1') {
-            // J3DChildShape / J3DSweepShape
+            // JPAChildShape / JPASweepShape
             // Contains child particle draw settings.
 
             const shapeType: ShapeType = view.getUint8(tableIdx + 0x10);
@@ -3686,7 +3694,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
                 life, rate, step, texIdx, rotateSpeed,
             };
         } else if (fourcc === 'ETX1') {
-            // J3DExTexShape
+            // JPAExTexShape
             // Contains extra texture draw settings.
 
             const indTextureMode: IndTextureMode = view.getUint8(tableIdx + 0x10);
@@ -3711,7 +3719,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
 
             etx1 = { indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
-            // J3DKeyBlock
+            // JPAKeyBlock
             // Contains curve animations for various emitter parameters.
 
             assert(kfa1KeyTypeMask !== 0);
@@ -3736,7 +3744,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             // Now unset it from the mask so we don't find it again.
             kfa1KeyTypeMask = kfa1KeyTypeMask & ~(1 << keyType);
         } else if (fourcc === 'FLD1') {
-            // J3DFieldBlock
+            // JPAFieldBlock
             // Contains physics simulation fields that act on the particles.
 
             const type: FieldType = view.getUint8(tableIdx + 0x0C);
@@ -3848,7 +3856,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
         const dataBegin = tableIdx + 0x0C;
 
         if (fourcc === 'BEM1') {
-            // J3DDynamicsBlock
+            // JPADynamicsBlock
             // Contains emitter settings and details about how the particle simulates.
 
             const flags = view.getUint32(dataBegin + 0x00);
@@ -3898,9 +3906,9 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const emitterDir = vec3.fromValues(emitterDirX, emitterDirY, emitterDirZ);
             vec3.normalize(emitterDir, emitterDir);
 
-            const emitterRotX = view.getInt16(dataBegin + 0x78) / 180;
-            const emitterRotY = view.getInt16(dataBegin + 0x7A) / 180;
-            const emitterRotZ = view.getInt16(dataBegin + 0x7C) / 180;
+            const emitterRotX = view.getInt16(dataBegin + 0x78) * MathConstants.DEG_TO_RAD;
+            const emitterRotY = view.getInt16(dataBegin + 0x7A) * MathConstants.DEG_TO_RAD;
+            const emitterRotZ = view.getInt16(dataBegin + 0x7C) * MathConstants.DEG_TO_RAD;
             const emitterRot = vec3.fromValues(emitterRotX, emitterRotY, emitterRotZ);
 
             bem1 = {
@@ -3910,7 +3918,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm, accel, accelRndm,
             };
         } else if (fourcc === 'BSP1') {
-            // J3DBaseShape
+            // JPABaseShape
             // Contains particle draw settings.
 
             const flags = view.getUint32(dataBegin + 0x00);
@@ -4007,7 +4015,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 colorCalcOnEmitter, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorAnimRndmMask,
             };
         } else if (fourcc === 'ESP1') {
-            // J3DExtraShape
+            // JPAExtraShape
             // Contains misc. extra particle draw settings.
 
             const flags = view.getUint32(dataBegin + 0x00);
@@ -4088,7 +4096,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 rotateAngle, rotateAngleRandom, rotateSpeed, rotateSpeedRandom, rotateDirection,
             };
         } else if (fourcc === 'SSP1') {
-            // J3DChildShape / J3DSweepShape
+            // JPAChildShape / JPASweepShape
             // Contains child particle draw settings.
 
             const flags = view.getUint32(dataBegin + 0x00);
@@ -4141,7 +4149,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 life, rate, step, texIdx, rotateSpeed,
             };
         } else if (fourcc === 'ETX1') {
-            // J3DExTexShape
+            // JPAExTexShape
             // Contains extra texture draw settings.
 
             const flags = view.getUint32(dataBegin + 0x00);
@@ -4165,7 +4173,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             etx1 = { indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
-            // J3DKeyBlock
+            // JPAKeyBlock
             // Contains curve animations for various emitter parameters.
 
             const keyType: JPAKeyType = view.getUint8(dataBegin + 0x00);
@@ -4177,7 +4185,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             kfa1.push({ keyType, isLoopEnable, keyValues });
         } else if (fourcc === 'FLD1') {
-            // J3DFieldBlock
+            // JPAFieldBlock
             // Contains physics simulation fields that act on the particles.
 
             const flags = view.getUint32(dataBegin + 0x00);
@@ -4291,7 +4299,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
         const blockSize = view.getUint32(tableIdx + 0x04);
 
         if (fourcc === 'BEM1') {
-            // J3DDynamicsBlock
+            // JPADynamicsBlock
             // Contains emitter settings and details about how the particle simulates.
 
             const flags = view.getUint32(tableIdx + 0x08);
@@ -4329,9 +4337,9 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const volumeMinRad = view.getFloat32(tableIdx + 0x5C);
             const airResist = view.getFloat32(tableIdx + 0x60);
             const momentRndm = view.getFloat32(tableIdx + 0x64);
-            const emitterRotX = view.getInt16(tableIdx + 0x68) / 180;
-            const emitterRotY = view.getInt16(tableIdx + 0x6A) / 180;
-            const emitterRotZ = view.getInt16(tableIdx + 0x6C) / 180;
+            const emitterRotX = view.getInt16(tableIdx + 0x68) * MathConstants.DEG_TO_RAD;
+            const emitterRotY = view.getInt16(tableIdx + 0x6A) * MathConstants.DEG_TO_RAD;
+            const emitterRotZ = view.getInt16(tableIdx + 0x6C) * MathConstants.DEG_TO_RAD;
             const emitterRot = vec3.fromValues(emitterRotX, emitterRotY, emitterRotZ);
             const maxFrame = view.getInt16(tableIdx + 0x6E);
             const startFrame = view.getInt16(tableIdx + 0x70);
@@ -4356,7 +4364,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 lifeTime, lifeTimeRndm, maxFrame, startFrame, airResist, airResistRndm, moment, momentRndm, accel, accelRndm,
             };
         } else if (fourcc === 'BSP1') {
-            // J3DBaseShape
+            // JPABaseShape
             // Contains particle draw settings.
 
             const flags = view.getUint32(tableIdx + 0x08);
@@ -4467,7 +4475,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 colorCalcOnEmitter, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorAnimRndmMask,
             };
         } else if (fourcc === 'ESP1') {
-            // J3DExtraShape
+            // JPAExtraShape
             // Contains misc. extra particle draw settings.
 
             const flags = view.getUint32(tableIdx + 0x08);
@@ -4549,7 +4557,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 rotateAngle, rotateAngleRandom, rotateSpeed, rotateSpeedRandom, rotateDirection,
             };
         } else if (fourcc === 'SSP1') {
-            // J3DChildShape / J3DSweepShape
+            // JPAChildShape / JPASweepShape
             // Contains child particle draw settings.
 
             const flags = view.getUint32(tableIdx + 0x08);
@@ -4597,7 +4605,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
                 life, rate, step, texIdx, rotateSpeed,
             };
         } else if (fourcc === 'ETX1') {
-            // J3DExTexShape
+            // JPAExTexShape
             // Contains extra texture draw settings.
 
             const flags = view.getUint32(tableIdx + 0x08);
@@ -4621,7 +4629,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
 
             etx1 = { indTextureMode, indTextureMtx, indTextureID, subTextureID, secondTextureIndex };
         } else if (fourcc === 'KFA1') {
-            // J3DKeyBlock
+            // JPAKeyBlock
             // Contains curve animations for various emitter parameters.
 
             const keyType: JPAKeyType = view.getUint8(tableIdx + 0x08);
@@ -4633,7 +4641,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
 
             kfa1.push({ keyType, isLoopEnable, keyValues });
         } else if (fourcc === 'FLD1') {
-            // J3DFieldBlock
+            // JPAFieldBlock
             // Contains physics simulation fields that act on the particles.
 
             const flags = view.getUint32(tableIdx + 0x08);

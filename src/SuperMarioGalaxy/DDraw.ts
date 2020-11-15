@@ -184,6 +184,7 @@ export class TDDraw extends TDDrawVtxSpec {
         this.writeFloat32(offs + 0x00, x);
         this.writeFloat32(offs + 0x04, y);
         this.writeFloat32(offs + 0x08, z);
+        this.writeFloat32(offs + 0x0C, 1.0);
     }
 
     public position3vec3(v: ReadonlyVec3): void {

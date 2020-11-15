@@ -173,9 +173,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     }
 
     function createEmitter(context: WindWakerRenderer, resourceId: number): JPABaseEmitter {
-        const emitter = context.effectSystem!.createBaseEmitter(context.device, context.renderCache, resourceId);
-        // TODO(jstpierre): Scale, Rotation
-        return emitter;
+        return globals.particleCtrl.set(globals, 0, resourceId, null)!;
     }
 
     const objName = assertExists(globals.dStage_searchName(actorName));

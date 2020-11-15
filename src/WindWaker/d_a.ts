@@ -8,12 +8,11 @@ import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { settingTevStruct, LightType, setLightTevColorType, LIGHT_INFLUENCE, dKy_plight_set, dKy_plight_cut, dKy_tevstr_c, dKy_tevstr_init, dKy_checkEventNightStop, dKy_change_colpat, dKy_setLight__OnModelInstance, WAVE_INFLUENCE, dKy__waveinfl_cut, dKy__waveinfl_set, dKy_setLight, dKy_setLight__OnMaterialParams } from "./d_kankyo";
 import { mDoExt_modelUpdateDL, mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_bckAnm, mDoExt_McaMorf } from "./m_do_ext";
-import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { cLib_addCalc2, cLib_addCalc, cLib_addCalcAngleRad2, cM_rndFX, cM_rndF, cLib_addCalcAngleS2, cM_atan2s, cLib_addCalcPosXZ2, cLib_addCalcAngleS, cLib_chasePosXZ, cLib_targetAngleY, cM__Short2Rad } from "./SComponent";
 import { dPath_GetRoomPath, dStage_Multi_c, dPath, dPath__Point } from "./d_stage";
 import { nArray, assertExists, assert } from "../util";
 import { TTK1, LoopMode, TRK1, TexMtx } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8, Yellow, Magenta, Green, Red, Blue, White } from "../Color";
+import { colorCopy, colorNewCopy, TransparentBlack, colorNewFromRGBA8, colorFromRGBA8 } from "../Color";
 import { dKyw_rain_set, ThunderMode, dKyw_get_wind_vec, dKyw_get_wind_pow, dKyr_get_vectle_calc, loadRawTexture, dKyw_get_AllWind_vecpow } from "./d_kankyo_wether";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../gx/gx_render";
 import { dLib_getWaterY, d_a_sea } from "./d_a_sea";
@@ -28,7 +27,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GlobalSaveManager } from "../SaveManager";
 import { TevDefaultSwapTables } from "../gx/gx_material";
 import { Endianness } from "../endian";
-import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { dPa_splashEcallBack, dPa_waveEcallBack } from "./d_particle";
 
 // Framework'd actors
 
@@ -253,13 +252,6 @@ class d_a_grass extends fopAc_ac_c {
     }
 }
 
-// TODO(jstpierre): Bad hack
-export function createEmitter(globals: dGlobals, resourceId: number): JPABaseEmitter {
-    const renderer = globals.renderer;
-    const emitter = renderer.effectSystem!.createBaseEmitter(renderer.device, renderer.renderCache, resourceId);
-    return emitter;
-}
-
 class d_a_ep extends fopAc_ac_c {
     public static PROCESS_NAME = fpc__ProcessName.d_a_ep;
 
@@ -303,15 +295,15 @@ class d_a_ep extends fopAc_ac_c {
         // Create particle systems.
 
         // TODO(jstpierre): Implement the real thing.
-        const pa = createEmitter(globals, 0x0001);
+        const pa = globals.particleCtrl.set(globals, 0, 0x0001, null)!;
         vec3.copy(pa.globalTranslation, this.posTop);
         pa.globalTranslation[1] += -240 + 235 + 15;
         if (this.type !== 2) {
-            const pb = createEmitter(globals, 0x4004);
+            const pb = globals.particleCtrl.set(globals, 0, 0x4004, null)!;
             vec3.copy(pb.globalTranslation, pa.globalTranslation);
             pb.globalTranslation[1] += 20;
         }
-        const pc = createEmitter(globals, 0x01EA);
+        const pc = globals.particleCtrl.set(globals, 0, 0x01EA, null)!;
         vec3.copy(pc.globalTranslation, this.posTop);
         pc.globalTranslation[1] += -240 + 235 + 8;
         // TODO(jstpierre): ga
@@ -3297,6 +3289,12 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
     public curMode = d_a_obj_ikada_mode.modeWait;
 
+    private splash: dPa_splashEcallBack | null = null;
+    private waveL: dPa_waveEcallBack | null = null;
+    private waveR: dPa_waveEcallBack | null = null;
+    private wavePos = vec3.create();
+    private waveRot = vec3.create();
+
     public subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, `IkadaH`);
         if (status !== cPhs__Status.Complete)
@@ -3339,6 +3337,14 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
         if (this.isTerry())
             modeProcInit(globals, this, this.mode_tbl, d_a_obj_ikada_mode.modeStopTerry);
+
+        if (this.isShip()) {
+            this.splash = new dPa_splashEcallBack(globals);
+            this.waveL = new dPa_waveEcallBack(globals);
+            this.waveR = new dPa_waveEcallBack(globals);
+
+            this.createWave(globals);
+        }
 
         this.cullMtx = this.model.modelMatrix;
         const scaleX = this.scale[0];
@@ -3410,7 +3416,20 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         }
 
         if (this.isShip()) {
-            // wave / track pos
+            MtxTrans(this.pos, false);
+            mDoMtx_XrotM(calc_mtx, this.rot[0]);
+            mDoMtx_ZrotM(calc_mtx, this.rot[2]);
+            mDoMtx_YrotM(calc_mtx, this.rot[1]);
+            // attn/eye
+
+            if (this.isTerry()) {
+                const waveOffsZ = 660.0 + (this.curMode === d_a_obj_ikada_mode.modePathMoveTerry ? 20.0 : 5.0);
+                const waveOffsY = 20.0;
+                vec3.set(this.wavePos, 0.0, waveOffsY, waveOffsZ);
+                transformVec3Mat4w1(this.wavePos, calc_mtx, this.wavePos);
+
+                // track
+            }
         }
     }
 
@@ -3522,6 +3541,82 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
         this.setMtx(globals);
         this.model.calcAnim();
+
+        if (this.isShip()) {
+            // check culling box, and velocity and player distance, such
+
+            this.setWave(globals, deltaTimeInFrames);
+        }
+    }
+
+    private createWave(globals: dGlobals): void {
+        if (this.waveL !== null && this.waveL.emitter === null) {
+            const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveL);
+            if (emitter !== null)
+                vec3.set(emitter.emitterDir, 0.5, 1.0, -0.3);
+        }
+
+        if (this.waveR !== null && this.waveR.emitter === null) {
+            const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveR);
+            if (emitter !== null)
+                vec3.set(emitter.emitterDir, -0.5, 1.0, -0.3);
+        }
+
+        if (this.splash !== null && this.splash.emitter === null)
+            globals.particleCtrl.set(globals, 0, 0x0035, this.wavePos, this.waveRot, null, 1.0, this.splash);
+    }
+
+    private static waveCollapsePos = [
+        vec3.fromValues(-80.0, -50.0, -150.0),
+        vec3.fromValues(-40.0, -100.0, -350.0),
+    ];
+
+    private setWave(globals: dGlobals, deltaTimeInFrames: number): void {
+        let splashScaleTarget = 200.0;
+        let waveVelFade = 2.0;
+
+        if (this.velocityFwd > 2.0) {
+            this.createWave(globals);
+        } else {
+            splashScaleTarget = 0.0;
+            waveVelFade = 0.0;
+        }
+
+        // this.wavePos[1] = dLib_getWaterY(this.wavePos, this.objAcch);
+        this.wavePos[1] = this.pos[1] + 25.0;
+        this.waveRot[1] = this.rot[1];
+
+        if (this.waveL !== null) {
+            this.waveL.velFade1 = waveVelFade;
+            this.waveL.velFade2 = 1.0;
+            this.waveL.velSpeed = 2.0;
+            this.waveL.maxDistance = 15.0;
+            vec3.copy(this.waveL.collapsePos[0], d_a_obj_ikada.waveCollapsePos[0]);
+            vec3.copy(this.waveL.collapsePos[1], d_a_obj_ikada.waveCollapsePos[1]);
+        }
+
+        if (this.waveR !== null) {
+            this.waveR.velFade1 = waveVelFade;
+            this.waveR.velFade2 = 1.0;
+            this.waveR.velSpeed = 2.0;
+            this.waveR.maxDistance = 15.0;
+            vec3.copy(this.waveR.collapsePos[0], d_a_obj_ikada.waveCollapsePos[0]);
+            vec3.copy(this.waveR.collapsePos[1], d_a_obj_ikada.waveCollapsePos[1]);
+            this.waveR.collapsePos[0][0] *= -1.0;
+            this.waveR.collapsePos[1][0] *= -1.0;
+        }
+
+        if (this.splash !== null) {
+            this.splash.scaleTimer = cLib_addCalc2(this.splash.scaleTimer, splashScaleTarget, 0.1, 10.0 * deltaTimeInFrames);
+            this.splash.maxScaleTimer = 300.0;
+        }
+    }
+
+    public delete(globals: dGlobals): void {
+        super.delete(globals);
+
+        if (this.splash !== null)
+            this.splash.remove();
     }
 }
 

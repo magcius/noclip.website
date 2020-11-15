@@ -1630,8 +1630,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                 }
 
                 // TODO(jstpierre): dPa_control_c
-                const device = globals.modelCache.device, cache = globals.modelCache.cache;
-                eff.emitter = globals.renderer.effectSystem.createBaseEmitter(device, cache, 0x31);
+                eff.emitter = globals.particleCtrl.set(globals, 0, 0x31, null)!;
                 vec3.add(eff.emitter.globalTranslation, eff.basePos, eff.animPos);
 
                 let effScale = hasCustomWindPower ? 0.14 : 1.0;
