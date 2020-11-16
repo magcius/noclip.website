@@ -1,25 +1,22 @@
 import { nArray } from '../util';
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
-import { GX_VtxDesc, GX_VtxAttrFmt, GX_Array } from '../gx/gx_displaylist';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, makeSortKeyTranslucent, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DataFetcher } from '../DataFetcher';
-import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
 
 import { GameInfo } from './scenes';
-import { SFAMaterial, ShaderAttrFlags, ANCIENT_MAP_SHADER_FIELDS } from './materials';
+import { SFAMaterial } from './materials';
 import { SFAAnimationController } from './animation';
-import { Shader, parseShader, ShaderFlags, BETA_MODEL_SHADER_FIELDS, SFA_SHADER_FIELDS, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, MaterialFactory } from './materials';
-import { LowBitReader, dataSubarray, arrayBufferSliceFromDataView, dataCopy, readVec3, readUint32, readUint16, mat4SetRowMajor } from './util';
+import { MaterialFactory } from './materials';
+import { dataSubarray, readUint32, mat4SetRowMajor } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
-import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
+import { Shape } from './shapes';
 import { SceneRenderContext } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { Color } from '../Color';
-import { AABB } from '../Geometry';
 import { loadModel, ModelVersion } from './modelloader';
 
 interface Joint {
@@ -126,20 +123,13 @@ export class ModelShapes {
     }
 }
 
-export interface FineSkinningConfig {
-    numPieces: number;
+export interface FineSkin {
     quantizeScale: number;
-}
-
-export interface FineSkinningPiece {
-    skinDataSrcOffs: number;
-    weightsSrc: number;
+    vertexCount: number;
+    bufferOffset: number;
     bone0: number;
     bone1: number;
-    weightsBlockCount: number;
-    numVertices: number;
-    skinMeOffset: number;
-    skinSrcBlockCount: number; // A block is 32 bytes
+    weights: DataView;
 }
 
 export class Model {
@@ -159,14 +149,10 @@ export class Model {
 
     public originalPosBuffer: DataView;
 
-    public posFineSkinningConfig: FineSkinningConfig | undefined = undefined;
-    public posFineSkinningWeights: DataView | undefined = undefined;
-    public posFineSkinningPieces: FineSkinningPiece[] = [];
-
-    public nrmFineSkinningConfig: FineSkinningConfig | undefined = undefined;
-
     public hasFineSkinning: boolean = false;
     public hasBetaFineSkinning: boolean = false;
+    public posFineSkins: FineSkin[] = [];
+    
     public skeleton?: Skeleton;
 
     public isMapBlock: boolean;
@@ -210,11 +196,11 @@ export class ModelInstance {
     private amap: DataView;
 
     constructor(public model: Model) {
-        const numBones = this.model.joints.length + this.model.coarseBlends.length;
+        const numMatrices = this.model.joints.length + this.model.coarseBlends.length;
 
-        if (numBones !== 0) {
+        if (numMatrices !== 0) {
             this.skeletonInst = new SkeletonInstance(this.model.skeleton!);
-            this.matrixPalette = nArray(numBones, () => mat4.create());
+            this.matrixPalette = nArray(numMatrices, () => mat4.create());
         } else {
             this.matrixPalette = [mat4.create()];
         }
@@ -239,7 +225,6 @@ export class ModelInstance {
     
     public resetPose() {
         mat4.identity(scratchMtx0);
-
         for (let i = 0; i < this.model.joints.length; i++)
             this.skeletonInst!.setPoseMatrix(i, scratchMtx0);
 
@@ -295,9 +280,8 @@ export class ModelInstance {
     }
     
     private updateSkinning() {
-        if (!this.skinningDirty) {
+        if (!this.skinningDirty)
             return;
-        }
 
         // Compute matrices for rigid joints (no blending)
         for (let i = 0; i < this.model.joints.length; i++) {
@@ -328,13 +312,11 @@ export class ModelInstance {
     }
 
     private performFineSkinning() {
-        if (!this.model.hasFineSkinning) {
+        if (!this.model.hasFineSkinning)
             return;
-        }
 
-        if (this.model.posFineSkinningPieces.length === 0) {
+        if (this.model.posFineSkins.length === 0)
             return;
-        }
 
         const boneMtx0 = scratchMtx2;
         const boneMtx1 = scratchMtx3;
@@ -342,41 +324,38 @@ export class ModelInstance {
 
         // The original game performs fine skinning on the CPU.
         // A more appropriate place for these calculations might be in a vertex shader.
-        const quant = 1 << this.model.posFineSkinningConfig!.quantizeScale;
-        const dequant = 1 / quant;
-        for (let i = 0; i < this.model.posFineSkinningPieces.length; i++) {
-            const piece = this.model.posFineSkinningPieces[i];
+        for (let i = 0; i < this.model.posFineSkins.length; i++) {
+            const skin = this.model.posFineSkins[i];
+            const quant = 1 << skin.quantizeScale;
+            const dequant = 1 / quant;
 
-            mat4.copy(boneMtx0, this.matrixPalette[piece.bone0]);
-            mat4.copy(boneMtx1, this.matrixPalette[piece.bone1]);
+            mat4.copy(boneMtx0, this.matrixPalette[skin.bone0]);
+            mat4.copy(boneMtx1, this.matrixPalette[skin.bone1]);
             if (!this.model.hasBetaFineSkinning) {
-                mat4.translate(boneMtx0, boneMtx0, this.model.invBindTranslations[piece.bone0]);
-                mat4.translate(boneMtx1, boneMtx1, this.model.invBindTranslations[piece.bone1]);
+                mat4.translate(boneMtx0, boneMtx0, this.model.invBindTranslations[skin.bone0]);
+                mat4.translate(boneMtx1, boneMtx1, this.model.invBindTranslations[skin.bone1]);
             }
 
-            const src = dataSubarray(this.model.originalPosBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
-            const dst = dataSubarray(this.modelShapes.posBuffer, piece.skinDataSrcOffs, 32 * piece.skinSrcBlockCount);
-            const weights = dataSubarray(this.model.posFineSkinningWeights!, piece.weightsSrc, 32 * piece.weightsBlockCount);
-            let srcOffs = piece.skinMeOffset;
-            let dstOffs = piece.skinMeOffset;
+            const src = this.model.originalPosBuffer;
+            const dst = this.modelShapes.posBuffer;
+            let bufferOffs = skin.bufferOffset;
             let weightOffs = 0;
-            for (let j = 0; j < piece.numVertices; j++) {
-                pos[0] = src.getInt16(srcOffs) * dequant;
-                pos[1] = src.getInt16(srcOffs + 2) * dequant;
-                pos[2] = src.getInt16(srcOffs + 4) * dequant;
+            for (let j = 0; j < skin.vertexCount; j++) {
+                pos[0] = src.getInt16(bufferOffs) * dequant;
+                pos[1] = src.getInt16(bufferOffs + 2) * dequant;
+                pos[2] = src.getInt16(bufferOffs + 4) * dequant;
 
-                const weight0 = weights.getUint8(weightOffs) / 128;
-                const weight1 = weights.getUint8(weightOffs + 1) / 128;
+                const weight0 = skin.weights.getUint8(weightOffs) / 128;
+                const weight1 = skin.weights.getUint8(weightOffs + 1) / 128;
                 mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
                 mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
                 vec3.transformMat4(pos, pos, scratchMtx0);
 
-                dst.setInt16(dstOffs, pos[0] * quant);
-                dst.setInt16(dstOffs + 2, pos[1] * quant);
-                dst.setInt16(dstOffs + 4, pos[2] * quant);
+                dst.setInt16(bufferOffs, pos[0] * quant);
+                dst.setInt16(bufferOffs + 2, pos[1] * quant);
+                dst.setInt16(bufferOffs + 4, pos[2] * quant);
 
-                srcOffs += 6;
-                dstOffs += 6;
+                bufferOffs += 6;
                 weightOffs += 2;
             }
         }
@@ -391,7 +370,7 @@ class ModelsFile {
     private bin: ArrayBufferSlice;
     private models: Model[] = [];
 
-    private constructor(private device: GfxDevice, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
+    private constructor(private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
     }
 
     private async init(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string) {
@@ -404,17 +383,15 @@ class ModelsFile {
         this.bin = bin;
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, device: GfxDevice, materialFactory: MaterialFactory, texFetcher: TextureFetcher, animController: SFAAnimationController, modelVersion: ModelVersion): Promise<ModelsFile> {
-        const self = new ModelsFile(device, materialFactory, texFetcher, animController, modelVersion);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, subdir: string, materialFactory: MaterialFactory, texFetcher: TextureFetcher, animController: SFAAnimationController, modelVersion: ModelVersion): Promise<ModelsFile> {
+        const self = new ModelsFile(materialFactory, texFetcher, animController, modelVersion);
         await self.init(gameInfo, dataFetcher, subdir);
         return self;
     }
 
     public hasModel(num: number): boolean {
-        if (num < 0 || num * 4 >= this.tab.byteLength) {
+        if (num < 0 || num * 4 >= this.tab.byteLength)
             return false;
-        }
-
 
         return readUint32(this.tab, 0, num) !== 0;
     }
@@ -428,9 +405,8 @@ class ModelsFile {
             console.log(`Loading model #${num} ...`);
     
             const modelTabValue = readUint32(this.tab, 0, num);
-            if (modelTabValue === 0) {
+            if (modelTabValue === 0)
                 throw Error(`Model #${num} not found`);
-            }
     
             const modelOffs = modelTabValue & 0xffffff;
             const modelData = loadRes(this.bin.subarray(modelOffs + 0x24));
@@ -444,31 +420,29 @@ class ModelsFile {
 export class ModelFetcher {
     private files: {[subdir: string]: ModelsFile} = {};
 
-    private constructor(private device: GfxDevice, private gameInfo: GameInfo, private texFetcher: TextureFetcher, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
+    private constructor(private gameInfo: GameInfo, private texFetcher: TextureFetcher, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private modelVersion: ModelVersion) {
     }
 
-    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, texFetcher: Promise<TextureFetcher>, materialFactory: MaterialFactory, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelFetcher> {
-        return new ModelFetcher(device, gameInfo, await texFetcher, materialFactory, animController, modelVersion);
+    public static async create(gameInfo: GameInfo, texFetcher: Promise<TextureFetcher>, materialFactory: MaterialFactory, animController: SFAAnimationController, modelVersion: ModelVersion = ModelVersion.Final): Promise<ModelFetcher> {
+        return new ModelFetcher(gameInfo, await texFetcher, materialFactory, animController, modelVersion);
     }
 
     private async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
         if (this.files[subdir] === undefined) {
-            this.files[subdir] = await ModelsFile.create(this.gameInfo, dataFetcher, subdir, this.device, this.materialFactory, this.texFetcher, this.animController, this.modelVersion);
+            this.files[subdir] = await ModelsFile.create(this.gameInfo, dataFetcher, subdir, this.materialFactory, this.texFetcher, this.animController, this.modelVersion);
 
             // XXX: These maps require additional model files to be loaded
-            if (subdir === 'shipbattle') {
+            if (subdir === 'shipbattle')
                 await this.loadSubdir('', dataFetcher);
-            } else if (subdir === 'shop') {
+            else if (subdir === 'shop')
                 await this.loadSubdir('swaphol', dataFetcher);
-            }
         }
     }
 
     public async loadSubdirs(subdirs: string[], dataFetcher: DataFetcher) {
         const promises = [];
-        for (let subdir of subdirs) {
+        for (let subdir of subdirs)
             promises.push(this.loadSubdir(subdir, dataFetcher));
-        }
 
         await Promise.all(promises);
     }
@@ -479,14 +453,14 @@ export class ModelFetcher {
             const file = this.files[s];
             result = Math.max(result, file.getNumModels());
         }
+
         return result;
     }
 
     private getModelsFileWithModel(modelNum: number): ModelsFile | null {
         for (let s in this.files) {
-            if (this.files[s].hasModel(modelNum)) {
+            if (this.files[s].hasModel(modelNum))
                 return this.files[s];
-            }
         }
 
         return null;

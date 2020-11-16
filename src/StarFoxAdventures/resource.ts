@@ -97,7 +97,7 @@ export class ResourceCollection {
         const pathBase = this.gameInfo.pathBase;
         const [texFetcher, modelFetcher, animColl, amapColl, modanimColl, tablesTab, tablesBin] = await Promise.all([
             texFetcherPromise,
-            ModelFetcher.create(this.device, this.gameInfo, dataFetcher, texFetcherPromise, this.materialFactory, this.animController, ModelVersion.Final),
+            ModelFetcher.create(this.gameInfo, texFetcherPromise, this.materialFactory, this.animController, ModelVersion.Final),
             AnimCollection.create(this.gameInfo, dataFetcher, this.subdirs[0]),
             AmapCollection.create(this.gameInfo, dataFetcher),
             ModanimCollection.create(this.gameInfo, dataFetcher),

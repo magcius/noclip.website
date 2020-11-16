@@ -5,7 +5,7 @@ import * as GX from '../gx/gx_enum';
 import { nArray } from '../util';
 
 import { ANCIENT_MAP_SHADER_FIELDS, BETA_MODEL_SHADER_FIELDS, MaterialFactory, parseShader, SFADEMO_MAP_SHADER_FIELDS, SFADEMO_MODEL_SHADER_FIELDS, SFAMaterial, SFA_SHADER_FIELDS, Shader, ShaderAttrFlags, ShaderFlags } from './materials';
-import { Model, ModelShapes, FineSkinningConfig, FineSkinningPiece } from './models';
+import { Model, ModelShapes } from './models';
 import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { Skeleton } from './skeleton';
 import { TextureFetcher } from './textures';
@@ -44,14 +44,29 @@ function parseDisplayListInfo(data: DataView): DisplayListInfo {
     }
 }
 
+interface FineSkinningConfig {
+    numPieces: number;
+    quantizeScale: number;
+}
+
+const FineSkinningPiece_SIZE = 0x74;
+interface FineSkinningPiece {
+    skinDataSrcOffs: number;
+    weightsSrc: number;
+    bone0: number;
+    bone1: number;
+    weightsBlockCount: number;
+    numVertices: number;
+    skinMeOffset: number;
+    skinSrcBlockCount: number; // A block is 32 bytes
+}
+
 function parseFineSkinningConfig(data: DataView): FineSkinningConfig {
     return {
         numPieces: data.getUint16(0x2),
         quantizeScale: data.getUint8(0x6),
     };
 }
-
-const FineSkinningPiece_SIZE = 0x74;
 
 function parseFineSkinningPiece(data: DataView): FineSkinningPiece {
     return {
@@ -380,24 +395,32 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     model.isMapBlock = !!fields.isMapBlock;
 
     if (fields.posFineSkinningConfig !== undefined) {
-        model.posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.posFineSkinningConfig));
+        const posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.posFineSkinningConfig));
         // console.log(`pos fine skinning config: ${JSON.stringify(model.posFineSkinningConfig, null, '\t')}`);
-        if (model.posFineSkinningConfig.numPieces !== 0) {
+        model.hasFineSkinning = posFineSkinningConfig.numPieces !== 0;
+        if (posFineSkinningConfig.numPieces !== 0) {
             const weightsOffs = data.getUint32(fields.posFineSkinningWeights);
-            model.posFineSkinningWeights = dataSubarray(data, weightsOffs);
+            const posFineSkinningWeights = dataSubarray(data, weightsOffs);
             const piecesOffs = data.getUint32(fields.posFineSkinningPieces);
-            for (let i = 0; i < model.posFineSkinningConfig.numPieces; i++) {
+            for (let i = 0; i < posFineSkinningConfig.numPieces; i++) {
                 const piece = parseFineSkinningPiece(dataSubarray(data, piecesOffs + i * FineSkinningPiece_SIZE, FineSkinningPiece_SIZE));
                 // console.log(`piece ${i}: ${JSON.stringify(piece, null, '\t')}`);
-                model.posFineSkinningPieces.push(piece);
+
+                model.posFineSkins.push({
+                    quantizeScale: posFineSkinningConfig.quantizeScale,
+                    vertexCount: piece.numVertices,
+                    bufferOffset: piece.skinDataSrcOffs + piece.skinMeOffset,
+                    bone0: piece.bone0,
+                    bone1: piece.bone1,
+                    weights: dataSubarray(posFineSkinningWeights, piece.weightsSrc, piece.weightsBlockCount * 32),
+                });
             }
         }
 
-        model.nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.nrmFineSkinningConfig));
+        const nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.nrmFineSkinningConfig));
         // TODO: implement fine skinning for normals
     }
 
-    model.hasFineSkinning = model.posFineSkinningConfig !== undefined && model.posFineSkinningConfig.numPieces !== 0;
     model.hasBetaFineSkinning = model.hasFineSkinning && version === ModelVersion.Beta;
 
     const vat = fields.oldVat ? OLD_VAT : VAT;
