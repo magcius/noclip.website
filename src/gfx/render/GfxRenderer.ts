@@ -318,7 +318,6 @@ export class GfxRenderInst {
     }
 
     public drawIndexes(indexCount: number, indexStart: number = 0): void {
-        assert(indexCount >= 1);
         this._flags |= GfxRenderInstFlags.Indexed;
         this._drawCount = indexCount;
         this._drawStart = indexStart;
