@@ -1236,6 +1236,22 @@ function assocHierarchy(bmd: BMD): void {
     // Double-check that we have everything done.
     for (let i = 0; i < bmd.shp1.shapes.length; i++)
         assert(bmd.shp1.shapes[i].materialIndex !== -1);
+
+    // Go through and auto-optimize materials which don't use MULTI
+    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
+        let multiCount = 0;
+        for (let j = 0; j < bmd.shp1.shapes.length; j++) {
+            const shp1 = bmd.shp1.shapes[j];
+            if (shp1.materialIndex !== i)
+                continue;
+
+            if (bmd.shp1.shapes[j].displayFlags === ShapeDisplayFlags.MULTI)
+                ++multiCount;
+        }
+
+        if (multiCount === 0)
+            bmd.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = false;
+    }
 }
 
 export class BMD {

@@ -1,7 +1,7 @@
 
 import { fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor } from "./framework";
 import { dGlobals, dDlst_alphaModel__Type } from "./zww_scenes";
-import { vec3, mat4, quat, ReadonlyVec3 } from "gl-matrix";
+import { vec3, mat4, quat, ReadonlyVec3, vec2 } from "gl-matrix";
 import { dComIfG_resLoad, ResType } from "./d_resorce";
 import { J3DModelInstance, J3DModelData, buildEnvMtx } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
@@ -27,7 +27,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GlobalSaveManager } from "../SaveManager";
 import { TevDefaultSwapTables } from "../gx/gx_material";
 import { Endianness } from "../endian";
-import { dPa_splashEcallBack, dPa_waveEcallBack } from "./d_particle";
+import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle";
 
 // Framework'd actors
 
@@ -3294,6 +3294,8 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
     private waveR: dPa_waveEcallBack | null = null;
     private wavePos = vec3.create();
     private waveRot = vec3.create();
+    private track: dPa_trackEcallBack | null = null;
+    private trackPos = vec3.create();
 
     public subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, `IkadaH`);
@@ -3342,7 +3344,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             this.splash = new dPa_splashEcallBack(globals);
             this.waveL = new dPa_waveEcallBack(globals);
             this.waveR = new dPa_waveEcallBack(globals);
-
+            this.track = new dPa_trackEcallBack(globals);
             this.createWave(globals);
         }
 
@@ -3369,7 +3371,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
     }
 
     private setMtx(globals: dGlobals): void {
-        // TODO(jstpierre): wave
+        // TODO(jstpierre): dLib_waveRot
         vec3.copy(this.model.baseScale, this.scale);
 
         const waveAnim1 = Math.sin(cM__Short2Rad(this.waveAnim1Timer));
@@ -3428,7 +3430,9 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
                 vec3.set(this.wavePos, 0.0, waveOffsY, waveOffsZ);
                 transformVec3Mat4w1(this.wavePos, calc_mtx, this.wavePos);
 
-                // track
+                const trackOffsZ = -180.0;
+                vec3.set(this.trackPos, 0.0, 0.0, trackOffsZ);
+                transformVec3Mat4w1(this.trackPos, calc_mtx, this.trackPos);
             }
         }
     }
@@ -3564,6 +3568,14 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
         if (this.splash !== null && this.splash.emitter === null)
             globals.particleCtrl.set(globals, 0, 0x0035, this.wavePos, this.waveRot, null, 1.0, this.splash);
+
+        if (this.track !== null && this.track.emitter === null) {
+            const emitter = globals.particleCtrl.set(globals, 5, 0x0036, this.trackPos, this.rot, null, 0.0, this.track);
+            if (emitter !== null) {
+                vec3.set(emitter.globalScale, 1.0, 1.0, 1.0);
+                vec2.set(emitter.globalScale2D, 1.0, 1.0);
+            }
+        }
     }
 
     private static waveCollapsePos = [
@@ -3580,17 +3592,28 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         } else {
             splashScaleTarget = 0.0;
             waveVelFade = 0.0;
+            if (this.track !== null)
+                this.track.state = 1;
         }
 
         // this.wavePos[1] = dLib_getWaterY(this.wavePos, this.objAcch);
         this.wavePos[1] = this.pos[1] + 25.0;
         this.waveRot[1] = this.rot[1];
 
+        if (this.track !== null && this.track.emitter !== null) {
+            this.track.indTransY = -0.04;
+            this.track.indScaleY = 4.0;
+
+            // mObjAcch
+            this.track.vel = 300.0;
+            this.track.minVel = 3.0;
+        }
+
         if (this.waveL !== null) {
             this.waveL.velFade1 = waveVelFade;
             this.waveL.velFade2 = 1.0;
             this.waveL.velSpeed = 2.0;
-            this.waveL.maxDistance = 15.0;
+            this.waveL.maxParticleVelocity = 15.0;
             vec3.copy(this.waveL.collapsePos[0], d_a_obj_ikada.waveCollapsePos[0]);
             vec3.copy(this.waveL.collapsePos[1], d_a_obj_ikada.waveCollapsePos[1]);
         }
@@ -3599,7 +3622,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             this.waveR.velFade1 = waveVelFade;
             this.waveR.velFade2 = 1.0;
             this.waveR.velSpeed = 2.0;
-            this.waveR.maxDistance = 15.0;
+            this.waveR.maxParticleVelocity = 15.0;
             vec3.copy(this.waveR.collapsePos[0], d_a_obj_ikada.waveCollapsePos[0]);
             vec3.copy(this.waveR.collapsePos[1], d_a_obj_ikada.waveCollapsePos[1]);
             this.waveR.collapsePos[0][0] *= -1.0;
@@ -3617,6 +3640,12 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
 
         if (this.splash !== null)
             this.splash.remove();
+        if (this.waveL !== null)
+            this.waveL.remove();
+        if (this.waveR !== null)
+            this.waveR.remove();
+        if (this.track !== null)
+            this.track.remove();
     }
 }
 

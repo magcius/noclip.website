@@ -263,6 +263,7 @@ export class d_a_sea extends fopAc_ac_c {
 
         mb.setTevKColorSel(0, GX.KonstColorSel.KCSEL_K0);
         mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_K1);
+        mb.setUsePnMtxIdx(false);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
         globals.sea = this;

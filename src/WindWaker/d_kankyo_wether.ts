@@ -919,8 +919,11 @@ export class dKankyo_rain_Packet {
 
         // Sibuki means "splash"
         const envLight = globals.g_env_light;
-        const ddraw = this.ddraw;
 
+        const sibukiCount = envLight.rainCount >>> 1;
+        if (sibukiCount < 1)
+            return;
+    
         const alphaTarget = this.sibukiHidden ? 0.0 : 200/255;
         this.sibukiAlpha = cLib_addCalc(this.sibukiAlpha, alphaTarget, 0.2, 3.0, 0.001);
 
@@ -936,14 +939,13 @@ export class dKankyo_rain_Packet {
         if (finalAlpha <= 0.001)
             return;
 
+        const ddraw = this.ddraw;
         renderInstManager.setCurrentRenderInstList(globals.dlst.wetherEffect);
 
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xB4C8C800);
         materialParams.u_Color[ColorKind.C0].a = finalAlpha;
         colorCopy(materialParams.u_Color[ColorKind.C1], materialParams.u_Color[ColorKind.C0]);
         this.ringTexture.fillTextureMapping(materialParams.m_TextureMapping[0]);
-
-        const sibukiCount = envLight.rainCount >>> 1;
 
         dKy_set_eyevect_calc(globals, scratchVec3, 7000.0, 4000.0);
 

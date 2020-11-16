@@ -265,8 +265,7 @@ export function dStage_actorCreate(globals: dGlobals, processNameStr: string, ac
     actor.gbaName = objName.gbaName;
     actor.subtype = objName.subtype;
 
-    // This is supposed to be executing in the context of the stage, I believe.
-    // TODO(jstpierre): This can also be the room class!
+    // This is supposed to be executing in the context of the room or stage, I believe.
     assert(fpcLy_CurrentLayer(globals.frameworkGlobals) === globals.scnPlay.layer);
     const res = fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, actor);
     assert(res);

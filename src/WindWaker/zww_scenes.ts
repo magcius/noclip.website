@@ -667,8 +667,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         let nearPlane = Math.max(stag.nearPlane, 5);
         let farPlane = stag.farPlane;
 
-        // noclip modification: if this is the full sea map, push our far plane out.
-        if (this.globals.stageName === 'sea' && this.rooms.length !== 1)
+        // noclip modification: if this is the sea map, push our far plane out a bit.
+        if (this.globals.stageName === 'sea')
             farPlane *= 2;
 
         viewerInput.camera.setClipPlanes(nearPlane, farPlane);
