@@ -11,11 +11,10 @@ import { mat4 } from 'gl-matrix';
 import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
-import { colorFromRGBA, Color, colorCopy, colorFromARGB8, colorFromRGBA8 } from '../Color';
+import { colorFromRGBA, Color, colorCopy } from '../Color';
 import { EnvfxManager } from './envfx';
 import { TextureMapping } from '../TextureHolder';
 import { SceneRenderContext } from './render';
-import { Material } from '../SuperMario64DS/sm64ds_bmd';
 
 interface ShaderLayer {
     texId: number | null;
