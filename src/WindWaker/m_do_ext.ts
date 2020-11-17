@@ -120,7 +120,7 @@ export function mDoExt_modelUpdateDL(globals: dGlobals, modelInstance: J3DModelI
 
 const scratchTransform = new JointTransformInfo();
 export class mDoExt_McaMorf implements JointMatrixCalc {
-    public modelInstance: J3DModelInstance;
+    public model: J3DModelInstance;
     public frameCtrl = new J3DFrameCtrl(0);
     private prevMorf: number = -1.0;
     private curMorf: number = 0.0;
@@ -128,7 +128,7 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
     private transformInfos: JointTransformInfo[] = [];
 
     constructor(modelData: J3DModelData, private callback1: any = null, private callback2: any = null, private anm: ANK1 | null = null, loopMode: LoopMode, speedInFrames: number = 1.0, startFrame: number = 0, duration: number = -1) {
-        this.modelInstance = new J3DModelInstance(modelData);
+        this.model = new J3DModelInstance(modelData);
 
         this.setAnm(anm, loopMode, 0.0, speedInFrames, startFrame, duration);
         this.prevMorf = -1.0;
@@ -172,8 +172,8 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
     }
 
     public calc(): void {
-        this.modelInstance.jointMatrixCalc = this;
-        this.modelInstance.calcAnim();
+        this.model.jointMatrixCalc = this;
+        this.model.calcAnim();
     }
 
     public play(deltaTimeFrames: number): boolean {
@@ -225,10 +225,10 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
     }
 
     public update(): void {
-        this.modelInstance.jointMatrixCalc = this;
+        this.model.jointMatrixCalc = this;
     }
 
     public entryDL(globals: dGlobals, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput, drawListSet: dDlst_list_Set | null = null): void {
-        mDoExt_modelEntryDL(globals, this.modelInstance, renderInstManager, viewerInput);
+        mDoExt_modelEntryDL(globals, this.model, renderInstManager, viewerInput);
     }
 }

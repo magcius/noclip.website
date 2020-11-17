@@ -262,7 +262,7 @@ export function setupMultiEmitter(m: MultiEmitter, autoEffectIter: JMapInfoIter)
     m.continueAnimEnd = autoEffectIter.getValueString('ContinueAnimEnd') === 'on';
 }
 
-class MultiEmitterCallBack implements JPA.JPAEmitterCallBack {
+class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
     public globalColorPrm: Color = colorNewCopy(White);
     public globalColorEnv: Color = colorNewCopy(White);
     public offset = vec3.create();

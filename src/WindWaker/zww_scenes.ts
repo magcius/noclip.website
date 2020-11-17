@@ -25,7 +25,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { range, getMatrixAxisZ, computeProjectionMatrixFromCuboid } from '../MathHelpers';
 import { TextureMapping } from '../TextureHolder';
-import { EFB_WIDTH, EFB_HEIGHT, parseMaterial, GX_Program } from '../gx/gx_material';
+import { parseMaterial, GX_Program } from '../gx/gx_material';
 import { BTIData } from '../Common/JSYSTEM/JUTTexture';
 import { FlowerPacket, TreePacket, GrassPacket } from './Grass';
 import { dRes_control_c, ResType } from './d_resorce';
@@ -40,10 +40,12 @@ import { dBgS } from './d_bg';
 import { dfRange } from '../DebugFloaters';
 import { colorNewCopy, White, colorCopy } from '../Color';
 import { GX_Array, GX_VtxAttrFmt, compileVtxLoader, GX_VtxDesc } from '../gx/gx_displaylist';
-import { makeStaticDataBuffer, GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
+import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TSDraw } from '../SuperMarioGalaxy/DDraw';
+import { d_a_sea } from './d_a_sea';
+import { dPa_control_c } from './d_particle';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -333,6 +335,7 @@ export class dGlobals {
     public stageName: string;
     public dStage_dt = new dStage_stageDt_c();
     public roomStatus: dStage_roomStatus_c[] = nArray(64, () => new dStage_roomStatus_c());
+    public particleCtrl: dPa_control_c;
 
     public scnPlay: d_s_play;
 
@@ -356,6 +359,8 @@ export class dGlobals {
 
     private relNameTable: { [id: number]: string };
     private objectNameTable: dStage__ObjectNameTable;
+
+    public sea: d_a_sea | null = null;
 
     constructor(public context: SceneContext, public modelCache: ModelCache, private extraSymbolData: SymbolMap, public frameworkGlobals: fGlobals) {
         this.resCtrl = this.modelCache.resCtrl;
@@ -401,6 +406,7 @@ export class dGlobals {
     }
 
     public destroy(device: GfxDevice): void {
+        this.particleCtrl.destroy(device);
         this.dlst.destroy(device);
         this.quadStatic.destroy(device);
     }
@@ -516,119 +522,9 @@ export class WindWakerRoom {
     }
 }
 
-function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
-    m.gfxTexture = sceneTexture;
-    m.width = EFB_WIDTH;
-    m.height = EFB_HEIGHT;
-    m.flipY = true;
-}
-
 const enum EffectDrawGroup {
     Main = 0,
     Indirect = 1,
-}
-
-class SimpleEffectSystem {
-    private emitterManager: JPA.JPAEmitterManager;
-    private drawInfo = new JPA.JPADrawInfo();
-    private jpacData: JPA.JPACData[] = [];
-    private resourceDatas = new Map<number, JPA.JPAResourceData>();
-
-    constructor(device: GfxDevice, private jpac: JPA.JPAC[]) {
-        this.emitterManager = new JPA.JPAEmitterManager(device, 6000, 300);
-        for (let i = 0; i < this.jpac.length; i++)
-            this.jpacData.push(new JPA.JPACData(this.jpac[i]));
-    }
-
-    private findResourceData(userIndex: number): [JPA.JPACData, JPA.JPAResourceRaw] | null {
-        for (let i = 0; i < this.jpacData.length; i++) {
-            const r = this.jpacData[i].jpac.effects.find((resource) => resource.resourceId === userIndex);
-            if (r !== undefined)
-                return [this.jpacData[i], r];
-        }
-
-        return null;
-    }
-
-    private getResourceData(device: GfxDevice, cache: GfxRenderCache, userIndex: number): JPA.JPAResourceData | null {
-        if (!this.resourceDatas.has(userIndex)) {
-            const data = this.findResourceData(userIndex);
-            if (data !== null) {
-                const [jpacData, jpaResRaw] = data;
-                const resData = new JPA.JPAResourceData(device, cache, jpacData, jpaResRaw);
-                this.resourceDatas.set(userIndex, resData);
-            }
-        }
-
-        return this.resourceDatas.get(userIndex)!;
-    }
-
-    public setOpaqueSceneTexture(opaqueSceneTexture: GfxTexture): void {
-        for (let i = 0; i < this.jpacData.length; i++) {
-            const m = this.jpacData[i].getTextureMappingReference('AK_kagerouSwap00');
-            if (m !== null)
-                setTextureMappingIndirect(m, opaqueSceneTexture);
-        }
-    }
-
-    public setDrawInfo(posCamMtx: mat4, prjMtx: mat4, texPrjMtx: mat4 | null): void {
-        this.drawInfo.posCamMtx = posCamMtx;
-        this.drawInfo.texPrjMtx = texPrjMtx;
-    }
-
-    public calc(viewerInput: Viewer.ViewerRenderInput): void {
-        const inc = viewerInput.deltaTime * 30/1000;
-        this.emitterManager.calc(inc);
-    }
-
-    public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, drawGroupId: number): void {
-        this.emitterManager.draw(device, renderInstManager, this.drawInfo, drawGroupId);
-    }
-
-    public createBaseEmitter(device: GfxDevice, cache: GfxRenderCache, resourceId: number): JPA.JPABaseEmitter {
-        const resData = assertExists(this.getResourceData(device, cache, resourceId));
-        const emitter = this.emitterManager.createEmitter(resData)!;
-
-        // This seems to mark it as an indirect particle (???) for simple particles.
-        // ref. d_paControl_c::readCommon / readRoomScene
-        if (!!(resourceId & 0x4000)) {
-            emitter.drawGroupId = EffectDrawGroup.Indirect;
-        } else {
-            emitter.drawGroupId = EffectDrawGroup.Main;
-        }
-
-        return emitter;
-    }
-
-    public createEmitterTest(resourceId: number = 0x14) {
-        const device: GfxDevice = window.main.viewer.gfxDevice;
-        const cache: GfxRenderCache = (window.main as any).scene.renderHelper.getCache();
-        const emitter = this.createBaseEmitter(device, cache, resourceId);
-        if (emitter !== null) {
-            emitter.globalTranslation[0] = -275;
-            emitter.globalTranslation[1] = 150;
-            emitter.globalTranslation[2] = 2130;
-
-            const orig = vec3.clone(emitter.globalTranslation);
-            let t = 0;
-            function move() {
-                t += 0.1;
-                emitter!.globalTranslation[0] = orig[0] + Math.sin(t) * 50;
-                emitter!.globalTranslation[1] = orig[1] + Math.sin(t * 0.777) * 50;
-                emitter!.globalTranslation[2] = orig[2] + Math.cos(t) * 50;
-                requestAnimationFrame(move);
-            }
-            requestAnimationFrame(move);
-        }
-
-        return emitter;
-    }
-
-    public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.jpacData.length; i++)
-            this.jpacData[i].destroy(device);
-        this.emitterManager.destroy(device);
-    }
 }
 
 const scratchMatrix = mat4.create();
@@ -638,7 +534,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public renderHelper: GXRenderHelperGfx;
 
     public rooms: WindWakerRoom[] = [];
-    public effectSystem: SimpleEffectSystem;
     public extraTextures: ZWWExtraTextures;
     public renderCache: GfxRenderCache;
 
@@ -758,12 +653,25 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             for (let j = 0; j < fwGlobals.dwQueue[i].length; j++) {
                 const ac = fwGlobals.dwQueue[i][j];
                 if (ac instanceof fopAc_ac_c) {
-                    ac.visible = this.getRoomVisible(ac.roomNo) && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
-                    if (ac.visible && !this.globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
-                        ac.visible = false;
+                    ac.roomVisible = this.getRoomVisible(ac.roomNo) && objectLayerVisible(this.roomLayerMask, ac.roomLayer);
+                    if (ac.roomVisible && !this.globals.renderHacks.objectsVisible && fpcIsObject(ac.processName))
+                        ac.roomVisible = false;
                 }
             }
         }
+
+        // Near/far planes are decided by the stage data.
+        const stag = this.globals.dStage_dt.stag;
+
+        // Pull in the near plane to decrease Z-fighting, some stages set it far too close...
+        let nearPlane = Math.max(stag.nearPlane, 5);
+        let farPlane = stag.farPlane;
+
+        // noclip modification: if this is the sea map, push our far plane out a bit.
+        if (this.globals.stageName === 'sea')
+            farPlane *= 2;
+
+        viewerInput.camera.setClipPlanes(nearPlane, farPlane);
 
         this.globals.camera = viewerInput.camera;
 
@@ -782,8 +690,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         renderInstManager.setCurrentRenderInstList(dlst.main[0]);
         {
-            this.effectSystem.calc(viewerInput);
-            this.effectSystem.setOpaqueSceneTexture(this.opaqueSceneTexture.gfxTexture!);
+            this.globals.particleCtrl.calc(viewerInput);
+            this.globals.particleCtrl.setOpaqueSceneTexture(this.opaqueSceneTexture.gfxTexture!);
 
             for (let group = EffectDrawGroup.Main; group <= EffectDrawGroup.Indirect; group++) {
                 let texPrjMtx: mat4 | null = null;
@@ -793,9 +701,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                     texProjCameraSceneTex(texPrjMtx, viewerInput.camera, viewerInput.viewport, 1);
                 }
 
-                this.effectSystem.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx);
+                this.globals.particleCtrl.setDrawInfo(viewerInput.camera.viewMatrix, viewerInput.camera.projectionMatrix, texPrjMtx, viewerInput.camera.frustum);
                 renderInstManager.setCurrentRenderInstList(dlst.effect[group]);
-                this.effectSystem.draw(device, this.renderHelper.renderInstManager, group);
+                this.globals.particleCtrl.draw(device, this.renderHelper.renderInstManager, group);
             }
         }
 
@@ -867,8 +775,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.extraTextures.destroy(device);
         this.renderTarget.destroy(device);
         this.globals.destroy(device);
-        if (this.effectSystem !== null)
-            this.effectSystem.destroy(device);
         this.globals.frameworkGlobals.delete(this.globals);
     }
 }
@@ -1155,7 +1061,7 @@ class SceneDesc {
             const jpacData = modelCache.getFileData(particleArchives[i]);
             jpac.push(JPA.parse(jpacData));
         }
-        renderer.effectSystem = new SimpleEffectSystem(device, jpac);
+        globals.particleCtrl = new dPa_control_c(device, jpac);
 
         // dStage_Create
         dKankyo_create(globals);
