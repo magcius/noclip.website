@@ -20,11 +20,11 @@ export class BlockCollection {
     private bin: ArrayBufferSlice;
     private blockModels: ModelInstance[] = [];
 
-    private constructor(private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texFetcher: TextureFetcher, private modelVersion: ModelVersion, private isCompressed: boolean) {
+    private constructor(private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelVersion: ModelVersion, private isCompressed: boolean) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, tabPath: string, binPath: string, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texFetcher: TextureFetcher, modelVersion: ModelVersion, isCompressed: boolean = true): Promise<BlockCollection> {
-        const self = new BlockCollection(device, materialFactory, animController, texFetcher, modelVersion, isCompressed);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, tabPath: string, binPath: string, materialFactory: MaterialFactory, texFetcher: TextureFetcher, modelVersion: ModelVersion, isCompressed: boolean = true): Promise<BlockCollection> {
+        const self = new BlockCollection(materialFactory, texFetcher, modelVersion, isCompressed);
 
         const pathBase = gameInfo.pathBase;
         const [tab, bin] = await Promise.all([
@@ -109,7 +109,7 @@ export class SFABlockFetcher implements BlockFetcher {
             const tabPath = `${subdir}/mod${modNum}.tab`;
             const binPath = `${subdir}/mod${modNum}.zlb.bin`;
             const [blockColl, _] = await Promise.all([
-                BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, this.device, this.materialFactory, this.animController, this.texFetcher, ModelVersion.FinalMap),
+                BlockCollection.create(this.gameInfo, dataFetcher, tabPath, binPath, this.materialFactory, this.texFetcher, ModelVersion.FinalMap),
                 this.texFetcher.loadSubdirs([subdir], dataFetcher),
             ]);
             this.blockColls[mod] = blockColl;
@@ -122,16 +122,16 @@ export class SFABlockFetcher implements BlockFetcher {
 export class SwapcircleBlockFetcher implements BlockFetcher {
     private blockColl: BlockCollection;
 
-    private constructor(private gameInfo: GameInfo, private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController, private texFetcher: TextureFetcher) {
+    private constructor(private gameInfo: GameInfo, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher) {
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController, texFetcher: TextureFetcher) {
-        const self = new SwapcircleBlockFetcher(gameInfo, device, materialFactory, animController, texFetcher);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, materialFactory: MaterialFactory, texFetcher: TextureFetcher) {
+        const self = new SwapcircleBlockFetcher(gameInfo, materialFactory, texFetcher);
 
         const subdir = `swapcircle`;
         const tabPath = `${subdir}/mod22.tab`;
         const binPath = `${subdir}/mod22.bin`;
-        self.blockColl = await BlockCollection.create(self.gameInfo, dataFetcher, tabPath, binPath, self.device, self.materialFactory, self.animController, self.texFetcher, ModelVersion.BetaMap, false);
+        self.blockColl = await BlockCollection.create(self.gameInfo, dataFetcher, tabPath, binPath, self.materialFactory, self.texFetcher, ModelVersion.BetaMap, false);
 
         return self;
     }
@@ -206,12 +206,12 @@ export class AncientBlockFetcher implements BlockFetcher {
     blocksBin: ArrayBufferSlice;
     texFetcher: TextureFetcher;
 
-    private constructor(private device: GfxDevice, private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
+    private constructor(private materialFactory: MaterialFactory) {
         this.texFetcher = new FakeTextureFetcher();
     }
 
-    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, device: GfxDevice, materialFactory: MaterialFactory, animController: SFAAnimationController): Promise<AncientBlockFetcher> {
-        const self = new AncientBlockFetcher(device, materialFactory, animController);
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, materialFactory: MaterialFactory): Promise<AncientBlockFetcher> {
+        const self = new AncientBlockFetcher(materialFactory);
 
         const pathBase = gameInfo.pathBase;
         const [tab, bin] = await Promise.all([
@@ -232,8 +232,8 @@ export class AncientBlockFetcher implements BlockFetcher {
 
         const blockOffset = readUint32(this.blocksTab, 0, num);
         console.log(`Loading block ${num} from BLOCKS.bin offset 0x${blockOffset.toString(16)}`);
-        const blockData = this.blocksBin.slice(blockOffset);
+        const blockData = this.blocksBin.slice(blockOffset).createDataView();
 
-        return new ModelInstance(new Model(this.materialFactory, blockData, this.texFetcher, ModelVersion.AncientMap));
+        return new ModelInstance(loadModel(blockData, this.texFetcher, this.materialFactory, ModelVersion.AncientMap));
     }
 }

@@ -78,8 +78,7 @@ export class ModelShapes {
             if (shapes[i].isDevGeometry && !modelCtx.showDevGeometry)
                 continue;
 
-            mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
-            mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
+            mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
             shapes[i].prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, boneMatrices, this.model.isMapBlock);
         }
@@ -89,8 +88,7 @@ export class ModelShapes {
         for (let i = 0; i < this.waters.length; i++) {
             const water = this.waters[i];
 
-            mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
-            mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
+            mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
             mat4.mul(scratchMtx0, matrix, scratchMtx0);
             water.shape.prepareToRender(device, renderInstManager, scratchMtx0, modelCtx, {}, matrixPalette, this.model.isMapBlock);
         }
@@ -101,8 +99,7 @@ export class ModelShapes {
             const fur = this.furs[i];
 
             for (let j = 0; j < fur.numLayers; j++) {
-                mat4.fromTranslation(scratchMtx0, [0, this.model.yTranslate, 0]);
-                mat4.translate(scratchMtx0, scratchMtx0, this.model.modelTranslate);
+                mat4.fromTranslation(scratchMtx0, this.model.modelTranslate);
                 mat4.translate(scratchMtx0, scratchMtx0, [0, 0.4 * (j + 1), 0]);
                 mat4.mul(scratchMtx0, matrix, scratchMtx0);
 
@@ -141,7 +138,6 @@ export class Model {
     public coarseBlends: CoarseBlend[] = [];
     public invBindTranslations: vec3[] = [];
 
-    public yTranslate: number = 0;
     public modelTranslate: vec3 = vec3.create();
 
     public materials: (SFAMaterial | undefined)[] = [];
@@ -159,6 +155,9 @@ export class Model {
     public skeleton?: Skeleton;
 
     public isMapBlock: boolean;
+
+    public constructor(public version: ModelVersion) {
+    }
 
     public createInstanceShapes(): ModelShapes {
         if (this.hasFineSkinning) {
@@ -369,7 +368,8 @@ export class ModelInstance {
                 mat4.translate(boneMtx1, boneMtx1, this.model.invBindTranslations[skin.bone1]);
             }
 
-            // FIXME: Handle NBT mode. I don't know whether any models use fine skinning together with NBT.
+            // FIXME: Handle NBT mode. I don't know whether any models use fine skinning and NBT,
+            // but the original game is able to handle such models.
             const src = this.model.originalNrmBuffer;
             const dst = this.modelShapes.nrmBuffer!;
             let bufferOffs = skin.bufferOffset;
@@ -383,15 +383,14 @@ export class ModelInstance {
                 const weight1 = skin.weights.getUint8(weightOffs + 1) / 128;
                 mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
                 mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
-                // Clear the translation column to produce the normal matrix from
+                // Clear the translation column to produce a normal matrix from
                 // the position matrix.
-                // Note: This method is only valid for position matrices that do not
-                // scale in the X, Y or Z direction; only rotation and translation
-                // are allowed.
-                // This method appears to be used by the original game, but it
-                // is not generally correct.
-                // Also, the original game does not rescale normals to magnitude 1.
-                // FIXME: verify against the original.
+                // This method only works if the position matrix has no scaling
+                // in the X, Y or Z direction; only rotation and translation are
+                // allowed. Although this method appears to be used by the original
+                // game, it is not generally correct.
+                // Additionally, the original game does not rescale normals to
+                // magnitude 1, which is required for full accuracy.
                 // For the correct and general formula to produce a normal matrix from a
                 // position matrix, see: <https://github.com/graphitemaster/normals_revisited>
                 mat4SetCol(scratchMtx0, 3, 0, 0, 0, 1);

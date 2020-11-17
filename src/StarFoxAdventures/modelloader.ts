@@ -389,7 +389,7 @@ const enum Opcode {
 }
 
 export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFactory: MaterialFactory, version: ModelVersion): Model {
-    const model = new Model();
+    const model = new Model(version);
 
     let offs = 0;
 
@@ -598,9 +598,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     }
 
     if (fields.hasYTranslate)
-        model.yTranslate = data.getInt16(0x8e);
-    else
-        model.yTranslate = 0;
+        model.modelTranslate[1] = data.getInt16(0x8e);
 
     const pnMatrixMap: number[] = nArray(10, () => 0);
 
