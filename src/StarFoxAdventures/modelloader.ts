@@ -336,6 +336,8 @@ const FIELDS: any = {
         posFineSkinningPieces: 0xa4,
         posFineSkinningWeights: 0xa8,
         nrmFineSkinningConfig: 0xac,
+        nrmFineSkinningPieces: 0xc8,
+        nrmFineSkinningWeights: 0xcc,
         shaderOffset: 0x38,
         shaderCount: 0xf8,
         shaderFields: SFA_SHADER_FIELDS,
@@ -393,21 +395,37 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
     const fields = FIELDS[version];
     model.isMapBlock = !!fields.isMapBlock;
+    
+    const posOffset = data.getUint32(fields.posOffset);
+    const posCount = data.getUint16(fields.posCount);
+    // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
+    model.originalPosBuffer = dataSubarray(data, posOffset, posCount * 6);
+
+    let nrmBuffer = data;
+    let nrmTypeFlags = 0;
+    let isNbt = false;
+    if (fields.hasNormals) {
+        const nrmOffset = data.getUint32(fields.nrmOffset);
+        const nrmCount = data.getUint16(fields.nrmCount);
+        // console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
+        nrmBuffer = dataSubarray(data, nrmOffset);
+        nrmTypeFlags = data.getUint8(0x24);
+        isNbt = !!(nrmTypeFlags & 8);
+        model.originalNrmBuffer = dataSubarray(data, nrmOffset, nrmCount * (isNbt ? 9 : 3));
+    }
 
     if (fields.posFineSkinningConfig !== undefined) {
         const posFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.posFineSkinningConfig));
-        // console.log(`pos fine skinning config: ${JSON.stringify(model.posFineSkinningConfig, null, '\t')}`);
-        model.hasFineSkinning = posFineSkinningConfig.numPieces !== 0;
         if (posFineSkinningConfig.numPieces !== 0) {
+            model.hasFineSkinning = true;
+            model.fineSkinQuantizeScale = posFineSkinningConfig.quantizeScale;
+
             const weightsOffs = data.getUint32(fields.posFineSkinningWeights);
             const posFineSkinningWeights = dataSubarray(data, weightsOffs);
             const piecesOffs = data.getUint32(fields.posFineSkinningPieces);
             for (let i = 0; i < posFineSkinningConfig.numPieces; i++) {
                 const piece = parseFineSkinningPiece(dataSubarray(data, piecesOffs + i * FineSkinningPiece_SIZE, FineSkinningPiece_SIZE));
-                // console.log(`piece ${i}: ${JSON.stringify(piece, null, '\t')}`);
-
                 model.posFineSkins.push({
-                    quantizeScale: posFineSkinningConfig.quantizeScale,
                     vertexCount: piece.numVertices,
                     bufferOffset: piece.skinDataSrcOffs + piece.skinMeOffset,
                     bone0: piece.bone0,
@@ -418,10 +436,28 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         }
 
         const nrmFineSkinningConfig = parseFineSkinningConfig(dataSubarray(data, fields.nrmFineSkinningConfig));
-        // TODO: implement fine skinning for normals
+        if (nrmFineSkinningConfig.numPieces !== 0) {
+            model.hasFineSkinning = true;
+            model.fineSkinNBTNormals = !!(nrmTypeFlags & 8);
+
+            const weightsOffs = data.getUint32(fields.nrmFineSkinningWeights);
+            const nrmFineSkinningWeights = dataSubarray(data, weightsOffs);
+            const piecesOffs = data.getUint32(fields.nrmFineSkinningPieces);
+            for (let i = 0; i < nrmFineSkinningConfig.numPieces; i++) {
+                const piece = parseFineSkinningPiece(dataSubarray(data, piecesOffs + i * FineSkinningPiece_SIZE, FineSkinningPiece_SIZE));
+                model.nrmFineSkins.push({
+                    vertexCount: piece.numVertices,
+                    bufferOffset: piece.skinDataSrcOffs + piece.skinMeOffset,
+                    bone0: piece.bone0,
+                    bone1: piece.bone1,
+                    weights: dataSubarray(nrmFineSkinningWeights, piece.weightsSrc, piece.weightsBlockCount * 32),
+                });
+            }
+        }
+
+        model.hasBetaFineSkinning = model.hasFineSkinning && version === ModelVersion.Beta;
     }
 
-    model.hasBetaFineSkinning = model.hasFineSkinning && version === ModelVersion.Beta;
 
     const vat = fields.oldVat ? OLD_VAT : VAT;
 
@@ -438,22 +474,6 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         texIds.push(texIdFromFile);
     }
     // console.log(`texids: ${texIds}`);
-
-    const posOffset = data.getUint32(fields.posOffset);
-    const posCount = data.getUint16(fields.posCount);
-    // console.log(`Loading ${posCount} positions from 0x${posOffset.toString(16)}`);
-    const originalPosBuffer = dataSubarray(data, posOffset, posCount * 6);
-    model.originalPosBuffer = originalPosBuffer;
-
-    let nrmBuffer = data;
-    let nrmTypeFlags = 0;
-    if (fields.hasNormals) {
-        const nrmOffset = data.getUint32(fields.nrmOffset);
-        const nrmCount = data.getUint16(fields.nrmCount);
-        // console.log(`Loading ${nrmCount} normals from 0x${nrmOffset.toString(16)}`);
-        nrmBuffer = dataSubarray(data, nrmOffset);
-        nrmTypeFlags = data.getUint8(0x24);
-    }
 
     const clrOffset = data.getUint32(fields.clrOffset);
     const clrCount = data.getUint16(fields.clrCount);
@@ -584,11 +604,11 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
     const pnMatrixMap: number[] = nArray(10, () => 0);
 
-    const getVtxArrays = (posBuffer: DataView) => {
+    const getVtxArrays = (posBuffer: DataView, nrmBuffer?: DataView) => {
         const vtxArrays: GX_Array[] = [];
         vtxArrays[GX.Attr.POS] = { buffer: arrayBufferSliceFromDataView(posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
         if (fields.hasNormals)
-            vtxArrays[GX.Attr.NRM] = { buffer: arrayBufferSliceFromDataView(nrmBuffer), offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
+            vtxArrays[GX.Attr.NRM] = { buffer: arrayBufferSliceFromDataView(nrmBuffer!), offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
         vtxArrays[GX.Attr.CLR0] = { buffer: arrayBufferSliceFromDataView(clrBuffer), offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
         for (let t = 0; t < 8; t++)
             vtxArrays[GX.Attr.TEX0 + t] = { buffer: arrayBufferSliceFromDataView(texcoordBuffer), offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
@@ -665,7 +685,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         return vcd;
     }
 
-    const runSpecialBitstream = (bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView): Shape => {
+    const runSpecialBitstream = (bitsOffset: number, bitAddress: number, buildSpecialMaterial: BuildMaterialFunc, posBuffer: DataView, nrmBuffer?: DataView): Shape => {
         // console.log(`running special bitstream at offset 0x${bitsOffset.toString(16)} bit-address 0x${bitAddress.toString(16)}`);
         const bits = new LowBitReader(data, bitsOffset);
         bits.seekBit(bitAddress);
@@ -689,7 +709,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         // console.log(`Calling special bitstream DL #${listNum} at offset 0x${dlInfo.offset.toString(16)}, size 0x${dlInfo.size.toString(16)}`);
         const displayList = dataSubarray(data, dlInfo.offset, dlInfo.size);
 
-        const vtxArrays = getVtxArrays(posBuffer);
+        const vtxArrays = getVtxArrays(posBuffer, nrmBuffer);
 
         const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, model.hasFineSkinning);
         newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
@@ -698,7 +718,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         return new Shape(newGeom, new ShapeMaterial(material), false);
     }
 
-    const runBitstream = (modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView) => {
+    const runBitstream = (modelShapes: ModelShapes, bitsOffset: number, drawStep: number, posBuffer: DataView, nrmBuffer?: DataView) => {
         // console.log(`running bitstream at offset 0x${bitsOffset.toString(16)}`);
         modelShapes.shapes[drawStep] = [];
         const shapes = modelShapes.shapes[drawStep];
@@ -744,10 +764,10 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
                 try {
                     if (curShader.flags & ShaderFlags.Water) {
-                        const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress!, materialFactory.buildWaterMaterial.bind(materialFactory), posBuffer);
+                        const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress!, materialFactory.buildWaterMaterial.bind(materialFactory), posBuffer, nrmBuffer);
                         modelShapes.waters.push({ shape: newShape });
                     } else {
-                        const vtxArrays = getVtxArrays(posBuffer);
+                        const vtxArrays = getVtxArrays(posBuffer, nrmBuffer);
 
                         const newGeom = new ShapeGeometry(vtxArrays, vcd, vat, displayList, model.hasFineSkinning);
                         newGeom.setPnMatrixMap(pnMatrixMap, model.hasFineSkinning);
@@ -757,7 +777,7 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
                         shapes.push(newShape);
 
                         if (drawStep === 0 && (curShader.flags & (ShaderFlags.ShortFur | ShaderFlags.MediumFur | ShaderFlags.LongFur))) {
-                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress!, materialFactory.buildFurMaterial.bind(materialFactory), posBuffer);
+                            const newShape = runSpecialBitstream(bitsOffset, dlInfo.specialBitAddress!, materialFactory.buildFurMaterial.bind(materialFactory), posBuffer, nrmBuffer);
 
                             let numFurLayers;
                             if (curShader.flags & ShaderFlags.ShortFur)
@@ -800,15 +820,19 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
     model.createModelShapes = () => {
         let instancePosBuffer;
-        if (model.hasFineSkinning)
+        let instanceNrmBuffer;
+        if (model.hasFineSkinning) {
             instancePosBuffer = dataCopy(model.originalPosBuffer);
-        else
+            instanceNrmBuffer = dataCopy(model.originalNrmBuffer);
+        } else {
             instancePosBuffer = model.originalPosBuffer;
+            instanceNrmBuffer = model.originalNrmBuffer;
+        }
 
-        const modelShapes = new ModelShapes(model, instancePosBuffer);
+        const modelShapes = new ModelShapes(model, instancePosBuffer, instanceNrmBuffer);
 
         for (let i = 0; i < bitsOffsets.length; i++)
-            runBitstream(modelShapes, bitsOffsets[i], i, modelShapes.posBuffer);
+            runBitstream(modelShapes, bitsOffsets[i], i, modelShapes.posBuffer, modelShapes.nrmBuffer);
 
         return modelShapes;
     }

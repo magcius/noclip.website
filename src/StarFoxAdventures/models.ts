@@ -10,7 +10,7 @@ import { GameInfo } from './scenes';
 import { SFAMaterial } from './materials';
 import { SFAAnimationController } from './animation';
 import { MaterialFactory } from './materials';
-import { dataSubarray, readUint32, mat4SetRowMajor } from './util';
+import { dataSubarray, readUint32, mat4SetRowMajor, mat4SetCol, setInt8Clamped, setInt16Clamped } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape } from './shapes';
@@ -57,7 +57,7 @@ export class ModelShapes {
     public furs: Fur[] = [];
     public waters: Water[] = [];
 
-    constructor(public model: Model, public posBuffer: DataView) {
+    constructor(public model: Model, public posBuffer: DataView, public nrmBuffer?: DataView) {
     }
 
     public reloadVertices() {
@@ -124,7 +124,6 @@ export class ModelShapes {
 }
 
 export interface FineSkin {
-    quantizeScale: number;
     vertexCount: number;
     bufferOffset: number;
     bone0: number;
@@ -148,10 +147,14 @@ export class Model {
     public materials: (SFAMaterial | undefined)[] = [];
 
     public originalPosBuffer: DataView;
+    public originalNrmBuffer: DataView;
 
     public hasFineSkinning: boolean = false;
     public hasBetaFineSkinning: boolean = false;
+    public fineSkinQuantizeScale: number = 0; // factor = 2 ^^ fineSkinQuantizeScale
+    public fineSkinNBTNormals: boolean = false;
     public posFineSkins: FineSkin[] = [];
+    public nrmFineSkins: FineSkin[] = [];
     
     public skeleton?: Skeleton;
 
@@ -197,7 +200,6 @@ export class ModelInstance {
 
     constructor(public model: Model) {
         const numMatrices = this.model.joints.length + this.model.coarseBlends.length;
-
         if (numMatrices !== 0) {
             this.skeletonInst = new SkeletonInstance(this.model.skeleton!);
             this.matrixPalette = nArray(numMatrices, () => mat4.create());
@@ -315,19 +317,16 @@ export class ModelInstance {
         if (!this.model.hasFineSkinning)
             return;
 
-        if (this.model.posFineSkins.length === 0)
-            return;
-
         const boneMtx0 = scratchMtx2;
         const boneMtx1 = scratchMtx3;
         const pos = scratchVec0;
 
         // The original game performs fine skinning on the CPU.
         // A more appropriate place for these calculations might be in a vertex shader.
+        const quant = 1 << this.model.fineSkinQuantizeScale;
+        const dequant = 1 / quant;
         for (let i = 0; i < this.model.posFineSkins.length; i++) {
             const skin = this.model.posFineSkins[i];
-            const quant = 1 << skin.quantizeScale;
-            const dequant = 1 / quant;
 
             mat4.copy(boneMtx0, this.matrixPalette[skin.bone0]);
             mat4.copy(boneMtx1, this.matrixPalette[skin.bone1]);
@@ -351,11 +350,58 @@ export class ModelInstance {
                 mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
                 vec3.transformMat4(pos, pos, scratchMtx0);
 
-                dst.setInt16(bufferOffs, pos[0] * quant);
-                dst.setInt16(bufferOffs + 2, pos[1] * quant);
-                dst.setInt16(bufferOffs + 4, pos[2] * quant);
+                setInt16Clamped(dst, bufferOffs, pos[0] * quant);
+                setInt16Clamped(dst, bufferOffs + 2, pos[1] * quant);
+                setInt16Clamped(dst, bufferOffs + 4, pos[2] * quant);
 
                 bufferOffs += 6;
+                weightOffs += 2;
+            }
+        }
+
+        for (let i = 0; i < this.model.nrmFineSkins.length; i++) {
+            const skin = this.model.nrmFineSkins[i];
+
+            mat4.copy(boneMtx0, this.matrixPalette[skin.bone0]);
+            mat4.copy(boneMtx1, this.matrixPalette[skin.bone1]);
+            if (!this.model.hasBetaFineSkinning) {
+                mat4.translate(boneMtx0, boneMtx0, this.model.invBindTranslations[skin.bone0]);
+                mat4.translate(boneMtx1, boneMtx1, this.model.invBindTranslations[skin.bone1]);
+            }
+
+            // FIXME: Handle NBT mode. I don't know whether any models use fine skinning together with NBT.
+            const src = this.model.originalNrmBuffer;
+            const dst = this.modelShapes.nrmBuffer!;
+            let bufferOffs = skin.bufferOffset;
+            let weightOffs = 0;
+            for (let j = 0; j < skin.vertexCount; j++) {
+                pos[0] = src.getInt8(bufferOffs);
+                pos[1] = src.getInt8(bufferOffs + 1);
+                pos[2] = src.getInt8(bufferOffs + 2);
+
+                const weight0 = skin.weights.getUint8(weightOffs) / 128;
+                const weight1 = skin.weights.getUint8(weightOffs + 1) / 128;
+                mat4.multiplyScalar(scratchMtx0, boneMtx0, weight0);
+                mat4.multiplyScalarAndAdd(scratchMtx0, scratchMtx0, boneMtx1, weight1);
+                // Clear the translation column to produce the normal matrix from
+                // the position matrix.
+                // Note: This method is only valid for position matrices that do not
+                // scale in the X, Y or Z direction; only rotation and translation
+                // are allowed.
+                // This method appears to be used by the original game, but it
+                // is not generally correct.
+                // Also, the original game does not rescale normals to magnitude 1.
+                // FIXME: verify against the original.
+                // For the correct and general formula to produce a normal matrix from a
+                // position matrix, see: <https://github.com/graphitemaster/normals_revisited>
+                mat4SetCol(scratchMtx0, 3, 0, 0, 0, 1);
+                vec3.transformMat4(pos, pos, scratchMtx0);
+
+                setInt8Clamped(dst, bufferOffs, pos[0]);
+                setInt8Clamped(dst, bufferOffs + 1, pos[1]);
+                setInt8Clamped(dst, bufferOffs + 2, pos[2]);
+
+                bufferOffs += 3;
                 weightOffs += 2;
             }
         }
