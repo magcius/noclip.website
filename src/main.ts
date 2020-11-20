@@ -64,6 +64,7 @@ import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 import * as Scenes_FFX from './FinalFantasyX/scenes';
+import * as Scenes_SuperMonkeyBall2 from './SuperMonkeyBall2/scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -154,6 +155,7 @@ const sceneGroups = [
     Scenes_SonicColors.sceneGroup,
     Scenes_StarFoxAdventures.sceneGroup,
     Scenes_SuperMarioOdyssey.sceneGroup,
+    Scenes_SuperMonkeyBall2.sceneGroup,
     Scenes_SuperSmashBrosMelee.sceneGroup,
     Scenes_WiiUTransferTool.sceneGroup,
     Scenes_Zelda_OcarinaOfTime.sceneGroup,
