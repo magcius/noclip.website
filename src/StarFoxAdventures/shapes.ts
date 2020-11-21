@@ -14,7 +14,7 @@ import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, Pack
 import { nArray } from '../util';
 import { MaterialRenderContext, SFAMaterial } from './materials';
 import { DrawStep, ModelRenderContext } from './models';
-import { computeModelView } from './util';
+import { arrayBufferSliceFromDataView, computeModelView } from './util';
 
 
 class MyShapeHelper {
@@ -116,9 +116,9 @@ export class ShapeGeometry {
     public pnMatrixMap: number[] = nArray(10, () => 0);
     private hasFineSkinning = false;
 
-    constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: ArrayBufferSlice, private isDynamic: boolean) {
+    constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: DataView, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
-        this.loadedVertexData = this.vtxLoader.parseDisplayList(displayList);
+        this.loadedVertexData = this.vtxLoader.parseDisplayList(arrayBufferSliceFromDataView(displayList));
         this.vtxLoader = compilePartialVtxLoader(this.vtxLoader, this.loadedVertexData);
         this.reloadVertices();
     }

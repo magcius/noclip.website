@@ -432,7 +432,7 @@ export class Explorer implements SceneGfx {
             vec3.copy(this.emitters[i].globalTranslation, scratchVec3);
 
             if (this.forceCentered)
-                vec3.set(this.emitters[i].emitterTrs, 0, 0, 0);
+                vec3.set(this.emitters[i].emitterTranslation, 0, 0, 0);
 
             const ctx = getDebugOverlayCanvas2D();
             drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, this.emitters[i].globalTranslation);

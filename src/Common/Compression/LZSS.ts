@@ -1,54 +1,44 @@
+
+// A decompressor for Haruhiko Okumura's LZSS, with MATCHLEN 18
+// http://read.pudn.com/downloads4/sourcecode/zip/14045/LZSS.C__.htm
+
 import ArrayBufferSlice from "../../ArrayBufferSlice";
 
-// https://github.com/niemasd/PyFF7/wiki/LZSS-Format
-// Section2
-// https://github.com/cebix/ff7tools/blob/master/ff7/lzss.py
-
 export function decompress(srcView: DataView, uncompressedSize: number) {
-    let dataSize = srcView.byteLength;
     const dstBuffer = new Uint8Array(uncompressedSize);
 
-    const MIN_REF_LEN = 3;
-    
-    let dstPos = 0;
-    let i = 0;
-    let j = 0;
+    let srcOffs = 0x00;
+    let dstOffs = 0x00;
 
-    while(i < dataSize){
-        const commandByte = srcView.getUint8(i);
-        i++;
-        
-        for (let bit = 0; bit < 8; bit++){
-            if(i >= dataSize){
-                break;
-            }
+    const N = 4096, F = 18;
+    const tempBuffer = new Uint8Array(N);
+    let tempBufferWP = N - F;
 
-            if(commandByte & ( 1 << bit)){
-                dstBuffer[dstPos] = srcView.getUint8(i);
-                dstPos++;
-                i++;
-                j++;
+    while (true) {
+        const commandByte = srcView.getUint8(srcOffs++);
+        for (let i = 0; i < 8; i++) {
+            if (commandByte & (1 << i)) {
+                // Literal.
+                uncompressedSize--;
+                tempBuffer[tempBufferWP++] = dstBuffer[dstOffs++] = srcView.getUint8(srcOffs++);
+                tempBufferWP %= N;
             } else {
-                let offset = srcView.getUint8(i) | ((srcView.getUint8(i+1) & 0xF0) << 4);
-                let length = (srcView.getUint8(i+1) & 0x0F) + MIN_REF_LEN;
-                i+=2;
-                
-                let ref = j - ((j + 0xFEE - offset) & 0xFFF);
-                while(length > 0){
-                    if(ref < 0){
-                        dstBuffer[dstPos] = 0x00;
-                        dstPos++;
-                    } else {
-                        dstBuffer[dstPos] = dstBuffer[ref];
-                        dstPos++;
-                    }
+                const b0 = srcView.getUint8(srcOffs++);
+                const b1 = srcView.getUint8(srcOffs++);
 
-                    j++;
-                    ref++;
-                    length--;
+                let tempBufferRP = b0 | ((b1 & 0xF0) << 4);
+                let copyLength = (b1 & 0x0F) + 3;
+
+                uncompressedSize -= copyLength;
+                while (copyLength--) {
+                    tempBuffer[tempBufferWP++] = dstBuffer[dstOffs++] = tempBuffer[tempBufferRP++];
+                    tempBufferWP %= N;
+                    tempBufferRP %= N;
                 }
             }
+
+            if (uncompressedSize <= 0)
+                return new ArrayBufferSlice(dstBuffer.buffer);
         }
     }
-    return new ArrayBufferSlice(dstBuffer.buffer);
 }

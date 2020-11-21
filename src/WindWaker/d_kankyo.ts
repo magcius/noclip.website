@@ -1248,11 +1248,16 @@ export function dKy_set_vrboxcol_ratio(envLight: dScnKy_env_light_c, ratio: numb
     dKy_set_vrboxkumocol_ratio(envLight, ratio);
 }
 
-export function dKy_get_seacolor(envLight: dScnKy_env_light_c, dstAmb: Color, dstDif: Color): void {
-    colorAdd(dstAmb, envLight.bgCol[1].C0, envLight.bgAdd[1].C0);
-    colorClampLDR(dstAmb, dstAmb);
-    colorAdd(dstDif, envLight.bgCol[1].K0, envLight.bgAdd[1].K0);
-    colorClampLDR(dstDif, dstDif);
+export function dKy_get_seacolor(envLight: dScnKy_env_light_c, dstAmb: Color | null, dstDif: Color | null): void {
+    if (dstAmb !== null) {
+        colorAdd(dstAmb, envLight.bgCol[1].C0, envLight.bgAdd[1].C0);
+        colorClampLDR(dstAmb, dstAmb);
+    }
+
+    if (dstDif !== null) {
+        colorAdd(dstDif, envLight.bgCol[1].K0, envLight.bgAdd[1].K0);
+        colorClampLDR(dstDif, dstDif);
+    }
 }
 
 export function dKy_change_colpat(envLight: dScnKy_env_light_c, idx: number): void {

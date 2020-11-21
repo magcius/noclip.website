@@ -6,7 +6,8 @@ import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 import { GameInfo } from './scenes';
 import { DataFetcher } from '../DataFetcher';
 import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation';
-import { ModelFetcher, ModelVersion } from './models';
+import { ModelFetcher } from './models';
+import { ModelVersion } from './modelloader';
 import { TextureFetcher, SFATextureFetcher } from './textures';
 import { MaterialFactory } from './materials';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -96,7 +97,7 @@ export class ResourceCollection {
         const pathBase = this.gameInfo.pathBase;
         const [texFetcher, modelFetcher, animColl, amapColl, modanimColl, tablesTab, tablesBin] = await Promise.all([
             texFetcherPromise,
-            ModelFetcher.create(this.device, this.gameInfo, dataFetcher, texFetcherPromise, this.materialFactory, this.animController, ModelVersion.Final),
+            ModelFetcher.create(this.gameInfo, texFetcherPromise, this.materialFactory, this.animController, ModelVersion.Final),
             AnimCollection.create(this.gameInfo, dataFetcher, this.subdirs[0]),
             AmapCollection.create(this.gameInfo, dataFetcher),
             ModanimCollection.create(this.gameInfo, dataFetcher),

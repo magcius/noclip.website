@@ -4,7 +4,7 @@ import * as CSAB from './csab';
 import * as CTXB from './ctxb';
 import * as CMB from './cmb';
 import * as ZAR from './zar';
-import * as LzS from '../Common/Compression/LzS';
+import * as LzS from './LzS';
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';

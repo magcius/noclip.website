@@ -8,12 +8,13 @@ import { SceneContext } from '../SceneBase';
 import { GameInfo, SFA_GAME_INFO } from './scenes';
 import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, applyKeyframeToModel } from './animation';
 import { SFARenderer, SceneRenderContext } from './render';
-import { ModelFetcher, ModelInstance, ModelVersion, ModelRenderContext } from './models';
+import { ModelFetcher, ModelInstance, ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { dataSubarray, createDownloadLink, readUint16 } from './util';
 import { TextureFetcher, SFATextureFetcher } from './textures';
 import { White } from '../Color';
+import { ModelVersion } from './modelloader';
 
 class ModelExhibitRenderer extends SFARenderer {
     private modelInst: ModelInstance | null | undefined = undefined; // undefined: Not set. null: Failed to load.
@@ -89,7 +90,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
     public downloadModel() {
         if (this.modelInst !== null && this.modelInst !== undefined) {
-            const link = createDownloadLink(this.modelInst.model.modelData, `model_${this.subdir}_${this.modelNum}${this.modelInst.model.modelVersion === ModelVersion.Beta ? '_beta' : ''}.bin`);
+            const link = createDownloadLink(this.modelInst.model.modelData, `model_${this.subdir}_${this.modelNum}${this.modelInst.model.version === ModelVersion.Beta ? '_beta' : ''}.bin`);
             link.click();
         }
     }
@@ -287,7 +288,7 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
         const animColl = await AnimCollection.create(this.gameInfo, context.dataFetcher, this.subdir);
         const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, this.modelVersion === ModelVersion.Beta);
         await texFetcher.loadSubdirs([this.subdir], context.dataFetcher);
-        const modelFetcher = await ModelFetcher.create(device, this.gameInfo, context.dataFetcher, Promise.resolve(texFetcher), materialFactory, animController, this.modelVersion);
+        const modelFetcher = await ModelFetcher.create(this.gameInfo, Promise.resolve(texFetcher), materialFactory, animController, this.modelVersion);
         await modelFetcher.loadSubdirs([this.subdir], context.dataFetcher);
 
         return new ModelExhibitRenderer(device, this.subdir, animController, materialFactory, texFetcher, modelFetcher, animColl, amapColl, modanimColl);

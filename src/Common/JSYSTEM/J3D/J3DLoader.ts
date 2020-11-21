@@ -1,7 +1,7 @@
 
 // Implements Nintendo's J3D formats (BMD, BDL, BTK, etc.)
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, quat, vec3 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../../../ArrayBufferSlice';
 import { Endianness } from '../../../endian';
@@ -16,6 +16,7 @@ import BitMap from '../../../BitMap';
 import { autoOptimizeMaterial } from '../../../gx/gx_render';
 import { Color, colorNewFromRGBA, colorCopy, colorNewFromRGBA8 } from '../../../Color';
 import { readBTI_Texture, BTI_Texture } from '../JUTTexture';
+import { quatFromEulerRadians } from '../../../MathHelpers';
 
 //#region Helpers
 // ResNTAB / JUTNameTab
@@ -311,8 +312,20 @@ function readDRW1Chunk(buffer: ArrayBufferSlice): DRW1 {
 //#region JNT1
 export class JointTransformInfo {
     public scale = vec3.fromValues(1.0, 1.0, 1.0);
-    public rotation = vec3.create();
+    public rotation = quat.create();
     public translation = vec3.create();
+
+    public copy(o: Readonly<JointTransformInfo>): void {
+        vec3.copy(this.scale, o.scale);
+        vec3.copy(this.translation, o.translation);
+        quat.copy(this.rotation, o.rotation);
+    }
+
+    public lerp(a: Readonly<JointTransformInfo>, b: Readonly<JointTransformInfo>, t: number): void {
+        vec3.lerp(this.scale, a.scale, b.scale, t);
+        vec3.lerp(this.translation, a.translation, b.translation, t);
+        quat.slerp(this.rotation, a.rotation, b.rotation, t);
+    }
 }
 
 export interface Joint {
@@ -372,9 +385,7 @@ function readJNT1Chunk(buffer: ArrayBufferSlice): JNT1 {
         transform.scale[0] = scaleX;
         transform.scale[1] = scaleY;
         transform.scale[2] = scaleZ;
-        transform.rotation[0] = rotationX;
-        transform.rotation[1] = rotationY;
-        transform.rotation[2] = rotationZ;
+        quatFromEulerRadians(transform.rotation, rotationX, rotationY, rotationZ);
         transform.translation[0] = translationX;
         transform.translation[1] = translationY;
         transform.translation[2] = translationZ;
@@ -1225,6 +1236,22 @@ function assocHierarchy(bmd: BMD): void {
     // Double-check that we have everything done.
     for (let i = 0; i < bmd.shp1.shapes.length; i++)
         assert(bmd.shp1.shapes[i].materialIndex !== -1);
+
+    // Go through and auto-optimize materials which don't use MULTI
+    for (let i = 0; i < bmd.mat3.materialEntries.length; i++) {
+        let multiCount = 0;
+        for (let j = 0; j < bmd.shp1.shapes.length; j++) {
+            const shp1 = bmd.shp1.shapes[j];
+            if (shp1.materialIndex !== i)
+                continue;
+
+            if (bmd.shp1.shapes[j].displayFlags === ShapeDisplayFlags.MULTI)
+                ++multiCount;
+        }
+
+        if (multiCount === 0)
+            bmd.mat3.materialEntries[i].gxMaterial.usePnMtxIdx = false;
+    }
 }
 
 export class BMD {
