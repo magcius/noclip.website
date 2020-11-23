@@ -1562,7 +1562,7 @@ class ViewerSettings extends Panel {
         setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
         setElementHighlighted(this.cameraControllerOrtho, cameraControllerClass === OrthoCameraController);
 
-        setElementVisible(this.fovSlider.elem, cameraControllerClass === FPSCameraController);
+        setElementVisible(this.fovSlider.elem, cameraControllerClass !== OrthoCameraController);
     }
 
     private invertYChanged(saveManager: SaveManager, key: string): void {
