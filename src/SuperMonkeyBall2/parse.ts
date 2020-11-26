@@ -1,8 +1,9 @@
 import { vec2, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString } from '../util';
-import * as Stagedef from './stagedef';
+import * as SD from './stagedef';
 import * as GX from '../gx/gx_enum';
+import { SensorHitChecker } from '../SuperMarioGalaxy/HitSensor';
 
 const COLI_HEADER_SIZE = 0x49C
 const GOAL_SIZE = 0x14;
@@ -17,12 +18,19 @@ const BACKGROUND_MODEL_SIZE = 0x38;
 const ANIM_KEYFRAME_SIZE = 0x14;
 const WORMHOLE_SIZE = 0x1C;
 const BUTTON_SIZE = 0x18;
+const COLI_TRI_SIZE = 0x40;
 
 function parseVec3f(view: DataView, offset: number): vec3 {
     const x = view.getFloat32(offset);
     const y = view.getFloat32(offset + 0x4);
     const z = view.getFloat32(offset + 0x8);
     return vec3.fromValues(x, y, z)
+}
+
+function parseVec2f(view: DataView, offset: number): vec2 {
+    const x = view.getFloat32(offset);
+    const y = view.getFloat32(offset + 0x4);
+    return vec2.fromValues(x, y);
 }
 
 function parseVec3s(view: DataView, offset: number): vec3 {
@@ -32,13 +40,13 @@ function parseVec3s(view: DataView, offset: number): vec3 {
     return vec3.fromValues(x, y, z);
 }
 
-function parseAnimKeyframeList(view: DataView, offset: number): Stagedef.AnimKeyframe[] {
-    const keyframes: Stagedef.AnimKeyframe[] = [];
+function parseAnimKeyframeList(view: DataView, offset: number): SD.AnimKeyframe[] {
+    const keyframes: SD.AnimKeyframe[] = [];
     const keyframeCount = view.getUint32(offset);
     const keyframeListOffs = view.getUint32(offset + 0x4);
     for (let i = 0; i < keyframeCount; i++) {
         const keyframeOffs = keyframeListOffs + i * ANIM_KEYFRAME_SIZE;
-        const easing = view.getUint32(keyframeOffs + 0x0) as Stagedef.Easing;
+        const easing = view.getUint32(keyframeOffs + 0x0) as SD.Easing;
         const time = view.getFloat32(keyframeOffs + 0x4);
         const value = view.getFloat32(keyframeOffs + 0x8);
         keyframes.push({ easing, time, value });
@@ -46,7 +54,31 @@ function parseAnimKeyframeList(view: DataView, offset: number): Stagedef.AnimKey
     return keyframes;
 }
 
-export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
+function parseAnimHeader(view: DataView, offset: number): SD.AnimHeader {
+    const rotXKeyframes = parseAnimKeyframeList(view, offset + 0x0);
+    const rotYKeyframes = parseAnimKeyframeList(view, offset + 0x8);
+    const rotZKeyframes = parseAnimKeyframeList(view, offset + 0x10);
+    const posXKeyframes = parseAnimKeyframeList(view, offset + 0x18);
+    const posYKeyframes = parseAnimKeyframeList(view, offset + 0x20);
+    const posZKeyframes = parseAnimKeyframeList(view, offset + 0x28);
+    return {
+        rotXKeyframes,
+        rotYKeyframes,
+        rotZKeyframes,
+        posXKeyframes,
+        posYKeyframes,
+        posZKeyframes,
+    };
+}
+
+function parseSlicedList<T>(view: DataView, offset: number, origList: T[], origListOffs: number, elemSize: number): T[] {
+    const count = view.getUint32(offset);
+    const listOffs = view.getUint32(offset + 0x4);
+    const idx = (listOffs - origListOffs) / elemSize;
+    return origList.slice(idx, idx + count);
+}
+
+export function parseStagedefLz(buffer: ArrayBufferSlice): SD.FileHeader {
     const view = buffer.createDataView();
 
     const magicNumberA = view.getUint32(0x0);
@@ -56,28 +88,28 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     const startOffs = view.getUint32(0x10);
     const startPos = parseVec3f(view, startOffs + 0x0);
     const startRot = parseVec3s(view, startOffs + 0xC);
-    const start: Stagedef.Start = { pos: startPos, rot: startRot };
+    const start: SD.Start = { pos: startPos, rot: startRot };
 
     // Fallout plane
     const falloutPlaneOffs = view.getUint32(0x14);
-    const falloutPlane: Stagedef.FalloutPlane = { y: view.getFloat32(falloutPlaneOffs) };
+    const falloutPlane: SD.FalloutPlane = { y: view.getFloat32(falloutPlaneOffs) };
 
     // Goals
     const goalCount = view.getUint32(0x18);
     const goalListOffs = view.getUint32(0x1C);
-    const goals: Stagedef.Goal[] = [];
+    const goals: SD.Goal[] = [];
     for (let i = 0; i < goalCount; i++) {
         const goalOffs = goalListOffs + i * GOAL_SIZE;
         const pos = parseVec3f(view, goalOffs + 0x0);
         const rot = parseVec3s(view, goalOffs + 0xc);
-        const type = view.getUint16(goalOffs + 0x12) as Stagedef.GoalType;
+        const type = view.getUint16(goalOffs + 0x12) as SD.GoalType;
         goals.push({ pos, rot, type });
     }
 
     // Bumpers
     const bumperCount = view.getUint32(0x20);
     const bumperListOffs = view.getUint32(0x24);
-    const bumpers: Stagedef.Bumper[] = [];
+    const bumpers: SD.Bumper[] = [];
     for (let i = 0; i < bumperCount; i++) {
         const bumperOffs = bumperListOffs + i * BUMPER_SIZE;
         const pos = parseVec3f(view, bumperOffs + 0x0);
@@ -89,7 +121,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     // Jamabars
     const jamabarCount = view.getUint32(0x28);
     const jamabarListOffs = view.getUint32(0x2C);
-    const jamabars: Stagedef.Jamabar[] = [];
+    const jamabars: SD.Jamabar[] = [];
     for (let i = 0; i < jamabarCount; i++) {
         const jamabarOffs = jamabarListOffs + i * JAMABAR_SIZE;
         const pos = parseVec3f(view, jamabarOffs + 0x0);
@@ -101,18 +133,18 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     // Bananas
     const bananaCount = view.getUint32(0x30);
     const bananaListOffs = view.getUint32(0x34);
-    const bananas: Stagedef.Banana[] = [];
+    const bananas: SD.Banana[] = [];
     for (let i = 0; i < bananaCount; i++) {
         const bananaOffs = bananaListOffs + i * BANANA_SIZE;
         const pos = parseVec3f(view, bananaOffs + 0x0);
-        const type = view.getUint32(bananaOffs + 0xC) as Stagedef.BananaType;
+        const type = view.getUint32(bananaOffs + 0xC) as SD.BananaType;
         bananas.push({ pos, type });
     }
 
     // Collision cones
     const coliConeCount = view.getUint32(0x38);
     const coliConeListOffs = view.getUint32(0x3C);
-    const coliCones: Stagedef.ColiCone[] = [];
+    const coliCones: SD.ColiCone[] = [];
     for (let i = 0; i < coliConeCount; i++) {
         const coliConeOffs = coliConeListOffs + i * COLI_CONE_SIZE;
         const pos = parseVec3f(view, coliConeOffs + 0x0);
@@ -124,7 +156,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     // Collision spheres
     const coliSphereCount = view.getUint32(0x40);
     const coliSphereListOffs = view.getUint32(0x44);
-    const coliSpheres: Stagedef.ColiSphere[] = [];
+    const coliSpheres: SD.ColiSphere[] = [];
     for (let i = 0; i < coliSphereCount; i++) {
         const coliSphereOffs = coliSphereListOffs + i * COLI_SPHERE_SIZE;
         const pos = parseVec3f(view, coliSphereOffs + 0x0);
@@ -135,7 +167,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     // Collision cylinders
     const coliCylinderCount = view.getUint32(0x48);
     const coliCylinderListOffs = view.getUint32(0x4C);
-    const coliCylinders: Stagedef.ColiCylinder[] = [];
+    const coliCylinders: SD.ColiCylinder[] = [];
     for (let i = 0; i < coliCylinderCount; i++) {
         const coliCylinderOffs = coliCylinderListOffs + i * COLI_CYLINDER_SIZE;
         const pos = parseVec3f(view, coliCylinderOffs + 0x0);
@@ -148,7 +180,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     // Fallout volumes
     const falloutVolumeCount = view.getUint32(0x50);
     const falloutVolumeListOffs = view.getUint32(0x54);
-    const falloutVolumes: Stagedef.FalloutVolume[] = [];
+    const falloutVolumes: SD.FalloutVolume[] = [];
     for (let i = 0; i < falloutVolumeCount; i++) {
         const falloutVolumeOffs = falloutVolumeListOffs + i * FALLOUT_VOLUME_SIZE;
         const pos = parseVec3f(view, falloutVolumeOffs + 0x0);
@@ -160,7 +192,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     // Background models
     const backgroundModelCount = view.getUint32(0x58);
     const backgroundModelListOffs = view.getUint32(0x5C);
-    const backgroundModels: Stagedef.BackgroundModel[] = [];
+    const backgroundModels: SD.BackgroundModel[] = [];
     for (let i = 0; i < backgroundModelCount; i++) {
         const backgroundModelOffs = backgroundModelListOffs + i * BACKGROUND_MODEL_SIZE;
         const modelName = readString(buffer, view.getUint32(backgroundModelOffs + 0x4));
@@ -177,7 +209,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
         const bgPosXKeyframes = parseAnimKeyframeList(view, backgroundAnimHeaderOffs + 0x28);
         const bgPosYKeyframes = parseAnimKeyframeList(view, backgroundAnimHeaderOffs + 0x30);
         const bgPosZKeyframes = parseAnimKeyframeList(view, backgroundAnimHeaderOffs + 0x38);
-        const backgroundAnimHeader: Stagedef.BackgroundAnimHeader = {
+        const backgroundAnimHeader: SD.BackgroundAnimHeader = {
             loopPointSeconds: bgLoopPointSeconds,
             rotXKeyframes: bgRotXKeyframes,
             rotYKeyframes: bgRotYKeyframes,
@@ -201,7 +233,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
         const bg2Unk9Keyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x48);
         const bg2Unk10Keyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x50);
         const bg2Unk11Keyframes = parseAnimKeyframeList(view, backgroundAnim2HeaderOffs + 0x58);
-        const backgroundAnim2Header: Stagedef.BackgroundAnim2Header = {
+        const backgroundAnim2Header: SD.BackgroundAnim2Header = {
             loopPointSeconds: bg2LoopPointSeconds,
             unk1Keyframes: bg2Unk1Keyframes,
             unk2Keyframes: bg2Unk2Keyframes,
@@ -220,10 +252,10 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
         const effectHeaderOffs = view.getUint32(backgroundModelOffs + 0x34);
         // TODO fx1 and fx2 keyfranmes
         const effectTextureScrollOffs = view.getUint32(effectHeaderOffs + 0x10);
-        const effectTextureScroll: Stagedef.TextureScroll = { speed: parseVec3f(view, effectTextureScrollOffs + 0x0) };
-        const effectHeader: Stagedef.EffectHeader = { fx1Keyframes: [], fx2Keyframes: [], textureScroll: effectTextureScroll };
+        const effectTextureScroll: SD.TextureScroll = { speed: parseVec3f(view, effectTextureScrollOffs + 0x0) };
+        const effectHeader: SD.EffectHeader = { fx1Keyframes: [], fx2Keyframes: [], textureScroll: effectTextureScroll };
 
-        const backgroundModel: Stagedef.BackgroundModel = {
+        const backgroundModel: SD.BackgroundModel = {
             modelName,
             pos,
             rot,
@@ -238,33 +270,33 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     // Foreground models
     const foregroundModelCount = view.getUint32(0x60);
     const foregroundModelListOffs = view.getUint32(0x64);
-    const foregroundModels: Stagedef.ForegroundModel[] = [];
+    const foregroundModels: SD.ForegroundModel[] = [];
     // TODO actually parse 'em
 
     // Reflective stage models
     const reflectiveStageModelCount = view.getUint32(0x70);
     const reflectiveStageModelListOffs = view.getUint32(0x74);
-    const reflectiveStageModels: Stagedef.ReflectiveStageModel[] = [];
+    const reflectiveStageModels: SD.ReflectiveStageModel[] = [];
     // TODO actually parse 'em
 
     // TODO Stage model instances
-    const stageModelInstances: Stagedef.StageModelInstance[] = [];
+    const stageModelInstances: SD.StageModelInstance[] = [];
 
     // TODO Stage model ptr As
-    const stageModelPtrAs: Stagedef.StageModelPtrA[] = [];
+    const stageModelPtrAs: SD.StageModelPtrA[] = [];
 
     // TODO Stage model ptr Bs
-    const stageModelPtrBs: Stagedef.StageModelPtrB[] = [];
+    const stageModelPtrBs: SD.StageModelPtrB[] = [];
 
     // Buttons
     const buttonCount = view.getUint32(0xA8);
     const buttonListOffs = view.getUint32(0xAC);
-    const buttons: Stagedef.Button[] = [];
+    const buttons: SD.Button[] = [];
     for (let i = 0; i < buttonCount; i++) {
         const buttonOffs = buttonListOffs + i * BUTTON_SIZE;
         const pos = parseVec3f(view, buttonOffs + 0x0);
         const rot = parseVec3s(view, buttonOffs + 0xC);
-        const playbackState = view.getUint16(buttonOffs + 0x12);
+        const playbackState = view.getUint16(buttonOffs + 0x12) as SD.PlaybackState;
         const animGroupId = view.getUint16(buttonOffs + 0x14);
         buttons.push({ pos, rot, playbackState, animGroupId });
     }
@@ -277,7 +309,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     const fogGreenKeyframes = parseAnimKeyframeList(view, fogAnimHeaderOffs + 0x18);
     const fogBlueKeyframes = parseAnimKeyframeList(view, fogAnimHeaderOffs + 0x20);
     const fogUnkKeyframes = parseAnimKeyframeList(view, fogAnimHeaderOffs + 0x28);
-    const fogAnimHeader: Stagedef.FogAnimHeader = {
+    const fogAnimHeader: SD.FogAnimHeader = {
         startDistanceKeyframes: fogStartDistanceKeyframes,
         endDistanceKeyframes: fogEndDistanceKeyframes,
         redKeyframes: fogRedKeyframes,
@@ -289,7 +321,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     // Wormholes
     const wormholeCount = view.getUint32(0xB4);
     const wormholeListOffs = view.getUint32(0xB8);
-    const wormholes: Stagedef.Wormhole[] = [];
+    const wormholes: SD.Wormhole[] = [];
     const wormholeDestOffsets: number[] = [];
     for (let i = 0; i < wormholeCount; i++) {
         const wormholeOffs = wormholeListOffs + i * WORMHOLE_SIZE;
@@ -298,7 +330,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
         // Record destination wormhole offsets, then add a reference after all wormholes are parsed.
         // For now, just link the wormhole to an empty object
         wormholeDestOffsets.push(view.getUint32(wormholeOffs + 0x18));
-        const wormhole: Stagedef.Wormhole = { pos: pos, rot: rot, destination: {} as Stagedef.Wormhole };
+        const wormhole: SD.Wormhole = { pos: pos, rot: rot, destination: {} as SD.Wormhole };
     }
     // Fix wormhole destinations
     for (let i = 0; i < wormholeCount; i++) {
@@ -313,7 +345,7 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
     const fogStartDistance = view.getFloat32(fogOffs + 0x4);
     const fogEndDistance = view.getFloat32(fogOffs + 0x8);
     const fogColor = parseVec3f(view, fogOffs + 0xc);
-    const fog: Stagedef.Fog = {
+    const fog: SD.Fog = {
         type: fogType,
         startDistance: fogStartDistance,
         endDistance: fogEndDistance,
@@ -322,11 +354,140 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): Stagedef.FileHeader {
 
     const coliHeaderCount = view.getUint32(0x8);
     const coliHeaderListOffs = view.getUint32(0xC);
-    const coliHeaders: Stagedef.ColiHeader[] = [];
+    const coliHeaders: SD.ColiHeader[] = [];
     for (let i = 0; i < coliHeaderCount; i++) {
         const coliHeaderOffs = coliHeaderListOffs + i * COLI_HEADER_SIZE;
-        const coliHeader = parseColiHeader(view, coliHeaderOffs);
-        coliHeaders.push(coliHeader);
+        const origin = parseVec3f(view, coliHeaderOffs + 0x0);
+        const initialRot = parseVec3s(view, coliHeaderOffs + 0xC);
+        const animType = view.getUint16(coliHeaderOffs + 0x12) as SD.AnimType;
+        const animHeader = parseAnimHeader(view, coliHeaderOffs + 0x14);
+        const conveyorVel = parseVec3f(view, coliHeaderOffs + 0x18);
+
+        // Parse coli grid tri indices first so we know how many tris we need to parse,
+        // as the tri list does not indicate its length
+        const coliTriListOffs = view.getUint32(coliHeaderOffs + 0x24);
+        const coliTriIdxsOffs = view.getUint32(coliHeaderOffs + 0x28);
+        const coliGridStartX = view.getFloat32(coliHeaderOffs + 0x2C);
+        const coliGridStartZ = view.getFloat32(coliHeaderOffs + 0x30);
+        const coliGridStepX = view.getFloat32(coliHeaderOffs + 0x34);
+        const coliGridStepZ = view.getFloat32(coliHeaderOffs + 0x38);
+        const coliGridCellsX = view.getUint32(coliHeaderOffs + 0x3C);
+        const coliGridCellsZ = view.getUint32(coliHeaderOffs + 0x40);
+
+        const coliTriIdxs: number[][] = [];
+
+        for (let z = 0; z < coliGridCellsZ; z++) {
+            for (let x = 0; x < coliGridCellsX; x++) {
+                const gridIdx = z * coliGridCellsX + x;
+                // Index into the array of s16 pointers
+                const triIdxListOffs = view.getUint32(coliTriIdxsOffs + gridIdx * 4);
+                const triIdxList: number[] = [];
+                for (let triIdxIdx = 0; ; triIdxIdx++) {
+                    const triIdx = view.getInt16(triIdxListOffs + triIdxIdx * 2);
+                    if (triIdx != -1) {
+                        triIdxList.push(triIdx);
+                    } else {
+                        break;
+                    }
+                }
+                coliTriIdxs.push(triIdxList);
+            }
+        }
+
+        let maxTriIdx = -1;
+        for (let idxList of coliTriIdxs) {
+            maxTriIdx = Math.max(maxTriIdx, Math.max(...idxList));
+        }
+        const numTris = maxTriIdx + 1;
+
+        const coliTris: SD.ColiTri[] = [];
+
+        // Parse collision tris
+        for (let i = 0; i < numTris; i++) {
+            const triOffs = coliTriListOffs + i * COLI_TRI_SIZE;
+            const point1Pos = parseVec3f(view, triOffs + 0x0);
+            const normal = parseVec3f(view, triOffs + 0xC);
+            // TODO is this really from XY, or is it XZ?
+            const rotFromXY = parseVec3s(view, triOffs + 0x18);
+            const point2Point1Delta = parseVec2f(view, triOffs + 0x20);
+            const point3Point1Delta = parseVec2f(view, triOffs + 0x28);
+            const tangent = parseVec2f(view, triOffs + 0x30);
+            const bitangent = parseVec2f(view, triOffs + 0x38);
+            coliTris.push({
+                point1Pos,
+                normal,
+                rotFromXY,
+                point2Point1Delta,
+                point3Point1Delta,
+                tangent,
+                bitangent,
+            });
+        }
+
+        // "sub" means a subset of the entire stage's lists
+        const subGoals = parseSlicedList(view, coliHeaderOffs + 0x44, goals, goalListOffs, GOAL_SIZE);
+        const subBumpers = parseSlicedList(view, coliHeaderOffs + 0x4C, bumpers, bumperListOffs, BUMPER_SIZE);
+        const subJamabars = parseSlicedList(view, coliHeaderOffs + 0x54, jamabars, jamabarListOffs, JAMABAR_SIZE);
+        const subBananas = parseSlicedList(view, coliHeaderOffs + 0x5C, bananas, bananaListOffs, BANANA_SIZE);
+        const subColiCones = parseSlicedList(view, coliHeaderOffs + 0x64, coliCones, coliConeListOffs, COLI_CONE_SIZE);
+        const subColiSpheres = parseSlicedList(view, coliHeaderOffs + 0x6C, coliSpheres, coliSphereListOffs, COLI_SPHERE_SIZE);
+        const subColiCylinders = parseSlicedList(view, coliHeaderOffs + 0x74, coliCylinders, coliCylinderListOffs, COLI_CYLINDER_SIZE);
+        const subFalloutVolumes = parseSlicedList(view, coliHeaderOffs + 0x7C, falloutVolumes, falloutVolumeListOffs, FALLOUT_VOLUME_SIZE);
+        // TODO reflective stage models, stage model instances, model A/B ptr
+
+        const animGroupId = view.getUint16(coliHeaderOffs + 0xA4);
+
+        const subButtons = parseSlicedList(view, coliHeaderOffs + 0xA8, buttons, buttonListOffs, BUTTON_SIZE);
+
+        const seesawSensitivity = view.getFloat32(coliHeaderOffs + 0xB8);
+        const seesawFriction = view.getFloat32(coliHeaderOffs + 0xBC);
+        const seesawSpring = view.getFloat32(coliHeaderOffs + 0xC0);
+
+        const subWormholes = parseSlicedList(view, coliHeaderOffs + 0xC4, wormholes, wormholeListOffs, WORMHOLE_SIZE);
+
+        const initialPlaybackState = view.getUint32(coliHeaderOffs + 0xCC) as SD.PlaybackState;
+        const loopPointSeconds = view.getFloat32(coliHeaderOffs + 0xD4);
+        const textureScrollOffs = view.getUint32(coliHeaderOffs + 0xD8);
+        const textureScroll: SD.TextureScroll = { speed: parseVec3f(view, textureScrollOffs) };
+
+        coliHeaders.push({
+            origin: origin,
+            initialRot: initialRot,
+            animType: animType,
+            animHeader: animHeader,
+            conveyorVel: conveyorVel,
+
+            coliTris: coliTris,
+            coliTriIdxs: coliTriIdxs,
+            coliGridStartX: coliGridStartX,
+            coliGridStartZ: coliGridStartZ,
+            coliGridStepX: coliGridStepX,
+            coliGridStepZ: coliGridStepZ,
+            coliGridCellsX: coliGridCellsX,
+            coliGridCellsZ: coliGridCellsZ,
+
+            goals: subGoals,
+            bumpers: subBumpers,
+            jamabars: subJamabars,
+            bananas: subBananas,
+            coliCones: subColiCones,
+            coliSpheres: subColiSpheres,
+            coliCylinders: subColiCylinders,
+            falloutVolumes: subFalloutVolumes,
+            reflectiveStageModels: [],
+            stageModelInstances: [],
+            stageModelPtrB: [],
+            animGroupId: animGroupId,
+
+            buttons: subButtons,
+            seesawSensitivity: seesawSensitivity,
+            seesawFriction: seesawFriction,
+            seesawSpring: seesawSpring,
+            wormholes: subWormholes,
+            initialPlaybackState: initialPlaybackState,
+            loopPointSeconds: loopPointSeconds,
+            textureScroll: textureScroll,
+        });
     }
 
     return {

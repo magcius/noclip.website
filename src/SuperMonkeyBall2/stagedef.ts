@@ -154,9 +154,15 @@ export interface ColiHeader {
     conveyorVel: vec3;
     
     coliTris: ColiTri[];
-    coliGrid: number[][];
-    coliGridStart: vec2;
-    coliGridStep: vec2;
+    // Given cell coord (x, z), coliTriIdxs[z * coliGridCellsX + x] gives you
+    // a list of tri indices in that cell
+    coliTriIdxs: number[][];
+    coliGridStartX: number;
+    coliGridStartZ: number;
+    coliGridStepX: number;
+    coliGridStepZ: number;
+    coliGridCellsX: number;
+    coliGridCellsZ: number;
 
     goals: Goal[];
     bumpers: Bumper[];
@@ -164,7 +170,7 @@ export interface ColiHeader {
     bananas: Banana[];
     coliCones: ColiCone[];
     coliSpheres: ColiSphere[];
-    coliCylinder: ColiCylinder[];
+    coliCylinders: ColiCylinder[];
     falloutVolumes: FalloutVolume[];
     reflectiveStageModels: ReflectiveStageModel[];
     stageModelInstances: StageModelInstance[];
@@ -177,7 +183,7 @@ export interface ColiHeader {
     seesawSpring: number;
     wormholes: Wormhole[];
     initialPlaybackState: PlaybackState;
-    animLoopPointSeconds: number;
+    loopPointSeconds: number;
     textureScroll: TextureScroll;
 }
 
@@ -245,8 +251,8 @@ export interface ColiTri {
     point1Pos: vec3;
     normal: vec3;
     rotFromXY: vec3;
-    point2DeltaPosFromPoint1: vec3;
-    point3DeltaPosFromPoint1: vec3;
+    point2Point1Delta: vec2;
+    point3Point1Delta: vec2;
     tangent: vec2;
     bitangent: vec2;
 }
