@@ -202,6 +202,9 @@ class ShadowController {
         if (this.visibleSyncHost)
             return isValidDraw(this.host);
 
+        if (!this.host.visibleScenario)
+            return false;
+
         return true;
     }
 

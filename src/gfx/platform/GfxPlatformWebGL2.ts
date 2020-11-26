@@ -1799,7 +1799,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             for (let i = 0; i < uniformBlocks.length; i++) {
                 const [m, blockName, contents] = uniformBlocks[i];
                 const blockIdx = gl.getUniformBlockIndex(prog, blockName);
-                gl.uniformBlockBinding(prog, blockIdx, i);
+                if (blockIdx !== -1)
+                    gl.uniformBlockBinding(prog, blockIdx, i);
             }
 
             const samplers = findall(deviceProgram.preprocessedVert, /^uniform .*sampler\S+ (\w+)(?:\[(\d+)\])?;$/gm);

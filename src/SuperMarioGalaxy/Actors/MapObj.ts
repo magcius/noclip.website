@@ -9,7 +9,7 @@ import { ColorKind } from '../../gx/gx_render';
 import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixSRT, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, Vec3One, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos } from '../ActorUtil';
+import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos, connectToSceneNoSilhouettedMapObjStrongLight, getBckFrameMax, setBrkFrame } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit } from '../Collision';
 import { registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
@@ -19,8 +19,8 @@ import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, HitSensor
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg7, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, resetPosition, ZoneAndLayer } from '../LiveActor';
-import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
-import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRailPosture, MapPartsRotator, MoveConditionType, MovePostureType, RailGuideType } from '../MapParts';
+import { getDeltaTimeFrames, getObjectName, getTimeFrames, SceneObj, SceneObjHolder } from '../Main';
+import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapPartsArgRailGuideType, getMapPartsArgShadowType, hasMapPartsShadow, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRailPosture, MapPartsRotator, MoveConditionType, MovePostureType, RailGuideType } from '../MapParts';
 import { isInWater } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
@@ -44,10 +44,12 @@ function setupInitInfoSimpleMapObj(initInfo: MapObjActorInitInfo): void {
     initInfo.connectToScene = true;
     initInfo.initEffect = true;
     initInfo.effectFilename = null;
+    initInfo.setupShadow();
 }
 
 function setupInitInfoTypical(initInfo: MapObjActorInitInfo, objName: string): void {
     // Special cases go here.
+
 }
 
 function setupInitInfoColorChangeArg0(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
@@ -56,6 +58,10 @@ function setupInitInfoColorChangeArg0(initInfo: MapObjActorInitInfo, infoIter: J
 
 function setupInitInfoTextureChangeArg1(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
     initInfo.texChangeFrame = fallback(getJMapInfoArg1(infoIter), -1);
+}
+
+function setupInitInfoShadowLengthArg2(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
+    initInfo.shadowDropLength = fallback(getJMapInfoArg1(infoIter), -1);
 }
 
 function setupInitInfoPlanet(initInfo: MapObjActorInitInfo): void {
@@ -124,8 +130,8 @@ class MapObjActorInitInfo<TNerve extends number = number> {
 }
 
 abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
-    private bloomModel: ModelObj | null = null;
-    private objName: string;
+    protected objName: string;
+    protected bloomModel: ModelObj | null = null;
     protected rotator: MapPartsRotator | null = null;
     protected railMover: MapPartsRailMover | null = null;
     protected railPosture: MapPartsRailPosture | null = null;
@@ -378,6 +384,7 @@ export class SimpleMapObj extends MapObjActor {
         setupInitInfoTypical(initInfo, getObjectName(infoIter));
         setupInitInfoColorChangeArg0(initInfo, infoIter);
         setupInitInfoTextureChangeArg1(initInfo, infoIter);
+        setupInitInfoShadowLengthArg2(initInfo, infoIter);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
         this.initFinish(sceneObjHolder, infoIter);
     }
@@ -658,6 +665,7 @@ export class UFOKinokoUnderConstruction extends MapObjActor {
         setupInitInfoSimpleMapObj(initInfo);
         setupInitInfoColorChangeArg0(initInfo, infoIter);
         setupInitInfoTextureChangeArg1(initInfo, infoIter);
+        setupInitInfoShadowLengthArg2(initInfo, infoIter);
         // Original actor tests isUFOKinokoBeforeConstruction() / isUFOKinokoUnderConstruction()
         // to determine which model to show. Here, we assume the player has unlocked the relevant flag...
         initInfo.setupModelName('UFOKinokoLandingAstro');
@@ -893,6 +901,9 @@ export class UFOKinoko extends MapObjActor<UFOKinokoNrv> {
         initInfo.setupRailMover();
         initInfo.setupRotator();
         // initInfo.setupBaseMtxFolowTarget();
+        const shadowType = getMapPartsArgShadowType(infoIter);
+        if (hasMapPartsShadow(shadowType))
+            initInfo.setupShadow();
         initInfo.setupNerve(UFOKinokoNrv.Wait);
         setupInitInfoColorChangeArg0(initInfo, infoIter);
         // setupNoUseLodCtrl
@@ -3810,5 +3821,49 @@ export class FireBar extends LiveActor<FireBarNrv> {
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestObjectData('FireBarCore');
         FireBarBall.requestArchives(sceneObjHolder);
+    }
+}
+
+const enum FlipPanelNrv { Front, FrontLand, Back, BackLand }
+export class FlipPanel extends MapObjActor<FlipPanelNrv> {
+    private isReverse: boolean;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo();
+        initInfo.setupDefaultPos();
+        initInfo.setupConnectToScene();
+        initInfo.setupEffect('FlipPanel');
+        // initInfo.setupSound();
+        initInfo.setupNerve(FlipPanelNrv.Front);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        this.modelInstance!.jointMatrixCalcCallback = this.jointCallback.bind(this);
+
+        this.isReverse = this.isObjectName('FlipPanelReverse');
+        if (this.isReverse) {
+            this.appearBloomModel(sceneObjHolder);
+        } else {
+            this.killBloomModel(sceneObjHolder);
+        }
+
+        startBck(this, 'PanelB');
+        setBckFrameAndStop(this, getBckFrameMax(this));
+
+        this.initFinish(sceneObjHolder, infoIter);
+    }
+
+    private jointCallback(dst: mat4, modelData: J3DModelData, i: number): void {
+        if (modelData.bmd.jnt1.joints[i].name !== 'Panel')
+            return;
+
+        if (this.getCurrentNerve() === FlipPanelNrv.BackLand || this.getCurrentNerve() === FlipPanelNrv.FrontLand) {
+            vec3.set(scratchVec3a, 0.0, -25.0, 0.0);
+            mat4.translate(dst, dst, scratchVec3a);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData(getObjectName(infoIter));
+        sceneObjHolder.modelCache.requestObjectData(`${getObjectName(infoIter)}Bloom`);
     }
 }
