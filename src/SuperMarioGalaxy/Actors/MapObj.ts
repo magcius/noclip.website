@@ -20,7 +20,7 @@ import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, get
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, resetPosition, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObj, SceneObjHolder } from '../Main';
-import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapPartsArgRailGuideType, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRailPosture, MapPartsRotator, MoveConditionType, MovePostureType, RailGuideType } from '../MapParts';
+import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapPartsArgRailGuideType, getMapPartsArgShadowType, hasMapPartsShadow, MapPartsRailGuideDrawer, MapPartsRailMover, MapPartsRailPosture, MapPartsRotator, MoveConditionType, MovePostureType, RailGuideType } from '../MapParts';
 import { isInWater } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
@@ -44,10 +44,12 @@ function setupInitInfoSimpleMapObj(initInfo: MapObjActorInitInfo): void {
     initInfo.connectToScene = true;
     initInfo.initEffect = true;
     initInfo.effectFilename = null;
+    initInfo.setupShadow();
 }
 
 function setupInitInfoTypical(initInfo: MapObjActorInitInfo, objName: string): void {
     // Special cases go here.
+
 }
 
 function setupInitInfoColorChangeArg0(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
@@ -56,6 +58,10 @@ function setupInitInfoColorChangeArg0(initInfo: MapObjActorInitInfo, infoIter: J
 
 function setupInitInfoTextureChangeArg1(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
     initInfo.texChangeFrame = fallback(getJMapInfoArg1(infoIter), -1);
+}
+
+function setupInitInfoShadowLengthArg2(initInfo: MapObjActorInitInfo, infoIter: JMapInfoIter): void {
+    initInfo.shadowDropLength = fallback(getJMapInfoArg1(infoIter), -1);
 }
 
 function setupInitInfoPlanet(initInfo: MapObjActorInitInfo): void {
@@ -378,6 +384,7 @@ export class SimpleMapObj extends MapObjActor {
         setupInitInfoTypical(initInfo, getObjectName(infoIter));
         setupInitInfoColorChangeArg0(initInfo, infoIter);
         setupInitInfoTextureChangeArg1(initInfo, infoIter);
+        setupInitInfoShadowLengthArg2(initInfo, infoIter);
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
         this.initFinish(sceneObjHolder, infoIter);
     }
@@ -658,6 +665,7 @@ export class UFOKinokoUnderConstruction extends MapObjActor {
         setupInitInfoSimpleMapObj(initInfo);
         setupInitInfoColorChangeArg0(initInfo, infoIter);
         setupInitInfoTextureChangeArg1(initInfo, infoIter);
+        setupInitInfoShadowLengthArg2(initInfo, infoIter);
         // Original actor tests isUFOKinokoBeforeConstruction() / isUFOKinokoUnderConstruction()
         // to determine which model to show. Here, we assume the player has unlocked the relevant flag...
         initInfo.setupModelName('UFOKinokoLandingAstro');
@@ -893,6 +901,9 @@ export class UFOKinoko extends MapObjActor<UFOKinokoNrv> {
         initInfo.setupRailMover();
         initInfo.setupRotator();
         // initInfo.setupBaseMtxFolowTarget();
+        const shadowType = getMapPartsArgShadowType(infoIter);
+        if (hasMapPartsShadow(shadowType))
+            initInfo.setupShadow();
         initInfo.setupNerve(UFOKinokoNrv.Wait);
         setupInitInfoColorChangeArg0(initInfo, infoIter);
         // setupNoUseLodCtrl

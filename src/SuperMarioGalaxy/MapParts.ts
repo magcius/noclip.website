@@ -9,7 +9,7 @@ import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3Unit
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
 import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection } from './ActorUtil';
-import { calcDropShadowVectorOrZero } from './Shadow';
+import { calcDropShadowVectorOrZero, initShadowVolumeSphere, onCalcShadowOneTime, setShadowDropLength } from './Shadow';
 import { getRailArg } from './RailRider';
 
 export const enum MoveConditionType { Unconditionally, WaitForPlayerOn }
@@ -19,13 +19,21 @@ export function getMapPartsArgMoveConditionType(infoIter: JMapInfoIter): MoveCon
 
 // Seems to be additional slots at 3, 4, 5...
 const enum SignMotionType { None, MoveStart, MoveWait }
-
 function getMapPartsArgSignMotionType(infoIter: JMapInfoIter): SignMotionType {
     return fallback(infoIter.getValueNumberNoInit('SignMotionType'), SignMotionType.None);
 }
 
 function hasMapPartsMoveStartSignMotion(signMotionType: SignMotionType): boolean {
     return signMotionType === SignMotionType.MoveStart || signMotionType === SignMotionType.MoveWait;
+}
+
+export const enum MapPartsShadowType { None }
+export function getMapPartsArgShadowType(infoIter: JMapInfoIter): MapPartsShadowType {
+    return fallback(infoIter.getValueNumberNoInit('ShadowType'), MapPartsShadowType.None);
+}
+
+export function hasMapPartsShadow(shadowType: MapPartsShadowType): boolean {
+    return shadowType !== MapPartsShadowType.None;
 }
 
 const enum MoveStopType { OnceAndWait, Mirror, Loop, OnceAndVanish }
@@ -675,10 +683,16 @@ export class MapPartsRailMover extends MapPartsFunction<MapPartsRailMoverNrv> {
 
 const enum MapPartsRailGuideDrawerNrv { HideAll, Draw, DrawForward }
 class MapPartsRailGuidePoint extends LiveActor {
-    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, modelName: string, public coord: number) {
+    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, modelName: string, public coord: number, private hasShadow: boolean) {
         super(actor.zoneAndLayer, sceneObjHolder, 'MapPartsRailGuidePoint');
         this.initModelManagerWithAnm(sceneObjHolder, modelName);
         calcRailPosAtCoord(this.translation, actor, coord);
+
+        if (this.hasShadow) {
+            initShadowVolumeSphere(sceneObjHolder, this, 20.0);
+            setShadowDropLength(this, null, 5000.0);
+            onCalcShadowOneTime(this);
+        }
 
         connectToSceneMapObjNoMovement(sceneObjHolder, this);
         this.makeActorDead(sceneObjHolder);
@@ -689,7 +703,7 @@ export class MapPartsRailGuideDrawer extends MapPartsFunction<MapPartsRailGuideD
     private guidePoints: MapPartsRailGuidePoint[] = [];
     private guideType: RailGuideType;
 
-    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, private pointModelName: string, public railId: number) {
+    constructor(sceneObjHolder: SceneObjHolder, actor: LiveActor, private pointModelName: string, public railId: number, infoIter: JMapInfoIter) {
         super(sceneObjHolder, actor, 'MapPartsRailGuideDrawer');
 
         this.guideType = fallback(getMapPartsArgRailGuideType(this.actor), RailGuideType.None);
@@ -697,7 +711,7 @@ export class MapPartsRailGuideDrawer extends MapPartsFunction<MapPartsRailGuideD
         if (this.guideType === RailGuideType.None) {
             this.spine.setNerve(MapPartsRailGuideDrawerNrv.HideAll);
         } else {
-            this.initGuidePoints(sceneObjHolder);
+            this.initGuidePoints(sceneObjHolder, infoIter);
             if (this.guideType === RailGuideType.DrawForward)
                 this.spine.setNerve(MapPartsRailGuideDrawerNrv.DrawForward);
             else
@@ -735,16 +749,19 @@ export class MapPartsRailGuideDrawer extends MapPartsFunction<MapPartsRailGuideD
             this.guidePoints[i].makeActorDead(sceneObjHolder);
     }
 
-    private initGuidePoints(sceneObjHolder: SceneObjHolder) {
+    private initGuidePoints(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const shadowType = getMapPartsArgShadowType(infoIter);
+        const hasShadow = hasMapPartsShadow(shadowType);
+
         const railLength = getRailTotalLength(this.actor);
 
         for (let coord = 0; coord < railLength; coord += 200.0)
-            this.guidePoints.push(new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord));
+            this.guidePoints.push(new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord, hasShadow));
 
         if (this.guideType === RailGuideType.DrawPoints) {
             for (let i = 0; i < this.actor.railRider!.getPointNum(); i++) {
                 const coord = this.actor.railRider!.getPointCoord(i);
-                const point = new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord);
+                const point = new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord, hasShadow);
                 vec3.set(point.scale, 2.0, 2.0, 2.0);
                 this.guidePoints.push(point);
             }
@@ -765,7 +782,7 @@ export class MapPartsRailGuideHolder extends NameObj {
             if (this.railDrawers[i].railId === railId)
                 return this.railDrawers[i];
 
-        const railDrawer = new MapPartsRailGuideDrawer(sceneObjHolder, actor, pointModelName, railId);
+        const railDrawer = new MapPartsRailGuideDrawer(sceneObjHolder, actor, pointModelName, railId, infoIter);
         this.railDrawers.push(railDrawer);
         return railDrawer;
     }
