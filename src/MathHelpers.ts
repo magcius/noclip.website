@@ -614,3 +614,7 @@ export function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
     else if (Math.abs(z) > Math.abs(y) && Math.abs(z) > Math.abs(x))
         vec3.set(dst, 0, 0, speed * Math.sign(z));
 }
+
+export function vec3SetAll(dst: vec3, v: number): void {
+    vec3.set(dst, v, v, v);
+}

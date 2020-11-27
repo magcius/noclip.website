@@ -230,6 +230,11 @@ export function isBtpStopped(actor: LiveActor): boolean {
     return actor.modelManager!.isBtpStopped();
 }
 
+export function getBvaFrameMax(actor: LiveActor): number {
+    const bvaCtrl = actor.modelManager!.getBvaCtrl();
+    return bvaCtrl.endFrame;
+}
+
 export function initDefaultPos(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): void {
     if (infoIter !== null) {
         getJMapInfoTrans(actor.translation, sceneObjHolder, infoIter);
@@ -970,6 +975,12 @@ export function makeAxisVerticalZX(axisRight: vec3, front: ReadonlyVec3): void {
     if (isNearZeroVec3(axisRight, 0.001))
         vecKillElement(axisRight, Vec3UnitX, front);
     vec3.normalize(axisRight, axisRight);
+}
+
+export function makeAxisCrossPlane(axisRight: vec3, axisUp: vec3, front: vec3): void {
+    makeAxisVerticalZX(axisRight, front);
+    vec3.cross(axisUp, front, axisRight);
+    vec3.normalize(axisUp, axisUp);
 }
 
 export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: number = 1.0, scratch = scratchVec3): void {
