@@ -338,7 +338,7 @@ function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.FileHeader {
         // Record destination wormhole offsets, then add a reference after all wormholes are parsed.
         // For now, just link the wormhole to an empty object
         wormholeDestOffsets.push(view.getUint32(wormholeOffs + 0x18));
-        const wormhole: SD.Wormhole = { pos: pos, rot: rot, destination: {} as SD.Wormhole };
+        wormholes.push({ pos: pos, rot: rot, destination: {} as SD.Wormhole });
     }
     // Fix wormhole destinations
     for (let i = 0; i < wormholeCount; i++) {
