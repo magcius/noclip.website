@@ -3,9 +3,10 @@ import { Color, colorFromHSL, White } from '../Color';
 import { drawWorldSpaceLine, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { BasicGXRendererHelper } from '../gx/gx_render';
-import { ColorAnimator } from '../oot3d/cmab';
 import { SceneContext } from '../SceneBase';
+import * as SD from './stagedef';
 import * as Viewer from '../viewer';
+import { parseStagedefLz } from './parse';
 
 /**
  * TODO:
@@ -22,6 +23,10 @@ const scratchVec3b: vec3 = vec3.create();
 const scratchColora: Color = White;
 
 class Mkb2Renderer extends BasicGXRendererHelper {
+
+    constructor(device: GfxDevice, private stagedef: SD.FileHeader) {
+        super(device);
+    }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         for (let x = -10; x < 10; x++) {
@@ -44,12 +49,14 @@ class Mkb2Renderer extends BasicGXRendererHelper {
 }
 
 class Mkb2SceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, private index: number, public name: string) {
+    constructor(public id: string, public name: string) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const lzBuffer = await context.dataFetcher.fetchData(`${pathBase}/files/stage/STAGE005.lz`);
-        const renderer = new Mkb2Renderer(device);
+        const stagedef = parseStagedefLz(lzBuffer);
+        console.log(stagedef);
+        const renderer = new Mkb2Renderer(device, stagedef);
         return renderer;
     }
 }
@@ -58,7 +65,7 @@ const id = 'supermonkeyball2'
 const name = 'Super Monkey Ball 2'
 
 const sceneDescs = [
-    new Mkb2SceneDesc('test', 1, 'test'),
+    new Mkb2SceneDesc('jungle', 'Jungle'),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

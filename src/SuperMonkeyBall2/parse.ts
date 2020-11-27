@@ -3,7 +3,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { readString } from '../util';
 import * as SD from './stagedef';
 import * as GX from '../gx/gx_enum';
-import { SensorHitChecker } from '../SuperMarioGalaxy/HitSensor';
+import * as LZSS from '../Common/Compression/LZSS'
 
 const COLI_HEADER_SIZE = 0x49C
 const GOAL_SIZE = 0x14;
@@ -79,6 +79,14 @@ function parseSlicedList<T>(view: DataView, offset: number, origList: T[], origL
 }
 
 export function parseStagedefLz(buffer: ArrayBufferSlice): SD.FileHeader {
+    const view = buffer.createDataView();
+    const compressedView = buffer.subarray(0x8).createDataView()
+    const uncompressedSize = view.getUint32(0x4, true);
+    const uncompressedBuffer = LZSS.decompress(compressedView, uncompressedSize);
+    return parseStagedefUncompressed(uncompressedBuffer);
+}
+
+function parseStagedefUncompressed(buffer: ArrayBufferSlice): SD.FileHeader {
     const view = buffer.createDataView();
 
     const magicNumberA = view.getUint32(0x0);
@@ -360,7 +368,8 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): SD.FileHeader {
         const origin = parseVec3f(view, coliHeaderOffs + 0x0);
         const initialRot = parseVec3s(view, coliHeaderOffs + 0xC);
         const animType = view.getUint16(coliHeaderOffs + 0x12) as SD.AnimType;
-        const animHeader = parseAnimHeader(view, coliHeaderOffs + 0x14);
+        const animHeaderOffs = view.getUint32(coliHeaderOffs + 0x14);
+        const animHeader = parseAnimHeader(view, animHeaderOffs);
         const conveyorVel = parseVec3f(view, coliHeaderOffs + 0x18);
 
         // Parse coli grid tri indices first so we know how many tris we need to parse,
@@ -380,14 +389,18 @@ export function parseStagedefLz(buffer: ArrayBufferSlice): SD.FileHeader {
             for (let x = 0; x < coliGridCellsX; x++) {
                 const gridIdx = z * coliGridCellsX + x;
                 // Index into the array of s16 pointers
+                // Original game had null offsets for empty grid cells,
+                // we just use empty lists
                 const triIdxListOffs = view.getUint32(coliTriIdxsOffs + gridIdx * 4);
                 const triIdxList: number[] = [];
-                for (let triIdxIdx = 0; ; triIdxIdx++) {
-                    const triIdx = view.getInt16(triIdxListOffs + triIdxIdx * 2);
-                    if (triIdx != -1) {
-                        triIdxList.push(triIdx);
-                    } else {
-                        break;
+                if (triIdxListOffs != 0) {
+                    for (let triIdxIdx = 0; ; triIdxIdx++) {
+                        const triIdx = view.getInt16(triIdxListOffs + triIdxIdx * 2);
+                        if (triIdx != -1) {
+                            triIdxList.push(triIdx);
+                        } else {
+                            break;
+                        }
                     }
                 }
                 coliTriIdxs.push(triIdxList);
