@@ -9,7 +9,7 @@ import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { vec3, mat4 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy, Color } from "../Color";
-import { computeModelMatrixR } from "../MathHelpers";
+import { computeModelMatrixR, vec3SetAll } from "../MathHelpers";
 import { DrawType, NameObj } from "./NameObj";
 import { LiveActor } from './LiveActor';
 import { TextureMapping } from '../TextureHolder';
@@ -307,7 +307,7 @@ class MultiEmitterCallBack extends JPA.JPAEmitterCallBack {
             emitter.setGlobalScale(scratchVec3c);
         } else {
             if (isInit && this.baseScale !== null) {
-                vec3.set(scratchVec3c, this.baseScale, this.baseScale, this.baseScale);
+                vec3SetAll(scratchVec3c, this.baseScale);
                 emitter.setGlobalScale(scratchVec3c);
             }
         }
@@ -1134,7 +1134,7 @@ export function emitEffectWithScale(sceneObjHolder: SceneObjHolder, actor: LiveA
     if (actor.effectKeeper === null)
         return;
     const emitter = actor.effectKeeper.createEmitter(sceneObjHolder, name);
-    vec3.set(scratchVec3a, scale, scale, scale);
+    vec3SetAll(scratchVec3a, scale);
     emitter!.setGlobalScale(scratchVec3a);
 }
 

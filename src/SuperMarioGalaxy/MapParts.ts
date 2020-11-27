@@ -5,7 +5,7 @@ import { Spine, isFirstStep, getStep, isGreaterEqualStep } from './Spine';
 import { NameObj } from './NameObj';
 import { mat4, vec3 } from 'gl-matrix';
 import { JMapInfoIter } from './JMapInfo';
-import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ } from '../MathHelpers';
+import { computeModelMatrixR, MathConstants, isNearZero, setMatrixAxis, Vec3UnitX, Vec3UnitY, Vec3UnitZ, vec3SetAll } from '../MathHelpers';
 import { SceneObjHolder, getDeltaTimeFrames } from './Main';
 import { ViewerRenderInput } from '../viewer';
 import { moveCoordAndTransToNearestRailPos, moveCoordAndTransToNearestRailPoint, moveCoordAndTransToRailStartPoint, getRailCoord, setRailCoord, getRailPos, reverseRailDirection, isRailGoingToEnd, getCurrentRailPointNo, getRailPartLength, getRailCoordSpeed, moveCoordAndFollowTrans, setRailCoordSpeed, moveCoordToStartPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointArg5, getCurrentRailPointArg7, calcRailPosAtCoord, getRailTotalLength, connectToSceneMapObjNoMovement, moveCoord, calcGravityVector, getRailDirection, isSameDirection } from './ActorUtil';
@@ -762,7 +762,7 @@ export class MapPartsRailGuideDrawer extends MapPartsFunction<MapPartsRailGuideD
             for (let i = 0; i < this.actor.railRider!.getPointNum(); i++) {
                 const coord = this.actor.railRider!.getPointCoord(i);
                 const point = new MapPartsRailGuidePoint(sceneObjHolder, this.actor, this.pointModelName, coord, hasShadow);
-                vec3.set(point.scale, 2.0, 2.0, 2.0);
+                vec3SetAll(point.scale, 2.0);
                 this.guidePoints.push(point);
             }
         }

@@ -17,7 +17,7 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';
 import { getVertexInputLocation } from '../../gx/gx_material';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../../gx/gx_render';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
+import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, nArray } from '../../util';
 import * as Viewer from '../../viewer';
@@ -439,8 +439,8 @@ export class BlackHole extends LiveActor {
     }
 
     private updateModelScale(rangeScale: number, holeScale: number): void {
-        vec3.set(this.scale, rangeScale, rangeScale, rangeScale);
-        vec3.set(this.blackHoleModel.scale, 0.5 * holeScale, 0.5 * holeScale, 0.5 * holeScale);
+        vec3SetAll(this.scale, rangeScale);
+        vec3SetAll(this.blackHoleModel.scale, 0.5 * holeScale);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -1044,7 +1044,7 @@ abstract class CoinGroup extends LiveActor<CoinGroupNrv> {
             coin.setShadowAndPoseModeFromJMapIter(infoIter);
             if (coin.useLocalGravity)
                 initDefaultPos(sceneObjHolder, coin, infoIter);
-            vec3.set(coin.scale, 1, 1, 1);
+            vec3SetAll(coin.scale, 1);
             coin.initialize(sceneObjHolder);
         }
 
@@ -1263,7 +1263,7 @@ export class MiniRouteGalaxy extends LiveActor {
             assertExists(infoIter.getValueNumber('PosOffsetZ')));
 
         vec3.add(this.translation, pointInfo.position, miniatureOffset);
-        vec3.set(this.scale, miniatureScale, miniatureScale, miniatureScale);
+        vec3SetAll(this.scale, miniatureScale);
 
         this.initModelManagerWithAnm(sceneObjHolder, miniatureName);
         this.initEffectKeeper(sceneObjHolder, null);
@@ -1791,7 +1791,7 @@ export class ShootingStar extends LiveActor<ShootingStarNrv> {
             }
 
             const scale = calcNerveRate(this, 20);
-            vec3.set(this.scale, scale, scale, scale);
+            vec3SetAll(this.scale, scale);
 
             if (isGreaterStep(this, 20)) {
                 this.setNerve(ShootingStarNrv.Shooting);
@@ -4282,7 +4282,7 @@ export class Trapeze extends LiveActor {
         calcMtxAxis(this.axisX, this.axisY, this.axisZ, scratchMatrix);
 
         this.height = this.scale[1] * 100.0;
-        vec3.set(this.scale, 1.0, 1.0, 1.0);
+        vec3SetAll(this.scale, 1.0);
 
         vec3.set(scratchVec3, this.translation[0], this.translation[1] - this.height, this.translation[2]);
         this.swingRopePoint = new SwingRopePoint(scratchVec3);
@@ -6900,7 +6900,7 @@ export class Pole extends LiveActor {
         this.useSquareEndCap = getJMapInfoBool(fallback(getJMapInfoArg0(infoIter), -1));
 
         this.height = 100.0 * this.scale[1];
-        vec3.set(this.scale, 1, 1, 1);
+        vec3SetAll(this.scale, 1.0);
 
         if (this.name.includes('NoModel')) {
             this.noModel = true;
@@ -7034,7 +7034,7 @@ export class BrightSun extends LiveActor {
 
     private controlSunModel(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         vec3.copy(this.sun.translation, this.translation);
-        vec3.set(this.sun.scale, 100.0, 100.0, 100.0);
+        vec3SetAll(this.sun.scale, 100.0);
 
         getCamPos(scratchVec3, viewerInput.camera);
         vec3.sub(scratchVec3, scratchVec3, this.translation);
@@ -7616,7 +7616,7 @@ class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
     }
 
     public setSize(size: number): void {
-        vec3.set(this.scale, size, size, size);
+        vec3SetAll(this.scale, size);
     }
 
     protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
@@ -7964,7 +7964,7 @@ export class MiniatureGalaxy extends LiveActor<MiniatureGalaxyNrv> {
         // namePlate
         this.makeActorAppeared(sceneObjHolder);
 
-        vec3.set(this.scale, 0.65, 0.65, 0.65);
+        vec3SetAll(this.scale, 0.65);
     }
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
@@ -8329,7 +8329,7 @@ class HeatHazeEffect extends LiveActor {
         computeEulerAngleRotationFromSRTMatrix(this.rotation, viewerInput.camera.worldMatrix);
 
         const scale = this.depth / 1000.0;
-        vec3.set(this.scale, scale, scale, scale);
+        vec3SetAll(this.scale, scale);
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {

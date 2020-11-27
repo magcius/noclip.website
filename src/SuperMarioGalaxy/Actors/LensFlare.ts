@@ -9,7 +9,7 @@ import { JMapInfoIter, getJMapInfoArg0 } from "../JMapInfo";
 import { fallback } from "../../util";
 import { LiveActor, ZoneAndLayer, isDead, dynamicSpawnZoneAndLayer } from "../LiveActor";
 import { isFirstStep } from "../Spine";
-import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1 } from "../../MathHelpers";
+import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers";
 import { divideByW } from "../../Camera";
 import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ";
 import { GfxDevice, GfxCompareMode } from "../../gfx/platform/GfxPlatform";
@@ -320,7 +320,7 @@ class LensFlareRing extends LensFlareModel {
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder) {
         super(zoneAndLayer, sceneObjHolder, 'LensFlare');
         this.fadeStep = 0.05;
-        vec3.set(this.scale, 0.135, 0.135, 0.135);
+        vec3SetAll(this.scale, 0.135);
     }
 
     protected appearAnim(sceneObjHolder: SceneObjHolder): void {

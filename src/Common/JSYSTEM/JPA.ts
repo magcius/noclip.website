@@ -25,7 +25,7 @@ import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8, Blue, Green, Yellow } from "../../Color";
 import { MaterialParams, ColorKind, PacketParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero } from "../../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll } from "../../MathHelpers";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
@@ -1352,7 +1352,7 @@ export class JPABaseEmitter {
         next_rndm(this.emitterManager.workData.random);
         copy_rndm(this.random, this.emitterManager.workData.random);
         mat4.identity(this.globalRotation);
-        vec3.set(this.globalScale, 1, 1, 1);
+        vec3SetAll(this.globalScale, 1);
         vec3.zero(this.globalTranslation);
         vec2.set(this.globalScale2D, 1, 1);
         colorCopy(this.globalColorPrm, White);
