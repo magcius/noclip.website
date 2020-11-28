@@ -128,6 +128,10 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     public setupShadow(filename: string = 'Shadow'): void {
         this.initShadow = filename;
     }
+
+    public setupHitSensor(): void {
+        this.initHitSensor = true;
+    }
 }
 
 abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
@@ -163,6 +167,12 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
         }
         if (initInfo.initNerve !== null)
             this.initNerve(initInfo.initNerve as TNerve);
+
+        if (initInfo.initHitSensor) {
+            // TODO(jstpierre): Add a proper hit sensor with a radius
+            this.initHitSensor();
+            addBodyMessageSensorMapObj(sceneObjHolder, this);
+        }
 
         if (isExistCollisionResource(this, this.objName)) {
             if (!initInfo.initHitSensor) {
@@ -517,6 +527,7 @@ export class CollapsePlane extends MapObjActor {
         const initInfo = new MapObjActorInitInfo();
         initInfo.setupDefaultPos();
         initInfo.setupConnectToScene();
+        initInfo.setupHitSensor();
         super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
         this.initFinish(sceneObjHolder, infoIter);
         this.initEffectKeeper(sceneObjHolder, null);

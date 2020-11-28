@@ -843,7 +843,7 @@ export const enum CollisionScaleType {
 function createCollisionParts(sceneObjHolder: SceneObjHolder, zoneAndLayer: ZoneAndLayer, resourceHolder: ResourceHolder, name: string, hitSensor: HitSensor, initialHostMtx: mat4, scaleType: CollisionScaleType, category: CollisionKeeperCategory): CollisionParts {
     const kclData = assertExists(resourceHolder.arc.findFileData(`${name}.kcl`));
     const paData = resourceHolder.arc.findFileData(`${name}.pa`);
-    return new CollisionParts(sceneObjHolder, zoneAndLayer, initialHostMtx, hitSensor, kclData, paData, category, scaleType);
+    return new CollisionParts(sceneObjHolder, zoneAndLayer, initialHostMtx, assertExists(hitSensor), kclData, paData, category, scaleType);
 }
 
 export function validateCollisionParts(sceneObjHolder: SceneObjHolder, parts: CollisionParts): void {
