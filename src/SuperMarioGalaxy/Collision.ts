@@ -204,7 +204,7 @@ export class CollisionParts {
             return scratchVec3a[0];
 
         let scale: number;
-        if (this.scaleType === CollisionScaleType.NotUsingScale) {
+        if (this.scaleType === CollisionScaleType.AutoEqualScaleOne) {
             // Invert the scale.
             scale = 1.0;
         } else if (this.scaleType === CollisionScaleType.AutoEqualScale) {
@@ -836,7 +836,7 @@ export function calcMapGround(sceneObjHolder: SceneObjHolder, dst: vec3, p0: Rea
 
 export const enum CollisionScaleType {
     AutoEqualScale,
-    NotUsingScale,
+    AutoEqualScaleOne,
     AutoScale,
 }
 

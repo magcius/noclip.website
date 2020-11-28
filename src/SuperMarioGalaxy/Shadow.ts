@@ -1161,15 +1161,19 @@ export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveAct
     else
         throw "whoops";
 
-    if (shadowFile === null)
-        return;
-
     actor.shadowControllerList = new ShadowControllerList();
 
-    const shadowData = createCsvParser(shadowFile);
-    shadowData.mapRecords((infoIter) => {
-        addShadowFromCSV(sceneObjHolder, actor, infoIter);
-    });
+    if (shadowFile !== null) {
+        const shadowData = createCsvParser(shadowFile);
+        shadowData.mapRecords((infoIter) => {
+            addShadowFromCSV(sceneObjHolder, actor, infoIter);
+        });
+    } else {
+        // Create a dummy shadow controller.
+        const controller = new ShadowController(sceneObjHolder, actor, name);
+        actor.shadowControllerList!.addController(controller);
+        return;
+    }
 }
 
 function createShadowControllerSurfaceParam(sceneObjHolder: SceneObjHolder, actor: LiveActor, name = 'default'): ShadowController {
