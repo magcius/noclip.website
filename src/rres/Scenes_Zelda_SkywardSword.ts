@@ -668,9 +668,9 @@ const sceneDescs = [
 	new SkywardSwordSceneDesc("F018r", "Item Check Girl Peatrice’s House"),
 	new SkywardSwordSceneDesc("F019r", "Bamboo Island"),
 	new SkywardSwordSceneDesc("F020", "The Sky"),
-	// new SkywardSwordSceneDesc("S000", "Skyloft Silent Realm"),
-	// new SkywardSwordSceneDesc("F021", "Cutscene Sky"),
-	// new SkywardSwordSceneDesc("F023", "Inside the Thunderhead"),
+	new SkywardSwordSceneDesc("S000", "Skyloft Silent Realm"),
+	new SkywardSwordSceneDesc("F021", "Cutscene Sky"),
+	// new SkywardSwordSceneDesc("F023", "Inside the Thunderhead"), // missing object
 	new SkywardSwordSceneDesc("D000", "Waterfall Cave"),
 
     "Faron Woods",
@@ -681,7 +681,7 @@ const sceneDescs = [
     new SkywardSwordSceneDesc("B100_1", "Skyview Spring"),
 	new SkywardSwordSceneDesc("F102_2", "Faron's Lair"),
 	new SkywardSwordSceneDesc("F101", "Deep Woods"),
-	// new SkywardSwordSceneDesc("S100", "Faron Silent Realm"),
+	new SkywardSwordSceneDesc("S100", "Faron Silent Realm"),
 	new SkywardSwordSceneDesc("F102", "Lake Floria"),
 	new SkywardSwordSceneDesc("F102_1", "Outside Ancient Cistern"),
 	new SkywardSwordSceneDesc("D101", "Ancient Cistern"),
@@ -699,7 +699,7 @@ const sceneDescs = [
     new SkywardSwordSceneDesc("D200", "Earth Temple"),
     new SkywardSwordSceneDesc("B200", "Earth Temple (Boss)"),
     new SkywardSwordSceneDesc("B210", "Earth Spring"),
-	// new SkywardSwordSceneDesc("S200", "Eldin Silent Realm"),
+	new SkywardSwordSceneDesc("S200", "Eldin Silent Realm"),
 	new SkywardSwordSceneDesc("F201_3", "Fire Sanctuary Entrance"),
 	new SkywardSwordSceneDesc("D201", "Fire Sanctuary (A)"),
     new SkywardSwordSceneDesc("D201_1", "Fire Sanctuary (B)"),
@@ -723,7 +723,7 @@ const sceneDescs = [
     new SkywardSwordSceneDesc("B300", "Lanayru Mining Facility (Boss)"),
 	new SkywardSwordSceneDesc("F300_5", "Lanayru Mining Facility (Back)"),
 	new SkywardSwordSceneDesc("F300_4", "Temple of Time"),
-	// new SkywardSwordSceneDesc("S300", "Lanayru Silent Realm"),
+	new SkywardSwordSceneDesc("S300", "Lanayru Silent Realm"),
 	new SkywardSwordSceneDesc("F301", "Sand Sea Docks"),
 	new SkywardSwordSceneDesc("F301_1", "Sand Sea"),
 	new SkywardSwordSceneDesc("F301_2", "Pirate Stronghold"),
@@ -732,7 +732,7 @@ const sceneDescs = [
 	new SkywardSwordSceneDesc("F301_4", "Shipyard"),
 	new SkywardSwordSceneDesc("F301_7", "Shipyard Construction Bay"),
 	new SkywardSwordSceneDesc("D301", "Sandship (A)"),
-	// new SkywardSwordSceneDesc("D301_1", "Sandship (B)"), // doesn't seem to work, probably only objects
+	// new SkywardSwordSceneDesc("D301_1", "Sandship (B)"), // doesn't seem to work, probably only actors
 	new SkywardSwordSceneDesc("B301", "Sandship (Boss)"),
 	new SkywardSwordSceneDesc("F302", "Lanayru Gorge"),
     new SkywardSwordSceneDesc("F303", "Lanayru Caves"),
