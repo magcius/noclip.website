@@ -471,6 +471,10 @@ export function isSensorPlayerOrRide(sensor: HitSensor): boolean {
     return isSensorPlayer(sensor) || isSensorRide(sensor);
 }
 
+export function isSensorEnemyAttack(sensor: HitSensor): boolean {
+    return sensor.isType(HitSensorType.EnemyAttack);
+}
+
 export function sendMsgEnemyAttack(sceneObjHolder: SceneObjHolder, recvSensor: HitSensor, sendSensor: HitSensor): boolean {
     return recvSensor.receiveMessage(sceneObjHolder, MessageType.EnemyAttack, sendSensor);
 }
@@ -548,6 +552,14 @@ export function addHitSensorAtJointEnemy(sceneObjHolder: SceneObjHolder, actor: 
 export function addHitSensorAtJointEnemyAttack(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, jointName: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
     const jointMtx = assertExists(getJointMtxByName(actor, jointName));
     return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.EnemyAttack, pairwiseCapacity, radius, actor, jointMtx, offset);
+}
+
+export function addHitSensorMtxEnemy(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, mtx: ReadonlyMat4, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.Enemy, pairwiseCapacity, radius, actor, mtx, offset);
+}
+
+export function addHitSensorMtxEnemyAttack(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, mtx: ReadonlyMat4, radius: number, offset: ReadonlyVec3) {
+    return actor.hitSensorKeeper!.addMtx(sceneObjHolder, name, HitSensorType.EnemyAttack, pairwiseCapacity, radius, actor, mtx, offset);
 }
 
 export function invalidateHitSensor(actor: LiveActor, name: string): void {

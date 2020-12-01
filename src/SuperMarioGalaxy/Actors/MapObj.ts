@@ -3997,3 +3997,32 @@ export class SmallStone extends LiveActor {
             this.members[i].movementByHost();
     }
 }
+
+const enum AnmModelObjNrv { Wait, Move, Done }
+export class AnmModelObj extends MapObjActor<AnmModelObjNrv> {
+    private moveJointPos: vec3;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo<AnmModelObjNrv>();
+        setupInitInfoSimpleMapObj(initInfo);
+        initInfo.setupNerve(AnmModelObjNrv.Move);
+        setupInitInfoTypical(initInfo, getObjectName(infoIter));
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+
+        const moveJointMtx = getJointMtxByName(this, 'Move');
+        this.moveJointPos = vec3.create();
+        if (moveJointMtx !== null) {
+            getMatrixTranslation(this.moveJointPos, moveJointMtx);
+        } else {
+            vec3.copy(this.moveJointPos, this.translation);
+        }
+
+        this.initFinish(sceneObjHolder, infoIter);
+    }
+
+    public initCaseUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+
+    public initCaseNoUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+}

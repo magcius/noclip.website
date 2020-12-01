@@ -249,6 +249,7 @@ class SwitchWatcher {
     public listenerAppear: SwitchEventListener | null = null;
 
     constructor(public switchCtrl: StageSwitchCtrl) {
+        assertExists(switchCtrl);
     }
 
     private checkSwitch(sceneObjHolder: SceneObjHolder, listener: SwitchEventListener, bit: number, isOn: boolean): void {

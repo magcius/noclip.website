@@ -16,7 +16,7 @@ import { OceanBowl } from "./Actors/OceanBowl";
 import { OceanSphere } from './Actors/OceanSphere';
 import { SwitchSynchronizer } from './Switch';
 import { DemoExecutor } from './Demo';
-import { BallBeamer, DinoPackun, Dossun, EyeBeamer, Hanachan, HomingKillerLauncher, Karon, KoteBug, Kuribo, KuriboMini, Mogu, NokonokoLand, OnimasuJump, RingBeamer, Snakehead, Takobo, Unizo } from './Actors/Enemy';
+import { BallBeamer, DinoPackun, Dossun, EyeBeamer, Hanachan, HomingKillerLauncher, Kanina, Karon, KoteBug, Kuribo, KuriboMini, Mogu, NokonokoLand, OnimasuJump, Petari, RingBeamer, Snakehead, Takobo, Unizo } from './Actors/Enemy';
 
 export interface NameObjFactory {
     new(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj;
@@ -124,6 +124,11 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("Snakehead",                      Snakehead),
     _("SnakeheadSmall",                 Snakehead),
     _("Hanachan",                       Hanachan),
+    _("Kanina",                         Kanina),
+    _("KaninaRed",                      Kanina),
+
+    // TODO(jstpierre): Figure out what to do with this
+    N("Petari"),
 
     // NPCs
     _("Butler",                         Butler),
@@ -261,6 +266,9 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("FlowerGroup",                    GameBits.SMG2),
     N("FlowerBlueGroup",                GameBits.SMG2),
     N("CutBushGroup",                   GameBits.SMG2),
+
+    // Get rid of CocoNut for now, since they don't look right and would take a while to implement properly
+    N("CocoNut"),
 
     // Sun
     _("BrightSun",                      BrightSun),
