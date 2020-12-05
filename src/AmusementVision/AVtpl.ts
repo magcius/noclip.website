@@ -9,6 +9,7 @@ import { assert } from '../util';
 export interface AVTexture {
     name: string;
     format: GX.TexFormat;
+    offs: number;
     width: number;
     height: number;
     mipCount: number;
@@ -22,7 +23,7 @@ export interface AVTpl{
     textures: AVTexture[];
 }
 
-function parseAvTplHeader(buffer: ArrayBufferSlice, idx:number): AVTexture {
+function parseAvTplHeader(buffer: ArrayBufferSlice, idx:number, basebuffer: ArrayBufferSlice): AVTexture {
     let view = buffer.createDataView();
 
     assert(view.getUint16(0x0E) == 0x1234);
@@ -32,26 +33,30 @@ function parseAvTplHeader(buffer: ArrayBufferSlice, idx:number): AVTexture {
     const width = view.getUint16(0x08);
     const height = view.getUint16(0x0A);
     const mipCount = view.getUint16(0x0C);
-
-    const data = buffer.slice(offs);
+    const data = basebuffer.slice(offs);
     
     const paletteFormat:GX.TexPalette  | null = null;
     const paletteData:ArrayBufferSlice | null = null;
 
-
-    return { name, format, width, height, mipCount, data, paletteFormat, paletteData };
+    return { name, format, offs, width, height, mipCount, data, paletteFormat, paletteData };
 }
 
 export function parseAvTpl(buffer: ArrayBufferSlice):AVTpl {
     let view = buffer.createDataView();
     const textures: AVTexture[] = [];
 
-    let count = view.getUint32(0x00);
-
-    for (let i = 0; i < count; i++){
-        const texture = parseAvTplHeader(buffer.slice(0x04), i);
+    let entryCount = view.getUint32(0x00);
+    let enableCount = 0;
+    for (let i = 0; i < entryCount; i++){
+        let offs = 0x10 * i + 0x04;
+        const texture = parseAvTplHeader(buffer.slice(offs), i, buffer);
+        if (texture.offs === 0 && texture.width === 0 && texture.height === 0 && texture.mipCount === 0){
+            continue;
+        }
         textures.push( texture );
+        enableCount++;
     }
+    const count = enableCount;
 
     return { count, textures };
 }

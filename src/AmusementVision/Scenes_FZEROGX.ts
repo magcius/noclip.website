@@ -1,17 +1,22 @@
-﻿import * as  GMA from './gma';
+﻿import * as Viewer from '../viewer';
+import * as  GMA from './gma';
 import * as AVtpl from './AVtpl';
 import * as LZSS from "../Common/Compression/LZSS"
 
 import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance } from './render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import * as Viewer from '../viewer';
 import { SceneContext } from '../SceneBase';
 import { BasicRenderTarget, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import AnimationController from '../AnimationController';
-import { fillSceneParamsDataOnTemplate, GXTextureHolder } from '../gx/gx_render';
+import { fillSceneParamsDataOnTemplate, } from '../gx/gx_render';
+import { executeOnPass } from '../gfx/render/GfxRenderer';
+
+enum FZEROGXPass {
+    SKYBOX = 0x01,
+    MAIN = 0x02,
+}
 
 export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
@@ -28,6 +33,8 @@ export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
+
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
@@ -41,8 +48,11 @@ export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
         
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
-
+        executeOnPass(this.renderHelper.renderInstManager, device, mainPassRenderer, FZEROGXPass.MAIN);
+        this.renderHelper.renderInstManager.resetRenderInsts();
         return mainPassRenderer;
     }
 
@@ -59,6 +69,7 @@ export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
     }
 }
 
+const pathBase = `FZEROGX`;
 class FZEROGXSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public backGroundName: string, public name: string) {
     }
@@ -74,7 +85,7 @@ class FZEROGXSceneDesc implements Viewer.SceneDesc {
         return sceneRenderer;
     }
 
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         // decompress F-ZERO GX's LZSS
         function decompressLZSS(buffer:ArrayBufferSlice){
             const srcView = buffer.createDataView();
@@ -82,29 +93,31 @@ class FZEROGXSceneDesc implements Viewer.SceneDesc {
             return LZSS.decompress(buffer.slice(8).createDataView(), uncompressedSize);
         }
 
-        const sceneRender = new FZEROGXSceneRenderer(device);
-        const cache = sceneRender.renderHelper.renderInstManager.gfxRenderCache;
-
         const dataFetcher = context.dataFetcher;
-        const stageDir = `FZEROGX/stage/`;
+        const stageId = `st${this.id}`;
+        const gmaPath = `${pathBase}/stage/${stageId}.gma.lz`;
+        const tplPath = `${pathBase}/stage/${stageId}.tpl.lz`;
+        return Promise.all([dataFetcher.fetchData(gmaPath), dataFetcher.fetchData(tplPath)]).then(([gmaData, tplData]) => {
+            const sceneRender = new FZEROGXSceneRenderer(device);
+            context.destroyablePool.push(sceneRender);
+            const cache = sceneRender.renderHelper.renderInstManager.gfxRenderCache;
 
-        // gma
-        let buffer = await dataFetcher.fetchData(stageDir+`st${this.id}.gma.lz`);
-        const gma = GMA.parse(decompressLZSS(buffer));
-        // tpl
-        buffer = await dataFetcher.fetchData(stageDir+`st${this.id}.tpl.lz`);
-        const tpl = AVtpl.parseAvTpl(decompressLZSS(buffer));
-        sceneRender.textureHolder.addMaterialSetTextures(device, tpl);
+            // tpl
+            const tpl = AVtpl.parseAvTpl(decompressLZSS(tplData));  
+            sceneRender.textureHolder.addAVtplTextures(device, tpl);
+            // gma
+            const gma = GMA.parse(decompressLZSS(gmaData));
+            for(let i = 0; i < gma.gcmfEntrys.length; i++){
+                const modelData = new GcmfModel(device, cache, gma.gcmfEntrys[i]);
+                const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, modelData);
+                modelInstance.passMask = FZEROGXPass.MAIN;
 
-        for(let i = 0; i < gma.gcmfEntrys.length; i++){
-            const modelData = new GcmfModel(device, cache, gma.gcmfEntrys[i]);
-            const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, modelData);
+                sceneRender.modelData.push(modelData);
+                sceneRender.modelInstances.push(modelInstance);
+            }
 
-            sceneRender.modelData.push(modelData);
-            sceneRender.modelInstances.push(modelInstance);
-        }
- 
-        return sceneRender;
+            return sceneRender;
+        });
     }
 }
 

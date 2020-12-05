@@ -1,26 +1,24 @@
 ﻿import * as GMA from './gma';
 import * as GX_Material from '../gx/gx_material';
+import { AVTexture, AVTpl } from './AVtpl';
 
+import { LoadedVertexDraw } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxDevice, GfxNormalizedViewportCoords, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { autoOptimizeMaterial, ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, PacketParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
-import { mat4, vec3 } from 'gl-matrix';
+import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, PacketParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
+import { mat4 } from 'gl-matrix';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
-import { Color, colorCopy } from '../Color';
-import AnimationController from '../AnimationController';
+import { Color} from '../Color';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyBias, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { computeNormalMatrix } from '../MathHelpers';
 import { nArray } from '../util';
-import { compileVtxLoaderMultiVat, LoadedVertexData, LoadedVertexDraw, VtxLoader } from '../gx/gx_displaylist';
 import { AABB, IntersectionState } from '../Geometry';
 import { ViewerRenderInput } from '../viewer';
-import { TextureMapping } from '../TextureHolder';
-import { AVTexture, AVTpl } from './AVtpl';
 
 
 export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
-    public addMaterialSetTextures(device: GfxDevice, avtpl: AVTpl): void {
+    public addAVtplTextures(device: GfxDevice, avtpl: AVTpl): void {
         this.addTextures(device, avtpl.textures);
     }
 }
@@ -38,9 +36,8 @@ export class GcmfModel {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public gcmfEntry: GMA.GcmfEntry, private materialHacks?: GX_Material.GXMaterialHacks) {
         this.bufferCoalescer = loadedDataCoalescerComboGfx(device, gcmfEntry.gcmf.shapes.map((shape) => shape.loadedVertexData));
- 
 
-        let gcmf = gcmfEntry.gcmf;
+        const gcmf = gcmfEntry.gcmf;
         for (let i = 0; i < gcmf.shapes.length; i++) {
             const shape = gcmf.shapes[i];
             const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[i];
@@ -207,8 +204,6 @@ export class GcmfModelInstance {
     public materialInstances: MaterialInstance[] = [];
 
     private instanceStateData = new InstanceStateData();
-
-    private debugBones = false;
 
     public colorOverrides: Color[] = [];
 
