@@ -14,7 +14,7 @@ import { mat4 } from 'gl-matrix';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
-import BitMap, { bitMapSerialize, bitMapDeserialize } from '../BitMap';
+import BitMap, { bitMapSerialize, bitMapDeserialize, bitMapGetSerializedByteLength } from '../BitMap';
 import { CMDL } from './cmdl';
 import { colorNewCopy, OpaqueBlack } from '../Color';
 
@@ -130,7 +130,7 @@ export class RetroSceneRenderer implements Viewer.SceneGfx {
 
     public deserializeSaveState(src: ArrayBuffer, offs: number, byteLength: number): number {
         const view = new DataView(src);
-        const numBytes = (this.areaRenderers.length + 7) >>> 3;
+        const numBytes = bitMapGetSerializedByteLength(this.areaRenderers.length);
         if (offs + numBytes <= byteLength) {
             const b = new BitMap(this.areaRenderers.length);
             offs = bitMapDeserialize(view, offs, b);
