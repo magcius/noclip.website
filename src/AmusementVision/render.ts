@@ -108,6 +108,7 @@ function lightChannelCopy(o: GX_Material.LightChannelControl): GX_Material.Light
     return { colorChannel, alphaChannel };
 }
 
+const materialParams = new MaterialParams();
 class MaterialInstance {
     public materialHelper: GXMaterialHelperGfx;
     public sortKey: number = 0;
@@ -132,32 +133,16 @@ class MaterialInstance {
         this.materialHelper.setMaterialHacks(materialHacks);
     }
 
-    // public calcIndTexMatrix(dst: mat4, indIdx: number): void {
-    //     const material = this.materialData.material;
+    private calcTexMatrix(materialParams: MaterialParams, texIdx: number, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        const material = this.materialData.material;
+        const flipY = materialParams.m_TextureMapping[texIdx].flipY;
+        const flipYScale = flipY ? -1.0 : 1.0;
+        const dstPost = materialParams.u_PostTexMtx[texIdx];
 
-    //     let a: number, b: number, c: number, d: number, tx: number, ty: number, scale: number;
-    //     const mtx = material.indTexMatrices[indIdx];
-    //     a = mtx[0], c = mtx[1], tx = mtx[2], scale = mtx[3];
-    //     b = mtx[4], d = mtx[5], ty = mtx[6];
+        mat4.identity(dstPost);
 
-    //     mat4.set(dst,
-    //         a,     b,  0, 0,
-    //         c,     d,  0, 0,
-    //         tx,    ty, 0, 0,
-    //         scale, 0,  0, 0,
-    //     );
-    // }
-
-    // private calcTexMatrix(materialParams: MaterialParams, texIdx: number, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-    //     const material = this.materialData.material;
-    //     const flipY = materialParams.m_TextureMapping[texIdx].flipY;
-    //     const flipYScale = flipY ? -1.0 : 1.0;
-    //     const dstPost = materialParams.u_PostTexMtx[texIdx];
-
-    //     mat4.identity(dstPost);
-
-    //     mat4.mul(dstPost, matrixScratch, dstPost);
-    // }
+        mat4.mul(dstPost, matrixScratch, dstPost);
+    }
 
     private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
         const material = this.materialData.material;
@@ -178,17 +163,15 @@ class MaterialInstance {
             computeNormalMatrix(materialParams.u_TexMtx[i], instanceStateData.drawViewMatrixArray[texMtxIdx]);
         }
 
-        // for (let i = 0; i < 8; i++)
-        //     this.calcTexMatrix(materialParams, i, camera, viewport);
-        // for (let i = 0; i < 3; i++)
-        //     this.calcIndTexMatrix(materialParams.u_IndTexMtx[i], i);
+        for (let i = 0; i < 8; i++)
+            this.calcTexMatrix(materialParams, i, camera, viewport);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    public fillMaterialParams(materialParams: MaterialParams, renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
         this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, packet, camera, viewport);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
@@ -301,9 +284,36 @@ export class GcmfModelInstance {
 
 }
 
+// export const enum AVTexFilter{
+//     LINER_MIP_NEAR_LINER = 0,
+//     // 0x00: LINER & MIPMAP NEAR, LINER (mipmap:0)
+//     // 0x01: LINER & MIPMAP LINER, LINER (mipmap:1) liner?
+//     // 0x02: LINER & MIPMAP LINER, LINER (mipmap:3) tri liner?
+//     // 0x04: LINER & MIPMAP LINER, LINER
+//     // 0x08: NEAR & MIPMAP NEAR, NEAR (NEAR FLAG) (mipmap:0)
+//     // 0x10: LINER & MIPMAP NEAR, LINER
+// }
+
+// function translateTexFilterGfxAV(texFilter: AVTexFilter): [GfxTexFilterMode, GfxMipFilterMode] {
+//     switch (texFilter) {
+//         case AVTexFilter.LINER_MIP_NEAR_LINER:
+//             return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP ];
+//         case GX.TexFilter.NEAR:
+//             return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NO_MIP ];
+//         case GX.TexFilter.LIN_MIP_LIN:
+//             return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR ];
+//         case GX.TexFilter.NEAR_MIP_LIN:
+//             return [ GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR ];
+//         case GX.TexFilter.LIN_MIP_NEAR:
+//             return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST ];
+//         case GX.TexFilter.NEAR_MIP_NEAR:
+//             return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST ];
+//     }
+// }
+
 const matrixScratch = mat4.create();
 class MaterialData {
-    public gfxSampler: GfxSampler;
+    public gfxSamplers: GfxSampler[] = [];
 
     constructor(device: GfxDevice, public material: GMA.GcmfMaterial, public texture: GMA.GcmfTexture, public materialHacks?: GX_Material.GXMaterialHacks) {
         const [minFilter, mipFilter] = translateTexFilterGfx(texture.mipmap);
@@ -317,10 +327,10 @@ class MaterialData {
             maxLOD: 100,
         });
 
-        this.gfxSampler = gfxSampler;
+        this.gfxSamplers[0] = gfxSampler;
     }
 
     public destroy(device: GfxDevice): void {
-        device.destroySampler(this.gfxSampler);
+        this.gfxSamplers.forEach((r) => device.destroySampler(r));
     }
 }

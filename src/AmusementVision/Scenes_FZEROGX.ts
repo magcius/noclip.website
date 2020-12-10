@@ -8,9 +8,8 @@ import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/Gfx
 import { SceneContext } from '../SceneBase';
 import { BasicRenderTarget, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import AnimationController from '../AnimationController';
-import { fillSceneParamsDataOnTemplate, } from '../gx/gx_render';
+import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx, } from '../gx/gx_render';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 
 enum FZEROGXPass {
@@ -19,7 +18,7 @@ enum FZEROGXPass {
 }
 
 export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
-    public renderHelper: GfxRenderHelper;
+    public renderHelper: GXRenderHelperGfx;
     public renderTarget = new BasicRenderTarget();
 
     public textureHolder = new AmusementVisionTextureHolder();
@@ -29,7 +28,7 @@ export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
     public modelData: GcmfModel[] = [];
     
     constructor(device: GfxDevice) {
-        this.renderHelper = new GfxRenderHelper(device);
+        this.renderHelper = new GXRenderHelperGfx(device);
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
@@ -108,6 +107,9 @@ class FZEROGXSceneDesc implements Viewer.SceneDesc {
             // gma
             const gma = GMA.parse(decompressLZSS(gmaData));
             for(let i = 0; i < gma.gcmfEntrys.length; i++){
+                if(gma.gcmfEntrys[i].gcmf.shapes[0].loadedVertexData.draws.length < 1){
+                    continue;
+                }
                 const modelData = new GcmfModel(device, cache, gma.gcmfEntrys[i]);
                 const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, modelData);
                 modelInstance.passMask = FZEROGXPass.MAIN;
@@ -141,7 +143,7 @@ const sceneDescs = [
     "Emerald Cup",
     new FZEROGXSceneDesc("15", "fir", "Fire Field - Cylinder Knot"),
     new FZEROGXSceneDesc("10", "for", "Green Plant - Intersection"),
-    new FZEROGXSceneDesc("29", "cas", "Casino palace - Double Branches"),
+    new FZEROGXSceneDesc("29", "cas", "Casino Palace - Double Branches"),
     new FZEROGXSceneDesc("09", "lig", "Lightning - Half-Pipe"),
     new FZEROGXSceneDesc("27", "big", "Big Blue - Ordeal"),
     // new FZEROGXSceneDesc("15", "fir_jp", "[JP]Fire Field Cylinder Knot"),
