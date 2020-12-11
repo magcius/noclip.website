@@ -380,17 +380,16 @@ export class MaterialInstance {
     public sortKey: number = 0;
     public colorOverrides: (Color | null)[] = nArray(ColorKind.COUNT, () => null);
     public fogBlock = new GX_Material.FogBlock();
-    public usePnMtxIdx?: boolean = undefined;
 
     constructor(materialData: MaterialData, public shapeInstances: ShapeInstance[], materialHacks?: GX_Material.GXMaterialHacks) {
-        this.usePnMtxIdx = shapeInstancesUsePnMtxIdx(this.shapeInstances);
         this.setMaterialData(materialData, materialHacks);
     }
 
     public setMaterialData(materialData: MaterialData, materialHacks?: GX_Material.GXMaterialHacks): void {
         this.materialData = materialData;
         const material = this.materialData.material;
-        material.gxMaterial.usePnMtxIdx = this.usePnMtxIdx;
+        if (material.gxMaterial.usePnMtxIdx === undefined)
+            material.gxMaterial.usePnMtxIdx = shapeInstancesUsePnMtxIdx(this.shapeInstances);
         this.materialHelper = new GXMaterialHelperGfx(material.gxMaterial, materialHacks);
         this.name = material.name;
         let layer = !material.gxMaterial.ropInfo.depthTest ? GfxRendererLayer.BACKGROUND : material.translucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
