@@ -8,11 +8,11 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { mat4, vec3 } from "gl-matrix";
 import { assert, hexzero, readString } from "../util"
 import { Color, colorNewFromRGBA } from "../Color";
-import { compileVtxLoader, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, VtxLoader } from "../gx/gx_displaylist";
+import { compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, VtxLoader } from "../gx/gx_displaylist";
 
 // GCMF Attribute
 const enum GcmfAttribute{
-    value16Bit = (1 << 0), // vertex length is 16bit
+    value16Bit = (1 << 0), // vertex length is 16bit (VTXFMT1)
     none = (1 << 1),       // maybe not exist
     stiching = (1 << 2),
     skin = (1 << 3),
@@ -293,6 +293,19 @@ function parseExShape(buffer: ArrayBufferSlice): GcmfExShape{
 }
 
 function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: number, vtxCon2Offs: number): GcmfShape{
+    function fillVatFormat(vtxType: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
+        const vatFormat: GX_VtxAttrFmt[] = [];
+        vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: vtxType, compShift };
+        vatFormat[GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: vtxType, compShift };
+        vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
+        vatFormat[GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
+        vatFormat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: vtxType, compShift };
+        vatFormat[GX.Attr.TEX1] = { compCnt: GX.CompCnt.TEX_ST, compType: vtxType, compShift };
+        vatFormat[GX.Attr.TEX2] = { compCnt: GX.CompCnt.TEX_ST, compType: vtxType, compShift };
+        vatFormat[GX.Attr.NBT] = { compCnt: GX.CompCnt.NRM_XYZ, compType: vtxType, compShift };
+        return vatFormat;
+    }
+    
     const view = buffer.createDataView();
     const mtxIdxs: number[] = [];
     const boundingSphere = vec3.create();
@@ -312,18 +325,12 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
     const dlist = buffer.slice(0x60+0x01, 0x60+dlistSize);
     const compShift = 0x00;
     const vtxAttr = material.vtxAttr;
-    const vertType = (attribute == GcmfAttribute.value16Bit ? GX.CompType.S16 : GX.CompType.F32);
+    // value16Bit is only VTXFM1
+    const fmtVat = (attribute === GcmfAttribute.value16Bit ? GX.VtxFmt.VTXFMT1 : GX.VtxFmt.VTXFMT0);
     
-    const vat: GX_VtxAttrFmt[] = [];
-    vat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: vertType, compShift };
-    vat[GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: vertType, compShift };
-    vat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
-    vat[GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
-    vat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: vertType, compShift };
-    vat[GX.Attr.TEX1] = { compCnt: GX.CompCnt.TEX_ST, compType: vertType, compShift };
-    vat[GX.Attr.TEX2] = { compCnt: GX.CompCnt.TEX_ST, compType: vertType, compShift };
-    vat[GX.Attr.NBT] = { compCnt: GX.CompCnt.NRM_NBT, compType: vertType, compShift };
-
+    const vat: GX_VtxAttrFmt[][] = [];
+    vat[GX.VtxFmt.VTXFMT0] = fillVatFormat(GX.CompType.F32, compShift);
+    vat[GX.VtxFmt.VTXFMT1] = fillVatFormat(GX.CompType.S16, compShift);
 
     const vcd: GX_VtxDesc[] = [];
     for (let i = 0; i <= GX.Attr.MAX; i++) {
@@ -333,17 +340,16 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
     }
 
     const arrays: GX_Array[] = [];
-    arrays[GX.Attr.POS]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat, GX.Attr.POS) };
-    arrays[GX.Attr.NRM]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat, GX.Attr.NRM) };
-    arrays[GX.Attr.CLR0]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat, GX.Attr.CLR0) };
-    arrays[GX.Attr.CLR1]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat, GX.Attr.CLR1) };
-    arrays[GX.Attr.TEX0]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat, GX.Attr.TEX0) };
-    arrays[GX.Attr.TEX1]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat, GX.Attr.TEX1) };
-    arrays[GX.Attr.TEX2]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat, GX.Attr.TEX2) };
-    arrays[GX.Attr.NBT]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat, GX.Attr.NBT) };
+    arrays[GX.Attr.POS]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.POS) };
+    arrays[GX.Attr.NRM]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.NRM) };
+    arrays[GX.Attr.CLR0]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.CLR0) };
+    arrays[GX.Attr.CLR1]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.CLR1) };
+    arrays[GX.Attr.TEX0]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX0) };
+    arrays[GX.Attr.TEX1]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX1) };
+    arrays[GX.Attr.TEX2]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX2) };
+    arrays[GX.Attr.NBT]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.NBT) };
 
-
-    const loader = compileVtxLoader(vat, vcd);
+    const loader = compileVtxLoaderMultiVat(vat, vcd);
     const loadedVertexLayout = loader.loadedVertexLayout;
     const loadedVertexData = loader.runVertices(arrays, dlist);
 
@@ -405,12 +411,14 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf{
     // GcmfShape
     for(let i = 0; i < allMaterialCount; i++){
         const shape = parseShape(shapeBuff.slice(shapeOffs), attribute, i, vtxCon2Offs);
+        if(shape.material.tex0Idx < 0){
+            // ignore invalid tex0Index material
+            continue;
+        }
         shapes.push( shape );
 
         shapeOffs += 0x60 + shape.dlist0Size + shape.dlist1Size;
     }
-
-
 
     return { attribute, origin, boundSpeher, texCount, materialCount, traslucidMaterialCount, mtxCount, matrixs, textures, shapes };
 }
@@ -439,12 +447,12 @@ export function parse(buffer: ArrayBufferSlice): GMA{
     const gcmfBuff = buffer.slice(gcmfBaseOffs);
     for(let i = 0; i < gcmfEntryOffs.length; i++){
         let nameOffs = gcmfEntryOffs[i].nameOffs;
-        if (nameOffs <= 0){
+        let gcmfOffs = gcmfEntryOffs[i].gcmfOffs;
+        if (gcmfOffs <= 0 && nameOffs <= 0){
             // ignore invaild gcmf
             continue;
         }
         const name = readString(nameBuff, nameOffs);
-        let gcmfOffs = gcmfEntryOffs[i].gcmfOffs;
         const gcmf = parseGcmf(gcmfBuff.slice(gcmfOffs));
 
         if (gcmf.materialCount + gcmf.traslucidMaterialCount < 1){
