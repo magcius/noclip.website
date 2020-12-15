@@ -401,6 +401,10 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     _("SurfingRaceSignBoard",           SimpleMapObj),
     _("SurfingRaceVictoryStand",        SimpleMapObj),
     _("HeavensDoorHouseDoor",           SimpleMapObj),
+    // This is the transition effect version of the steps that appear after you chase the bunnies in Gateway Galaxy.
+    // "HeavensDoorAppearStepAAfter" is the non-transition version of the same, and it's also spawned, so don't
+    // bother spawning this one.
+    N("HeavensDoorAppearStepA"),
     _("HeavensDoorAppearStepAAfter",    SimpleMapObj),
     _("MechaKoopaPartsBody",            SimpleMapObj),
     _("MechaKoopaPartsRollerA",         SimpleMapObj),
