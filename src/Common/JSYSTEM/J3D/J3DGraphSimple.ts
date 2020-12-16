@@ -50,7 +50,8 @@ class JointMatrixCalcANK1 {
         if (entry !== undefined) {
             const frame = this.animationController.getTimeInFrames();
             const animFrame = getAnimFrame(this.ank1, frame);
-            calcJointAnimationTransform(scratchTransform, entry, animFrame, this.ank1.duration);
+            const animFrame1 = getAnimFrame(this.ank1, frame + 1);
+            calcJointAnimationTransform(scratchTransform, entry, animFrame, animFrame1);
             transform = scratchTransform;
         } else {
             transform = jnt1.transform;

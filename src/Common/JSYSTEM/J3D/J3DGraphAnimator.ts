@@ -6,7 +6,7 @@ import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
 import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase';
 import { mat4, quat, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { computeModelMatrixS, computeModelMatrixSRT, quatFromEulerRadians, scaleMatrix, setMatrixTranslation } from '../../../MathHelpers';
+import { quatFromEulerRadians, setMatrixTranslation } from '../../../MathHelpers';
 import { getPointHermite } from '../../../Spline';
 
 function hermiteInterpolate(k0: AnimationKeyframe, k1: AnimationKeyframe, frame: number): number {
@@ -72,6 +72,27 @@ export class J3DFrameCtrl {
         this.repeatStartFrame = 0;
         this.speedInFrames = 1.0;
         this.currentTimeInFrames = 0.0;
+    }
+
+    public applyLoopMode(timeInFrames: number): number {
+        if (this.loopMode === LoopMode.ONCE) {
+            if (timeInFrames > this.endFrame)
+                return this.endFrame - 0.001;
+        } else if (this.loopMode === LoopMode.ONCE_AND_RESET) {
+            if (timeInFrames >= this.endFrame)
+                return this.startFrame;
+        } else if (this.loopMode === LoopMode.REPEAT) {
+            if (timeInFrames >= this.endFrame)
+                return timeInFrames - (this.endFrame - this.repeatStartFrame);
+        } else if (this.loopMode === LoopMode.MIRRORED_ONCE || this.loopMode === LoopMode.MIRRORED_REPEAT) {
+            if (timeInFrames >= this.endFrame - 1.0)
+                return this.endFrame - (timeInFrames - this.endFrame);
+
+            if (timeInFrames < this.startFrame)
+                return this.startFrame - (timeInFrames - this.startFrame);
+        }
+
+        return timeInFrames;
     }
 
     public update(deltaTimeFrames: number): void {
@@ -328,7 +349,7 @@ export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransfor
 }
 
 const scratchQuat = quat.create();
-export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number, duration: number): void {
+export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number, animFrame1: number): void {
     dst.scale[0] = sampleAnimationData(entry.scaleX, animFrame);
     dst.scale[1] = sampleAnimationData(entry.scaleY, animFrame);
     dst.scale[2] = sampleAnimationData(entry.scaleZ, animFrame);
@@ -340,7 +361,7 @@ export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1
     quatFromEulerRadians(dst.rotation, r0x, r0y, r0z);
 
     if (a0 !== animFrame) {
-        const a1 = (a0 + 1) % duration;
+        const a1 = animFrame1 | 0;
         const r1x = sampleAnimationData(entry.rotationX, a1);
         const r1y = sampleAnimationData(entry.rotationY, a1);
         const r1z = sampleAnimationData(entry.rotationZ, a1);
@@ -368,7 +389,7 @@ export class J3DJointMatrixAnm {
         let transform: JointTransformInfo;
         if (entry !== undefined) {
             const animFrame = this.frameCtrl.currentTimeInFrames;
-            calcJointAnimationTransform(scratchTransform, entry, animFrame, this.frameCtrl.endFrame);
+            calcJointAnimationTransform(scratchTransform, entry, animFrame, this.frameCtrl.applyLoopMode(animFrame + 1));
             transform = scratchTransform;
         } else {
             transform = jnt1.transform;

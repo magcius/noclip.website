@@ -148,17 +148,17 @@ export class mDoExt_McaMorf implements JointMatrixCalc {
         const loadFlags = modelData.bmd.inf1.loadFlags;
 
         if (this.anm !== null) {
-            const duration = this.frameCtrl.endFrame;
+            const animFrame1 = this.frameCtrl.applyLoopMode(animFrame + 1);
 
             if (this.curMorf >= 1.0) {
-                calcJointAnimationTransform(dstTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, duration);
+                calcJointAnimationTransform(dstTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, animFrame1);
                 // callback1
             } else {
                 // callback1
                 let amt = (this.curMorf - this.prevMorf) / (1.0 - this.prevMorf);
 
                 if (amt > 0.0) {
-                    calcJointAnimationTransform(scratchTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, duration);
+                    calcJointAnimationTransform(scratchTransform, this.anm.jointAnimationEntries[jointIndex], animFrame, animFrame1);
                     dstTransform.lerp(dstTransform, scratchTransform, amt);
                 }
             }
