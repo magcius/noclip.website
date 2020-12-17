@@ -9,12 +9,13 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, PacketParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
 import { mat4 } from 'gl-matrix';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
-import { Color} from '../Color';
+import { Color, colorCopy} from '../Color';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyBias, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { computeNormalMatrix } from '../MathHelpers';
 import { nArray } from '../util';
 import { AABB, IntersectionState } from '../Geometry';
 import { ViewerRenderInput } from '../viewer';
+import { TextureMapping } from '../TextureHolder';
 
 
 export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
@@ -47,7 +48,7 @@ export class GcmfModel {
         for (let i = 0; i < gcmf.shapes.length; i++) {
             const material = gcmf.shapes[i].material;
             const texture = gcmf.textures[material.tex0Idx];
-            this.materialData[i] = new MaterialData(device, material, texture);
+            this.materialData[i] = new MaterialData(device, material, texture, this.materialHacks);
         }
     }
 
@@ -83,6 +84,8 @@ class ShapeInstance {
 
         const usesSkinning = this.shape.material.vtxRenderFlag < 0x08;
         
+        // materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.material.tex0Idx, null, camera, viewport);
+
         packetParams.clear();
         for (let p = 0; p < this.shape.loadedVertexData.draws.length; p++) {
             const packet = this.shape.loadedVertexData.draws[p];
@@ -90,6 +93,9 @@ class ShapeInstance {
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.setOnRenderInst(renderInst, packet);
             materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+
+            // if (usesSkinning)
+            //     materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, packet, camera, viewport);
 
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -108,6 +114,15 @@ function lightChannelCopy(o: GX_Material.LightChannelControl): GX_Material.Light
     return { colorChannel, alphaChannel };
 }
 
+type CopyFunc<T> = (a: T) => T;
+
+function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
+    const b = Array(a.length);
+    for (let i = 0; i < a.length; i++)
+        b[i] = copyFunc(a[i]);
+    return b;
+}
+
 const materialParams = new MaterialParams();
 class MaterialInstance {
     public materialHelper: GXMaterialHelperGfx;
@@ -116,6 +131,7 @@ class MaterialInstance {
 
     constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData) {
         const gxMaterial: GX_Material.GXMaterial = Object.assign({}, materialData.material.gxMaterial);
+        gxMaterial.lightChannels = arrayCopy(gxMaterial.lightChannels, lightChannelCopy);
         gxMaterial.useTexMtxIdx = nArray(8, () => false);
 
         this.materialHelper = new GXMaterialHelperGfx(gxMaterial, materialData.materialHacks);
@@ -144,8 +160,29 @@ class MaterialInstance {
         mat4.mul(dstPost, matrixScratch, dstPost);
     }
 
+    private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: Color): void {
+        const dst = materialParams.u_Color[i];
+        let color: Color;
+        if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
+            color = this.modelInstance.colorOverrides[i];
+        } else {
+            color = fallbackColor;
+        }
+
+        colorCopy(dst, color);
+    }
+
     private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
         const material = this.materialData.material;
+
+        for (let i = 0; i < 8; i++) {
+            const m = materialParams.m_TextureMapping[i];
+            m.reset();
+
+
+            this.fillTextureMapping(m, textureHolder, i);
+        }
+
 
         // Fill in our environment mapped texture matrices.
         for (let i = 0; i < 10; i++) {
@@ -165,6 +202,14 @@ class MaterialInstance {
 
         for (let i = 0; i < 8; i++)
             this.calcTexMatrix(materialParams, i, camera, viewport);
+    }
+
+    private fillTextureMapping(dst: TextureMapping, textureHolder: GXTextureHolder, i: number): void {
+        const material = this.materialData.material;
+        dst.reset();
+        const name: string = `texture_`+material.tex0Idx;
+        textureHolder.fillTextureMapping(dst, name);
+        dst.gfxSampler = this.materialData.gfxSamplers[i];
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
@@ -205,8 +250,24 @@ export class GcmfModelInstance {
         while (matrixScratchArray.length < this.instanceStateData.jointToWorldMatrixArray.length)
             matrixScratchArray.push(mat4.create());
 
-        for (let i = 0; i < this.gcmfModel.materialData.length; i++)
+        for (let i = 0; i < this.gcmfModel.materialData.length; i++){
             this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i]);
+        }
+        
+        const gcmf = this.gcmfModel.gcmfEntry.gcmf;
+        for (let i = 0; i < gcmf.shapes.length; i++) {
+            const materialInstance = this.materialInstances[i];
+            const shape = gcmf.shapes[i];
+            const shapeData = this.gcmfModel.shapeData[i];
+            const shapeInstance = new ShapeInstance(shape, shapeData, materialInstance);
+            // if (translucent)
+            //     shapeInstance.sortKeyBias = i;
+
+            // const usesSkinning = gcmf.attribute > GMA.GcmfAttribute.stiching;
+            // materialInstance.setSkinningEnabled(usesSkinning);
+
+            this.shapeInstances.push(shapeInstance);
+        }
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
@@ -258,20 +319,13 @@ export class GcmfModelInstance {
             }
         }
 
-        let depth = -1;
-
-        if (depth < 0)
-            return;
-
+        let depth = 2;
         this.calcView(camera);
 
         const template = renderInstManager.pushTemplateRenderInst();
         template.filterKey = this.passMask;
         for (let i = 0; i < this.shapeInstances.length; i++) {
             const shapeInstance = this.shapeInstances[i];
-            // const shapeVisibility = shapeInstance.sortVizNode.visible;
-            // if (!shapeVisibility)
-            //     continue;
             shapeInstance.prepareToRender(device, this.textureHolder, renderInstManager, depth, camera, viewerInput.viewport, this.instanceStateData, this.isSkybox);
         }
         renderInstManager.popTemplateRenderInst();

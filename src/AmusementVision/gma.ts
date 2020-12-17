@@ -11,7 +11,7 @@ import { Color, colorNewFromRGBA } from "../Color";
 import { compileVtxLoaderMultiVat, getAttributeByteSize, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexLayout, VtxLoader } from "../gx/gx_displaylist";
 
 // GCMF Attribute
-const enum GcmfAttribute{
+export const enum GcmfAttribute{
     value16Bit = (1 << 0), // vertex length is 16bit (VTXFMT1)
     none = (1 << 1),       // maybe not exist
     stiching = (1 << 2),
@@ -365,6 +365,9 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf{
     const origin = vec3.create();
 
     const attribute: GcmfAttribute = view.getUint32(0x04);
+    if (attribute === GcmfAttribute.skin || attribute === GcmfAttribute.effect){
+        throw "not support attribute skin";
+    }
     vec3.set(origin, view.getFloat32(0x08), view.getFloat32(0x0C), view.getFloat32(0x10));
     const boundSpeher = view.getFloat32(0x14);
 
@@ -448,13 +451,18 @@ export function parse(buffer: ArrayBufferSlice): GMA{
     for(let i = 0; i < gcmfEntryOffs.length; i++){
         let nameOffs = gcmfEntryOffs[i].nameOffs;
         let gcmfOffs = gcmfEntryOffs[i].gcmfOffs;
-        if (gcmfOffs <= 0 && nameOffs <= 0){
+        if (gcmfOffs < 0 && nameOffs <= 0){
             // ignore invaild gcmf
             continue;
         }
         const name = readString(nameBuff, nameOffs);
         const gcmf = parseGcmf(gcmfBuff.slice(gcmfOffs));
 
+        if (gcmf.attribute === GcmfAttribute.skin || gcmf.attribute === GcmfAttribute.effect){
+            // ignore "skin" and "effect" model.
+            // TODO: Support "skin" and "effect" model.
+            continue;
+        }
         if (gcmf.materialCount + gcmf.traslucidMaterialCount < 1){
             // ignore invaild gcmf
             continue;
