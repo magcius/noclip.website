@@ -68,7 +68,7 @@ export class dPa_control_c {
     }
 
     public calc(viewerInput: ViewerRenderInput): void {
-        const inc = 0.5;
+        const inc = viewerInput.deltaTime / 1000 * 30;
         this.emitterManager.calc(inc);
     }
 
@@ -152,6 +152,19 @@ export class dPa_control_c {
         return baseEmitter;
     }
 
+    // TODO(jstpierre): Full simple particle system
+/*
+    public setSimple(globals: dGlobals, userID: number, pos: ReadonlyVec3, alpha: number = 1.0, colorPrm: Color | null = null, colorEnv: Color | null = null, affectedByWind: boolean = false): boolean {
+        let groupID = EffectDrawGroup.Main;
+
+        if (!!(userID & 0x4000))
+            groupID = EffectDrawGroup.Indirect;
+
+        this.set(globals, groupID, userID, pos, null, null, alpha, null, 0, colorPrm, colorEnv);
+        return true;
+    }
+*/
+
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.jpacData.length; i++)
             this.jpacData[i].destroy(device);
@@ -205,8 +218,7 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        this.emitter.maxFrame = -1;
-        this.emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
+        dPa__StopEmitter(this.emitter);
         this.emitter = null;
     }
 }
@@ -314,8 +326,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        this.emitter.maxFrame = -1;
-        this.emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
+        dPa__StopEmitter(this.emitter);
         this.emitter = null;
         this.ddraw.destroy(this.globals.modelCache.device);
     }
@@ -440,9 +451,13 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        this.emitter.maxFrame = -1;
-        this.emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
+        dPa__StopEmitter(this.emitter);
         this.emitter = null;
         this.ddraw.destroy(this.globals.modelCache.device);
     }
+}
+
+export function dPa__StopEmitter(emitter: JPABaseEmitter): void {
+    emitter.maxFrame = -1;
+    emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
 }
