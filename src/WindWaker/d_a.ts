@@ -3307,7 +3307,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
     private track: dPa_trackEcallBack | null = null;
     private trackPos = vec3.create();
 
-    private static arcName = `Ikada_H`;
+    private static arcName = `IkadaH`;
 
     public subload(globals: dGlobals): cPhs__Status {
         const status = dComIfG_resLoad(globals, d_a_obj_ikada.arcName);

@@ -8,7 +8,7 @@ import { Frustum } from "../Geometry";
 import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material";
-import { computeModelMatrixR, saturate, transformVec3Mat4w0 } from "../MathHelpers";
+import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { TextureMapping } from "../TextureHolder";
 import { nArray } from "../util";
@@ -41,6 +41,14 @@ function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture):
     m.flipY = true;
 }
 
+function setBitFlagEnabled(v: number, mask: number, enabled: boolean): number {
+    if (enabled)
+        v |= mask;
+    else
+        v &= ~mask;
+    return v;
+}
+
 export class dPa_control_c {
     private emitterManager: JPAEmitterManager;
     private drawInfo = new JPADrawInfo();
@@ -69,6 +77,14 @@ export class dPa_control_c {
 
     public calc(viewerInput: ViewerRenderInput): void {
         const inc = viewerInput.deltaTime / 1000 * 30;
+
+        // Some hacky distance culling for emitters.
+        getMatrixTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
+        for (let i = 0; i < this.emitterManager.aliveEmitters.length; i++) {
+            const emitter = this.emitterManager.aliveEmitters[i];
+            emitter.flags = setBitFlagEnabled(emitter.flags, BaseEmitterFlags.STOP_CALC_EMITTER | BaseEmitterFlags.STOP_DRAW_PARTICLE, vec3.distance(emitter.globalTranslation, scratchVec3a) > 5000);
+        }
+
         this.emitterManager.calc(inc);
     }
 
