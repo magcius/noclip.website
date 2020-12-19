@@ -3,7 +3,7 @@ import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute
 import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
-import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount } from "../gfx/helpers/TopologyHelpers";
+import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
 import { makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { DeviceProgram } from "../Program";
 import { DDSTextureHolder } from "./dds";
@@ -104,8 +104,9 @@ function translateDataType(dataType: number): GfxFormat {
 class BatchData {
     public inputLayout: GfxInputLayout;
     public inputStates: GfxInputState[] = [];
+    public primitiveIndexCounts: number[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, flverData: FLVERData, public batch: Batch, vertexBuffer: GfxCoalescedBuffer, indexBuffers: GfxCoalescedBuffer[]) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, flverData: FLVERData, public batch: Batch, vertexBuffer: GfxCoalescedBuffer, indexBuffers: GfxCoalescedBuffer[], triangleIndexCounts: number[]) {
         const flverInputState = flverData.flver.inputStates[batch.inputStateIndex];
         const flverInputLayout = flverData.flver.inputLayouts[flverInputState.inputLayoutIndex];
         const buffers: GfxVertexBufferDescriptor[] = [vertexBuffer];
@@ -136,11 +137,13 @@ class BatchData {
             vertexBufferDescriptors,
         });
 
+        // TODO(jstpierre): Switch to firstIndex
         for (let j = 0; j < batch.primitiveIndexes.length; j++) {
             const coaIndexBuffer = assertExists(indexBuffers.shift());
             const indexBuffer: GfxIndexBufferDescriptor = coaIndexBuffer;
             const inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
             this.inputStates.push(inputState);
+            this.primitiveIndexCounts.push(assertExists(triangleIndexCounts.shift()));
         }
     }
 
@@ -166,12 +169,16 @@ export class FLVERData {
         const vertexBuffers = coalesceBuffer(device, GfxBufferUsage.VERTEX, vertexBufferDatas);
         this.vertexBuffer = vertexBuffers[0].buffer;
 
+        const triangleIndexCounts: number[] = [];
+
         for (let i = 0; i < flver.batches.length; i++) {
             const batch = flver.batches[i];
             for (let j = 0; j < batch.primitiveIndexes.length; j++) {
                 const primitive = flver.primitives[batch.primitiveIndexes[j]];
-                const triangleIndexData = convertToTriangleIndexBuffer(GfxTopology.TRISTRIP, primitive.indexData.createTypedArray(Uint16Array));
+                const triangleIndexData = filterDegenerateTriangleIndexBuffer(convertToTriangleIndexBuffer(GfxTopology.TRISTRIP, primitive.indexData.createTypedArray(Uint16Array)));
+                const triangleIndexCount = triangleIndexData.byteLength / 2;
                 indexBufferDatas.push(new ArrayBufferSlice(triangleIndexData.buffer));
+                triangleIndexCounts.push(triangleIndexCount);
                 primitive.indexData = null as unknown as ArrayBufferSlice;
             }
         }
@@ -182,7 +189,7 @@ export class FLVERData {
         for (let i = 0; i < flver.batches.length; i++) {
             const batch = flver.batches[i];
             const coaVertexBuffer = vertexBuffers[batch.inputStateIndex];
-            const batchData = new BatchData(device, cache, this, batch, coaVertexBuffer, indexBuffers);
+            const batchData = new BatchData(device, cache, this, batch, coaVertexBuffer, indexBuffers, triangleIndexCounts);
             this.batchData.push(batchData);
         }
 
@@ -753,7 +760,7 @@ class BatchInstance {
             renderInst.setMegaStateFlags(this.megaState);
             if (primitive.cullMode)
                 renderInst.getMegaStateFlags().cullMode = GfxCullMode.BACK;
-            renderInst.drawIndexes(getTriangleIndexCountForTopologyIndexCount(GfxTopology.TRISTRIP, primitive.indexCount));
+            renderInst.drawIndexes(this.batchData.primitiveIndexCounts[j]);
             renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -850,7 +857,7 @@ export class RenderContext {
     public directionalLight = new DirectionalLight();
 
     public prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
-        // this.directionalLight.debugDraw(viewerInput.camera);
+        this.directionalLight.debugDraw(viewerInput.camera);
     }
 }
 

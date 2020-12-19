@@ -132,7 +132,6 @@ export function parse(buffer: ArrayBufferSlice): FLVER {
 
     const materials: Material[] = [];
     for (let i = 0; i < materialCount; i++) {
-        const mo = offs;
         const nameOffs = view.getUint32(offs + 0x00, true);
         const name = readStringUTF16(buffer, nameOffs);
         const mtdNameOffs = view.getUint32(offs + 0x04, true);
