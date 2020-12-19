@@ -1,6 +1,6 @@
 
 import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute } from "./flver";
-import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
 import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
@@ -103,8 +103,9 @@ function translateDataType(dataType: number): GfxFormat {
 
 class BatchData {
     public inputLayout: GfxInputLayout;
-    public inputStates: GfxInputState[] = [];
+    public inputState: GfxInputState;
     public primitiveIndexCounts: number[] = [];
+    public primitiveIndexStarts: number[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, flverData: FLVERData, public batch: Batch, vertexBuffer: GfxCoalescedBuffer, indexBuffers: GfxCoalescedBuffer[], triangleIndexCounts: number[]) {
         const flverInputState = flverData.flver.inputStates[batch.inputStateIndex];
@@ -137,19 +138,18 @@ class BatchData {
             vertexBufferDescriptors,
         });
 
-        // TODO(jstpierre): Switch to firstIndex
+        const indexBuffer0 = indexBuffers[0];
+        this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer0);
+
         for (let j = 0; j < batch.primitiveIndexes.length; j++) {
             const coaIndexBuffer = assertExists(indexBuffers.shift());
-            const indexBuffer: GfxIndexBufferDescriptor = coaIndexBuffer;
-            const inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
-            this.inputStates.push(inputState);
             this.primitiveIndexCounts.push(assertExists(triangleIndexCounts.shift()));
+            this.primitiveIndexStarts.push((coaIndexBuffer.byteOffset - indexBuffer0.byteOffset) / 2);
         }
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.inputStates.length; i++)
-            device.destroyInputState(this.inputStates[i]);
+        device.destroyInputState(this.inputState);
     }
 }
 
@@ -308,12 +308,11 @@ void main() {
 #ifdef HAS_BITANGENT
     vec3 t_TangentTWorld = UNORM_TO_SNORM(a_Bitangent.xyz);
 #else
-    // TODO(jstpierre): Sign?
-    vec3 t_TangentTWorld = normalize(cross(t_TangentSWorld, t_NormalWorld));
+    vec3 t_TangentTWorld = normalize(cross(t_NormalWorld, t_TangentSWorld));
 #endif
 
     v_TangentSpaceBasis0 = t_TangentSWorld;
-    v_TangentSpaceBasis1 = t_TangentTWorld;
+    v_TangentSpaceBasis1 = t_TangentTWorld * sign(UNORM_TO_SNORM(a_Tangent.w));
     v_TangentSpaceBasis2 = t_NormalWorld;
 
     v_Color = a_Color;
@@ -532,6 +531,8 @@ void main() {
         t_Color.rgba = vec4(v_TangentSpaceBasis1 * 0.5 + 0.5, 1.0); // TangentT
     else if (t_Debug == 4)
         t_Color.rgba = vec4(v_TangentSpaceBasis2 * 0.5 + 0.5, 1.0); // Normal
+    else if (t_Debug == 5)
+        t_Color.rgba = vec4(t_IncomingDiffuseRadiance, 1.0);
 #endif
 
     // Convert to gamma-space
@@ -693,6 +694,8 @@ class BatchInstance {
             console.warn(`Unknown blend mode ${blendMode} in material ${material.mtdName}`);
         }
 
+        this.megaState.frontFace = GfxFrontFaceMode.CW;
+
         const diffuseMapColor = getMaterialParam(mtd, 'g_DiffuseMapColor');
         if (diffuseMapColor !== null) {
             const diffuseMapColorPower = assertExists(getMaterialParam(mtd, `g_DiffuseMapColorPower`))[0];
@@ -730,6 +733,8 @@ class BatchInstance {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setGfxProgram(this.gfxProgram);
+        template.setInputLayoutAndState(this.batchData.inputLayout, this.batchData.inputState);
+        template.setMegaStateFlags(this.megaState);
 
         let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*8);
         const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
@@ -756,11 +761,9 @@ class BatchInstance {
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
-            renderInst.setInputLayoutAndState(this.batchData.inputLayout, this.batchData.inputStates[j]);
-            renderInst.setMegaStateFlags(this.megaState);
             if (primitive.cullMode)
                 renderInst.getMegaStateFlags().cullMode = GfxCullMode.BACK;
-            renderInst.drawIndexes(this.batchData.primitiveIndexCounts[j]);
+            renderInst.drawIndexes(this.batchData.primitiveIndexCounts[j], this.batchData.primitiveIndexStarts[j]);
             renderInst.sortKey = setSortKeyDepth(this.sortKey, depth);
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -821,7 +824,7 @@ function modelMatrixFromPart(m: mat4, part: Part): void {
     const modelScale = 100;
 
     // Game uses +x = left convention for some reason.
-    mat4.scale(m, m, [-modelScale, modelScale, modelScale]);
+    mat4.scale(m, m, [modelScale, modelScale, modelScale]);
 
     mat4.translate(m, m, part.translation);
     mat4.rotateX(m, m, part.rotation[0] * MathConstants.DEG_TO_RAD);
