@@ -824,7 +824,7 @@ function modelMatrixFromPart(m: mat4, part: Part): void {
     const modelScale = 100;
 
     // Game uses +x = left convention for some reason.
-    mat4.scale(m, m, [modelScale, modelScale, modelScale]);
+    mat4.scale(m, m, [-modelScale, modelScale, modelScale]);
 
     mat4.translate(m, m, part.translation);
     mat4.rotateX(m, m, part.rotation[0] * MathConstants.DEG_TO_RAD);
@@ -860,7 +860,7 @@ export class RenderContext {
     public directionalLight = new DirectionalLight();
 
     public prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
-        this.directionalLight.debugDraw(viewerInput.camera);
+        // this.directionalLight.debugDraw(viewerInput.camera);
     }
 }
 
