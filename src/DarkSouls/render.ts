@@ -694,8 +694,6 @@ class BatchInstance {
             console.warn(`Unknown blend mode ${blendMode} in material ${material.mtdName}`);
         }
 
-        this.megaState.frontFace = GfxFrontFaceMode.CW;
-
         const diffuseMapColor = getMaterialParam(mtd, 'g_DiffuseMapColor');
         if (diffuseMapColor !== null) {
             const diffuseMapColorPower = assertExists(getMaterialParam(mtd, `g_DiffuseMapColorPower`))[0];
