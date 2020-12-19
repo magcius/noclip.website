@@ -56,7 +56,7 @@ vec3 CalcReflection(in vec3 t_NormalWorld, in vec3 t_PositionToEye) {
 }
 
 vec3 CalcNormalWorld(in vec3 t_MapNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
-    return t_MapNormal.xxx * t_Basis0 + t_MapNormal.yyy * t_Basis1 * t_MapNormal.zzz * t_Basis2;
+    return t_MapNormal.xxx * t_Basis0 + t_MapNormal.yyy * t_Basis1 + t_MapNormal.zzz * t_Basis2;
 }
 
 float CalcFresnelTerm(float t_DotProduct) {
@@ -796,7 +796,7 @@ void mainVS() {
 #endif
 
 #ifdef HAS_FULL_TANGENTSPACE
-    vec3 t_TangentSWorld = a_TangentS.xyz;
+    vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
 
     v_TangentSpaceBasis0 = t_TangentSWorld * sign(a_TangentS.w);
@@ -1423,7 +1423,7 @@ void mainVS() {
     v_PositionWorld.xyz = t_PositionWorld;
     vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
-    vec3 t_TangentSWorld = a_TangentS.xyz;
+    vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
 
     v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;
@@ -1613,7 +1613,7 @@ void mainVS() {
     v_PositionWorld.xyz = t_PositionWorld;
     vec3 t_NormalWorld = Mul(u_ModelMatrix, vec4(a_Normal.xyz, 0.0));
 
-    vec3 t_TangentSWorld = a_TangentS.xyz;
+    vec3 t_TangentSWorld = Mul(u_ModelMatrix, vec4(a_TangentS.xyz, 0.0));
     vec3 t_TangentTWorld = cross(t_TangentSWorld, t_NormalWorld);
 
     v_TangentSpaceBasis0 = t_TangentSWorld * a_TangentS.w;

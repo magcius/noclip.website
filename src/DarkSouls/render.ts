@@ -9,20 +9,20 @@ import { DeviceProgram } from "../Program";
 import { DDSTextureHolder } from "./dds";
 import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
-import { mat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer";
-import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
+import { Camera, computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
 import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { AABB } from "../Geometry";
 import { ModelHolder, MaterialDataHolder } from "./scenes";
 import { MSB, Part } from "./msb";
 import { getMatrixAxisZ, getMatrixTranslation, MathConstants, transformVec3Mat4w0 } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
-import { drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D, interactiveVizSliderSelect } from '../DebugJunk';
+import { drawWorldSpaceVector, getDebugOverlayCanvas2D, interactiveVizSliderSelect } from '../DebugJunk';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { dfRange, dfShow } from "../DebugFloaters";
-import { colorFromRGBA, colorNewFromRGBA, Magenta } from "../Color";
+import { colorNewFromRGBA } from "../Color";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
@@ -226,17 +226,17 @@ class DKSProgram extends DeviceProgram {
     public static BindingDefinitions = `
 // Expected to be constant across the entire scene.
 layout(std140) uniform ub_SceneParams {
-    Mat4x4 u_Projection;
+    Mat4x4 u_ProjectionView;
+    vec4 u_CameraPosWorld;
 };
 
 struct DirectionalLight {
-    // Direction in view-space.
-    vec4 DirView;
+    vec4 DirWorld;
     vec4 Color;
 };
 
 layout(std140) uniform ub_MeshFragParams {
-    Mat4x3 u_ViewFromLocal[1];
+    Mat4x3 u_WorldFromLocal[1];
     // Fourth element has g_DiffuseMapColorPower
     vec4 u_DiffuseMapColor;
     // Fourth element has g_SpecularMapColorPower
@@ -259,30 +259,56 @@ ${DKSProgram.BindingDefinitions}
 
 varying vec4 v_Color;
 varying vec2 v_TexCoord[3];
-varying vec3 v_PositionView;
-varying vec3 v_NormalView;
-varying vec3 v_TangentView;
-varying vec3 v_BitangentView;
+varying vec3 v_PositionWorld;
+
+// 3x3 matrix for our tangent space basis.
+varying vec3 v_TangentSpaceBasis0;
+varying vec3 v_TangentSpaceBasis1;
+varying vec3 v_TangentSpaceBasis2;
 `;
 
     public vert = `
-layout(location = 0) in vec3 a_Position;
-layout(location = 1) in vec4 a_Color;
-layout(location = 2) in vec4 a_TexCoord0;
-layout(location = 3) in vec4 a_TexCoord1;
-layout(location = 4) in vec4 a_Normal;
-layout(location = 5) in vec4 a_Tangent;
-layout(location = 6) in vec4 a_Bitangent;
+layout(location = ${DKSProgram.a_Position})  in vec3 a_Position;
+layout(location = ${DKSProgram.a_Color})     in vec4 a_Color;
+layout(location = ${DKSProgram.a_TexCoord0}) in vec4 a_TexCoord0;
+layout(location = ${DKSProgram.a_TexCoord1}) in vec4 a_TexCoord1;
+layout(location = ${DKSProgram.a_Normal})    in vec4 a_Normal;
+layout(location = ${DKSProgram.a_Tangent})   in vec4 a_Tangent;
+
+#ifdef HAS_BITANGENT
+layout(location = ${DKSProgram.a_Bitangent}) in vec4 a_Bitangent;
+#endif
 
 #define UNORM_TO_SNORM(xyz) ((xyz - 0.5) * 2.0)
 
+vec3 MulNormalMatrix(Mat4x3 t_Matrix, vec4 t_Value) {
+    // Pull out the squared scaling.
+    vec3 t_Col0 = Mat4x3GetCol0(t_Matrix);
+    vec3 t_Col1 = Mat4x3GetCol1(t_Matrix);
+    vec3 t_Col2 = Mat4x3GetCol2(t_Matrix);
+    vec4 t_SqScale = vec4(dot(t_Col0, t_Col0), dot(t_Col1, t_Col1), dot(t_Col2, t_Col2), 1.0);
+    return normalize(Mul(t_Matrix, t_Value / t_SqScale));
+}
+
 void main() {
-    vec4 t_PositionView = Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(a_Position, 1.0));
-    v_PositionView = t_PositionView.xyz;
-    gl_Position = Mul(u_Projection, t_PositionView);
-    v_NormalView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0)).xyz);
-    v_TangentView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0)).xyz);
-    v_BitangentView = normalize(Mul(_Mat4x4(u_ViewFromLocal[0]), vec4(UNORM_TO_SNORM(a_Bitangent.xyz), 0.0)).xyz);
+    vec4 t_PositionWorld = Mul(_Mat4x4(u_WorldFromLocal[0]), vec4(a_Position, 1.0));
+    v_PositionWorld = t_PositionWorld.xyz;
+    gl_Position = Mul(u_ProjectionView, t_PositionWorld);
+
+    vec3 t_NormalWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Normal.xyz), 0.0));
+    vec3 t_TangentSWorld = MulNormalMatrix(u_WorldFromLocal[0], vec4(UNORM_TO_SNORM(a_Tangent.xyz), 0.0));
+
+#ifdef HAS_BITANGENT
+    vec3 t_TangentTWorld = UNORM_TO_SNORM(a_Bitangent.xyz);
+#else
+    // TODO(jstpierre): Sign?
+    vec3 t_TangentTWorld = normalize(cross(t_TangentSWorld, t_NormalWorld));
+#endif
+
+    v_TangentSpaceBasis0 = t_TangentSWorld;
+    v_TangentSpaceBasis1 = t_TangentTWorld;
+    v_TangentSpaceBasis2 = t_NormalWorld;
+
     v_Color = a_Color;
     v_TexCoord[0] = ((a_TexCoord0.xy) / 1024.0) + u_TexScroll[0].xy;
     v_TexCoord[1] = ((a_TexCoord0.zw) / 1024.0) + u_TexScroll[1].xy;
@@ -371,7 +397,7 @@ ${specularEpi}
 
         const bumpmapEpi = `
     vec3 t_NormalTangentSpace = DecodeNormalMap(t_BumpmapSample.xyz);
-    vec3 t_NormalDirView = (t_NormalTangentSpace.x * v_TangentView.xyz + t_NormalTangentSpace.y * v_BitangentView.xyz + t_NormalTangentSpace.z * v_NormalView.xyz);
+    vec3 t_NormalDirWorld = CalcNormalWorld(t_NormalTangentSpace, v_TangentSpaceBasis0, v_TangentSpaceBasis1, v_TangentSpaceBasis2);
 `;
 
         if (bumpmap1 !== null && bumpmap2 !== null) {
@@ -389,7 +415,7 @@ ${bumpmapEpi}
 `;
         } else {
             return `
-    vec3 t_NormalDirView = v_NormalView;
+    vec3 t_NormalDirWorld = v_TangentSpaceBasis2;
 `;
         }
     }
@@ -429,6 +455,10 @@ vec3 DecodeNormalMap(vec3 t_NormalMapIn) {
     return normalize(t_NormalMap.xyz);
 }
 
+vec3 CalcNormalWorld(in vec3 t_MapNormal, in vec3 t_Basis0, in vec3 t_Basis1, in vec3 t_Basis2) {
+    return t_MapNormal.xxx * t_Basis0 + t_MapNormal.yyy * t_Basis1 + t_MapNormal.zzz * t_Basis2;
+}
+
 void main() {
     vec4 t_Color = vec4(1.0);
     float t_Blend = v_Color.a;
@@ -445,25 +475,25 @@ void main() {
     vec3 t_IncomingIndirectRadiance = vec3(0.0);
 
     ${this.genNormalDir()}
-    t_NormalDirView *= gl_FrontFacing ? 1.0 : -1.0;
+    t_NormalDirWorld *= gl_FrontFacing ? 1.0 : -1.0;
 
-    // Basic fake directional.
+    // Basic directional light.
     // TODO(jstpierre): Read environment maps.
-
-    vec3 t_LightDirView = -u_DirectionalLight.DirView.xyz;
+    vec3 t_LightDirWorld = -u_DirectionalLight.DirWorld.xyz;
     vec3 t_LightColor = u_DirectionalLight.Color.rgb;
 
-    float t_DiffuseIntensity = max(dot(t_NormalDirView, t_LightDirView), 0.0);
+    float t_DiffuseIntensity = max(dot(t_NormalDirWorld, t_LightDirWorld), 0.0);
     t_IncomingDiffuseRadiance += t_LightColor * t_DiffuseIntensity;
 
-    vec3 t_ViewDir = normalize(-v_PositionView);
+    vec3 t_PositionToEye = u_CameraPosWorld.xyz - v_PositionWorld.xyz;
+    vec3 t_WorldDirectionToEye = normalize(t_PositionToEye);
 
     // Fake ambient with a sun color.
     t_IncomingIndirectRadiance += vec3(0.92, 0.95, 0.85) * 0.4;
 
     if (t_DiffuseIntensity > 0.0) {
-        vec3 t_ReflectanceDir = reflect(-t_LightDirView, t_NormalDirView);
-        float t_SpecularIntensity = pow(max(dot(t_ReflectanceDir, t_ViewDir), 0.0), u_SpecularPower);
+        vec3 t_ReflectanceDir = reflect(-t_LightDirWorld, t_NormalDirWorld);
+        float t_SpecularIntensity = pow(max(dot(t_ReflectanceDir, t_WorldDirectionToEye), 0.0), u_SpecularPower);
         t_IncomingSpecularRadiance += t_LightColor * t_SpecularIntensity;
     }
 
@@ -488,15 +518,13 @@ void main() {
     int t_Debug = 0;
 
     if (t_Debug == 1)
-        t_Color.rgb = vec3(t_NormalDirView * 0.5 + 0.5);
+        t_Color.rgba = vec4(t_NormalDirWorld.xyz * 0.5 + 0.5, 1.0);
+    else if (t_Debug == 2)
+        t_Color.rgba = vec4(v_TangentSpaceBasis0 * 0.5 + 0.5, 1.0); // TangentS
     else if (t_Debug == 3)
-        t_Color.rgb = vec3(t_LightDirView * 0.5 + 0.5);
+        t_Color.rgba = vec4(v_TangentSpaceBasis1 * 0.5 + 0.5, 1.0); // TangentT
     else if (t_Debug == 4)
-        t_Color.rgb = vec3(t_DiffuseIntensity);
-    else if (t_Debug == 5)
-        t_Color.rgb = vec3(t_IncomingSpecularRadiance);
-    else if (t_Debug == 6)
-        t_Color.rgb = t_Specular * t_IncomingSpecularRadiance;
+        t_Color.rgba = vec4(v_TangentSpaceBasis2 * 0.5 + 0.5, 1.0); // Normal
 #endif
 
     // Convert to gamma-space
@@ -592,7 +620,7 @@ class BatchInstance {
     private gfxProgram: GfxProgram;
     private sortKey: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, material: Material, mtd: MTD) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, private material: Material, private mtd: MTD) {
         const program = new DKSProgram(mtd);
 
         // If this is a Phong shader, then turn on lighting.
@@ -606,6 +634,14 @@ class BatchInstance {
         // If this is a Water shader, turn off by default until we RE this.
         if (mtd.shaderPath.includes('_Water_'))
             this.visible = false;
+
+        const inputState = flverData.flver.inputStates[batchData.batch.inputStateIndex];
+        const inputLayout = flverData.flver.inputLayouts[inputState.inputLayoutIndex];
+
+        if (inputLayout.vertexAttributes.some((vertexAttribute) => vertexAttribute.semantic === VertexInputSemantic.Bitangent)) {
+            // TODO(jstpierre): I don't think this is correct. It doesn't seem like a bitangent, but more like a bent binormal? Needs investigation.
+            // program.defines.set('HAS_BITANGENT', '1');
+        }
 
         linkTextureParameter(this.textureMapping, textureHolder, 'g_Diffuse',    material, mtd);
         linkTextureParameter(this.textureMapping, textureHolder, 'g_Specular',   material, mtd);
@@ -691,9 +727,7 @@ class BatchInstance {
         let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*8);
         const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
 
-        computeViewMatrix(scratchMat4a, viewerInput.camera);
-        mat4.mul(scratchMat4a, scratchMat4a, modelMatrix);
-        offs += fillMatrix4x3(d, offs, scratchMat4a);
+        offs += fillMatrix4x3(d, offs, modelMatrix);
 
         offs += fillVec4v(d, offs, this.diffuseColor);
         offs += fillVec4v(d, offs, this.specularColor);
@@ -705,9 +739,7 @@ class BatchInstance {
 
         offs += renderContext.directionalLight.fill(d, offs);
 
-        // TODO(jstpierre): The depths seem to have an insane spec power? 40/100 are common. Need to figure out how this is used.
-        const specularPower = 4;
-        offs += fillVec4(d, offs, specularPower);
+        offs += fillVec4(d, offs, this.specularPower);
 
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
 
@@ -730,7 +762,6 @@ class BatchInstance {
     }
 }
 
-const scratchMat4a = mat4.create();
 const bboxScratch = new AABB();
 export class FLVERInstance {
     private batchInstances: BatchInstance[] = [];
@@ -770,7 +801,9 @@ export class FLVERInstance {
 }
 
 function fillSceneParamsData(d: Float32Array, camera: Camera, offs: number = 0): void {
-    offs += fillMatrix4x4(d, offs, camera.projectionMatrix);
+    offs += fillMatrix4x4(d, offs, camera.clipFromWorldMatrix);
+    getMatrixTranslation(scratchVec3a, camera.worldMatrix);
+    offs += fillVec3v(d, offs, scratchVec3a);
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
@@ -797,8 +830,6 @@ class DirectionalLight {
     @dfRange(0, 2, 0.01)
     public color = colorNewFromRGBA(0.90 * 2.0, 0.95 * 2.0, 0.95 * 2.0);
 
-    private dirView = vec3.create();
-
     public debugDraw(camera: Camera): void {
         getMatrixTranslation(scratchVec3a, camera.worldMatrix);
         getMatrixAxisZ(scratchVec3b, camera.worldMatrix);
@@ -808,15 +839,8 @@ class DirectionalLight {
         drawWorldSpaceVector(getDebugOverlayCanvas2D(), camera.clipFromWorldMatrix, scratchVec3a, this.dirWorld, mag * 2, this.color, 8);
     }
 
-    public calcViewSpace(camera: Camera): void {
-        // Light direction
-        vec3.normalize(scratchVec3a, this.dirWorld);
-        transformVec3Mat4w0(scratchVec3a, camera.viewMatrix, scratchVec3a);
-        vec3.normalize(this.dirView, scratchVec3a);
-    }
-
     public fill(d: Float32Array, offs: number): number {
-        offs += fillVec3v(d, offs, this.dirView);
+        offs += fillVec3v(d, offs, this.dirWorld);
         offs += fillColor(d, offs, this.color);
         return 8;
     }
@@ -826,7 +850,6 @@ export class RenderContext {
     public directionalLight = new DirectionalLight();
 
     public prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
-        this.directionalLight.calcViewSpace(viewerInput.camera);
         // this.directionalLight.debugDraw(viewerInput.camera);
     }
 }
@@ -870,7 +893,7 @@ export class MSBRenderer {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
-        const offs = template.allocateUniformBuffer(DKSProgram.ub_SceneParams, 16);
+        const offs = template.allocateUniformBuffer(DKSProgram.ub_SceneParams, 16+4);
         const sceneParamsMapped = template.mapUniformBufferF32(DKSProgram.ub_SceneParams);
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 

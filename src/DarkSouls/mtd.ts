@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, align } from "../util";
+import { assert, align, readString, decodeString } from "../util";
 
 // Dark Souls MTD (Material Definition)
 // https://github.com/JKAnderson/SoulsFormats/blob/master/SoulsFormats/Formats/MTD.cs
@@ -90,7 +90,7 @@ class DataReader {
 
     public readMarkedString(expectedMarker: number): string {
         const size = this.view.getUint32(this.offs + 0x00, true);
-        const str = readString(this.buffer, this.offs + 0x04, size, false);
+        const str = decodeString(this.buffer, this.offs + 0x04, size, 'sjis');
         this.offs += 0x04 + size;
         this.assertMarker(expectedMarker);
         return str;
