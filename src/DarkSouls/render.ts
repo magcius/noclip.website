@@ -705,7 +705,9 @@ class BatchInstance {
 
         offs += renderContext.directionalLight.fill(d, offs);
 
-        offs += fillVec4(d, offs, this.specularPower);
+        // TODO(jstpierre): The depths seem to have an insane spec power? 40/100 are common. Need to figure out how this is used.
+        const specularPower = 4;
+        offs += fillVec4(d, offs, specularPower);
 
         const depth = computeViewSpaceDepthFromWorldSpaceAABB(viewerInput.camera, bboxScratch);
 
@@ -825,8 +827,7 @@ export class RenderContext {
 
     public prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
         this.directionalLight.calcViewSpace(viewerInput.camera);
-
-        this.directionalLight.debugDraw(viewerInput.camera);
+        // this.directionalLight.debugDraw(viewerInput.camera);
     }
 }
 
