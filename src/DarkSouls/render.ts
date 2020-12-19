@@ -71,31 +71,31 @@ function translateLocation(attr: VertexAttribute): number {
 
 function translateDataType(dataType: number): GfxFormat {
     switch (dataType) {
-        case 17:
-            // Bone indices -- four bytes.
-            return GfxFormat.U8_RGBA_NORM;
-        case 19:
-            // Colors and normals -- four bytes.
-            return GfxFormat.U8_RGBA_NORM;
-        case 21:
-            // One set of UVs -- two shorts.
-            return GfxFormat.S16_RG;
-        case 22:
-            // Two sets of UVs -- four shorts.
-            return GfxFormat.S16_RGBA;
-        case 26:
-            // Bone weight -- four shorts.
-            return GfxFormat.S16_RGBA_NORM;
-        case 2:
-        case 18:
-        case 20:
-        case 23:
-        case 24:
-        case 25:
-            // Everything else -- three floats.
-            return GfxFormat.F32_RGBA;
-        default:
-            throw "whoops";
+    case 17:
+        // Bone indices -- four bytes.
+        return GfxFormat.U8_RGBA_NORM;
+    case 19:
+        // Colors and normals -- four bytes.
+        return GfxFormat.U8_RGBA_NORM;
+    case 21:
+        // One set of UVs -- two shorts.
+        return GfxFormat.S16_RG;
+    case 22:
+        // Two sets of UVs -- four shorts.
+        return GfxFormat.S16_RGBA;
+    case 26:
+        // Bone weight -- four shorts.
+        return GfxFormat.S16_RGBA_NORM;
+    case 2:
+    case 18:
+    case 20:
+    case 23:
+    case 24:
+    case 25:
+        // Everything else -- three floats.
+        return GfxFormat.F32_RGBA;
+    default:
+        throw "whoops";
     }
 }
 
@@ -342,7 +342,7 @@ ${diffuseEpi}
             return `
     vec3 t_Specular1 = ${this.buildTexAccess(specular1)}.rgb;
     vec3 t_Specular2 = ${this.buildTexAccess(specular2)}.rgb;
-    vec3 t_Specular = mix(t_Specular1, t_Specular2, v_Color.a);
+    vec3 t_Specular = mix(t_Specular1, t_Specular2, t_Blend);
 ${specularEpi}
 `;
         } else if (specular1 !== null) {
@@ -362,29 +362,22 @@ ${specularEpi}
         const bumpmap1 = this.getTexture('g_Bumpmap');
         const bumpmap2 = this.getTexture('g_Bumpmap_2');
 
-        const bumpmapPro = `
-    vec3 t_Normal = v_NormalView.xyz;
-    vec3 t_Tangent = v_TangentView.xyz;
-    vec3 t_Bitangent = v_BitangentView.xyz;
-`;
-
         const bumpmapEpi = `
-    vec3 t_NormalDirView = (t_LocalNormal.x * t_Tangent + t_LocalNormal.y * t_Bitangent + t_LocalNormal.z * t_Normal);
+    vec3 t_NormalTangentSpace = DecodeNormalMap(t_BumpmapSample.xyz);
+    vec3 t_NormalDirView = (t_NormalTangentSpace.x * v_TangentView.xyz + t_NormalTangentSpace.y * v_BitangentView.xyz + t_NormalTangentSpace.z * v_NormalView.xyz);
 `;
 
         if (bumpmap1 !== null && bumpmap2 !== null) {
             return `
-${bumpmapPro}
     vec3 t_Bumpmap1 = ${this.buildTexAccess(bumpmap1)}.rgb;
     vec3 t_Bumpmap2 = ${this.buildTexAccess(bumpmap2)}.rgb;
-    vec3 t_LocalNormal = mix(t_Bumpmap1, t_Bumpmap2, v_Color.a);
+    vec3 t_BumpmapSample = mix(t_Bumpmap1, t_Bumpmap2, t_Blend);
 ${bumpmapEpi}
 `;
         } else if (bumpmap1 !== null) {
             return `
-${bumpmapPro}
     vec3 t_Bumpmap1 = ${this.buildTexAccess(bumpmap1)}.rgb;
-    vec3 t_LocalNormal = t_Bumpmap1;
+    vec3 t_BumpmapSample = t_Bumpmap1;
 ${bumpmapEpi}
 `;
         } else {
@@ -421,8 +414,17 @@ ${bumpmapEpi}
 
     private genFrag(): string {
         return `
+vec3 DecodeNormalMap(vec3 t_NormalMapIn) {
+    // Decode two-channel normal map
+    vec3 t_NormalMap;
+    t_NormalMap.xy = t_NormalMapIn.xy * 2.0 - 1.0;
+    t_NormalMap.z = sqrt(1.0 - min(dot(t_NormalMap.xy, t_NormalMap.xy), 1.0));
+    return normalize(t_NormalMap.xyz);
+}
+
 void main() {
     vec4 t_Color = vec4(1.0);
+    float t_Blend = v_Color.a;
 
     t_Color *= v_Color;
 
@@ -436,6 +438,7 @@ void main() {
     vec3 t_IncomingIndirectRadiance = vec3(0.0);
 
     ${this.genNormalDir()}
+    t_NormalDirView *= gl_FrontFacing ? 1.0 : -1.0;
 
     // Basic fake directional.
     // TODO(jstpierre): Read environment maps.
@@ -475,10 +478,10 @@ void main() {
     ${this.genAlphaTest()}
 
 #ifdef USE_LIGHTING
-    int t_Debug = int(u_Misc[0].y);
+    int t_Debug = 0;
 
     if (t_Debug == 1)
-        t_Color.rgb = vec3(t_ViewDir * 0.5 + 0.5);
+        t_Color.rgb = vec3(t_NormalDirView * 0.5 + 0.5);
     else if (t_Debug == 3)
         t_Color.rgb = vec3(t_LightDirView * 0.5 + 0.5);
     else if (t_Debug == 4)
