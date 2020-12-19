@@ -14,7 +14,7 @@ import { DataFetcher } from "../DataFetcher";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DDSTextureHolder } from "./dds";
 import { assert, assertExists } from "../util";
-import { FLVERData, MSBRenderer } from "./render";
+import { FLVERData, MSBRenderer, RenderContext } from "./render";
 import { Panel, LayerPanel } from "../ui";
 import { SceneContext } from "../SceneBase";
 import * as MTD from "./mtd";
@@ -56,6 +56,7 @@ class DKSRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     private renderInstManager = new GfxRenderInstManager();
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
+    private renderContext = new RenderContext();
 
     constructor(device: GfxDevice, public textureHolder: DDSTextureHolder) {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
@@ -75,7 +76,7 @@ class DKSRenderer implements Viewer.SceneGfx {
         template.setUniformBuffer(this.uniformBuffer);
 
         for (let i = 0; i < this.msbRenderers.length; i++)
-            this.msbRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+            this.msbRenderers[i].prepareToRender(this.renderContext, device, this.renderInstManager, viewerInput);
 
         this.uniformBuffer.prepareToRender(device, hostAccessPass);
 
@@ -83,6 +84,8 @@ class DKSRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        this.renderContext.prepareToRender(viewerInput);
+
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);

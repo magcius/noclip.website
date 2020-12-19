@@ -9,18 +9,20 @@ import { DeviceProgram } from "../Program";
 import { DDSTextureHolder } from "./dds";
 import { nArray, assert, assertExists } from "../util";
 import { TextureMapping } from "../TextureHolder";
-import { mat4, vec4 } from "gl-matrix";
+import { mat4, ReadonlyVec3, vec3, vec4 } from "gl-matrix";
 import * as Viewer from "../viewer";
 import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
-import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
+import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { AABB } from "../Geometry";
 import { ModelHolder, MaterialDataHolder } from "./scenes";
 import { MSB, Part } from "./msb";
-import { MathConstants } from "../MathHelpers";
+import { getMatrixAxisZ, getMatrixTranslation, MathConstants, transformVec3Mat4w0 } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
-import { interactiveVizSliderSelect } from '../DebugJunk';
+import { drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D, interactiveVizSliderSelect } from '../DebugJunk';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { dfRange, dfShow } from "../DebugFloaters";
+import { colorFromRGBA, colorNewFromRGBA, Magenta } from "../Color";
 
 function shouldRenderPrimitive(primitive: Primitive): boolean {
     return primitive.flags === 0;
@@ -227,6 +229,12 @@ layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
+struct DirectionalLight {
+    // Direction in view-space.
+    vec4 DirView;
+    vec4 Color;
+};
+
 layout(std140) uniform ub_MeshFragParams {
     Mat4x3 u_ViewFromLocal[1];
     // Fourth element has g_DiffuseMapColorPower
@@ -234,8 +242,7 @@ layout(std140) uniform ub_MeshFragParams {
     // Fourth element has g_SpecularMapColorPower
     vec4 u_SpecularMapColor;
     vec4 u_TexScroll[3];
-    // Light direction in view space
-    vec4 u_LightDirView;
+    DirectionalLight u_DirectionalLight;
     // g_SpecularPower
     vec4 u_Misc[1];
 };
@@ -443,8 +450,8 @@ void main() {
     // Basic fake directional.
     // TODO(jstpierre): Read environment maps.
 
-    vec3 t_LightDirView = -u_LightDirView.xyz;
-    vec3 t_LightColor = vec3(0.9, 0.95, 0.95) * 2.0;
+    vec3 t_LightDirView = -u_DirectionalLight.DirView.xyz;
+    vec3 t_LightColor = u_DirectionalLight.Color.rgb;
 
     float t_DiffuseIntensity = max(dot(t_NormalDirView, t_LightDirView), 0.0);
     t_IncomingDiffuseRadiance += t_LightColor * t_DiffuseIntensity;
@@ -571,13 +578,14 @@ function linkTextureParameter(textureMapping: TextureMapping[], textureHolder: D
     }
 }
 
+const scratchVec3a = vec3.create();
+const scratchVec3b = vec3.create();
 const scratchVec4 = vec4.create();
 class BatchInstance {
     private visible = true;
     private diffuseColor = vec4.fromValues(1, 1, 1, 1);
     private specularColor = vec4.fromValues(0, 0, 0, 0);
     private specularPower = 1.0;
-    private lightDir = vec4.fromValues(-0.4, -0.8, -0.4, 0.0);
     private texScroll = nArray(3, () => vec4.create());
     private textureMapping = nArray(8, () => new TextureMapping());
     private megaState: Partial<GfxMegaStateDescriptor>;
@@ -672,7 +680,7 @@ class BatchInstance {
         this.sortKey = makeSortKey(layer, 0);
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4): void {
+    public prepareToRender(renderContext: RenderContext, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, modelMatrix: mat4): void {
         if (!this.visible)
             return;
 
@@ -680,12 +688,12 @@ class BatchInstance {
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setGfxProgram(this.gfxProgram);
 
-        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*7);
+        let offs = template.allocateUniformBuffer(DKSProgram.ub_MeshFragParams, 12*1 + 4*8);
         const d = template.mapUniformBufferF32(DKSProgram.ub_MeshFragParams);
 
-        computeViewMatrix(matrixScratch, viewerInput.camera);
-        mat4.mul(matrixScratch, matrixScratch, modelMatrix);
-        offs += fillMatrix4x3(d, offs, matrixScratch);
+        computeViewMatrix(scratchMat4a, viewerInput.camera);
+        mat4.mul(scratchMat4a, scratchMat4a, modelMatrix);
+        offs += fillMatrix4x3(d, offs, scratchMat4a);
 
         offs += fillVec4v(d, offs, this.diffuseColor);
         offs += fillVec4v(d, offs, this.specularColor);
@@ -695,11 +703,7 @@ class BatchInstance {
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[1], scrollTime));
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[2], scrollTime));
 
-        // Light direction
-        vec4.normalize(scratchVec4, this.lightDir);
-        vec4.transformMat4(scratchVec4, scratchVec4, matrixScratch);
-        vec4.normalize(scratchVec4, scratchVec4);
-        offs += fillVec4v(d, offs, scratchVec4);
+        offs += renderContext.directionalLight.fill(d, offs);
 
         offs += fillVec4(d, offs, this.specularPower);
 
@@ -724,7 +728,7 @@ class BatchInstance {
     }
 }
 
-const matrixScratch = mat4.create();
+const scratchMat4a = mat4.create();
 const bboxScratch = new AABB();
 export class FLVERInstance {
     private batchInstances: BatchInstance[] = [];
@@ -750,7 +754,7 @@ export class FLVERInstance {
         this.visible = v;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderContext: RenderContext, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         if (!this.visible)
             return;
 
@@ -759,7 +763,7 @@ export class FLVERInstance {
             return;
 
         for (let i = 0; i < this.batchInstances.length; i++)
-            this.batchInstances[i].prepareToRender(device, renderInstManager, viewerInput, this.modelMatrix);
+            this.batchInstances[i].prepareToRender(renderContext, device, renderInstManager, viewerInput, this.modelMatrix);
     }
 }
 
@@ -782,6 +786,48 @@ function modelMatrixFromPart(m: mat4, part: Part): void {
     mat4.rotateY(m, m, part.rotation[1] * MathConstants.DEG_TO_RAD);
     mat4.rotateZ(m, m, part.rotation[2] * MathConstants.DEG_TO_RAD);
     mat4.scale(m, m, part.scale);
+}
+
+class DirectionalLight {
+    @dfShow()
+    @dfRange(-1, 1, 0.01)
+    public dirWorld = vec3.fromValues(-0.4, -0.8, -0.4);
+    @dfRange(0, 2, 0.01)
+    public color = colorNewFromRGBA(0.90 * 2.0, 0.95 * 2.0, 0.95 * 2.0);
+
+    private dirView = vec3.create();
+
+    public debugDraw(camera: Camera): void {
+        getMatrixTranslation(scratchVec3a, camera.worldMatrix);
+        getMatrixAxisZ(scratchVec3b, camera.worldMatrix);
+        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -100);
+        const mag = 100;
+        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, this.dirWorld, -mag);
+        drawWorldSpaceVector(getDebugOverlayCanvas2D(), camera.clipFromWorldMatrix, scratchVec3a, this.dirWorld, mag * 2, this.color, 8);
+    }
+
+    public calcViewSpace(camera: Camera): void {
+        // Light direction
+        vec3.normalize(scratchVec3a, this.dirWorld);
+        transformVec3Mat4w0(scratchVec3a, camera.viewMatrix, scratchVec3a);
+        vec3.normalize(this.dirView, scratchVec3a);
+    }
+
+    public fill(d: Float32Array, offs: number): number {
+        offs += fillVec3v(d, offs, this.dirView);
+        offs += fillColor(d, offs, this.color);
+        return 8;
+    }
+}
+
+export class RenderContext {
+    public directionalLight = new DirectionalLight();
+
+    public prepareToRender(viewerInput: Viewer.ViewerRenderInput): void {
+        this.directionalLight.calcViewSpace(viewerInput.camera);
+
+        this.directionalLight.debugDraw(viewerInput.camera);
+    }
 }
 
 export class MSBRenderer {
@@ -819,7 +865,7 @@ export class MSBRenderer {
         });
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(renderContext: RenderContext, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
@@ -828,7 +874,7 @@ export class MSBRenderer {
         fillSceneParamsData(sceneParamsMapped, viewerInput.camera, offs);
 
         for (let i = 0; i < this.flverInstances.length; i++)
-            this.flverInstances[i].prepareToRender(device, renderInstManager, viewerInput);
+            this.flverInstances[i].prepareToRender(renderContext, device, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
     }
