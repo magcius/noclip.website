@@ -6,10 +6,10 @@ import * as LZSS from "../Common/Compression/LZSS"
 import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance } from './render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { BasicRenderTarget, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import AnimationController from '../AnimationController';
-import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx, } from '../gx/gx_render';
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXRenderHelperGfx, } from '../gx/gx_render';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import * as UI from '../ui';
 
@@ -55,7 +55,7 @@ export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        this.animationController.setTimeInMilliseconds(viewerInput.time);
+        // this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
@@ -71,7 +71,11 @@ export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
         device.submitPass(hostAccessPass);
         
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        
+        // First, render the skybox.
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, FZEROGXPass.SKYBOX);
+        device.submitPass(skyboxPassRenderer);
+        // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, mainPassRenderer, FZEROGXPass.MAIN);
         this.renderHelper.renderInstManager.resetRenderInsts();
@@ -196,6 +200,9 @@ const sceneDescs = [
     new FZEROGXSceneDesc("49", "com", "Interview"),
     new FZEROGXSceneDesc("50", "com", "Victory Lap"),
     new FZEROGXSceneDesc("00", "", "st00"),
+
+    new FZEROGXSceneDesc("age_noclip/common", "", "Unused Model(Official GMA)"),
+    new FZEROGXSceneDesc("age_noclip/Arc_Cube", "", "ARC Cube(Unofficial GMA)"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

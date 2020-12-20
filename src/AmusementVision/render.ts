@@ -84,7 +84,7 @@ class ShapeInstance {
 
         const usesSkinning = this.shape.material.vtxRenderFlag < 0x08;
         
-        // materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.material.tex0Idx, null, camera, viewport);
+        materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.material.tex0Idx, null, camera, viewport);
 
         packetParams.clear();
         for (let p = 0; p < this.shape.loadedVertexData.draws.length; p++) {
@@ -246,7 +246,7 @@ export class GcmfModelInstance {
         this.name = `${namePrefix}/${gcmfModel.gcmfEntry.name}`;
 
         this.instanceStateData.jointToWorldMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.mtxCount, () => mat4.create());
-        this.instanceStateData.drawViewMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.mtxCount, () => mat4.create());
+        this.instanceStateData.drawViewMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.texCount, () => mat4.create());
         while (matrixScratchArray.length < this.instanceStateData.jointToWorldMatrixArray.length)
             matrixScratchArray.push(mat4.create());
 
@@ -338,50 +338,25 @@ export class GcmfModelInstance {
 
 }
 
-// export const enum AVTexFilter{
-//     LINER_MIP_NEAR_LINER = 0,
-//     // 0x00: LINER & MIPMAP NEAR, LINER (mipmap:0)
-//     // 0x01: LINER & MIPMAP LINER, LINER (mipmap:1) liner?
-//     // 0x02: LINER & MIPMAP LINER, LINER (mipmap:3) tri liner?
-//     // 0x04: LINER & MIPMAP LINER, LINER
-//     // 0x08: NEAR & MIPMAP NEAR, NEAR (NEAR FLAG) (mipmap:0)
-//     // 0x10: LINER & MIPMAP NEAR, LINER
-// }
-
-// function translateTexFilterGfxAV(texFilter: AVTexFilter): [GfxTexFilterMode, GfxMipFilterMode] {
-//     switch (texFilter) {
-//         case AVTexFilter.LINER_MIP_NEAR_LINER:
-//             return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NO_MIP ];
-//         case GX.TexFilter.NEAR:
-//             return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NO_MIP ];
-//         case GX.TexFilter.LIN_MIP_LIN:
-//             return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.LINEAR ];
-//         case GX.TexFilter.NEAR_MIP_LIN:
-//             return [ GfxTexFilterMode.POINT, GfxMipFilterMode.LINEAR ];
-//         case GX.TexFilter.LIN_MIP_NEAR:
-//             return [ GfxTexFilterMode.BILINEAR, GfxMipFilterMode.NEAREST ];
-//         case GX.TexFilter.NEAR_MIP_NEAR:
-//             return [ GfxTexFilterMode.POINT, GfxMipFilterMode.NEAREST ];
-//     }
-// }
-
 const matrixScratch = mat4.create();
 class MaterialData {
     public gfxSamplers: GfxSampler[] = [];
 
     constructor(device: GfxDevice, public material: GMA.GcmfMaterial, public texture: GMA.GcmfTexture, public materialHacks?: GX_Material.GXMaterialHacks) {
-        const [minFilter, mipFilter] = translateTexFilterGfx(texture.mipmap);
-        const [magFilter]            = translateTexFilterGfx(texture.mipmap);
-        
-        const gfxSampler = device.createSampler({
-            wrapS: translateWrapModeGfx(texture.wrapS),
-            wrapT: translateWrapModeGfx(texture.wrapT),
-            minFilter, mipFilter, magFilter,
-            minLOD: 0,
-            maxLOD: 100,
-        });
+        for (let i = 0; i < 8; i++) {
+            const [minFilter, mipFilter] = translateTexFilterGfx(texture.mipmap);
+            const [magFilter]            = translateTexFilterGfx(texture.mipmap);
+            
+            const gfxSampler = device.createSampler({
+                wrapS: translateWrapModeGfx(texture.wrapS),
+                wrapT: translateWrapModeGfx(texture.wrapT),
+                minFilter, mipFilter, magFilter,
+                minLOD: 0,
+                maxLOD: 100,
+            });
 
-        this.gfxSamplers[0] = gfxSampler;
+            this.gfxSamplers[i] = gfxSampler;
+        }
     }
 
     public destroy(device: GfxDevice): void {
