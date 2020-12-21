@@ -603,7 +603,7 @@ class Material_Generic_Program extends MaterialProgramBase {
     public static ub_SkinningParams = 2;
 
     public static MaxDynamicWorldLights = 2;
-    public static MaxSkinningParamsBoneMatrix = 16;
+    public static MaxSkinningParamsBoneMatrix = 53;
 
     public both = `
 precision mediump float;
@@ -1333,7 +1333,7 @@ class Material_Generic extends BaseMaterial {
 
     public setOnRenderInstSkinningParams(renderInst: GfxRenderInst, boneMatrix: ReadonlyMat4[], bonePaletteTable: number[]): void {
         if (this.skinningMode === SkinningMode.Smooth) {
-            assert(bonePaletteTable.length < Material_Generic_Program.MaxSkinningParamsBoneMatrix);
+            assert(bonePaletteTable.length <= Material_Generic_Program.MaxSkinningParamsBoneMatrix);
 
             let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16 * Material_Generic_Program.MaxSkinningParamsBoneMatrix);
             const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
