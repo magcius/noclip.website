@@ -86,7 +86,7 @@ layout(set = ${set}, binding = ${binding++}) uniform sampler S_${samplerName};
         });
     }
 
-    const matrixLibary = `
+    const matrixLibrary = `
 struct Mat4x4 { vec4 mx; vec4 my; vec4 mz; vec4 mw; };
 struct Mat4x3 { vec4 mx; vec4 my; vec4 mz; };
 struct Mat4x2 { vec4 mx; vec4 my; };
@@ -133,7 +133,7 @@ ${hasFragColor ? `
 #define gl_FragColor o_color
 ${type === 'frag' ? `out vec4 o_color;` : ''}
 ` : ``}
-${matrixLibary}
+${matrixLibrary}
 ${definesString}
 ${rest}
 `.trim();

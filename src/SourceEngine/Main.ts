@@ -5,22 +5,22 @@ import { ViewerRenderInput, SceneGfx } from "../viewer";
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { BSPFile, Surface, Model } from "./BSPFile";
+import { BSPFile, Surface, Model, computeAmbientCubeFromLeaf, newAmbientCube } from "./BSPFile";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { VPKMount, createVPKMount } from "./VPK";
 import { ZipFile, ZipFileEntry, ZipCompressionMethod } from "../ZipFile";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase, LateBindingTexture } from "./Materials";
+import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase, LateBindingTexture, LightCache } from "./Materials";
 import { clamp, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
 import { assertExists, assert, nArray } from "../util";
 import { BSPEntity, vmtParseNumbers } from "./VMT";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix, Camera } from "../Camera";
 import { AABB, Frustum } from "../Geometry";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
-import { StudioModelCache } from "./Studio";
+import { computeModelMatrixPosRotStudio, StudioModelCache, StudioModelInstance } from "./Studio";
 import BitMap from "../BitMap";
 import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
 import { DeviceProgram } from "../Program";
@@ -286,7 +286,7 @@ class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: mat4, pvs: BitMap | null = null) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4, pvs: BitMap | null = null) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
             return;
 
@@ -474,7 +474,7 @@ class BSPModelRenderer {
     }
 }
 
-export function computeModelMatrixPosRot(dst: mat4, pos: vec3, rot: vec3): void {
+function computeModelMatrixPosRot(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
     const rotX = MathConstants.DEG_TO_RAD * rot[0];
     const rotY = MathConstants.DEG_TO_RAD * rot[1];
     const rotZ = MathConstants.DEG_TO_RAD * rot[2];
@@ -485,21 +485,26 @@ export function computeModelMatrixPosRot(dst: mat4, pos: vec3, rot: vec3): void 
 }
 
 class BaseEntity {
-    public model: BSPModelRenderer | null = null;
+    public modelBSP: BSPModelRenderer | null = null;
+    public modelStudio: StudioModelInstance | null = null;
+
     public origin = vec3.create();
     public angles = vec3.create();
     public renderamt: number = 1.0;
     public visible = true;
-    public materialParams = new EntityMaterialParameters();
+    public materialParams: EntityMaterialParameters | null = null;
 
     constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, private entity: BSPEntity) {
         if (entity.model) {
+            this.materialParams = new EntityMaterialParameters();
+
             if (entity.model.startsWith('*')) {
                 const index = parseInt(entity.model.slice(1), 10);
-                this.model = bspRenderer.models[index];
-                this.model.setEntity(this);
-            } else {
+                this.modelBSP = bspRenderer.models[index];
+                this.modelBSP.setEntity(this);
+            } else if (entity.model.endsWith('.mdl')) {
                 // External model reference.
+                this.fetchStudioModel(renderContext, bspRenderer);
             }
         }
 
@@ -517,17 +522,46 @@ class BaseEntity {
             this.renderamt = Number(entity.renderamt) / 255.0;
     }
 
+    private async fetchStudioModel(renderContext: SourceRenderContext, bspRenderer: BSPRenderer) {
+        const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.entity.model!);
+        this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
+
+        const leaf = assertExists(bspRenderer.bsp.findLeafForPoint(this.origin));
+        this.materialParams!.ambientCube = newAmbientCube();
+        computeAmbientCubeFromLeaf(this.materialParams!.ambientCube, leaf, this.origin);
+
+        this.materialParams!.lightCache = new LightCache(bspRenderer.bsp, this.origin, modelData.bbox);
+    }
+
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
+        if (!this.visible)
+            return;
+
+        if (this.modelBSP !== null) {
+            // BSP models are rendered by the BSP system.
+        } else if (this.modelStudio !== null) {
+            this.modelStudio.prepareToRender(renderContext, renderInstManager);
+        }
+    }
+
     public movement(): void {
-        if (this.model !== null) {
-            computeModelMatrixPosRot(this.model.modelMatrix, this.origin, this.angles);
+        if (this.modelBSP !== null || this.modelStudio !== null) {
+            vec3.copy(this.materialParams!.position, this.origin);
+
+            if (this.modelBSP !== null) {
+                computeModelMatrixPosRot(this.modelBSP.modelMatrix, this.origin, this.angles);
+            } else if (this.modelStudio !== null) {
+                computeModelMatrixPosRotStudio(this.modelStudio.modelMatrix, this.origin, this.angles);
+            }
 
             let visible = this.visible;
             if (this.renderamt === 0)
                 visible = false;
 
-            this.model.visible = visible;
-
-            vec3.copy(this.materialParams.position, this.origin);
+            if (this.modelBSP !== null)
+                this.modelBSP.visible = visible;
+            else if (this.modelStudio !== null)
+                this.modelStudio.visible = visible;
         }
     }
 }
@@ -540,8 +574,8 @@ class sky_camera extends BaseEntity {
 
     constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(renderContext, bspRenderer, entity);
-        const leafnum = bspRenderer.bsp.findLeafForPoint(this.origin);
-        this.area = bspRenderer.bsp.leaflist[leafnum].area;
+        const leaf = assertExists(bspRenderer.bsp.findLeafForPoint(this.origin));
+        this.area = leaf.area;
         this.scale = Number(entity.scale);
         computeModelMatrixSRT(this.modelMatrix, this.scale, this.scale, this.scale, 0, 0, 0,
             this.scale * -this.origin[0],
@@ -559,6 +593,18 @@ class water_lod_control extends BaseEntity {
             renderContext.cheapWaterStartDistance = Number(entity.cheapwaterstartdistance);
         if (entity.cheapwaterenddistance !== undefined)
             renderContext.cheapWaterEndDistance = Number(entity.cheapwaterenddistance);
+    }
+}
+
+class func_movelinear extends BaseEntity {
+    public static classname = `func_movelinear`;
+
+    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(renderContext, bspRenderer, entity);
+    }
+
+    public movement(): void {
+        super.movement();
     }
 }
 
@@ -714,9 +760,12 @@ export class BSPRenderer {
         if (!!(kinds & RenderObjectKind.WorldSpawn))
             this.models[0].prepareToRenderWorld(renderContext, renderInstManager, view, pvs);
 
-        if (!!(kinds & RenderObjectKind.Entities))
+        if (!!(kinds & RenderObjectKind.Entities)) {
             for (let i = 1; i < this.models.length; i++)
                 this.models[i].prepareToRenderModel(renderContext, renderInstManager, view);
+            for (let i = 0; i < this.entities.length; i++)
+                this.entities[i].prepareToRender(renderContext, renderInstManager, view);
+        }
 
         // Static props.
         if (!!(kinds & RenderObjectKind.StaticProps))
@@ -784,7 +833,7 @@ export class SourceRenderContext {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 7 },
+    { numUniformBuffers: 3, numSamplers: 7 },
 ];
 
 const bindingLayoutsGammaCorrect: GfxBindingLayoutDescriptor[] = [
@@ -860,17 +909,13 @@ export class SourceRenderer implements SceneGfx {
 
     public calcPVS(bsp: BSPFile, pvs: BitMap, view: SourceEngineView): boolean {
         // Compute PVS from view.
-        const leafid = bsp.findLeafForPoint(view.cameraPos);
+        const leaf = bsp.findLeafForPoint(view.cameraPos);
 
-        if (leafid >= 0) {
-            const leaf = bsp.leaflist[leafid];
-
-            if (leaf.cluster !== 0xFFFF) {
-                // Has valid visibility.
-                pvs.fill(false);
-                pvs.or(bsp.visibility.pvs[leaf.cluster]);
-                return true;
-            }
+        if (leaf !== null && leaf.cluster !== 0xFFFF) {
+            // Has valid visibility.
+            pvs.fill(false);
+            pvs.or(bsp.visibility.pvs[leaf.cluster]);
+            return true;
         }
 
         return false;

@@ -1,8 +1,8 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, nArray } from "../util";
+import { assert, readString, assertExists, nArray } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
-import { Color, colorNewFromRGBA, colorNewCopy, TransparentBlack } from "../Color";
+import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
 import { SourceRenderContext, SourceEngineView } from "./Main";
 import { GfxInputLayout, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxDevice, GfxBuffer, GfxBufferUsage, GfxBufferFrequencyHint, GfxInputState } from "../gfx/platform/GfxPlatform";
@@ -11,10 +11,9 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { StudioModelInstance, HardwareVertData } from "./Studio";
-import { computeModelMatrixPosRot } from "./Main";
+import { StudioModelInstance, HardwareVertData, computeModelMatrixPosRotStudio } from "./Studio";
 import BitMap from "../BitMap";
-import { BSPFile, computeAmbientCubeFromLeaf } from "./BSPFile";
+import { BSPFile, computeAmbientCubeFromLeaf, newAmbientCube } from "./BSPFile";
 import { AABB } from "../Geometry";
 
 //#region Detail Models
@@ -431,8 +430,7 @@ export function deserializeGameLump_sprp(buffer: ArrayBufferSlice, version: numb
 
         const index = i;
         const pos = vec3.fromValues(posX, posY, posZ);
-        // This was empirically determined. TODO(jstpierre): Should computeModelMatrixPosRot in general do this?
-        const rot = vec3.fromValues(rotZ, rotX, rotY);
+        const rot = vec3.fromValues(rotX, rotY, rotZ);
         const propName = staticModelDict[propType];
         const propLeafList = leafList.subarray(firstLeaf, firstLeaf + leafCount);
         staticProps.push({ index, pos, rot, flags, skin, propName, leafList: propLeafList, fadeMinDist, fadeMaxDist, lightingOrigin });
@@ -457,17 +455,14 @@ export class StaticPropRenderer {
 
         // TODO(jstpierre): studiohdr2_t illumposition
         const lightingOrigin = this.staticProp.lightingOrigin !== null ? this.staticProp.lightingOrigin : this.staticProp.pos;
-        const leafidx = bsp.findLeafForPoint(lightingOrigin);
-        assert(leafidx >= 0);
-        const leaf = bsp.leaflist[leafidx];
-        const ambientCube = nArray(6, () => colorNewCopy(TransparentBlack));
-        computeAmbientCubeFromLeaf(ambientCube, leaf, lightingOrigin);
-        this.materialParams.ambientCube = ambientCube;
+        const leaf = assertExists(bsp.findLeafForPoint(lightingOrigin));
+        this.materialParams.ambientCube = newAmbientCube();
+        computeAmbientCubeFromLeaf(this.materialParams.ambientCube, leaf, lightingOrigin);
 
-        computeModelMatrixPosRot(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
+        computeModelMatrixPosRotStudio(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
         this.bbox.transform(modelData.bbox, scratchMatrix);
 
-        this.materialParams.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);;
+        this.materialParams.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);
 
         this.studioModelInstance = new StudioModelInstance(renderContext, modelData, this.materialParams);
         mat4.copy(this.studioModelInstance.modelMatrix, scratchMatrix);

@@ -1799,7 +1799,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             for (let i = 0; i < uniformBlocks.length; i++) {
                 const [m, blockName, contents] = uniformBlocks[i];
                 const blockIdx = gl.getUniformBlockIndex(prog, blockName);
-                if (blockIdx !== -1)
+                if (blockIdx !== -1 && blockIdx !== 0xFFFFFFFF)
                     gl.uniformBlockBinding(prog, blockIdx, i);
             }
 
