@@ -6,7 +6,7 @@ import { assert, assertExists, fallbackUndefined } from '../util';
 import { computeAmbientCubeFromLeaf, newAmbientCube } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { EntityMaterialParameters, LightCache } from './Materials';
-import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
+import { computeModelMatrixPosQAngle, StudioModelData, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseNumbers } from './VMT';
 
 interface EntityOutputAction {
@@ -37,13 +37,13 @@ class EntityOutput {
             this.actions.push(parseEntityOutputAction(S));
     }
 
-    public fire(entitySystem: EntitySystem): void {
+    public fire(entitySystem: EntitySystem, value: string = ''): void {
         for (let i = 0; i < this.actions.length; i++)
-            entitySystem.fireEntityOutputAction(this.actions[i]);
+            entitySystem.fireEntityOutputAction(this.actions[i], value);
     }
 }
 
-type EntityInputCallback = (entitySystem: EntitySystem) => void;
+type EntityInputFunc = (entitySystem: EntitySystem, value: string) => void;
 
 const scratchMat4a = mat4.create();
 export class BaseEntity {
@@ -60,7 +60,7 @@ export class BaseEntity {
     public parentEntity: BaseEntity | null = null;
 
     public outputs: EntityOutput[] = [];
-    public inputs = new Map<string, EntityInputCallback>();
+    public inputs = new Map<string, EntityInputFunc>();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, protected entity: BSPEntity) {
         if (entity.model) {
@@ -93,17 +93,17 @@ export class BaseEntity {
             this.targetName = '' + entity.targetname;
     }
 
-    protected registerInput(inputName: string, func: EntityInputCallback): void {
+    protected registerInput(inputName: string, func: EntityInputFunc): void {
         assert(!this.inputs.has(inputName));
         this.inputs.set(inputName, func);
     }
 
-    public fireInput(entitySystem: EntitySystem, inputName: string): void {
+    public fireInput(entitySystem: EntitySystem, inputName: string, value: string): void {
         const func = this.inputs.get(inputName);
         if (!func)
             return;
 
-        func(entitySystem);
+        func(entitySystem, value);
     }
 
     private updateLightingData(): void {
@@ -117,16 +117,14 @@ export class BaseEntity {
         materialParams.lightCache = new LightCache(this.bspRenderer.bsp, materialParams.position, this.modelStudio!.modelData.bbox);
     }
 
-    private async fetchStudioModel(renderContext: SourceRenderContext) {
-        if (this.entity.classname.startsWith('npc')) {
-            // TODO(jstpierre): We have trouble rendering humanoid meshes right now.
-            return;
-        }
+    protected modelUpdated(): void {
+    }
 
+    private async fetchStudioModel(renderContext: SourceRenderContext) {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.entity.model!);
         this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
         this.materialParams!.ambientCube = newAmbientCube();
-
+        this.modelUpdated();
         this.updateLightingData();
     }
 
@@ -249,44 +247,33 @@ function angleVec(dstForward: vec3, rot: ReadonlyVec3): void {
     dstForward[2] = -sx;
 }
 
-const scratchVec3a = vec3.create();
-class func_movelinear extends BaseEntity {
-    public static classname = `func_movelinear`;
+const enum ToggleState {
+    Top, Bottom, GoingToTop, GoingToBottom,
+}
 
+abstract class BaseToggle extends BaseEntity {
     public moveDir = vec3.create();
     public startPosition: number;
     public moveDistance: number;
     public speed: number;
+    
+    protected positionOpened = vec3.create();
+    protected positionClosed = vec3.create();
 
-    private positionOpened = vec3.create();
-    private positionClosed = vec3.create();
-
-    private timeLeftInSeconds = 0.0;
-    private positionTarget = vec3.create();
-    private velocityPerSecond = vec3.create();
-
-    private output_onFullyClosed = new EntityOutput();
-    private output_onFullyOpen = new EntityOutput();
+    protected timeLeftInSeconds = 0.0;
+    protected positionTarget = vec3.create();
+    protected velocityPerSecond = vec3.create();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
-
-        this.output_onFullyOpen.parse(this.entity.onfullyopen);
-        this.output_onFullyClosed.parse(this.entity.onfullyclosed);
-        this.registerInput('open', this.input_open.bind(this));
-        this.registerInput('close', this.input_close.bind(this));
 
         vec3.copy(this.moveDir, vmtParseNumbers(fallbackUndefined(this.entity.movedir, "")) as vec3);
         this.startPosition = fallbackUndefined(Number(this.entity.startposition), 0.0);
         this.moveDistance = fallbackUndefined(Number(this.entity.movedistance), 0.0);
         this.speed = fallbackUndefined(Number(this.entity.speed), 0.0);
-
-        angleVec(scratchVec3a, this.moveDir);
-        vec3.scaleAndAdd(this.positionOpened, this.origin, scratchVec3a, -this.moveDistance * this.startPosition);
-        vec3.scaleAndAdd(this.positionClosed, this.origin, scratchVec3a,  this.moveDistance);
     }
 
-    private moveToTargetPos(entitySystem: EntitySystem, positionTarget: ReadonlyVec3, speedInSeconds: number): void {
+    protected moveToTargetPos(entitySystem: EntitySystem, positionTarget: ReadonlyVec3, speedInSeconds: number): void {
         vec3.copy(this.positionTarget, positionTarget);
         vec3.sub(this.velocityPerSecond, this.positionTarget, this.origin);
         this.timeLeftInSeconds = vec3.length(this.velocityPerSecond) / speedInSeconds;
@@ -294,21 +281,6 @@ class func_movelinear extends BaseEntity {
             this.moveDone(entitySystem);
         else
             vec3.scale(this.velocityPerSecond, this.velocityPerSecond, 1.0 / this.timeLeftInSeconds);
-    }
-
-    private moveDone(entitySystem: EntitySystem): void {
-        if (vec3.distance(this.origin, this.positionClosed) < MathConstants.EPSILON)
-            this.output_onFullyClosed.fire(entitySystem);
-        if (vec3.distance(this.origin, this.positionOpened) < MathConstants.EPSILON)
-            this.output_onFullyOpen.fire(entitySystem);
-    }
-
-    private input_open(entitySystem: EntitySystem): void {
-        this.moveToTargetPos(entitySystem, this.positionOpened, this.speed);
-    }
-
-    private input_close(entitySystem: EntitySystem): void {
-        this.moveToTargetPos(entitySystem, this.positionClosed, this.speed);
     }
 
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
@@ -330,6 +302,152 @@ class func_movelinear extends BaseEntity {
             }
         }
     }
+
+    protected abstract moveDone(entitySystem: EntitySystem): void;
+}
+
+const scratchVec3a = vec3.create();
+class func_movelinear extends BaseToggle {
+    public static classname = `func_movelinear`;
+
+    private output_onFullyClosed = new EntityOutput();
+    private output_onFullyOpen = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_onFullyOpen.parse(this.entity.onfullyopen);
+        this.output_onFullyClosed.parse(this.entity.onfullyclosed);
+        this.registerInput('open', this.input_open.bind(this));
+        this.registerInput('close', this.input_close.bind(this));
+
+        angleVec(scratchVec3a, this.moveDir);
+        vec3.scaleAndAdd(this.positionOpened, this.origin, scratchVec3a, -this.moveDistance * this.startPosition);
+        vec3.scaleAndAdd(this.positionClosed, this.origin, scratchVec3a,  this.moveDistance);
+    }
+
+    protected moveDone(entitySystem: EntitySystem): void {
+        if (vec3.distance(this.origin, this.positionClosed) < MathConstants.EPSILON)
+            this.output_onFullyClosed.fire(entitySystem);
+        if (vec3.distance(this.origin, this.positionOpened) < MathConstants.EPSILON)
+            this.output_onFullyOpen.fire(entitySystem);
+    }
+
+    private input_open(entitySystem: EntitySystem): void {
+        this.moveToTargetPos(entitySystem, this.positionOpened, this.speed);
+    }
+
+    private input_close(entitySystem: EntitySystem): void {
+        this.moveToTargetPos(entitySystem, this.positionClosed, this.speed);
+    }
+}
+
+class func_door extends BaseToggle {
+    public static classname = `func_door`;
+
+    private output_onClose = new EntityOutput();
+    private output_onOpen = new EntityOutput();
+    private output_onFullyClosed = new EntityOutput();
+    private output_onFullyOpen = new EntityOutput();
+
+    private modelExtents = vec3.create();
+    private locked: boolean = false;
+    protected toggleState: ToggleState;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        // TODO(jstpierre): Rotating doors
+
+        this.output_onClose.parse(this.entity.onclose);
+        this.output_onOpen.parse(this.entity.onopen);
+        this.output_onFullyClosed.parse(this.entity.onfullyclosed);
+        this.output_onFullyOpen.parse(this.entity.onfullyopen);
+
+        this.registerInput('close', this.input_close.bind(this));
+        this.registerInput('open', this.input_open.bind(this));
+        this.registerInput('toggle', this.input_toggle.bind(this));
+
+        const spawnpos = Number(fallbackUndefined(this.entity.spawnpos, '0'));
+        if (spawnpos === 1)
+            this.toggleState = ToggleState.Top;
+        else
+            this.toggleState = ToggleState.Bottom;
+
+        vec3.copy(this.positionOpened, this.origin);
+        vec3.copy(this.positionClosed, this.origin);
+
+        this.updateExtents();
+    }
+
+    private updateExtents(): void {
+        if (this.modelBSP !== null)
+            this.modelBSP.model.bbox.extents(this.modelExtents);
+        else if (this.modelStudio !== null)
+            this.modelStudio.modelData.bbox.extents(this.modelExtents);
+
+        angleVec(scratchVec3a, this.moveDir);
+        const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents));
+        vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, moveDistance);
+    }
+
+    protected modelUpdated(): void {
+        this.updateExtents();
+    }
+
+    private goToTop(entitySystem: EntitySystem): void {
+        this.toggleState = ToggleState.GoingToTop;
+        this.moveToTargetPos(entitySystem, this.positionOpened, this.speed);
+        this.output_onOpen.fire(entitySystem);
+    }
+
+    private goToBottom(entitySystem: EntitySystem): void {
+        this.toggleState = ToggleState.GoingToBottom;
+        this.moveToTargetPos(entitySystem, this.positionClosed, this.speed);
+        this.output_onClose.fire(entitySystem);
+    }
+
+    private hitTop(entitySystem: EntitySystem): void {
+        this.output_onFullyOpen.fire(entitySystem);
+    }
+
+    private hitBottom(entitySystem: EntitySystem): void {
+        this.output_onFullyClosed.fire(entitySystem);
+    }
+
+    protected moveDone(entitySystem: EntitySystem): void {
+        if (this.toggleState === ToggleState.GoingToTop)
+            this.hitTop(entitySystem);
+        else if (this.toggleState === ToggleState.GoingToBottom)
+            this.hitBottom(entitySystem);
+    }
+
+    private input_close(entitySystem: EntitySystem): void {
+        if (this.toggleState === ToggleState.Bottom)
+            return;
+
+        this.goToBottom(entitySystem);
+    }
+
+    private input_open(entitySystem: EntitySystem): void {
+        if (this.toggleState === ToggleState.Top || this.toggleState === ToggleState.GoingToTop)
+            return;
+
+        if (this.locked)
+            return;
+
+        this.goToTop(entitySystem);
+    }
+
+    private input_toggle(entitySystem: EntitySystem): void {
+        if (this.locked)
+            return;
+
+        if (this.toggleState === ToggleState.Top)
+            this.goToTop(entitySystem);
+        else if (this.toggleState === ToggleState.Bottom)
+            this.goToBottom(entitySystem);
+    }
 }
 
 class logic_auto extends BaseEntity {
@@ -345,6 +463,46 @@ class logic_auto extends BaseEntity {
 
     public spawn(entitySystem: EntitySystem): void {
         this.output_onMapSpawn.fire(entitySystem);
+    }
+}
+
+class logic_relay extends BaseEntity {
+    public static classname = `logic_relay`;
+
+    private output_onTrigger = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_onTrigger.parse(this.entity.ontrigger);
+        this.registerInput('trigger', this.input_trigger.bind(this));
+    }
+
+    private input_trigger(entitySystem: EntitySystem): void {
+        this.output_onTrigger.fire(entitySystem);
+    }
+}
+
+class env_texturetoggle extends BaseEntity {
+    public static classname = `env_texturetoggle`;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.registerInput('settextureindex', this.input_settextureindex.bind(this));
+    }
+
+    private input_settextureindex(entitySystem: EntitySystem, value: string): void {
+        const valueNum = Number(value);
+        if (Number.isNaN(valueNum))
+            return;
+
+        const target = entitySystem.findEntityByTargetName(this.entity.target);
+        if (target === null)
+            return;
+
+        if (target.materialParams !== null)
+            target.materialParams.textureFrameIndex = valueNum;
     }
 }
 
@@ -365,20 +523,26 @@ export class EntitySystem {
         this.registerFactory(sky_camera);
         this.registerFactory(water_lod_control);
         this.registerFactory(func_movelinear);
+        this.registerFactory(func_door);
         this.registerFactory(logic_auto);
+        this.registerFactory(logic_relay);
+        this.registerFactory(env_texturetoggle);
     }
 
     public registerFactory(factory: EntityFactory): void {
         this.classname.set(factory.classname, factory);
     }
 
-    public fireEntityOutputAction(action: EntityOutputAction): void {
+    public fireEntityOutputAction(action: EntityOutputAction, value: string): void {
         // TODO(jstpierre): Support multicast / wildcard target names
         const target = this.findEntityByTargetName(action.targetName);
         if (target === null)
             return;
 
-        target.fireInput(this, action.inputName);
+        if (action.parameterOverride !== '')
+            value = action.parameterOverride;
+
+        target.fireInput(this, action.inputName, value);
     }
 
     public findEntityByTargetName(targetName: string): BaseEntity | null {

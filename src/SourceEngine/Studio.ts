@@ -4,7 +4,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { assert, readString, nArray, assertExists } from "../util";
+import { assert, readString, nArray, assertExists, hexzero0x } from "../util";
 import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -335,6 +335,13 @@ export class StudioModelData {
             bone.rot[0] = mdlView.getFloat32(boneidx + 0x3C, true);
             bone.rot[1] = mdlView.getFloat32(boneidx + 0x40, true);
             bone.rot[2] = mdlView.getFloat32(boneidx + 0x44, true);
+
+            if (i === 0) {
+                // XXX(jstpierre): Empirically, we seem to need some extra "oomph" on the root bone's Z rotation.
+                // I have no clue why this is necessary.
+                bone.rot[2] += MathConstants.TAU / 4;
+            }
+
             const posScaleX = mdlView.getFloat32(boneidx + 0x48, true);
             const posScaleY = mdlView.getFloat32(boneidx + 0x4C, true);
             const posScaleZ = mdlView.getFloat32(boneidx + 0x50, true);
@@ -366,7 +373,6 @@ export class StudioModelData {
             const alignmentZ = mdlView.getFloat32(boneidx + 0x98, true);
             const alignmentW = mdlView.getFloat32(boneidx + 0x9C, true);
 
-            const flags = mdlView.getUint32(boneidx + 0xA0, true);
             const proctype = mdlView.getUint32(boneidx + 0xA4, true);
             const procindex = mdlView.getUint32(boneidx + 0xA8, true);
             const physicsbone = mdlView.getUint32(boneidx + 0xAC, true);
@@ -1230,9 +1236,11 @@ export class StudioModelInstance {
             // World-from-bone
             const parentBoneMatrix = bone.parent >= 0 ? this.worldFromPoseMatrix[bone.parent] : this.modelMatrix;
             mat4.mul(this.worldFromPoseMatrix[i], parentBoneMatrix, this.worldFromPoseMatrix[i]);
+        }
 
-            // World-from-pose
-            mat4.mul(this.worldFromPoseMatrix[i], this.worldFromPoseMatrix[i], bone.poseToBone);
+        for (let i = 0; i < this.worldFromPoseMatrix.length; i++) {
+            // After we've built our world-from-bone array, compute world-from-pose.
+            mat4.mul(this.worldFromPoseMatrix[i], this.worldFromPoseMatrix[i], this.modelData.bones[i].poseToBone);
         }
 
         const lodIndex = this.getLODModelIndex(renderContext);
