@@ -1,8 +1,8 @@
 
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
-import { assertExists } from '../util';
+import { computeModelMatrixSRT, getMatrixTranslation, MathConstants, transformVec3Mat4w1 } from '../MathHelpers';
+import { assert, assertExists, fallbackUndefined } from '../util';
 import { computeAmbientCubeFromLeaf, newAmbientCube } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { EntityMaterialParameters, LightCache } from './Materials';
@@ -19,6 +19,43 @@ function computeModelMatrixPosRot(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec
     computeModelMatrixSRT(dst, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
 }
 
+interface EntityOutputAction {
+    targetName: string;
+    inputName: string;
+    parameterOverride: string;
+    delay: number;
+    timesToFire: number;
+}
+
+function parseEntityOutputAction(S: string): EntityOutputAction {
+    const parts = S.split(',');
+    assert(parts.length === 5);
+    const [targetName, inputNameStr, parameterOverride, delayStr, timesToFireStr] = parts;
+    const inputName = inputNameStr.toLowerCase();
+    const delay = Number(delayStr);
+    const timesToFire = Number(timesToFireStr);
+    return { targetName, inputName, parameterOverride, delay, timesToFire };
+}
+
+class EntityOutput {
+    public actions: EntityOutputAction[] = [];
+
+    public parse(S: string | string[] | undefined): void {
+        if (Array.isArray(S))
+            S.forEach((s) => this.parse(s));
+        else if (S !== undefined)
+            this.actions.push(parseEntityOutputAction(S));
+    }
+
+    public fire(entitySystem: EntitySystem): void {
+        for (let i = 0; i < this.actions.length; i++)
+            entitySystem.fireEntityOutputAction(this.actions[i]);
+    }
+}
+
+type EntityInputCallback = (entitySystem: EntitySystem) => void;
+
+const scratchMat4a = mat4.create();
 export class BaseEntity {
     public modelBSP: BSPModelRenderer | null = null;
     public modelStudio: StudioModelInstance | null = null;
@@ -29,7 +66,13 @@ export class BaseEntity {
     public visible = true;
     public materialParams: EntityMaterialParameters | null = null;
 
-    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, private entity: BSPEntity) {
+    public targetName: string | null = null;
+    public parentEntity: BaseEntity | null = null;
+
+    public outputs: EntityOutput[] = [];
+    public inputs = new Map<string, EntityInputCallback>();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, private bspRenderer: BSPRenderer, protected entity: BSPEntity) {
         if (entity.model) {
             this.materialParams = new EntityMaterialParameters();
 
@@ -39,7 +82,7 @@ export class BaseEntity {
                 this.modelBSP.setEntity(this);
             } else if (entity.model.endsWith('.mdl')) {
                 // External model reference.
-                this.fetchStudioModel(renderContext, bspRenderer);
+                this.fetchStudioModel(renderContext);
             }
         }
 
@@ -55,17 +98,41 @@ export class BaseEntity {
 
         if (entity.renderamt)
             this.renderamt = Number(entity.renderamt) / 255.0;
+
+        if (entity.targetname)
+            this.targetName = '' + entity.targetname;
     }
 
-    private async fetchStudioModel(renderContext: SourceRenderContext, bspRenderer: BSPRenderer) {
+    protected registerInput(inputName: string, func: EntityInputCallback): void {
+        assert(!this.inputs.has(inputName));
+        this.inputs.set(inputName, func);
+    }
+
+    public fireInput(entitySystem: EntitySystem, inputName: string): void {
+        const func = this.inputs.get(inputName);
+        if (!func)
+            return;
+
+        func(entitySystem);
+    }
+
+    private updateLightingData(): void {
+        const materialParams = this.materialParams!;
+
+        const modelMatrix = this.updateModelMatrix()!;
+        getMatrixTranslation(materialParams.position, modelMatrix);
+
+        const leaf = assertExists(this.bspRenderer.bsp.findLeafForPoint(materialParams.position));
+        computeAmbientCubeFromLeaf(materialParams.ambientCube!, leaf, materialParams.position);
+        materialParams.lightCache = new LightCache(this.bspRenderer.bsp, materialParams.position, this.modelStudio!.modelData.bbox);
+    }
+
+    private async fetchStudioModel(renderContext: SourceRenderContext) {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.entity.model!);
         this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
-
-        const leaf = assertExists(bspRenderer.bsp.findLeafForPoint(this.origin));
         this.materialParams!.ambientCube = newAmbientCube();
-        computeAmbientCubeFromLeaf(this.materialParams!.ambientCube, leaf, this.origin);
 
-        this.materialParams!.lightCache = new LightCache(bspRenderer.bsp, this.origin, modelData.bbox);
+        this.updateLightingData();
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView): void {
@@ -79,15 +146,62 @@ export class BaseEntity {
         }
     }
 
-    public movement(): void {
-        if (this.modelBSP !== null || this.modelStudio !== null) {
-            vec3.copy(this.materialParams!.position, this.origin);
+    public setParentEntity(parentEntity: BaseEntity | null): void {
+        if (parentEntity === this.parentEntity)
+            return;
 
-            if (this.modelBSP !== null) {
-                computeModelMatrixPosRot(this.modelBSP.modelMatrix, this.origin, this.angles);
-            } else if (this.modelStudio !== null) {
-                computeModelMatrixPosRotStudio(this.modelStudio.modelMatrix, this.origin, this.angles);
+        if (this.parentEntity !== null) {
+            const parentModelMatrix = this.parentEntity.updateModelMatrix();
+            if (parentModelMatrix !== null) {
+                // Transform origin into absolute world-space.
+                transformVec3Mat4w1(this.origin, parentModelMatrix, this.origin);
             }
+        }
+
+        this.parentEntity = parentEntity;
+
+        if (this.parentEntity !== null) {
+            const parentModelMatrix = this.parentEntity.updateModelMatrix();
+            if (parentModelMatrix !== null) {
+                // Transform origin from world-space into entity space.
+                mat4.invert(scratchMat4a, parentModelMatrix);
+                transformVec3Mat4w1(this.origin, scratchMat4a, this.origin);
+            }
+        }
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        if (this.entity.parentname)
+            this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
+    }
+
+    protected updateModelMatrix(): mat4 | null {
+        // TODO(jstpierre): There has to be a better way!!!!
+        let modelMatrix: mat4;
+
+        if (this.modelBSP !== null) {
+            computeModelMatrixPosRot(this.modelBSP.modelMatrix, this.origin, this.angles);
+            modelMatrix = this.modelBSP.modelMatrix;
+        } else if (this.modelStudio !== null) {
+            computeModelMatrixPosRotStudio(this.modelStudio.modelMatrix, this.origin, this.angles);
+            modelMatrix = this.modelStudio.modelMatrix;
+        } else {
+            return null;
+        }
+
+        if (this.parentEntity !== null) {
+            const parentModelMatrix = this.parentEntity.updateModelMatrix();
+            if (parentModelMatrix !== null)
+                mat4.mul(modelMatrix, parentModelMatrix, modelMatrix);
+        }
+
+        return modelMatrix;
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        if (this.modelBSP !== null || this.modelStudio !== null) {
+            const modelMatrix = this.updateModelMatrix()!;
+            getMatrixTranslation(this.materialParams!.position, modelMatrix);
 
             let visible = this.visible;
             if (this.renderamt === 0)
@@ -107,8 +221,8 @@ export class sky_camera extends BaseEntity {
     public scale: number = 1;
     public modelMatrix = mat4.create();
 
-    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
-        super(renderContext, bspRenderer, entity);
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
         const leaf = assertExists(bspRenderer.bsp.findLeafForPoint(this.origin));
         this.area = leaf.area;
         this.scale = Number(entity.scale);
@@ -122,8 +236,8 @@ export class sky_camera extends BaseEntity {
 class water_lod_control extends BaseEntity {
     public static classname = 'water_lod_control';
 
-    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
-        super(renderContext, bspRenderer, entity);
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
         if (entity.cheapwaterstartdistance !== undefined)
             renderContext.cheapWaterStartDistance = Number(entity.cheapwaterstartdistance);
         if (entity.cheapwaterenddistance !== undefined)
@@ -131,25 +245,123 @@ class water_lod_control extends BaseEntity {
     }
 }
 
+function angleVec(dstForward: vec3, rot: ReadonlyVec3): void {
+    const rx = rot[0] * MathConstants.DEG_TO_RAD, ry = rot[1] * MathConstants.DEG_TO_RAD;
+    const sx = Math.sin(rx), cx = Math.cos(rx);
+    const sy = Math.sin(ry), cy = Math.cos(ry);
+
+    dstForward[0] = cx*cy;
+    dstForward[1] = cx*sy;
+    dstForward[2] = -sx;
+}
+
+const scratchVec3a = vec3.create();
 class func_movelinear extends BaseEntity {
     public static classname = `func_movelinear`;
 
-    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
-        super(renderContext, bspRenderer, entity);
+    public moveDir = vec3.create();
+    public startPosition: number;
+    public moveDistance: number;
+    public speed: number;
+
+    private positionOpened = vec3.create();
+    private positionClosed = vec3.create();
+
+    private timeLeftInSeconds = 0.0;
+    private positionTarget = vec3.create();
+    private velocityPerSecond = vec3.create();
+
+    private output_onFullyClosed = new EntityOutput();
+    private output_onFullyOpen = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_onFullyOpen.parse(this.entity.onfullyopen);
+        this.output_onFullyClosed.parse(this.entity.onfullyclosed);
+        this.registerInput('open', this.input_open.bind(this));
+        this.registerInput('close', this.input_close.bind(this));
+
+        vec3.copy(this.moveDir, vmtParseNumbers(fallbackUndefined(this.entity.movedir, "")) as vec3);
+        this.startPosition = fallbackUndefined(Number(this.entity.startposition), 0.0);
+        this.moveDistance = fallbackUndefined(Number(this.entity.movedistance), 0.0);
+        this.speed = fallbackUndefined(Number(this.entity.speed), 0.0);
+
+        angleVec(scratchVec3a, this.moveDir);
+        vec3.scaleAndAdd(this.positionOpened, this.origin, scratchVec3a, -this.moveDistance * this.startPosition);
+        vec3.scaleAndAdd(this.positionClosed, this.origin, scratchVec3a,  this.moveDistance);
     }
 
-    public movement(): void {
-        super.movement();
+    private moveToTargetPos(entitySystem: EntitySystem, positionTarget: ReadonlyVec3, speedInSeconds: number): void {
+        vec3.copy(this.positionTarget, positionTarget);
+        vec3.sub(this.velocityPerSecond, this.positionTarget, this.origin);
+        this.timeLeftInSeconds = vec3.length(this.velocityPerSecond) / speedInSeconds;
+        if (this.timeLeftInSeconds <= 0.0)
+            this.moveDone(entitySystem);
+        else
+            vec3.scale(this.velocityPerSecond, this.velocityPerSecond, 1.0 / this.timeLeftInSeconds);
+    }
+
+    private moveDone(entitySystem: EntitySystem): void {
+        if (vec3.distance(this.origin, this.positionClosed) < MathConstants.EPSILON)
+            this.output_onFullyClosed.fire(entitySystem);
+        if (vec3.distance(this.origin, this.positionOpened) < MathConstants.EPSILON)
+            this.output_onFullyOpen.fire(entitySystem);
+    }
+
+    private input_open(entitySystem: EntitySystem): void {
+        this.moveToTargetPos(entitySystem, this.positionOpened, this.speed);
+    }
+
+    private input_close(entitySystem: EntitySystem): void {
+        this.moveToTargetPos(entitySystem, this.positionClosed, this.speed);
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        const deltaTimeInSeconds = renderContext.globalDeltaTime;
+
+        if (this.timeLeftInSeconds > 0.0) {
+            // Apply the velocity.
+            vec3.scaleAndAdd(this.origin, this.origin, this.velocityPerSecond, deltaTimeInSeconds);
+            this.timeLeftInSeconds -= deltaTimeInSeconds;
+
+            // If we've reached the target position, then we're done.
+            if (this.timeLeftInSeconds <= 0.0) {
+                vec3.copy(this.origin, this.positionTarget);
+                vec3.zero(this.velocityPerSecond);
+                this.timeLeftInSeconds = 0.0;
+                this.moveDone(entitySystem);
+            }
+        }
+    }
+}
+
+class logic_auto extends BaseEntity {
+    public static classname = `logic_auto`;
+
+    private output_onMapSpawn = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_onMapSpawn.parse(this.entity.onmapspawn);
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        this.output_onMapSpawn.fire(entitySystem);
     }
 }
 
 interface EntityFactory {
-    new(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): BaseEntity;
+    new(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): BaseEntity;
     classname: string;
 }
 
 export class EntitySystem {
     public classname = new Map<string, EntityFactory>();
+    public entities: BaseEntity[] = [];
 
     constructor() {
         this.registerDefaultFactories();
@@ -158,14 +370,49 @@ export class EntitySystem {
     private registerDefaultFactories(): void {
         this.registerFactory(sky_camera);
         this.registerFactory(water_lod_control);
+        this.registerFactory(func_movelinear);
+        this.registerFactory(logic_auto);
     }
 
     public registerFactory(factory: EntityFactory): void {
         this.classname.set(factory.classname, factory);
     }
 
-    public createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, entity: BSPEntity): BaseEntity {
+    public fireEntityOutputAction(action: EntityOutputAction): void {
+        // TODO(jstpierre): Support multicast / wildcard target names
+        const target = this.findEntityByTargetName(action.targetName);
+        if (target === null)
+            return;
+
+        target.fireInput(this, action.inputName);
+    }
+
+    public findEntityByTargetName(targetName: string): BaseEntity | null {
+        for (let i = 0; i < this.entities.length; i++)
+            if (this.entities[i].targetName === targetName)
+                return this.entities[i];
+        return null;
+    }
+
+    public movement(renderContext: SourceRenderContext): void {
+        for (let i = 0; i < this.entities.length; i++)
+            this.entities[i].movement(this, renderContext);
+    }
+
+    private spawn(): void {
+        for (let i = 0; i < this.entities.length; i++)
+            this.entities[i].spawn(this);
+    }
+
+    private createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, entity: BSPEntity): void {
         const factory = this.classname.has(entity.classname) ? this.classname.get(entity.classname)! : BaseEntity;
-        return new factory(renderContext, renderer, entity);
+        const entityInstance = new factory(this, renderContext, renderer, entity);
+        this.entities.push(entityInstance);
+    }
+
+    public createEntities(renderContext: SourceRenderContext, renderer: BSPRenderer, entities: BSPEntity[]): void {
+        for (let i = 0; i < entities.length; i++)
+            this.createEntity(renderContext, renderer, entities[i]);
+        this.spawn();
     }
 }

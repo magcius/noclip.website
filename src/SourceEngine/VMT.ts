@@ -151,7 +151,15 @@ function pairs2obj(pairs: VKFPair[], recurse: boolean = false): any {
     const o: any = {};
     for (let i = 0; i < pairs.length; i++) {
         const [k, v] = pairs[i];
-        o[k] = (recurse && typeof v === 'object') ? pairs2obj(v) : v;
+        const vv = (recurse && typeof v === 'object') ? pairs2obj(v) : v;
+
+        if (k in o) {
+            if (!Array.isArray(o[k]))
+                o[k] = [o[k]];
+            o[k].push(vv);
+        } else {
+            o[k] = vv;
+        }
     }
     return o;
 }

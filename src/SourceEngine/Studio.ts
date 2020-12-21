@@ -1127,7 +1127,7 @@ export class StudioModelInstance {
 
     private lodInstance: StudioModelLODInstance[] = [];
 
-    constructor(renderContext: SourceRenderContext, private modelData: StudioModelData, materialParams: EntityMaterialParameters) {
+    constructor(renderContext: SourceRenderContext, public modelData: StudioModelData, materialParams: EntityMaterialParameters) {
         assert(this.modelData.bodyPartData.length === 1);
         const bodyPartData = this.modelData.bodyPartData[0];
 

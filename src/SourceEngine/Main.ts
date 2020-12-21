@@ -519,7 +519,7 @@ export class BSPRenderer {
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private entities: BaseEntity[] = [];
+    private entitySystem = new EntitySystem();
     public models: BSPModelRenderer[] = [];
     public detailPropLeafRenderers: DetailPropLeafRenderer[] = [];
     public staticPropRenderers: StaticPropRenderer[] = [];
@@ -557,8 +557,7 @@ export class BSPRenderer {
         }
 
         // Spawn entities.
-        for (let i = 0; i < this.bsp.entities.length; i++)
-            this.entities.push(renderContext.entitySystem.createEntity(renderContext, this, this.bsp.entities[i]));
+        this.entitySystem.createEntities(renderContext, this, this.bsp.entities);
 
         // Spawn static objects.
         if (this.bsp.staticObjects !== null)
@@ -572,13 +571,13 @@ export class BSPRenderer {
     }
 
     public getSkyCameraModelMatrix(): mat4 | null {
-        const skyCameraEntity = this.entities.find((entity) => entity instanceof sky_camera) as sky_camera;
+        const skyCameraEntity = this.entitySystem.entities.find((entity) => entity instanceof sky_camera) as sky_camera;
         return skyCameraEntity !== undefined ? skyCameraEntity.modelMatrix : null;
     }
 
     public movement(renderContext: SourceRenderContext): void {
-        for (let i = 0; i < this.entities.length; i++)
-            this.entities[i].movement();
+        this.entitySystem.movement(renderContext);
+
         for (let i = 0; i < this.models.length; i++)
             this.models[i].movement(renderContext);
         for (let i = 0; i < this.staticPropRenderers.length; i++)
@@ -602,8 +601,8 @@ export class BSPRenderer {
         if (!!(kinds & RenderObjectKind.Entities)) {
             for (let i = 1; i < this.models.length; i++)
                 this.models[i].prepareToRenderModel(renderContext, renderInstManager, view);
-            for (let i = 0; i < this.entities.length; i++)
-                this.entities[i].prepareToRender(renderContext, renderInstManager, view);
+            for (let i = 0; i < this.entitySystem.entities.length; i++)
+                this.entitySystem.entities[i].prepareToRender(renderContext, renderInstManager, view);
         }
 
         // Static props.
@@ -652,8 +651,8 @@ export class SourceRenderContext {
     public materialCache: MaterialCache;
     public worldLightingState = new WorldLightingState();
     public globalTime: number = 0;
+    public globalDeltaTime: number = 0;
     public materialProxySystem = new MaterialProxySystem();
-    public entitySystem = new EntitySystem();
     public cheapWaterStartDistance = 0.0;
     public cheapWaterEndDistance = 0.1;
     public currentView: SourceEngineView;
@@ -763,6 +762,7 @@ export class SourceRenderer implements SceneGfx {
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         // globalTime is in seconds.
         this.renderContext.globalTime = viewerInput.time / 1000.0;
+        this.renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
 
         // Set up our views.
         this.mainView.setupFromCamera(viewerInput.camera);
