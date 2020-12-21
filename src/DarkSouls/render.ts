@@ -625,18 +625,21 @@ class BatchInstance {
     private texScroll = nArray(3, () => vec4.create());
     private textureMapping = nArray(8, () => new TextureMapping());
     private megaState: Partial<GfxMegaStateDescriptor>;
+    private program: DKSProgram;
     private gfxProgram: GfxProgram;
     private sortKey: number;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private flverData: FLVERData, private batchData: BatchData, textureHolder: DDSTextureHolder, private material: Material, private mtd: MTD) {
-        const program = new DKSProgram(mtd);
+        this.program = new DKSProgram(mtd);
 
         // If this is a Phong shader, then turn on lighting.
         if (mtd.shaderPath.includes('_Phn_')) {
             const lightingType: LightingType = assertExists(getMaterialParam(mtd, 'g_LightingType'))[0];
 
             if (lightingType !== LightingType.None)
-                program.defines.set('USE_LIGHTING', '1');
+                this.program.defines.set('USE_LIGHTING', '1');
+        } else if (mtd.shaderPath.includes('_Lit')) {
+            this.program.defines.set('USE_LIGHTING', '1');
         }
 
         // If this is a Water shader, turn off by default until we RE this.
@@ -648,7 +651,7 @@ class BatchInstance {
 
         if (inputLayout.vertexAttributes.some((vertexAttribute) => vertexAttribute.semantic === VertexInputSemantic.Bitangent)) {
             // TODO(jstpierre): I don't think this is correct. It doesn't seem like a bitangent, but more like a bent binormal? Needs investigation.
-            // program.defines.set('HAS_BITANGENT', '1');
+            // this.program.defines.set('HAS_BITANGENT', '1');
         }
 
         linkTextureParameter(this.textureMapping, textureHolder, 'g_Diffuse',    material, mtd);
@@ -717,8 +720,8 @@ class BatchInstance {
                 vec4.set(this.texScroll[i], param[0], param[1], 0, 0);
         }
 
-        program.ensurePreprocessed(device.queryVendorInfo());
-        this.gfxProgram = cache.createProgram(device, program);
+        this.program.ensurePreprocessed(device.queryVendorInfo());
+        this.gfxProgram = cache.createProgram(device, this.program);
 
         const layer = isTranslucent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.sortKey = makeSortKey(layer, 0);
