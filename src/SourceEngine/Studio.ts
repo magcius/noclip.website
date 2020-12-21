@@ -150,6 +150,9 @@ class StudioModelSubmodelData {
 class StudioModelBodyPartData {
     public submodelData: StudioModelSubmodelData[] = [];
 
+    constructor(private name: string) {
+    }
+
     public destroy(device: GfxDevice): void {
         for (let i = 0; i < this.submodelData.length; i++)
             this.submodelData[i].destroy(device);
@@ -234,6 +237,12 @@ export class StudioModelData {
     constructor(renderContext: SourceRenderContext, mdlBuffer: ArrayBufferSlice, vvdBuffer: ArrayBufferSlice, vtxBuffer: ArrayBufferSlice) {
         const mdlView = mdlBuffer.createDataView();
 
+        // We have three separate files of data (MDL, VVD, VTX) to chew through.
+        //
+        // MDL = Studio Model Header, contains skeleton, most aux data, animations, etc.
+        // VVD = Valve Vertex Data, contains actual vertex data.
+        // VTX = Optimized Model, contains per-LOD information (index buffer, optimized trilist information & material replacement).
+
         // Parse MDL header
         assert(readString(mdlBuffer, 0x00, 0x04) === 'IDST');
         const mdlVersion = mdlView.getUint32(0x04, true);
@@ -271,8 +280,6 @@ export class StudioModelData {
 
         const flags: StudioModelFlags = mdlView.getUint32(0x98, true);
         const isStaticProp = !!(flags & StudioModelFlags.STATIC_PROP);
-        // We only support static props right now.
-        // assert(isStaticProp);
 
         const numbones = mdlView.getUint32(0x9C, true);
         const boneindex = mdlView.getUint32(0xA0, true);
@@ -547,13 +554,7 @@ export class StudioModelData {
             vtxMaterialReplacementListIdx += 0x08;
         }
 
-        // We have three separate files of data (MDL, VVD, VTX) to chew through.
-        //
-        // MDL = Studio Model Header, contains skeleton, most aux data, animations, etc.
-        // VVD = Valve Vertex Data, contains actual vertex data.
-        // VTX = Optimized Model, contains per-LOD information (index buffer, optimized trilist information & material replacement).
-
-        // The hierarchy of a model is Body Part -> Submodel -> Submodel LOD -> Mesh -> Mesh Group -> Strip
+        // The hierarchy of a model is Body Part -> Submodel -> Submodel LOD -> Mesh -> Strip Group -> Strip
         // Note that "strips" might not actually be tristrips. They appear to be trilists in modern models.
 
         let mdlBodyPartIdx = bodypartindex;
@@ -566,9 +567,9 @@ export class StudioModelData {
 
             const vtxNumModels = vtxView.getUint32(vtxBodyPartIdx + 0x00, true);
             assert(mdlNumModels === vtxNumModels);
-            const vtxModelOffs = vtxView.getUint32(vtxBodyPartOffset + 0x04, true);
+            const vtxModelOffs = vtxView.getUint32(vtxBodyPartIdx + 0x04, true);
 
-            const bodyPartData = new StudioModelBodyPartData();
+            const bodyPartData = new StudioModelBodyPartData(bodyPartName);
             this.bodyPartData.push(bodyPartData);
 
             let mdlSubmodelIdx = mdlBodyPartIdx + mdlModelindex;
@@ -728,7 +729,6 @@ export class StudioModelData {
                                 const vvdNumBones = vvdView.getUint8(vvdVertexOffs + 0x0F);
 
                                 const boneWeights: number[] = [0, 0, 0, 0];
-                                const boneIDs: number[] = [0, 0, 0, 0];
 
                                 let totalBoneWeight = 0.0;
                                 for (let i = 0; i < vtxNumBones; i++) {
@@ -877,9 +877,6 @@ export class StudioModelData {
 
             mdlBodyPartIdx += 0x10;
             vtxBodyPartIdx += 0x08;
-
-            // TODO(jstpierre): Reading models with multiple body parts seems to break right now... not sure why.
-            break;
         }
     }
 
