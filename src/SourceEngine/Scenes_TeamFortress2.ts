@@ -50,7 +50,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('background01'),
     new TeamFortress2SceneDesc('cp_dustbowl'),
     new TeamFortress2SceneDesc('ctf_2fort'),
-    new TeamFortress2SceneDesc('koth_harvest'),
+    new TeamFortress2SceneDesc('koth_harvest_final'),
     new TeamFortress2SceneDesc('koth_highpass'),
     new TeamFortress2SceneDesc('koth_king'),
     new TeamFortress2SceneDesc('koth_sawmill'),

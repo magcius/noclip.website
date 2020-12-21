@@ -93,7 +93,7 @@ export function computeModelMatrixR(dst: mat4, rotationX: number, rotationY: num
     const sinZ = Math.sin(rotationZ), cosZ = Math.cos(rotationZ);
 
     dst[0] =  (cosY * cosZ);
-    dst[1] =  (sinZ * cosY);
+    dst[1] =  (cosY * sinZ);
     dst[2] =  (-sinY);
     dst[3] =  0.0;
 

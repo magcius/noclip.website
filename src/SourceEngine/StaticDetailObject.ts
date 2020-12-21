@@ -1,6 +1,6 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { assert, readString, assertExists, nArray } from "../util";
+import { assert, readString, assertExists } from "../util";
 import { vec4, vec3, mat4 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../Color";
 import { unpackColorRGBExp32, BaseMaterial, MaterialProgramBase, LightCache, EntityMaterialParameters } from "./Materials";
@@ -11,7 +11,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { Endianness } from "../endian";
 import { fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { StudioModelInstance, HardwareVertData, computeModelMatrixPosRotStudio } from "./Studio";
+import { StudioModelInstance, HardwareVertData, computeModelMatrixPosQAngle } from "./Studio";
 import BitMap from "../BitMap";
 import { BSPFile, computeAmbientCubeFromLeaf, newAmbientCube } from "./BSPFile";
 import { AABB } from "../Geometry";
@@ -459,7 +459,7 @@ export class StaticPropRenderer {
         this.materialParams.ambientCube = newAmbientCube();
         computeAmbientCubeFromLeaf(this.materialParams.ambientCube, leaf, lightingOrigin);
 
-        computeModelMatrixPosRotStudio(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
+        computeModelMatrixPosQAngle(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
         this.bbox.transform(modelData.bbox, scratchMatrix);
 
         this.materialParams.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);
@@ -503,6 +503,8 @@ export class StaticPropRenderer {
 
         if (!visible)
             return;
+
+        computeModelMatrixPosQAngle(this.studioModelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
 
         getMatrixTranslation(this.materialParams.position, this.studioModelInstance.modelMatrix);
         this.studioModelInstance.prepareToRender(renderContext, renderInstManager);

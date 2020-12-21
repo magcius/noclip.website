@@ -6,18 +6,8 @@ import { assert, assertExists, fallbackUndefined } from '../util';
 import { computeAmbientCubeFromLeaf, newAmbientCube } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { EntityMaterialParameters, LightCache } from './Materials';
-import { computeModelMatrixPosRotStudio, StudioModelInstance } from "./Studio";
+import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseNumbers } from './VMT';
-
-function computeModelMatrixPosRot(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
-    const rotX = MathConstants.DEG_TO_RAD * rot[0];
-    const rotY = MathConstants.DEG_TO_RAD * rot[1];
-    const rotZ = MathConstants.DEG_TO_RAD * rot[2];
-    const transX = pos[0];
-    const transY = pos[1];
-    const transZ = pos[2];
-    computeModelMatrixSRT(dst, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
-}
 
 interface EntityOutputAction {
     targetName: string;
@@ -128,6 +118,11 @@ export class BaseEntity {
     }
 
     private async fetchStudioModel(renderContext: SourceRenderContext) {
+        if (this.entity.classname.startsWith('npc')) {
+            // TODO(jstpierre): We have trouble rendering humanoid meshes right now.
+            return;
+        }
+
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.entity.model!);
         this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
         this.materialParams!.ambientCube = newAmbientCube();
@@ -176,18 +171,17 @@ export class BaseEntity {
     }
 
     protected updateModelMatrix(): mat4 | null {
-        // TODO(jstpierre): There has to be a better way!!!!
         let modelMatrix: mat4;
 
         if (this.modelBSP !== null) {
-            computeModelMatrixPosRot(this.modelBSP.modelMatrix, this.origin, this.angles);
             modelMatrix = this.modelBSP.modelMatrix;
         } else if (this.modelStudio !== null) {
-            computeModelMatrixPosRotStudio(this.modelStudio.modelMatrix, this.origin, this.angles);
             modelMatrix = this.modelStudio.modelMatrix;
         } else {
             return null;
         }
+
+        computeModelMatrixPosQAngle(modelMatrix, this.origin, this.angles);
 
         if (this.parentEntity !== null) {
             const parentModelMatrix = this.parentEntity.updateModelMatrix();

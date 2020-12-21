@@ -12,7 +12,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { MaterialProgramBase, BaseMaterial, EntityMaterialParameters, StaticLightingMode, SkinningMode } from "./Materials";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { mat4, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
-import { computeModelMatrixSRT, MathConstants } from "../MathHelpers";
+import { MathConstants } from "../MathHelpers";
 
 // Encompasses the MDL, VVD & VTX formats.
 
@@ -34,26 +34,50 @@ const enum OptimizeStripFlags {
     IS_TRISTRIP                    = 0x02,
 }
 
-export function computeModelMatrixPosRotStudio(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
-    // Empirically determined.
-    const rotX = MathConstants.DEG_TO_RAD * rot[2];
-    const rotY = MathConstants.DEG_TO_RAD * rot[0];
-    const rotZ = MathConstants.DEG_TO_RAD * rot[1];
-    const transX = pos[0];
-    const transY = pos[1];
-    const transZ = pos[2];
-    computeModelMatrixSRT(dst, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
+function computeModelMatrixPosRotInternal(dst: mat4, pitch: number, yaw: number, roll: number, pos: ReadonlyVec3): void {
+    // Pitch, Yaw, Roll
+    // https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/mathlib/mathlib_base.cpp#L1218-L1233
+
+    const sinP = Math.sin(pitch), cosP = Math.cos(pitch);
+    const sinY = Math.sin(yaw),   cosY = Math.cos(yaw);
+    const sinR = Math.sin(roll),  cosR = Math.cos(roll);
+
+    dst[0] =  (cosP * cosY);
+    dst[1] =  (cosP * sinY);
+    dst[2] =  (-sinP);
+    dst[3] =  0.0;
+
+    dst[4] =  (sinP * sinR * cosY - cosR * sinY);
+    dst[5] =  (sinP * sinR * sinY + cosR * cosY);
+    dst[6] =  (sinR * cosP);
+    dst[7] =  0.0;
+
+    dst[8] =  (sinP * cosR * cosY + sinR * sinY);
+    dst[9] =  (sinP * cosR * sinY - sinR * cosY);
+    dst[10] = (cosR * cosP);
+    dst[11] = 0.0;
+
+    dst[12] = pos[0];
+    dst[13] = pos[1];
+    dst[14] = pos[2];
+    dst[15] = 1.0;
 }
 
-function computeBoneMatrix(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
-    // Empirically determined.
-    const rotX = rot[1];
-    const rotY = rot[2];
-    const rotZ = rot[0];
-    const transX = pos[0];
-    const transY = pos[1];
-    const transZ = pos[2];
-    computeModelMatrixSRT(dst, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
+export function computeModelMatrixPosQAngle(dst: mat4, pos: ReadonlyVec3, qangle: ReadonlyVec3): void {
+    // QAngle is in degrees.
+    const pitch = qangle[0] * MathConstants.DEG_TO_RAD;
+    const yaw =   qangle[1] * MathConstants.DEG_TO_RAD;
+    const roll =  qangle[2] * MathConstants.DEG_TO_RAD;
+    computeModelMatrixPosRotInternal(dst, pitch, yaw, roll, pos);
+}
+
+function computeModelMatrixPosRadianEuler(dst: mat4, pos: ReadonlyVec3, radianEuler: ReadonlyVec3): void {
+    // Convert Euler angles to PYR.
+    // https://github.com/ValveSoftware/source-sdk-2013/blob/master/sp/src/mathlib/mathlib_base.cpp#L1182
+    const pitch = radianEuler[1];
+    const yaw =   radianEuler[2];
+    const roll =  radianEuler[0];
+    computeModelMatrixPosRotInternal(dst, pitch, yaw, roll, pos);
 }
 
 class StudioModelStripData {
@@ -221,6 +245,7 @@ class ResizableArrayBuffer {
 class Bone {
     public pos = vec3.create();
     public rot = vec3.create();
+    public poseToBone = mat4.create();
 
     constructor(private name: string, public parent: number) {
     }
@@ -329,6 +354,12 @@ export class StudioModelData {
             const poseToBone21 = mdlView.getFloat32(boneidx + 0x84, true);
             const poseToBone22 = mdlView.getFloat32(boneidx + 0x88, true);
             const poseToBone23 = mdlView.getFloat32(boneidx + 0x8C, true);
+            mat4.set(bone.poseToBone,
+                poseToBone00, poseToBone10, poseToBone20, 0,
+                poseToBone01, poseToBone11, poseToBone21, 0,
+                poseToBone02, poseToBone12, poseToBone22, 0,
+                poseToBone03, poseToBone13, poseToBone23, 1,
+            );
 
             const alignmentX = mdlView.getFloat32(boneidx + 0x90, true);
             const alignmentY = mdlView.getFloat32(boneidx + 0x94, true);
@@ -599,12 +630,12 @@ export class StudioModelData {
 
                 const vtxSubmodelNumLODs = vtxView.getUint32(vtxSubmodelIdx + 0x00, true);
                 assert(vtxSubmodelNumLODs === vtxNumLODs);
-                const vtxSubmodelLODOffset = vtxSubmodelIdx + vtxView.getUint32(vtxSubmodelIdx + 0x04, true);
+                const vtxSubmodelLODOffset = vtxView.getUint32(vtxSubmodelIdx + 0x04, true);
 
                 const submodelData = new StudioModelSubmodelData(mdlSubmodelName);
                 bodyPartData.submodelData.push(submodelData);
 
-                let vtxLODIdx = vtxSubmodelLODOffset;
+                let vtxLODIdx = vtxSubmodelIdx + vtxSubmodelLODOffset;
                 for (let lod = 0; lod < vtxSubmodelNumLODs; lod++) {
                     const vtxNumMeshes = vtxView.getUint32(vtxLODIdx + 0x00, true);
                     assert(vtxNumMeshes === mdlSubmodelNumMeshes);
@@ -877,6 +908,9 @@ export class StudioModelData {
 
             mdlBodyPartIdx += 0x10;
             vtxBodyPartIdx += 0x08;
+
+            // TODO(jstpierre): Reading models with multiple body parts seems to break right now... not sure why.
+            break;
         }
     }
 
@@ -1131,7 +1165,7 @@ class StudioModelLODInstance {
 export class StudioModelInstance {
     public visible: boolean = true;
     public modelMatrix = mat4.create();
-    public worldFromLocalMatrix: mat4[];
+    public worldFromPoseMatrix: mat4[];
 
     private lodInstance: StudioModelLODInstance[] = [];
 
@@ -1147,7 +1181,7 @@ export class StudioModelInstance {
             this.lodInstance.push(new StudioModelLODInstance(renderContext, lodData, materialParams));
         }
 
-        this.worldFromLocalMatrix = nArray(this.modelData.bones.length, () => mat4.create());
+        this.worldFromPoseMatrix = nArray(this.modelData.bones.length, () => mat4.create());
     }
 
     public setColorMeshData(device: GfxDevice, data: HardwareVertData): void {
@@ -1187,16 +1221,22 @@ export class StudioModelInstance {
         if (!this.visible)
             return;
 
-        for (let i = 0; i < this.worldFromLocalMatrix.length; i++) {
+        for (let i = 0; i < this.worldFromPoseMatrix.length; i++) {
             const bone = this.modelData.bones[i];
-            computeBoneMatrix(this.worldFromLocalMatrix[i], bone.pos, bone.rot);
 
-            const parentBoneMatrix = bone.parent >= 0 ? this.worldFromLocalMatrix[bone.parent] : this.modelMatrix;
-            mat4.mul(this.worldFromLocalMatrix[i], parentBoneMatrix, this.worldFromLocalMatrix[i]);
+            // Parent-from-bone
+            computeModelMatrixPosRadianEuler(this.worldFromPoseMatrix[i], bone.pos, bone.rot);
+
+            // World-from-bone
+            const parentBoneMatrix = bone.parent >= 0 ? this.worldFromPoseMatrix[bone.parent] : this.modelMatrix;
+            mat4.mul(this.worldFromPoseMatrix[i], parentBoneMatrix, this.worldFromPoseMatrix[i]);
+
+            // World-from-pose
+            mat4.mul(this.worldFromPoseMatrix[i], this.worldFromPoseMatrix[i], bone.poseToBone);
         }
 
         const lodIndex = this.getLODModelIndex(renderContext);
-        this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromLocalMatrix);
+        this.lodInstance[lodIndex].prepareToRender(renderContext, renderInstManager, this.modelMatrix, this.worldFromPoseMatrix);
     }
 
     public destroy(device: GfxDevice): void {
