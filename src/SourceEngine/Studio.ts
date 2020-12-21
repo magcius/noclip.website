@@ -35,7 +35,7 @@ const enum OptimizeStripFlags {
 }
 
 export function computeModelMatrixPosRotStudio(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
-    // Studio uses a different space.
+    // Empirically determined.
     const rotX = MathConstants.DEG_TO_RAD * rot[2];
     const rotY = MathConstants.DEG_TO_RAD * rot[0];
     const rotZ = MathConstants.DEG_TO_RAD * rot[1];
@@ -46,9 +46,10 @@ export function computeModelMatrixPosRotStudio(dst: mat4, pos: ReadonlyVec3, rot
 }
 
 function computeBoneMatrix(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
-    const rotX = rot[0];
-    const rotY = rot[1];
-    const rotZ = rot[2];
+    // Empirically determined.
+    const rotX = rot[1];
+    const rotY = rot[2];
+    const rotZ = rot[0];
     const transX = pos[0];
     const transY = pos[1];
     const transZ = pos[2];
@@ -60,7 +61,6 @@ class StudioModelStripData {
     }
 }
 
-// TODO(jstpierre): Coalesce all buffers for a studio model?
 class StudioModelStripGroupData {
     public stripData: StudioModelStripData[] = [];
 
@@ -68,6 +68,7 @@ class StudioModelStripGroupData {
     }
 }
 
+// TODO(jstpierre): Coalesce all buffers for a studio model?
 class StudioModelMeshData {
     public vertexBuffer: GfxBuffer;
     public indexBuffer: GfxBuffer;
@@ -81,6 +82,7 @@ class StudioModelMeshData {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData);
 
+        // TODO(jstpierre): Lighten up vertex buffers by only allocating bone weights / IDs if necessary?
         const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [
             { location: MaterialProgramBase.a_Position,    bufferIndex: 0, bufferByteOffset: 0*0x04, format: GfxFormat.F32_RGB, },
             { location: MaterialProgramBase.a_Normal,      bufferIndex: 0, bufferByteOffset: 3*0x04, format: GfxFormat.F32_RGBA, },
@@ -692,7 +694,6 @@ export class StudioModelData {
                                     vtxView.getUint8(vertIdx + 0x02),
                                 ];
                                 const vtxNumBones = vtxView.getUint8(vertIdx + 0x03);
-                                // assert(vtxNumBones === 0);
 
                                 const vtxOrigMeshVertID = vtxView.getUint16(vertIdx + 0x04, true);
                                 const vtxBoneID = [
@@ -724,7 +725,7 @@ export class StudioModelData {
 
                                 let totalBoneWeight = 0.0;
                                 for (let i = 0; i < vtxNumBones; i++) {
-                                    const boneWeightIdx = vtxBoneID[i];
+                                    const boneWeightIdx = vtxBoneWeightIdx[i];
                                     boneWeights[i] = vvdBoneWeight[boneWeightIdx];
                                     totalBoneWeight += boneWeights[i];
                                 }
@@ -821,7 +822,6 @@ export class StudioModelData {
                                 assert(stripVertOffset === 0);
 
                                 const numBones = vtxView.getUint16(vtxStripIdx + 0x10, true);
-                                // assert(numBones === 0);
 
                                 const stripFlags: OptimizeStripFlags = vtxView.getUint8(vtxStripIdx + 0x12);
                                 assert(stripFlags === OptimizeStripFlags.IS_TRILIST);
@@ -1007,9 +1007,11 @@ class StudioModelMeshInstance {
     private visible = true;
     private materialInstance: BaseMaterial | null = null;
     private inputStateWithColorMesh: GfxInputState | null = null;
+    private skinningMode: SkinningMode;
 
     constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData, entityParams: EntityMaterialParameters) {
         this.bindMaterial(renderContext, entityParams);
+        this.skinningMode = this.calcSkinningMode();
     }
 
     private syncMaterialInstanceStaticLightingMode(): void {
@@ -1020,21 +1022,27 @@ class StudioModelMeshInstance {
     }
 
     private calcSkinningMode(): SkinningMode {
+        let maxNumBones = 0;
+
         for (let i = 0; i < this.meshData.stripGroupData.length; i++) {
             const stripGroupData = this.meshData.stripGroupData[i];
             for (let j = 0; j < stripGroupData.stripData.length; j++) {
                 const stripData = stripGroupData.stripData[j];
-                if (stripData.hardwareBoneTable.length > 1)
+                maxNumBones = Math.max(stripData.hardwareBoneTable.length, maxNumBones);
+                if (maxNumBones > 1)
                     return SkinningMode.Smooth;
             }
         }
+
+        if (maxNumBones === 1)
+            return SkinningMode.Rigid;
 
         return SkinningMode.None;
     }
 
     private async bindMaterial(renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): Promise<void> {
         this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialName, entityParams);
-        this.materialInstance.setSkinningMode(this.calcSkinningMode());
+        this.materialInstance.setSkinningMode(this.skinningMode);
         this.syncMaterialInstanceStaticLightingMode();
     }
 

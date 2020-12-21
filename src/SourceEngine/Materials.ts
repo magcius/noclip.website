@@ -619,7 +619,7 @@ struct WorldLight {
 };
 
 layout(std140) uniform ub_ObjectParams {
-#ifndef USE_SMOOTH_SKINNING
+#if SKINNING_MODE == ${SkinningMode.None}
     Mat4x3 u_ModelMatrix;
 #endif
 
@@ -649,9 +649,13 @@ layout(std140) uniform ub_ObjectParams {
     vec4 u_Misc[1];
 };
 
-#ifdef USE_SMOOTH_SKINNING
+#if SKINNING_MODE != ${SkinningMode.None}
 layout(std140) uniform ub_SkinningParams {
+#if SKINNING_MODE == ${SkinningMode.Rigid}
+    Mat4x3 u_ModelMatrix;
+#elif SKINNING_MODE == ${SkinningMode.Smooth}
     Mat4x3 u_BoneMatrix[${Material_Generic_Program.MaxSkinningParamsBoneMatrix}];
+#endif
 };
 #endif
 
@@ -698,7 +702,7 @@ layout(location = ${MaterialProgramBase.a_Color}) attribute vec4 a_Color;
 #ifdef USE_STATIC_VERTEX_LIGHTING
 layout(location = ${MaterialProgramBase.a_StaticVertexLighting}) attribute vec3 a_StaticVertexLighting;
 #endif
-#ifdef USE_SMOOTH_SKINNING
+#if SKINNING_MODE == ${SkinningMode.Smooth}
 layout(location = ${MaterialProgramBase.a_BoneWeights}) attribute vec4 a_BoneWeights;
 layout(location = ${MaterialProgramBase.a_BoneIDs}) attribute vec4 a_BoneIndices;
 #endif
@@ -784,7 +788,7 @@ vec3 WorldLightCalcAll(in vec3 t_PositionWorld, in vec3 t_NormalWorld) {
 #endif
 
 Mat4x3 WorldFromLocalMatrixCalc() {
-#ifdef USE_SMOOTH_SKINNING
+#if SKINNING_MODE == ${SkinningMode.Smooth}
     // Calculate our per-vertex position.
     Mat4x3 t_WorldFromLocalMatrix = _Mat4x3(0.0);
 
@@ -1074,7 +1078,7 @@ class Material_Generic extends BaseMaterial {
 
     public setSkinningMode(skinningMode: SkinningMode): void {
         this.skinningMode = skinningMode;
-        this.program.setDefineBool('USE_SMOOTH_SKINNING', skinningMode === SkinningMode.Smooth);
+        this.program.defines.set('SKINNING_MODE', '' + skinningMode);
     }
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {
@@ -1159,6 +1163,7 @@ class Material_Generic extends BaseMaterial {
             this.shaderType = ShaderType.Unknown;
 
         this.program = new Material_Generic_Program();
+        this.setSkinningMode(SkinningMode.None);
 
         if (this.paramGetVTF('$detail') !== null) {
             this.wantsDetail = true;
@@ -1255,8 +1260,8 @@ class Material_Generic extends BaseMaterial {
     private fillModelMatrix(d: Float32Array, offs: number, modelMatrix: ReadonlyMat4 | null): number {
         let origOffs = offs;
 
-        // Smooth skinning does not use the model matrix.
-        if (this.skinningMode !== SkinningMode.Smooth)
+        // Rigid/smooth skinning do not use the model matrix.
+        if (this.skinningMode === SkinningMode.None)
             offs += fillMatrix4x3(d, offs, modelMatrix!);
 
         return offs - origOffs;
@@ -1336,9 +1341,18 @@ class Material_Generic extends BaseMaterial {
             mat4.identity(scratchMatrix);
             for (let i = 0; i < Material_Generic_Program.MaxSkinningParamsBoneMatrix; i++) {
                 const boneIndex = bonePaletteTable[i];
-                const m = boneIndex ? boneMatrix[boneIndex] : scratchMatrix;
+                const m = boneIndex !== undefined ? boneMatrix[boneIndex] : scratchMatrix;
                 offs += fillMatrix4x3(d, offs, m);
             }
+        } else if (this.skinningMode === SkinningMode.Rigid) {
+            assert(bonePaletteTable.length === 1);
+
+            let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_SkinningParams, 16);
+            const d = renderInst.mapUniformBufferF32(Material_Generic_Program.ub_SkinningParams);
+
+            const boneIndex = bonePaletteTable[0];
+            const m = boneMatrix[boneIndex];
+            offs += fillMatrix4x3(d, offs, m);
         }
     }
 
