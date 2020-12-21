@@ -45,6 +45,16 @@ export function computeModelMatrixPosRotStudio(dst: mat4, pos: ReadonlyVec3, rot
     computeModelMatrixSRT(dst, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
 }
 
+function computeBoneMatrix(dst: mat4, pos: ReadonlyVec3, rot: ReadonlyVec3): void {
+    const rotX = rot[0];
+    const rotY = rot[1];
+    const rotZ = rot[2];
+    const transX = pos[0];
+    const transY = pos[1];
+    const transZ = pos[2];
+    computeModelMatrixSRT(dst, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
+}
+
 class StudioModelStripData {
     constructor(public firstIndex: number, public indexCount: number, public hardwareBoneTable: number[]) {
     }
@@ -207,7 +217,7 @@ class Bone {
     public pos = vec3.create();
     public rot = vec3.create();
 
-    constructor(private name: string, private parent: number) {
+    constructor(private name: string, public parent: number) {
     }
 }
 
@@ -268,7 +278,8 @@ export class StudioModelData {
         let boneidx = boneindex;
         for (let i = 0; i < numbones; i++) {
             const szname = readString(mdlBuffer, boneidx + mdlView.getUint32(boneidx + 0x00, true));
-            const parent = mdlView.getUint32(boneidx + 0x04, true);
+            const parent = mdlView.getInt32(boneidx + 0x04, true);
+            assert(parent < i);
             const bone = new Bone(szname, parent);
 
             const bonecontroller = [
@@ -341,6 +352,7 @@ export class StudioModelData {
 
         const numlocalseqs = mdlView.getUint32(0xBC, true);
         const localseqindex = mdlView.getUint32(0xC0, true);
+
         const activitylistversion = mdlView.getUint32(0xC4, true);
         const eventsindexed = mdlView.getUint32(0xC8, true);
 
@@ -1160,8 +1172,11 @@ export class StudioModelInstance {
             return;
 
         for (let i = 0; i < this.worldFromLocalMatrix.length; i++) {
-            // TODO(jstpierre): Compute bone matrices properly
-            mat4.copy(this.worldFromLocalMatrix[i], this.modelMatrix);
+            const bone = this.modelData.bones[i];
+            computeBoneMatrix(this.worldFromLocalMatrix[i], bone.pos, bone.rot);
+
+            const parentBoneMatrix = bone.parent >= 0 ? this.worldFromLocalMatrix[bone.parent] : this.modelMatrix;
+            mat4.mul(this.worldFromLocalMatrix[i], parentBoneMatrix, this.worldFromLocalMatrix[i]);
         }
 
         const lodIndex = this.getLODModelIndex(renderContext);
