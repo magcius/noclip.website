@@ -1078,7 +1078,8 @@ class Material_Generic extends BaseMaterial {
 
     public setSkinningMode(skinningMode: SkinningMode): void {
         this.skinningMode = skinningMode;
-        this.program.defines.set('SKINNING_MODE', '' + skinningMode);
+        this.program.setDefineString('SKINNING_MODE', '' + skinningMode);
+        this.gfxProgram = null;
     }
 
     public setStaticLightingMode(staticLightingMode: StaticLightingMode): void {

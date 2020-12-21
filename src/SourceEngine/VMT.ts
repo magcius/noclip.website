@@ -45,10 +45,17 @@ class ValveKeyValueParser {
 
     private skipcomment2(): boolean {
         if (this.chew() === '/') {
-            assert(this.chew(true) === '/');
-            while (this.chew(true) !== '\n')
-                ;
-            return true;
+            const ch = this.chew(true);
+            if (ch === '/') {
+                while (this.chew(true) !== '\n')
+                    ;
+                return true;
+            } else if (ch === '*') {
+                this.pos = this.S.indexOf('*/', this.pos) + 2;
+                return true;
+            } else {
+                throw "whoops";
+            }
         } else {
             this.spit();
             return false;

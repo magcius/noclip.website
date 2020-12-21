@@ -4,7 +4,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor } from "../gfx/platform/GfxPlatform";
-import { assert, readString, nArray, assertExists, hexzero0x } from "../util";
+import { assert, readString, nArray, assertExists } from "../util";
 import { SourceFileSystem, SourceRenderContext } from "./Main";
 import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
