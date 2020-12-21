@@ -870,10 +870,16 @@ export class StudioModelData {
 
                 mdlSubmodelIdx += 0x94;
                 vtxSubmodelIdx += 0x08;
+
+                // TODO(jstpierre): Reading models with multiple submodels seems to break right now... not sure why.
+                break;
             }
 
             mdlBodyPartIdx += 0x10;
             vtxBodyPartIdx += 0x08;
+
+            // TODO(jstpierre): Reading models with multiple body parts seems to break right now... not sure why.
+            break;
         }
     }
 
