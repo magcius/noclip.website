@@ -465,6 +465,7 @@ export class StaticPropRenderer {
         this.materialParams.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);
 
         this.studioModelInstance = new StudioModelInstance(renderContext, modelData, this.materialParams);
+        this.studioModelInstance.setSkin(renderContext, this.staticProp.skin);
         mat4.copy(this.studioModelInstance.modelMatrix, scratchMatrix);
 
         // Bind static lighting data, if we have it...

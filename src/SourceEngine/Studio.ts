@@ -102,7 +102,7 @@ class StudioModelMeshData {
 
     public stripGroupData: StudioModelStripGroupData[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public materialName: string, vertexData: ArrayBuffer, indexData: ArrayBuffer) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public materialNames: string[], vertexData: ArrayBuffer, indexData: ArrayBuffer) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData);
 
@@ -420,6 +420,7 @@ export class StudioModelData {
         const numskinref = mdlView.getUint32(0xDC, true);
         const numskinfamilies = mdlView.getUint32(0xE0, true);
         const skinindex = mdlView.getUint32(0xE4, true);
+        const skinArray = mdlBuffer.createTypedArray(Uint16Array, skinindex, numskinref * numskinfamilies);
 
         const numbodyparts = mdlView.getUint32(0xE8, true);
         const bodypartindex = mdlView.getUint32(0xEC, true);
@@ -654,9 +655,17 @@ export class StudioModelData {
                     let vtxMeshIdx = vtxLODIdx + vtxMeshOffset;
                     for (let m = 0; m < mdlSubmodelNumMeshes; m++) {
                         // MDL data is not LOD-specific, we reparse this for each LOD.
-                        const material = mdlView.getUint32(mdlMeshIdx + 0x00, true);
+
+                        const skinrefIndex = mdlView.getUint32(mdlMeshIdx + 0x00, true);
+
+                        // Parse out the material names for each skin family.
+                        const materialNames: string[] = [];
+                        for (let i = 0; i < numskinfamilies; i++) {
+                            const materialNameIndex = skinArray[i * numskinref + skinrefIndex];
+                            materialNames.push(lodMaterialNames[lod][materialNameIndex]);
+                        }
+
                         const modelindex = mdlView.getInt32(mdlMeshIdx + 0x04, true);
-                        const materialName = lodMaterialNames[lod][material];
 
                         const mdlMeshNumvertices = mdlView.getUint32(mdlMeshIdx + 0x08, true);
                         const mdlMeshVertexoffset = mdlView.getUint32(mdlMeshIdx + 0x0C, true);
@@ -890,7 +899,7 @@ export class StudioModelData {
                         }
 
                         const device = renderContext.device, cache = renderContext.cache;
-                        const meshData = new StudioModelMeshData(device, cache, materialName, meshVtxData.buffer, meshIdxData.buffer);
+                        const meshData = new StudioModelMeshData(device, cache, materialNames, meshVtxData.buffer, meshIdxData.buffer);
                         for (let i = 0; i < stripGroupDatas.length; i++)
                             meshData.stripGroupData.push(stripGroupDatas[i]);
                         lodData.meshData.push(meshData);
@@ -1057,8 +1066,8 @@ class StudioModelMeshInstance {
     private inputStateWithColorMesh: GfxInputState | null = null;
     private skinningMode: SkinningMode;
 
-    constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData, entityParams: EntityMaterialParameters) {
-        this.bindMaterial(renderContext, entityParams);
+    constructor(renderContext: SourceRenderContext, private meshData: StudioModelMeshData, private entityParams: EntityMaterialParameters) {
+        this.bindMaterial(renderContext);
         this.skinningMode = this.calcSkinningMode();
     }
 
@@ -1088,8 +1097,8 @@ class StudioModelMeshInstance {
         return SkinningMode.None;
     }
 
-    private async bindMaterial(renderContext: SourceRenderContext, entityParams: EntityMaterialParameters): Promise<void> {
-        this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialName, entityParams);
+    private async bindMaterial(renderContext: SourceRenderContext, skin: number = 0): Promise<void> {
+        this.materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, this.meshData.materialNames[skin], this.entityParams);
         this.materialInstance.setSkinningMode(this.skinningMode);
         this.syncMaterialInstanceStaticLightingMode();
     }
@@ -1101,6 +1110,12 @@ class StudioModelMeshInstance {
         this.inputStateWithColorMesh = this.meshData.createInputStateWithColorMesh(device, colorDescriptor);
 
         this.syncMaterialInstanceStaticLightingMode();
+    }
+
+    public setSkin(renderContext: SourceRenderContext, skin: number): void {
+        if (skin >= this.meshData.materialNames.length)
+            skin = 0;
+        this.bindMaterial(renderContext, skin);
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -1209,6 +1224,16 @@ export class StudioModelInstance {
                     continue;
 
                 meshInstance.bindColorMeshData(device, data, colorMesh);
+            }
+        }
+    }
+
+    public setSkin(renderContext: SourceRenderContext, skin: number): void {
+        for (let i = 0; i < this.lodInstance.length; i++) {
+            const lodInstance = this.lodInstance[i];
+            for (let j = 0; j < lodInstance.meshInstance.length; j++) {
+                const meshInstance = lodInstance.meshInstance[j];
+                meshInstance.setSkin(renderContext, skin);
             }
         }
     }

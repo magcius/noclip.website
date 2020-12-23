@@ -6,7 +6,7 @@ import { assert, assertExists, fallbackUndefined } from '../util';
 import { computeAmbientCubeFromLeaf, newAmbientCube } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
 import { EntityMaterialParameters, LightCache } from './Materials';
-import { computeModelMatrixPosQAngle, StudioModelData, StudioModelInstance } from "./Studio";
+import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseNumbers } from './VMT';
 
 interface EntityOutputAction {
@@ -55,6 +55,7 @@ export class BaseEntity {
     public renderamt: number = 1.0;
     public visible = true;
     public materialParams: EntityMaterialParameters | null = null;
+    public skin: number = 0;
 
     public targetName: string | null = null;
     public parentEntity: BaseEntity | null = null;
@@ -91,6 +92,9 @@ export class BaseEntity {
 
         if (entity.targetname)
             this.targetName = '' + entity.targetname;
+
+        if (entity.skin)
+            this.skin = Number(entity.skin);
     }
 
     protected registerInput(inputName: string, func: EntityInputFunc): void {
@@ -123,6 +127,7 @@ export class BaseEntity {
     private async fetchStudioModel(renderContext: SourceRenderContext) {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.entity.model!);
         this.modelStudio = new StudioModelInstance(renderContext, modelData, this.materialParams!);
+        this.modelStudio.setSkin(renderContext, this.skin);
         this.materialParams!.ambientCube = newAmbientCube();
         this.modelUpdated();
         this.updateLightingData();
