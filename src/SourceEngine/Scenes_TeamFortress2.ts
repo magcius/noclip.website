@@ -64,7 +64,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('pl_upward'),
     new TeamFortress2SceneDesc('pl_hoodoo_final'),
     new TeamFortress2SceneDesc('plr_hightower'),
-    new GarrysModSceneDesc('gm_construct'),
+    // new GarrysModSceneDesc('gm_construct'),
 ];
 
 export const sceneGroup: SceneGroup = { id, name, sceneDescs };
