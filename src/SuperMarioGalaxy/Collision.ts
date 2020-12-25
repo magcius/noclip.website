@@ -1028,7 +1028,7 @@ export class Binder {
         const vel = vec3.copy(scratchVec3g, actorVelocity);
 
         const expandDistance = this.expandDistance;
-        let ret = this.findBindedPos(sceneObjHolder, pos, vel, expandDistance, false);
+        let ret = this.findBindedPos(sceneObjHolder, pos, vel, false, expandDistance);
         this.expandDistance = false;
 
         if (ret === BinderFindBindedPositionRet.NoCollide) {
