@@ -67,4 +67,4 @@ const sceneDescs = [
     new GarrysModSceneDesc('gm_construct'),
 ];
 
-export const sceneGroup: SceneGroup = { id, name, sceneDescs, hidden: true };
+export const sceneGroup: SceneGroup = { id, name, sceneDescs };

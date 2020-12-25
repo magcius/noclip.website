@@ -131,6 +131,7 @@ const sceneGroups = [
     Scenes_SpongeBobBFBB.sceneGroup,
     "PC",
     Scenes_HalfLife2.sceneGroup,
+    Scenes_TeamFortress2.sceneGroup,
     Scenes_Portal.sceneGroup,
     "Experimental",
     Scenes_BanjoTooie.sceneGroup,
@@ -161,7 +162,6 @@ const sceneGroups = [
     Scenes_Test.sceneGroup,
     Scenes_InteractiveExamples.sceneGroup,
     Scenes_SunshineWater.sceneGroup,
-    Scenes_TeamFortress2.sceneGroup,
     Scenes_TheWitness.sceneGroup,
 ];
 
