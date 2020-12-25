@@ -637,8 +637,7 @@ export class BSPFile {
 
         // Parse materials.
         const pakfileData = getLumpData(LumpType.PAKFILE);
-        if (pakfileData !== null)
-            this.pakfile = parseZipFile(pakfileData);
+        this.pakfile = parseZipFile(pakfileData);
 
         // Build our mesh.
 

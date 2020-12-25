@@ -475,7 +475,7 @@ export function interactiveVizSliderSelect(items: any[], fieldName: string = 'vi
         return item.name || item.constructor.name;
     }, (index) => {
         visibleItems.forEach((v) => v[fieldName] = true);
-        if (index >= visibleItems.length)
+        if (index >= visibleItems.length || index < 0)
             return;
         const item = visibleItems[index];
         const origIndex = items.indexOf(item);
