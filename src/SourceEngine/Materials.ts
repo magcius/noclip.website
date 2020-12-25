@@ -9,12 +9,13 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3, ReadonlyMat4 } from "gl-matrix";
 import { fillMatrix4x3, fillVec4, fillVec4v, fillMatrix4x2, fillColor, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { VTF, VTFFlags } from "./VTF";
-import { SourceRenderContext, SourceFileSystem } from "./Main";
+import { SourceRenderContext, SourceFileSystem, SourceEngineView } from "./Main";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { SurfaceLightmapData, LightmapPackerManager, LightmapPackerPage, Cubemap, BSPFile, AmbientCube, WorldLight, WorldLightType } from "./BSPFile";
-import { MathConstants, invlerp, lerp, clamp } from "../MathHelpers";
-import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA } from "../Color";
+import { MathConstants, invlerp, lerp, clamp, Vec3Zero } from "../MathHelpers";
+import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA, colorNewFromRGBA } from "../Color";
 import { AABB } from "../Geometry";
+import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 //#region Base Classes
 const scratchVec4 = vec4.create();
@@ -55,6 +56,10 @@ layout(std140) uniform ub_SceneParams {
 };
 
 // Utilities.
+float Saturate(float v) {
+    return clamp(v, 0.0, 1.0);
+}
+
 vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
     return t_Pos.xy * t_SB.xy + t_SB.zw;
 }
@@ -602,7 +607,7 @@ class Material_Generic_Program extends MaterialProgramBase {
     public static ub_ObjectParams = 1;
     public static ub_SkinningParams = 2;
 
-    public static MaxDynamicWorldLights = 2;
+    public static MaxDynamicWorldLights = 4;
     public static MaxSkinningParamsBoneMatrix = 53;
 
     public both = `
@@ -611,11 +616,14 @@ precision mediump float;
 ${this.Common}
 
 struct WorldLight {
-    // w = ShaderWorldLightType. Directional has a world-space direction in here.
+    // w = ShaderWorldLightType.
     vec4 Position;
+    // w = Spot exponent
     vec4 Color;
-    vec4 Attenuation;
-    // TODO(jstpierre): Spot/Directional Lights
+    // w = stopdot
+    vec4 DistAttenuation;
+    // Direction for directional / spotlight. w = stopdot2
+    vec4 Direction;
 };
 
 layout(std140) uniform ub_ObjectParams {
@@ -733,10 +741,22 @@ float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWo
 
     if (t_UseDistanceAttenuation) {
         float t_Distance = distance(t_WorldLight.Position.xyz, t_PositionWorld);
-        t_Attenuation *= 1.0 / ApplyAttenuation(t_WorldLight.Attenuation.xyz, t_Distance);
+        t_Attenuation *= 1.0 / ApplyAttenuation(t_WorldLight.DistAttenuation.xyz, t_Distance);
 
         if (t_UseAngleAttenuation) {
-            // TODO(jstpierre): Spotlight angle attenuation
+            // Unpack spot parameters
+            float t_Exponent = t_WorldLight.Color.w;
+            float t_Stopdot = t_WorldLight.DistAttenuation.w;
+            float t_Stopdot2 = t_WorldLight.Direction.w;
+
+            vec3 t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
+            float t_CosAngle = dot(t_WorldLight.Direction.xyz, -t_LightDirectionWorld);
+
+            // invlerp
+            float t_AngleAttenuation = max((t_CosAngle - t_Stopdot2) / (t_Stopdot - t_Stopdot2), 0.01);
+            t_AngleAttenuation = Saturate(pow(t_AngleAttenuation, t_Exponent));
+
+            t_Attenuation *= t_AngleAttenuation;
         }
     }
 
@@ -751,7 +771,7 @@ float WorldLightCalcVisibility(in WorldLight t_WorldLight, in vec3 t_PositionWor
 
     if (t_LightType == ${ShaderWorldLightType.Directional}) {
         // Directionals just have incoming light direction stored in Position field.
-        t_LightDirectionWorld = -t_WorldLight.Position.xyz;
+        t_LightDirectionWorld = -t_WorldLight.Direction.xyz;
     } else {
         t_LightDirectionWorld = normalize(t_WorldLight.Position.xyz - t_PositionWorld);
     }
@@ -773,7 +793,12 @@ vec3 WorldLightCalc(in vec3 t_PositionWorld, in vec3 t_NormalWorld, in WorldLigh
     if (t_LightType == ${ShaderWorldLightType.None})
         return vec3(0.0);
 
+#ifdef USE_HALF_LAMBERT
+    const bool t_HalfLambert = true;
+#else
     const bool t_HalfLambert = false;
+#endif
+
     float t_Attenuation = WorldLightCalcAttenuation(t_WorldLight, t_PositionWorld);
     float t_Visibility = WorldLightCalcVisibility(t_WorldLight, t_PositionWorld, t_NormalWorld, t_HalfLambert);
     return t_Visibility * t_Attenuation * t_WorldLight.Color.rgb;
@@ -1128,6 +1153,7 @@ class Material_Generic extends BaseMaterial {
         p['$alphatestreference']           = new ParameterNumber(0.4);
         p['$nodiffusebumplighting']        = new ParameterBoolean(false, false);
         p['$ssbump']                       = new ParameterBoolean(false, false);
+        p['$halflambert']                  = new ParameterBoolean(false, false);
         p['$selfillumtint']                = new ParameterColor(1, 1, 1);
 
         // World Vertex Transition
@@ -1228,6 +1254,9 @@ class Material_Generic extends BaseMaterial {
 
         if (this.paramGetBoolean('$ssbump'))
             this.program.setDefineBool('USE_SSBUMP', true);
+
+        if (this.paramGetBoolean('$halflambert'))
+            this.program.setDefineBool('USE_HALF_LAMBERT', true);
 
         if (this.paramGetBoolean('$alphatest')) {
             this.program.setDefineBool('USE_ALPHATEST', true);
@@ -1977,7 +2006,7 @@ function worldLightDistanceFalloff(light: WorldLight, delta: vec3): number {
 
         // Compute quadratic attn falloff.
         const sqdist = vec3.squaredLength(delta), dist = Math.sqrt(sqdist);
-        const denom = (1.0*light.attn[0] + dist*light.attn[1] + sqdist*light.attn[2]);
+        const denom = (1.0*light.distAttenuation[0] + dist*light.distAttenuation[1] + sqdist*light.distAttenuation[2]);
         return 1.0 / denom;
     } else if (light.type === WorldLightType.SkyLight) {
         // Sky light requires visibility to the sky. Until we can do a raycast,
@@ -1987,7 +2016,7 @@ function worldLightDistanceFalloff(light: WorldLight, delta: vec3): number {
         // Already in ambient cube; ignore.
         return 0.0;
     } else if (light.type === WorldLightType.QuakeLight) {
-        return Math.max(0.0, light.attn[1] - vec3.length(delta));
+        return Math.max(0.0, light.distAttenuation[1] - vec3.length(delta));
     } else {
         throw "whoops";
     }
@@ -2003,29 +2032,34 @@ function fillWorldLight(d: Float32Array, offs: number, light: WorldLight | null)
         offs += fillVec4(d, offs, 0);
         offs += fillVec4(d, offs, 0);
         offs += fillVec4(d, offs, 0);
+        offs += fillVec4(d, offs, 0);
     } else if (light.type === WorldLightType.Surface) {
         // 180 degree spotlight.
         const type = ShaderWorldLightType.Spot;
         offs += fillVec3v(d, offs, light.pos, type);
         offs += fillVec3v(d, offs, light.intensity);
         offs += fillVec4(d, offs, 0, 0, 1);
+        offs += fillVec4(d, offs, 0);
     } else if (light.type === WorldLightType.Spotlight) {
         // Controllable spotlight.
         const type = ShaderWorldLightType.Spot;
         offs += fillVec3v(d, offs, light.pos, type);
-        offs += fillVec3v(d, offs, light.intensity);
-        offs += fillVec3v(d, offs, light.attn);
+        offs += fillVec3v(d, offs, light.intensity, light.exponent);
+        offs += fillVec3v(d, offs, light.distAttenuation, light.stopdot);
+        offs += fillVec3v(d, offs, light.normal, light.stopdot2);
     } else if (light.type === WorldLightType.Point) {
         const type = ShaderWorldLightType.Point;
         offs += fillVec3v(d, offs, light.pos, type);
         offs += fillVec3v(d, offs, light.intensity);
-        offs += fillVec3v(d, offs, light.attn);
+        offs += fillVec3v(d, offs, light.distAttenuation);
+        offs += fillVec4(d, offs, 0);
     } else if (light.type === WorldLightType.SkyLight) {
         // Directional.
         const type = ShaderWorldLightType.Directional;
-        offs += fillVec3v(d, offs, light.normal, type);
+        offs += fillVec3v(d, offs, Vec3Zero, type);
         offs += fillVec3v(d, offs, light.intensity);
         offs += fillVec4(d, offs, 0);
+        offs += fillVec3v(d, offs, light.normal);
     } else {
         debugger;
     }
@@ -2066,6 +2100,17 @@ export class LightCache {
         this.cacheWorldLights(bspfile.worldlights);
     }
 
+    public debugDrawLights(view: SourceEngineView): void {
+        for (let i = 0; i < this.worldLights.length; i++) {
+            const worldLight = this.worldLights[i].worldLight;
+            if (worldLight !== null) {
+                const norm = Math.max(...worldLight.intensity);
+                const color = colorNewFromRGBA(worldLight.intensity[0] * norm, worldLight.intensity[1] * norm, worldLight.intensity[2] * norm);
+                drawWorldSpacePoint(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, worldLight.pos, color, 4);
+            }
+        }
+    }
+
     public cacheWorldLights(worldLights: WorldLight[]): void {
         for (let i = 0; i < this.worldLights.length; i++)
             this.worldLights[i].reset();
@@ -2087,8 +2132,9 @@ export class LightCache {
                     continue;
 
                 // Found a better light than the one we have right now. Move down the remaining ones to make room.
-                for (let k = this.worldLights.length - 2; k > j; k--)
-                    this.worldLights[k].copy(this.worldLights[k + 1]);
+                for (let k = this.worldLights.length - 1; k > j; k--)
+                    if (this.worldLights[k].worldLight !== null)
+                        this.worldLights[k].copy(this.worldLights[k - 1]);
 
                 this.worldLights[j].worldLight = light;
                 this.worldLights[j].intensity = intensity;

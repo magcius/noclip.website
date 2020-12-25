@@ -208,7 +208,10 @@ export interface WorldLight {
     normal: vec3;
     type: WorldLightType;
     radius: number;
-    attn: vec3;
+    distAttenuation: vec3;
+    exponent: number;
+    stopdot: number;
+    stopdot2: number;
 }
 
 interface BSPDispInfo {
@@ -1301,9 +1304,9 @@ export class BSPFile {
                 }
             }
 
-            const attn = vec3.fromValues(constant_attn, linear_attn, quadratic_attn);
+            const distAttenuation = vec3.fromValues(constant_attn, linear_attn, quadratic_attn);
 
-            this.worldlights.push({ pos, intensity, normal, type, radius, attn });
+            this.worldlights.push({ pos, intensity, normal, type, radius, distAttenuation, exponent, stopdot, stopdot2 });
         }
 
         const dprp = getGameLumpData('dprp');

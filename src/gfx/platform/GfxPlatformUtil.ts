@@ -97,7 +97,7 @@ export function gfxBindingsDescriptorEquals(a: Readonly<GfxBindingsDescriptor>, 
     if (a.samplerBindings.length !== b.samplerBindings.length) return false;
     if (!arrayEqual(a.samplerBindings, b.samplerBindings, gfxSamplerBindingEquals)) return false;
     if (!arrayEqual(a.uniformBufferBindings, b.uniformBufferBindings, gfxBufferBindingEquals)) return false;
-    if (a.bindingLayout !== b.bindingLayout) return false;
+    if (!gfxBindingLayoutEquals(a.bindingLayout, b.bindingLayout)) return false;
     return true;
 }
 

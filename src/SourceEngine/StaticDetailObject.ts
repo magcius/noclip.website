@@ -446,23 +446,22 @@ export class StaticPropRenderer {
     private bbox = new AABB();
     private materialParams = new EntityMaterialParameters();
 
-    constructor(renderContext: SourceRenderContext, bsp: BSPFile, private staticProp: StaticProp) {
+    constructor(renderContext: SourceRenderContext, private bsp: BSPFile, private staticProp: StaticProp) {
         this.createInstance(renderContext, bsp);
     }
 
     private async createInstance(renderContext: SourceRenderContext, bsp: BSPFile) {
         const modelData = await renderContext.studioModelCache.fetchStudioModelData(this.staticProp.propName);
-
-        // TODO(jstpierre): studiohdr2_t illumposition
-        const lightingOrigin = this.staticProp.lightingOrigin !== null ? this.staticProp.lightingOrigin : this.staticProp.pos;
-        const leaf = assertExists(bsp.findLeafForPoint(lightingOrigin));
         this.materialParams.ambientCube = newAmbientCube();
-        computeAmbientCubeFromLeaf(this.materialParams.ambientCube, leaf, lightingOrigin);
 
         computeModelMatrixPosQAngle(scratchMatrix, this.staticProp.pos, this.staticProp.rot);
         this.bbox.transform(modelData.bbox, scratchMatrix);
 
+        const lightingOrigin = this.staticProp.lightingOrigin !== null ? this.staticProp.lightingOrigin : this.staticProp.pos;
         this.materialParams.lightCache = new LightCache(bsp, lightingOrigin, this.bbox);
+
+        const leaf = assertExists(this.bsp.findLeafForPoint(lightingOrigin));
+        computeAmbientCubeFromLeaf(this.materialParams.ambientCube, leaf, lightingOrigin);
 
         this.studioModelInstance = new StudioModelInstance(renderContext, modelData, this.materialParams);
         this.studioModelInstance.setSkin(renderContext, this.staticProp.skin);
@@ -505,6 +504,9 @@ export class StaticPropRenderer {
         if (!visible)
             return;
 
+        if ((this as any).debug)
+            this.materialParams.lightCache!.debugDrawLights(renderContext.currentView);
+
         computeModelMatrixPosQAngle(this.studioModelInstance.modelMatrix, this.staticProp.pos, this.staticProp.rot);
 
         getMatrixTranslation(this.materialParams.position, this.studioModelInstance.modelMatrix);
@@ -518,4 +520,4 @@ export class StaticPropRenderer {
             this.colorMeshData.destroy(device);
     }
 }
-////#endregion
+//#endregion

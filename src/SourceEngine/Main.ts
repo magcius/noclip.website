@@ -1,15 +1,16 @@
 
-import { mat4, ReadonlyMat4, vec3 } from "gl-matrix";
+import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import BitMap from "../BitMap";
 import { Camera, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
 import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
 import { DataFetcher } from "../DataFetcher";
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { BasicRenderTarget, ColorTexture, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
+import { fillColor, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxHostAccessPass, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
@@ -21,7 +22,7 @@ import { TextureMapping } from "../TextureHolder";
 import { assert, assertExists, nArray } from "../util";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { ZipCompressionMethod, ZipFile, ZipFileEntry } from "../ZipFile";
-import { BSPFile, Model, Surface } from "./BSPFile";
+import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
 import { BaseEntity, EntitySystem, sky_camera } from "./EntitySystem";
 import { BaseMaterial, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, WorldLightingState } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
@@ -512,6 +513,122 @@ const enum RenderObjectKind {
     Entities    = 1 << 1,
     StaticProps = 1 << 2,
     DetailProps = 1 << 3,
+    DebugCube   = 1 << 4,
+}
+
+class DebugCubeProgram extends DeviceProgram {
+    public static ub_ObjectParams = 0;
+
+    public vert: string = `
+layout(std140) uniform ub_ObjectParams {
+    Mat4x4 u_ProjectionViewModel;
+    vec4 u_AmbientCube[6];
+};
+
+layout(location = ${MaterialProgramBase.a_Position}) attribute vec4 a_Position;
+out vec3 v_Color;
+
+void main() {
+    gl_Position = Mul(u_ProjectionViewModel, vec4(a_Position.xyz, 1.0));
+    v_Color = u_AmbientCube[int(a_Position.w)].rgb;
+}
+`;
+
+    public frag: string = `
+in vec3 v_Color;
+
+void main() {
+    gl_FragColor = vec4(v_Color, 1.0);
+}
+`;
+}
+
+export class DebugCube {
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private program = new DebugCubeProgram();
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        const vertData = new Float32Array([
+            // left
+            -1, -1, -1,  0,
+            -1, -1,  1,  0,
+            -1,  1, -1,  0,
+            -1,  1,  1,  0,
+            // right
+             1, -1, -1,  1,
+             1,  1, -1,  1,
+             1, -1,  1,  1,
+             1,  1,  1,  1,
+            // top
+            -1, -1, -1,  2,
+             1, -1, -1,  2,
+            -1, -1,  1,  2,
+             1, -1,  1,  2,
+            // bottom
+            -1,  1, -1,  3,
+            -1,  1,  1,  3,
+             1,  1, -1,  3,
+             1,  1,  1,  3,
+            // front
+            -1, -1, -1,  4,
+            -1,  1, -1,  4,
+             1, -1, -1,  4,
+             1,  1, -1,  4,
+            // bottom
+            -1, -1,  1,  5,
+             1, -1,  1,  5,
+            -1,  1,  1,  5,
+             1,  1,  1,  5,
+        ]);
+        const indxData = new Uint16Array([
+            0, 1, 2, 1, 3, 2,
+            4, 5, 6, 5, 7, 6,
+            8, 9, 10, 9, 11, 10,
+            12, 13, 14, 13, 15, 14,
+            16, 17, 18, 17, 19, 18,
+            20, 21, 22, 21, 23, 22,
+        ]);
+
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indxData.buffer);
+
+        this.inputLayout = cache.createInputLayout(device, {
+            vertexAttributeDescriptors: [{ format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 0, location: 0, }],
+            vertexBufferDescriptors: [{ byteStride: 4*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, }],
+            indexBufferFormat: GfxFormat.U16_R,
+        });
+
+        this.inputState = device.createInputState(this.inputLayout,
+            [{ buffer: this.vertexBuffer, byteOffset: 0 }],
+            { buffer: this.indexBuffer, byteOffset: 0 },
+        );
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, view: SourceEngineView, position: ReadonlyVec3, ambientCube: AmbientCube): void {
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setBindingLayouts([{ numSamplers: 0, numUniformBuffers: 1 }]);
+        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.program));
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.drawIndexes(6*6);
+        renderInstManager.submitRenderInst(renderInst);
+        let offs = renderInst.allocateUniformBuffer(DebugCubeProgram.ub_ObjectParams, 16+4*6);
+        const d = renderInst.mapUniformBufferF32(DebugCubeProgram.ub_ObjectParams);
+
+        const scale = 15;
+        mat4.fromRotationTranslationScale(scratchMatrix, quat.create(), position, [scale, scale, scale]);
+        mat4.mul(scratchMatrix, view.clipFromWorldMatrix, scratchMatrix);
+        offs += fillMatrix4x4(d, offs, scratchMatrix);
+        for (let i = 0; i < 6; i++)
+            offs += fillColor(d, offs, ambientCube[i]);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
+    }
 }
 
 export class BSPRenderer {
@@ -524,6 +641,7 @@ export class BSPRenderer {
     public detailPropLeafRenderers: DetailPropLeafRenderer[] = [];
     public staticPropRenderers: StaticPropRenderer[] = [];
     public liveLeafSet = new Set<number>();
+    private debugCube: DebugCube;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
         renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
@@ -568,6 +686,8 @@ export class BSPRenderer {
         if (this.bsp.detailObjects !== null)
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
                 this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, this.bsp.detailObjects, leaf));
+
+        this.debugCube = new DebugCube(device, cache);
     }
 
     public getSkyCameraModelMatrix(): mat4 | null {
@@ -623,6 +743,17 @@ export class BSPRenderer {
             }
         }
 
+        if (!!(kinds & RenderObjectKind.DebugCube)) {
+            for (const leafidx of this.liveLeafSet) {
+                const leaf = this.bsp.leaflist[leafidx];
+                if ((leaf as any).debug) {
+                    drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, leaf.bbox);
+                    for (const sample of leaf.ambientLightSamples)
+                        this.debugCube.prepareToRender(renderContext.device, renderInstManager, view, sample.pos, sample.ambientCube);
+                }
+            }
+        }
+
         /*
         for (let i = 0; i < this.bsp.worldlights.length; i++) {
             drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.bsp.worldlights[i].pos, '' + i);
@@ -637,6 +768,7 @@ export class BSPRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputState(this.inputState);
+        this.debugCube.destroy(device);
 
         for (let i = 0; i < this.detailPropLeafRenderers.length; i++)
             this.detailPropLeafRenderers[i].destroy(device);
@@ -812,7 +944,7 @@ export class SourceRenderer implements SceneGfx {
                 this.pvsScratch.fill(true);
             }
 
-            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps);
+            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
         }
 
         renderInstManager.popTemplateRenderInst();
