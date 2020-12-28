@@ -236,7 +236,7 @@ export class evt_disasm_ctx {
         const v = (uv | 0);
         if (v <= -250000000)
             return this.disasm_addr(uv, type);
-        else if (v < -230000000)
+        else if (v >= -230000000 && v <= -210000000)
             return `${(v - -230000000) / 1024.0}`;
         else if (v >= -210000000 && v < -200000000)
             return `UF(${v - -210000000})`;
@@ -357,9 +357,9 @@ class evt_exec {
     public waitonfrm: number | null = null;
     public waitonevtid: number | null = null;
     public uf: Uint32Array;
-    public uw: Uint32Array;
+    public uw: Float32Array;
     public lf: Uint8Array = new Uint8Array(512);
-    public lw: Int32Array = new Int32Array(512);
+    public lw: Float32Array = new Float32Array(512);
     public typeMask: number = 0xEF;
 
     public opcode: op;
@@ -380,11 +380,11 @@ export class evtmgr {
     private evtid = 0;
 
     public gswf: Uint8Array = new Uint8Array(65535);
-    public lswf: Uint8Array = new Uint8Array(512);
+    public lswf: Float32Array = new Float32Array(512);
     public gsw: Uint32Array = new Uint32Array(512);
-    public lsw: Uint32Array = new Uint32Array(512);
+    public lsw: Float32Array = new Float32Array(512);
     public gf: Uint8Array = new Uint8Array(512);
-    public gw: Uint32Array = new Uint32Array(512);
+    public gw: Float32Array = new Float32Array(512);
 
     constructor(private handler: evt_handler, private rel: ArrayBufferSlice, private baseAddress: number, private entryAddress: number) {
         this.view = this.rel.createDataView();
@@ -443,7 +443,7 @@ export class evtmgr {
         const expr = (uexpr | 0);
         if (expr <= -250000000)
             return uexpr; // addr
-        else if (expr < -230000000)
+        else if (expr >= -230000000 && expr <= -210000000)
             return (expr - -230000000) / 1024.0; // float imm
         else if (expr >= -210000000 && expr < -200000000)
             return evt.uf[expr - -210000000];
@@ -1090,7 +1090,7 @@ export class evtmgr {
             this.execone(evt);
 
         if (evt.state === evt_state.waitonfrm) {
-            if (evt.waitonfrm!-- <= 0)
+            if (--evt.waitonfrm! <= 0)
                 evt.state = evt_state.running;
         } else if (evt.state === evt_state.waitonevt) {
             const subevt = this.evtgetbyid(evt.waitonevtid!);
