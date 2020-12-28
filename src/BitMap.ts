@@ -1,4 +1,4 @@
-import { assert } from "./util";
+import { assert, setBitFlagEnabled } from "./util";
 
 // Moderately memory-efficient way of storing some number of bits.
 
@@ -42,10 +42,7 @@ export default class BitMap {
     public setBit(bitIndex: number, bitValue: boolean): void {
         const wordIndex = bitIndex >>> 5;
         const mask = (1 << (31 - (bitIndex & 0x1F))) >>> 0;
-        if (bitValue)
-            this.words[wordIndex] |= mask;
-        else
-            this.words[wordIndex] &= ~mask;
+        this.words[wordIndex] = setBitFlagEnabled(this.words[wordIndex], mask, bitValue);
     }
 
     public getBit(bitIndex: number): boolean {

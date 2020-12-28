@@ -146,7 +146,7 @@ export function computeModelMatrixT(dst: mat4, translationX: number, translation
  *
  * This is equivalent to mat4.scale(dst, m, [scaleX, scaleY, scaleZ]) but generates zero GC garbage.
  */
-export function scaleMatrix(dst: mat4, m: mat4, scaleX: number, scaleY: number = scaleX, scaleZ: number = scaleX): void {
+export function scaleMatrix(dst: mat4, m: ReadonlyMat4, scaleX: number, scaleY: number = scaleX, scaleZ: number = scaleX): void {
     // Scale column vectors.
     dst[0] = m[0] * scaleX;
     dst[1] = m[1] * scaleX;

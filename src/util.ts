@@ -199,3 +199,11 @@ export function spliceBisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => numb
     const idx = bisectRight(L, e, compare);
     L.splice(idx, 0, e);
 }
+
+export function setBitFlagEnabled(v: number, mask: number, enabled: boolean): number {
+    if (enabled)
+        v |= mask;
+    else
+        v &= ~mask;
+    return v;
+}

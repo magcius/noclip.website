@@ -8,7 +8,7 @@ import * as GX_Material from './gx_material';
 import * as GX_Texture from './gx_texture';
 import * as Viewer from '../viewer';
 
-import { assert, nArray, assertExists } from '../util';
+import { assert, nArray, assertExists, setBitFlagEnabled } from '../util';
 import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput } from './gx_displaylist';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
@@ -412,10 +412,7 @@ export class GXMaterialHelperGfx {
 
 export function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: GfxColorWriteMask, en: boolean): void {
     let colorWriteMask = materialHelper.megaStateFlags.attachmentsState![0].colorWriteMask;
-    if (en)
-        colorWriteMask |= bits;
-    else
-        colorWriteMask &= ~bits;
+    colorWriteMask = setBitFlagEnabled(colorWriteMask, bits, en);
     setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
 }
 

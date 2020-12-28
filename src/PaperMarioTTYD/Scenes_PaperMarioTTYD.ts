@@ -8,10 +8,8 @@ import { SceneContext } from '../SceneBase';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController } from '../Camera';
 import { linkREL } from './REL';
-import { evt_disasm_ctx } from './evt';
+import { evtmgr, evt_disasm_ctx, evt_handler_ttyd } from './evt';
 import * as AnimGroup from './AnimGroup';
-import { computeModelMatrixS } from '../MathHelpers';
-import { mat4 } from 'gl-matrix';
 
 const pathBase = `PaperMarioTTYD`;
 
@@ -35,17 +33,6 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             dataFetcher.fetchData(`${pathBase}/m/${this.id}/t.blob`),
             dataFetcher.fetchData(`${pathBase}/b/${this.id}.tpl`, { allow404: true }),
         ]);
-
-        let rel: ArrayBufferSlice | null = null;
-        if (this.relName !== null) {
-            rel = await dataFetcher.fetchData(`${pathBase}/rel/${this.relName}`);
-            linkREL(rel, this.relBaseAddress!);
-
-            const mapFile = await dataFetcher.fetchData(`${pathBase}/G8ME01.map`, { allow404: true });
-
-            const scriptExec = new evt_disasm_ctx(rel, this.relBaseAddress!, this.relEntry!, mapFile);
-            // scriptExec.disasm();
-        }
 
         const d = World.parse(dBuffer);
         const textureHolder = new TPLTextureHolder();
@@ -71,6 +58,21 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
 
         const renderer = new TTYDRenderer(device, d, textureHolder, backgroundTextureName);
         renderer.animGroupCache = new AnimGroup.AnimGroupDataCache(device, dataFetcher, pathBase);
+
+        let rel: ArrayBufferSlice | null = null;
+        if (this.relName !== null) {
+            rel = await dataFetcher.fetchData(`${pathBase}/rel/${this.relName}`);
+            linkREL(rel, this.relBaseAddress!);
+
+            const mapFile = await dataFetcher.fetchData(`${pathBase}/G8ME01.map`, { allow404: true });
+
+            const handler = new evt_handler_ttyd(mapFile, renderer);
+
+            const disasm = new evt_disasm_ctx(handler, rel, this.relBaseAddress!, this.relEntry!);
+            disasm.disasm();
+
+            renderer.evtctx = new evtmgr(handler, rel, this.relBaseAddress!, this.relEntry!);
+        }
 
         /*
         const agd1 = await renderer.animGroupCache!.requestAnimGroupData('c_bomt');

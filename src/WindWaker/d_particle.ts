@@ -11,7 +11,7 @@ import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material";
 import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { TextureMapping } from "../TextureHolder";
-import { nArray } from "../util";
+import { nArray, setBitFlagEnabled } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { dKy_get_seacolor } from "./d_kankyo";
 import { cLib_addCalc2, cM__Short2Rad } from "./SComponent";
@@ -39,14 +39,6 @@ function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture):
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;
     m.flipY = true;
-}
-
-function setBitFlagEnabled(v: number, mask: number, enabled: boolean): number {
-    if (enabled)
-        v |= mask;
-    else
-        v &= ~mask;
-    return v;
 }
 
 export class dPa_control_c {

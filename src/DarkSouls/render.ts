@@ -3,7 +3,7 @@ import { FLVER, VertexInputSemantic, Material, Primitive, Batch, VertexAttribute
 import { GfxDevice, GfxInputState, GfxInputLayout, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBuffer, GfxVertexBufferDescriptor, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, GfxFrontFaceMode } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { coalesceBuffer, GfxCoalescedBuffer } from "../gfx/helpers/BufferHelpers";
-import { convertToTriangleIndexBuffer, GfxTopology, getTriangleIndexCountForTopologyIndexCount, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
+import { convertToTriangleIndexBuffer, GfxTopology, filterDegenerateTriangleIndexBuffer } from "../gfx/helpers/TopologyHelpers";
 import { makeSortKey, GfxRendererLayer, setSortKeyDepth, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { DeviceProgram } from "../Program";
 import { DDSTextureHolder } from "./dds";
@@ -16,7 +16,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillVec4v, fillVec4, fillVec3v, fillColor
 import { AABB } from "../Geometry";
 import { ModelHolder, MaterialDataHolder } from "./scenes";
 import { MSB, Part } from "./msb";
-import { getMatrixAxisZ, getMatrixTranslation, MathConstants, transformVec3Mat4w0 } from "../MathHelpers";
+import { getMatrixAxisZ, getMatrixTranslation, MathConstants } from "../MathHelpers";
 import { MTD, MTDTexture } from './mtd';
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D, interactiveVizSliderSelect } from '../DebugJunk';
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -745,7 +745,7 @@ class BatchInstance {
         offs += fillVec4v(d, offs, this.diffuseColor);
         offs += fillVec4v(d, offs, this.specularColor);
 
-        const scrollTime = viewerInput.time / 120;
+        const scrollTime = viewerInput.time / 240;
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[0], scrollTime));
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[1], scrollTime));
         offs += fillVec4v(d, offs, vec4.scale(scratchVec4, this.texScroll[2], scrollTime));
@@ -846,12 +846,14 @@ class DirectionalLight {
         getMatrixAxisZ(scratchVec3b, camera.worldMatrix);
         vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -100);
         const mag = 100;
-        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, this.dirWorld, -mag);
-        drawWorldSpaceVector(getDebugOverlayCanvas2D(), camera.clipFromWorldMatrix, scratchVec3a, this.dirWorld, mag * 2, this.color, 8);
+        vec3.normalize(scratchVec3b, this.dirWorld);
+        vec3.scaleAndAdd(scratchVec3a, scratchVec3a, scratchVec3b, -mag);
+        drawWorldSpaceVector(getDebugOverlayCanvas2D(), camera.clipFromWorldMatrix, scratchVec3a, scratchVec3b, mag * 2, this.color, 8);
     }
 
     public fill(d: Float32Array, offs: number): number {
-        offs += fillVec3v(d, offs, this.dirWorld);
+        vec3.normalize(scratchVec3b, this.dirWorld);
+        offs += fillVec3v(d, offs, scratchVec3b);
         offs += fillColor(d, offs, this.color);
         return 8;
     }
