@@ -372,6 +372,14 @@ class evt_exec {
     constructor(public id: number, public pc: number) {
         this.entryAddress = this.pc;
     }
+
+    public copy(o: evt_exec): void {
+        this.uf = o.uf;
+        this.uw = o.uw;
+        this.lf.set(o.lf);
+        this.lw.set(o.lw);
+        this.typeMask = o.typeMask;
+    }
 }
 
 export class evtmgr {
@@ -388,14 +396,16 @@ export class evtmgr {
 
     constructor(private handler: evt_handler, private rel: ArrayBufferSlice, private baseAddress: number, private entryAddress: number) {
         this.view = this.rel.createDataView();
-        this.evtnew(this.entryAddress);
+        this.evtnew(this.entryAddress, null);
     }
 
-    private evtnew(pc: number): number {
+    private evtnew(pc: number, parent: evt_exec | null): evt_exec {
         assert(pc >= this.baseAddress);
-        const id = ++this.evtid;
-        this.evt.push(new evt_exec(id, pc));
-        return id;
+        const evt = new evt_exec(this.evtid++, pc);
+        if (parent !== null)
+            evt.copy(parent);
+        this.evt.push(evt);
+        return evt;
     }
 
     private evtgetbyid(id: number): evt_exec | null {
@@ -707,7 +717,8 @@ export class evtmgr {
             // no-op
         } break;
         case op.end_evt:
-        case op.end_inline: {
+        case op.end_inline:
+        case op.end_brother: {
             evt.state = evt_state.end;
         } break;
         case op.lbl: break;
@@ -1009,19 +1020,20 @@ export class evtmgr {
         case op.run_evt: {
             const addr = this.evt_eval_arg(evt, 0);
             if (this.validevtaddr(addr))
-                this.evtnew(addr);
+                this.evtnew(addr, evt);
         } break;
         case op.run_evt_id: {
             const addr = this.evt_eval_arg(evt, 0);
             if (this.validevtaddr(addr)) {
-                const id = this.evtnew(addr);
-                this.evt_set_arg(evt, 1, id);
+                const subevt = this.evtnew(addr, evt);
+                this.evt_set_arg(evt, 1, subevt.id);
             }
         } break;
         case op.run_child_evt: {
             const addr = this.evt_eval_arg(evt, 0);
             if (this.validevtaddr(addr)) {
-                evt.waitonevtid = this.evtnew(addr);
+                const subevt = this.evtnew(addr, evt);
+                evt.waitonevtid = subevt.id;
                 evt.state = evt_state.waitonevt;
             }
         } break;
@@ -1063,14 +1075,22 @@ export class evtmgr {
             this.evt_set_arg(evt, 1, is_running ? 1 : 0);
         } break;
         case op.inline_evt: {
-            // inline_evt spawns an evt after this op
-            this.evtnew(nextpc);
+            const subevt = this.evtnew(nextpc, evt);
             evt.pc = this.scan(evt, [op.inline_evt, op.inline_evt_id], op.end_inline);
         } break;
         case op.inline_evt_id: {
-            const id = this.evtnew(nextpc);
+            const subevt = this.evtnew(nextpc, evt);
             nextpc = this.scan(evt, [op.inline_evt, op.inline_evt_id], op.end_inline);
-            this.evt_set_arg(evt, 0, id);
+            this.evt_set_arg(evt, 0, subevt.id);
+        } break;
+        case op.brother_evt: {
+            const subevt = this.evtnew(nextpc, evt);
+            evt.pc = this.scan(evt, [op.brother_evt, op.brother_evt_id], op.end_brother);
+        } break;
+        case op.brother_evt_id: {
+            const subevt = this.evtnew(nextpc, evt);
+            nextpc = this.scan(evt, [op.brother_evt, op.brother_evt_id], op.end_brother);
+            this.evt_set_arg(evt, 0, subevt.id);
         } break;
         case op.debug_put_msg:
         case op.debug_put_reg: {
