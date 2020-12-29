@@ -304,27 +304,32 @@ class ParameterColor extends ParameterVector {
     }
 }
 
-function createParameterAuto(S: string): Parameter | null {
-    const n = Number(S);
-    if (!Number.isNaN(n))
-        return new ParameterNumber(n);
+function createParameterAuto(value: any): Parameter | null {
+    if (typeof value === 'string') {
+        const S = value;
+        const n = Number(S);
+        if (!Number.isNaN(n))
+            return new ParameterNumber(n);
 
-    // Try Vector
-    if (S.startsWith('[') || S.startsWith('{')) {
-        const v = new ParameterVector(0);
+        // Try Vector
+        if (S.startsWith('[') || S.startsWith('{')) {
+            const v = new ParameterVector(0);
+            v.parse(S);
+            return v;
+        }
+
+        if (S.startsWith('center')) {
+            const v = new ParameterMatrix();
+            v.parse(S);
+            return v;
+        }
+
+        const v = new ParameterString();
         v.parse(S);
         return v;
     }
 
-    if (S.startsWith('center')) {
-        const v = new ParameterMatrix();
-        v.parse(S);
-        return v;
-    }
-
-    const v = new ParameterString();
-    v.parse(S);
-    return v;
+    return null;
 }
 
 function setupParametersFromVMT(param: ParameterMap, vmt: VMT): void {

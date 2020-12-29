@@ -202,9 +202,8 @@ export async function parseVMT(filesystem: SourceFileSystem, path: string, depth
             if (k === 'proxies' || k === 'replace' || k === 'insert')
                 continue;
 
-            if (typeof vmtObj[k] === 'object') {
+            if (typeof vmtObj[k] === 'object' && !Array.isArray(vmtObj[k])) {
                 // The result should be an array of pairs. Convert to object.
-                const pairs = vmtObj[k] as VKFPair[];
                 vmtObj[k] = pairs2obj(vmtObj[k], true);
             }
         }

@@ -544,6 +544,9 @@ export class EntitySystem {
         if (target === null)
             return;
 
+        if (action.delay !== 0)
+            return;
+
         if (action.parameterOverride !== '')
             value = action.parameterOverride;
 
