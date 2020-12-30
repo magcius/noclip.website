@@ -1002,6 +1002,10 @@ export class evtmgr {
             const op1 = this.evt_raw_arg(evt, 1);
             this.evt_set_arg(evt, 0, op0 | op1);
         } break;
+        case op.set_frame_from_msec: {
+            const msec = this.evt_eval_arg(evt, 1);
+            this.evt_set_arg(evt, 0, msec * 60/1000);
+        } break;
         case op.setr:
         case op.setrf: {
             // TODO
