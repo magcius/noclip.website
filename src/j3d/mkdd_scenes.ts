@@ -15,6 +15,8 @@ import { BCK, BMD, BTK, BRK, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
 import { CameraController } from '../Camera';
+import { BKGeoNode } from '../BanjoKazooie/geo';
+import { findFileData } from '../oot3d/zar';
 
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";
@@ -161,7 +163,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
         const modelInstance = new J3DModelInstanceSimple(bmdModel);
 
-        const btkFileData = rarc.findFileData(`${basename}.btk`);
+        /*const btkFileData = rarc.findFileData(`${basename}.btk`);
         if (btkFileData !== null)
             modelInstance.bindTTK1(BTK.parse(btkFileData));
 
@@ -171,7 +173,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
         const btpFileData = rarc.findFileData(`${basename}.btp`);
         if (btpFileData !== null)
-            modelInstance.bindTPT1(BTP.parse(btpFileData));
+            modelInstance.bindTPT1(BTP.parse(btpFileData));*/
 
         modelInstance.name = basename;
         if (modelMatrix !== null)
@@ -185,29 +187,115 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
         const path = `j3d/mkdd/Course/${this.path}`;
         return dataFetcher.fetchData(path).then((buffer) => {
             const rarc = RARC.parse(buffer);
-            // Find course name.
-            const bolFile = assertExists(rarc.files.find((f) => f.name.endsWith('_course.bol')));
-            const courseName = bolFile.name.replace('_course.bol', '');
-
+            const courseName = this.path.replace('.arc', '').toLowerCase();
+            
             const renderer = new MKDDRenderer(device);
 
-            if (rarc.findFile(`${courseName}_sky.bmd`))
-                renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `${courseName}_sky`));
+            const bolFileName = `${courseName}_course.bol`;
 
-            renderer.addModelInstance(this.spawnBMD(device, renderer, rarc, `${courseName}_course`));
+            const courseFileName = `${courseName}_course`;
+            const courseBTKFilNames = [ `${courseFileName}.btk`, `${courseFileName}_02.btk`, `${courseFileName}__03.btk` ];
+            const courseBTPFileName = `${courseFileName}.btp`;
+            const courseBRKFileName = `${courseName}.brk`;
+            
+            const skyFileName = `${courseName}_sky`;
+            const skyBTKFileName = `${skyFileName}.btk`;
+            const skyBRKFileName = `${skyFileName}.brk`;
+
+            const bolFile = assertExists(rarc.files.find((f) => f.name === bolFileName));
+
+            // Find all course files
+            const courseModelInstance = this.spawnBMD(device, renderer, rarc, courseFileName);
+            renderer.addModelInstance(courseModelInstance);
+
+            for (const BTKFileName of courseBTKFilNames) {
+                const btkFileData = rarc.findFileData(BTKFileName);
+
+                if (btkFileData !== null) {
+                    courseModelInstance.bindTTK1(BTK.parse(btkFileData));
+                }
+            }
+    
+            const btpFileData = rarc.findFileData(courseBTPFileName);
+
+            if (btpFileData !== null) {
+                courseModelInstance.bindTPT1(BTP.parse(btpFileData));
+            }
+
+            const brkFileData = rarc.findFileData(courseBRKFileName);
+
+            if (brkFileData !== null) {
+                courseModelInstance.bindTRK1(BRK.parse(brkFileData));
+            }
+
+            // Find all skybox files
+            if (rarc.findFile(`${skyFileName}.bmd`)) {
+                const skyModelInstance = this.spawnBMD(device, renderer, rarc, skyFileName);
+                renderer.addModelInstance(skyModelInstance);
+
+                const btkFileData = rarc.findFileData(skyBTKFileName);
+
+                if (btkFileData !== null) {
+                    skyModelInstance.bindTTK1(BTK.parse(btkFileData));
+                }
+
+                const brkFileData = rarc.findFileData(skyBRKFileName);
+    
+                if (brkFileData !== null) {
+                    skyModelInstance.bindTRK1(BRK.parse(brkFileData));
+                }
+            }
 
             const spawnObject = (obj: Obj, basename: string, animName: string | null = null) => {
                 const scene = this.spawnBMD(device, renderer, rarc, basename, obj.modelMatrix);
                 renderer.addModelInstance(scene);
+
+                // Each object has code which decides what files to load
+                // For now just simply load common files
+
+                // BCK
                 let bckFile;
+
                 if (animName !== null) {
                     bckFile = assertExists(rarc.findFile(animName));
-                } else {
+                }
+                else {
                     bckFile = rarc.findFile(`${basename}_wait.bck`);
                 }
+                
                 if (bckFile !== null) {
                     const bck = BCK.parse(bckFile.buffer);
                     scene.bindANK1(bck);
+                }
+
+                // BCA                
+                const bcaFileData = rarc.findFileData(`${basename}.btk`);
+
+                if (bcaFileData !== null) {
+                    // Not supported
+                }
+
+                // BTK
+                const btkFileData = rarc.findFileData(`${basename}.btk`);
+
+                if (btkFileData !== null) {
+                    scene.bindTTK1(BTK.parse(btkFileData));
+                }
+
+                // BTP
+                // Many files use texture pattern to switch color of the object
+                // Also, thwomps look bad when looping animations
+                //const btpFileData = rarc.findFileData(`${basename}.btp`);
+
+                //if (btpFileData !== null) {
+                //    scene.bindTPT1(BTP.parse(btpFileData));
+                //}
+
+                // BRK
+                const brkFileData = rarc.findFileData(`${basename}.brk`);
+
+                if (brkFileData !== null) {
+                    scene.bindTRK1(BRK.parse(brkFileData));
                 }
             };
 
@@ -219,36 +307,56 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 case 0x0009:
                     // Item box.
                     break;
+                case 0x0CE8:
+                    spawnObject(obj, 'objects/yoshihelib');
+                    break;
                 case 0x0D49:
                     // Sea.
-                    spawnObject(obj, `objects/sea1_spc`);
-                    spawnObject(obj, `objects/sea2_tex`);
-                    spawnObject(obj, `objects/sea3_dark`);
-                    spawnObject(obj, `objects/sea4_nami`);
-                    spawnObject(obj, `objects/sea5_sand`);
+                    spawnObject(obj, 'objects/sea1_spc');
+                    spawnObject(obj, 'objects/sea2_tex');
+                    spawnObject(obj, 'objects/sea3_dark');
+                    spawnObject(obj, 'objects/sea4_nami');
+                    spawnObject(obj, 'objects/sea5_sand');
                     break;
                 case 0x0D4A:
-                    spawnObject(obj, `objects/poihana1`); break;
+                    spawnObject(obj, 'objects/poihana1');
+                    break;
                 case 0x0D4D:
-                    spawnObject(obj, `objects/peachtree1`); break;
+                    spawnObject(obj, 'objects/peachtree1');
+                    break;
                 case 0x0D4E:
-                    spawnObject(obj, `objects/peachfountain`); break;
+                    spawnObject(obj, 'objects/peachfountain');
+                    break;
                 case 0x0D4F:
-                    spawnObject(obj, `objects/marel_a`); break;
+                    spawnObject(obj, 'objects/marel_a');
+                    break;
                 case 0x0E75:
-                    spawnObject(obj, `objects/mariotree1`); break;
+                    spawnObject(obj, 'objects/mariotree1');
+                    break;
                 case 0x0E77:
-                    spawnObject(obj, `objects/marioflower1`, `objects/marioflower1.bck`); break;
+                    spawnObject(obj, 'objects/marioflower1', 'objects/marioflower1.bck');
+                    break;
                 case 0x0E78:
                     // Chain chomp. Looks awful, don't spawn.
-                    // spawnObject(obj, `objects/wanwan1`); break;
+                    // spawnObject(obj, 'objects/wanwan1'); break;
                     break;
                 case 0x0E7E:
-                    spawnObject(obj, 'objects/skyship1'); break;
+                    spawnObject(obj, 'objects/skyship1');
+                    break;
                 case 0x0E7F:
-                    spawnObject(obj, `objects/kuribo1`); break;
+                    spawnObject(obj, 'objects/kuribo1');
+                    break;
+                case 0x0FA4:
+                    spawnObject(obj, 'objects/signal1');
+                    break;
+                case 0x1195:
+                    //spawnObject(obj, 'objects/cannon1');
+                    break;
                 case 0x119A:
                     // Butterflies.
+                    break;
+                case 0x125D:
+                    spawnObject(obj, 'objects/dossun1');
                     break;
                 default:
                     console.warn(`Unknown object ID ${obj.id.toString(16)}`);
