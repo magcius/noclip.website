@@ -3,17 +3,17 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { readString, assert, assertExists } from '../util';
-import { mat4, quat } from 'gl-matrix';
+import { readString, assert, assertExists, bisectRight } from '../util';
+import { mat3, mat4, quat, vec3 } from 'gl-matrix';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
-import { BCK, BMD, BTK, BRK, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
+import { BCK, BMD, BTK, BRK, BTP, BCA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';
-import { computeModelMatrixS } from '../MathHelpers';
+import { computeModelMatrixS, Vec3Zero } from '../MathHelpers';
 import { CameraController } from '../Camera';
 
 const id = "mkdd";
@@ -110,6 +110,7 @@ interface Obj {
     id: number;
     routeId: number;
     modelMatrix: mat4;
+    settings: number[];
 }
 
 interface BOL {
@@ -131,18 +132,51 @@ function parseBOL(buffer: ArrayBufferSlice): BOL {
         const scaleX = view.getFloat32(objectTableIdx + 0x0C);
         const scaleY = view.getFloat32(objectTableIdx + 0x10);
         const scaleZ = view.getFloat32(objectTableIdx + 0x14);
-        const rotFaceX = view.getInt32(objectTableIdx + 0x18);
-        const rotFaceZ = view.getInt32(objectTableIdx + 0x1C);
-        const rotFaceN = view.getInt32(objectTableIdx + 0x20);
+        const forwardX = view.getInt16(objectTableIdx + 0x18) / 10000;
+        const forwardY = view.getInt16(objectTableIdx + 0x1A) / 10000;
+        const forwardZ = view.getInt16(objectTableIdx + 0x1C) / 10000;
+        const upX = view.getInt16(objectTableIdx + 0x1E) / 10000;
+        const upY = view.getInt16(objectTableIdx + 0x20) / 10000;
+        const upZ = view.getInt16(objectTableIdx + 0x22) / 10000;
         const id = view.getUint16(objectTableIdx + 0x24);
         const routeId = view.getInt16(objectTableIdx + 0x26);
+        const settings = [];
 
+        for (let i = 0; i < 8; i++) {
+            settings.push(view.getUint16(objectTableIdx + 0x30 + i * 2));
+        }
+
+        // Create rotation
+        const forward: vec3 = [forwardX, forwardY, forwardZ];
+        const up: vec3 = [upX, upY, upZ];
+
+        vec3.normalize(forward, forward);
+        vec3.normalize(up, up);
+
+        const right = vec3.create();
+        vec3.cross(right, up, forward);
+
+        const rotationMatrix = mat4.create();
+
+        // NOTE: column by column
+        mat4.set(rotationMatrix,
+            right[0], right[1], right[2], 0,
+            up[0], up[1], up[2], 0,
+            forward[0], forward[1], forward[2], 0,
+            0, 0, 0, 1);
+
+        // Calculate model matrix
+        const translationMatrix = mat4.create();
+        mat4.fromTranslation(translationMatrix, [translationX, translationY, translationZ]);
+
+        const scaleMatrix = mat4.create();
+        mat4.fromScaling(scaleMatrix, [scaleX, scaleY, scaleZ]);
+        
         const modelMatrix = mat4.create();
-        const q = quat.create();
-        const rotationY = Math.atan2(rotFaceZ, rotFaceX);
-        quat.fromEuler(q, 0, -(rotationY * 180 / Math.PI) + 90, 0);
-        mat4.fromRotationTranslationScale(modelMatrix, q, [translationX, translationY, translationZ], [scaleX, scaleY, scaleZ]);
-        objects.push({ id, routeId, modelMatrix });
+        mat4.multiply(modelMatrix, rotationMatrix, scaleMatrix);
+        mat4.multiply(modelMatrix, translationMatrix, modelMatrix);
+
+        objects.push({ id, routeId, modelMatrix, settings });
         objectTableIdx += 0x40;
     }
 
@@ -161,18 +195,6 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
         const modelInstance = new J3DModelInstanceSimple(bmdModel);
 
-        /*const btkFileData = rarc.findFileData(`${basename}.btk`);
-        if (btkFileData !== null)
-            modelInstance.bindTTK1(BTK.parse(btkFileData));
-
-        const brkFileData = rarc.findFileData(`${basename}.brk`);
-        if (brkFileData !== null)
-            modelInstance.bindTRK1(BRK.parse(brkFileData));
-
-        const btpFileData = rarc.findFileData(`${basename}.btp`);
-        if (btpFileData !== null)
-            modelInstance.bindTPT1(BTP.parse(btpFileData));*/
-
         modelInstance.name = basename;
         if (modelMatrix !== null)
             mat4.copy(modelInstance.modelMatrix, modelMatrix);
@@ -183,6 +205,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
     public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
         const path = `j3d/mkdd/Course/${this.path}`;
+
         return dataFetcher.fetchData(path).then((buffer) => {
             const rarc = RARC.parse(buffer);
             const courseName = this.path.replace('.arc', '').toLowerCase();
@@ -244,56 +267,36 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 }
             }
 
-            const spawnObject = (obj: Obj, basename: string, animName: string | null = null) => {
+            const spawnObject = (obj: Obj, basename: string, animNames: string[] = []) => {
                 const scene = this.spawnBMD(device, renderer, rarc, basename, obj.modelMatrix);
                 renderer.addModelInstance(scene);
 
                 // Each object has code which decides what files to load
                 // For now just simply load common files
 
-                // BCK
-                let bckFile;
+                for (const anim of animNames) {
+                    const fileData = assertExists(rarc.findFileData(anim));
 
-                if (animName !== null) {
-                    bckFile = assertExists(rarc.findFile(animName));
-                }
-                else {
-                    bckFile = rarc.findFile(`${basename}_wait.bck`);
-                }
-                
-                if (bckFile !== null) {
-                    const bck = BCK.parse(bckFile.buffer);
-                    scene.bindANK1(bck);
-                }
-
-                // BCA                
-                const bcaFileData = rarc.findFileData(`${basename}.btk`);
-
-                if (bcaFileData !== null) {
-                    // Not supported
-                }
-
-                // BTK
-                const btkFileData = rarc.findFileData(`${basename}.btk`);
-
-                if (btkFileData !== null) {
-                    scene.bindTTK1(BTK.parse(btkFileData));
-                }
-
-                // BTP
-                // Many files use texture pattern to switch color of the object
-                // Also, thwomps look bad when looping animations
-                //const btpFileData = rarc.findFileData(`${basename}.btp`);
-
-                //if (btpFileData !== null) {
-                //    scene.bindTPT1(BTP.parse(btpFileData));
-                //}
-
-                // BRK
-                const brkFileData = rarc.findFileData(`${basename}.brk`);
-
-                if (brkFileData !== null) {
-                    scene.bindTRK1(BRK.parse(brkFileData));
+                    if (anim.endsWith(".bck")) {
+                        const bck = BCK.parse(fileData);
+                        scene.bindANK1(bck);
+                    }
+                    else if (anim.endsWith(".bca")) {
+                        const bca = BCA.parse(fileData);
+                        scene.bindANF1(bca);
+                    }
+                    else if (anim.endsWith(".btk")) {
+                        const btk = BTK.parse(fileData);
+                        scene.bindTTK1(btk);
+                    }
+                    else if (anim.endsWith(".btp")) {
+                        const btp = BTP.parse(fileData);
+                        scene.bindTPT1(btp);
+                    }
+                    else if (anim.endsWith(".brk")) {
+                        const brk = BRK.parse(fileData);
+                        scene.bindTRK1(brk);
+                    }
                 }
             };
 
@@ -332,7 +335,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                     spawnObject(obj, 'objects/mariotree1');
                     break;
                 case 0x0E77:
-                    spawnObject(obj, 'objects/marioflower1', 'objects/marioflower1.bck');
+                    spawnObject(obj, 'objects/marioflower1', ['objects/marioflower1.bck']);
                     break;
                 case 0x0E78:
                     // Chain chomp. Looks awful, don't spawn.
@@ -344,8 +347,11 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 case 0x0E7F:
                     spawnObject(obj, 'objects/kuribo1');
                     break;
+                case 0x0E80:
+                    spawnObject(obj, 'objects/pakkun');
+                    break;
                 case 0x0FA4:
-                    spawnObject(obj, 'objects/signal1');
+                    spawnObject(obj, 'objects/signal1', ['objects/signal1.brk']);
                     break;
                 case 0x1195:
                     //spawnObject(obj, 'objects/cannon1');

@@ -3,7 +3,7 @@ import { J3DModelInstance, BMDModelMaterialData, JointMatrixCalcNoAnm, J3DModelD
 import AnimationController from "../../../AnimationController";
 import { assert } from "../../../util";
 import { Camera } from "../../../Camera";
-import { TTK1, TRK1, TPT1, ANK1, JointTransformInfo, TRK1AnimationEntry, TTK1AnimationEntry, TPT1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, LoopMode, AnimationBase } from "./J3DLoader";
+import { TTK1, TRK1, TPT1, ANK1, ANF1, BCA, JointTransformInfo, TRK1AnimationEntry, TTK1AnimationEntry, TPT1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, LoopMode, AnimationBase } from "./J3DLoader";
 import { GfxDevice } from "../../../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../../../viewer";
@@ -226,6 +226,10 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
      */
     public bindANK1(ank1: ANK1 | null, animationController: AnimationController = this.animationController): void {
         this.jointMatrixCalc = ank1 !== null ? new JointMatrixCalcANK1(animationController, ank1) : new JointMatrixCalcNoAnm();
+    }
+
+    public bindANF1(anf1: ANF1 | null, animationController: AnimationController = this.animationController) : void {
+        this.bindANK1(BCA.toBCK(anf1), animationController);
     }
 
     private calcSkybox(camera: Camera): void {
