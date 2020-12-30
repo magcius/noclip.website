@@ -15,7 +15,7 @@ import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask, GfxFormat, GfxNor
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { Texture } from '../../../viewer';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
-import { colorCopy, Color } from '../../../Color';
+import { colorCopy, Color, colorClamp, colorClampLDR } from '../../../Color';
 import { computeNormalMatrix, texEnvMtx, computeModelMatrixS } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';
 import { GfxRenderCache } from '../../../gfx/render/GfxRenderCache';
@@ -366,6 +366,8 @@ function shapeInstancesUsePnMtxIdx(shapeInstances: ShapeInstance[]): boolean | u
     return false;
 }
 
+const enum ColorRegType { S10, U8, }
+
 const materialParams = new MaterialParams();
 const matrixScratch = mat4.create(), matrixScratch2 = mat4.create(), matrixScratch3 = mat4.create(), matrixScratch4 = mat4.create();
 export class MaterialInstance {
@@ -414,19 +416,11 @@ export class MaterialInstance {
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
     }
 
-    private clampTo8Bit(color: Color): void {
-        // TODO(jstpierre): Actually clamp. For now, just make sure it doesn't go negative.
-        color.r = Math.max(color.r, 0);
-        color.g = Math.max(color.g, 0);
-        color.b = Math.max(color.b, 0);
-        color.a = Math.max(color.a, 0);
-    }
-
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    private calcColor(dst: Color, i: ColorKind, fallbackColor: Color, clampTo8Bit: boolean): void {
+    private calcColor(dst: Color, i: ColorKind, fallbackColor: Color, colorRegType: ColorRegType): void {
         if (this.colorCalc[i]) {
             this.colorCalc[i]!.calcColor(dst);
         } else if (this.colorOverrides[i] !== null) {
@@ -435,8 +429,12 @@ export class MaterialInstance {
             colorCopy(dst, fallbackColor);
         }
 
-        if (clampTo8Bit)
-            this.clampTo8Bit(dst);
+        if (colorRegType === ColorRegType.S10) {
+            // S10 register goes from -1024.0 to 1023.0
+            colorClamp(dst, dst, -1024.0/256.0, 1023.0/256.0);
+        } else {
+            colorClampLDR(dst, dst);
+        }
     }
 
     private calcTexMtxInput(dst: mat4, texMtx: TexMtx, modelViewMatrix: mat4, modelMatrix: mat4): void {
@@ -681,18 +679,18 @@ export class MaterialInstance {
     public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: mat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix = camera.viewMatrix): void {
         const material = this.materialData.material;
 
-        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  material.colorMatRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  material.colorAmbRegs[0],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  material.colorAmbRegs[1],   false);
-        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    material.colorConstants[0], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    material.colorConstants[1], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    material.colorConstants[2], true);
-        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    material.colorConstants[3], true);
-        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    material.colorRegisters[0], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    material.colorRegisters[1], false);
-        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    material.colorRegisters[2], false);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.MAT1],  ColorKind.MAT1,  material.colorMatRegs[1],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB0],  ColorKind.AMB0,  material.colorAmbRegs[0],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.AMB1],  ColorKind.AMB1,  material.colorAmbRegs[1],   ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.K0],    ColorKind.K0,    material.colorConstants[0], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K1],    ColorKind.K1,    material.colorConstants[1], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K2],    ColorKind.K2,    material.colorConstants[2], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.K3],    ColorKind.K3,    material.colorConstants[3], ColorRegType.U8);
+        this.calcColor(materialParams.u_Color[ColorKind.CPREV], ColorKind.CPREV, material.colorRegisters[3], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.C0],    ColorKind.C0,    material.colorRegisters[0], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.C1],    ColorKind.C1,    material.colorRegisters[1], ColorRegType.S10);
+        this.calcColor(materialParams.u_Color[ColorKind.C2],    ColorKind.C2,    material.colorRegisters[2], ColorRegType.S10);
 
         // Texture mappings.
         for (let i = 0; i < material.textureIndexes.length; i++) {
