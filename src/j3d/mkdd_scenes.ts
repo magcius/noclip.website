@@ -15,8 +15,8 @@ import { BCK, BMD, BTK, BRK, BTP } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
 import { CameraController } from '../Camera';
-import { BKGeoNode } from '../BanjoKazooie/geo';
-import { findFileData } from '../oot3d/zar';
+
+import {  sampleAnimationData } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";
