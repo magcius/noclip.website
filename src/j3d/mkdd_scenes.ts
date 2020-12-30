@@ -16,8 +16,6 @@ import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
 import { CameraController } from '../Camera';
 
-import {  sampleAnimationData } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
-
 const id = "mkdd";
 const name = "Mario Kart: Double Dash!!";
 
