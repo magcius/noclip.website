@@ -1,5 +1,5 @@
 
-import { lerp, saturate, MathConstants, invlerp } from "./MathHelpers";
+import { lerp, saturate, clamp } from "./MathHelpers";
 import { assert } from "./util";
 
 // Color utilities
@@ -82,6 +82,13 @@ export function colorClampLDR(dst: Color, a: Color) {
     dst.g = saturate(a.g);
     dst.b = saturate(a.b);
     dst.a = saturate(a.a);
+}
+
+export function colorClamp(dst: Color, a: Color, min: number, max: number): void {
+    dst.r = clamp(a.r, min, max);
+    dst.g = clamp(a.g, min, max);
+    dst.b = clamp(a.b, min, max);
+    dst.a = clamp(a.a, min, max);
 }
 
 export function colorScale(dst: Color, a: Color, v: number) {
