@@ -82,7 +82,7 @@ class JointMatrixCalcANF1 {
             transform = anf1ScratchTransform;
         } else {
             transform = jnt1.transform;
-        }        
+        }
 
         const loadFlags = modelData.bmd.inf1.loadFlags;
         calcJointMatrixFromTransform(dst, transform, loadFlags, jnt1, shapeInstanceState);
@@ -257,13 +257,6 @@ export class J3DModelInstanceSimple extends J3DModelInstance {
 
     public bindANF1(anf1: ANF1 | null, animationController: AnimationController = this.animationController) : void {
         this.jointMatrixCalc = anf1 !== null ? new JointMatrixCalcANF1(animationController, anf1) : new JointMatrixCalcNoAnm();
-
-        //if (anf1 === null) {
-        //    this.bindANK1(null, animationController);
-        //}
-        //else {            
-        //    this.bindANK1(BCA.toBCK(anf1), animationController);
-        //}
     }
 
     private calcSkybox(camera: Camera): void {
