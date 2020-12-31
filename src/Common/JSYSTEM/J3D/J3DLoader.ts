@@ -1793,50 +1793,6 @@ export class BCA {
 
         return readANF1Chunk(j3d.nextChunk('ANF1'));
     }
-
-    public static toBCK(anf1: ANF1): ANK1 {
-        const jointAnimationEntries: ANK1JointAnimationEntry[] = [];
-        
-        for (const anim of anf1.jointAnimationEntries) {
-            const convert = (fullFrames: number[]) => {
-                const frames: AnimationKeyframe[] = [];
-                
-                for (let i = 0; i < fullFrames.length; i++) {                
-                    const time = i;
-                    const value = fullFrames[i];
-                    const tangentIn = 0;
-                    const tangentOut = 0;
-    
-                    frames.push({time, value, tangentIn, tangentOut });
-                }
-
-                return { frames };
-            }
-
-            const scaleX = convert(anim.scaleX);
-            const rotationX = convert(anim.rotationX);
-            const translationX = convert(anim.translationX);
-
-            const scaleY = convert(anim.scaleY);
-            const rotationY = convert(anim.rotationY);
-            const translationY = convert(anim.translationY);
-
-            const scaleZ = convert(anim.scaleZ);
-            const rotationZ = convert(anim.rotationZ);
-            const translationZ = convert(anim.translationZ);
-
-            jointAnimationEntries.push({
-                scaleX, rotationX, translationX,
-                scaleY, rotationY, translationY,
-                scaleZ, rotationZ, translationZ,
-            });
-        }
-
-        const loopMode = anf1.loopMode;
-        const duration = anf1.duration;
-    
-        return { loopMode, duration, jointAnimationEntries };
-    }
 }
 //#endregion
 

@@ -1,7 +1,7 @@
 
 // Animation support.
 
-import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, Joint, JointTransformInfo, ANK1, ANK1JointAnimationEntry, J3DLoadFlags } from './J3DLoader';
+import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, Joint, JointTransformInfo, ANK1, ANK1JointAnimationEntry, J3DLoadFlags, ANF1JointAnimationEntry } from './J3DLoader';
 import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
 import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase';
@@ -339,6 +339,9 @@ export function calcJointMatrixMayaSSC(dst: mat4, parentScale: ReadonlyVec3): vo
 }
 
 export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransformInfo, loadFlags: J3DLoadFlags, jnt1: Joint, shapeInstanceState: ShapeInstanceState): void {
+    
+    
+    
     mat4.fromQuat(dst, transform.rotation);
     setMatrixTranslation(dst, transform.translation);
     mat4.scale(dst, dst, transform.scale);
@@ -348,8 +351,8 @@ export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransfor
         calcJointMatrixMayaSSC(dst, shapeInstanceState.parentScale);
 }
 
-const scratchQuat = quat.create();
-export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number, animFrame1: number): void {
+const ank1ScratchQuat = quat.create();
+export function calcANK1JointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number, animFrame1: number): void {
     dst.scale[0] = sampleAnimationData(entry.scaleX, animFrame);
     dst.scale[1] = sampleAnimationData(entry.scaleY, animFrame);
     dst.scale[2] = sampleAnimationData(entry.scaleZ, animFrame);
@@ -365,8 +368,8 @@ export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1
         const r1x = sampleAnimationData(entry.rotationX, a1);
         const r1y = sampleAnimationData(entry.rotationY, a1);
         const r1z = sampleAnimationData(entry.rotationZ, a1);
-        quatFromEulerRadians(scratchQuat, r1x, r1y, r1z);
-        quat.slerp(dst.rotation, dst.rotation, scratchQuat, animFrame - a0);
+        quatFromEulerRadians(ank1ScratchQuat, r1x, r1y, r1z);
+        quat.slerp(dst.rotation, dst.rotation, ank1ScratchQuat, animFrame - a0);
     }
 
     dst.translation[0] = sampleAnimationData(entry.translationX, animFrame);
@@ -389,7 +392,7 @@ export class J3DJointMatrixAnm {
         let transform: JointTransformInfo;
         if (entry !== undefined) {
             const animFrame = this.frameCtrl.currentTimeInFrames;
-            calcJointAnimationTransform(scratchTransform, entry, animFrame, this.frameCtrl.applyLoopMode(animFrame + 1));
+            calcANK1JointAnimationTransform(scratchTransform, entry, animFrame, this.frameCtrl.applyLoopMode(animFrame + 1));
             transform = scratchTransform;
         } else {
             transform = jnt1.transform;
@@ -411,4 +414,38 @@ export function entryJointAnimator(modelInstance: J3DModelInstance, ank1: ANK1, 
 
 export function removeJointAnimator(modelInstance: J3DModelInstance, ank1: ANK1): void {
     modelInstance.jointMatrixCalc = new JointMatrixCalcNoAnm();
+}
+
+const anf1ScratchQuat = quat.create();
+export function calcANF1JointAnimationTransform(dst: JointTransformInfo, entry: ANF1JointAnimationEntry, animFrame: number, animFrame1: number): void {
+
+    const sample = (frames: number[]) => {
+        if (frames.length == 1) {
+            return frames[0];
+        }
+
+        return frames[animFrame | 0];
+    }
+
+    dst.scale[0] = sample(entry.scaleX);
+    dst.scale[1] = sample(entry.scaleY);
+    dst.scale[2] = sample(entry.scaleZ);
+
+    const a0 = animFrame | 0;
+    const r0x = sample(entry.rotationX);
+    const r0y = sample(entry.rotationY);
+    const r0z = sample(entry.rotationZ);
+    quatFromEulerRadians(dst.rotation, r0x, r0y, r0z);
+
+    if (a0 !== animFrame) {
+        const r1x = sample(entry.rotationX);
+        const r1y = sample(entry.rotationY);
+        const r1z = sample(entry.rotationZ);
+        quatFromEulerRadians(anf1ScratchQuat, r1x, r1y, r1z);
+        quat.slerp(dst.rotation, dst.rotation, anf1ScratchQuat, animFrame - a0);
+    }
+
+    dst.translation[0] = sample(entry.translationX);
+    dst.translation[1] = sample(entry.translationY);
+    dst.translation[2] = sample(entry.translationZ);
 }

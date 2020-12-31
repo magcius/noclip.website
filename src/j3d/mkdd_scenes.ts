@@ -273,9 +273,6 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 const scene = this.spawnBMD(device, renderer, rarc, basename, obj.modelMatrix);
                 renderer.addModelInstance(scene);
 
-                // Each object has code which decides what files to load
-                // For now just simply load common files
-
                 for (const anim of animNames) {
                     const fileData = assertExists(rarc.findFileData(anim));
 
@@ -304,6 +301,9 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 
             const bol = parseBOL(bolFile.buffer);
             
+            // Each object has code which decides what files to load
+            // For now just simply hardcode which object should load what files
+            // Objects: https://avsys.xyz/wiki/Mario_Kart_Double_Dash/Object
             for (const obj of bol.objects) {
                 switch (obj.id) {
                 case 0x0001:
@@ -340,8 +340,8 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                     break;
                 case 0x0D49:
                     // Sea.
-                    spawnObject(obj, 'objects/sea1_spc.bmd');
-                    spawnObject(obj, 'objects/sea2_tex.bmd');
+                    spawnObject(obj, 'objects/sea1_spc.bmd', ['objects/sea1_spc.btk']);
+                    spawnObject(obj, 'objects/sea2_tex.bmd', ['objects/sea2_tex.btk']);
                     spawnObject(obj, 'objects/sea3_dark.bmd');
                     spawnObject(obj, 'objects/sea4_nami.bmd');
                     spawnObject(obj, 'objects/sea5_sand.bmd');
@@ -434,14 +434,14 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                     spawnObject(obj, 'objects/testwall1.bmd');
                     break;
                 case 0x0E75:
-                    spawnObject(obj, 'objects/mariotree1.bmd');
+                    spawnObject(obj, 'objects/mariotree1.bmd', ['objects/mariotree1_wait.bck']); // both BCA and BCK exist
                     break;
                 case 0x0E77:
                     spawnObject(obj, 'objects/marioflower1.bmd', ['objects/marioflower1.bck']);
                     break;
                 case 0x0E78:
                     // Chain chomp. Looks awful, don't spawn.
-                    // spawnObject(obj, 'objects/wanwan1.bmd'); break;
+                    //spawnObject(obj, 'objects/wanwan1.bmd'); break;
                     break;
                 case 0x0E7E:
                     spawnObject(obj, 'objects/skyship1.bmd');
@@ -602,7 +602,7 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
 }
 
 // Courses named and organized by Starschulz
-// Other added by Wexos
+// Extra courses added by Wexos
 const sceneDescs = [
     "Mushroom Cup",
     new MKDDSceneDesc(`Luigi Circuit`, 'Luigi.arc'),
