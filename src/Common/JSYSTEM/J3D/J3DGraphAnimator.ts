@@ -46,6 +46,14 @@ export function sampleAnimationData(track: AnimationTrack, frame: number): numbe
     return hermiteInterpolate(k0, k1, frame);
 }
 
+function sampleANF1AnimationData(frames: number[], animFrame: number): number {
+    if (frames.length == 1) {
+        return frames[0];
+    }
+
+    return frames[animFrame];
+}
+
 export const enum J3DFrameCtrl__UpdateFlags {
     HasStopped  = 0b0001,
     HasRepeated = 0b0010,
@@ -339,9 +347,6 @@ export function calcJointMatrixMayaSSC(dst: mat4, parentScale: ReadonlyVec3): vo
 }
 
 export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransformInfo, loadFlags: J3DLoadFlags, jnt1: Joint, shapeInstanceState: ShapeInstanceState): void {
-    
-    
-    
     mat4.fromQuat(dst, transform.rotation);
     setMatrixTranslation(dst, transform.translation);
     mat4.scale(dst, dst, transform.scale);
@@ -351,7 +356,7 @@ export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransfor
         calcJointMatrixMayaSSC(dst, shapeInstanceState.parentScale);
 }
 
-const ank1ScratchQuat = quat.create();
+const scratchQuat = quat.create();
 export function calcANK1JointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number, animFrame1: number): void {
     dst.scale[0] = sampleAnimationData(entry.scaleX, animFrame);
     dst.scale[1] = sampleAnimationData(entry.scaleY, animFrame);
@@ -368,8 +373,8 @@ export function calcANK1JointAnimationTransform(dst: JointTransformInfo, entry: 
         const r1x = sampleAnimationData(entry.rotationX, a1);
         const r1y = sampleAnimationData(entry.rotationY, a1);
         const r1z = sampleAnimationData(entry.rotationZ, a1);
-        quatFromEulerRadians(ank1ScratchQuat, r1x, r1y, r1z);
-        quat.slerp(dst.rotation, dst.rotation, ank1ScratchQuat, animFrame - a0);
+        quatFromEulerRadians(scratchQuat, r1x, r1y, r1z);
+        quat.slerp(dst.rotation, dst.rotation, scratchQuat, animFrame - a0);
     }
 
     dst.translation[0] = sampleAnimationData(entry.translationX, animFrame);
@@ -416,36 +421,28 @@ export function removeJointAnimator(modelInstance: J3DModelInstance, ank1: ANK1)
     modelInstance.jointMatrixCalc = new JointMatrixCalcNoAnm();
 }
 
-const anf1ScratchQuat = quat.create();
 export function calcANF1JointAnimationTransform(dst: JointTransformInfo, entry: ANF1JointAnimationEntry, animFrame: number, animFrame1: number): void {
-
-    const sample = (frames: number[]) => {
-        if (frames.length == 1) {
-            return frames[0];
-        }
-
-        return frames[animFrame | 0];
-    }
-
-    dst.scale[0] = sample(entry.scaleX);
-    dst.scale[1] = sample(entry.scaleY);
-    dst.scale[2] = sample(entry.scaleZ);
-
     const a0 = animFrame | 0;
-    const r0x = sample(entry.rotationX);
-    const r0y = sample(entry.rotationY);
-    const r0z = sample(entry.rotationZ);
+
+    dst.scale[0] = sampleANF1AnimationData(entry.scaleX, a0);
+    dst.scale[1] = sampleANF1AnimationData(entry.scaleY, a0);
+    dst.scale[2] = sampleANF1AnimationData(entry.scaleZ, a0);
+
+    const r0x = sampleANF1AnimationData(entry.rotationX, a0);
+    const r0y = sampleANF1AnimationData(entry.rotationY, a0);
+    const r0z = sampleANF1AnimationData(entry.rotationZ, a0);
     quatFromEulerRadians(dst.rotation, r0x, r0y, r0z);
 
     if (a0 !== animFrame) {
-        const r1x = sample(entry.rotationX);
-        const r1y = sample(entry.rotationY);
-        const r1z = sample(entry.rotationZ);
-        quatFromEulerRadians(anf1ScratchQuat, r1x, r1y, r1z);
-        quat.slerp(dst.rotation, dst.rotation, anf1ScratchQuat, animFrame - a0);
+        const a1 = animFrame1 | 0;
+        const r1x = sampleANF1AnimationData(entry.rotationX, a1);
+        const r1y = sampleANF1AnimationData(entry.rotationY, a1);
+        const r1z = sampleANF1AnimationData(entry.rotationZ, a1);
+        quatFromEulerRadians(scratchQuat, r1x, r1y, r1z);
+        quat.slerp(dst.rotation, dst.rotation, scratchQuat, animFrame - a0);
     }
 
-    dst.translation[0] = sample(entry.translationX);
-    dst.translation[1] = sample(entry.translationY);
-    dst.translation[2] = sample(entry.translationZ);
+    dst.translation[0] = sampleANF1AnimationData(entry.translationX, a0);
+    dst.translation[1] = sampleANF1AnimationData(entry.translationY, a0);
+    dst.translation[2] = sampleANF1AnimationData(entry.translationZ, a0);
 }

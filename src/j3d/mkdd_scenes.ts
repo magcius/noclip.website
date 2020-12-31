@@ -132,12 +132,12 @@ function parseBOL(buffer: ArrayBufferSlice): BOL {
         const scaleX = view.getFloat32(objectTableIdx + 0x0C);
         const scaleY = view.getFloat32(objectTableIdx + 0x10);
         const scaleZ = view.getFloat32(objectTableIdx + 0x14);
-        const forwardX = view.getInt16(objectTableIdx + 0x18) / 10000;
-        const forwardY = view.getInt16(objectTableIdx + 0x1A) / 10000;
-        const forwardZ = view.getInt16(objectTableIdx + 0x1C) / 10000;
-        const upX = view.getInt16(objectTableIdx + 0x1E) / 10000;
-        const upY = view.getInt16(objectTableIdx + 0x20) / 10000;
-        const upZ = view.getInt16(objectTableIdx + 0x22) / 10000;
+        const forwardX = view.getInt16(objectTableIdx + 0x18);
+        const forwardY = view.getInt16(objectTableIdx + 0x1A);
+        const forwardZ = view.getInt16(objectTableIdx + 0x1C);
+        const upX = view.getInt16(objectTableIdx + 0x1E);
+        const upY = view.getInt16(objectTableIdx + 0x20);
+        const upZ = view.getInt16(objectTableIdx + 0x22);
         const id = view.getUint16(objectTableIdx + 0x24);
         const routeId = view.getInt16(objectTableIdx + 0x26);
         const settings = [];
@@ -147,8 +147,8 @@ function parseBOL(buffer: ArrayBufferSlice): BOL {
         }
 
         // Create rotation
-        const forward: vec3 = [forwardX, forwardY, forwardZ];
-        const up: vec3 = [upX, upY, upZ];
+        const forward = vec3.fromValues(forwardX / 10000, forwardY / 10000, forwardZ / 10000);
+        const up = vec3.fromValues(upX / 10000, upY / 10000, upZ / 10000);
 
         vec3.normalize(forward, forward);
         vec3.normalize(up, up);
