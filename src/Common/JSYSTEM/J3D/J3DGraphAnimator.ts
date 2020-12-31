@@ -1,7 +1,7 @@
 
 // Animation support.
 
-import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, Joint, JointTransformInfo, ANK1, ANK1JointAnimationEntry, J3DLoadFlags } from './J3DLoader';
+import { AnimationTrack, AnimationKeyframe, LoopMode, VAF1, TRK1, TRK1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, TTK1, TTK1AnimationEntry, TPT1AnimationEntry, TPT1, Joint, JointTransformInfo, ANK1, ANK1JointAnimationEntry, J3DLoadFlags, ANF1JointAnimationEntry } from './J3DLoader';
 import { assertExists } from '../../../util';
 import { Color } from '../../../Color';
 import { J3DModelInstance, JointMatrixCalcNoAnm, MaterialInstance, J3DModelData, ShapeInstanceState } from './J3DGraphBase';
@@ -44,6 +44,14 @@ export function sampleAnimationData(track: AnimationTrack, frame: number): numbe
     const k1 = frames[idx1];
 
     return hermiteInterpolate(k0, k1, frame);
+}
+
+function sampleANF1AnimationData(frames: number[], animFrame: number): number {
+    if (frames.length == 1) {
+        return frames[0];
+    }
+
+    return frames[animFrame];
 }
 
 export const enum J3DFrameCtrl__UpdateFlags {
@@ -349,7 +357,7 @@ export function calcJointMatrixFromTransform(dst: mat4, transform: JointTransfor
 }
 
 const scratchQuat = quat.create();
-export function calcJointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number, animFrame1: number): void {
+export function calcANK1JointAnimationTransform(dst: JointTransformInfo, entry: ANK1JointAnimationEntry, animFrame: number, animFrame1: number): void {
     dst.scale[0] = sampleAnimationData(entry.scaleX, animFrame);
     dst.scale[1] = sampleAnimationData(entry.scaleY, animFrame);
     dst.scale[2] = sampleAnimationData(entry.scaleZ, animFrame);
@@ -389,7 +397,7 @@ export class J3DJointMatrixAnm {
         let transform: JointTransformInfo;
         if (entry !== undefined) {
             const animFrame = this.frameCtrl.currentTimeInFrames;
-            calcJointAnimationTransform(scratchTransform, entry, animFrame, this.frameCtrl.applyLoopMode(animFrame + 1));
+            calcANK1JointAnimationTransform(scratchTransform, entry, animFrame, this.frameCtrl.applyLoopMode(animFrame + 1));
             transform = scratchTransform;
         } else {
             transform = jnt1.transform;
@@ -411,4 +419,30 @@ export function entryJointAnimator(modelInstance: J3DModelInstance, ank1: ANK1, 
 
 export function removeJointAnimator(modelInstance: J3DModelInstance, ank1: ANK1): void {
     modelInstance.jointMatrixCalc = new JointMatrixCalcNoAnm();
+}
+
+export function calcANF1JointAnimationTransform(dst: JointTransformInfo, entry: ANF1JointAnimationEntry, animFrame: number, animFrame1: number): void {
+    const a0 = animFrame | 0;
+
+    dst.scale[0] = sampleANF1AnimationData(entry.scaleX, a0);
+    dst.scale[1] = sampleANF1AnimationData(entry.scaleY, a0);
+    dst.scale[2] = sampleANF1AnimationData(entry.scaleZ, a0);
+
+    const r0x = sampleANF1AnimationData(entry.rotationX, a0);
+    const r0y = sampleANF1AnimationData(entry.rotationY, a0);
+    const r0z = sampleANF1AnimationData(entry.rotationZ, a0);
+    quatFromEulerRadians(dst.rotation, r0x, r0y, r0z);
+
+    if (a0 !== animFrame) {
+        const a1 = animFrame1 | 0;
+        const r1x = sampleANF1AnimationData(entry.rotationX, a1);
+        const r1y = sampleANF1AnimationData(entry.rotationY, a1);
+        const r1z = sampleANF1AnimationData(entry.rotationZ, a1);
+        quatFromEulerRadians(scratchQuat, r1x, r1y, r1z);
+        quat.slerp(dst.rotation, dst.rotation, scratchQuat, animFrame - a0);
+    }
+
+    dst.translation[0] = sampleANF1AnimationData(entry.translationX, a0);
+    dst.translation[1] = sampleANF1AnimationData(entry.translationY, a0);
+    dst.translation[2] = sampleANF1AnimationData(entry.translationZ, a0);
 }
