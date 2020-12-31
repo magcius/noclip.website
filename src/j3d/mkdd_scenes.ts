@@ -10,7 +10,7 @@ import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
+import { bindTTK1MaterialInstance, J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { BCK, BMD, BTK, BRK, BTP, BCA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS, Vec3Zero } from '../MathHelpers';
@@ -235,7 +235,13 @@ class MKDDSceneDesc implements Viewer.SceneDesc {
                 const btkFileData = rarc.findFileData(BTKFileName);
 
                 if (btkFileData !== null) {
-                    courseModelInstance.bindTTK1(BTK.parse(btkFileData));
+                    const btk = BTK.parse(btkFileData);
+
+                    for (const materialInstance of courseModelInstance.materialInstances) {
+                        if (btk.uvAnimationEntries.findIndex((x) => x.materialName == materialInstance.name) != -1) {
+                            bindTTK1MaterialInstance(materialInstance, courseModelInstance.animationController, btk);
+                        }
+                    }
                 }
             }
     
