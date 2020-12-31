@@ -37,7 +37,7 @@ function getAnimFrame(anim: AnimationBase, frame: number, loopMode: LoopMode = a
     return animFrame;
 }
 
-const ank1ScratchTransform = new JointTransformInfo();
+const scratchTransform = new JointTransformInfo();
 class JointMatrixCalcANK1 {
     constructor(public animationController: AnimationController, public ank1: ANK1) {
     }
@@ -51,8 +51,8 @@ class JointMatrixCalcANK1 {
             const frame = this.animationController.getTimeInFrames();
             const animFrame = getAnimFrame(this.ank1, frame);
             const animFrame1 = getAnimFrame(this.ank1, frame + 1);
-            calcANK1JointAnimationTransform(ank1ScratchTransform, entry, animFrame, animFrame1);
-            transform = ank1ScratchTransform;
+            calcANK1JointAnimationTransform(scratchTransform, entry, animFrame, animFrame1);
+            transform = scratchTransform;
         } else {
             transform = jnt1.transform;
         }
@@ -64,7 +64,6 @@ class JointMatrixCalcANK1 {
     }
 }
 
-const anf1ScratchTransform = new JointTransformInfo();
 class JointMatrixCalcANF1 {
     constructor(public animationController: AnimationController, public anf1: ANF1) {
     }
@@ -78,8 +77,8 @@ class JointMatrixCalcANF1 {
             const frame = this.animationController.getTimeInFrames();
             const animFrame = getAnimFrame(this.anf1, frame);
             const animFrame1 = getAnimFrame(this.anf1, frame + 1);
-            calcANF1JointAnimationTransform(anf1ScratchTransform, entry, animFrame, animFrame1);
-            transform = anf1ScratchTransform;
+            calcANF1JointAnimationTransform(scratchTransform, entry, animFrame, animFrame1);
+            transform = scratchTransform;
         } else {
             transform = jnt1.transform;
         }
