@@ -638,7 +638,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
         // Adjust for GL defaults.
-        this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
+        this._currentMegaState.depthCompare = GfxCompareMode.LESS;
         this._currentMegaState.depthWrite = false;
         this._currentMegaState.attachmentsState[0].colorWriteMask = GfxColorWriteMask.ALL;
 
