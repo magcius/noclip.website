@@ -332,14 +332,12 @@ class GfxRenderPassP_GL implements GfxRenderPass {
 }
 
 enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
-let g0 = 0;
 class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public gfxr: (GfxResource | null)[] = [];
     public bufr: ArrayBufferView[] = [];
 
-    public g0 = 0;
-    public reset() { this.g0 = ++g0; this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
+    public reset() { this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
 
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
