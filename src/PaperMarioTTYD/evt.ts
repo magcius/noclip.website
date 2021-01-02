@@ -971,7 +971,8 @@ export class evtmgr {
             // TODO
         } break;
         case op.read: {
-            // TODO
+            // HACK: Fix gor_04
+            this.evt_set_arg(evt, 0, 0);
         } break;
         case op.read2: {
             // TODO
@@ -980,7 +981,11 @@ export class evtmgr {
             // TODO
         } break;
         case op.read4: {
-            // TODO
+            // HACK: Fix gor_04
+            this.evt_set_arg(evt, 0, 0);
+            this.evt_set_arg(evt, 1, 0);
+            this.evt_set_arg(evt, 2, 0);
+            this.evt_set_arg(evt, 3, 0);
         } break;
         case op.and: {
             const op0 = this.evt_eval_arg(evt, 0);
