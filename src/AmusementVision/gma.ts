@@ -29,9 +29,7 @@ export interface GcmfMaterial{
     transparent: number,
     matCount: number,
     vtxRenderFlag: GX.AttrType,
-    tex0Idx: number,
-    tex1Idx: number,
-    tex2Idx: number,
+    texIdxs: number[], // GMA can store max 3 texture index
     vtxAttr: GX.Attr
 }
 
@@ -79,8 +77,8 @@ export interface GcmfShape{
 export interface GcmfExShape{
     unk_0x00: number,
     unk_0x04: number,
-    dlist0Size: number,
-    dlist1Size: number
+    dlist0Length: number,
+    dlist1Length: number
 }
 
 // GCMF GcmfTexture
@@ -88,9 +86,9 @@ export interface GcmfTexture{
     mipmap: GX.TexFilter,
     wrapS: GX.WrapMode,
     wrapT: GX.WrapMode,
-    textureIndex: number, 
+    texIdx: number, // index of tpl
     anisotropy: number,
-    idx: number
+    idx: number // index of GcmfTexture
 }
 
 interface Gcmf{
@@ -126,11 +124,11 @@ function parseTexture(buffer: ArrayBufferSlice): GcmfTexture{
 
     const unk0x00 = view.getInt16(0x00);
     const AVmipmap: GX.TexFilter = view.getInt8(0x02);
-    const mipmap = GX.TexFilter.NEAR_MIP_LIN;
+    const mipmap = GX.TexFilter.LIN_MIP_LIN;
     let uvWrap = view.getInt8(0x03);
     const wrapS: GX.WrapMode = (uvWrap >> 2) & 0x03;
     const wrapT: GX.WrapMode = (uvWrap >> 4) & 0x03;
-    const textureIndex = view.getInt16(0x04);
+    const texIdx = view.getInt16(0x04);
     const unk0x06 = view.getInt8(0x06);
     const anisotropy = view.getInt8(0x07);
     const unk0x0C = view.getInt8(0x0C);
@@ -138,7 +136,7 @@ function parseTexture(buffer: ArrayBufferSlice): GcmfTexture{
     const idx = view.getInt16(0x0E);
     const unk0x10 = view.getInt32(0x10);
 
-    return { mipmap, wrapS, wrapT, textureIndex, anisotropy, idx };
+    return { mipmap, wrapS, wrapT, texIdx, anisotropy, idx };
 }
 
 function parseMatrix(buffer: ArrayBufferSlice): mat4{
@@ -168,6 +166,7 @@ function parseMatrix(buffer: ArrayBufferSlice): mat4{
 
 function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
     const view = buffer.createDataView();
+    const texIdxs: number[] = [];
 
     const unk0x02 = view.getUint8(0x02);
     const unk0x03 = view.getUint8(0x03);
@@ -180,9 +179,11 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
     const vtxRenderFlag: GX.AttrType = view.getUint8(0x13);
     const unk0x14 = view.getUint8(0x14);
     const unk0x15 = view.getUint8(0x15);
-    const tex0Idx = view.getInt16(0x16);
-    const tex1Idx = view.getInt16(0x18);
-    const tex2Idx = view.getInt16(0x1A);
+    for(let i = 0; i < 3; i++){
+        let offs = 0x16 + i * 0x02;
+        texIdxs[i] = view.getInt16(offs);
+    }
+
     const vtxAttr: GX.Attr = view.getUint32(0x1C);
 
     // GX_Material
@@ -269,7 +270,8 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
     const gxMaterial: GX_Material.GXMaterial = {
         // GMA not have Material name
         name: `$material_${idx}`,
-        cullMode: (unk0x03 & (1 << 2)) == 2 ? GX.CullMode.ALL : GX.CullMode.FRONT,
+        // cullMode: (unk0x03 & (1 << 2)) == 2 ? GX.CullMode.NONE : GX.CullMode.FRONT,
+        cullMode: GX.CullMode.NONE,
         lightChannels,
         texGens,
         tevStages,
@@ -278,7 +280,7 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
         indTexStages: [],
     };
 
-    return { gxMaterial, color0, color1, color2, emission, transparent, matCount, vtxRenderFlag, tex0Idx, tex1Idx, tex2Idx, vtxAttr };
+    return { gxMaterial, color0, color1, color2, emission, transparent, matCount, vtxRenderFlag, texIdxs, vtxAttr };
 }
 
 function parseExShape(buffer: ArrayBufferSlice): GcmfExShape{
@@ -286,10 +288,10 @@ function parseExShape(buffer: ArrayBufferSlice): GcmfExShape{
 
     const unk_0x00 = view.getUint32(0x00);
     const unk_0x04 = view.getUint32(0x04);
-    const dlist0Size = view.getUint32(0x08);
-    const dlist1Size = view.getUint32(0x0C);
+    const dlist0Length = view.getUint32(0x08);
+    const dlist1Length = view.getUint32(0x0C);
 
-    return{ unk_0x00, unk_0x04, dlist0Size, dlist1Size };
+    return{ unk_0x00, unk_0x04, dlist0Length, dlist1Length };
 }
 
 function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: number, vtxCon2Offs: number): GcmfShape{
@@ -414,7 +416,7 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf{
     // GcmfShape
     for(let i = 0; i < allMaterialCount; i++){
         const shape = parseShape(shapeBuff.slice(shapeOffs), attribute, i, vtxCon2Offs);
-        if(shape.material.tex0Idx < 0){
+        if(shape.material.texIdxs[0] < 0){
             // ignore invalid tex0Index material
             continue;
         }

@@ -12,6 +12,7 @@ import AnimationController from '../AnimationController';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXRenderHelperGfx, } from '../gx/gx_render';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import * as UI from '../ui';
+import { CameraController } from '../Camera';
 
 enum FZEROGXPass {
     SKYBOX = 0x01,
@@ -52,6 +53,10 @@ export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
         renderHacksPanel.contents.appendChild(enableTextures.elem);
 
         return [renderHacksPanel];
+    }
+
+    public adjustCameraController(c: CameraController) {
+        c.setSceneMoveSpeedMult(8/60);
     }
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {

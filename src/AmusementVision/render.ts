@@ -7,11 +7,10 @@ import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxDevice, GfxNormalizedViewportCoords, GfxSampler } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, PacketParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
-import { mat4 } from 'gl-matrix';
+import { mat4, vec3 } from 'gl-matrix';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
-import { Color, colorCopy} from '../Color';
+import { Color } from '../Color';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyBias, setSortKeyDepth } from '../gfx/render/GfxRenderer';
-import { computeNormalMatrix } from '../MathHelpers';
 import { nArray } from '../util';
 import { AABB, IntersectionState } from '../Geometry';
 import { ViewerRenderInput } from '../viewer';
@@ -46,9 +45,16 @@ export class GcmfModel {
         }
 
         for (let i = 0; i < gcmf.shapes.length; i++) {
-            const material = gcmf.shapes[i].material;
-            const texture = gcmf.textures[material.tex0Idx];
-            this.materialData[i] = new MaterialData(device, material, texture, this.materialHacks);
+            for(let j = 0; j < 3; j++){
+                const GcmfMaterial = gcmf.shapes[i].material;
+                const texIdx = GcmfMaterial.texIdxs[j];
+                if (texIdx < 0){
+                    continue;
+                } 
+                const texture = gcmf.textures[texIdx];
+                const material = new MaterialData(device, GcmfMaterial, texture, this.materialHacks);
+                this.materialData.push(material);
+            }
         }
     }
 
@@ -84,18 +90,17 @@ class ShapeInstance {
 
         const usesSkinning = this.shape.material.vtxRenderFlag < 0x08;
         
-        materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.material.tex0Idx, null, camera, viewport);
+        materialInstance.fillMaterialParams(template, textureHolder, this.shape.material.texIdxs[0], null, camera, viewport);
 
         packetParams.clear();
         for (let p = 0; p < this.shape.loadedVertexData.draws.length; p++) {
             const packet = this.shape.loadedVertexData.draws[p];
 
+            mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[0]);
+
             const renderInst = renderInstManager.newRenderInst();
             this.shapeData.setOnRenderInst(renderInst, packet);
             materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
-
-            // if (usesSkinning)
-            //     materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, packet, camera, viewport);
 
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -123,13 +128,14 @@ function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
     return b;
 }
 
+const matrixScratch = mat4.create();
 const materialParams = new MaterialParams();
 class MaterialInstance {
     public materialHelper: GXMaterialHelperGfx;
     public sortKey: number = 0;
     public visible = true;
 
-    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData) {
+    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public textures: GMA.GcmfTexture[]) {
         const gxMaterial: GX_Material.GXMaterial = Object.assign({}, materialData.material.gxMaterial);
         gxMaterial.lightChannels = arrayCopy(gxMaterial.lightChannels, lightChannelCopy);
         gxMaterial.useTexMtxIdx = nArray(8, () => false);
@@ -160,54 +166,39 @@ class MaterialInstance {
         mat4.mul(dstPost, matrixScratch, dstPost);
     }
 
-    private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: Color): void {
-        const dst = materialParams.u_Color[i];
-        let color: Color;
-        if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
-            color = this.modelInstance.colorOverrides[i];
-        } else {
-            color = fallbackColor;
-        }
+    // private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: Color): void {
+    //     const dst = materialParams.u_Color[i];
+    //     let color: Color;
+    //     if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
+    //         color = this.modelInstance.colorOverrides[i];
+    //     } else {
+    //         color = fallbackColor;
+    //     }
 
-        colorCopy(dst, color);
-    }
+    //     colorCopy(dst, color);
+    // }
 
-    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
         const material = this.materialData.material;
 
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 3; i++) {
             const m = materialParams.m_TextureMapping[i];
             m.reset();
 
-
             this.fillTextureMapping(m, textureHolder, i);
         }
-
-
-        // Fill in our environment mapped texture matrices.
-        for (let i = 0; i < 10; i++) {
-            let texMtxIdx: number;
-            if (packet !== null) {
-                texMtxIdx = packet.texMatrixTable[i];
-
-                // Don't bother computing a normal matrix if the matrix is unused.
-                if (texMtxIdx === 0xFFFF)
-                    continue;
-            } else {
-                texMtxIdx = posNrmMatrixIdx;
-            }
-
-            computeNormalMatrix(materialParams.u_TexMtx[i], instanceStateData.drawViewMatrixArray[texMtxIdx]);
-        }
-
-        for (let i = 0; i < 8; i++)
-            this.calcTexMatrix(materialParams, i, camera, viewport);
     }
 
     private fillTextureMapping(dst: TextureMapping, textureHolder: GXTextureHolder, i: number): void {
         const material = this.materialData.material;
         dst.reset();
-        const name: string = `texture_`+material.tex0Idx;
+        let idx = material.texIdxs[i];
+        if(idx < 0){
+            return;
+        }
+        let texIdx = 0;
+        texIdx = this.textures[idx].texIdx;
+        const name: string = `texture_`+texIdx;
         textureHolder.fillTextureMapping(dst, name);
         dst.gfxSampler = this.materialData.gfxSamplers[i];
     }
@@ -216,8 +207,8 @@ class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, packet, camera, viewport);
+    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        this.fillMaterialParamsData(materialParams, textureHolder, posNrmMatrixIdx, packet, camera, viewport);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }
@@ -225,6 +216,7 @@ class MaterialInstance {
     public destroy(device: GfxDevice): void {
     }
 }
+
 
 const matrixScratchArray = nArray(1, () => mat4.create());
 export class GcmfModelInstance {
@@ -246,12 +238,9 @@ export class GcmfModelInstance {
         this.name = `${namePrefix}/${gcmfModel.gcmfEntry.name}`;
 
         this.instanceStateData.jointToWorldMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.mtxCount, () => mat4.create());
-        this.instanceStateData.drawViewMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.texCount, () => mat4.create());
-        while (matrixScratchArray.length < this.instanceStateData.jointToWorldMatrixArray.length)
-            matrixScratchArray.push(mat4.create());
-
+        this.instanceStateData.drawViewMatrixArray = nArray(1, () => mat4.create());
         for (let i = 0; i < this.gcmfModel.materialData.length; i++){
-            this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i]);
+            this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.textures);
         }
         
         const gcmf = this.gcmfModel.gcmfEntry.gcmf;
@@ -260,11 +249,6 @@ export class GcmfModelInstance {
             const shape = gcmf.shapes[i];
             const shapeData = this.gcmfModel.shapeData[i];
             const shapeInstance = new ShapeInstance(shape, shapeData, materialInstance);
-            // if (translucent)
-            //     shapeInstance.sortKeyBias = i;
-
-            // const usesSkinning = gcmf.attribute > GMA.GcmfAttribute.stiching;
-            // materialInstance.setSkinningEnabled(usesSkinning);
 
             this.shapeInstances.push(shapeInstance);
         }
@@ -296,10 +280,16 @@ export class GcmfModelInstance {
     private calcView(camera: Camera): void {
         const viewMatrix = matrixScratch;
 
-        if (this.isSkybox)
+        if (this.isSkybox){
             computeViewMatrixSkybox(viewMatrix, camera);
-        else
+
+        } else{
             computeViewMatrix(viewMatrix, camera);
+        }
+
+        const dstDrawMatrix = this.instanceStateData.drawViewMatrixArray[0];
+
+        mat4.mul(dstDrawMatrix, viewMatrix, this.modelMatrix);
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
@@ -338,7 +328,7 @@ export class GcmfModelInstance {
 
 }
 
-const matrixScratch = mat4.create();
+
 class MaterialData {
     public gfxSamplers: GfxSampler[] = [];
 

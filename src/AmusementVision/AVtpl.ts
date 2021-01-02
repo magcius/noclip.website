@@ -27,7 +27,7 @@ function parseAvTplHeader(buffer: ArrayBufferSlice, idx:number, basebuffer: Arra
     let view = buffer.createDataView();
 
     assert(view.getUint16(0x0E) == 0x1234);
-    const name = "texture_"+idx;
+    const name = `texture_`+idx;
     const format: GX.TexFormat = view.getUint32(0x00);
     const offs = view.getUint32(0x04);
     const width = view.getUint16(0x08);
