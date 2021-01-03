@@ -268,8 +268,7 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
     const gxMaterial: GX_Material.GXMaterial = {
         // GMA not have Material name
         name: `material_${idx}`,
-        // cullMode: (unk0x03 & (1 << 2)) == 2 ? GX.CullMode.NONE : GX.CullMode.FRONT,
-        cullMode: GX.CullMode.NONE,
+        cullMode: (unk0x03 & (1 << 1)) !== 0 ? GX.CullMode.NONE : GX.CullMode.FRONT,
         lightChannels,
         texGens,
         tevStages,
@@ -522,8 +521,8 @@ export function parse(buffer: ArrayBufferSlice): GMA{
         let attr = view.getUint32(gcmfBaseOffs + gcmfOffs + 0x04);
         let notSupport = (attr & (1 << 3)) !== 0 || (attr & (1 << 4)) !== 0 || (attr & (1 << 5)) !== 0;
         if (notSupport){
-            // ignore "skin" and "effect" model.
-            // TODO: Support "skin" and "effect" model.
+            // ignore "Stiching Model", "Skin Model" and "Effective Model".
+            // TODO: Support those model.
             console.log(`not support this model ${hexzero(gcmfBaseOffs + gcmfOffs, 8)}`);
             console.log(`Stiching Model:${(attr & (1 << 3)) !== 0} Skin Model:${(attr & (1 << 4)) !== 0} Effective Model:${(attr & (1 << 5)) !== 0}`);
             continue;
