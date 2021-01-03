@@ -35,13 +35,13 @@ export class GcmfModel {
     private bufferCoalescer: GfxBufferCoalescerCombo;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public gcmfEntry: GMA.GcmfEntry, private materialHacks?: GX_Material.GXMaterialHacks) {
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, gcmfEntry.gcmf.shapes.map((shape) => shape.loadedVertexData));
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, gcmfEntry.gcmf.shapes.map((shape) => shape.loadedVertexDatas[0]));
 
         const gcmf = gcmfEntry.gcmf;
         for (let i = 0; i < gcmf.shapes.length; i++) {
             const shape = gcmf.shapes[i];
             const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[i];
-            this.shapeData[i] = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, shape.loadedVertexLayout, shape.loadedVertexData);
+            this.shapeData[i] = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, shape.loadedVertexLayout, shape.loadedVertexDatas[0]);
         }
 
         for (let i = 0; i < gcmf.shapes.length; i++) {
@@ -93,8 +93,8 @@ class ShapeInstance {
         materialInstance.fillMaterialParams(template, textureHolder, this.shape.material.texIdxs[0], null, camera, viewport);
 
         packetParams.clear();
-        for (let p = 0; p < this.shape.loadedVertexData.draws.length; p++) {
-            const packet = this.shape.loadedVertexData.draws[p];
+        for (let p = 0; p < this.shape.loadedVertexDatas[0].draws.length; p++) {
+            const packet = this.shape.loadedVertexDatas[0].draws[p];
 
             mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[0]);
 

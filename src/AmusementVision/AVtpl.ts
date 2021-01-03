@@ -1,4 +1,3 @@
-
 // AmusementVision's Texture format
 
 import * as GX from '../gx/gx_enum';
@@ -19,7 +18,6 @@ export interface AVTexture {
 }
 
 export interface AVTpl{
-    count: number;
     textures: AVTexture[];
 }
 
@@ -27,7 +25,7 @@ function parseAvTplHeader(buffer: ArrayBufferSlice, idx:number, basebuffer: Arra
     let view = buffer.createDataView();
 
     assert(view.getUint16(0x0E) == 0x1234);
-    const name = `texture_`+idx;
+    const name = `texture_${idx}`;
     const format: GX.TexFormat = view.getUint32(0x00);
     const offs = view.getUint32(0x04);
     const width = view.getUint16(0x08);
@@ -46,17 +44,15 @@ export function parseAvTpl(buffer: ArrayBufferSlice):AVTpl {
     const textures: AVTexture[] = [];
 
     let entryCount = view.getUint32(0x00);
-    let enableCount = 0;
+    let offs = 0x04;
     for (let i = 0; i < entryCount; i++){
-        let offs = 0x10 * i + 0x04;
         const texture = parseAvTplHeader(buffer.slice(offs), i, buffer);
+        offs += 0x10;
         if (texture.offs === 0 && texture.width === 0 && texture.height === 0 && texture.mipCount === 0){
             continue;
         }
         textures.push( texture );
-        enableCount++;
     }
-    const count = enableCount;
 
-    return { count, textures };
+    return { textures };
 }

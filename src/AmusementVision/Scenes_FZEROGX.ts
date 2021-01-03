@@ -158,41 +158,41 @@ const sceneDescs = [
     "Rudy Cup",
     new FZEROGXSceneDesc("01", "mut", "Mute City - Twist Road"),
     new FZEROGXSceneDesc("16", "cas", "Casino Palace - Split Oval"),
-    new FZEROGXSceneDesc("26", "san", "Sand Ocean - Surface Slide"), //
+    new FZEROGXSceneDesc("26", "san", "Sand Ocean - Surface Slide"), // NBT, Skin Model
     new FZEROGXSceneDesc("08", "lig", "Lightning - Loop Cross"),
     new FZEROGXSceneDesc("05", "tow", "Aeropolis - Multiplex"),
     // new FZEROGXSceneDesc("01", "mut_jp", "[JP]Mute City - Twist Road"),
     "Sapphire Cup",
     new FZEROGXSceneDesc("14", "big", "Big Blue - Drift Highway"),
     new FZEROGXSceneDesc("13", "por", "Port Town - Long Pipe"),
-    new FZEROGXSceneDesc("11", "for", "Green Plant - Mobious Ring"), //
+    new FZEROGXSceneDesc("11", "for", "Green Plant - Mobious Ring"), // NBT
     new FZEROGXSceneDesc("07", "por", "Port Town - Aerodive"),
     new FZEROGXSceneDesc("03", "mut", "Mute City - Serial Gaps"),
     // new FZEROGXSceneDesc("03", "mut_jp", "[JP]Mute City - Serial Gaps"),
     "Emerald Cup",
     new FZEROGXSceneDesc("15", "fir", "Fire Field - Cylinder Knot"),
-    new FZEROGXSceneDesc("10", "for", "Green Plant - Intersection"), //
+    new FZEROGXSceneDesc("10", "for", "Green Plant - Intersection"), // NBT
     new FZEROGXSceneDesc("29", "cas", "Casino Palace - Double Branches"),
     new FZEROGXSceneDesc("09", "lig", "Lightning - Half-Pipe"),
     new FZEROGXSceneDesc("27", "big", "Big Blue - Ordeal"),
     // new FZEROGXSceneDesc("15", "fir_jp", "[JP]Fire Field Cylinder Knot"),
     "Diamond Cup",
     new FZEROGXSceneDesc("24", "ele", "Cosmo Termial - Trident"),
-    new FZEROGXSceneDesc("25", "san", "Sand Ocean - Lateral Shift"), //
+    new FZEROGXSceneDesc("25", "san", "Sand Ocean - Lateral Shift"), // NBT
     new FZEROGXSceneDesc("17", "fir", "Fire Field - Undulation"),
     new FZEROGXSceneDesc("21", "tow", "Aeropolis - Dragon Slope"),
     new FZEROGXSceneDesc("28", "rai", "Phantom Road - Slim-Line Slits"),
     // new FZEROGXSceneDesc("17", "fir_jp", "[JP]Fire Field - Undulation"),
     "AX Cup",
     new FZEROGXSceneDesc("31", "tow", "Aeropolis - Screw Drive"),
-    new FZEROGXSceneDesc("32", "met", "Outer Space - Meteor Stream"), //
+    new FZEROGXSceneDesc("32", "met", "Outer Space - Meteor Stream"), // NBT
     new FZEROGXSceneDesc("33", "por", "Port Town - Cylinder Wave"),
     new FZEROGXSceneDesc("34", "lig", "Lightning - Thunder Road"),
     new FZEROGXSceneDesc("35", "for", "Green Plant - Spiral"), //
     new FZEROGXSceneDesc("36", "com", "Mute City - Sonic Oval"),
     "Story Mode",
     new FZEROGXSceneDesc("37", "com_s", "Chapter 1"),
-    new FZEROGXSceneDesc("38", "san_s", "Chapter 2"), //
+    new FZEROGXSceneDesc("38", "san_s", "Chapter 2"), // NBT
     new FZEROGXSceneDesc("39", "cas_s", "Chapter 3"),
     new FZEROGXSceneDesc("40", "big_s", "Chapter 4"),
     new FZEROGXSceneDesc("41", "por_s", "Chapter 5"),
@@ -205,9 +205,6 @@ const sceneDescs = [
     new FZEROGXSceneDesc("49", "com", "Interview"),
     new FZEROGXSceneDesc("50", "com", "Victory Lap"),
     new FZEROGXSceneDesc("00", "", "st00"),
-
-    new FZEROGXSceneDesc("age_noclip/common", "", "Unused Model(Official GMA)"),
-    new FZEROGXSceneDesc("age_noclip/Arc_Cube", "", "ARC Cube(Unofficial GMA)"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
