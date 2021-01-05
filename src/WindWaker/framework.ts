@@ -23,10 +23,11 @@ export const enum fpc__ProcessName {
     d_a_sie_flag        = 0x00B1,
     d_a_ep              = 0x00BA,
     d_a_kamome          = 0x00C3,
+    d_a_obj_flame       = 0x010D,
     d_a_tbox            = 0x0126,
     d_a_kytag00         = 0x0181,
     d_a_kytag01         = 0x0182,
-    d_a_obj_zouK1       = 0x018F,
+    d_a_obj_zouK        = 0x018F,
     d_a_grass           = 0x01B8,
     d_thunder           = 0x01B9,
     d_a_vrbox           = 0x01BA,
@@ -440,10 +441,10 @@ export function fopDw_Draw(globals: fGlobals, globalUserData: GlobalUserData, re
     for (let i = 0; i < globals.dwQueue.length; i++) {
         for (let j = 0; j < globals.dwQueue[i].length; j++) {
             const pc = globals.dwQueue[i][j];
-            if (!pc.visible)
+            if (!pc.visible || !pc.roomVisible)
                 continue;
             fpcLy_SetCurrentLayer(globals, pc.ly);
-            globals.dwQueue[i][j].draw(globalUserData, renderInstManager, viewerInput);
+            pc.draw(globalUserData, renderInstManager, viewerInput);
         }
     }
 }

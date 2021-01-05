@@ -1,5 +1,5 @@
 
-import { mat4, vec3, vec4, quat } from 'gl-matrix';
+import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
 import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
@@ -160,7 +160,7 @@ export function computeViewSpaceDepthFromWorldSpaceAABB(camera: Camera, aabb: AA
  * The returned value can be passed directly to {@link GfxRenderer.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3, v_ = scratchVec3a): number {
+export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: ReadonlyVec3, v_ = scratchVec3a): number {
     transformVec3Mat4w1(v_, camera.viewMatrix, v);
     return -v_[2];
 }
@@ -176,7 +176,7 @@ export function computeViewSpaceDepthFromWorldSpacePoint(camera: Camera, v: vec3
  * The returned value can be passed directly to {@link GfxRenderer.setSortKeyDepth},
  * which will clamp if the value is below 0.
  */
-export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: mat4, v: vec3, v_ = scratchVec3a): number {
+export function computeViewSpaceDepthFromWorldSpacePointAndViewMatrix(viewMatrix: ReadonlyMat4, v: ReadonlyVec3, v_ = scratchVec3a): number {
     transformVec3Mat4w1(v_, viewMatrix, v);
     return -v_[2];
 }
@@ -234,7 +234,7 @@ export class ScreenSpaceProjection {
  * clip space (between -1 and 1 on all three axes). Conversion into screen or viewport space
  * is not done in this function.
  */
-export function computeClipSpacePointFromWorldSpacePoint(output: vec3, camera: Camera, p: vec3, v4 = scratchVec4): void {
+export function computeClipSpacePointFromWorldSpacePoint(output: vec3, camera: Camera, p: ReadonlyVec3, v4 = scratchVec4): void {
     vec4.set(v4, p[0], p[1], p[2], 1.0);
     vec4.transformMat4(v4, v4, camera.clipFromWorldMatrix);
     const w = v4[3];
@@ -246,7 +246,7 @@ export function computeClipSpacePointFromWorldSpacePoint(output: vec3, camera: C
  * a sphere in world-space coordinates with parameters @param center and @param radius
  * will take up when viewed by @param camera.
  */
-export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, center: vec3, radius: number, v: vec3 = scratchVec3a, v4: vec4 = scratchVec4): void {
+export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProjection: ScreenSpaceProjection, camera: Camera, center: ReadonlyVec3, radius: number, v: vec3 = scratchVec3a, v4: vec4 = scratchVec4): void {
     screenSpaceProjection.reset();
 
     transformVec3Mat4w1(v, camera.viewMatrix, center);

@@ -42,14 +42,7 @@ const fileDescriptions: { [key: number]: FileDescription } = {
 }
 
 function readStringUTF8(buffer: ArrayBufferSlice, offs: number): string {
-    const buf = buffer.createTypedArray(Uint8Array, offs);
-    let i = 0;
-    while (true) {
-        if (buf[i] === 0)
-            break;
-        i++;
-    }
-    return decodeString(buffer.subarray(offs, i));
+    return readString(buffer, offs, -1, true, 'utf8');
 }
 
 export type StringTable = string[];

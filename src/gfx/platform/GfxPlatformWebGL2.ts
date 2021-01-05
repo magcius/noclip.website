@@ -332,14 +332,12 @@ class GfxRenderPassP_GL implements GfxRenderPass {
 }
 
 enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
-let g0 = 0;
 class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public gfxr: (GfxResource | null)[] = [];
     public bufr: ArrayBufferView[] = [];
 
-    public g0 = 0;
-    public reset() { this.g0 = ++g0; this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
+    public reset() { this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
 
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
@@ -640,7 +638,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 
         // Adjust for GL defaults.
-        this._currentMegaState.depthCompare = GfxCompareMode.ALWAYS;
+        this._currentMegaState.depthCompare = GfxCompareMode.LESS;
         this._currentMegaState.depthWrite = false;
         this._currentMegaState.attachmentsState[0].colorWriteMask = GfxColorWriteMask.ALL;
 
@@ -1799,7 +1797,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             for (let i = 0; i < uniformBlocks.length; i++) {
                 const [m, blockName, contents] = uniformBlocks[i];
                 const blockIdx = gl.getUniformBlockIndex(prog, blockName);
-                if (blockIdx !== -1)
+                if (blockIdx !== -1 && blockIdx !== 0xFFFFFFFF)
                     gl.uniformBlockBinding(prog, blockIdx, i);
             }
 

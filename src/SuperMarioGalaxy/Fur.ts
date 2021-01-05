@@ -1,5 +1,5 @@
 
-import { vec4, vec3, mat4 } from "gl-matrix";
+import { vec4, vec3, mat4, ReadonlyVec4 } from "gl-matrix";
 import { fallbackUndefined, assert, decodeString, assertExists } from "../util";
 
 import { J3DModelData, ShapeData, prepareShapeMtxGroup } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -75,7 +75,7 @@ function parseColor(dst: Color, S: string): void {
 }
 
 function initFurParamFromDVD(dstParam: FurParam, dstDynParam: DynamicFurParam, furTxt: ArrayBufferSlice): void {
-    const S = decodeString(furTxt, 'sjis');
+    const S = decodeString(furTxt, undefined, undefined, 'sjis');
 
     dstParam.numLayers               = parseInt  (scanForLine(S, `レイヤ数`), 10);
     dstParam.hairLengthTip              = parseFloat(scanForLine(S, `毛長さ`));
@@ -169,7 +169,7 @@ class CLayerParam {
     }
 }
 
-function createFurDensityMap(mapDensity: vec4, mapThickness: vec4, mapMixingRatio: vec4): BTI_Texture {
+function createFurDensityMap(mapDensity: ReadonlyVec4, mapThickness: ReadonlyVec4, mapMixingRatio: ReadonlyVec4): BTI_Texture {
     // Creates the density map from the given params.
     const width = 0x20, height = 0x20;
     const format = GX.TexFormat.IA8;
@@ -198,7 +198,7 @@ function createFurDensityMap(mapDensity: vec4, mapThickness: vec4, mapMixingRati
     }
 
     const btiTexture: BTI_Texture = {
-        name,
+        name: 'FurDensityMap',
         width, height, format, wrapS, wrapT,
         minFilter: GX.TexFilter.LINEAR,
         magFilter: GX.TexFilter.LINEAR,

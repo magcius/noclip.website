@@ -93,7 +93,7 @@ export function computeModelMatrixR(dst: mat4, rotationX: number, rotationY: num
     const sinZ = Math.sin(rotationZ), cosZ = Math.cos(rotationZ);
 
     dst[0] =  (cosY * cosZ);
-    dst[1] =  (sinZ * cosY);
+    dst[1] =  (cosY * sinZ);
     dst[2] =  (-sinY);
     dst[3] =  0.0;
 
@@ -146,7 +146,7 @@ export function computeModelMatrixT(dst: mat4, translationX: number, translation
  *
  * This is equivalent to mat4.scale(dst, m, [scaleX, scaleY, scaleZ]) but generates zero GC garbage.
  */
-export function scaleMatrix(dst: mat4, m: mat4, scaleX: number, scaleY: number = scaleX, scaleZ: number = scaleX): void {
+export function scaleMatrix(dst: mat4, m: ReadonlyMat4, scaleX: number, scaleY: number = scaleX, scaleZ: number = scaleX): void {
     // Scale column vectors.
     dst[0] = m[0] * scaleX;
     dst[1] = m[1] * scaleX;
@@ -613,4 +613,8 @@ export function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
         vec3.set(dst, 0, speed * Math.sign(y), 0);
     else if (Math.abs(z) > Math.abs(y) && Math.abs(z) > Math.abs(x))
         vec3.set(dst, 0, 0, speed * Math.sign(z));
+}
+
+export function vec3SetAll(dst: vec3, v: number): void {
+    vec3.set(dst, v, v, v);
 }

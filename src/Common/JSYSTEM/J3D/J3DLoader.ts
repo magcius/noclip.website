@@ -1710,6 +1710,92 @@ export class BCK {
 }
 //#endregion
 
+//#region J3DAnmTransformFull
+export interface ANF1JointAnimationEntry {
+    scaleX: number[];
+    rotationX: number[];
+    translationX: number[];
+    scaleY: number[];
+    rotationY: number[];
+    translationY: number[];
+    scaleZ: number[];
+    rotationZ: number[];
+    translationZ: number[];
+}
+
+export interface ANF1 extends AnimationBase {
+    jointAnimationEntries: ANF1JointAnimationEntry[];
+}
+
+function readANF1Chunk(buffer: ArrayBufferSlice): ANF1 {
+    const view = buffer.createDataView();
+    const loopMode: LoopMode = view.getUint8(0x08);
+    //const rotationDecimal = view.getInt8(0x09);
+    const duration = view.getUint16(0x0A);
+    const jointAnimationTableCount = view.getUint16(0x0C);
+    const sCount = view.getUint16(0x0E);
+    const rCount = view.getUint16(0x10);
+    const tCount = view.getUint16(0x12);
+    const jointAnimationTableOffs = view.getUint32(0x14);
+    const sTableOffs = view.getUint32(0x18);
+    const rTableOffs = view.getUint32(0x1C);
+    const tTableOffs = view.getUint32(0x20);
+
+    const rotationScale = Math.PI / 0x7FFF;
+
+    const sTable = buffer.createTypedArray(Float32Array, sTableOffs, sCount, Endianness.BIG_ENDIAN);
+    const rTable = buffer.createTypedArray(Int16Array, rTableOffs, rCount, Endianness.BIG_ENDIAN);
+    const tTable = buffer.createTypedArray(Float32Array, tTableOffs, tCount, Endianness.BIG_ENDIAN);
+
+    let animationTableIdx = jointAnimationTableOffs;
+
+    function readAnimationTrack(data: Int16Array | Float32Array, scale: number): number[] {
+        const count = view.getUint16(animationTableIdx + 0x00);
+        const index = view.getUint16(animationTableIdx + 0x02);
+        animationTableIdx += 0x04;
+
+        const frames: number[] = [];
+
+        for (let i = 0; i < count; i++) {
+            frames.push(data[index + i] * scale);
+        }
+
+        return frames;
+    }
+
+    const jointAnimationEntries: ANF1JointAnimationEntry[] = [];
+
+    for (let i = 0; i < jointAnimationTableCount; i++) {
+        const scaleX = readAnimationTrack(sTable, 1);
+        const rotationX = readAnimationTrack(rTable, rotationScale);
+        const translationX = readAnimationTrack(tTable, 1);
+        const scaleY = readAnimationTrack(sTable, 1);
+        const rotationY = readAnimationTrack(rTable, rotationScale);
+        const translationY = readAnimationTrack(tTable, 1);
+        const scaleZ = readAnimationTrack(sTable, 1);
+        const rotationZ = readAnimationTrack(rTable, rotationScale);
+        const translationZ = readAnimationTrack(tTable, 1);
+
+        jointAnimationEntries.push({
+            scaleX, rotationX, translationX,
+            scaleY, rotationY, translationY,
+            scaleZ, rotationZ, translationZ,
+        });
+    }
+
+    return { loopMode, duration, jointAnimationEntries };
+}
+
+export class BCA {
+    public static parse(buffer: ArrayBufferSlice): ANF1 {
+        const j3d = new JSystemFileReaderHelper(buffer);
+        assert(j3d.magic === 'J3D1bca1');
+
+        return readANF1Chunk(j3d.nextChunk('ANF1'));
+    }
+}
+//#endregion
+
 //#region J3DAnmTexPattern
 export interface TPT1AnimationEntry {
     materialName: string;

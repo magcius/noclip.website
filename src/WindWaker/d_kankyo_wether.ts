@@ -3,7 +3,7 @@ import { dScnKy_env_light_c, dKy_efplight_set, dKy_efplight_cut, dKy_actor_addco
 import { dGlobals } from "./zww_scenes";
 import { cM_rndF, cLib_addCalc, cM_rndFX, cLib_addCalcAngleRad } from "./SComponent";
 import { vec3, mat4, vec4, vec2, ReadonlyVec3 } from "gl-matrix";
-import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White, Red, Green, Magenta, Yellow, Blue } from "../Color";
+import { Color, colorFromRGBA, colorFromRGBA8, colorLerp, colorCopy, colorNewCopy, colorNewFromRGBA8, White } from "../Color";
 import { computeMatrixWithoutTranslation, MathConstants, saturate, invlerp } from "../MathHelpers";
 import { fGlobals, fpcPf__Register, fpc__ProcessName, fpc_bs__Constructor, kankyo_class, cPhs__Status, fopKyM_Delete, fopKyM_create } from "./framework";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
@@ -23,12 +23,12 @@ import { GfxDevice, GfxCompareMode } from "../gfx/platform/GfxPlatform";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { nArray, assertExists, assert } from "../util";
 import { uShortTo2PI } from "./Grass";
-import { JPABaseEmitter, BaseEmitterFlags } from "../Common/JSYSTEM/JPA";
+import { JPABaseEmitter } from "../Common/JSYSTEM/JPA";
 import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { _T } from "../gfx/platform/GfxPlatformImpl";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { dPa__StopEmitter } from "./d_particle";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -1712,8 +1712,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                 eff.stateTimer = cLib_addCalc(eff.stateTimer, 0.0, speed, maxVel * (0.1 + 0.01 * (i / 30)), 0.01);
                 if (eff.stateTimer <= 0.0) {
                     emitter.deleteAllParticle();
-                    emitter.maxFrame = -1;
-                    emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
+                    dPa__StopEmitter(emitter);
                     eff.emitter = null;
                     eff.state = 0;
                 }

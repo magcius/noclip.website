@@ -190,7 +190,7 @@ export function getJointMtx(actor: LiveActor, i: number): mat4 {
 export function getJointMtxByName(actor: LiveActor, n: string): mat4 | null {
     const modelInstance = actor.modelInstance;
     if (modelInstance === null)
-        return null;    
+        return null;
     const joints = modelInstance.modelData.bmd.jnt1.joints;
     for (let i = 0; i < joints.length; i++)
         if (joints[i].name === n)
@@ -228,6 +228,11 @@ export function getBrkFrameMax(actor: LiveActor): number {
 
 export function isBtpStopped(actor: LiveActor): boolean {
     return actor.modelManager!.isBtpStopped();
+}
+
+export function getBvaFrameMax(actor: LiveActor): number {
+    const bvaCtrl = actor.modelManager!.getBvaCtrl();
+    return bvaCtrl.endFrame;
 }
 
 export function initDefaultPos(sceneObjHolder: SceneObjHolder, actor: LiveActor, infoIter: JMapInfoIter | null): void {
@@ -582,8 +587,12 @@ export function initCollisionParts(sceneObjHolder: SceneObjHolder, actor: LiveAc
     actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, resourceHolder, hostMtx, CollisionScaleType.AutoScale);
 }
 
-export function initCollisionPartsAutoEqualScaleOne(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null = null, resourceHolder: ResourceHolder | null = null) {
+export function initCollisionPartsAutoEqualScale(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null = null, resourceHolder: ResourceHolder | null = null) {
     actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, resourceHolder, hostMtx, CollisionScaleType.AutoEqualScale);
+}
+
+export function initCollisionPartsAutoEqualScaleOne(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, hitSensor: HitSensor, hostMtx: mat4 | null = null, resourceHolder: ResourceHolder | null = null) {
+    actor.initActorCollisionParts(sceneObjHolder, name, hitSensor, resourceHolder, hostMtx, CollisionScaleType.AutoEqualScaleOne);
 }
 
 export function getRailTotalLength(actor: LiveActor): number {
@@ -953,6 +962,16 @@ export function makeMtxFrontSide(dst: mat4, front: ReadonlyVec3, side: ReadonlyV
     setMtxAxisXYZ(dst, sideNorm, up, frontNorm);
 }
 
+export function makeMtxSideUp(dst: mat4, side: ReadonlyVec3, up: ReadonlyVec3): void {
+    const front = scratchVec3b;
+    const sideNorm = scratchVec3a;
+    const upNorm = scratchVec3c;
+    vec3.normalize(sideNorm, side);
+    vec3.cross(front, sideNorm, up);
+    vec3.normalize(front, front);
+    vec3.cross(upNorm, front, sideNorm);
+    setMtxAxisXYZ(dst, sideNorm, upNorm, front);
+}
 
 export function makeMtxFrontSidePos(dst: mat4, front: ReadonlyVec3, side: ReadonlyVec3, pos: ReadonlyVec3): void {
     makeMtxFrontSide(dst, front, side);
@@ -960,7 +979,13 @@ export function makeMtxFrontSidePos(dst: mat4, front: ReadonlyVec3, side: Readon
 }
 
 export function makeQuatUpFront(dst: quat, up: ReadonlyVec3, front: ReadonlyVec3): void {
-    makeMtxUpFrontPos(scratchMatrix, up, front, Vec3Zero);
+    makeMtxUpFront(scratchMatrix, up, front);
+    mat4.getRotation(dst, scratchMatrix);
+    quat.normalize(dst, dst);
+}
+
+export function makeQuatSideUp(dst: quat, side: ReadonlyVec3, up: ReadonlyVec3): void {
+    makeMtxSideUp(scratchMatrix, side, up);
     mat4.getRotation(dst, scratchMatrix);
     quat.normalize(dst, dst);
 }
@@ -970,6 +995,12 @@ export function makeAxisVerticalZX(axisRight: vec3, front: ReadonlyVec3): void {
     if (isNearZeroVec3(axisRight, 0.001))
         vecKillElement(axisRight, Vec3UnitX, front);
     vec3.normalize(axisRight, axisRight);
+}
+
+export function makeAxisCrossPlane(axisRight: vec3, axisUp: vec3, front: vec3): void {
+    makeAxisVerticalZX(axisRight, front);
+    vec3.cross(axisUp, front, axisRight);
+    vec3.normalize(axisUp, axisUp);
 }
 
 export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: number = 1.0, scratch = scratchVec3): void {
@@ -1420,6 +1451,13 @@ export function calcDistanceToPlayer(sceneObjHolder: SceneObjHolder, actor: Live
     return calcDistToCamera(actor, sceneObjHolder.viewerInput.camera, scratchVec3);
 }
 
+export function calcDistanceToPlayerH(sceneObjHolder: SceneObjHolder, actor: LiveActor): number {
+    getPlayerPos(scratchVec3a, sceneObjHolder);
+    vec3.sub(scratchVec3a, scratchVec3a, actor.translation);
+    vecKillElement(scratchVec3a, scratchVec3a, actor.gravityVector);
+    return vec3.length(scratchVec3a);
+}
+
 export function isNearPlayer(sceneObjHolder: SceneObjHolder, actor: LiveActor, radius: number): boolean {
     return calcSqDistanceToPlayer(sceneObjHolder, actor) <= radius ** 2.0;
 }
@@ -1708,4 +1746,21 @@ export function sendMsgPushAndKillVelocityToTarget(sceneObjHolder: SceneObjHolde
 
 export function isInDeath(sceneObjHolder: SceneObjHolder, pos: ReadonlyVec3): boolean {
     return isInAreaObj(sceneObjHolder, 'DeathArea', pos);
+}
+
+export function calcVecToTargetPosH(dst: vec3, actor: LiveActor, targetPos: ReadonlyVec3, h: ReadonlyVec3 = actor.gravityVector): void {
+    vec3.sub(dst, targetPos, actor.translation);
+    vecKillElement(dst, dst, h);
+    vec3.normalize(dst, dst);
+}
+
+export function calcVecToPlayerH(dst: vec3, sceneObjHolder: SceneObjHolder, actor: LiveActor, h: ReadonlyVec3 = actor.gravityVector): void {
+    getPlayerPos(scratchVec3a, sceneObjHolder);
+    calcVecToTargetPosH(dst, actor, scratchVec3a, h);
+}
+
+export function calcVecFromPlayerH(dst: vec3, sceneObjHolder: SceneObjHolder, actor: LiveActor, h: ReadonlyVec3 = actor.gravityVector): void {
+    getPlayerPos(scratchVec3a, sceneObjHolder);
+    calcVecToTargetPosH(dst, actor, scratchVec3a, h);
+    vec3.negate(dst, dst);
 }

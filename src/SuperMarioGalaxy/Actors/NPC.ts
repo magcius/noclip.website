@@ -3,7 +3,7 @@
 
 import { quat, vec3, ReadonlyVec3 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
-import { isNearZero, MathConstants, quatFromEulerRadians, Vec3Zero } from '../../MathHelpers';
+import { isNearZero, MathConstants, quatFromEulerRadians, vec3SetAll, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback } from '../../util';
 import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
@@ -414,7 +414,7 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPosAndQuat(sceneObjHolder, this, infoIter);
-        vec3.set(this.scale, 1.2, 1.2, 1.2);
+        vec3SetAll(this.scale, 1.2);
         this.initModelManagerWithAnm(sceneObjHolder, 'Kinopio');
         connectToSceneNpc(sceneObjHolder, this);
         this.calcBinderFlag = false;

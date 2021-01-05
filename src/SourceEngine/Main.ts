@@ -1,32 +1,33 @@
 
-import { SceneContext } from "../SceneBase";
-import { GfxDevice, GfxRenderPass, GfxCullMode, GfxHostAccessPass, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexAttributeDescriptor, GfxBindingLayoutDescriptor, GfxVertexBufferFrequency, GfxInputLayout, GfxBuffer, GfxBufferUsage, GfxInputState, GfxSamplerBinding, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from "../gfx/platform/GfxPlatform";
-import { ViewerRenderInput, SceneGfx } from "../viewer";
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
-import { BSPFile, Surface, Model } from "./BSPFile";
-import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from "../gfx/render/GfxRenderer";
-import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { mat4, vec3 } from "gl-matrix";
-import { VPKMount, createVPKMount } from "./VPK";
-import { ZipFile, ZipFileEntry, ZipCompressionMethod } from "../ZipFile";
+import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { BaseMaterial, MaterialCache, LightmapManager, SurfaceLightmap, WorldLightingState, MaterialProxySystem, EntityMaterialParameters, MaterialProgramBase, LateBindingTexture } from "./Materials";
-import { clamp, computeModelMatrixSRT, MathConstants, getMatrixTranslation } from "../MathHelpers";
-import { assertExists, assert, nArray } from "../util";
-import { BSPEntity, vmtParseNumbers } from "./VMT";
-import { computeViewSpaceDepthFromWorldSpacePointAndViewMatrix, Camera } from "../Camera";
+import BitMap from "../BitMap";
+import { Camera, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from "../Camera";
+import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
+import { DataFetcher } from "../DataFetcher";
+import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum } from "../Geometry";
+import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
+import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { BasicRenderTarget, ColorTexture, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { fillColor, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxHostAccessPass, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
+import { clamp, getMatrixTranslation } from "../MathHelpers";
+import { DeviceProgram } from "../Program";
+import { SceneContext } from "../SceneBase";
+import { TextureMapping } from "../TextureHolder";
+import { assert, assertExists, nArray } from "../util";
+import { SceneGfx, ViewerRenderInput } from "../viewer";
+import { ZipCompressionMethod, ZipFile, ZipFileEntry } from "../ZipFile";
+import { AmbientCube, BSPFile, Model, Surface } from "./BSPFile";
+import { BaseEntity, EntitySystem, sky_camera } from "./EntitySystem";
+import { BaseMaterial, LateBindingTexture, LightmapManager, MaterialCache, MaterialProgramBase, MaterialProxySystem, SurfaceLightmap, WorldLightingState } from "./Materials";
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
-import BitMap from "../BitMap";
-import { decodeLZMAProperties, decompress } from "../Common/Compression/LZMA";
-import { DeviceProgram } from "../Program";
-import { TextureMapping } from "../TextureHolder";
-import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { DataFetcher } from "../DataFetcher";
+import { createVPKMount, VPKMount } from "./VPK";
 
 function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
     if (entry.compressionMethod === ZipCompressionMethod.None) {
@@ -286,7 +287,7 @@ class BSPSurfaceRenderer {
         this.materialInstance.movement(renderContext);
     }
 
-    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: mat4, pvs: BitMap | null = null) {
+    public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4, pvs: BitMap | null = null) {
         if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
             return;
 
@@ -331,7 +332,7 @@ class BSPSurfaceRenderer {
 }
 
 const scratchAABB = new AABB();
-class BSPModelRenderer {
+export class BSPModelRenderer {
     public visible: boolean = true;
     public modelMatrix = mat4.create();
     public entity: BaseEntity | null = null;
@@ -474,121 +475,6 @@ class BSPModelRenderer {
     }
 }
 
-export function computeModelMatrixPosRot(dst: mat4, pos: vec3, rot: vec3): void {
-    const rotX = MathConstants.DEG_TO_RAD * rot[0];
-    const rotY = MathConstants.DEG_TO_RAD * rot[1];
-    const rotZ = MathConstants.DEG_TO_RAD * rot[2];
-    const transX = pos[0];
-    const transY = pos[1];
-    const transZ = pos[2];
-    computeModelMatrixSRT(dst, 1, 1, 1, rotX, rotY, rotZ, transX, transY, transZ);
-}
-
-class BaseEntity {
-    public model: BSPModelRenderer | null = null;
-    public origin = vec3.create();
-    public angles = vec3.create();
-    public renderamt: number = 1.0;
-    public visible = true;
-    public materialParams = new EntityMaterialParameters();
-
-    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, private entity: BSPEntity) {
-        if (entity.model) {
-            if (entity.model.startsWith('*')) {
-                const index = parseInt(entity.model.slice(1), 10);
-                this.model = bspRenderer.models[index];
-                this.model.setEntity(this);
-            } else {
-                // External model reference.
-            }
-        }
-
-        if (entity.origin) {
-            const origin = vmtParseNumbers(entity.origin);
-            vec3.set(this.origin, origin[0], origin[1], origin[2]);
-        }
-
-        if (entity.angles) {
-            const angles = vmtParseNumbers(entity.angles);
-            vec3.set(this.angles, angles[0], angles[1], angles[2]);
-        }
-
-        if (entity.renderamt)
-            this.renderamt = Number(entity.renderamt) / 255.0;
-    }
-
-    public movement(): void {
-        if (this.model !== null) {
-            computeModelMatrixPosRot(this.model.modelMatrix, this.origin, this.angles);
-
-            let visible = this.visible;
-            if (this.renderamt === 0)
-                visible = false;
-
-            this.model.visible = visible;
-
-            vec3.copy(this.materialParams.position, this.origin);
-        }
-    }
-}
-
-class sky_camera extends BaseEntity {
-    public static classname = 'sky_camera';
-    public area: number = -1;
-    public scale: number = 1;
-    public modelMatrix = mat4.create();
-
-    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
-        super(renderContext, bspRenderer, entity);
-        const leafnum = bspRenderer.bsp.findLeafForPoint(this.origin);
-        this.area = bspRenderer.bsp.leaflist[leafnum].area;
-        this.scale = Number(entity.scale);
-        computeModelMatrixSRT(this.modelMatrix, this.scale, this.scale, this.scale, 0, 0, 0,
-            this.scale * -this.origin[0],
-            this.scale * -this.origin[1],
-            this.scale * -this.origin[2]);
-    }
-}
-
-class water_lod_control extends BaseEntity {
-    public static classname = 'water_lod_control';
-
-    constructor(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
-        super(renderContext, bspRenderer, entity);
-        if (entity.cheapwaterstartdistance !== undefined)
-            renderContext.cheapWaterStartDistance = Number(entity.cheapwaterstartdistance);
-        if (entity.cheapwaterenddistance !== undefined)
-            renderContext.cheapWaterEndDistance = Number(entity.cheapwaterenddistance);
-    }
-}
-
-interface EntityFactory {
-    new(renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity): BaseEntity;
-    classname: string;
-}
-
-class EntitySystem {
-    public classname = new Map<string, EntityFactory>();
-
-    constructor() {
-        this.registerDefaultFactories();
-    }
-
-    private registerDefaultFactories(): void {
-        this.registerFactory(sky_camera);
-        this.registerFactory(water_lod_control);
-    }
-
-    public registerFactory(factory: EntityFactory): void {
-        this.classname.set(factory.classname, factory);
-    }
-
-    public createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, entity: BSPEntity): BaseEntity {
-        const factory = this.classname.has(entity.classname) ? this.classname.get(entity.classname)! : BaseEntity;
-        return new factory(renderContext, renderer, entity);
-    }
-}
-
 const enum FilterKey { Skybox, Main, Translucent }
 
 // A "View" is effectively a camera, but in Source engine space.
@@ -627,6 +513,122 @@ const enum RenderObjectKind {
     Entities    = 1 << 1,
     StaticProps = 1 << 2,
     DetailProps = 1 << 3,
+    DebugCube   = 1 << 4,
+}
+
+class DebugCubeProgram extends DeviceProgram {
+    public static ub_ObjectParams = 0;
+
+    public vert: string = `
+layout(std140) uniform ub_ObjectParams {
+    Mat4x4 u_ProjectionViewModel;
+    vec4 u_AmbientCube[6];
+};
+
+layout(location = ${MaterialProgramBase.a_Position}) attribute vec4 a_Position;
+out vec3 v_Color;
+
+void main() {
+    gl_Position = Mul(u_ProjectionViewModel, vec4(a_Position.xyz, 1.0));
+    v_Color = u_AmbientCube[int(a_Position.w)].rgb;
+}
+`;
+
+    public frag: string = `
+in vec3 v_Color;
+
+void main() {
+    gl_FragColor = vec4(v_Color, 1.0);
+}
+`;
+}
+
+export class DebugCube {
+    private vertexBuffer: GfxBuffer;
+    private indexBuffer: GfxBuffer;
+    private program = new DebugCubeProgram();
+    private inputLayout: GfxInputLayout;
+    private inputState: GfxInputState;
+
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
+        const vertData = new Float32Array([
+            // left
+            -1, -1, -1,  0,
+            -1, -1,  1,  0,
+            -1,  1, -1,  0,
+            -1,  1,  1,  0,
+            // right
+             1, -1, -1,  1,
+             1,  1, -1,  1,
+             1, -1,  1,  1,
+             1,  1,  1,  1,
+            // top
+            -1, -1, -1,  2,
+             1, -1, -1,  2,
+            -1, -1,  1,  2,
+             1, -1,  1,  2,
+            // bottom
+            -1,  1, -1,  3,
+            -1,  1,  1,  3,
+             1,  1, -1,  3,
+             1,  1,  1,  3,
+            // front
+            -1, -1, -1,  4,
+            -1,  1, -1,  4,
+             1, -1, -1,  4,
+             1,  1, -1,  4,
+            // bottom
+            -1, -1,  1,  5,
+             1, -1,  1,  5,
+            -1,  1,  1,  5,
+             1,  1,  1,  5,
+        ]);
+        const indxData = new Uint16Array([
+            0, 1, 2, 1, 3, 2,
+            4, 5, 6, 5, 7, 6,
+            8, 9, 10, 9, 11, 10,
+            12, 13, 14, 13, 15, 14,
+            16, 17, 18, 17, 19, 18,
+            20, 21, 22, 21, 23, 22,
+        ]);
+
+        this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertData.buffer);
+        this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indxData.buffer);
+
+        this.inputLayout = cache.createInputLayout(device, {
+            vertexAttributeDescriptors: [{ format: GfxFormat.F32_RGBA, bufferIndex: 0, bufferByteOffset: 0, location: 0, }],
+            vertexBufferDescriptors: [{ byteStride: 4*4, frequency: GfxVertexBufferFrequency.PER_VERTEX, }],
+            indexBufferFormat: GfxFormat.U16_R,
+        });
+
+        this.inputState = device.createInputState(this.inputLayout,
+            [{ buffer: this.vertexBuffer, byteOffset: 0 }],
+            { buffer: this.indexBuffer, byteOffset: 0 },
+        );
+    }
+
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, view: SourceEngineView, position: ReadonlyVec3, ambientCube: AmbientCube): void {
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setBindingLayouts([{ numSamplers: 0, numUniformBuffers: 1 }]);
+        renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.program));
+        renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
+        renderInst.drawIndexes(6*6);
+        renderInstManager.submitRenderInst(renderInst);
+        let offs = renderInst.allocateUniformBuffer(DebugCubeProgram.ub_ObjectParams, 16+4*6);
+        const d = renderInst.mapUniformBufferF32(DebugCubeProgram.ub_ObjectParams);
+
+        const scale = 15;
+        mat4.fromRotationTranslationScale(scratchMatrix, quat.create(), position, [scale, scale, scale]);
+        mat4.mul(scratchMatrix, view.clipFromWorldMatrix, scratchMatrix);
+        offs += fillMatrix4x4(d, offs, scratchMatrix);
+        for (let i = 0; i < 6; i++)
+            offs += fillColor(d, offs, ambientCube[i]);
+    }
+
+    public destroy(device: GfxDevice): void {
+        device.destroyBuffer(this.vertexBuffer);
+        device.destroyBuffer(this.indexBuffer);
+    }
 }
 
 export class BSPRenderer {
@@ -634,11 +636,12 @@ export class BSPRenderer {
     private indexBuffer: GfxBuffer;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private entities: BaseEntity[] = [];
+    private entitySystem = new EntitySystem();
     public models: BSPModelRenderer[] = [];
     public detailPropLeafRenderers: DetailPropLeafRenderer[] = [];
     public staticPropRenderers: StaticPropRenderer[] = [];
     public liveLeafSet = new Set<number>();
+    private debugCube: DebugCube;
 
     constructor(renderContext: SourceRenderContext, public bsp: BSPFile) {
         renderContext.lightmapManager.appendPackerManager(this.bsp.lightmapPackerManager);
@@ -672,8 +675,7 @@ export class BSPRenderer {
         }
 
         // Spawn entities.
-        for (let i = 0; i < this.bsp.entities.length; i++)
-            this.entities.push(renderContext.entitySystem.createEntity(renderContext, this, this.bsp.entities[i]));
+        this.entitySystem.createEntities(renderContext, this, this.bsp.entities);
 
         // Spawn static objects.
         if (this.bsp.staticObjects !== null)
@@ -684,16 +686,18 @@ export class BSPRenderer {
         if (this.bsp.detailObjects !== null)
             for (const leaf of this.bsp.detailObjects.leafDetailModels.keys())
                 this.detailPropLeafRenderers.push(new DetailPropLeafRenderer(renderContext, this.bsp.detailObjects, leaf));
+
+        this.debugCube = new DebugCube(device, cache);
     }
 
     public getSkyCameraModelMatrix(): mat4 | null {
-        const skyCameraEntity = this.entities.find((entity) => entity instanceof sky_camera) as sky_camera;
+        const skyCameraEntity = this.entitySystem.entities.find((entity) => entity instanceof sky_camera) as sky_camera;
         return skyCameraEntity !== undefined ? skyCameraEntity.modelMatrix : null;
     }
 
     public movement(renderContext: SourceRenderContext): void {
-        for (let i = 0; i < this.entities.length; i++)
-            this.entities[i].movement();
+        this.entitySystem.movement(renderContext);
+
         for (let i = 0; i < this.models.length; i++)
             this.models[i].movement(renderContext);
         for (let i = 0; i < this.staticPropRenderers.length; i++)
@@ -714,9 +718,12 @@ export class BSPRenderer {
         if (!!(kinds & RenderObjectKind.WorldSpawn))
             this.models[0].prepareToRenderWorld(renderContext, renderInstManager, view, pvs);
 
-        if (!!(kinds & RenderObjectKind.Entities))
+        if (!!(kinds & RenderObjectKind.Entities)) {
             for (let i = 1; i < this.models.length; i++)
                 this.models[i].prepareToRenderModel(renderContext, renderInstManager, view);
+            for (let i = 0; i < this.entitySystem.entities.length; i++)
+                this.entitySystem.entities[i].prepareToRender(renderContext, renderInstManager, view);
+        }
 
         // Static props.
         if (!!(kinds & RenderObjectKind.StaticProps))
@@ -736,6 +743,17 @@ export class BSPRenderer {
             }
         }
 
+        if (!!(kinds & RenderObjectKind.DebugCube)) {
+            for (const leafidx of this.liveLeafSet) {
+                const leaf = this.bsp.leaflist[leafidx];
+                if ((leaf as any).debug) {
+                    drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, leaf.bbox);
+                    for (const sample of leaf.ambientLightSamples)
+                        this.debugCube.prepareToRender(renderContext.device, renderInstManager, view, sample.pos, sample.ambientCube);
+                }
+            }
+        }
+
         /*
         for (let i = 0; i < this.bsp.worldlights.length; i++) {
             drawWorldSpaceText(getDebugOverlayCanvas2D(), view.clipFromWorldMatrix, this.bsp.worldlights[i].pos, '' + i);
@@ -750,6 +768,7 @@ export class BSPRenderer {
         device.destroyBuffer(this.vertexBuffer);
         device.destroyBuffer(this.indexBuffer);
         device.destroyInputState(this.inputState);
+        this.debugCube.destroy(device);
 
         for (let i = 0; i < this.detailPropLeafRenderers.length; i++)
             this.detailPropLeafRenderers[i].destroy(device);
@@ -764,8 +783,8 @@ export class SourceRenderContext {
     public materialCache: MaterialCache;
     public worldLightingState = new WorldLightingState();
     public globalTime: number = 0;
+    public globalDeltaTime: number = 0;
     public materialProxySystem = new MaterialProxySystem();
-    public entitySystem = new EntitySystem();
     public cheapWaterStartDistance = 0.0;
     public cheapWaterEndDistance = 0.1;
     public currentView: SourceEngineView;
@@ -784,7 +803,7 @@ export class SourceRenderContext {
 }
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [
-    { numUniformBuffers: 2, numSamplers: 7 },
+    { numUniformBuffers: 3, numSamplers: 7 },
 ];
 
 const bindingLayoutsGammaCorrect: GfxBindingLayoutDescriptor[] = [
@@ -860,17 +879,13 @@ export class SourceRenderer implements SceneGfx {
 
     public calcPVS(bsp: BSPFile, pvs: BitMap, view: SourceEngineView): boolean {
         // Compute PVS from view.
-        const leafid = bsp.findLeafForPoint(view.cameraPos);
+        const leaf = bsp.findLeafForPoint(view.cameraPos);
 
-        if (leafid >= 0) {
-            const leaf = bsp.leaflist[leafid];
-
-            if (leaf.cluster !== 0xFFFF) {
-                // Has valid visibility.
-                pvs.fill(false);
-                pvs.or(bsp.visibility.pvs[leaf.cluster]);
-                return true;
-            }
+        if (leaf !== null && leaf.cluster !== 0xFFFF) {
+            // Has valid visibility.
+            pvs.fill(false);
+            pvs.or(bsp.visibility.pvs[leaf.cluster]);
+            return true;
         }
 
         return false;
@@ -879,6 +894,7 @@ export class SourceRenderer implements SceneGfx {
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         // globalTime is in seconds.
         this.renderContext.globalTime = viewerInput.time / 1000.0;
+        this.renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
 
         // Set up our views.
         this.mainView.setupFromCamera(viewerInput.camera);
@@ -928,7 +944,7 @@ export class SourceRenderer implements SceneGfx {
                 this.pvsScratch.fill(true);
             }
 
-            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps);
+            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
         }
 
         renderInstManager.popTemplateRenderInst();

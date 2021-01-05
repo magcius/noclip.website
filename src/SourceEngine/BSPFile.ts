@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assertExists, assert, nArray } from "../util";
-import { vec4, vec3, vec2 } from "gl-matrix";
+import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
 import { parseEntitiesLump, BSPEntity } from "./VMT";
@@ -11,7 +11,7 @@ import { Plane, AABB } from "../Geometry";
 import { deserializeGameLump_dprp, DetailObjects, deserializeGameLump_sprp, StaticObjects } from "./StaticDetailObject";
 import BitMap from "../BitMap";
 import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
-import { Color, colorNewFromRGBA, colorCopy, TransparentBlack, colorScaleAndAdd, colorScale } from "../Color";
+import { Color, colorNewFromRGBA, colorCopy, TransparentBlack, colorScaleAndAdd, colorScale, colorNewCopy } from "../Color";
 import { unpackColorRGBExp32 } from "./Materials";
 import { lerp } from "../MathHelpers";
 
@@ -147,7 +147,11 @@ export interface BSPLeaf {
     surfaces: number[];
 }
 
-export function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: vec3): void {
+export function newAmbientCube(): AmbientCube {
+    return nArray(6, () => colorNewCopy(TransparentBlack));
+}
+
+export function computeAmbientCubeFromLeaf(dst: AmbientCube, leaf: BSPLeaf, pos: ReadonlyVec3): void {
     // XXX(jstpierre): This breaks on d2_coast_01, where there's a prop located outside
     // the leaf it's in due to floating point rounding error.
     // assert(leaf.bbox.containsPoint(pos));
@@ -204,7 +208,10 @@ export interface WorldLight {
     normal: vec3;
     type: WorldLightType;
     radius: number;
-    attn: vec3;
+    distAttenuation: vec3;
+    exponent: number;
+    stopdot: number;
+    stopdot2: number;
 }
 
 interface BSPDispInfo {
@@ -630,8 +637,7 @@ export class BSPFile {
 
         // Parse materials.
         const pakfileData = getLumpData(LumpType.PAKFILE);
-        if (pakfileData !== null)
-            this.pakfile = parseZipFile(pakfileData);
+        this.pakfile = parseZipFile(pakfileData);
 
         // Build our mesh.
 
@@ -1297,9 +1303,9 @@ export class BSPFile {
                 }
             }
 
-            const attn = vec3.fromValues(constant_attn, linear_attn, quadratic_attn);
+            const distAttenuation = vec3.fromValues(constant_attn, linear_attn, quadratic_attn);
 
-            this.worldlights.push({ pos, intensity, normal, type, radius, attn });
+            this.worldlights.push({ pos, intensity, normal, type, radius, distAttenuation, exponent, stopdot, stopdot2 });
         }
 
         const dprp = getGameLumpData('dprp');
@@ -1311,14 +1317,19 @@ export class BSPFile {
             this.staticObjects = deserializeGameLump_sprp(sprp[0], sprp[1]);
     }
 
-    public findLeafForPoint(p: vec3, nodeid: number = 0): number {
+    public findLeafIdxForPoint(p: ReadonlyVec3, nodeid: number = 0): number {
         if (nodeid < 0) {
             return -nodeid - 1;
         } else {
             const node = this.nodelist[nodeid];
             const dot = node.plane.distance(p[0], p[1], p[2]);
-            return this.findLeafForPoint(p, dot >= 0.0 ? node.child0 : node.child1);
+            return this.findLeafIdxForPoint(p, dot >= 0.0 ? node.child0 : node.child1);
         }
+    }
+
+    public findLeafForPoint(p: ReadonlyVec3): BSPLeaf | null {
+        const leafidx = this.findLeafIdxForPoint(p);
+        return leafidx >= 0 ? this.leaflist[leafidx] : null;
     }
 
     public markClusterSet(dst: number[], aabb: AABB, nodeid: number = 0): void {

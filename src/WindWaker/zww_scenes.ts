@@ -290,6 +290,9 @@ export class dDlst_list_c {
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Forwards),
     ];
     public wetherEffect = new GfxRenderInstList(gfxRenderInstCompareNone, GfxRenderInstExecutionOrder.Backwards);
+    public wetherEffectSet: dDlst_list_Set = [
+        this.wetherEffect, this.wetherEffect,
+    ]
     public effect: GfxRenderInstList[] = [
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
         new GfxRenderInstList(gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder.Backwards),
@@ -995,6 +998,7 @@ class SceneDesc {
 
         const particleArchives = [
             `Particle/common.jpc`,
+            `Particle/Pscene254.jpc`,
         ];
 
         for (let i = 0; i < particleArchives.length; i++)

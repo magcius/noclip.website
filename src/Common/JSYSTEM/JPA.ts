@@ -25,7 +25,7 @@ import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8, Blue, Green, Yellow } from "../../Color";
 import { MaterialParams, ColorKind, PacketParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
-import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero } from "../../MathHelpers";
+import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll } from "../../MathHelpers";
 import { makeStaticDataBuffer } from "../../gfx/helpers/BufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager, makeSortKeyTranslucent, GfxRendererLayer, setSortKeyBias, setSortKeyDepth } from "../../gfx/render/GfxRenderer";
 import { fillMatrix4x3, fillColor, fillMatrix4x2 } from "../../gfx/helpers/UniformBufferHelpers";
@@ -1136,30 +1136,33 @@ function JPAGetDirMtx(m: mat4, v: vec3, scratch: vec3 = scratchVec3a): void {
     m[14] = 0.0;
 }
 
-export function JPASetRMtxSTVecFromMtx(scale: vec3, rot: mat4, trans: vec3, m: mat4): void {
+export function JPASetRMtxSTVecFromMtx(scale: vec3 | null, rot: mat4, trans: vec3, m: mat4): void {
     // Extract our three column vectors.
     mat4.identity(rot);
 
-    scale[0] = Math.hypot(m[0], m[1], m[2]);
-    scale[1] = Math.hypot(m[4], m[5], m[6]);
-    scale[2] = Math.hypot(m[8], m[9], m[10]);
+    const scaleX = Math.hypot(m[0], m[1], m[2]);
+    const scaleY = Math.hypot(m[4], m[5], m[6]);
+    const scaleZ = Math.hypot(m[8], m[9], m[10]);
 
-    if (scale[0] !== 0) {
-        const d = 1 / scale[0];
+    if (scale !== null)
+        vec3.set(scale, scaleX, scaleY, scaleZ);
+
+    if (scaleX !== 0) {
+        const d = 1 / scaleX;
         rot[0] = m[0] * d;
         rot[1] = m[1] * d;
         rot[2] = m[2] * d;
     }
 
-    if (scale[1] !== 0) {
-        const d = 1 / scale[1];
+    if (scaleY !== 0) {
+        const d = 1 / scaleY;
         rot[4] = m[4] * d;
         rot[5] = m[5] * d;
         rot[6] = m[6] * d;
     }
 
-    if (scale[2] !== 0) {
-        const d = 1 / scale[2];
+    if (scaleZ !== 0) {
+        const d = 1 / scaleZ;
         rot[8] = m[8] * d;
         rot[9] = m[9] * d;
         rot[10] = m[10] * d;
@@ -1352,7 +1355,7 @@ export class JPABaseEmitter {
         next_rndm(this.emitterManager.workData.random);
         copy_rndm(this.random, this.emitterManager.workData.random);
         mat4.identity(this.globalRotation);
-        vec3.set(this.globalScale, 1, 1, 1);
+        vec3SetAll(this.globalScale, 1);
         vec3.zero(this.globalTranslation);
         vec2.set(this.globalScale2D, 1, 1);
         colorCopy(this.globalColorPrm, White);
