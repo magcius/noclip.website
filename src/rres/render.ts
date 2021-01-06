@@ -4,7 +4,7 @@ import * as BRRES from './brres';
 import * as GX_Material from '../gx/gx_material';
 import { mat4, vec3 } from "gl-matrix";
 import { MaterialParams, GXTextureHolder, ColorKind, translateTexFilterGfx, translateWrapModeGfx, PacketParams, loadedDataCoalescerComboGfx } from "../gx/gx_render";
-import { GXShapeHelperGfx, GXMaterialHelperGfx, autoOptimizeMaterial } from "../gx/gx_render";
+import { GXShapeHelperGfx, GXMaterialHelperGfx } from "../gx/gx_render";
 import { computeViewMatrix, computeViewMatrixSkybox, Camera, computeViewSpaceDepthFromWorldSpaceAABB, texProjCameraSceneTex } from "../Camera";
 import AnimationController from "../AnimationController";
 import { TextureMapping } from "../TextureHolder";
@@ -391,9 +391,7 @@ class MaterialInstance {
                 lightSet.calcAmbColorCopy(materialParams.u_Color[ColorKind.AMB0], lightSetting);
                 if (lightSet.calcLightSetLitMask(this.materialHelper.material.lightChannels, lightSetting)) {
                     this.materialHelper.material.hasLightsBlock = undefined;
-                    autoOptimizeMaterial(this.materialHelper.material);
-                    this.materialHelper.calcMaterialParamsBufferSize();
-                    this.materialHelper.createProgram();
+                    this.materialHelper.autoOptimizeMaterial();
                 }
             }
         }

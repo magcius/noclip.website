@@ -421,7 +421,7 @@ abstract class ShadowVolumeDrawer extends ShadowDrawer {
         this.materialBack = new GXMaterialHelperGfx(mb.finish('ShadowVolumeDrawer Back'));
 
         assert(this.materialBack.materialParamsBufferSize === this.materialFront.materialParamsBufferSize);
-        assert(this.materialBack.packetParamsBufferSize === this.materialFront.packetParamsBufferSize);
+        assert(this.materialBack.drawParamsBufferSize === this.materialFront.drawParamsBufferSize);
     }
 
     protected isDraw(): boolean {

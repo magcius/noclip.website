@@ -342,8 +342,8 @@ ${materialHasDynamicAlphaTest(material) ? `
 };
 
 // Expected to change with each shape draw.
-// TODO(jstpierre): Rename from ub_PacketParams.
-layout(std140) uniform ub_PacketParams {
+// TODO(jstpierre): Rename from ub_DrawParams.
+layout(std140) uniform ub_DrawParams {
 ${materialUsePnMtxIdx(material) ? `
     Mat4x3 u_PosMtx[10];
 ` : `
@@ -369,7 +369,7 @@ export function getMaterialParamsBlockSize(material: GXMaterial): number {
     return size;
 }
 
-export function getPacketParamsBlockSize(material: GXMaterial): number {
+export function getDrawParamsBlockSize(material: GXMaterial): number {
     let size = 0;
 
     if (materialUsePnMtxIdx(material))
@@ -383,7 +383,7 @@ export function getPacketParamsBlockSize(material: GXMaterial): number {
 export class GX_Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
-    public static ub_PacketParams = 2;
+    public static ub_DrawParams = 2;
 
     public name: string;
 
@@ -1357,121 +1357,6 @@ ${this.generateDstAlpha()}
     gl_FragColor = t_PixelOut;
 }`;
     }
-}
-// #endregion
-
-// #region Material flags generation.
-export function translateCullMode(cullMode: GX.CullMode): GfxCullMode {
-    switch (cullMode) {
-    case GX.CullMode.ALL:
-        return GfxCullMode.FRONT_AND_BACK;
-    case GX.CullMode.FRONT:
-        return GfxCullMode.FRONT;
-    case GX.CullMode.BACK:
-        return GfxCullMode.BACK;
-    case GX.CullMode.NONE:
-        return GfxCullMode.NONE;
-    }
-}
-
-function translateBlendFactorCommon(blendFactor: GX.BlendFactor): GfxBlendFactor {
-    switch (blendFactor) {
-    case GX.BlendFactor.ZERO:
-        return GfxBlendFactor.ZERO;
-    case GX.BlendFactor.ONE:
-        return GfxBlendFactor.ONE;
-    case GX.BlendFactor.SRCALPHA:
-        return GfxBlendFactor.SRC_ALPHA;
-    case GX.BlendFactor.INVSRCALPHA:
-        return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
-    case GX.BlendFactor.DSTALPHA:
-        return GfxBlendFactor.DST_ALPHA;
-    case GX.BlendFactor.INVDSTALPHA:
-        return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
-    default:
-        throw new Error("whoops");
-    }
-}
-
-function translateBlendSrcFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
-    switch (blendFactor) {
-    case GX.BlendFactor.SRCCLR:
-        return GfxBlendFactor.DST_COLOR;
-    case GX.BlendFactor.INVSRCCLR:
-        return GfxBlendFactor.ONE_MINUS_DST_COLOR;
-    default:
-        return translateBlendFactorCommon(blendFactor);
-    }
-}
-
-function translateBlendDstFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
-    switch (blendFactor) {
-    case GX.BlendFactor.SRCCLR:
-        return GfxBlendFactor.SRC_COLOR;
-    case GX.BlendFactor.INVSRCCLR:
-        return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
-    default:
-        return translateBlendFactorCommon(blendFactor);
-    }
-}
-
-function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
-    switch (compareType) {
-    case GX.CompareType.NEVER:
-        return GfxCompareMode.NEVER;
-    case GX.CompareType.LESS:
-        return GfxCompareMode.LESS;
-    case GX.CompareType.EQUAL:
-        return GfxCompareMode.EQUAL;
-    case GX.CompareType.LEQUAL:
-        return GfxCompareMode.LEQUAL;
-    case GX.CompareType.GREATER:
-        return GfxCompareMode.GREATER;
-    case GX.CompareType.NEQUAL:
-        return GfxCompareMode.NEQUAL;
-    case GX.CompareType.GEQUAL:
-        return GfxCompareMode.GEQUAL;
-    case GX.CompareType.ALWAYS:
-        return GfxCompareMode.ALWAYS;
-    }
-}
-
-export function translateGfxMegaState(megaState: Partial<GfxMegaStateDescriptor>, material: GXMaterial) {
-    megaState.cullMode = translateCullMode(material.cullMode);
-    megaState.depthWrite = material.ropInfo.depthWrite;
-    megaState.depthCompare = material.ropInfo.depthTest ? reverseDepthForCompareMode(translateCompareType(material.ropInfo.depthFunc)) : GfxCompareMode.ALWAYS;
-    megaState.frontFace = GfxFrontFaceMode.CW;
-
-    const attachmentStateSimple: Partial<AttachmentStateSimple> = {};
-
-    if (material.ropInfo.blendMode === GX.BlendMode.NONE) {
-        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
-        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
-    } else if (material.ropInfo.blendMode === GX.BlendMode.BLEND) {
-        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendSrcFactor);
-        attachmentStateSimple.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendDstFactor);
-    } else if (material.ropInfo.blendMode === GX.BlendMode.SUBTRACT) {
-        attachmentStateSimple.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
-        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
-        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ONE;
-    } else if (material.ropInfo.blendMode === GX.BlendMode.LOGIC) {
-        // Sonic Colors uses this? WTF?
-        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
-        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
-        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
-        console.warn(`Unimplemented LOGIC blend mode`);
-    }
-
-    attachmentStateSimple.colorWriteMask = GfxColorWriteMask.NONE;
-
-    if (material.ropInfo.colorUpdate)
-        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.COLOR;
-    if (material.ropInfo.alphaUpdate)
-        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.ALPHA;
-
-    setAttachmentStateSimple(megaState, attachmentStateSimple);
 }
 // #endregion
 

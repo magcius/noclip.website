@@ -15,13 +15,14 @@ import { TextureMapping, TextureHolder, LoadedTexture } from '../TextureHolder';
 
 import { GfxBufferCoalescerCombo, makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillColor, fillMatrix4x3, fillVec4, fillMatrix4x4, fillVec3v, fillMatrix4x2 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
+import { GfxFormat, GfxDevice, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxVertexBufferDescriptor, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxVertexBufferFrequency, GfxHostAccessPass, GfxRenderPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxColorWriteMask, GfxCullMode, GfxBlendFactor, GfxCompareMode, GfxFrontFaceMode, GfxBlendMode } from '../gfx/platform/GfxPlatform';
 import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderInst, GfxRenderInstManager, setSortKeyProgramKey } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color';
-import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
+import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -132,7 +133,7 @@ function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMateria
     assert(d.length >= offs);
 }
 
-function fillPacketParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, packetParams: PacketParams): void {
+function fillDrawParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, packetParams: PacketParams): void {
     let offs = bOffs;
 
     if (GX_Material.materialUsePnMtxIdx(material))
@@ -333,11 +334,126 @@ export function autoOptimizeMaterial(material: GX_Material.GXMaterial): void {
         material.hasFogBlock = autoOptimizeMaterialHasFogBlock(material);
 }
 
+export function translateCullMode(cullMode: GX.CullMode): GfxCullMode {
+    switch (cullMode) {
+    case GX.CullMode.ALL:
+        return GfxCullMode.FRONT_AND_BACK;
+    case GX.CullMode.FRONT:
+        return GfxCullMode.FRONT;
+    case GX.CullMode.BACK:
+        return GfxCullMode.BACK;
+    case GX.CullMode.NONE:
+        return GfxCullMode.NONE;
+    }
+}
+
+function translateBlendFactorCommon(blendFactor: GX.BlendFactor): GfxBlendFactor {
+    switch (blendFactor) {
+    case GX.BlendFactor.ZERO:
+        return GfxBlendFactor.ZERO;
+    case GX.BlendFactor.ONE:
+        return GfxBlendFactor.ONE;
+    case GX.BlendFactor.SRCALPHA:
+        return GfxBlendFactor.SRC_ALPHA;
+    case GX.BlendFactor.INVSRCALPHA:
+        return GfxBlendFactor.ONE_MINUS_SRC_ALPHA;
+    case GX.BlendFactor.DSTALPHA:
+        return GfxBlendFactor.DST_ALPHA;
+    case GX.BlendFactor.INVDSTALPHA:
+        return GfxBlendFactor.ONE_MINUS_DST_ALPHA;
+    default:
+        throw new Error("whoops");
+    }
+}
+
+function translateBlendSrcFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
+    switch (blendFactor) {
+    case GX.BlendFactor.SRCCLR:
+        return GfxBlendFactor.DST_COLOR;
+    case GX.BlendFactor.INVSRCCLR:
+        return GfxBlendFactor.ONE_MINUS_DST_COLOR;
+    default:
+        return translateBlendFactorCommon(blendFactor);
+    }
+}
+
+function translateBlendDstFactor(blendFactor: GX.BlendFactor): GfxBlendFactor {
+    switch (blendFactor) {
+    case GX.BlendFactor.SRCCLR:
+        return GfxBlendFactor.SRC_COLOR;
+    case GX.BlendFactor.INVSRCCLR:
+        return GfxBlendFactor.ONE_MINUS_SRC_COLOR;
+    default:
+        return translateBlendFactorCommon(blendFactor);
+    }
+}
+
+function translateCompareType(compareType: GX.CompareType): GfxCompareMode {
+    switch (compareType) {
+    case GX.CompareType.NEVER:
+        return GfxCompareMode.NEVER;
+    case GX.CompareType.LESS:
+        return GfxCompareMode.LESS;
+    case GX.CompareType.EQUAL:
+        return GfxCompareMode.EQUAL;
+    case GX.CompareType.LEQUAL:
+        return GfxCompareMode.LEQUAL;
+    case GX.CompareType.GREATER:
+        return GfxCompareMode.GREATER;
+    case GX.CompareType.NEQUAL:
+        return GfxCompareMode.NEQUAL;
+    case GX.CompareType.GEQUAL:
+        return GfxCompareMode.GEQUAL;
+    case GX.CompareType.ALWAYS:
+        return GfxCompareMode.ALWAYS;
+    }
+}
+
+function translateGfxMegaState(material: GX_Material.GXMaterial) {
+    const megaState: Partial<GfxMegaStateDescriptor> = {};
+    megaState.cullMode = translateCullMode(material.cullMode);
+    megaState.depthWrite = material.ropInfo.depthWrite;
+    megaState.depthCompare = material.ropInfo.depthTest ? reverseDepthForCompareMode(translateCompareType(material.ropInfo.depthFunc)) : GfxCompareMode.ALWAYS;
+    megaState.frontFace = GfxFrontFaceMode.CW;
+
+    const attachmentStateSimple: Partial<AttachmentStateSimple> = {};
+
+    if (material.ropInfo.blendMode === GX.BlendMode.NONE) {
+        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
+        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
+        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
+    } else if (material.ropInfo.blendMode === GX.BlendMode.BLEND) {
+        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
+        attachmentStateSimple.blendSrcFactor = translateBlendSrcFactor(material.ropInfo.blendSrcFactor);
+        attachmentStateSimple.blendDstFactor = translateBlendDstFactor(material.ropInfo.blendDstFactor);
+    } else if (material.ropInfo.blendMode === GX.BlendMode.SUBTRACT) {
+        attachmentStateSimple.blendMode = GfxBlendMode.REVERSE_SUBTRACT;
+        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
+        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ONE;
+    } else if (material.ropInfo.blendMode === GX.BlendMode.LOGIC) {
+        // Sonic Colors uses this? WTF?
+        attachmentStateSimple.blendMode = GfxBlendMode.ADD;
+        attachmentStateSimple.blendSrcFactor = GfxBlendFactor.ONE;
+        attachmentStateSimple.blendDstFactor = GfxBlendFactor.ZERO;
+        console.warn(`Unimplemented LOGIC blend mode`);
+    }
+
+    attachmentStateSimple.colorWriteMask = GfxColorWriteMask.NONE;
+
+    if (material.ropInfo.colorUpdate)
+        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.COLOR;
+    if (material.ropInfo.alphaUpdate)
+        attachmentStateSimple.colorWriteMask |= GfxColorWriteMask.ALPHA;
+
+    setAttachmentStateSimple(megaState, attachmentStateSimple);
+    return megaState;
+}
+
 export class GXMaterialHelperGfx {
     public programKey: number;
     public megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public materialParamsBufferSize: number;
-    public packetParamsBufferSize: number;
+    public drawParamsBufferSize: number;
     private materialHacks: GX_Material.GXMaterialHacks = {};
     private program!: GX_Material.GX_Program;
     private gfxProgram: GfxProgram | null = null;
@@ -346,20 +462,20 @@ export class GXMaterialHelperGfx {
         if (materialHacks)
             Object.assign(this.materialHacks, materialHacks);
 
-        this.calcMaterialParamsBufferSize();
-        this.calcPacketParamsBufferSize();
+        this.materialInvalidated();
+    }
+
+    public autoOptimizeMaterial(): void {
+        autoOptimizeMaterial(this.material);
+        this.materialInvalidated();
+    }
+
+    public materialInvalidated(): void {
+        this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
+        this.drawParamsBufferSize = GX_Material.getDrawParamsBlockSize(this.material);
         this.createProgram();
 
-        this.megaStateFlags = {};
-        GX_Material.translateGfxMegaState(this.megaStateFlags, this.material);
-    }
-
-    public calcMaterialParamsBufferSize(): void {
-        this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
-    }
-
-    public calcPacketParamsBufferSize(): void {
-        this.packetParamsBufferSize = GX_Material.getPacketParamsBlockSize(this.material);
+        this.megaStateFlags = translateGfxMegaState(this.material);
     }
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
@@ -397,9 +513,9 @@ export class GXMaterialHelperGfx {
     }
 
     public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void {
-        const offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_PacketParams, this.packetParamsBufferSize);
-        const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_PacketParams);
-        fillPacketParamsDataWithOptimizations(this.material, d, offs, packetParams);
+        const offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_DrawParams, this.drawParamsBufferSize);
+        const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_DrawParams);
+        fillDrawParamsDataWithOptimizations(this.material, d, offs, packetParams);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
