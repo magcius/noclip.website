@@ -618,7 +618,6 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
         const vcd: GX_VtxDesc[] = [];
         for (let i = 0; i <= GX.Attr.MAX; i++)
             vcd[i] = { type: GX.AttrType.NONE };
-        vcd[GX.Attr.NBT] = { type: GX.AttrType.NONE };
 
         if (fields.hasBones && jointCount >= 2) {
             vcd[GX.Attr.PNMTXIDX].type = GX.AttrType.DIRECT;
@@ -649,15 +648,10 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
         if (fields.hasNormals && (shader.attrFlags & ShaderAttrFlags.NRM)) {
             const nrmDesc = bits.get(1);
-            if (nrmTypeFlags & 8) {
-                // TODO: Enable NBT normals
-                // vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
-                // vcd[GX.Attr.NBT].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-                vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-            } else {
-                // vcd[GX.Attr.NBT].type = GX.AttrType.NONE;
-                vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
-            }
+            vcd[GX.Attr.NRM].type = nrmDesc ? GX.AttrType.INDEX16 : GX.AttrType.INDEX8;
+
+            // const isNBT = !!(nrmTypeFlags & 8);
+            // No need to do anything, NRM and NBT are the same under the hood.
         } else {
             vcd[GX.Attr.NRM].type = GX.AttrType.NONE;
         }

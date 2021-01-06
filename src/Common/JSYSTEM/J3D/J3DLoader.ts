@@ -137,7 +137,7 @@ function readVTX1Chunk(buffer: ArrayBufferSlice): VTX1 {
     const dataTables = [
         GX.Attr.POS,
         GX.Attr.NRM,
-        GX.Attr.NBT,
+        GX.Attr.NRM, // NBT
         GX.Attr.CLR0,
         GX.Attr.CLR1,
         GX.Attr.TEX0,
