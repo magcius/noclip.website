@@ -206,7 +206,7 @@ class WorldRenderer extends SFARenderer {
         this.layerSelect = new UI.Slider();
         this.layerSelect.setLabel('Layer');
         this.layerSelect.setRange(0, 16, 1);
-        this.layerSelect.setValue(0);
+        this.layerSelect.setValue(1);
         layerPanel.contents.append(this.layerSelect.elem);
 
         const showDevObjects = new UI.Checkbox("Show developer objects", false);
