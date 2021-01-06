@@ -94,8 +94,8 @@ class ShapeInstance {
 
             let instVisible = false;
             if (usesSkinning) {
-                for (let j = 0; j < packet.posNrmMatrixTable.length; j++) {
-                    const posNrmMatrixIdx = packet.posNrmMatrixTable[j];
+                for (let j = 0; j < packet.posMatrixTable.length; j++) {
+                    const posNrmMatrixIdx = packet.posMatrixTable[j];
 
                     // Leave existing matrix.
                     if (posNrmMatrixIdx === 0xFFFF)

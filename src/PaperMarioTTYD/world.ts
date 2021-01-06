@@ -1000,7 +1000,7 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     const totalVertexCount = vertexCount;
                     const packet: LoadedVertexDraw = {
                         indexOffset: 0, indexCount: totalIndexCount,
-                        posNrmMatrixTable: Array(10).fill(0xFFFF),
+                        posMatrixTable: Array(10).fill(0xFFFF),
                         texMatrixTable: Array(10).fill(0xFFFF),
                     };
                     const vertexBuffers: ArrayBuffer[] = [vertexData];

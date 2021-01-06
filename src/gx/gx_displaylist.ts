@@ -132,7 +132,7 @@ interface VertexLayout extends LoadedVertexLayout, VtxLoaderDesc {
 // Note that the loader relies the common convention of the indexed load commands to produce the matrix tables
 // in each LoadedVertexDraw. GX establishes the conventions:
 //
-//  INDX_A = Position Matrices (=> posNrmMatrixTable)
+//  INDX_A = Position Matrices (=> posMatrixTable)
 //  INDX_B = Normal Matrices (currently unsupported)
 //  INDX_C = Texture Matrices (=> texMatrixTable)
 //  INDX_D = Light Objects (currently unsupported)
@@ -142,7 +142,7 @@ interface VertexLayout extends LoadedVertexLayout, VtxLoaderDesc {
 export interface LoadedVertexDraw {
     indexOffset: number;
     indexCount: number;
-    posNrmMatrixTable: number[];
+    posMatrixTable: number[];
     texMatrixTable: number[];
 }
 
@@ -908,7 +908,7 @@ class VtxLoaderImpl implements VtxLoader {
             return {
                 indexOffset,
                 indexCount: 0,
-                posNrmMatrixTable: Array(10).fill(0xFFFF),
+                posMatrixTable: Array(10).fill(0xFFFF),
                 texMatrixTable: Array(10).fill(0xFFFF),
             };
         }
@@ -940,7 +940,7 @@ class VtxLoaderImpl implements VtxLoader {
                 // each element being 3*4 in size.
                 const memoryElemSize = 3*4;
                 const memoryBaseAddr = 0x0000;
-                const table = currentXfmem.posNrmMatrixTable;
+                const table = currentXfmem.posMatrixTable;
 
                 const arrayIndex = dlView.getUint16(drawCallIdx + 0x01);
                 const addrLen = dlView.getUint16(drawCallIdx + 0x03);
@@ -1457,7 +1457,7 @@ export function displayListRegistersInitGX(r: DisplayListRegisters): void {
 function canMergeDraws(a: LoadedVertexDraw, b: LoadedVertexDraw): boolean {
     if (a.indexOffset !== b.indexOffset)
         return false;
-    if (!arrayEqual(a.posNrmMatrixTable, b.posNrmMatrixTable, (i, j) => i === j))
+    if (!arrayEqual(a.posMatrixTable, b.posMatrixTable, (i, j) => i === j))
         return false;
     if (!arrayEqual(a.texMatrixTable, b.texMatrixTable, (i, j) => i === j))
         return false;
@@ -1484,9 +1484,9 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
             } else {
                 const indexOffset = totalIndexCount + draw.indexOffset;
                 const indexCount = draw.indexCount;
-                const posNrmMatrixTable = draw.posNrmMatrixTable;
+                const posNrmMatrixTable = draw.posMatrixTable;
                 const texMatrixTable = draw.texMatrixTable;
-                draws.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+                draws.push({ indexOffset, indexCount, posMatrixTable: posNrmMatrixTable, texMatrixTable });
             }
         }
 
