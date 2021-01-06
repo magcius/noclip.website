@@ -512,10 +512,10 @@ export class GXMaterialHelperGfx {
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
     }
 
-    public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void {
+    public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, drawParams: PacketParams): void {
         const offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_DrawParams, this.drawParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_DrawParams);
-        fillDrawParamsDataWithOptimizations(this.material, d, offs, packetParams);
+        fillDrawParamsDataWithOptimizations(this.material, d, offs, drawParams);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
@@ -532,24 +532,17 @@ export function setChanWriteEnabled(materialHelper: GXMaterialHelperGfx, bits: G
     setAttachmentStateSimple(materialHelper.megaStateFlags, { colorWriteMask });
 }
 
-export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, loadedVertexLayout: LoadedVertexLayout, wantZeroBuffer: boolean = true): GfxInputLayout {
+export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, loadedVertexLayout: LoadedVertexLayout): GfxInputLayout {
     const vertexAttributeDescriptors: GfxVertexAttributeDescriptor[] = [];
 
-    let usesZeroBuffer = false;
     for (let attrInput: VertexAttributeInput = 0; attrInput < VertexAttributeInput.COUNT; attrInput++) {
         const attribLocation = GX_Material.getVertexInputLocation(attrInput);
-        const attribGenDef = GX_Material.getVertexInputGenDef(attrInput);
         const attrib = loadedVertexLayout.singleVertexInputLayouts.find((attrib) => attrib.attrInput === attrInput);
 
         if (attrib !== undefined) {
             const bufferByteOffset = attrib.bufferOffset;
             const bufferIndex = attrib.bufferIndex;
             vertexAttributeDescriptors.push({ location: attribLocation, format: attrib.format, bufferIndex, bufferByteOffset });
-        } else if (wantZeroBuffer) {
-            const bufferByteOffset = 0;
-            const bufferIndex = loadedVertexLayout.vertexBufferStrides.length;
-            vertexAttributeDescriptors.push({ location: attribLocation, format: attribGenDef.format, bufferIndex, bufferByteOffset });
-            usesZeroBuffer = true;
         }
     }
 
@@ -558,13 +551,6 @@ export function createInputLayout(device: GfxDevice, cache: GfxRenderCache, load
         vertexBufferDescriptors.push({
             byteStride: loadedVertexLayout.vertexBufferStrides[i],
             frequency: GfxVertexBufferFrequency.PER_VERTEX,
-        });
-    }
-
-    if (usesZeroBuffer) {
-        vertexBufferDescriptors.push({
-            byteStride: 0,
-            frequency: GfxVertexBufferFrequency.PER_INSTANCE,
         });
     }
 
@@ -606,17 +592,17 @@ export class GXShapeHelperGfx {
         this.inputState = device.createInputState(this.inputLayout, buffers, indexBuffer);
     }
 
-    public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexDraw | null = null): void {
+    public setOnRenderInst(renderInst: GfxRenderInst, draw: LoadedVertexDraw | null = null): void {
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);
 
-        if (packet === null) {
-            // Legacy API -- render a single packet.
+        if (draw === null) {
+            // Legacy API -- render a single draw.
             const loadedVertexData = assertExists(this.loadedVertexData);
             assert(loadedVertexData.draws.length === 1);
-            packet = loadedVertexData.draws[0];
+            draw = loadedVertexData.draws[0];
         }
 
-        renderInst.drawIndexes(packet.indexCount, packet.indexOffset);
+        renderInst.drawIndexes(draw.indexCount, draw.indexOffset);
     }
 
     public destroy(device: GfxDevice): void {

@@ -72,7 +72,7 @@ class TDDrawVtxSpec {
 
     protected createInputLayoutInternal(device: GfxDevice, cache: GfxRenderCache): boolean {
         if (this.inputLayout === null) {
-            this.inputLayout = createInputLayout(device, cache, this.loadedVertexLayout!, false);
+            this.inputLayout = createInputLayout(device, cache, this.loadedVertexLayout!);
             return true;
         } else {
             return false;

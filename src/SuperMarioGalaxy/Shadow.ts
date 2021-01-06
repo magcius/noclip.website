@@ -1170,7 +1170,7 @@ export function initShadowFromCSV(sceneObjHolder: SceneObjHolder, actor: LiveAct
         });
     } else {
         // Create a dummy shadow controller.
-        const controller = new ShadowController(sceneObjHolder, actor, name);
+        const controller = new ShadowController(sceneObjHolder, actor, filename);
         actor.shadowControllerList!.addController(controller);
         return;
     }
