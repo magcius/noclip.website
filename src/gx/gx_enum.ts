@@ -75,8 +75,7 @@ export const enum Attr {
     TEX5 = 18,
     TEX6 = 19,
     TEX7 = 20,
-    NBT = 25,
-    MAX = NBT,
+    MAX = TEX7,
     NULL = 0xFF,
 }
 
