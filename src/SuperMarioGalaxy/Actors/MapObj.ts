@@ -3417,7 +3417,7 @@ export class StarPieceGroup extends LiveActor<StarPieceGroupNrv> {
         }
 
         for (let i = 0; i < starPieceCount; i++) {
-            const starPiece = new StarPiece(zoneAndLayer, sceneObjHolder, null, starPieceType);
+            const starPiece = new StarPiece(zoneAndLayer, sceneObjHolder, infoIter, starPieceType);
             this.starPieces.push(starPiece);
         }
 
