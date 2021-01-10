@@ -50,9 +50,9 @@ export class GcmfModel {
                 const texIdx = GcmfMaterial.texIdxs[j];
                 if (texIdx < 0){
                     continue;
-                } 
-                const texture = gcmf.textures[texIdx];
-                const material = new MaterialData(device, GcmfMaterial, texture, this.materialHacks);
+                }
+                const sampler = gcmf.samplers[texIdx];
+                const material = new MaterialData(device, GcmfMaterial, sampler, this.materialHacks);
                 this.materialData.push(material);
             }
         }
@@ -135,7 +135,7 @@ class MaterialInstance {
     public sortKey: number = 0;
     public visible = true;
 
-    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public textures: GMA.GcmfTexture[]) {
+    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public textures: GMA.GcmfSampler[]) {
         const gxMaterial: GX_Material.GXMaterial = Object.assign({}, materialData.material.gxMaterial);
         gxMaterial.lightChannels = arrayCopy(gxMaterial.lightChannels, lightChannelCopy);
         gxMaterial.useTexMtxIdx = nArray(8, () => false);
@@ -240,7 +240,7 @@ export class GcmfModelInstance {
         this.instanceStateData.jointToWorldMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.mtxCount, () => mat4.create());
         this.instanceStateData.drawViewMatrixArray = nArray(1, () => mat4.create());
         for (let i = 0; i < this.gcmfModel.materialData.length; i++){
-            this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.textures);
+            this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.samplers);
         }
         
         const gcmf = this.gcmfModel.gcmfEntry.gcmf;
@@ -332,15 +332,17 @@ export class GcmfModelInstance {
 class MaterialData {
     public gfxSamplers: GfxSampler[] = [];
 
-    constructor(device: GfxDevice, public material: GMA.GcmfMaterial, public texture: GMA.GcmfTexture, public materialHacks?: GX_Material.GXMaterialHacks) {
+    constructor(device: GfxDevice, public material: GMA.GcmfMaterial, public sampler: GMA.GcmfSampler, public materialHacks?: GX_Material.GXMaterialHacks) {
         for (let i = 0; i < 8; i++) {
-            const [minFilter, mipFilter] = translateTexFilterGfx(texture.mipmap);
-            const [magFilter]            = translateTexFilterGfx(texture.mipmap);
+            const [minFilter, mipFilter] = translateTexFilterGfx(sampler.mipmap);
+            const [magFilter]            = translateTexFilterGfx(sampler.mipmap);
             
             const gfxSampler = device.createSampler({
-                wrapS: translateWrapModeGfx(texture.wrapS),
-                wrapT: translateWrapModeGfx(texture.wrapT),
-                minFilter, mipFilter, magFilter,
+                wrapS: translateWrapModeGfx(sampler.wrapS),
+                wrapT: translateWrapModeGfx(sampler.wrapT),
+                minFilter, 
+                mipFilter, 
+                magFilter,
                 minLOD: 0,
                 maxLOD: 100,
             });

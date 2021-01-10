@@ -79,8 +79,8 @@ interface GcmfDisplaylistHeader{
     submesh_end_offs: number
 }
 
-// GCMF GcmfTexture
-export interface GcmfTexture{
+// GCMF GcmfSampler
+export interface GcmfSampler{
     mipmap: GX.TexFilter,
     wrapS: GX.WrapMode,
     wrapT: GX.WrapMode,
@@ -98,7 +98,7 @@ interface Gcmf{
     traslucidMaterialCount: number,
     mtxCount : number,
     matrixs: mat4[],
-    textures: GcmfTexture[],
+    samplers: GcmfSampler[],
     shapes: GcmfShape[]
 }
 
@@ -117,7 +117,7 @@ export interface GMA{
 }
 
 
-function parseTexture(buffer: ArrayBufferSlice): GcmfTexture{
+function parseSampler(buffer: ArrayBufferSlice): GcmfSampler{
     const view = buffer.createDataView();
 
     const unk0x00 = view.getInt16(0x00);
@@ -301,20 +301,21 @@ function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader{
 }
 
 function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: number, vtxCon2Offs: number): GcmfShape{
-    function fillVatFormat(vtxType: GX.CompType, compShift: number): GX_VtxAttrFmt[] {
+    function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
+        const compShift = 0x00;
         vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: vtxType, compShift };
-        vatFormat[GX.Attr.NRM] = { compCnt: GX.CompCnt.NRM_XYZ, compType: vtxType, compShift };
+        vatFormat[GX.Attr.NRM] = { compCnt: isNBT ? GX.CompCnt.NRM_NBT3 : GX.CompCnt.NRM_XYZ, compType: vtxType, compShift };
         vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
         vatFormat[GX.Attr.CLR1] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
         vatFormat[GX.Attr.TEX0] = { compCnt: GX.CompCnt.TEX_ST, compType: vtxType, compShift };
         vatFormat[GX.Attr.TEX1] = { compCnt: GX.CompCnt.TEX_ST, compType: vtxType, compShift };
         vatFormat[GX.Attr.TEX2] = { compCnt: GX.CompCnt.TEX_ST, compType: vtxType, compShift };
-        vatFormat[GX.Attr.NBT] = { compCnt: GX.CompCnt.NRM_NBT3, compType: vtxType, compShift };
+        
         return vatFormat;
     }
 
-    function generateLoadedVertexData(dlist: ArrayBufferSlice, vat: GX_VtxAttrFmt[][], loader: VtxLoader): LoadedVertexData{
+    function generateLoadedVertexData(dlist: ArrayBufferSlice, vat: GX_VtxAttrFmt[][], fmtVat: GX.VtxFmt.VTXFMT0 | GX.VtxFmt.VTXFMT1, isNBT: boolean, loader: VtxLoader): LoadedVertexData{
         const arrays: GX_Array[] = [];
         arrays[GX.Attr.POS]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.POS) };
         arrays[GX.Attr.NRM]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.NRM) };
@@ -323,7 +324,6 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
         arrays[GX.Attr.TEX0]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX0) };
         arrays[GX.Attr.TEX1]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX1) };
         arrays[GX.Attr.TEX2]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX2) };
-        arrays[GX.Attr.NBT]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.NBT) };
         const loadedVertexData = loader.runVertices(arrays, dlist);
         return loadedVertexData;
     }
@@ -370,14 +370,15 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
             vcd[i] = { type: GX.AttrType.DIRECT };
         }
     }
-    if ((vtxAttr & (1 << GX.Attr.NBT)) !== 0){
+    let isNBT = ((vtxAttr & (1 << GX.Attr._NBT)) !== 0);
+    if (isNBT) {
         console.log(`Decetct NBT`);
         console.log(`vtxAttr: ${hexzero(vtxAttr, 8)} submesh offset: ${hexzero(view.byteOffset, 8)}`);
+        vcd[GX.Attr.NRM] = { type: GX.AttrType.DIRECT };
     }
-    const compShift = 0x00;
     const vat: GX_VtxAttrFmt[][] = [];
-    vat[GX.VtxFmt.VTXFMT0] = fillVatFormat(GX.CompType.F32, compShift);
-    vat[GX.VtxFmt.VTXFMT1] = fillVatFormat(GX.CompType.S16, compShift);
+    vat[GX.VtxFmt.VTXFMT0] = fillVatFormat(GX.CompType.F32, isNBT);
+    vat[GX.VtxFmt.VTXFMT1] = fillVatFormat(GX.CompType.S16, isNBT);
     const loader = compileVtxLoaderMultiVat(vat, vcd);
     const loadedVertexLayout = loader.loadedVertexLayout;
     // value16Bit is VTXFM1
@@ -393,7 +394,7 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
             }
             let dlisEndOffs = dlistOffs + size;
             let dlist = buffer.slice(dlistOffs + 0x01, dlisEndOffs);
-            const loadedVertexData = generateLoadedVertexData(dlist, vat, loader);
+            const loadedVertexData = generateLoadedVertexData(dlist, vat, fmtVat, isNBT, loader);
             loadedVertexDatas.push(loadedVertexData);
             dlistOffs = dlisEndOffs;
         }
@@ -414,7 +415,7 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf{
     }
     const view = buffer.createDataView();
     assert(readString(buffer, 0x00, 0x04) === "GCMF");
-    const textures: GcmfTexture[] = [];
+    const samplers: GcmfSampler[] = [];
     const matrixs: mat4[] = [];
     const shapes: GcmfShape[] = [];
     const origin = vec3.create();
@@ -433,9 +434,9 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf{
 
     let allMaterialCount = materialCount + traslucidMaterialCount;
     let offs = 0x40
-    // GcmfTexture
+    // GcmfSampler
     for(let i = 0; i < texCount; i++){
-        textures.push( parseTexture(buffer.slice(offs)) );
+        samplers.push( parseSampler(buffer.slice(offs)) );
         offs += 0x20;
     }
 
@@ -484,7 +485,7 @@ function parseGcmf(buffer: ArrayBufferSlice): Gcmf{
         shapeOffs += offs;
     }
 
-    return { attribute, origin, boundSpeher, texCount, materialCount, traslucidMaterialCount, mtxCount, matrixs, textures, shapes };
+    return { attribute, origin, boundSpeher, texCount, materialCount, traslucidMaterialCount, mtxCount, matrixs, samplers, shapes };
 }
 
 export function parse(buffer: ArrayBufferSlice): GMA{
