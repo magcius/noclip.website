@@ -5082,9 +5082,9 @@ class CocoNutBall extends LiveActor<CocoNutBallNrv> {
         this.initModelManagerWithAnm(sceneObjHolder, "CocoNut");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
         initLightCtrl(sceneObjHolder, this);
-        this.initHitSensor()
-        addHitSensor(sceneObjHolder, this, "body", HitSensorType.CocoNut, 8,40,[0,0,0]);
-        addHitSensor(sceneObjHolder, this, "bind", HitSensorType.CocoNut, 8,40,[0,0,0]);
+        this.initHitSensor();
+        addHitSensor(sceneObjHolder, this, "body", HitSensorType.CocoNut, 8, 40, [0,0,0]);
+        addHitSensor(sceneObjHolder, this, "bind", HitSensorType.CocoNut, 8, 40, [0,0,0]);
         this.initBinder(60, 0, 0);
         this.initEffectKeeper(sceneObjHolder, "CocoNut");
         // initStarPointerTarget
@@ -5121,7 +5121,6 @@ export class OtaKingLongFoot extends PartsModel<OtaKingLongFootNrv>{
         showModel(this);
         startBck(this,"Wait");
         setBckFrameAtRandom(this);
-        //setBckFrameAndStop(this, 0)
     }
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
@@ -5165,7 +5164,6 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
 
             this.dirToPlayer(sceneObjHolder);
             this.tryThrowCoconutOrFireBallIfWait(0x4b);
-
         }
     }
 
@@ -5202,24 +5200,24 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
     private tryThrowCoconutOrFireBallIfWait(step: number): boolean {
         if (isGreaterStep(this, step) || !this.isValidThrowCoconut()){
             if (isGreaterStep(this, step << 1) || !this.isValidThrowFireball()){
-                return false
+                return false;
             }else{
                 this.setNerve(OtaKingNrv.ThrowFireBall);
-                return false
+                return false;
             }
         }else{
             this.setNerve(OtaKingNrv.ThrowCocoNut);
-            return true
+            return true;
         }
     }
 
     private isValidThrowFireball(): boolean {
         //throw new Error('Method not implemented.');
-        return false
+        return false;
     }
 
     private isValidThrowCoconut(): boolean {
-        return false
+        return false;
     }
 
     private startBckWaitIfNotPlaying(){
@@ -5232,21 +5230,21 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
     public initLongFoot(sceneObjHolder:SceneObjHolder, infoIter: JMapInfoIter){
         this.longFeet = new Array<OtaKingLongFoot>();
         if (!this.isLv2){
-            let stepOffset = [3,8,0xE,0x12];
+            let stepOffset = [3, 8, 0xE, 0x12];
             for (let i = 0; i < 4; i++){
                 let longFoot = new OtaKingLongFoot(sceneObjHolder, infoIter, this, stepOffset[i]);
                 this.longFeet[i] = longFoot;
                 vec3.set(longFoot.scale, 1.0, 0.9, 0.8);
             }
 
-            vec3.add(this.longFeet[0].translation, vec3.set(scratchVec3a, 735.0, 80.0, -55.0), this.translation)
-            vec3.set(this.longFeet[0].rotation, -9*MathConstants.DEG_TO_RAD, 266*MathConstants.DEG_TO_RAD, 0.0)
-            vec3.add(this.longFeet[1].translation, vec3.set(scratchVec3a, -959.0, 130.0, 0.0), this.translation)
-            vec3.set(this.longFeet[1].rotation, 0.0,107*MathConstants.DEG_TO_RAD,14.0*MathConstants.DEG_TO_RAD)
-            vec3.add(this.longFeet[2].translation, vec3.set(scratchVec3a,  0.0, 43.0, 884.0), this.translation)
-            vec3.set(this.longFeet[2].rotation, -8*MathConstants.DEG_TO_RAD,159*MathConstants.DEG_TO_RAD,0.0)
-            vec3.add(this.longFeet[3].translation, vec3.set(scratchVec3a, 55.0, 55.0, -896.0), this.translation)
-            vec3.set(this.longFeet[3].rotation, -9*MathConstants.DEG_TO_RAD,-14*MathConstants.DEG_TO_RAD,0.0)
+            vec3.add(this.longFeet[0].translation, vec3.set(scratchVec3a, 735.0, 80.0, -55.0), this.translation);
+            vec3.set(this.longFeet[0].rotation, -9*MathConstants.DEG_TO_RAD, 266*MathConstants.DEG_TO_RAD, 0.0);
+            vec3.add(this.longFeet[1].translation, vec3.set(scratchVec3a, -959.0, 130.0, 0.0), this.translation);
+            vec3.set(this.longFeet[1].rotation, 0.0,107*MathConstants.DEG_TO_RAD,14.0*MathConstants.DEG_TO_RAD);
+            vec3.add(this.longFeet[2].translation, vec3.set(scratchVec3a,  0.0, 43.0, 884.0), this.translation);
+            vec3.set(this.longFeet[2].rotation, -8*MathConstants.DEG_TO_RAD,159*MathConstants.DEG_TO_RAD,0.0);
+            vec3.add(this.longFeet[3].translation, vec3.set(scratchVec3a, 55.0, 55.0, -896.0), this.translation);
+            vec3.set(this.longFeet[3].rotation, -9*MathConstants.DEG_TO_RAD,-14*MathConstants.DEG_TO_RAD,0.0);
         }
     }
 
@@ -5258,7 +5256,7 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
             this.feet = new Array<PartsModel>();
             for (let i = 0; i < 2; i++){
                 //this.feet[i] = new PartsModel(sceneObjHolder, 'OtaKingFoot', 'OtaKingFoot', this, DrawBufferType.EnemyDecoration, null);
-                this.feet[i] = createPartsModelEnemyAndFix(sceneObjHolder, this, 'OtaKingFoot',null, null, null, null,);
+                this.feet[i] = createPartsModelEnemyAndFix(sceneObjHolder, this, 'OtaKingFoot',null, null, null, null);
                 this.feet[i].translation = this.translation;
                 startBck(this.feet[i], 'wait');
             }
@@ -5274,8 +5272,8 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
         this.initLongFoot(sceneObjHolder, infoIter);
 
         for (let i in range(0,3)){
-            let coco = new CocoNutBall(this.zoneAndLayer, sceneObjHolder, infoIter)
-            this.coconuts.push(coco)
+            let coco = new CocoNutBall(this.zoneAndLayer, sceneObjHolder, infoIter);
+            this.coconuts.push(coco);
         }
     }
 
