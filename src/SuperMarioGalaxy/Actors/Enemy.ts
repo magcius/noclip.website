@@ -12,7 +12,7 @@ import { initFur } from '../Fur';
 import { addBodyMessageSensorMapObjPress, addHitSensor, addHitSensorAtJoint, addHitSensorAtJointEnemy, addHitSensorEnemyAttack, addHitSensorAtJointEnemyAttack, addHitSensorEnemy, addHitSensorEye, addHitSensorMapObj, addHitSensorPush, HitSensor, HitSensorType, invalidateHitSensor, invalidateHitSensors, isSensorEnemy, isSensorMapObj, isSensorNear, isSensorPlayer, isSensorPlayerOrRide, isSensorRide, sendMsgEnemyAttack, sendMsgEnemyAttackExplosion, sendMsgPush, sendMsgToGroupMember, validateHitSensors, isSensorEnemyAttack, addHitSensorMtxEnemy, addHitSensorMtxEnemyAttack, HitSensorInfo } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
-import { isDead, isMsgTypeEnemyAttack, LiveActor, makeMtxTRFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
+import { isDead, isMsgTypeEnemyAttack, LiveActor, makeMtxTRFromActor, makeMtxTRSFromActor, MessageType, ZoneAndLayer } from '../LiveActor';
 import { getDeltaTimeFrames, getObjectName, SceneObjHolder } from '../Main';
 import { MapPartsRailMover, MapPartsRailPointPassChecker } from '../MapParts';
 import { getWaterAreaInfo, isInWater, WaterInfo } from '../MiscMap';
@@ -20,7 +20,7 @@ import { CalcAnimType, DrawBufferType, DrawType, MovementType } from '../NameObj
 import { getRailArg, isConnectedWithRail } from '../RailRider';
 import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, offCalcShadow, setShadowDropLength, getShadowNearProjectionLength, getShadowProjectionLength, initShadowVolumeFlatModel, initShadowController, addShadowVolumeFlatModel, addShadowVolumeBox, setShadowDropPosition, setShadowVolumeBoxSize, initShadowVolumeCylinder } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
-import { appearCoinPop, CoconutTree, declareCoin, isEqualStageName } from './MiscActor';
+import { appearCoinPop, CoconutTree, declareCoin, isEqualStageName, requestArchivesSuperSpinDriver } from './MiscActor';
 import { PartsModel } from './PartsModel';
 import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
 import { getWaterAreaObj } from '../MiscMap';
@@ -5126,7 +5126,6 @@ export class OtaKingLongFoot extends PartsModel<OtaKingLongFootNrv>{
 
     protected control(sceneObjHolder: SceneObjHolder, viewerInput: Viewer.ViewerRenderInput): void {
         super.control(sceneObjHolder, viewerInput);
-        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.translation);
 
     }
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -5140,18 +5139,21 @@ enum OtaKingNrv { Wait, ThrowCocoNut, ThrowFireBall }
 
 export class OtaKing extends LiveActor<OtaKingNrv> {
     private feet: Array<PartsModel>;
+    private longFeet: Array<PartsModel>;
     private coconuts: Array<CocoNutBall>;
+    private currentMove: number;
     private magma: PartsModel;
     private magmaBloom: PartsModel;
+    private isLv2: boolean;
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
+        initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModel(sceneObjHolder, infoIter);
         connectToSceneEnemy(sceneObjHolder,this);
         initLightCtrl(sceneObjHolder, this);
         this.initEffectKeeper(sceneObjHolder, 'OtaKing');
         tryRegisterDemoCast(sceneObjHolder, this, infoIter);
         this.initNerve(OtaKingNrv.Wait);
-        initDefaultPos(sceneObjHolder, this, infoIter);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: OtaKingNrv, deltaTimeFrames: number): void {
@@ -5161,17 +5163,53 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
                 this.startBckWaitIfNotPlaying();
             }
 
+            this.dirToPlayer(sceneObjHolder);
             this.tryThrowCoconutOrFireBallIfWait(0x4b);
 
         }
     }
-    private tryThrowCoconutOrFireBallIfWait(step: number) {
+
+    private dirToPlayer(sceneObjHolder: SceneObjHolder){
+        getPlayerPos(scratchVec3a, sceneObjHolder);
+        vec3.sub(scratchVec3b, scratchVec3a, this.translation);
+        let tan = Math.atan2(scratchVec3b[0], scratchVec3b[2]);
+        let mod = ((MathConstants.TAU + (tan - (this.rotation[1]-MathConstants.TAU/2)))%MathConstants.TAU) + (this.rotation[1] - MathConstants.TAU/2);
+        let difference = mod - this.rotation[1];
+        if (((0 < difference) && (this.currentMove < difference))||((difference < 0) && (difference < this.currentMove))){
+            if (difference * this.currentMove < 0,0){
+                this.currentMove = 0.0;
+            }
+            this.rotation[1] += this.currentMove;
+            if (difference <= 0.0){
+                if (MathConstants.DEG_TO_RAD <= this.currentMove - 0.003*MathConstants.DEG_TO_RAD){
+                    this.currentMove -= 0.003*MathConstants.DEG_TO_RAD;
+                }else{
+                    this.currentMove = -MathConstants.DEG_TO_RAD;
+                }
+            }else{
+                this.currentMove += 0.003*MathConstants.DEG_TO_RAD;
+                if (MathConstants.DEG_TO_RAD <= this.currentMove){
+                    this.currentMove = MathConstants.DEG_TO_RAD;
+                }
+            }
+        }else{
+            this.rotation[1] = mod;
+            this.currentMove = 0;
+        }
+        this.rotation[1] = (this.rotation[1]+MathConstants.TAU)%MathConstants.TAU;
+    }
+
+    private tryThrowCoconutOrFireBallIfWait(step: number): boolean {
         if (isGreaterStep(this, step) || !this.isValidThrowCoconut()){
             if (isGreaterStep(this, step << 1) || !this.isValidThrowFireball()){
-                return
+                return false
+            }else{
+                this.setNerve(OtaKingNrv.ThrowFireBall);
+                return false
             }
         }else{
             this.setNerve(OtaKingNrv.ThrowCocoNut);
+            return true
         }
     }
 
@@ -5198,13 +5236,17 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
             for (let i = 0; i < 4; i++){
                 let longFoot = new OtaKingLongFoot(sceneObjHolder, infoIter, this, stepOffset[i]);
                 this.longFeet[i] = longFoot;
-                vec3.copy(longFoot.scale,[1.0, 0.9, 0.8]);
+                vec3.set(longFoot.scale, 1.0, 0.9, 0.8);
             }
 
-            this.longFeet[0].initFixedPositionRelative(vec3.set(scratchVec3a, 735.0, 80.0, -55.0), vec3.set(scratchVec3b, -9.0*MathConstants.DEG_TO_RAD, 266.0*MathConstants.DEG_TO_RAD, 0.0));
-            this.longFeet[1].initFixedPositionRelative(vec3.set(scratchVec3a, -959.0,130.0, 0.0), vec3.set(scratchVec3b, 0.0, 107.0*MathConstants.DEG_TO_RAD, 14.0*MathConstants.DEG_TO_RAD))
-            this.longFeet[2].initFixedPositionRelative(vec3.set(scratchVec3a, 0.0, 43.0, 884.0), vec3.set(scratchVec3b, -8.0*MathConstants.DEG_TO_RAD, 159.0*MathConstants.DEG_TO_RAD, 0.0))
-            this.longFeet[3].initFixedPositionRelative(vec3.set(scratchVec3a, 55.0, 55.0, -896.0), vec3.set(scratchVec3b, -9.0*MathConstants.DEG_TO_RAD, -14.0*MathConstants.DEG_TO_RAD, 0.0))
+            vec3.add(this.longFeet[0].translation, vec3.set(scratchVec3a, 735.0, 80.0, -55.0), this.translation)
+            vec3.set(this.longFeet[0].rotation, -9*MathConstants.DEG_TO_RAD, 266*MathConstants.DEG_TO_RAD, 0.0)
+            vec3.add(this.longFeet[1].translation, vec3.set(scratchVec3a, -959.0, 130.0, 0.0), this.translation)
+            vec3.set(this.longFeet[1].rotation, 0.0,107*MathConstants.DEG_TO_RAD,14.0*MathConstants.DEG_TO_RAD)
+            vec3.add(this.longFeet[2].translation, vec3.set(scratchVec3a,  0.0, 43.0, 884.0), this.translation)
+            vec3.set(this.longFeet[2].rotation, -8*MathConstants.DEG_TO_RAD,159*MathConstants.DEG_TO_RAD,0.0)
+            vec3.add(this.longFeet[3].translation, vec3.set(scratchVec3a, 55.0, 55.0, -896.0), this.translation)
+            vec3.set(this.longFeet[3].rotation, -9*MathConstants.DEG_TO_RAD,-14*MathConstants.DEG_TO_RAD,0.0)
         }
     }
 
@@ -5215,26 +5257,26 @@ export class OtaKing extends LiveActor<OtaKingNrv> {
 
             this.feet = new Array<PartsModel>();
             for (let i = 0; i < 2; i++){
-                this.feet[i] = new PartsModel(sceneObjHolder, 'OtaKingFoot', 'OtaKingFoot', this, DrawBufferType.EnemyDecoration, null);
+                //this.feet[i] = new PartsModel(sceneObjHolder, 'OtaKingFoot', 'OtaKingFoot', this, DrawBufferType.EnemyDecoration, null);
+                this.feet[i] = createPartsModelEnemyAndFix(sceneObjHolder, this, 'OtaKingFoot',null, null, null, null,);
                 this.feet[i].translation = this.translation;
                 startBck(this.feet[i], 'wait');
             }
         }
 
-
-
-        this.magma = createPartsModelEnemyAndFix(sceneObjHolder, this, 'OtaKingMagma',null,null,null,null);
-        this.magmaBloom = new PartsModel(sceneObjHolder, 'OtaKingMagmaBloom', 'OtaKingMagmaBloom', this, DrawBufferType.BloomModel, null);
+        //this.magma = createPartsModelEnemyAndFix(sceneObjHolder, this, 'OtaKingMagma',null,null,null,null);
+        this.magma = new PartsModel(sceneObjHolder, 'OtaKingMagma', 'OtaKingMagma', this, DrawBufferType.EnemyDecoration);
+        this.magmaBloom = new PartsModel(sceneObjHolder, 'OtaKingMagmaBloom', 'OtaKingMagmaBloom', this, DrawBufferType.BloomModel);
         this.magmaBloom.initFixedPositionJoint(null, this.translation, null);
         startBck(this.magma, 'wait');
         startBck(this, 'wait');
 
-
         this.initLongFoot(sceneObjHolder, infoIter);
-        //this.magma = createPartsModelEnemyAndFix(sceneObjHolder, this, 'OtaKingMagma',null,null,null,null);
-        this.magmaBloom = new PartsModel(sceneObjHolder, 'OtaKingMagmaBloom', 'OtaKingMagmaBloom', this, DrawBufferType.BloomModel, null);
-        this.magmaBloom.initFixedPositionJoint(null, this.translation, null);
-        //startBck(this.magma, 'wait');
+
+        for (let i in range(0,3)){
+            let coco = new CocoNutBall(this.zoneAndLayer, sceneObjHolder, infoIter)
+            this.coconuts.push(coco)
+        }
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
