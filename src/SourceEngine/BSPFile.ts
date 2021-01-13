@@ -420,7 +420,7 @@ export class LightmapPackerPage {
         const w = allocation.width, h = allocation.height;
 
         // March downwards until we find a span of skyline that will fit.
-        let bestY = -1, minX = this.maxWidth;
+        let bestY = -1, minX = this.maxWidth - w + 1;
         for (let y = 0; y < this.maxHeight - h;) {
             const searchY = this.searchSkyline(y, h);
             if (this.skyline[searchY] < minX) {

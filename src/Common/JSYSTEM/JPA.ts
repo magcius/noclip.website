@@ -22,7 +22,7 @@ import { Endianness } from "../../endian";
 import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
-import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8, Blue, Green, Yellow } from "../../Color";
+import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
 import { MaterialParams, ColorKind, PacketParams, fillIndTexMtx, fillTextureSize, fillTextureBias } from "../../gx/gx_render";
 import { GXMaterialHelperGfx } from "../../gx/gx_render";
 import { computeModelMatrixSRT, computeModelMatrixR, lerp, MathConstants, normToLengthAndAdd, normToLength, isNearZeroVec3, transformVec3Mat4w1, transformVec3Mat4w0, getMatrixAxisZ, setMatrixTranslation, setMatrixAxis, Vec3Zero, vec3SetAll } from "../../MathHelpers";
@@ -144,13 +144,13 @@ interface JPABaseShapeBlock {
     dirType: DirType;
     rotType: RotType;
     planeType: PlaneType;
-    globalScale2D: vec2;
-    tilingX: number;
-    tilingY: number;
-    traverseOrder: TraverseOrder;
-    drawChildrenBefore: boolean;
-    stopDrawParent: boolean;
-    stopDrawChild: boolean;
+    baseSize: vec2;
+    tilingS: number;
+    tilingT: number;
+    isDrawFwdAhead: boolean;
+    isDrawPrntAhead: boolean;
+    isNoDrawParent: boolean;
+    isNoDrawChild: boolean;
 
     // TEV/PE Settings
     colorInSelect: number;
@@ -164,35 +164,35 @@ interface JPABaseShapeBlock {
     anmRndm: number;
 
     // Texture Palette Animation
-    texCalcOnEmitter: boolean;
+    isGlblTexAnm: boolean;
     texCalcIdxType: CalcIdxType;
     texIdx: number;
     texIdxAnimData: Uint8Array | null;
-    texIdxAnimRndmMask: number;
+    texIdxLoopOfstMask: number;
 
     // Texture Coordinate Animation
     isEnableProjection: boolean;
     isEnableTexScrollAnm: boolean;
-    texStaticTransX: number;
-    texStaticTransY: number;
-    texStaticScaleX: number;
-    texStaticScaleY: number;
-    texStaticRotate: number;
-    texScrollTransX: number;
-    texScrollTransY: number;
-    texScrollScaleX: number;
-    texScrollScaleY: number;
-    texScrollRotate: number;
+    texInitTransX: number;
+    texInitTransY: number;
+    texInitScaleX: number;
+    texInitScaleY: number;
+    texInitRot: number;
+    texIncTransX: number;
+    texIncTransY: number;
+    texIncScaleX: number;
+    texIncScaleY: number;
+    texIncRot: number;
 
     // Color Animation Settings
-    colorCalcOnEmitter: boolean;
+    isGlblClrAnm: boolean;
     colorCalcIdxType: CalcIdxType;
     colorPrm: Color;
     colorEnv: Color;
     colorPrmAnimData: Color[] | null;
     colorEnvAnimData: Color[] | null;
     colorAnimMaxFrm: number;
-    colorAnimRndmMask: number;
+    colorLoopOfstMask: number;
 }
 
 const enum CalcIdxType {
@@ -316,7 +316,7 @@ const enum FieldType {
     Spin       = 0x08,
 }
 
-const enum FieldVelType {
+const enum FieldAddType {
     FieldAccel    = 0x00,
     BaseVelocity  = 0x01,
     FieldVelocity = 0x02,
@@ -325,7 +325,7 @@ const enum FieldVelType {
 interface JPAFieldBlock {
     sttFlag: number;
     type: FieldType;
-    velType: FieldVelType;
+    velType: FieldAddType;
     // Used by JPA1 and JEFFjpa1
     maxDistSq: number;
     pos: vec3;
@@ -1233,17 +1233,6 @@ function calcColor(dstPrm: Color, dstEnv: Color, workData: JPAEmitterWorkData, t
         colorCopy(dstEnv, bsp1.colorEnvAnimData[anmIdx]);
 }
 
-// JPA appends new particles to the *front* of its linked list. We append
-// particles to the *end* of our array (since adding to the start is expensive).
-//
-// That means wherever we iterate over particles, we do the opposite of what
-// the traversal order bit says. In the original code, FORWARD is 0x00, and
-// REVERSE is 0x01.
-const enum TraverseOrder {
-    Reverse = 0x00,
-    Forward = 0x01,
-}
-
 export class JPAEmitterCallBack {
     public execute(emitter: JPABaseEmitter): void {
     }
@@ -1743,10 +1732,10 @@ export class JPABaseEmitter {
             // mCalcEmitterFuncList
             const bsp1 = this.resData.res.bsp1;
 
-            if (bsp1.texIdxAnimData !== null && bsp1.texCalcOnEmitter)
+            if (bsp1.texIdxAnimData !== null && bsp1.isGlblTexAnm)
                 this.texAnmIdx = calcTexIdx(workData, this.tick, 0, 0);
 
-            if (bsp1.colorCalcOnEmitter)
+            if (bsp1.isGlblClrAnm)
                 calcColor(this.colorPrm, this.colorEnv, workData, this.tick, 0, 0);
 
             // mFieldBlocks
@@ -1814,7 +1803,10 @@ export class JPABaseEmitter {
         }
     
         const bsp1 = this.resData.res.bsp1;
-        const reverseOrder = bsp1.traverseOrder === TraverseOrder.Reverse;
+
+        // JPA appends new particles to the *front* of its linked list. We append
+        // particles to the *end* of our array (since adding to the start is expensive).
+        const reverseOrder = bsp1.isDrawFwdAhead;
 
         const needsPrevPos = sp1.dirType === DirType.PrevPctl;
         if (needsPrevPos)
@@ -1936,7 +1928,7 @@ export class JPABaseEmitter {
         const etx1 = this.resData.res.etx1;
 
         this.flags = this.flags & 0xFFFFFF7F;
-        vec2.mul(workData.globalScale2D, this.globalScale2D, bsp1.globalScale2D);
+        vec2.mul(workData.globalScale2D, this.globalScale2D, bsp1.baseSize);
 
         if (bsp1.shapeType === ShapeType.Point) {
             workData.globalScale2D[0] *= 1.02;
@@ -1952,7 +1944,7 @@ export class JPABaseEmitter {
 
         if (bsp1.texIdxAnimData === null)
             this.resData.fillTextureMapping(materialParams.m_TextureMapping[0], bsp1.texIdx);
-        else if (bsp1.texCalcOnEmitter)
+        else if (bsp1.isGlblTexAnm)
             this.resData.fillTextureMapping(materialParams.m_TextureMapping[0], this.texAnmIdx);
 
         if (etx1 !== null) {
@@ -2003,7 +1995,7 @@ export class JPABaseEmitter {
 
             const n = this.aliveParticlesBase.length;
             for (let i = 0; i < n; i++) {
-                const index = (bsp1.traverseOrder === TraverseOrder.Reverse) ? n - 1 - i : i;
+                const index = (bsp1.isDrawFwdAhead) ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesBase[index].drawP(device, renderInstManager, workData);
                 if (needsPrevPos)
@@ -2021,7 +2013,7 @@ export class JPABaseEmitter {
         this.flags = this.flags | 0x00000080;
 
         if (ssp1.isInheritedScale)
-            vec2.mul(workData.globalScale2D, this.globalScale2D, bsp1.globalScale2D);
+            vec2.mul(workData.globalScale2D, this.globalScale2D, bsp1.baseSize);
         else
             vec2.mul(workData.globalScale2D, this.globalScale2D, ssp1.globalScale2D);
 
@@ -2053,7 +2045,7 @@ export class JPABaseEmitter {
 
             const n = this.aliveParticlesChild.length;
             for (let i = 0; i < n; i++) {
-                const index = (bsp1.traverseOrder === TraverseOrder.Reverse) ? n - 1 - i : i;
+                const index = (bsp1.isDrawFwdAhead) ? n - 1 - i : i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesChild[index].drawC(device, renderInstManager, workData);
                 if (needsPrevPos)
@@ -2073,24 +2065,24 @@ export class JPABaseEmitter {
 
         this.calcWorkData_d(workData);
 
-        if (!bsp1.stopDrawChild && ssp1 !== null && bsp1.drawChildrenBefore)
+        if (!bsp1.isNoDrawChild && ssp1 !== null && bsp1.isDrawPrntAhead)
             this.drawC(device, renderInstManager, workData);
-        if (!bsp1.stopDrawParent)
+        if (!bsp1.isNoDrawParent)
             this.drawP(device, renderInstManager, workData);
-        if (!bsp1.stopDrawChild && ssp1 !== null && !bsp1.drawChildrenBefore)
+        if (!bsp1.isNoDrawChild && ssp1 !== null && !bsp1.isDrawPrntAhead)
             this.drawC(device, renderInstManager, workData);
     }
 }
 
 function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): void {
-    const offsS = 0.5 * bsp1.tilingX;
-    const offsT = 0.5 * bsp1.tilingY;
+    const offsS = 0.5 * bsp1.tilingS;
+    const offsT = 0.5 * bsp1.tilingT;
 
-    const translationS = (bsp1.texStaticTransX + tick * bsp1.texScrollTransX) + offsS;
-    const translationT = (bsp1.texStaticTransY + tick * bsp1.texScrollTransY) + offsT;
-    const scaleS = (bsp1.texStaticScaleX + tick * bsp1.texScrollScaleX);
-    const scaleT = (bsp1.texStaticScaleY + tick * bsp1.texScrollScaleY);
-    const rotate = (bsp1.texStaticRotate + tick * bsp1.texScrollRotate) * MathConstants.TAU / 0xFFFF;
+    const translationS = (bsp1.texInitTransX + tick * bsp1.texIncTransX) + offsS;
+    const translationT = (bsp1.texInitTransY + tick * bsp1.texIncTransY) + offsT;
+    const scaleS = (bsp1.texInitScaleX + tick * bsp1.texIncScaleX);
+    const scaleT = (bsp1.texInitScaleY + tick * bsp1.texIncScaleY);
+    const rotate = (bsp1.texInitRot + tick * bsp1.texIncRot) * MathConstants.TAU / 0xFFFF;
 
     const sinR = Math.sin(rotate);
     const cosR = Math.cos(rotate);
@@ -2098,13 +2090,13 @@ function calcTexCrdMtxAnm(dst: mat4, bsp1: JPABaseShapeBlock, tick: number): voi
     // Normally, the setting of tiling is done by choosing a separate texcoord array through the GXSetArray call in setPTev.
     // If the tiling bit is on, then it uses a texcoord of 2.0 instead of 1.0. In our case, we just adjust the texture matirx.
 
-    dst[0]  = bsp1.tilingX * scaleS *  cosR;
-    dst[4]  = bsp1.tilingX * scaleS * -sinR;
+    dst[0]  = bsp1.tilingS * scaleS *  cosR;
+    dst[4]  = bsp1.tilingS * scaleS * -sinR;
     dst[8]  = 0.0;
     dst[12] = offsS + scaleS * (sinR * translationT - cosR * translationS);
 
-    dst[1]  = bsp1.tilingY * scaleT *  sinR;
-    dst[5]  = bsp1.tilingY * scaleT *  cosR;
+    dst[1]  = bsp1.tilingT * scaleT *  sinR;
+    dst[5]  = bsp1.tilingT * scaleT *  cosR;
     dst[9]  = 0.0;
     dst[13] = offsT + -scaleT * (sinR * translationS + cosR * translationT);
 
@@ -2118,8 +2110,8 @@ function calcTexCrdMtxIdt(dst: mat4, bsp1: JPABaseShapeBlock): void {
     // Normally, the choice of tiling is done by choosing a separate texcoord array through the GXSetArray call in setPTev.
     // If the tiling bit is on, then it uses a texcoord of 2.0 instead of 1.0. In our case, we just adjust the texture matirx.
 
-    const scaleS = bsp1.tilingX;
-    const scaleT = bsp1.tilingY;
+    const scaleS = bsp1.tilingS;
+    const scaleT = bsp1.tilingT;
 
     dst[0]  = scaleS;
     dst[4]  = 0.0;
@@ -2458,11 +2450,11 @@ export class JPABaseParticle {
             vec3.scale(v, v, this.calcFieldFadeAffect(field, this.time));
         }
 
-        if (field.velType === FieldVelType.FieldAccel)
+        if (field.velType === FieldAddType.FieldAccel)
             vec3.scaleAndAdd(this.fieldAccel, this.fieldAccel, v, workData.deltaTime);
-        else if (field.velType === FieldVelType.BaseVelocity)
+        else if (field.velType === FieldAddType.BaseVelocity)
             vec3.scaleAndAdd(this.baseVel, this.baseVel, v, workData.deltaTime);
-        else if (field.velType === FieldVelType.FieldVelocity)
+        else if (field.velType === FieldAddType.FieldVelocity)
             vec3.scaleAndAdd(this.fieldVel, this.fieldVel, v, workData.deltaTime);
     }
 
@@ -2768,13 +2760,13 @@ export class JPABaseParticle {
             const esp1 = res.esp1;
             const ssp1 = res.ssp1;
 
-            if (bsp1.texIdxAnimData !== null && !bsp1.texCalcOnEmitter) {
-                const randomPhase = this.anmRandom & bsp1.texIdxAnimRndmMask;
+            if (bsp1.texIdxAnimData !== null && !bsp1.isGlblTexAnm) {
+                const randomPhase = this.anmRandom & bsp1.texIdxLoopOfstMask;
                 this.texAnmIdx = calcTexIdx(workData, this.tick, this.time, randomPhase);
             }
 
-            if (!bsp1.colorCalcOnEmitter) {
-                const randomPhase = this.anmRandom & bsp1.colorAnimRndmMask;
+            if (!bsp1.isGlblClrAnm) {
+                const randomPhase = this.anmRandom & bsp1.colorLoopOfstMask;
                 calcColor(this.colorPrm, this.colorEnv, workData, this.tick, this.time, randomPhase);
             } else {
                 colorCopy(this.colorPrm, workData.baseEmitter.colorPrm);
@@ -3279,7 +3271,7 @@ export class JPABaseParticle {
 
         const materialParams = workData.materialParams;
 
-        if (bsp1.texIdxAnimData !== null && !bsp1.texCalcOnEmitter)
+        if (bsp1.texIdxAnimData !== null && !bsp1.isGlblTexAnm)
             resData.fillTextureMapping(materialParams.m_TextureMapping[0], this.texAnmIdx);
 
         if (esp1 !== null && esp1.isEnableScale) {
@@ -3444,19 +3436,19 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             // JPABaseShape
             // Contains particle draw settings.
 
-            const globalScale2DX = view.getFloat32(tableIdx + 0x18);
-            const globalScale2DY = view.getFloat32(tableIdx + 0x1C);
-            const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
+            const baseSizeX = view.getFloat32(tableIdx + 0x18);
+            const baseSizeY = view.getFloat32(tableIdx + 0x1C);
+            const baseSize = vec2.fromValues(baseSizeX, baseSizeY);
 
             const anmRndm = view.getUint16(tableIdx + 0x20);
             const texAnmCalcFlags = view.getUint8(tableIdx + 0x22);
             const colorAnmCalcFlags = view.getUint8(tableIdx + 0x23);
 
-            const texIdxAnimRndmMask = (!!(texAnmCalcFlags & 0x01)) ? 0xFFFF : 0x0000;
-            const colorAnimRndmMask = (!!(colorAnmCalcFlags & 0x01)) ? 0xFFFF : 0x0000;
+            const texIdxLoopOfstMask = (!!(texAnmCalcFlags & 0x01)) ? 0xFFFF : 0x0000;
+            const colorLoopOfstMask = (!!(colorAnmCalcFlags & 0x01)) ? 0xFFFF : 0x0000;
 
-            const texCalcOnEmitter = !!(texAnmCalcFlags & 0x02);
-            const colorCalcOnEmitter = !!(colorAnmCalcFlags & 0x02);
+            const isGlblTexAnm = !!(texAnmCalcFlags & 0x02);
+            const isGlblClrAnm = !!(colorAnmCalcFlags & 0x02);
 
             const shapeType: ShapeType = view.getUint8(tableIdx + 0x24);
             const dirType: DirType = view.getUint8(tableIdx + 0x25);
@@ -3466,9 +3458,9 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const planeType: PlaneType = PlaneType.XY;
 
             // stopDrawParent is in the SSP1 block in JEFFjpa1.
-            const stopDrawParent = false;
+            const isNoDrawParent = false;
             // stopDrawChild does not exist in JEFFjpa1.
-            const stopDrawChild = false;
+            const isNoDrawChild = false;
 
             const colorInSelect = view.getUint8(tableIdx + 0x30);
 
@@ -3531,34 +3523,34 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const colorPrm = colorNewFromRGBA8(view.getUint32(tableIdx + 0x64));
             const colorEnv = colorNewFromRGBA8(view.getUint32(tableIdx + 0x68));
 
-            const texStaticTransX = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x80)) * 10;
-            const texStaticTransY = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x82)) * 10;
-            const texStaticScaleX = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x84)) * 10;
-            const texStaticScaleY = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x86)) * 10;
-            const tilingX = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x88)) * 10;
-            const tilingY = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x8A)) * 10;
-            const texScrollTransX = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x8C));
-            const texScrollTransY = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x8E));
-            const texScrollScaleX = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x90)) * 0.1;
-            const texScrollScaleY = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x92)) * 0.1;
-            const texScrollRotate = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x94));
+            const texInitTransX = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x80)) * 10;
+            const texInitTransY = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x82)) * 10;
+            const texInitScaleX = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x84)) * 10;
+            const texInitScaleY = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x86)) * 10;
+            const tilingS = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x88)) * 10;
+            const tilingT = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x8A)) * 10;
+            const texIncTransX = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x8C));
+            const texIncTransY = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x8E));
+            const texIncScaleX = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x90)) * 0.1;
+            const texIncScaleY = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x92)) * 0.1;
+            const texIncRot = JPAConvertFixToFloat(view.getInt16(tableIdx + 0x94));
             // texStaticRotate was added in JPA2.
-            const texStaticRotate = 0;
+            const texInitRot = 0;
 
             const isEnableTexScrollAnm = !!view.getUint8(tableIdx + 0x96);
 
-            const traverseOrder: TraverseOrder = (flags & 0x01);
-            const drawChildrenBefore = !!(flags & 0x02);
+            const isDrawFwdAhead = !!(flags & 0x01);
+            const isDrawPrntAhead = !!(flags & 0x02);
 
             bsp1 = {
-                shapeType, dirType, rotType, planeType, globalScale2D, tilingX, tilingY, traverseOrder, drawChildrenBefore, stopDrawParent, stopDrawChild,
+                shapeType, dirType, rotType, planeType, baseSize, tilingS, tilingT, isDrawFwdAhead, isDrawPrntAhead, isNoDrawParent, isNoDrawChild,
                 colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 anmRndm,
-                texCalcOnEmitter, texIdx, texIdxAnimData, texIdxAnimRndmMask, texCalcIdxType,
+                isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
                 isEnableTexScrollAnm, isEnableProjection,
-                texStaticTransX, texStaticTransY, texStaticScaleX, texStaticScaleY, texStaticRotate,
-                texScrollTransX, texScrollTransY, texScrollScaleX, texScrollScaleY, texScrollRotate,
-                colorCalcOnEmitter, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorAnimRndmMask,
+                texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
+                texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,
+                isGlblClrAnm, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorLoopOfstMask,
             };
         } else if (fourcc === 'ESP1') {
             // JPAExtraShape
@@ -3666,7 +3658,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             const isEnableField = !!view.getUint8(tableIdx + 0x36);
 
             const isEnableDrawParent = !!view.getUint8(tableIdx + 0x44);
-            assertExists(bsp1).stopDrawParent = !isEnableDrawParent;
+            assertExists(bsp1).isNoDrawParent = !isEnableDrawParent;
 
             const isEnableScaleOut = !!view.getUint8(tableIdx + 0x45);
             const isEnableAlphaOut = !!view.getUint8(tableIdx + 0x46);
@@ -3756,7 +3748,7 @@ function parseResource_JEFFjpa1(res: JPAResourceRaw): JPAResource {
             // Contains physics simulation fields that act on the particles.
 
             const type: FieldType = view.getUint8(tableIdx + 0x0C);
-            const velType: FieldVelType = view.getUint8(tableIdx + 0x0E);
+            const velType: FieldAddType = view.getUint8(tableIdx + 0x0E);
             const cycle = view.getUint8(tableIdx + 0x0F);
             const sttFlag = view.getUint8(tableIdx + 0x10);
 
@@ -3939,26 +3931,26 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
 
             const colorInSelect = (flags >>> 0x0F) & 0x07;
             const alphaInSelect = (flags >>> 0x12) & 0x01;
-            const traverseOrder: TraverseOrder = (flags >>> 0x15) & 0x01;
+            const isDrawFwdAhead = !!(flags >>> 0x15);
 
             const isEnableTexScrollAnm = !!(flags & 0x01000000);
-            const drawChildrenBefore   = !!(flags & 0x00400000);
+            const isDrawPrntAhead   = !!(flags & 0x00400000);
             const isEnableProjection   = !!(flags & 0x00100000);
-            const texCalcOnEmitter     = !!(flags & 0x00004000);
-            const colorCalcOnEmitter   = !!(flags & 0x00001000);
+            const isGlblTexAnm     = !!(flags & 0x00004000);
+            const isGlblClrAnm   = !!(flags & 0x00001000);
 
             // stopDrawParent is in the SSP1 block in JPA1.
-            const stopDrawParent = false;
+            const isNoDrawParent = false;
             // stopDrawChild does not exist in JPA1.
-            const stopDrawChild = false;
+            const isNoDrawChild = false;
 
-            const globalScale2DX = view.getFloat32(dataBegin + 0x08);
-            const globalScale2DY = view.getFloat32(dataBegin + 0x0C);
-            const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
+            const baseSizeX = view.getFloat32(dataBegin + 0x08);
+            const baseSizeY = view.getFloat32(dataBegin + 0x0C);
+            const baseSize = vec2.fromValues(baseSizeX, baseSizeY);
 
             const anmRndm = view.getInt16(dataBegin + 0x10);
-            const colorAnimRndmMask = -((flags >>> 11) & 0x01);
-            const texIdxAnimRndmMask = -((flags >>> 13) & 0x01);
+            const colorLoopOfstMask = -((flags >>> 11) & 0x01);
+            const texIdxLoopOfstMask = -((flags >>> 13) & 0x01);
 
             const blendModeFlags = view.getUint16(dataBegin + 0x12);
             const alphaCompareFlags = view.getUint8(dataBegin + 0x14);
@@ -3990,22 +3982,22 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 colorEnvAnimData = makeColorTable(buffer.slice(colorEnvAnimDataOffs), colorEnvAnimDataCount, colorAnimMaxFrm);
             }
 
-            const tilingX = view.getFloat32(dataBegin + 0x28);
-            const tilingY = view.getFloat32(dataBegin + 0x2C);
+            const tilingS = view.getFloat32(dataBegin + 0x28);
+            const tilingT = view.getFloat32(dataBegin + 0x2C);
 
             const texCalcIdxType: CalcIdxType = (texFlags >>> 2) & 0x07;
 
-            const texStaticTransX = view.getFloat32(dataBegin + 0x30);
-            const texStaticTransY = view.getFloat32(dataBegin + 0x34);
-            const texStaticScaleX = view.getFloat32(dataBegin + 0x38);
-            const texStaticScaleY = view.getFloat32(dataBegin + 0x3C);
+            const texInitTransX = view.getFloat32(dataBegin + 0x30);
+            const texInitTransY = view.getFloat32(dataBegin + 0x34);
+            const texInitScaleX = view.getFloat32(dataBegin + 0x38);
+            const texInitScaleY = view.getFloat32(dataBegin + 0x3C);
             // texStaticRotate was added in JPA2.
-            const texStaticRotate = 0;
-            const texScrollTransX = view.getFloat32(dataBegin + 0x40);
-            const texScrollTransY = view.getFloat32(dataBegin + 0x44);
-            const texScrollScaleX = view.getFloat32(dataBegin + 0x48);
-            const texScrollScaleY = view.getFloat32(dataBegin + 0x4C);
-            const texScrollRotate = view.getFloat32(dataBegin + 0x50);
+            const texInitRot = 0;
+            const texIncTransX = view.getFloat32(dataBegin + 0x40);
+            const texIncTransY = view.getFloat32(dataBegin + 0x44);
+            const texIncScaleX = view.getFloat32(dataBegin + 0x48);
+            const texIncScaleY = view.getFloat32(dataBegin + 0x4C);
+            const texIncRot = view.getFloat32(dataBegin + 0x50);
 
             let texIdxAnimData: Uint8Array | null = null;
             const isEnableTextureAnm = !!(texFlags & 0x00000001);
@@ -4013,14 +4005,14 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
                 texIdxAnimData = buffer.createTypedArray(Uint8Array, tableIdx + 0x60, texIdxAnimCount, Endianness.BIG_ENDIAN);
 
             bsp1 = {
-                shapeType, dirType, rotType, planeType, globalScale2D, tilingX, tilingY, traverseOrder, drawChildrenBefore, stopDrawParent, stopDrawChild,
+                shapeType, dirType, rotType, planeType, baseSize, tilingS, tilingT, isDrawFwdAhead, isDrawPrntAhead, isNoDrawParent, isNoDrawChild,
                 colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 anmRndm,
-                texCalcOnEmitter, texCalcIdxType, texIdx, texIdxAnimData, texIdxAnimRndmMask,
+                isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
                 isEnableTexScrollAnm, isEnableProjection,
-                texStaticTransX, texStaticTransY, texStaticScaleX, texStaticScaleY, texStaticRotate,
-                texScrollTransX, texScrollTransY, texScrollScaleX, texScrollScaleY, texScrollRotate,
-                colorCalcOnEmitter, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorAnimRndmMask,
+                texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
+                texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,
+                isGlblClrAnm, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorLoopOfstMask,
             };
         } else if (fourcc === 'ESP1') {
             // JPAExtraShape
@@ -4115,8 +4107,8 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
 
-            const isEnableDrawParent = !!(flags & 0x00080000);
-            assertExists(bsp1).stopDrawParent = !isEnableDrawParent;
+            const isDrawParent = !!(flags & 0x00080000);
+            assertExists(bsp1).isNoDrawParent = !isDrawParent;
 
             const posRndm = view.getFloat32(dataBegin + 0x04);
             const baseVel = view.getFloat32(dataBegin + 0x08);
@@ -4199,7 +4191,7 @@ function parseResource_JPAC1_00(res: JPAResourceRaw): JPAResource {
             const flags = view.getUint32(dataBegin + 0x00);
             const sttFlag = (flags >>> 0x10);
             const type: FieldType = flags & 0x0F;
-            const velType: FieldVelType = (flags >>> 8) & 0x03;
+            const velType: FieldAddType = (flags >>> 8) & 0x03;
 
             const mag = view.getFloat32(dataBegin + 0x04);
             const magRndm = view.getFloat32(dataBegin + 0x08);
@@ -4382,25 +4374,25 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             let planeType: PlaneType = (flags >>> 10) & 0x01;
             if (shapeType === ShapeType.DirectionCross || shapeType === ShapeType.RotationCross)
                 planeType = PlaneType.X;
-            const tilingX = !!((flags >>> 0x19) & 0x01) ? 2.0 : 1.0;
-            const tilingY = !!((flags >>> 0x1A) & 0x01) ? 2.0 : 1.0;
+            const tilingS = !!((flags >>> 0x19) & 0x01) ? 2.0 : 1.0;
+            const tilingT = !!((flags >>> 0x1A) & 0x01) ? 2.0 : 1.0;
 
-            const stopDrawParent = !!(flags & 0x08000000);
-            const stopDrawChild  = !!(flags & 0x10000000);
+            const isNoDrawParent = !!(flags & 0x08000000);
+            const isNoDrawChild  = !!(flags & 0x10000000);
 
             const colorInSelect = (flags >>> 0x0F) & 0x07;
             const alphaInSelect = (flags >>> 0x12) & 0x01;
-            const traverseOrder: TraverseOrder = (flags >>> 0x15) & 0x01;
 
             const isEnableTexScrollAnm = !!(flags & 0x01000000);
-            const drawChildrenBefore   = !!(flags & 0x00400000);
+            const isDrawFwdAhead       = !!(flags & 0x00200000);
+            const isDrawPrntAhead      = !!(flags & 0x00400000);
             const isEnableProjection   = !!(flags & 0x00100000);
-            const texCalcOnEmitter     = !!(flags & 0x00004000);
-            const colorCalcOnEmitter   = !!(flags & 0x00001000);
+            const isGlblTexAnm     = !!(flags & 0x00004000);
+            const isGlblClrAnm   = !!(flags & 0x00001000);
 
-            const globalScale2DX = view.getFloat32(tableIdx + 0x10);
-            const globalScale2DY = view.getFloat32(tableIdx + 0x14);
-            const globalScale2D = vec2.fromValues(globalScale2DX, globalScale2DY);
+            const baseSizeX = view.getFloat32(tableIdx + 0x10);
+            const baseSizeY = view.getFloat32(tableIdx + 0x14);
+            const baseSize = vec2.fromValues(baseSizeX, baseSizeY);
 
             const blendModeFlags = view.getUint16(tableIdx + 0x18);
             const alphaCompareFlags = view.getUint8(tableIdx + 0x1A);
@@ -4418,33 +4410,33 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const texCalcIdxType: CalcIdxType = (texFlags >>> 2) & 0x07;
 
             const anmRndm = view.getUint8(tableIdx + 0x2E);
-            const colorAnimRndmMask = view.getUint8(tableIdx + 0x2F);
-            const texIdxAnimRndmMask = view.getUint8(tableIdx + 0x30);
+            const colorLoopOfstMask = view.getUint8(tableIdx + 0x2F);
+            const texIdxLoopOfstMask = view.getUint8(tableIdx + 0x30);
 
             let extraDataOffs = tableIdx + 0x34;
 
-            let texStaticTransX = 0;
-            let texStaticTransY = 0;
-            let texStaticScaleX = 0;
-            let texStaticScaleY = 0;
-            let texStaticRotate = 0;
-            let texScrollTransX = 0;
-            let texScrollTransY = 0;
-            let texScrollScaleX = 0;
-            let texScrollScaleY = 0;
-            let texScrollRotate = 0;
+            let texInitTransX = 0;
+            let texInitTransY = 0;
+            let texInitScaleX = 0;
+            let texInitScaleY = 0;
+            let texInitRot = 0;
+            let texIncTransX = 0;
+            let texIncTransY = 0;
+            let texIncScaleX = 0;
+            let texIncScaleY = 0;
+            let texIncRot = 0;
 
             if (!!(flags & 0x01000000)) {
-                texStaticTransX = view.getFloat32(extraDataOffs + 0x00);
-                texStaticTransY = view.getFloat32(extraDataOffs + 0x04);
-                texStaticScaleX = view.getFloat32(extraDataOffs + 0x08);
-                texStaticScaleY = view.getFloat32(extraDataOffs + 0x0C);
-                texStaticRotate = view.getFloat32(extraDataOffs + 0x10);
-                texScrollTransX = view.getFloat32(extraDataOffs + 0x14);
-                texScrollTransY = view.getFloat32(extraDataOffs + 0x18);
-                texScrollScaleX = view.getFloat32(extraDataOffs + 0x1C);
-                texScrollScaleY = view.getFloat32(extraDataOffs + 0x20);
-                texScrollRotate = view.getFloat32(extraDataOffs + 0x24);
+                texInitTransX = view.getFloat32(extraDataOffs + 0x00);
+                texInitTransY = view.getFloat32(extraDataOffs + 0x04);
+                texInitScaleX = view.getFloat32(extraDataOffs + 0x08);
+                texInitScaleY = view.getFloat32(extraDataOffs + 0x0C);
+                texInitRot = view.getFloat32(extraDataOffs + 0x10);
+                texIncTransX = view.getFloat32(extraDataOffs + 0x14);
+                texIncTransY = view.getFloat32(extraDataOffs + 0x18);
+                texIncScaleX = view.getFloat32(extraDataOffs + 0x1C);
+                texIncScaleY = view.getFloat32(extraDataOffs + 0x20);
+                texIncRot = view.getFloat32(extraDataOffs + 0x24);
                 extraDataOffs += 0x28;
             }
 
@@ -4473,14 +4465,14 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const colorCalcIdxType: CalcIdxType = (colorFlags >>> 4) & 0x07;
 
             bsp1 = {
-                shapeType, dirType, rotType, planeType, globalScale2D, tilingX, tilingY, traverseOrder, drawChildrenBefore, stopDrawParent, stopDrawChild,
+                shapeType, dirType, rotType, planeType, baseSize, tilingS, tilingT, isDrawFwdAhead, isDrawPrntAhead, isNoDrawParent, isNoDrawChild,
                 colorInSelect, alphaInSelect, blendModeFlags, alphaCompareFlags, alphaRef0, alphaRef1, zModeFlags,
                 anmRndm,
-                texCalcOnEmitter, texCalcIdxType,texIdx, texIdxAnimData, texIdxAnimRndmMask,
+                isGlblTexAnm, texCalcIdxType, texIdx, texIdxAnimData, texIdxLoopOfstMask,
                 isEnableTexScrollAnm, isEnableProjection,
-                texStaticTransX, texStaticTransY, texStaticScaleX, texStaticScaleY, texStaticRotate,
-                texScrollTransX, texScrollTransY, texScrollScaleX, texScrollScaleY, texScrollRotate,
-                colorCalcOnEmitter, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorAnimRndmMask,
+                texInitTransX, texInitTransY, texInitScaleX, texInitScaleY, texInitRot,
+                texIncTransX, texIncTransY, texIncScaleX, texIncScaleY, texIncRot,
+                isGlblClrAnm, colorCalcIdxType, colorPrm, colorEnv, colorEnvAnimData, colorPrmAnimData, colorAnimMaxFrm, colorLoopOfstMask,
             };
         } else if (fourcc === 'ESP1') {
             // JPAExtraShape
@@ -4655,7 +4647,7 @@ function parseResource_JPAC2_10(res: JPAResourceRaw): JPAResource {
             const flags = view.getUint32(tableIdx + 0x08);
             const sttFlag = (flags >>> 0x10);
             const type: FieldType = flags & 0x0F;
-            const velType: FieldVelType = (flags >>> 8) & 0x03;
+            const velType: FieldAddType = (flags >>> 8) & 0x03;
 
             // maxDist does not exist in JPA2
             const maxDist = 0;
