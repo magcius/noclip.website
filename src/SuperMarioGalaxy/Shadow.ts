@@ -1288,6 +1288,10 @@ export function setShadowDropLength(actor: LiveActor, name: string | null, v: nu
     actor.shadowControllerList!.getController(name)!.setDropLength(v);
 }
 
+export function setShadowDropDirection(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
+    actor.shadowControllerList!.getController(name)!.setDropDirPtr(v);
+}
+
 export function offCalcShadow(actor: LiveActor, name: string | null = null): void {
     actor.shadowControllerList!.getController(name)!.setCalcCollisionMode(CalcCollisionMode.Off);
 }
