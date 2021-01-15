@@ -2,9 +2,9 @@
 import * as GX_Material from '../gx/gx_material';
 import { AVTexture, AVTpl } from './AVtpl';
 
-import { LoadedVertexDraw } from '../gx/gx_displaylist';
+import { LoadedVertexData, LoadedVertexDraw } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
-import { GfxDevice, GfxNormalizedViewportCoords, GfxSampler } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxMipFilterMode, GfxNormalizedViewportCoords, GfxSampler, GfxTexFilterMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, PacketParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
 import { mat4, vec3 } from 'gl-matrix';
@@ -15,6 +15,7 @@ import { nArray } from '../util';
 import { AABB, IntersectionState } from '../Geometry';
 import { ViewerRenderInput } from '../viewer';
 import { TextureMapping } from '../TextureHolder';
+import { CullMode } from '../gx/gx_enum';
 
 
 export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
@@ -30,28 +31,39 @@ class InstanceStateData {
 }
 
 export class GcmfModel {
-    public shapeData: GXShapeHelperGfx[] = [];
+    public shapeHelperGfx: GXShapeHelperGfx[] = [];
     public materialData: MaterialData[] = [];
     private bufferCoalescer: GfxBufferCoalescerCombo;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public gcmfEntry: GMA.GcmfEntry, private materialHacks?: GX_Material.GXMaterialHacks) {
-        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, gcmfEntry.gcmf.shapes.map((shape) => shape.loadedVertexDatas[0]));
+        const loadedVertexDatas: LoadedVertexData[] = [];
+        gcmfEntry.gcmf.shapes.forEach(shape => {
+            for (let i = 0; i < shape.loadedVertexDatas.length; i++) {
+                loadedVertexDatas.push(shape.loadedVertexDatas[i]);
+            }
+        });
+        this.bufferCoalescer = loadedDataCoalescerComboGfx(device, loadedVertexDatas);
 
         const gcmf = gcmfEntry.gcmf;
+        let idx = 0;
         for (let i = 0; i < gcmf.shapes.length; i++) {
             const shape = gcmf.shapes[i];
-            const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[i];
-            this.shapeData[i] = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, shape.loadedVertexLayout, shape.loadedVertexDatas[0]);
+            shape.loadedVertexDatas.forEach(loadedVertexDatas => {
+                const coalescedBuffers = this.bufferCoalescer.coalescedBuffers[idx];
+                const shapeData = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, shape.loadedVertexLayout, loadedVertexDatas);
+                this.shapeHelperGfx.push(shapeData);
+                idx++;
+            });
         }
 
         for (let i = 0; i < gcmf.shapes.length; i++) {
-            for(let j = 0; j < 3; j++){
+            for(let j = 0; j < 1; j++){
                 const GcmfMaterial = gcmf.shapes[i].material;
-                const texIdx = GcmfMaterial.texIdxs[j];
-                if (texIdx < 0){
-                    continue;
+                const samplerIdx = GcmfMaterial.samplerIdxs[j];
+                if (samplerIdx < 0){
+                    break;
                 }
-                const sampler = gcmf.samplers[texIdx];
+                const sampler = gcmf.samplers[samplerIdx];
                 const material = new MaterialData(device, GcmfMaterial, sampler, this.materialHacks);
                 this.materialData.push(material);
             }
@@ -59,8 +71,8 @@ export class GcmfModel {
     }
 
     public destroy(device: GfxDevice): void {
-        for (let i = 0; i < this.shapeData.length; i++)
-            this.shapeData[i].destroy(device);
+        for (let i = 0; i < this.shapeHelperGfx.length; i++)
+            this.shapeHelperGfx[i].destroy(device);
         for (let i = 0; i < this.materialData.length; i++)
             this.materialData[i].destroy(device);
         this.bufferCoalescer.destroy(device);
@@ -90,20 +102,27 @@ class ShapeInstance {
 
         const usesSkinning = this.shape.material.vtxRenderFlag < 0x08;
         
-        materialInstance.fillMaterialParams(template, textureHolder, this.shape.material.texIdxs[0], null, camera, viewport);
+        for(let i = 0; i < this.shape.material.samplerIdxs.length; i++){
+            if (this.shape.material.samplerIdxs[i] < 0){
+                break;
+            }
+            materialInstance.fillMaterialParams(template, textureHolder, this.shape.material.samplerIdxs[i], null, camera, viewport);
+        }
 
         packetParams.clear();
-        for (let p = 0; p < this.shape.loadedVertexDatas[0].draws.length; p++) {
-            const packet = this.shape.loadedVertexDatas[0].draws[p];
-
-            mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[0]);
-
-            const renderInst = renderInstManager.newRenderInst();
-            this.shapeData.setOnRenderInst(renderInst, packet);
-            materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
-
-            renderInstManager.submitRenderInst(renderInst);
-        }
+        this.shape.loadedVertexDatas.forEach(loadedVertexDatas => {
+            for (let p = 0; p < loadedVertexDatas.draws.length; p++) {
+                const packet = loadedVertexDatas.draws[p];
+    
+                mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[0]);
+    
+                const renderInst = renderInstManager.newRenderInst();
+                this.shapeData.setOnRenderInst(renderInst, packet);
+                materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+    
+                renderInstManager.submitRenderInst(renderInst);
+            }
+        });
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -135,7 +154,7 @@ class MaterialInstance {
     public sortKey: number = 0;
     public visible = true;
 
-    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public textures: GMA.GcmfSampler[]) {
+    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public samplers: GMA.GcmfSampler[]) {
         const gxMaterial: GX_Material.GXMaterial = Object.assign({}, materialData.material.gxMaterial);
         gxMaterial.lightChannels = arrayCopy(gxMaterial.lightChannels, lightChannelCopy);
         gxMaterial.useTexMtxIdx = nArray(8, () => false);
@@ -192,13 +211,13 @@ class MaterialInstance {
     private fillTextureMapping(dst: TextureMapping, textureHolder: GXTextureHolder, i: number): void {
         const material = this.materialData.material;
         dst.reset();
-        let idx = material.texIdxs[i];
-        if(idx < 0){
+        let samplerIdx = material.samplerIdxs[i];
+        if(samplerIdx < 0){
             return;
         }
         let texIdx = 0;
-        texIdx = this.textures[idx].texIdx;
-        const name: string = `texture_`+texIdx;
+        texIdx = this.samplers[samplerIdx].texIdx;
+        const name: string = `texture_${texIdx}`;
         textureHolder.fillTextureMapping(dst, name);
         dst.gfxSampler = this.materialData.gfxSamplers[i];
     }
@@ -244,13 +263,16 @@ export class GcmfModelInstance {
         }
         
         const gcmf = this.gcmfModel.gcmfEntry.gcmf;
+        let idx = 0;
         for (let i = 0; i < gcmf.shapes.length; i++) {
             const materialInstance = this.materialInstances[i];
             const shape = gcmf.shapes[i];
-            const shapeData = this.gcmfModel.shapeData[i];
-            const shapeInstance = new ShapeInstance(shape, shapeData, materialInstance);
-
-            this.shapeInstances.push(shapeInstance);
+            for (let j = 0; j < shape.loadedVertexDatas.length; j++){
+                const shapeData = this.gcmfModel.shapeHelperGfx[idx];
+                const shapeInstance = new ShapeInstance(shape, shapeData, materialInstance);
+                this.shapeInstances.push(shapeInstance);
+                idx++;
+            }
         }
     }
 
@@ -333,9 +355,28 @@ class MaterialData {
     public gfxSamplers: GfxSampler[] = [];
 
     constructor(device: GfxDevice, public material: GMA.GcmfMaterial, public sampler: GMA.GcmfSampler, public materialHacks?: GX_Material.GXMaterialHacks) {
+        function translateAVTexFilterGfx(mipmapAV: number): [GfxTexFilterMode, GfxMipFilterMode] {
+            // "Debug Mode" Menu showing like this
+            // 0x00: "LINER & MIPMAP NEAR, LINER"  (mipmap: 0) linear?
+            // 0x01: "LINER & MIPMAP LINER, LINER" (mipmap: 1) binear?
+            // 0x02: "LINER & MIPMAP LINER, LINER" (mipmap: 3) trilinear?
+            // 0x04: "LINER & MIPMAP LINER, LINER"
+            // 0x08: "NEAR & MIPMAP NEAR, NEAR (NEAR FLAG)" (mipmap: 0)
+            // 0x10: "LINER & MIPMAP NEAR, LINER"
+            let texFilter = GfxTexFilterMode.POINT;
+            let MipFilter = GfxMipFilterMode.NO_MIP;
+    
+            if ((mipmapAV & (1 << 1)) !== 0){
+                texFilter = GfxTexFilterMode.BILINEAR;
+                MipFilter = GfxMipFilterMode.LINEAR;
+            }
+
+            return [ texFilter, MipFilter ]
+        }
+    
         for (let i = 0; i < 8; i++) {
-            const [minFilter, mipFilter] = translateTexFilterGfx(sampler.mipmap);
-            const [magFilter]            = translateTexFilterGfx(sampler.mipmap);
+            const [minFilter, mipFilter] = translateAVTexFilterGfx(sampler.mipmapAV);
+            const [magFilter]            = translateAVTexFilterGfx(sampler.mipmapAV);
             
             const gfxSampler = device.createSampler({
                 wrapS: translateWrapModeGfx(sampler.wrapS),
