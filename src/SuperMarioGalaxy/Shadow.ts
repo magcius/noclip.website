@@ -1026,7 +1026,7 @@ function getJMapInfoV3f(dst: vec3, infoIter: JMapInfoIter, prefix: string): void
 function setUpShadowControlBaseMtxFromCSV(controller: ShadowController, actor: LiveActor, infoIter: JMapInfoIter): void {
     const jointName = infoIter.getValueString('Joint');
 
-    if (jointName === null || jointName === '::ACTOR_TRANS' || jointName === '::OTHER_TRANS') {
+    if (jointName === null || jointName === '' || jointName === '::ACTOR_TRANS' || jointName === '::OTHER_TRANS') {
         controller.setDropPosPtr(actor.translation);
     } else if (jointName === '::FIX_POSITION') {
         controller.setDropPosFix(actor.translation);

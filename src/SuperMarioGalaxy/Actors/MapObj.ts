@@ -9,13 +9,13 @@ import { ColorKind } from '../../gx/gx_render';
 import { computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixSRT, computeModelMatrixT, getMatrixAxis, getMatrixAxisX, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, Vec3One, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { assert, assertExists, fallback, nArray } from '../../util';
 import * as Viewer from '../../viewer';
-import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos, getBckFrameMax, setBvaFrameAndStop, getBvaFrameMax, isBckPlaying, setBckRate, makeAxisCrossPlane, initCollisionPartsAutoEqualScale } from '../ActorUtil';
+import { addVelocityToGravity, attenuateVelocity, calcDistToCamera, calcFrontVec, calcGravity, calcGravityVector, calcMtxFromGravityAndZAxis, calcRailPointPos, calcRailPosAtCoord, calcUpVec, connectToSceneCollisionMapObj, connectToSceneCollisionMapObjStrongLight, connectToSceneCollisionMapObjWeakLight, connectToSceneEnvironment, connectToSceneEnvironmentStrongLight, connectToSceneIndirectMapObj, connectToSceneMapObj, connectToSceneMapObjMovement, connectToSceneMapObjStrongLight, connectToSceneNoShadowedMapObjStrongLight, connectToSceneNoSilhouettedMapObj, connectToScenePlanet, getBckFrameMaxNamed, getBrkFrameMax, getCamPos, getCurrentRailPointArg0, getCurrentRailPointArg1, getCurrentRailPointNo, getEaseOutValue, getJointMtx, getJointMtxByName, getNextRailPointArg2, getPlayerPos, getRailDirection, getRailPointNum, getRailPos, getRailTotalLength, getRandomFloat, getRandomInt, getRandomVector, hideModel, initCollisionParts, initCollisionPartsAutoEqualScaleOne, initDefaultPos, invalidateCollisionPartsForActor, invalidateShadowAll, isBckExist, isBckOneTimeAndStopped, isBckStopped, isBtkExist, isBtpExist, isExistCollisionResource, isExistRail, isHiddenModel, isLoopRail, isNearPlayer, isRailReachedGoal, isSameDirection, isValidSwitchB, isValidSwitchDead, isZeroGravity, joinToGroupArray, listenStageSwitchOnOffA, listenStageSwitchOnOffB, makeMtxFrontNoSupportPos, makeMtxFrontSidePos, makeMtxFrontUpPos, makeMtxUpFrontPos, makeMtxUpNoSupportPos, moveCoord, moveCoordAndFollowTrans, moveCoordAndTransToNearestRailPos, moveCoordAndTransToRailPoint, moveCoordToNearestPos, reboundVelocityFromCollision, reverseRailDirection, rotateVecDegree, setBckFrameAndStop, setBrkFrameAndStop, setBtkFrameAndStop, setBtpFrameAndStop, showModel, startBck, startBrk, startBtk, startBtp, startBva, syncStageSwitchAppear, tryStartAllAnim, turnVecToVecCosOnPlane, useStageSwitchReadAppear, useStageSwitchSleep, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, validateCollisionPartsForActor, validateShadowAll, vecKillElement, appearStarPieceToDirection, declareStarPiece, isValidSwitchAppear, connectToScene, calcSqDistToCamera, quatFromMat4, turnVecToVecCos, getBckFrameMax, setBvaFrameAndStop, getBvaFrameMax, isBckPlaying, setBckRate, makeAxisCrossPlane, initCollisionPartsAutoEqualScale, calcDistanceToPlayer } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, isBinded, isBindedGround, isBindedGroundDamageFire, isBindedRoof, isBindedWall, isOnGround, tryCreateCollisionMoveLimit } from '../Collision';
 import { registerDemoActionNerveFunction, tryRegisterDemoCast } from '../Demo';
 import { LightType } from '../DrawBuffer';
 import { deleteEffect, deleteEffectAll, emitEffect, emitEffectWithScale, forceDeleteEffect, isEffectValid, isRegisteredEffect, setEffectEnvColor, setEffectHostMtx, setEffectHostSRT, setEffectPrmColor } from '../EffectSystem';
 import { initMultiFur } from '../Fur';
-import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorMapObj, HitSensor, HitSensorType, invalidateHitSensors, isSensorMapObj, validateHitSensors } from '../HitSensor';
+import { addBodyMessageSensorMapObj, addHitSensor, addHitSensorCallbackMapObj, addHitSensorMapObj, HitSensor, HitSensorType, invalidateHitSensors, isSensorMapObj, sendMsgEnemyAttackExplosion, sendMsgPush, validateHitSensors } from '../HitSensor';
 import { getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3, getJMapInfoArg4, getJMapInfoArg5, getJMapInfoArg7, getJMapInfoBool, JMapInfoIter } from '../JMapInfo';
 import { initLightCtrl } from '../LightData';
 import { dynamicSpawnZoneAndLayer, isDead, isMsgTypeEnemyAttack, LiveActor, LiveActorGroup, makeMtxTRFromActor, MessageType, MsgSharedGroup, resetPosition, ZoneAndLayer } from '../LiveActor';
@@ -24,7 +24,7 @@ import { getMapPartsArgMoveConditionType, getMapPartsArgMovePosture, getMapParts
 import { isInWater } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
-import { initShadowFromCSV, initShadowVolumeBox, initShadowVolumeCylinder, initShadowVolumeSphere, setShadowDropLength, setShadowVolumeSphereRadius, setShadowVolumeStartDropOffset } from '../Shadow';
+import { initShadowFromCSV, initShadowVolumeBox, initShadowVolumeCylinder, initShadowVolumeSphere, onCalcShadow, onCalcShadowDropGravity, setShadowDropLength, setShadowVolumeSphereRadius, setShadowVolumeStartDropOffset } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
 import { createBloomModel, createIndirectPlanetModel, PartsModel } from './MiscActor';
@@ -87,10 +87,18 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     public railPosture: boolean = false;
     public initNerve: TNerve | null = null;
     public initHitSensor: boolean = false;
+    public affectedScale: boolean = false;
+    public sensorPairwiseCapacity: number = 0;
+    public sensorSize: number = 0;
+    public sensorOffset = vec3.create();
+    public sensorCallback: boolean = false;
     public initFur: boolean = false;
     public calcGravity: boolean = false;
     public initShadow: string | null = null;
     public shadowDropLength: number = -1;
+    public initBinder: boolean = false;
+    public binderRadius: number = 0;
+    public binderCenterY: number = 0;
 
     public setupDefaultPos(): void {
         this.setDefaultPos = true;
@@ -132,6 +140,18 @@ class MapObjActorInitInfo<TNerve extends number = number> {
     public setupHitSensor(): void {
         this.initHitSensor = true;
     }
+
+    public setupHitSensorParam(sensorPairwiseCapacity: number, sensorSize: number, sensorOffset: ReadonlyVec3): void {
+        this.sensorPairwiseCapacity = sensorPairwiseCapacity;
+        this.sensorSize = sensorSize;
+        vec3.copy(this.sensorOffset, sensorOffset);
+    }
+
+    public setupBinder(radius: number, centerY: number): void {
+        this.initBinder = true;
+        this.binderRadius = radius;
+        this.binderCenterY = centerY;
+    }
 }
 
 abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNerve> {
@@ -156,6 +176,8 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
             this.connectToScene(sceneObjHolder, initInfo);
         if (initInfo.initLightControl)
             initLightCtrl(sceneObjHolder, this);
+        if (initInfo.initBinder)
+            this.initBinder(initInfo.binderRadius, initInfo.binderCenterY, 0);
         if (initInfo.initEffect !== null)
             this.initEffectKeeper(sceneObjHolder, initInfo.effectFilename);
         if (initInfo.calcGravity)
@@ -169,9 +191,21 @@ abstract class MapObjActor<TNerve extends number = number> extends LiveActor<TNe
             this.initNerve(initInfo.initNerve as TNerve);
 
         if (initInfo.initHitSensor) {
-            // TODO(jstpierre): Add a proper hit sensor with a radius
             this.initHitSensor();
-            addBodyMessageSensorMapObj(sceneObjHolder, this);
+
+            let sensorSize: number;
+            if (initInfo.affectedScale) {
+                vec3.mul(scratchVec3a, initInfo.sensorOffset!, this.scale);
+                sensorSize = initInfo.sensorSize * this.scale[0];
+            } else {
+                vec3.copy(scratchVec3a, initInfo.sensorOffset!);
+                sensorSize = initInfo.sensorSize;
+            }
+
+            if (initInfo.sensorCallback)
+                addHitSensorCallbackMapObj(sceneObjHolder, this, 'body', initInfo.sensorPairwiseCapacity, sensorSize);
+            else
+                addHitSensorMapObj(sceneObjHolder, this, 'body', initInfo.sensorPairwiseCapacity, sensorSize, scratchVec3a);
         }
 
         if (isExistCollisionResource(this, this.objName)) {
@@ -4024,5 +4058,91 @@ export class AnmModelObj extends MapObjActor<AnmModelObjNrv> {
     }
 
     public initCaseNoUseSwitchB(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+    }
+}
+
+function sendMsgEnemyAttackExplosionToAllBindedSensor(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    // TODO(jstpierre): Sort sensor list
+    const thisSensor = actor.hitSensorKeeper!.getSensor('body')!;
+
+    if (isBindedGround(actor))
+        sendMsgEnemyAttackExplosion(sceneObjHolder, actor.binder!.floorHitInfo.hitSensor!, thisSensor);
+    if (isBindedWall(actor))
+        sendMsgEnemyAttackExplosion(sceneObjHolder, actor.binder!.wallHitInfo.hitSensor!, thisSensor);
+    if (isBindedRoof(actor))
+        sendMsgEnemyAttackExplosion(sceneObjHolder, actor.binder!.ceilingHitInfo.hitSensor!, thisSensor);
+}
+
+const enum SpaceMineShadowType { None = -1, OnlyWhenExistRail = 0, Always = 1 }
+const enum SpaceMineNrv { Wait, Appear }
+export class SpaceMine extends MapObjActor<SpaceMineNrv> {
+    private shadowType: SpaceMineShadowType;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        const initInfo = new MapObjActorInitInfo<SpaceMineNrv>();
+        initInfo.setupDefaultPos();
+        initInfo.setupConnectToScene();
+        initInfo.setupEffect(null);
+        // initInfo.setupSound(2);
+        initInfo.setupNerve(SpaceMineNrv.Wait);
+        initInfo.setupRailMover();
+        initInfo.setupHitSensor();
+        initInfo.setupHitSensorParam(8, 100.0, Vec3Zero);
+        // initInfo.setupGroupClipping(16);
+        const shadowType = fallback(getJMapInfoArg0(infoIter), -1);
+        if (SpaceMine.isExistShadow(shadowType))
+            initInfo.setupShadow();
+        const hasBinder = getJMapInfoBool(fallback(getJMapInfoArg1(infoIter), -1));
+        if (hasBinder)
+            initInfo.setupBinder(100.0, 0.0);
+        super(zoneAndLayer, sceneObjHolder, infoIter, initInfo);
+        this.shadowType = shadowType;
+
+        if (this.isCalcShadowAlways())
+            onCalcShadowDropGravity(this);
+
+        this.initFinish(sceneObjHolder, infoIter);
+    }
+
+    public attackSensor(sceneObjHolder: SceneObjHolder, thisSensor: HitSensor, otherSensor: HitSensor): void {
+        if (sendMsgEnemyAttackExplosion(sceneObjHolder, otherSensor, thisSensor)) {
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            sendMsgPush(sceneObjHolder, otherSensor, thisSensor);
+        }
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: SpaceMineNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === SpaceMineNrv.Wait) {
+            if (isBinded(this)) {
+                sendMsgEnemyAttackExplosionToAllBindedSensor(sceneObjHolder, this);
+                this.calcBinderFlag = false;
+                this.makeActorDead(sceneObjHolder);
+            } else {
+                this.rotation[1] += 1.0 * MathConstants.DEG_TO_RAD * deltaTimeFrames;
+            }
+        }
+    }
+
+    public makeActorDead(sceneObjHolder: SceneObjHolder): void {
+        emitEffect(sceneObjHolder, this, 'Explosion');
+        super.makeActorDead(sceneObjHolder);
+    }
+
+    private static isExistShadow(shadowType: SpaceMineShadowType): boolean {
+        return shadowType === SpaceMineShadowType.OnlyWhenExistRail || shadowType === SpaceMineShadowType.Always;
+    }
+
+    private isCalcShadowAlways(): boolean {
+        if (this.shadowType === SpaceMineShadowType.None)
+            return false;
+        else if (this.shadowType === SpaceMineShadowType.Always)
+            return true;
+        else if (this.shadowType === SpaceMineShadowType.OnlyWhenExistRail)
+            return isExistRail(this);
+        else
+            throw "whoops";
     }
 }

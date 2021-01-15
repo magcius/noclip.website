@@ -7632,6 +7632,8 @@ class MogucchiHillPiece extends LiveActor<MogucchiHillPieceNrv> {
 
 const enum AstroDomeSkyNrv { Wait }
 export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
+    private isSkybox = true;
+
     private static skyNames: string[] = [
         'AstroDomeSkyA',
         'AstroDomeSkyB',
@@ -7658,9 +7660,11 @@ export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
     protected calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
         // calcHandledRotateMtx
 
-        getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
-        mat4.identity(this.modelInstance!.modelMatrix);
-        setMatrixTranslation(this.modelInstance!.modelMatrix, scratchVec3);
+        if (this.isSkybox) {
+            getCamPos(scratchVec3, sceneObjHolder.viewerInput.camera);
+            mat4.identity(this.modelInstance!.modelMatrix);
+            setMatrixTranslation(this.modelInstance!.modelMatrix, scratchVec3);
+        }
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
