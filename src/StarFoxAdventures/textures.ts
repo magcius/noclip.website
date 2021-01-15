@@ -7,6 +7,7 @@ import { DataFetcher } from '../DataFetcher';
 
 import { GameInfo } from './scenes';
 import { loadRes } from './resource';
+import { readUint32 } from './util';
 
 export interface SFATexture {
     gfxTexture: GfxTexture;
@@ -19,7 +20,8 @@ export interface SFATextureArray {
     textures: SFATexture[];
 }
 
-export abstract class TextureCollection {
+export abstract class TextureFetcher {
+    public abstract async loadSubdirs(subdirs: string[], dataFetcher: DataFetcher): Promise<void>;
     public abstract getTextureArray(device: GfxDevice, num: number, alwaysUseTex1: boolean): SFATextureArray | null;
     public getTexture(device: GfxDevice, num: number, alwaysUseTex1: boolean) : SFATexture | null {
         const texArray = this.getTextureArray(device, num, alwaysUseTex1);
@@ -98,7 +100,7 @@ function loadFirstValidTexture(device: GfxDevice, tab: DataView, bin: ArrayBuffe
 }
 
 function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayBufferSlice, id: number, isBeta: boolean): (SFATextureArray | null) {
-    const tabValue = tab.getUint32(id * 4);
+    const tabValue = readUint32(tab, 0, id);
     if (isValidTextureTabValue(tabValue)) {
         const arrayLength = (tabValue >> 24) & 0x3f;
         const binOffs = (tabValue & 0xffffff) * 2;
@@ -110,7 +112,7 @@ function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayB
             const result = { textures: [] as SFATexture[] };
             const binDv = bin.createDataView();
             for (let i = 0; i < arrayLength; i++) {
-                const texOffs = binDv.getUint32(binOffs + i * 4);
+                const texOffs = readUint32(binDv, binOffs, i);
                 const compData = bin.slice(binOffs + texOffs);
                 const uncompData = loadRes(compData);
                 result.textures.push(loadTexture(device, uncompData, isBeta));
@@ -124,7 +126,10 @@ function loadTextureArrayFromTable(device: GfxDevice, tab: DataView, bin: ArrayB
 }
 
 function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
-    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 2, 2, 1));
+    const DIM = 128;
+    const CHECKER = 32;
+
+    const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, DIM, DIM, 1));
     const gfxSampler = device.createSampler({
         wrapS: GfxWrapMode.REPEAT,
         wrapT: GfxWrapMode.REPEAT,
@@ -136,23 +141,32 @@ function makeFakeTexture(device: GfxDevice, num: number): SFATextureArray {
     });
 
     // Thanks, StackOverflow.
-    let seed = num;
-    console.log(`Creating fake texture from seed ${seed}`);
-    function random() {
-        let x = Math.sin(seed++) * 10000;
-        return x - Math.floor(x);
-    }
+    // let seed = num;
+    // console.log(`Creating fake texture from seed ${seed}`);
+    // function random() {
+    //     let x = Math.sin(seed++) * 10000;
+    //     return x - Math.floor(x);
+    // }
 
-    const baseColor = [127 + random() * 127, 127 + random() * 127, 127 + random() * 127];
-    const darkBase = [baseColor[0] * 0.7, baseColor[1] * 0.7, baseColor[2] * 0.7];
+    const baseColor = [255, 255, 255];
+    //const baseColor = [127 + random() * 127, 127 + random() * 127, 127 + random() * 127];
+    const darkBase = [baseColor[0] * 0.9, baseColor[1] * 0.9, baseColor[2] * 0.9];
     const light = [baseColor[0], baseColor[1], baseColor[2], 0xff];
     const dark = [darkBase[0], darkBase[1], darkBase[2], 0xff];
 
-    const pixels = new Uint8Array(4 * 4);
-    pixels.set(dark, 0);
-    pixels.set(light, 4);
-    pixels.set(light, 8);
-    pixels.set(dark, 12);
+    // Draw checkerboard
+    const pixels = new Uint8Array(DIM * DIM * 4);
+    for (let y = 0; y < DIM; y++) {
+        for (let x = 0; x < DIM; x++) {
+            const cx = (x / CHECKER)|0;
+            const cy = (y / CHECKER)|0;
+            let color = !!(cx & 1);
+            if (cy & 1)
+                color = !color;
+            const pixel = color ? light : dark;
+            pixels.set(pixel, (y * DIM + x) * 4);
+        }
+    }
 
     const hostAccessPass = device.createHostAccessPass();
     hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
@@ -172,6 +186,15 @@ class TextureFile {
     private textures: (SFATextureArray | null)[] = [];
 
     constructor(private tab: DataView, private bin: ArrayBufferSlice, private name: string, private isBeta: boolean) {
+    }
+
+    public hasTexture(num: number): boolean {
+        if (num < 0 || num * 4 >= this.tab.byteLength) {
+            return false;
+        }
+
+        const tabValue = readUint32(this.tab, 0, num);
+        return isValidTextureTabValue(tabValue);
     }
 
     public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
@@ -203,7 +226,7 @@ async function fetchTextureFile(dataFetcher: DataFetcher, tabPath: string, binPa
     }
 }
 
-export class FakeTextureCollection extends TextureCollection {
+export class FakeTextureFetcher extends TextureFetcher {
     textures: SFATextureArray[] = [];
 
     public getTextureArray(device: GfxDevice, num: number): SFATextureArray | null {
@@ -212,61 +235,116 @@ export class FakeTextureCollection extends TextureCollection {
         }
         return this.textures[num];
     }
+
+    public async loadSubdirs(subdirs: string[]) {
+    }
 }
 
-export class SFATextureCollection extends TextureCollection {
+interface SubdirTextureFiles {
+    tex0: TextureFile | null;
+    tex1: TextureFile | null;
+}
+
+export class SFATextureFetcher extends TextureFetcher {
     private textableBin: DataView;
     private texpre: TextureFile | null;
-    private tex0: TextureFile | null;
-    private tex1: TextureFile | null;
-    private fakes: FakeTextureCollection = new FakeTextureCollection();
+    private subdirTextureFiles: {[subdir: string]: SubdirTextureFiles} = {};
+    private fakes: FakeTextureFetcher = new FakeTextureFetcher();
 
-    constructor(private gameInfo: GameInfo, private isBeta: boolean) {
+    private constructor(private gameInfo: GameInfo, private isBeta: boolean) {
         super();
     }
 
-    public async create(dataFetcher: DataFetcher, subdir: string) {
-        const pathBase = this.gameInfo.pathBase;
-        const [textableBin, texpre, tex0, tex1] = await Promise.all([
+    // This code assumes that a texture with a given ID is identical in all subdirectories
+    // that contain a copy of it. If this is not the case, incorrect textures will appear.
+
+    public static async create(gameInfo: GameInfo, dataFetcher: DataFetcher, isBeta: boolean): Promise<SFATextureFetcher> {
+        const self = new SFATextureFetcher(gameInfo, isBeta);
+
+        const pathBase = self.gameInfo.pathBase;
+        const [textableBin, texpre] = await Promise.all([
             dataFetcher.fetchData(`${pathBase}/TEXTABLE.bin`),
             fetchTextureFile(dataFetcher,
                 `${pathBase}/TEXPRE.tab`,
                 `${pathBase}/TEXPRE.bin`, false), // TEXPRE is never beta
-            fetchTextureFile(dataFetcher,
-                `${pathBase}/${subdir}/TEX0.tab`,
-                `${pathBase}/${subdir}/TEX0.bin`, this.isBeta),
-            fetchTextureFile(dataFetcher,
-                `${pathBase}/${subdir}/TEX1.tab`,
-                `${pathBase}/${subdir}/TEX1.bin`, this.isBeta),
         ]);
-        this.textableBin = textableBin!.createDataView();
-        this.texpre = texpre;
-        this.tex0 = tex0;
-        this.tex1 = tex1;
+        self.textableBin = textableBin!.createDataView();
+        self.texpre = texpre;
+
+        return self;
     }
 
-    public getTextureArray(device: GfxDevice, texId: number, alwaysUseTex1: boolean = false): SFATextureArray | null {
-        let file: TextureFile | null;
-        if (alwaysUseTex1) {
-            file = this.tex1;
-        } else {
+    private async loadSubdir(subdir: string, dataFetcher: DataFetcher) {
+        if (this.subdirTextureFiles[subdir] === undefined) {
+            const pathBase = this.gameInfo.pathBase;
+            const [tex0, tex1] = await Promise.all([
+                fetchTextureFile(dataFetcher,
+                    `${pathBase}/${subdir}/TEX0.tab`,
+                    `${pathBase}/${subdir}/TEX0.bin`, this.isBeta),
+                fetchTextureFile(dataFetcher,
+                    `${pathBase}/${subdir}/TEX1.tab`,
+                    `${pathBase}/${subdir}/TEX1.bin`, this.isBeta),
+            ]);
+
+            this.subdirTextureFiles[subdir] = { tex0, tex1 };
+
+            // XXX: These maps need additional textures to be loaded
+            if (subdir === 'clouddungeon') {
+                await this.loadSubdir('crfort', dataFetcher);
+            } else if (subdir === 'desert') {
+                await this.loadSubdir('dfptop', dataFetcher);
+                await this.loadSubdir('volcano', dataFetcher);
+            } else if (subdir === 'linkb' || subdir === 'linkf') {
+                await this.loadSubdir('volcano', dataFetcher);
+            } else if (subdir === 'shipbattle') {
+                await this.loadSubdir('', dataFetcher);
+            } else if (subdir === 'swapholbot' || subdir === 'shop') {
+                await this.loadSubdir('swaphol', dataFetcher);
+            }
+        }
+    }
+
+    public async loadSubdirs(subdirs: string[], dataFetcher: DataFetcher) {
+        const promises = [];
+        for (let subdir of subdirs) {
+            promises.push(this.loadSubdir(subdir, dataFetcher));
+        }
+        
+        await Promise.all(promises);
+    }
+
+    public getTextureArray(device: GfxDevice, texId: number, useTex1: boolean): SFATextureArray | null {
+        const file = this.getTextureFile(texId, useTex1);
+
+        if (file.file === null) {
+            console.warn(`Texture ID ${texId} was not found in any loaded subdirectories (${Object.keys(this.subdirTextureFiles)})`);
+            return this.fakes.getTextureArray(device, file.texNum);
+        }
+
+        return file.file.getTextureArray(device, file.texNum);
+    }
+
+    private getTextureFile(texId: number, useTex1: boolean): {texNum: number, file: TextureFile | null} {
+        let texNum = texId;
+        if (!useTex1) {
             const textableValue = this.textableBin.getUint16(texId * 2);
-            console.log(`texid ${texId} translated to textable value ${textableValue}`);
             if (texId < 3000 || textableValue == 0) {
-                texId = textableValue;
-                file = this.tex0;
-                console.log(`translated to tex0 num ${texId}`);
+                texNum = textableValue;
             } else {
-                texId = textableValue + 1;
-                file = this.texpre;
-                console.log(`translated to texpre num ${texId}`);
+                texNum = textableValue + 1;
+                return {texNum, file: this.texpre};
             }
         }
 
-        if (file === null) {
-            return this.fakes.getTextureArray(device, texId);
+        for (let subdir in this.subdirTextureFiles) {
+            const files = this.subdirTextureFiles[subdir];
+
+            const file = useTex1 ? files.tex1 : files.tex0;
+            if (file !== null && file.hasTexture(texNum)) {
+                return {texNum, file};
+            }
         }
 
-        return file.getTextureArray(device, texId);
+        return {texNum, file: null};
     }
 }

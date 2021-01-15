@@ -63,6 +63,7 @@ export type ResAssetType<T extends ResType> =
 export class dRes_control_c {
     public resObj: dRes_info_c[] = [];
     public resStg: dRes_info_c[] = [];
+    public resSystem: dRes_info_c[] = [];
 
     public findResInfo(arcName: string, resList: dRes_info_c[]): dRes_info_c | null {
         for (let i = 0; i < resList.length; i++)

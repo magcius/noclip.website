@@ -25,9 +25,9 @@ export class GeometryData {
 
         this.bbox.setFromPoints(positions);
 
-        const posF32A = flat(positions);
-        const normalF32A = flat(normals);
-        const texcoordF32A = flat(texcoords);
+        const posF32A = flat(positions as Float32Array[]);
+        const normalF32A = flat(normals as Float32Array[]);
+        const texcoordF32A = flat(texcoords as Float32Array[]);
 
         const indices = Uint32Array.from(geometry.indices);
         this.indexCount = indices.length;

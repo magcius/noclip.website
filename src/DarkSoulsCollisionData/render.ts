@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import * as IV from './iv';
-import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxHostAccessPass, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage, GfxBuffer, GfxInputState, GfxFormat, GfxInputLayout, GfxProgram, GfxBindingLayoutDescriptor, GfxRenderPass, GfxBindings, GfxHostAccessPass, GfxVertexBufferFrequency, GfxVertexAttributeDescriptor, GfxInputLayoutBufferDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { fillColor, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
@@ -24,12 +24,12 @@ class IVProgram extends DeviceProgram {
     public both = `
 precision mediump float;
 
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
     Mat4x4 u_ModelView;
 };
 
-layout(row_major, std140) uniform ub_ObjectParams {
+layout(std140) uniform ub_ObjectParams {
     vec4 u_Color;
 };
 
@@ -214,9 +214,10 @@ export class Scene implements Viewer.SceneGfx {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setGfxProgram(this.program);
+        template.setMegaStateFlags({ cullMode: GfxCullMode.BACK });
 
         let offs = template.allocateUniformBuffer(IVProgram.ub_SceneParams, 32);
-        const mapped = template.mapUniformBufferF32(offs);
+        const mapped = template.mapUniformBufferF32(IVProgram.ub_SceneParams);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.viewMatrix);
 

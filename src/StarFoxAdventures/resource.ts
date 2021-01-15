@@ -4,6 +4,13 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { decompress as lzoDecompress } from '../Common/Compression/LZO';
 
 import { GameInfo } from './scenes';
+import { DataFetcher } from '../DataFetcher';
+import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation';
+import { ModelFetcher } from './models';
+import { ModelVersion } from './modelloader';
+import { TextureFetcher, SFATextureFetcher } from './textures';
+import { MaterialFactory } from './materials';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 class ZLBHeader {
     public static readonly SIZE = 16;
@@ -71,4 +78,49 @@ export function getSubdir(locationNum: number, gameInfo: GameInfo): string {
         throw Error(`Subdirectory for location ${locationNum} unknown`);
     }
     return gameInfo.subdirs[locationNum];
+}
+
+export class ResourceCollection {
+    public texFetcher: TextureFetcher;
+    public modelFetcher: ModelFetcher;
+    public animColl: AnimCollection;
+    public amapColl: AmapCollection;
+    public modanimColl: ModanimCollection;
+    public tablesTab: DataView;
+    public tablesBin: DataView;
+
+    private constructor(private device: GfxDevice, private gameInfo: GameInfo, private subdirs: string[], private materialFactory: MaterialFactory, private animController: SFAAnimationController) {
+    }
+
+    private async init(dataFetcher: DataFetcher) {
+        const texFetcherPromise = SFATextureFetcher.create(this.gameInfo, dataFetcher, false); // TODO: support beta
+        const pathBase = this.gameInfo.pathBase;
+        const [texFetcher, modelFetcher, animColl, amapColl, modanimColl, tablesTab, tablesBin] = await Promise.all([
+            texFetcherPromise,
+            ModelFetcher.create(this.gameInfo, texFetcherPromise, this.materialFactory, this.animController, ModelVersion.Final),
+            AnimCollection.create(this.gameInfo, dataFetcher, this.subdirs[0]),
+            AmapCollection.create(this.gameInfo, dataFetcher),
+            ModanimCollection.create(this.gameInfo, dataFetcher),
+            dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
+            dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
+        ]);
+        this.texFetcher = texFetcher;
+        this.modelFetcher = modelFetcher;
+        this.animColl = animColl;
+        this.amapColl = amapColl;
+        this.modanimColl = modanimColl;
+        this.tablesTab = tablesTab.createDataView();
+        this.tablesBin = tablesBin.createDataView();
+        
+        await Promise.all([
+            this.texFetcher.loadSubdirs(this.subdirs, dataFetcher),
+            this.modelFetcher.loadSubdirs(this.subdirs, dataFetcher),
+        ]);
+    }
+
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[], materialFactory: MaterialFactory, animController: SFAAnimationController): Promise<ResourceCollection> {
+        const self = new ResourceCollection(device, gameInfo, subdirs, materialFactory, animController);
+        await self.init(dataFetcher);
+        return self;
+    }
 }

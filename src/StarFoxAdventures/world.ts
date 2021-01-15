@@ -1,4 +1,5 @@
 import { mat4, vec3 } from 'gl-matrix';
+import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
@@ -6,24 +7,28 @@ import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
-import { ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData } from "../gx/gx_render";
 import { ViewerRenderInput } from "../viewer";
-import { fillSceneParamsDataOnTemplate, PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
+import * as GX_Material from '../gx/gx_material';
 
-import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
-import { loadRes } from './resource';
-import { ObjectManager, SFAObject } from './objects';
+import { SFA_GAME_INFO, GameInfo } from './scenes';
+import { loadRes, ResourceCollection } from './resource';
+import { ObjectManager, ObjectInstance, ObjectRenderContext } from './objects';
 import { EnvfxManager } from './envfx';
-import { SFATextureCollection } from './textures';
-import { SFARenderer } from './render';
+import { SFARenderer, SceneRenderContext } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
-import { createDownloadLink, dataSubarray, interpS16 } from './util';
-import { Model, ModelVersion } from './models';
-import { MaterialFactory } from './shaders';
+import { dataSubarray, readVec3 } from './util';
+import { ModelInstance, ModelRenderContext, DrawStep } from './models';
+import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
+import { SFABlockFetcher } from './blocks';
+import { colorNewFromRGBA, Color, colorCopy } from '../Color';
+import { getCamPos } from './util';
+import { computeViewMatrix } from '../Camera';
+import { noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -31,15 +36,13 @@ const packetParams = new PacketParams();
 function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, noViewMatrix: boolean = false, materialParams_ = materialParams, packetParams_ = packetParams): void {
     materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
-    const offs = materialHelper.allocateMaterialParams(renderInst);
-    materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams_);
-    renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+    materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
     if (noViewMatrix) {
         mat4.identity(packetParams_.u_PosMtx[0]);
     } else {
         mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
     }
-    fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams_);
+    materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams_);
     renderInstManager.submitRenderInst(renderInst);
 }
 
@@ -47,65 +50,113 @@ function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
 
-interface ObjectInstance {
-    name: string;
-    obj: SFAObject;
-    pos: vec3;
-    radius: number;
-    model?: Model;
+interface Light {
+    position: vec3;
+    color: Color;
+    distAtten: vec3;
+    // TODO: flags and other parameters...
 }
 
-async function testLoadingAModel(device: GfxDevice, dataFetcher: DataFetcher, gameInfo: GameInfo, subdir: string, modelNum: number, modelVersion?: ModelVersion): Promise<Model | null> {
-    const pathBase = gameInfo.pathBase;
-    const texColl = new SFATextureCollection(gameInfo, modelVersion === ModelVersion.Beta);
-    const [modelsTabData, modelsBin, _] = await Promise.all([
-        dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.tab`),
-        dataFetcher.fetchData(`${pathBase}/${subdir}/MODELS.bin`),
-        texColl.create(dataFetcher, subdir),
-    ]);
-    const modelsTab = modelsTabData.createDataView();
+export class World {
+    public animController: SFAAnimationController;
+    public envfxMan: EnvfxManager;
+    public blockFetcher: SFABlockFetcher;
+    public mapInstance: MapInstance | null = null;
+    public materialFactory: MaterialFactory;
+    public objectMan: ObjectManager;
+    public resColl: ResourceCollection;
+    public objectInstances: ObjectInstance[] = [];
+    public lights: Set<Light> = new Set();
 
-    const modelTabValue = modelsTab.getUint32(modelNum * 4);
-    if (modelTabValue === 0) {
-        throw Error(`Model #${modelNum} not found`);
+    private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[]) {
     }
 
-    const modelOffs = modelTabValue & 0xffffff;
-    const modelData = loadRes(modelsBin.subarray(modelOffs + 0x24));
-    
-    // window.main.downloadModel = () => {
-    //     const aEl = createDownloadLink(modelData, `model_${subdir}_${modelNum}.bin`);
-    //     aEl.click();
-    // };
-    
-    try {
-        return new Model(device, new MaterialFactory(device), modelData, texColl, new SFAAnimationController(), modelVersion);
-    } catch (e) {
-        console.warn(`Failed to load model due to exception:`);
-        console.error(e);
-        return null;
+    private async init(dataFetcher: DataFetcher) {
+        this.animController = new SFAAnimationController();
+        this.envfxMan = await EnvfxManager.create(this, dataFetcher);
+        this.materialFactory = new MaterialFactory(this.device, this.envfxMan);
+        
+        const resCollPromise = ResourceCollection.create(this.device, this.gameInfo, dataFetcher, this.subdirs, this.materialFactory, this.animController);
+        const texFetcherPromise = async () => {
+            return (await resCollPromise).texFetcher;
+        };
+
+        const [resColl, blockFetcher, objectMan] = await Promise.all([
+            resCollPromise,
+            SFABlockFetcher.create(this.gameInfo, dataFetcher, this.device, this.materialFactory, this.animController, texFetcherPromise()),
+            ObjectManager.create(this, dataFetcher, false),
+        ]);
+        this.resColl = resColl;
+        this.blockFetcher = blockFetcher;
+        this.objectMan = objectMan;
+    }
+
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[]): Promise<World> {
+        const self = new World(device, gameInfo, subdirs);
+        await self.init(dataFetcher);
+        return self;
+    }
+
+    public setMapInstance(mapInstance: MapInstance | null) {
+        this.mapInstance = mapInstance;
+    }
+
+    public spawnObject(objParams: DataView, parent: ObjectInstance | null = null, mapObjectOrigin: vec3): ObjectInstance {
+        const typeNum = objParams.getUint16(0x0);
+        const pos = readVec3(objParams, 0x8);
+
+        const posInMap = vec3.clone(pos);
+        vec3.add(posInMap, posInMap, mapObjectOrigin);
+
+        const obj = this.objectMan.createObjectInstance(typeNum, objParams, posInMap);
+        obj.setParent(parent);
+        this.objectInstances.push(obj);
+
+        obj.mount();
+
+        return obj;
+    }
+
+    public spawnObjectsFromRomlist(romlist: DataView, parent: ObjectInstance | null = null) {
+        const mapObjectOrigin = vec3.create();
+        if (this.mapInstance !== null) {
+            vec3.set(mapObjectOrigin, 640 * this.mapInstance.info.getOrigin()[0], 0, 640 * this.mapInstance.info.getOrigin()[1]);
+        }
+
+        let offs = 0;
+        let i = 0;
+        while (offs < romlist.byteLength) {
+            const entrySize = 4 * romlist.getUint8(offs + 0x2);
+            const objParams = dataSubarray(romlist, offs, entrySize);
+
+            const obj = this.spawnObject(objParams, parent, mapObjectOrigin);
+            console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
+
+            offs += entrySize;
+            i++;
+        }
     }
 }
+
+const scratchMtx0 = mat4.create();
+const scratchVec0 = vec3.create();
+const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
+    private timeSelect: UI.Slider;
+    private enableAmbient: boolean = true;
+    private layerSelect: UI.Slider;
+    private showObjects: boolean = true;
+    private showDevGeometry: boolean = false;
+    private showDevObjects: boolean = false;
+    private enableLights: boolean = true;
 
-    constructor(device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory, private envfxMan: EnvfxManager, private mapInstance: MapInstance, private objectInstances: ObjectInstance[], private models: (Model | null)[]) {
-        super(device, animController);
+    constructor(private world: World) {
+        super(world.device, world.animController);
 
         packetParams.clear();
-
-        const atmos = this.envfxMan.atmosphere;
-        for (let i = 0; i < 8; i++) {
-            const tex = atmos.textures[i]!;
-            materialParams.m_TextureMapping[i].gfxTexture = tex.gfxTexture;
-            materialParams.m_TextureMapping[i].gfxSampler = tex.gfxSampler;
-            materialParams.m_TextureMapping[i].width = tex.width;
-            materialParams.m_TextureMapping[i].height = tex.height;
-            materialParams.m_TextureMapping[i].lodBias = 0.0;
-            mat4.identity(materialParams.u_TexMtx[i]);
-        }
 
         this.ddraw.setVtxDesc(GX.Attr.POS, true);
         this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
@@ -127,368 +178,312 @@ class WorldRenderer extends SFARenderer {
         this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
     }
 
-    protected update(viewerInput: Viewer.ViewerRenderInput) {
-        super.update(viewerInput);
-        this.materialFactory.update(this.animController);
+    public createPanels(): UI.Panel[] {
+        const timePanel = new UI.Panel();
+        timePanel.setTitle(UI.TIME_OF_DAY_ICON, 'Time');
+
+        this.timeSelect = new UI.Slider();
+        this.timeSelect.setLabel('Time');
+        this.timeSelect.setRange(0, 7, 1);
+        this.timeSelect.setValue(4);
+        timePanel.contents.append(this.timeSelect.elem);
+
+        const enableAmbient = new UI.Checkbox("Enable ambient lighting", true);
+        enableAmbient.onchanged = () => {
+            this.enableAmbient = enableAmbient.checked;
+        };
+        timePanel.contents.append(enableAmbient.elem);
+
+        const layerPanel = new UI.Panel();
+        layerPanel.setTitle(UI.LAYER_ICON, 'Layers');
+
+        const showObjects = new UI.Checkbox("Show objects", true);
+        showObjects.onchanged = () => {
+            this.showObjects = showObjects.checked;
+        };
+        layerPanel.contents.append(showObjects.elem);
+
+        this.layerSelect = new UI.Slider();
+        this.layerSelect.setLabel('Layer');
+        this.layerSelect.setRange(0, 16, 1);
+        this.layerSelect.setValue(1);
+        layerPanel.contents.append(this.layerSelect.elem);
+
+        const showDevObjects = new UI.Checkbox("Show developer objects", false);
+        showDevObjects.onchanged = () => {
+            this.showDevObjects = showDevObjects.checked;
+        };
+        layerPanel.contents.append(showDevObjects.elem);
+
+        const showDevGeometry = new UI.Checkbox("Show developer map geometry", false);
+        showDevGeometry.onchanged = () => {
+            this.showDevGeometry = showDevGeometry.checked;
+        };
+        layerPanel.contents.append(showDevGeometry.elem);
+
+        const enableLights = new UI.Checkbox("Enable lights", true);
+        enableLights.onchanged = () => {
+            this.enableLights = enableLights.checked;
+        }
+        layerPanel.contents.append(enableLights.elem);
+
+        return [timePanel, layerPanel];
     }
 
-    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        this.beginPass(viewerInput, true);
+    public setEnvfx(envfxactNum: number) {
+        this.world.envfxMan.loadEnvfx(envfxactNum);
+    }
 
-        const atmos = this.envfxMan.atmosphere;
-        const atmosTexture = atmos.textures[0]!;
+    // XXX: for testing
+    public enableFineAnims(enable: boolean = true) {
+        this.animController.enableFineSkinAnims = enable;
+    }
 
-        // Extract pitch
-        const cameraFwd = vec3.create();
-        getMatrixAxisZ(cameraFwd, viewerInput.camera.worldMatrix);
-        vec3.negate(cameraFwd, cameraFwd);
-        const camPitch = vecPitch(cameraFwd);
-        const camRoll = Math.PI / 2;
+    protected update(viewerInput: Viewer.ViewerRenderInput) {
+        super.update(viewerInput);
+        this.world.materialFactory.update(this.animController);
+        this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
+        if (!this.enableAmbient) {
+            this.world.envfxMan.setOverrideOutdoorAmbientColor(colorNewFromRGBA(1.0, 1.0, 1.0, 1.0));
+        } else {
+            this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
+        }
+    }
 
+    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Draw atmosphere
-        // FIXME: This implementation is adapted from the game, but correctness is not verified.
-        // We should probably use a different technique, since this one works poorly in VR.
-        // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
-        const fovRollFactor = 3.0 * (atmosTexture.height * 0.5 * viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
-        const pitchFactor = (0.5 * atmosTexture.height - 6.0) - (3.0 * atmosTexture.height * camPitch / Math.PI);
-        const t0 = (pitchFactor + fovRollFactor) / atmosTexture.height;
-        const t1 = t0 - (fovRollFactor * 2.0) / atmosTexture.height;
+        const tex = this.world.envfxMan.getAtmosphereTexture();
+        if (tex !== null && tex !== undefined) {
+            this.beginPass(sceneCtx.viewerInput, true);
+            materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
+            materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
+            materialParams.m_TextureMapping[0].width = tex.width;
+            materialParams.m_TextureMapping[0].height = tex.height;
+            materialParams.m_TextureMapping[0].lodBias = 0.0;
+            mat4.identity(materialParams.u_TexMtx[0]);
 
-        this.ddraw.beginDraw();
-        this.ddraw.begin(GX.Command.DRAW_QUADS);
-        this.ddraw.position3f32(-1, -1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-        this.ddraw.position3f32(-1, 1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-        this.ddraw.position3f32(1, 1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-        this.ddraw.position3f32(1, -1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-        this.ddraw.end();
+            // Extract pitch
+            const cameraFwd = scratchVec0;
+            getMatrixAxisZ(cameraFwd, sceneCtx.viewerInput.camera.worldMatrix);
+            vec3.negate(cameraFwd, cameraFwd);
+            const camPitch = vecPitch(cameraFwd);
+            const camRoll = Math.PI / 2;
 
-        const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
-        submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, viewerInput, true);
+            // FIXME: This implementation is adapted from the game, but correctness is not verified.
+            // We should probably use a different technique, since this one works poorly in VR.
+            // TODO: Implement time of day, which the game implements by blending gradient textures on the CPU.
+            const fovRollFactor = 3.0 * (tex.height * 0.5 * sceneCtx.viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
+            const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
+            const t0 = (pitchFactor + fovRollFactor) / tex.height;
+            const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
+            // TODO: Verify to make sure the sky isn't upside-down!
 
-        this.ddraw.endAndUpload(device, renderInstManager);
+            this.ddraw.beginDraw();
+            this.ddraw.begin(GX.Command.DRAW_QUADS);
+            this.ddraw.position3f32(-1, -1, -1);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+            this.ddraw.position3f32(-1, 1, -1);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+            this.ddraw.position3f32(1, 1, -1);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+            this.ddraw.position3f32(1, -1, -1);
+            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+            this.ddraw.end();
+
+            const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
+            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true);
+
+            this.ddraw.endAndUpload(device, renderInstManager);
+            
+            this.endPass(device);
+        }
         
+        // Draw skyscape
+        this.beginPass(sceneCtx.viewerInput);
+
+        const objectCtx: ObjectRenderContext = {
+            sceneCtx,
+            showDevGeometry: this.showDevGeometry,
+            setupLights: () => {}, // Lights are not used when rendering skyscape objects (?)
+        }
+
+        const eyePos = scratchVec0;
+        getCamPos(eyePos, sceneCtx.viewerInput.camera);
+        for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
+            const obj = this.world.envfxMan.skyscape.objects[i];
+            obj.setPosition(eyePos);
+            obj.render(device, renderInstManager, objectCtx);
+        }
+
         this.endPass(device);
     }
 
-    private renderTestModel(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput, matrix: mat4, model: Model) {
-        model.prepareToRender(device, renderInstManager, viewerInput, matrix, this.sceneTexture, 0);
+    private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
+        let i = 0;
 
-        // Draw bones
-        const drawBones = false;
-        if (drawBones) {
+        if (this.enableLights) {
+            const worldView = scratchMtx0;
+            computeViewMatrix(worldView, modelCtx.sceneCtx.viewerInput.camera);
+
+            // Global specular ambient
+            // (TODO)
+            // lights[i].reset();
+            // vec3.set(lights[i].Direction, 1, 1, 1);
+            // colorCopy(lights[i].Color, modelCtx.outdoorAmbientColor);
+            // vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
+            // vec3.copy(lights[i].DistAtten, [1000, 1000, 1000]);
+            // i++;
+    
+            // const ctx = getDebugOverlayCanvas2D();
+            for (let light of this.world.lights) {
+                // TODO: The correct way to setup lights is to use the 8 closest lights to the model. Distance cutoff, material flags, etc. also come into play.
+    
+                lights[i].reset();
+                // Light information is specified in view space.
+                vec3.transformMat4(lights[i].Position, light.position, worldView);
+                // drawWorldSpacePoint(ctx, modelCtx.viewerInput.camera.clipFromWorldMatrix, light.position);
+                // TODO: use correct parameters
+                colorCopy(lights[i].Color, light.color);
+                vec3.set(lights[i].CosAtten, 1.0, 0.0, 0.0); // TODO
+                vec3.copy(lights[i].DistAtten, light.distAtten);
+    
+                i++;
+                if (i >= 8)
+                    break;
+            }
+        }
+
+        for (; i < 8; i++) {
+            lights[i].reset();
+        }
+    }
+
+    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+        // Render opaques
+
+        this.world.envfxMan.getAmbientColor(scratchColor0, 0); // Always use ambience #0 when rendering map
+        const modelCtx: ModelRenderContext = {
+            sceneCtx,
+            showDevGeometry: this.showDevGeometry,
+            outdoorAmbientColor: scratchColor0,
+            setupLights: this.setupLights.bind(this),
+        }
+
+        this.beginPass(sceneCtx.viewerInput);
+        if (this.world.mapInstance !== null)
+            this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx);
+
+        if (this.showObjects) {
             const ctx = getDebugOverlayCanvas2D();
-            for (let i = 1; i < model.joints.length; i++) {
-                const joint = model.joints[i];
-                const jointMtx = mat4.clone(model.boneMatrices[i]);
-                mat4.mul(jointMtx, jointMtx, matrix);
-                const jointPt = vec3.create();
-                mat4.getTranslation(jointPt, jointMtx);
-                if (joint.parent != 0xff) {
-                    const parentMtx = mat4.clone(model.boneMatrices[joint.parent]);
-                    mat4.mul(parentMtx, parentMtx, matrix);
-                    const parentPt = vec3.create();
-                    mat4.getTranslation(parentPt, parentMtx);
-                    drawWorldSpaceLine(ctx, viewerInput.camera, parentPt, jointPt);
-                } else {
-                    drawWorldSpacePoint(ctx, viewerInput.camera, jointPt);
+            for (let i = 0; i < this.world.objectInstances.length; i++) {
+                const obj = this.world.objectInstances[i];
+    
+                if (obj.getType().isDevObject && !this.showDevObjects)
+                    continue;
+    
+                if (obj.isInLayer(this.layerSelect.getValue())) {
+                    obj.render(device, renderInstManager, modelCtx);
+        
+                    const drawLabels = false;
+                    if (drawLabels)
+                        drawWorldSpaceText(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
                 }
             }
         }
-    }
 
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput) {
-        // Render opaques
-        this.beginPass(viewerInput);
-        this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, 0);
+        // Custom version of this.endPass(device)
+        this.renderInstManager.popTemplateRenderInst();
+
+        let hostAccessPass = device.createHostAccessPass();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        device.submitPass(hostAccessPass);
         
-        const mtx = mat4.create();
-        for (let i = 0; i < this.objectInstances.length; i++) {
-            const obj = this.objectInstances[i];
-            if (obj.model) {
-                mat4.fromTranslation(mtx, obj.pos);
-                mat4.scale(mtx, mtx, [obj.obj.scale, obj.obj.scale, obj.obj.scale]);
-                mat4.rotateY(mtx, mtx, obj.obj.yaw);
-                mat4.rotateX(mtx, mtx, obj.obj.pitch);
-                mat4.rotateZ(mtx, mtx, obj.obj.roll);
-                this.renderTestModel(device, renderInstManager, viewerInput, mtx, obj.model);
+        const renderIntoPass = (keys: number[]) => {
+            this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
+            for (let i = 0; i < keys.length; i++) {
+                this.renderInstManager.setVisibleByFilterKeyExact(keys[i]);
+                this.renderInstManager.drawOnPassRenderer(device, this.renderPass);
             }
-        }
-        
-        for (let i = 0; i < this.models.length; i++) {
-            if (this.models[i] !== null) {
-                mat4.fromTranslation(mtx, [i * 30, 0, 0]);
-                this.renderTestModel(device, renderInstManager, viewerInput, mtx, this.models[i]!);
-            }
-        }
-        
-        this.endPass(device);
+            device.submitPass(this.renderPass);
+        };
 
-        // Render waters, furs and translucents
-        this.beginPass(viewerInput);
-        this.mapInstance.prepareToRenderWaters(device, renderInstManager, viewerInput, this.sceneTexture);
-        this.mapInstance.prepareToRenderFurs(device, renderInstManager, viewerInput, this.sceneTexture);
-        this.endPass(device);
+        renderIntoPass([0, DrawStep.Furs]);
+        renderIntoPass([DrawStep.Waters, 1, 2]);
 
-        for (let drawStep = 1; drawStep < this.mapInstance.getNumDrawSteps(); drawStep++) {
-            this.beginPass(viewerInput);
-            this.mapInstance.prepareToRender(device, renderInstManager, viewerInput, this.sceneTexture, drawStep);
-            this.endPass(device);
-        }    
+        this.renderInstManager.resetRenderInsts();
     }
 }
 
 export class SFAWorldSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, private subdir: string, private mapNum: number, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+    public id: string;
+    private subdirs: string[];
+
+    constructor(public id_: string | string[], subdir_: string | string[], private mapNum: number | null, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
+        if (Array.isArray(id_)) {
+            this.id = id_[0];
+        } else {
+            this.id = id_;
+        }
+
+        if (Array.isArray(subdir_)) {
+            this.subdirs = subdir_;
+        } else {
+            this.subdirs = [subdir_];
+        }
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         console.log(`Creating scene for world ${this.name} (ID ${this.id}) ...`);
 
-        const materialFactory = new MaterialFactory(device);
-        const animController = new SFAAnimationController();
-        const mapSceneInfo = await loadMap(device, materialFactory, animController, context, this.mapNum, this.gameInfo);
-        const mapInstance = new MapInstance(mapSceneInfo);
-        await mapInstance.reloadBlocks();
-
-        // Translate map for SFA world coordinates
-        const objectOrigin = vec3.fromValues(640 * mapSceneInfo.getOrigin()[0], 0, 640 * mapSceneInfo.getOrigin()[1]);
-        const mapMatrix = mat4.create();
-        const mapTrans = vec3.clone(objectOrigin);
-        vec3.negate(mapTrans, mapTrans);
-        mat4.fromTranslation(mapMatrix, mapTrans);
-        mapInstance.setMatrix(mapMatrix);
-
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
-        const texColl = new SFATextureCollection(this.gameInfo, false);
-        await texColl.create(dataFetcher, this.subdir); // TODO: subdirectory depends on map
-        const objectMan = new ObjectManager(this.gameInfo, texColl, animController, false);
-        const earlyObjectMan = new ObjectManager(SFADEMO_GAME_INFO, texColl, animController, true);
-        const envfxMan = new EnvfxManager(this.gameInfo, texColl);
-        const [_1, _2, _3, romlistFile, tablesTab_, tablesBin_] = await Promise.all([
-            objectMan.create(dataFetcher, this.subdir),
-            earlyObjectMan.create(dataFetcher, this.subdir),
-            envfxMan.create(dataFetcher),
-            dataFetcher.fetchData(`${pathBase}/${this.id}.romlist.zlb`),
-            dataFetcher.fetchData(`${pathBase}/TABLES.tab`),
-            dataFetcher.fetchData(`${pathBase}/TABLES.bin`),
-        ]);
-        const romlist = loadRes(romlistFile).createDataView();
-        const tablesTab = tablesTab_.createDataView();
-        const tablesBin = tablesBin_.createDataView();
+        const world = await World.create(device, this.gameInfo, dataFetcher, this.subdirs);
+        
+        let mapInstance: MapInstance | null = null;
+        if (this.mapNum !== null) {
+            const mapSceneInfo = await loadMap(this.gameInfo, dataFetcher, this.mapNum);
+            mapInstance = new MapInstance(mapSceneInfo, world.blockFetcher);
+            await mapInstance.reloadBlocks(dataFetcher);
 
-        const objectInstances: ObjectInstance[] = [];
-        let offs = 0;
-        let i = 0;
-        while (offs < romlist.byteLength) {
-            const fields = {
-                objType: romlist.getUint16(offs + 0x0),
-                entrySize: romlist.getUint8(offs + 0x2),
-                radius: 8 * romlist.getUint8(offs + 0x6),
-                pos: vec3.fromValues(
-                    romlist.getFloat32(offs + 0x8),
-                    romlist.getFloat32(offs + 0xc),
-                    romlist.getFloat32(offs + 0x10)
-                ),
-            };
+            // Translate map for SFA world coordinates
+            const objectOrigin = vec3.fromValues(640 * mapSceneInfo.getOrigin()[0], 0, 640 * mapSceneInfo.getOrigin()[1]);
+            const mapMatrix = mat4.create();
+            const mapTrans = vec3.clone(objectOrigin);
+            vec3.negate(mapTrans, mapTrans);
+            mat4.fromTranslation(mapMatrix, mapTrans);
+            mapInstance.setMatrix(mapMatrix);
 
-            const posInMap = vec3.clone(fields.pos);
-            vec3.add(posInMap, posInMap, objectOrigin);
-
-            const objParams = dataSubarray(romlist, offs, fields.entrySize * 4);
-
-            const obj = await objectMan.loadObject(device, materialFactory, fields.objType);
-
-            if (obj.objClass === 201) {
-                // e.g. sharpclawGr
-                obj.yaw = (objParams.getInt8(0x2a) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 222 || obj.objClass === 233 || obj.objClass === 234 || obj.objClass === 235 || obj.objClass === 283 || obj.objClass === 313 || obj.objClass === 424 || obj.objClass === 666) {
-                // e.g. setuppoint
-                // Do nothing
-            } else if (obj.objClass === 237) {
-                // e.g. SH_LargeSca
-                obj.yaw = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x22) << 8) * Math.PI / 32768;
-                obj.roll = (objParams.getInt8(0x23) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 249) {
-                // e.g. ProjectileS
-                obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
-                const objScale = objParams.getUint8(0x1d);
-                if (objScale !== 0) {
-                    obj.scale *= objScale / 64;
-                }
-            } else if (obj.objClass === 254) {
-                // e.g. MagicPlant
-                obj.yaw = (objParams.getInt8(0x1d) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 256) {
-                // e.g. TrickyWarp
-                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 240 || obj.objClass === 260 || obj.objClass === 261) {
-                // e.g. WarpPoint, SmallBasket, LargeCrate
-                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 272) {
-                // e.g. SH_Portcull
-                obj.yaw = (objParams.getInt8(0x1f) << 8) * Math.PI / 32768;
-                const objScale = objParams.getUint8(0x21) / 64;
-                if (objScale === 0) {
-                    obj.scale = 1.0;
-                } else {
-                    obj.scale *= objScale;
-                }
-            } else if (obj.objClass === 275) {
-                // e.g. SH_newseqob
-                obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 284 || obj.objClass === 289) {
-                // e.g. StaffBoulde
-                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
-                // TODO: scale depends on subtype param
-            } else if (obj.objClass === 288) {
-                // e.g. TrickyGuard
-                obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 293) {
-                // e.g. curve
-                obj.yaw = (objParams.getInt8(0x2c) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x2d) << 8) * Math.PI / 32768;
-                // FIXME: mode 8 and 0x1a also have roll at 0x38
-            } else if (obj.objClass === 294 && obj.objType === 77) {
-                obj.yaw = (objParams.getInt8(0x3d) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x3e) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 306) {
-                // e.g. WaterFallSp
-                obj.roll = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x1b) << 8) * Math.PI / 32768;
-                obj.yaw = (objParams.getInt8(0x1c) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 308) {
-                // e.g. texscroll2
-                const block = mapInstance.getBlockAtPosition(posInMap[0], posInMap[2]);
-                if (block === null) {
-                    console.warn(`couldn't find block for texscroll object`);
-                } else {
-                    const scrollableIndex = objParams.getInt16(0x18);
-                    const speedX = objParams.getInt8(0x1e);
-                    const speedY = objParams.getInt8(0x1f);
-
-                    const tabValue = tablesTab.getUint32(0xe * 4);
-                    const targetTexId = tablesBin.getUint32(tabValue * 4 + scrollableIndex * 4) & 0x7fff;
-                    // Note: & 0x7fff above is an artifact of how the game stores tex id's.
-                    // Bit 15 set means the texture comes directly from TEX1 and does not go through TEXTABLE.
-
-                    const materials = block.getMaterials();
-                    for (let i = 0; i < materials.length; i++) {
-                        if (materials[i] !== undefined) {
-                            const mat = materials[i]!;
-                            for (let j = 0; j < mat.shader.layers.length; j++) {
-                                const layer = mat.shader.layers[j];
-                                if (layer.texId === targetTexId) {
-                                    // Found the texture! Make it scroll now.
-                                    const theTexture = texColl.getTexture(device, targetTexId, true)!;
-                                    const dxPerFrame = (speedX << 16) / theTexture.width;
-                                    const dyPerFrame = (speedY << 16) / theTexture.height;
-                                    layer.scrollingTexMtx = mat.factory.setupScrollingTexMtx(dxPerFrame, dyPerFrame);
-                                    mat.rebuild();
-                                }
-                            }
-                        }
-                    }
-                }
-            } else if (obj.objClass === 346) {
-                // e.g. SH_BombWall
-                obj.yaw = objParams.getInt16(0x1a) * Math.PI / 32768;
-                obj.pitch = objParams.getInt16(0x1c) * Math.PI / 32768;
-                obj.roll = objParams.getInt16(0x1e) * Math.PI / 32768;
-                let objScale = objParams.getInt8(0x2d);
-                if (objScale === 0) {
-                    objScale = 20;
-                }
-                obj.scale *= objScale / 20;
-            } else if (obj.objClass === 429) {
-                // e.g. ThornTail
-                obj.yaw = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
-                obj.scale *= objParams.getUint16(0x1c) / 1000;
-            } else if (obj.objClass === 518) {
-                // e.g. PoleFlame
-                obj.yaw = interpS16((objParams.getUint8(0x18) & 0x3f) << 10) * Math.PI / 32768;
-                const objScale = objParams.getInt16(0x1a);
-                if (objScale < 1) {
-                    obj.scale = 0.1;
-                } else {
-                    obj.scale = objScale / 8192;
-                }
-            } else if (obj.objClass === 579) {
-                // e.g. DBHoleContr
-                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 683) {
-                // e.g. LGTProjecte
-                obj.yaw = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
-                obj.roll = (objParams.getInt8(0x34) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 689) {
-                // e.g. CmbSrc
-                obj.roll = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
-                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
-            } else if (obj.objClass === 302 || obj.objClass === 685 || obj.objClass === 687 || obj.objClass === 688) {
-                // e.g. Boulder, LongGrassCl
-                obj.roll = (objParams.getInt8(0x18) << 8) * Math.PI / 32768;
-                obj.pitch = (objParams.getInt8(0x19) << 8) * Math.PI / 32768;
-                obj.yaw = (objParams.getInt8(0x1a) << 8) * Math.PI / 32768;
-                const scaleParam = objParams.getUint8(0x1b);
-                if (scaleParam !== 0) {
-                    obj.scale *= scaleParam / 255;
-                }
-            } else {
-                console.log(`Don't know how to setup object class ${obj.objClass} objType ${obj.objType}`);
-            }
-
-            objectInstances.push({
-                name: obj.name,
-                obj: obj,
-                pos: fields.pos,
-                radius: fields.radius,
-                model: obj.models[0],
-            });
-
-            console.log(`Object #${i}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
-
-            offs += fields.entrySize * 4;
-            i++;
+            world.setMapInstance(mapInstance);
         }
 
-        window.main.lookupObject = (objType: number, skipObjindex: boolean = false) => async function() {
-            const obj = await objectMan.loadObject(device, materialFactory, objType, skipObjindex);
-            console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
+        // Set default atmosphere: "InstallShield Blue"
+        // world.envfxMan.loadEnvfx(0x3c);
+
+        const romlistNames: string[] = Array.isArray(this.id_) ? this.id_ : [this.id_];
+        let parentObj: ObjectInstance | null = null;
+        for (let name of romlistNames) {
+            console.log(`Loading romlist ${name}.romlist.zlb...`);
+
+            const [romlistFile] = await Promise.all([
+                dataFetcher.fetchData(`${pathBase}/${name}.romlist.zlb`),
+            ]);
+            const romlist = loadRes(romlistFile).createDataView();
+    
+            world.spawnObjectsFromRomlist(romlist, parentObj);
+
+            // XXX: In the Ship Battle scene, attach galleonship objects to the ship.
+            if (name === 'frontend') {
+                parentObj = world.objectInstances[2];
+                console.log(`parentObj is ${parentObj.objType.name}`);
+            }
+        }
+        
+        (window.main as any).lookupObject = (objType: number, skipObjindex: boolean = false) => {
+            const obj = world.objectMan.getObjectType(objType, skipObjindex);
+            console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
-        window.main.lookupEarlyObject = (objType: number, skipObjindex: boolean = false) => async function() {
-            const obj = await earlyObjectMan.loadObject(device, materialFactory, objType, skipObjindex);
-            console.log(`Object ${objType}: ${obj.name} (type ${obj.objType} class ${obj.objClass})`);
-        };
-
-        const envfx = envfxMan.loadEnvfx(device, 60);
-        console.log(`Envfx ${envfx.index}: ${JSON.stringify(envfx, null, '\t')}`);
-
-        const testModels = [];
-        console.log(`Loading Fox....`);
-        testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 1)); // Fox
-        // console.log(`Loading SharpClaw....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, this.subdir, 23)); // Sharpclaw
-        // console.log(`Loading General Scales....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, this.gameInfo, 'shipbattle', 0x140 / 4)); // General Scales
-        // console.log(`Loading SharpClaw (demo version)....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'warlock', 0x1394 / 4, ModelVersion.Demo)); // SharpClaw (beta version)
-        // console.log(`Loading General Scales (demo version)....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'shipbattle', 0x138 / 4, ModelVersion.Demo)); // General Scales (beta version)
-        // console.log(`Loading Beta Fox....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x0 / 4, ModelVersion.Beta)); // Fox (beta version)
-        // console.log(`Loading a model (really old version)....`);
-        // testModels.push(await testLoadingAModel(device, dataFetcher, SFADEMO_GAME_INFO, 'swapcircle', 0x134 / 4, ModelVersion.Beta));
-
-        const renderer = new WorldRenderer(device, animController, materialFactory, envfxMan, mapInstance, objectInstances, testModels);
+        const renderer = new WorldRenderer(world);
         return renderer;
     }
 }

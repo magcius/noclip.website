@@ -5,13 +5,13 @@ import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { MathConstants, computeModelMatrixSRT, computeModelMatrixS, invlerp, lerp, saturate, clamp } from "../MathHelpers";
 import { dGlobals } from "./zww_scenes";
 import { nArray, assert } from "../util";
-import { vec2, vec3, mat4 } from "gl-matrix";
+import { vec2, vec3, mat4, ReadonlyVec3 } from "gl-matrix";
 import { fopAc_ac_c, fpc__ProcessName, cPhs__Status } from "./framework";
 import { ResType } from "./d_resorce";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { ViewerRenderInput } from "../viewer";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
-import { GXMaterialHelperGfx, ub_PacketParams, u_PacketParamsBufferSize, fillPacketParamsData, MaterialParams, PacketParams, ColorKind } from '../gx/gx_render';
+import { GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from '../gx/gx_render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { dKy_get_seacolor, dKy_GxFog_sea_set } from './d_kankyo';
 import { colorLerp, OpaqueBlack } from '../Color';
@@ -263,10 +263,33 @@ export class d_a_sea extends fopAc_ac_c {
 
         mb.setTevKColorSel(0, GX.KonstColorSel.KCSEL_K0);
         mb.setTevKColorSel(1, GX.KonstColorSel.KCSEL_K1);
+        mb.setUsePnMtxIdx(false);
 
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+        globals.sea = this;
 
         return cPhs__Status.Next;
+    }
+
+    private ChkAreaBeforePos(globals: dGlobals, x: number, z: number): boolean {
+        const height = this.waterHeightMng.GetHeightPos(globals, x, z);
+        if (height === 0 && this.cullStopFlag)
+            return false;
+
+        return true;
+    }
+
+    public ChkArea(globals: dGlobals, x: number, z: number): boolean {
+        // ChkAreaBeforePos
+        if (!this.ChkAreaBeforePos(globals, x, z))
+            return false;
+
+        return x >= this.drawMinX && x <= this.drawMaxX && z >= this.drawMinZ && z <= this.drawMaxZ;
+    }
+
+    public calcWave(globals: dGlobals, x: number, z: number): number {
+        // TODO(jstpierre):
+        return this.baseHeight;
     }
 
     private ClrFlat(): void {
@@ -372,6 +395,8 @@ export class d_a_sea extends fopAc_ac_c {
 
         const gridSize = 800.0;
         const texCoordScale = 5.0e-4;
+
+        // Draw main sea part if requested
         if (!this.cullStopFlag) {
             for (let z = 0; z < 64; z++) {
                 const pz0 = this.drawMinZ + gridSize * z;
@@ -397,44 +422,16 @@ export class d_a_sea extends fopAc_ac_c {
             }
         }
 
-        // noclip modification: Draw skirts even when the cull flag is set.
-        if (this.drawMinZ > -450000.0) {
-            const px0 = -450000.0, px1 = 450000.0;
-            const pz0 = -450000.0, pz1 = this.drawMinZ;
-
-            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
-            this.ddraw.position3f32(px0, this.baseHeight, pz1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz1);
-            this.ddraw.position3f32(px0, this.baseHeight, pz0);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz0);
-            this.ddraw.position3f32(px1, this.baseHeight, pz1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz1);
-            this.ddraw.position3f32(px1, this.baseHeight, pz0);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
-            this.ddraw.end();
-        }
-
-        if (this.drawMaxZ < 450000.0) {
-            const px0 = -450000.0, px1 = 450000.0;
-            const pz0 = this.drawMaxZ, pz1 = 450000.0;
-
-            this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
-            this.ddraw.position3f32(px0, this.baseHeight, pz1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz1);
-            this.ddraw.position3f32(px0, this.baseHeight, pz0);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz0);
-            this.ddraw.position3f32(px1, this.baseHeight, pz1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz1);
-            this.ddraw.position3f32(px1, this.baseHeight, pz0);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
-            this.ddraw.end();
-        }
-
-        if (this.drawMinZ > -450000.0 && this.drawMaxZ < 450000.0) {
-            const pz0 = this.drawMinZ, pz1 = this.drawMaxZ;
-
-            if (this.drawMinX > -450000.0) {
-                const px0 = -450000.0, px1 = this.drawMinX;
+        // noclip modification: draw skirt even when cull flag is set. This will cause clouds to render a bit weird...
+        const drawSkirt = true;
+        if (drawSkirt) {
+            const skirtMinX = -450000.0;
+            const skirtMaxX =  450000.0;
+            const skirtMinZ = -450000.0;
+            const skirtMaxZ =  450000.0;
+            if (this.drawMinZ > skirtMinZ) {
+                const px0 = skirtMinX, px1 = skirtMaxX;
+                const pz0 = skirtMinZ, pz1 = this.drawMinZ;
 
                 this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
                 this.ddraw.position3f32(px0, this.baseHeight, pz1);
@@ -448,8 +445,9 @@ export class d_a_sea extends fopAc_ac_c {
                 this.ddraw.end();
             }
 
-            if (this.drawMaxX < 450000.0) {
-                const px0 = this.drawMaxX, px1 = 450000.0;
+            if (this.drawMaxZ < skirtMaxZ) {
+                const px0 = skirtMinX, px1 = skirtMaxX;
+                const pz0 = this.drawMaxZ, pz1 = skirtMaxZ;
 
                 this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
                 this.ddraw.position3f32(px0, this.baseHeight, pz1);
@@ -461,6 +459,40 @@ export class d_a_sea extends fopAc_ac_c {
                 this.ddraw.position3f32(px1, this.baseHeight, pz0);
                 this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
                 this.ddraw.end();
+            }
+
+            if (this.drawMinZ > skirtMinZ && this.drawMaxZ < skirtMaxZ) {
+                const pz0 = this.drawMinZ, pz1 = this.drawMaxZ;
+
+                if (this.drawMinX > skirtMinX) {
+                    const px0 = skirtMinX, px1 = this.drawMinX;
+
+                    this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+                    this.ddraw.position3f32(px0, this.baseHeight, pz1);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz1);
+                    this.ddraw.position3f32(px0, this.baseHeight, pz0);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz0);
+                    this.ddraw.position3f32(px1, this.baseHeight, pz1);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz1);
+                    this.ddraw.position3f32(px1, this.baseHeight, pz0);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
+                    this.ddraw.end();
+                }
+
+                if (this.drawMaxX < skirtMaxX) {
+                    const px0 = this.drawMaxX, px1 = skirtMaxX;
+
+                    this.ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+                    this.ddraw.position3f32(px0, this.baseHeight, pz1);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz1);
+                    this.ddraw.position3f32(px0, this.baseHeight, pz0);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px0, texCoordScale * pz0);
+                    this.ddraw.position3f32(px1, this.baseHeight, pz1);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz1);
+                    this.ddraw.position3f32(px1, this.baseHeight, pz0);
+                    this.ddraw.texCoord2f32(GX.Attr.TEX0, texCoordScale * px1, texCoordScale * pz0);
+                    this.ddraw.end();
+                }
             }
         }
 
@@ -494,11 +526,9 @@ export class d_a_sea extends fopAc_ac_c {
         const renderInst = this.ddraw.endDraw(device, renderInstManager);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        const offs = materialHelper.allocateMaterialParams(renderInst);
-        materialHelper.fillMaterialParamsDataOnInst(renderInst, offs, materialParams);
-        renderInst.allocateUniformBuffer(ub_PacketParams, u_PacketParamsBufferSize);
+        materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        fillPacketParamsData(renderInst.mapUniformBufferF32(ub_PacketParams), renderInst.getUniformBufferOffset(ub_PacketParams), packetParams);
+        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         renderInstManager.submitRenderInst(renderInst);
     }
 
@@ -525,10 +555,10 @@ export class d_a_sea extends fopAc_ac_c {
         if (globals.stageName === 'sea' && isFullSea) {
             const roomNo = clamp(((this.idxZ - 1) * 7) + this.idxX, 1, 49);
             globals.mStayNo = roomNo;
-        }
 
-        if (this.roomNo !== globals.mStayNo && globals.mStayNo !== 0)
-            this.CheckRoomChange(globals);
+            if (this.roomNo !== globals.mStayNo && globals.mStayNo !== 0)
+                this.CheckRoomChange(globals);
+        }
 
         this.CalcFlatInter(globals);
         dKy_usonami_set(globals, this.flatInter);
@@ -582,15 +612,16 @@ export class d_a_sea extends fopAc_ac_c {
         let waveTheta2_Base = (this.scratchThetaX[2] * offsX) + (this.scratchThetaZ[2] * offsZ - this.scratchOffsAnim[2]) + this.waveInfo.waveParam[2].phase;
         let waveTheta3_Base = (this.scratchThetaX[3] * offsX) + (this.scratchThetaZ[3] * offsZ - this.scratchOffsAnim[3]) + this.waveInfo.waveParam[3].phase;
 
-        let idx = 65;
-        for (let z = 1; z < 64; z++) {
+        // noclip modification: Base game doesn't handle sea actors at anything other than y=0.
+        // Normally this is unused, but Siren Room 18 has such an actor out of bounds. Make it look somewhat nice.
+        for (let z = 0; z <= 64; z++) {
             let waveTheta0 = waveTheta0_Base;
             let waveTheta1 = waveTheta1_Base;
             let waveTheta2 = waveTheta2_Base;
             let waveTheta3 = waveTheta3_Base;
 
-            for (let x = 0; x < 64; x++) {
-                this.heightTable[idx++] = (this.baseHeight +
+            for (let x = 0; x <= 64; x++) {
+                this.heightTable[z*65 + x] = this.baseHeight + (
                     (this.scratchHeight[0] * Math.cos(waveTheta0)) +
                     (this.scratchHeight[1] * Math.cos(waveTheta1)) +
                     (this.scratchHeight[2] * Math.cos(waveTheta2)) +
@@ -607,7 +638,6 @@ export class d_a_sea extends fopAc_ac_c {
             waveTheta1_Base += gridSize * this.scratchThetaZ[1];
             waveTheta2_Base += gridSize * this.scratchThetaZ[2];
             waveTheta3_Base += gridSize * this.scratchThetaZ[3];
-            idx++;
         }
 
         this.waveInfo.AddCounter(deltaTimeInFrames);
@@ -619,4 +649,12 @@ export class d_a_sea extends fopAc_ac_c {
         const device = globals.modelCache.device;
         this.ddraw.destroy(device);
     }
+}
+
+export function dLib_getWaterY(globals: dGlobals, pos: ReadonlyVec3, objAcch: any): number {
+    if (globals.sea === null)
+        return 0;
+
+    const waveY = globals.sea.calcWave(globals, pos[0], pos[2]);
+    return waveY;
 }

@@ -8,7 +8,7 @@ import * as NARC from './narc';
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { MDL0Renderer, G3DPass } from './render';
+import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render';
 import { assert, readString, assertExists } from '../util';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
@@ -19,6 +19,8 @@ import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
 import { fx32, parseNSBMD, SRT0, parseNSBTA, parseNSBTP, PAT0, parseNSBTX } from './NNS_G3D';
+import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { NITRO_Program } from '../SuperMario64DS/render';
 
 const pathBase = `mkds`;
 class ModelCache {
@@ -77,6 +79,12 @@ export class MKDSRenderer implements Viewer.SceneGfx {
     private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
+
+        template.setBindingLayouts(nnsG3dBindingLayouts);
+        let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
+        const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
+        offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
+
         this.courseRenderer.prepareToRender(this.renderInstManager, viewerInput);
         if (this.skyboxRenderer !== null)
             this.skyboxRenderer.prepareToRender(this.renderInstManager, viewerInput);

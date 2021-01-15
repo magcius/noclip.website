@@ -244,6 +244,8 @@ export function parse(buffer: ArrayBufferSlice, name: string): BIN {
             depthFunc: GX.CompareType.LESS,
             depthTest: true,
             depthWrite: true,
+            colorUpdate: true,
+            alphaUpdate: false,
         };
 
         const gxMaterial: GX_Material.GXMaterial = {

@@ -3,7 +3,7 @@ import { vec3, mat4 } from 'gl-matrix';
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { nArray, assert } from '../util';
-import { MaterialParams, PacketParams, GXTextureHolder, ColorKind, ub_MaterialParams } from '../gx/gx_render';
+import { MaterialParams, PacketParams, GXTextureHolder, ColorKind } from '../gx/gx_render';
 
 import { MREA, Material, Surface, UVAnimationType, MaterialSet, AreaLight } from './mrea';
 import * as Viewer from '../viewer';
@@ -15,8 +15,8 @@ import { GfxDevice, GfxFormat, GfxSampler, GfxMipFilterMode, GfxTexFilterMode, G
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { GfxRenderInst, GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepthKey } from '../gfx/render/GfxRenderer';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
-import { LoadedVertexData, LoadedVertexPacket, LoadedVertexLayout } from '../gx/gx_displaylist';
-import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix } from '../gx/gx_material';
+import { LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout } from '../gx/gx_displaylist';
+import { GXMaterialHacks, lightSetWorldPositionViewMatrix, lightSetWorldDirectionNormalMatrix, GX_Program } from '../gx/gx_material';
 import { LightParameters, WorldLightingOptions, MP1EntityType, AreaAttributes, Entity } from './script';
 import { colorMult, colorCopy, White, OpaqueBlack, colorNewCopy, TransparentBlack, Color } from '../Color';
 import { texEnvMtx, computeNormalMatrix } from '../MathHelpers';
@@ -108,7 +108,7 @@ class SurfaceData {
     public shapeHelper: GXShapeHelperGfx;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, public surface: Surface, coalescedBuffers: GfxCoalescedBuffersCombo, public bbox: AABB) {
-        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers, surface.loadedVertexLayout, surface.loadedVertexData);
+        this.shapeHelper = new GXShapeHelperGfx(device, cache, coalescedBuffers.vertexBuffers, coalescedBuffers.indexBuffer, surface.loadedVertexLayout, surface.loadedVertexData);
     }
 
     public destroy(device: GfxDevice) {
@@ -154,7 +154,7 @@ class SurfaceInstance {
         this.materialGroupInstance.setOnRenderInst(device, renderHelper.renderInstManager.gfxRenderCache, renderInst);
 
         mat4.mul(this.packetParams.u_PosMtx[0], viewMatrix, modelMatrixScratch);
-        this.surfaceData.shapeHelper.fillPacketParams(this.packetParams, renderInst);
+        this.materialGroupInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, this.packetParams);
         renderInst.sortKey = setSortKeyDepthKey(renderInst.sortKey, this.materialTextureKey);
 
         renderInst.setSamplerBindingsFromTextureMappings(this.materialInstance.textureMappings);
@@ -191,7 +191,7 @@ class MaterialGroupInstance {
         // Set up the program.
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
 
-        renderInst.setUniformBufferOffset(ub_MaterialParams, this.materialParamsBlockOffs, this.materialHelper.materialParamsBufferSize);
+        renderInst.setUniformBufferOffset(GX_Program.ub_MaterialParams, this.materialParamsBlockOffs, this.materialHelper.materialParamsBufferSize);
 
         const layer = this.material.isTransparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         renderInst.sortKey = makeSortKey(layer, this.materialHelper.programKey);
@@ -350,22 +350,13 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     let totalIndexCount = 0;
     let totalVertexCount = 0;
     let packedVertexDataSize = 0;
-    const packets: LoadedVertexPacket[] = [];
+    const draws: LoadedVertexDraw[] = [];
     for (let i = 0; i < surfaces.length; i++) {
         const surface = surfaces[i];
         assert(surface.loadedVertexLayout.vertexBufferStrides[0] === surfaces[0].loadedVertexLayout.vertexBufferStrides[0]);
         totalIndexCount += surface.loadedVertexData.totalIndexCount;
         totalVertexCount += surface.loadedVertexData.totalVertexCount;
         packedVertexDataSize += surface.loadedVertexData.vertexBuffers[0].byteLength;
-
-        for (let j = 0; j < surface.loadedVertexData.packets.length; j++) {
-            const packet = surface.loadedVertexData.packets[j];
-            const indexOffset = totalIndexCount + packet.indexOffset;
-            const indexCount = packet.indexCount;
-            const posNrmMatrixTable = packet.posNrmMatrixTable;
-            const texMatrixTable = packet.texMatrixTable;
-            packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
-        }
     }
 
     const packedVertexData = new Uint8Array(packedVertexDataSize);
@@ -386,13 +377,23 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
         packedVertexDataOffs += surface.loadedVertexData.vertexBuffers[0].byteLength;
     }
 
+    // Merge into one giant draw. We know it doesn't use a posNrmMatrixTable or texMatrixTable.
+    const srcDraw = surfaces[0].loadedVertexData.draws[0];
+    const indexOffset = 0;
+    const indexCount = totalIndexCount;
+    const posNrmMatrixTable = srcDraw.posMatrixTable;
+    const texMatrixTable = srcDraw.texMatrixTable;
+    draws.push({ indexOffset, indexCount, posMatrixTable: posNrmMatrixTable, texMatrixTable });
+
     const newLoadedVertexData: LoadedVertexData = {
         indexData: indexData.buffer,
         vertexBuffers: [packedVertexData.buffer],
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,
-        packets,
+        draws,
+        drawCalls: null,
+        dlView: null,
     };
 
     const loadedVertexLayout: LoadedVertexLayout = { ... surfaces[0].loadedVertexLayout };
@@ -486,13 +487,11 @@ export class MREARenderer {
 
             // Transparent objects should not be merged.
             const canMerge = !materialCommand.material.isTransparent;
-            if (canMerge) {
-                while (i < surfaces.length && surfaces[i].materialIndex === materialIndex)
-                    i++;
-                mergedSurfaces.push(mergeSurfaces(surfaces.slice(firstSurfaceIndex, i)));
-            } else {
-                mergedSurfaces.push(surfaces[i++]);
-            }
+            i++;
+            while (i < surfaces.length && surfaces[i].materialIndex === materialIndex && canMerge)
+                i++;
+
+            mergedSurfaces.push(mergeSurfaces(surfaces.slice(firstSurfaceIndex, i)));
         }
 
         for (let i = 0; i < mergedSurfaces.length; i++) {

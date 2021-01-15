@@ -3,13 +3,14 @@ import * as Viewer from '../viewer';
 import { SMGSceneDescBase, ModelCache, SceneObjHolder, getDeltaTimeFrames, SMGRenderer } from "./Main";
 import { JMapInfoIter, createCsvParser } from './JMapInfo';
 import { JKRArchive } from '../Common/JSYSTEM/JKRArchive';
-import { NameObj } from './NameObj';
+import { NameObj, MovementType, GameBits } from './NameObj';
 import { connectToScene, getRandomInt, getRandomFloat, getRailTotalLength, vecKillElement } from './ActorUtil';
-import { TicoRail } from './MiscActor';
 import { vec3, mat4 } from 'gl-matrix';
+import { TicoRail } from './Actors/NPC';
 
 class SMG1SceneDesc extends SMGSceneDescBase {
     public pathBase: string = `SuperMarioGalaxy`;
+    public gameBit = GameBits.SMG1;
     public getLightData(modelCache: ModelCache): JMapInfoIter {
         const lightDataRarc = modelCache.getArchive(`ObjectData/LightData.arc`)!;
         return createCsvParser(lightDataRarc.findFileData(`LightData.bcsv`)!);
@@ -21,8 +22,13 @@ class SMG1SceneDesc extends SMGSceneDescBase {
     public getZoneMapArchive(modelCache: ModelCache, zoneName: string): JKRArchive {
         return modelCache.getArchive(`StageData/${zoneName}.arc`)!;
     }
+    public getObjNameTable(modelCache: ModelCache): JMapInfoIter {
+        const arc = modelCache.getArchive(`StageData/ObjNameTable.arc`)!;
+        return createCsvParser(arc.findFileData(`ObjNameTable.tbl`)!);
+    }
     public requestGlobalArchives(modelCache: ModelCache): void {
         modelCache.requestArchiveData(`ObjectData/LightData.arc`);
+        modelCache.requestArchiveData(`StageData/ObjNameTable.arc`);
     }
     public requestZoneArchives(modelCache: ModelCache, zoneName: string): void {
         modelCache.requestArchiveData(`StageData/${zoneName}.arc`);
@@ -49,7 +55,7 @@ class DayInTheLifeOfALumaController extends NameObj {
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'DayInTheLifeOfALumaController');
-        connectToScene(sceneObjHolder, this, 0x01, -1, -1, -1);
+        connectToScene(sceneObjHolder, this, MovementType.MapObj, -1, -1, -1);
     }
 
     private pickNewTico(): void {
@@ -158,6 +164,7 @@ const sceneDescs = [
     new SMG1SceneDesc("Gateway Galaxy", "HeavensDoorGalaxy"),
     new SMG1SceneDesc("Boo's Boneyard Galaxy", "TeresaMario2DGalaxy"),
     "Terrace",
+    new SMG1SceneDesc("Terrace", "AstroDome", 0),
     new SMG1SceneDesc("Good Egg Galaxy", "EggStarGalaxy"),
     new SMG1SceneDesc("Honeyhive Galaxy", "HoneyBeeKingdomGalaxy"),
     new SMG1SceneDesc("Loopdeeloop Galaxy", "SurfingLv1Galaxy"),
@@ -165,6 +172,7 @@ const sceneDescs = [
     new SMG1SceneDesc("Sweet Sweet Galaxy", "BeltConveyerExGalaxy"),
     new SMG1SceneDesc("Bowser Jr.'s Robot Reactor", "TriLegLv1Galaxy"),
     "Fountain",
+    new SMG1SceneDesc("Fountain", "AstroDome", 1),
     new SMG1SceneDesc("Space Junk Galaxy", "StarDustGalaxy"),
     new SMG1SceneDesc("Battlerock Galaxy", "BattleShipGalaxy"),
     new SMG1SceneDesc("Rolling Green Galaxy", "TamakoroExLv1Galaxy"),
@@ -172,6 +180,7 @@ const sceneDescs = [
     new SMG1SceneDesc("Sling Pod Galaxy", "CocoonExGalaxy"),
     new SMG1SceneDesc("Bowser's Star Reactor", "KoopaBattleVs1Galaxy"),
     "Kitchen",
+    new SMG1SceneDesc("Kitchen", "AstroDome", 2),
     new SMG1SceneDesc("Beach Bowl Galaxy", "HeavenlyBeachGalaxy"),
     new SMG1SceneDesc("Ghostly Galaxy", "PhantomGalaxy"),
     new SMG1SceneDesc("Bubble Breeze Galaxy", "CubeBubbleExLv1Galaxy"),
@@ -179,6 +188,7 @@ const sceneDescs = [
     new SMG1SceneDesc("Drip Drop Galaxy", "TearDropGalaxy"),
     new SMG1SceneDesc("Bowser Jr.'s Airship Armada", "KoopaJrShipLv1Galaxy"),
     "Bedroom",
+    new SMG1SceneDesc("Bedroom", "AstroDome", 3),
     new SMG1SceneDesc("Gusty Garden Galaxy", "CosmosGardenGalaxy"),
     new SMG1SceneDesc("Freezeflame Galaxy", "IceVolcanoGalaxy"),
     new SMG1SceneDesc("Dusty Dune Galaxy", "SandClockGalaxy"),
@@ -186,6 +196,7 @@ const sceneDescs = [
     new SMG1SceneDesc("Bigmouth Galaxy", "FishTunnelGalaxy"),
     new SMG1SceneDesc("Bowser's Dark Matter Plant", "KoopaBattleVs2Galaxy"),
     "Engine Room",
+    new SMG1SceneDesc("Engine Room", "AstroDome", 4),
     new SMG1SceneDesc("Gold Leaf Galaxy", "ReverseKingdomGalaxy"),
     new SMG1SceneDesc("Sea Slide Galaxy", "OceanRingGalaxy"),
     new SMG1SceneDesc("Toy Time Galaxy", "FactoryGalaxy"),
@@ -193,6 +204,7 @@ const sceneDescs = [
     new SMG1SceneDesc("Sand Spiral Galaxy", "TransformationExGalaxy"),
     new SMG1SceneDesc("Bowser Jr.'s Lava Reactor", "FloaterOtaKingGalaxy"),
     "Garden",
+    new SMG1SceneDesc("Garden", "AstroDome", 5),
     new SMG1SceneDesc("Deep Dark Galaxy", "OceanPhantomCaveGalaxy"),
     new SMG1SceneDesc("Dreadnought Galaxy", "CannonFleetGalaxy"),
     new SMG1SceneDesc("Melty Molten Galaxy", "HellProminenceGalaxy"),
@@ -206,7 +218,7 @@ const sceneDescs = [
     new SMG1SceneDesc("Loopdeeswoop Galaxy", "SurfingLv2Galaxy"),
     new SMG1SceneDesc("Grand Finale Galaxy", "PeachCastleFinalGalaxy"),
     "?",
-    new DayInTheLifeOfALuma("Day in the Life of a Luma", "AstroGalaxy", "DayInTheLifeOfALuma"),
+    new DayInTheLifeOfALuma("Day in the Life of a Luma", "AstroGalaxy", null, "DayInTheLifeOfALuma"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };

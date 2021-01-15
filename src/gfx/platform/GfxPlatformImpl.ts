@@ -22,5 +22,4 @@ export type GfxResource =
     GfxBuffer | GfxTexture | GfxAttachment | GfxSampler | GfxProgram | GfxBindings | GfxInputLayout | GfxInputState | GfxRenderPipeline | GfxReadback;
 
 export class GfxBugQuirksImpl implements GfxBugQuirks {
-    public rowMajorMatricesBroken: boolean = false;
 }

@@ -21,13 +21,25 @@ function containsElement(sub_: HTMLElement, searchFor: HTMLElement): boolean {
     return false;
 }
 
+function setGlobalCursor(cursor: string): void {
+    // Needed to make the cursor update in Chrome. See:
+    // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
+    if (document.body.style.cursor !== cursor) {
+        document.body.focus();
+        document.body.style.cursor = cursor;
+    }
+}
+
 export class GrabManager {
     private grabListener: GrabListener | null = null;
     private grabOptions: GrabOptions | null = null;
     private currentGrabTarget: HTMLElement | null = null;
+    private usingPointerLock: boolean = false;
+    private currentCursor: string = '';
 
     private lastX: number = -1;
     private lastY: number = -1;
+    private grabButton: number = -1;
 
     private _onMouseMove = (e: MouseEvent) => {
         if (this.grabListener === null)
@@ -49,47 +61,76 @@ export class GrabManager {
 
     private _onMouseDown = (e: MouseEvent) => {
         const grabElement = this.grabOptions!.grabElement;
-        if (grabElement && !containsElement(e.target as HTMLElement, grabElement))
+        if (!grabElement || !containsElement(e.target as HTMLElement, grabElement))
             this.releaseGrab();
     };
 
     private _onMouseUp = (e: MouseEvent) => {
-        this.releaseGrab();
-    };
-
-    private _onPointerLockChange = (e: Event) => {
-        if (document.pointerLockElement !== this.currentGrabTarget)
+        if (e.button === this.grabButton)
             this.releaseGrab();
     };
 
-    public hasGrabListener(grabListener: GrabListener): boolean {
-        return this.grabListener === grabListener;
+    private _onPointerLockChange = (e: Event) => {
+        if (document.pointerLockElement === this.currentGrabTarget) {
+            // Success.
+            this.usingPointerLock = true;
+        } else {
+            // This shouldn't hit the error case.
+            this.releaseGrab();
+        }
+    };
+
+    private _onPointerLockError = (e: Event) => {
+        // Could not take the pointer lock. Fall back to the grab cursor if wanted.
+        if (this.grabOptions !== null && this.grabOptions.useGrabbingCursor)
+            setGlobalCursor('grabbing');
+    };
+
+    public getGrabListenerOptions(grabListener: GrabListener): GrabOptions | null {
+        if (this.grabListener === grabListener)
+            return this.grabOptions;
+        else
+            return null;
     }
 
     public isGrabbed(): boolean {
         return this.grabListener !== null;
     }
 
+    public setCursor(cursor: string): void {
+        this.currentCursor = cursor;
+
+        // If we're in a pointer lock grab, then the cursor doesn't matter...
+        if (this.grabOptions !== null && this.usingPointerLock)
+            return;
+
+        // Grab cursor takes precedence.
+        if (this.grabOptions !== null && this.grabOptions.useGrabbingCursor)
+            return;
+
+        document.body.style.cursor = cursor;
+    }
+
     public takeGrab(grabListener: GrabListener, e: MouseEvent, grabOptions: GrabOptions): void {
+        e.preventDefault();
+
         if (this.grabListener !== null)
             return;
 
         this.grabListener = grabListener;
         this.grabOptions = grabOptions;
 
-        if (grabOptions.useGrabbingCursor)
-            document.body.style.cursor = 'grabbing';
-
         this.lastX = e.pageX;
         this.lastY = e.pageY;
-        // Needed to make the cursor update in Chrome. See:
-        // https://bugs.chromium.org/p/chromium/issues/detail?id=676644
-        document.body.focus();
-        e.preventDefault();
+        this.grabButton = e.button;
 
         const target = e.target as HTMLElement;
+        target.focus();
+
+        this.usingPointerLock = false;
         if (grabOptions.takePointerLock && target.requestPointerLock !== undefined) {
             document.addEventListener('pointerlockchange', this._onPointerLockChange);
+            document.addEventListener('pointerlockerror', this._onPointerLockError);
             target.requestPointerLock();
             this.currentGrabTarget = target;
         }
@@ -113,8 +154,10 @@ export class GrabManager {
                 document.exitPointerLock();
         }
 
-        if (this.grabOptions!.useGrabbingCursor)
-            document.body.style.cursor = '';
+        // If we're exiting a pointer lock, or we overrode the cursor with our grabbing one,
+        // then reset the cursor back to the user choice.
+        if (this.grabOptions!.useGrabbingCursor || this.usingPointerLock)
+            setGlobalCursor(this.currentCursor);
 
         // Call onGrabReleased after we set the grabListener to null so that if the callback calls
         // isDragging() or hasDragListener() we appear as if we have no grab.

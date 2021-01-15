@@ -10,7 +10,7 @@ import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, Gfx
 import { createInputLayout } from '../gx/gx_render';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers';
 import { getSystemEndianness, Endianness } from '../endian';
-import { vec3 } from 'gl-matrix';
+import { ReadonlyVec3 } from 'gl-matrix';
 import { Color } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
@@ -21,6 +21,8 @@ function getGfxToplogyFromCommand(cmd: GX.Command): GfxTopology {
         return GfxTopology.TRISTRIP;
     else if (cmd === GX.Command.DRAW_TRIANGLES)
         return GfxTopology.TRIANGLES;
+    else if (cmd === GX.Command.DRAW_TRIANGLE_FAN)
+        return GfxTopology.TRIFAN;
     else
         throw "whoops";
 }
@@ -70,7 +72,7 @@ class TDDrawVtxSpec {
 
     protected createInputLayoutInternal(device: GfxDevice, cache: GfxRenderCache): boolean {
         if (this.inputLayout === null) {
-            this.inputLayout = createInputLayout(device, cache, this.loadedVertexLayout!, false);
+            this.inputLayout = createInputLayout(device, cache, this.loadedVertexLayout!);
             return true;
         } else {
             return false;
@@ -184,8 +186,19 @@ export class TDDraw extends TDDrawVtxSpec {
         this.writeFloat32(offs + 0x08, z);
     }
 
-    public position3vec3(v: vec3): void {
+    public position3vec3(v: ReadonlyVec3): void {
         this.position3f32(v[0], v[1], v[2]);
+    }
+
+    public normal3f32(x: number, y: number, z: number): void {
+        const offs = this.getOffs(this.currentVertex, GX.Attr.NRM);
+        this.writeFloat32(offs + 0x00, x);
+        this.writeFloat32(offs + 0x04, y);
+        this.writeFloat32(offs + 0x08, z);
+    }
+
+    public normal3vec3(v: ReadonlyVec3): void {
+        this.normal3f32(v[0], v[1], v[2]);
     }
 
     public texCoord2f32(attr: GX.Attr, s: number, t: number): void {
@@ -219,8 +232,14 @@ export class TDDraw extends TDDrawVtxSpec {
     private flushDeviceObjects(device: GfxDevice, cache: GfxRenderCache): void {
         let recreateInputState = false;
 
-        if (this.createInputLayoutInternal(device, cache)) {
+        if (this.createInputLayoutInternal(device, cache))
             recreateInputState = true;
+        if (this.inputState === null)
+            recreateInputState = true;
+
+        if ((this.recreateVertexBuffer || this.recreateIndexBuffer) && this.startIndex > 0) {
+            console.warn(`DDraw: Recreating buffers when render insts already made. This will cause illegal warnings. Use allocatePrimitives() to prevent this.`);
+            debugger;
         }
 
         if (this.recreateVertexBuffer) {
@@ -283,12 +302,22 @@ export class TDDraw extends TDDrawVtxSpec {
     }
 
     public destroy(device: GfxDevice): void {
-        if (this.inputState !== null)
+        if (this.inputState !== null) {
             device.destroyInputState(this.inputState);
-        if (this.indexBuffer !== null)
+            this.inputState = null;
+        }
+
+        if (this.indexBuffer !== null) {
             device.destroyBuffer(this.indexBuffer);
-        if (this.vertexBuffer !== null)
+            this.indexBuffer = null;
+            this.recreateIndexBuffer = true;
+        }
+
+        if (this.vertexBuffer !== null) {
             device.destroyBuffer(this.vertexBuffer);
+            this.vertexBuffer = null;
+            this.recreateVertexBuffer = true;
+        }
     }
 }
 
@@ -391,8 +420,19 @@ export class TSDraw extends TDDrawVtxSpec {
         this.writeFloat32(offs + 0x08, z);
     }
 
-    public position3vec3(v: vec3): void {
+    public position3vec3(v: ReadonlyVec3): void {
         this.position3f32(v[0], v[1], v[2]);
+    }
+
+    public normal3f32(x: number, y: number, z: number): void {
+        const offs = this.getOffs(this.currentVertex, GX.Attr.NRM);
+        this.writeFloat32(offs + 0x00, x);
+        this.writeFloat32(offs + 0x04, y);
+        this.writeFloat32(offs + 0x08, z);
+    }
+
+    public normal3vec3(v: ReadonlyVec3): void {
+        this.normal3f32(v[0], v[1], v[2]);
     }
 
     public texCoord2f32(attr: GX.Attr, s: number, t: number): void {

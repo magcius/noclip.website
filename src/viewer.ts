@@ -3,17 +3,17 @@ import * as UI from './ui';
 
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
-import { CameraController, Camera, XRCameraController } from './Camera';
-import { TextureHolder } from './TextureHolder';
-import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture } from './gfx/platform/GfxPlatform';
-import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, getPlatformTexture_GL } from './gfx/platform/GfxPlatformWebGL2';
+import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
+import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
+import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
-import { downloadTextureToCanvas } from './Screenshot';
+import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { NormalizedViewportCoords, ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor, standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
+import { IS_DEVELOPMENT } from './BuildVersion';
 
 export interface ViewerUpdateInfo {
     time: number;
@@ -33,12 +33,12 @@ export interface ViewerRenderInput {
     deltaTime: number;
     backbufferWidth: number;
     backbufferHeight: number;
-    viewport: NormalizedViewportCoords;
+    viewport: Readonly<GfxNormalizedViewportCoords>;
     onscreenTexture: GfxTexture;
 }
 
 export interface SceneGfx {
-    textureHolder?: TextureHolder<any>;
+    textureHolder?: UI.TextureListHolder;
     createPanels?(): UI.Panel[];
     createCameraController?(): CameraController;
     adjustCameraController?(c: CameraController): void;
@@ -95,7 +95,9 @@ export class Viewer {
     public xrCameraController: XRCameraController = new XRCameraController();
 
     public camera = new Camera();
-    public fovY: number = MathConstants.TAU / 8;
+
+    static readonly FOV_Y_DEFAULT: number = MathConstants.TAU / 6;
+    public fovY: number = Viewer.FOV_Y_DEFAULT;
     // Scene time. Can be paused / scaled / rewound / whatever.
     public sceneTime: number = 0;
     // requestAnimationFrame time. Used to calculate dt from the new time.
@@ -105,11 +107,11 @@ export class Viewer {
     public gfxDevice: GfxDevice;
     public viewerRenderInput: ViewerRenderInput;
     public renderStatisticsTracker = new RenderStatisticsTracker();
-    public viewport: NormalizedViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
+    public viewport: GfxNormalizedViewportCoords = { x: 0, y: 0, w: 1, h: 1 };
 
     public scene: SceneGfx | null = null;
 
-    public oncamerachanged: () => void = (() => {});
+    public oncamerachanged: (force: boolean) => void = (() => {});
     public onstatistics: (statistics: RenderStatistics) => void = (() => {});
 
     private keyMoveSpeedListeners: Listener[] = [];
@@ -150,7 +152,7 @@ export class Viewer {
         this.keyMoveSpeedListeners.push(listener);
     }
 
-    private renderViewport() {
+    private renderViewport(): void {
         let renderPass: GfxRenderPass | null = null;
         if (this.scene !== null) {
             renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
@@ -179,6 +181,7 @@ export class Viewer {
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = this.canvas.width;
         this.viewerRenderInput.backbufferHeight = this.canvas.height;
+        this.viewerRenderInput.viewport = this.viewport;
         this.gfxSwapChain.configureSwapChain(this.canvas.width, this.canvas.height);
         this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
 
@@ -199,10 +202,12 @@ export class Viewer {
     }
 
     private renderWebXR(webXRContext: WebXRContext) {
-        const baseLayer: XRWebGLLayer | undefined = webXRContext.xrSession?.renderState.baseLayer;
-        if (!baseLayer) {
+        if (webXRContext.xrSession === null)
             return;
-        }
+
+        const baseLayer = webXRContext.xrSession.renderState.baseLayer;
+        if (baseLayer === undefined)
+            return;
 
         const framebuffer: WebGLFramebuffer = baseLayer.framebuffer;
         const fbw: number = baseLayer.framebufferWidth;
@@ -212,13 +217,13 @@ export class Viewer {
         this.viewerRenderInput.time = this.sceneTime;
         this.viewerRenderInput.backbufferWidth = fbw;
         this.viewerRenderInput.backbufferHeight = fbh;
-        this.gfxSwapChain.configureSwapChain(fbw, fbh);
+        this.gfxSwapChain.configureSwapChain(fbw, fbh, framebuffer);
 
         this.renderStatisticsTracker.beginFrame();
 
         resetGfxDebugGroup(this.debugGroup);
         this.gfxDevice.pushDebugGroup(this.debugGroup);
-        
+
         this.viewerRenderInput.onscreenTexture = this.gfxSwapChain.getOnscreenTexture();
 
         for (let i = 0; i < webXRContext.views.length; i++) {
@@ -232,16 +237,16 @@ export class Viewer {
 
             const widthRatio: number = xrViewPort.width / fbw;
             const heightRatio: number = xrViewPort.height / fbh;
-
-            this.renderViewport();
-
-            const viewportForBlitting = {
+            this.viewerRenderInput.viewport = {
                 x: xrViewPort.x / xrViewPort.width * widthRatio,
                 y: xrViewPort.y / xrViewPort.height * heightRatio,
                 w: widthRatio,
                 h: heightRatio
             };
-            this.gfxSwapChain.present(framebuffer, viewportForBlitting);
+
+            this.renderViewport();
+
+            this.gfxSwapChain.present();
         }
 
         this.gfxDevice.popDebugGroup();
@@ -278,7 +283,8 @@ export class Viewer {
 
         const camera = this.camera;
 
-        // Hack in projection for now until we have that unfolded from RenderState.
+        camera.clipSpaceNearZ = this.gfxDevice.queryVendorInfo().clipSpaceNearZ;
+
         camera.newFrame();
         const aspect = this.canvas.width / this.canvas.height;
         camera.fovY = this.fovY;
@@ -286,13 +292,10 @@ export class Viewer {
         camera.setClipPlanes(5);
 
         if (this.cameraController) {
-            const updated = this.cameraController.update(this.inputManager, dt);
-            if (updated)
-                this.oncamerachanged();
+            const result = this.cameraController.update(this.inputManager, dt, this.sceneTimeScale);
+            if (result !== CameraUpdateResult.Unchanged)
+                this.oncamerachanged(result === CameraUpdateResult.ImportantChange);
         }
-
-        // TODO(jstpierre): Move this to main
-        this.inputManager.afterFrame();
 
         const deltaTime = dt * this.sceneTimeScale;
         this.viewerRenderInput.deltaTime += deltaTime;
@@ -304,6 +307,9 @@ export class Viewer {
         } else {
             this.render();
         }
+
+        // TODO(jstpierre): Move this to main
+        this.inputManager.afterFrame();
 
         // Reset the delta for next frame.
         this.viewerRenderInput.deltaTime = 0;
@@ -321,7 +327,7 @@ export class Viewer {
             // TODO(jstpierre): Implement in Gfx somehow.
             const gl = gfxDeviceGetImpl_GL(this.gfxDevice).gl;
             const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
-            downloadTextureToCanvas(gl, getPlatformTexture_GL(this.gfxSwapChain.getOnscreenTexture()), width, height, canvas, opaque);
+            downloadFrontBufferToCanvas(gl, width, height, canvas, opaque);
         }
 
         return canvas;
@@ -344,7 +350,7 @@ export const enum InitErrorCode {
 }
 
 async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement): Promise<InitErrorCode> {
-    const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, preserveDrawingBuffer: false, xrCompatible: true } as WebGLContextAttributes);
+    const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false, xrCompatible: true } as WebGLContextAttributes);
     // For debugging purposes, add a hook for this.
     (window as any).gl = gl;
     if (!gl) {
@@ -365,7 +371,11 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
             return InitErrorCode.GARBAGE_WEBGL2_GENERIC;
     }
 
-    const gfxSwapChain = createSwapChainForWebGL2(gl);
+    const config = new GfxPlatformWebGL2Config();
+    config.trackResources = IS_DEVELOPMENT;
+    config.shaderDebug = IS_DEVELOPMENT;
+
+    const gfxSwapChain = createSwapChainForWebGL2(gl, config);
     out.viewer = new Viewer(gfxSwapChain, canvas);
 
     return InitErrorCode.SUCCESS;
@@ -418,7 +428,7 @@ export function makeErrorUI(errorCode: InitErrorCode): DocumentFragment {
         return makeErrorMessageUI(`
 <p>This application requires hardware acceleration to be enabled.
 <p>Please enable hardware acceleration in your's browser settings.
-<p>If you have enabled hardware acceleration and are still getting this error message, please open a <a href="https://github.com/magcius/noclip.website/issues/new?template=tech_support.md">GitHub issue</a> with as much as information as possible.
+<p>If you have enabled hardware acceleration and are still getting this error message, try restarting your browser and computer.
 <p style="text-align: right">Thanks, Jasper.
 `);
     else if (errorCode === InitErrorCode.GARBAGE_WEBGL2_GENERIC)

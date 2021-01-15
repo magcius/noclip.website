@@ -19,6 +19,7 @@ import { getImageFormatString } from "../BanjoKazooie/f3dex";
 import { TextFilt } from '../Common/N64/Image';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
+import { calcTextureScaleForShift } from '../Common/N64/RSP';
 import { translateCM } from '../Common/N64/RDP';
 
 class PaperMario64Program extends DeviceProgram {
@@ -138,7 +139,7 @@ class BackgroundBillboardProgram extends DeviceProgram {
     public static ub_Params = 0;
 
     public both: string = `
-layout(row_major, std140) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
 };
 
@@ -162,7 +163,7 @@ void main() {
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor = vec4(color.rgb, 1.0);
 }
 `;
@@ -226,14 +227,6 @@ export class BackgroundBillboardRenderer {
 
 enum RenderMode {
     OPA, XLU, DEC
-}
-
-function calcScaleForShift(shift: number): number {
-    if (shift <= 10) {
-        return 1 / (1 << shift);
-    } else {
-        return 1 << (16 - shift);
-    }
 }
 
 const modelViewScratch = mat4.create();
@@ -334,13 +327,13 @@ class ModelTreeLeafInstance {
         let scaleS, scaleT, offsetS, offsetT;
         if (tileId === 0) {
             // Tile 0's shift seems to always be 0x00.
-            scaleS = calcScaleForShift(0x00);
-            scaleT = calcScaleForShift(0x00);
+            scaleS = calcTextureScaleForShift(0x00);
+            scaleT = calcTextureScaleForShift(0x00);
             offsetS = 0;
             offsetT = 0;
         } else if (tileId === 1) {
-            scaleS = calcScaleForShift(this.secondaryTileShiftS);
-            scaleT = calcScaleForShift(this.secondaryTileShiftT);
+            scaleS = calcTextureScaleForShift(this.secondaryTileShiftS);
+            scaleT = calcTextureScaleForShift(this.secondaryTileShiftT);
             // Offset is in 10.2 coordinates (e.g. G_SETTILESIZE).
             offsetS = this.secondaryTileOffsetS / 0x04;
             offsetT = this.secondaryTileOffsetT / 0x04;
@@ -350,8 +343,8 @@ class ModelTreeLeafInstance {
 
         dst[0] *= scaleS;
         dst[5] *= scaleT;
-        dst[12] += offsetS;
-        dst[13] += offsetT;
+        dst[12] -= offsetS;
+        dst[13] -= offsetT;
 
         dst[0] *= 1 / image.width;
         dst[5] *= 1 / image.height;

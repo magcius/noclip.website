@@ -1,5 +1,5 @@
 
-import { nArray, assert, assertExists } from "../../util";
+import { nArray, assert, assertExists, spliceBisectRight } from "../../util";
 import { clamp } from "../../MathHelpers";
 
 import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxBuffer, GfxRenderPipeline } from "../platform/GfxPlatform";
@@ -75,7 +75,7 @@ export function setSortKeyProgramKey(sortKey: number, programKey: number): numbe
     if (isTransparent)
         return sortKey;
     else
-        return ((sortKey & 0xFF0000FF) | ((programKey & 0xFFFF) << 16)) >>> 0;
+        return ((sortKey & 0xFF0000FF) | ((programKey & 0xFFFF) << 8)) >>> 0;
 }
 
 export function setSortKeyBias(sortKey: number, bias: number): number {
@@ -165,12 +165,14 @@ const defaultTransientState = gfxRendererTransientStateNew();
 //#region GfxRenderInst
 // TODO(jstpierre): Very little of this is used, could be removed.
 const enum GfxRenderInstFlags {
-    Template = 1 << 0,
-    Draw = 1 << 1,
-    Indexed = 1 << 2,
+    Indexed = 1 << 0,
+
+    // Mostly for error checking.
+    Template = 1 << 1,
+    Draw = 1 << 2,
 
     // Which flags are inherited from templates...
-    InheritedFlags = (Indexed),
+    InheritedFlags = Indexed,
 }
 
 export class GfxRenderInst {
@@ -187,7 +189,7 @@ export class GfxRenderInst {
     private _bindingDescriptors: GfxBindingsDescriptor[] = nArray(1, () => ({ bindingLayout: null!, samplerBindings: [], uniformBufferBindings: [] }));
     private _dynamicUniformBufferByteOffsets: number[] = nArray(4, () => 0);
 
-    public _flags: number = 0;
+    public _flags: GfxRenderInstFlags = 0;
     private _inputState: GfxInputState | null = null;
     private _drawStart: number = 0;
     private _drawCount: number = 0;
@@ -215,6 +217,7 @@ export class GfxRenderInst {
         this.sortKey = 0;
         this.filterKey = 0;
         this._renderPipeline = null;
+        this._flags = 0;
     }
 
     /**
@@ -302,7 +305,7 @@ export class GfxRenderInst {
         for (let i = this._bindingDescriptors[0].uniformBufferBindings.length; i < bindingLayout.numUniformBuffers; i++)
             this._bindingDescriptors[0].uniformBufferBindings.push({ buffer: null!, wordCount: 0, wordOffset: 0 });
         for (let i = this._bindingDescriptors[0].samplerBindings.length; i < bindingLayout.numSamplers; i++)
-            this._bindingDescriptors[0].samplerBindings.push({ gfxSampler: null, gfxTexture: null });
+            this._bindingDescriptors[0].samplerBindings.push({ gfxSampler: null, gfxTexture: null, lateBinding: null });
     }
 
     /**
@@ -380,11 +383,12 @@ export class GfxRenderInst {
     /**
      * This is a convenience wrapper for {@see GfxRenderDynamicUniformBuffer.mapBufferF32}, but uses
      * the values previously assigned for the uniform buffer slot at index {@param bufferIndex}.
+     * Like {@see GfxRenderDynamicUniformBuffer.mapBufferF32}, this does not return a slice for the
+     * buffer; you need to write to it with the correct uniform buffer offset; this will usually be
+     * returned by {@see allocateUniformBuffer}.
      */
     public mapUniformBufferF32(bufferIndex: number): Float32Array {
-        const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
-        const wordCount = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex].wordCount;
-        return this._uniformBuffer.mapBufferF32(wordOffset, wordCount);
+        return this._uniformBuffer.mapBufferF32();
     }
 
     /**
@@ -396,23 +400,56 @@ export class GfxRenderInst {
 
     /**
      * Sets the {@param GfxSamplerBinding}s in use by this render instance.
+     *
+     * Note that {@see GfxRenderInst} has a method of doing late binding, intended to solve cases where live render
+     * targets are used, which can have difficult control flow consequences for users of GfxRenderer. Pass a string
+     * instead of a GfxSamplerBinding to record that it can be resolved later, and use
+     * {@see GfxRenderInst.resolveLateSamplerBinding} or equivalent to fill it in later.
      */
     public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
         for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
             const dst = this._bindingDescriptors[0].samplerBindings[i];
-            if (m[i] !== undefined && m[i] !== null) {
-                dst.gfxTexture = m[i]!.gfxTexture;
-                dst.gfxSampler = m[i]!.gfxSampler;
-            } else {
+            const binding = m[i];
+
+            if (binding === undefined || binding === null) {
                 dst.gfxTexture = null;
                 dst.gfxSampler = null;
+                dst.lateBinding = null;
+                continue;
+            }
+
+            dst.gfxTexture = binding.gfxTexture;
+            dst.gfxSampler = binding.gfxSampler;
+            dst.lateBinding = binding.lateBinding;
+        }
+    }
+
+    /**
+     * Resolve a previously registered "late bound" sampler binding for the given {@param name} to the provided
+     * {@param binding}, as registered through {@see setSamplerBindingsFromTextureMappings}.
+     *
+     * This is intended to be called by high-level code, and is especially helpful when juggling render targets
+     * for framebuffer effects.
+     */
+    public resolveLateSamplerBinding(name: string, binding: GfxSamplerBinding | null): void {
+        for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
+            const dst = this._bindingDescriptors[0].samplerBindings[i];
+            if (dst.lateBinding === name) {
+                if (binding === null) {
+                    dst.gfxTexture = null;
+                    dst.gfxSampler = null;
+                } else {
+                    assert(binding.lateBinding === null);
+                    dst.gfxTexture = binding.gfxTexture;
+                    dst.gfxSampler = binding.gfxSampler;
+                }
+
+                dst.lateBinding = null;
             }
         }
     }
 
     public drawOnPassWithState(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState): void {
-        assert(!!(this._flags & GfxRenderInstFlags.Draw));
-
         if (this._renderPipeline !== null) {
             state.currentRenderPipelineDescriptor = null;
             const ready = device.queryPipelineReady(this._renderPipeline);
@@ -450,7 +487,7 @@ export class GfxRenderInst {
 
         if (this._drawInstanceCount > 1) {
             assert(!!(this._flags & GfxRenderInstFlags.Indexed));
-            passRenderer.drawIndexedInstanced(this._drawCount, this._drawCount, this._drawInstanceCount);
+            passRenderer.drawIndexedInstanced(this._drawCount, this._drawStart, this._drawInstanceCount);
         } else if ((this._flags & GfxRenderInstFlags.Indexed)) {
             passRenderer.drawIndexed(this._drawCount, this._drawStart);
         } else {
@@ -458,13 +495,13 @@ export class GfxRenderInst {
         }
     }
 
-    public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
-        assert(!!(this._flags & GfxRenderInstFlags.Draw));
-
+    public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
         if (this._renderPipeline !== null) {
             passRenderer.setPipeline(this._renderPipeline);
         } else {
             const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
+            if (!device.queryPipelineReady(gfxPipeline))
+                return false;
             passRenderer.setPipeline(gfxPipeline);
         }
 
@@ -485,6 +522,8 @@ export class GfxRenderInst {
         } else {
             passRenderer.draw(this._drawCount, this._drawStart);
         }
+
+        return true;
     }
 }
 //#endregion
@@ -496,19 +535,6 @@ export function gfxRenderInstCompareSortKey(a: GfxRenderInst, b: GfxRenderInst):
     return a.sortKey - b.sortKey;
 }
 
-function bisectRight<T>(L: T[], e: T, compare: (a: T, b: T) => number): number {
-    let lo = 0, hi = L.length;
-    while (lo < hi) {
-        const mid = lo + ((hi - lo) >>> 1);
-        const cmp = compare(e, L[mid]);
-        if (cmp < 0)
-            hi = mid;
-        else
-            lo = mid + 1;
-    }
-    return lo;
-}
-
 export const enum GfxRenderInstExecutionOrder {
     Forwards,
     Backwards,
@@ -518,6 +544,7 @@ export type GfxRenderInstCompareFunc = (a: GfxRenderInst, b: GfxRenderInst) => n
 
 export class GfxRenderInstList {
     public renderInsts: GfxRenderInst[] = [];
+    private usePostSort: boolean = false;
 
     constructor(
         public compareFunction: GfxRenderInstCompareFunc | null = gfxRenderInstCompareSortKey,
@@ -526,17 +553,37 @@ export class GfxRenderInstList {
     }
 
     /**
+     * Determine whether to use post-sorting, based on some heuristics.
+     */
+    public checkUsePostSort(): void {
+        // Over a certain threshold, it's faster to push and then sort than insort directly...
+        this.usePostSort = this.compareFunction !== null && this.renderInsts.length >= 500;
+    }
+
+    /**
      * Insert a render inst to the list. This directly inserts the render inst to
      * the position specified by the compare function, so the render inst must be
      * fully constructed at this point.
      */
     public insertSorted(renderInst: GfxRenderInst): void {
-        if (this.compareFunction !== null) {
-            const idx = bisectRight(this.renderInsts, renderInst, this.compareFunction);
-            this.renderInsts.splice(idx, 0, renderInst);
-        } else {
+        if (this.compareFunction === null) {
             this.renderInsts.push(renderInst);
+        } else if (this.usePostSort) {
+            this.renderInsts.push(renderInst);
+        } else {
+            spliceBisectRight(this.renderInsts, renderInst, this.compareFunction);
         }
+
+        this.checkUsePostSort();
+    }
+
+    /**
+     * Resolve sampler bindings for all render insts on this render inst list. See the
+     * documentation for {@see GfxRenderInst.resolveLateSamplerBinding}.
+     */
+    public resolveLateSamplerBinding(name: string, binding: GfxSamplerBinding): void {
+        for (let i = 0; i < this.renderInsts.length; i++)
+            this.renderInsts[i].resolveLateSamplerBinding(name, binding);
     }
 
     /**
@@ -547,6 +594,11 @@ export class GfxRenderInstList {
     public drawOnPassRenderer(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass, state: GfxRendererTransientState | null = null): void {
         if (this.renderInsts.length === 0)
             return;
+
+        if (this.usePostSort) {
+            this.renderInsts.sort(this.compareFunction!);
+            this.usePostSort = false;
+        }
 
         // TODO(jstpierre): Remove this?
         if (state === null) {
@@ -608,7 +660,7 @@ export class GfxRenderInstManager {
     public gfxRenderCache = new GfxRenderCache();
     public instPool = new GfxRenderInstPool();
     public templatePool = new GfxRenderInstPool();
-    private simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
+    public simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
     private currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
 
     /**
@@ -624,7 +676,6 @@ export class GfxRenderInstManager {
             renderInst.setFromTemplate(this.templatePool.pool[templateIndex]);
         else
             renderInst.reset();
-        renderInst._flags = GfxRenderInstFlags.Draw;
         return renderInst;
     }
 
@@ -634,6 +685,7 @@ export class GfxRenderInstManager {
      * after submitting it.
      */
     public submitRenderInst(renderInst: GfxRenderInst): void {
+        renderInst._flags |= GfxRenderInstFlags.Draw;
         this.currentRenderInstList.insertSorted(renderInst);
     }
 
@@ -650,19 +702,6 @@ export class GfxRenderInstManager {
     }
 
     /**
-     * Returns a render instance to the pool after being used. This should be
-     * used in scenarios where the render inst is not submitted to any draw lists,
-     * like calling {@param drawOnPass} manually on the render inst.
-     */
-    public returnRenderInst(renderInst: GfxRenderInst): void {
-        renderInst._flags = 0;
-
-        // We leave it completely dead for now, since we don't expect to see too many "returned" instances.
-        // That said, if this is ever a memory pressure, we can have allocRenderInst allocate from dead items
-        // again...
-    }
-
-    /**
      * Pushes a new template render inst to the template stack. All properties set
      * on the topmost template on the template stack will be the defaults for both
      * for any future render insts created. Once done with a template, call
@@ -674,7 +713,7 @@ export class GfxRenderInstManager {
         const newTemplate = this.templatePool.pool[newTemplateIndex];
         if (templateIndex >= 0)
             newTemplate.setFromTemplate(this.templatePool.pool[templateIndex]);
-        newTemplate._flags = GfxRenderInstFlags.Template;
+        newTemplate._flags |= GfxRenderInstFlags.Template;
         return newTemplate;
     }
 
@@ -699,6 +738,8 @@ export class GfxRenderInstManager {
         this.instPool.reset();
         if (this.simpleRenderInstList !== null)
             this.simpleRenderInstList.reset();
+        // Ensure we aren't leaking templates.
+        assert(this.templatePool.allocCount === 0);
     }
 
     public destroy(device: GfxDevice): void {
@@ -721,6 +762,8 @@ export class GfxRenderInstManager {
      */
     public setVisibleByFilterKeyExact(filterKey: number): void {
         const list = assertExists(this.simpleRenderInstList);
+        // Guess whether we should speed things up with a post-sort by the previous contents of the list...
+        list.checkUsePostSort();
         list.renderInsts.length = 0;
 
         for (let i = 0; i < this.instPool.allocCount; i++)

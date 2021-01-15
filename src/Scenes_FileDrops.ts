@@ -56,7 +56,7 @@ async function loadArbitraryFile(context: SceneContext, buffer: ArrayBufferSlice
     buffer = await decompressArbitraryFile(buffer);
     const magic = readString(buffer, 0x00, 0x04);
 
-    if (magic === 'RARC' || magic === 'J3D2')
+    if (magic === 'RARC' || magic === 'CRAR' || magic === 'J3D2')
         return J3D.createSceneFromBuffer(context, buffer);
 
     if (magic === '\x55\xAA\x38\x2D') // U8

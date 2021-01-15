@@ -8,7 +8,7 @@ import { DeviceProgram } from "../Program";
 import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
@@ -66,6 +66,7 @@ class KingdomHeartsIIProgram extends DeviceProgram {
     public static a_TexRepeat = 4;
     public static a_TexScaleOffs = 5;
     public static a_TexScroll = 6;
+    public static a_Normal = 7;
 
     public static ub_SceneParams = 0;
     public static ub_DrawParams = 1;
@@ -95,6 +96,7 @@ class DrawCall {
     public textureAnim: MAP.TextureAnimation | null = null;
 
     public translucent: boolean = false;
+    public useNormal: boolean = false;
     public addAlpha: boolean = false;
     public cullBackfaces: boolean = true;
     public layer: Layer | null = null;
@@ -113,6 +115,7 @@ interface RenderBatchKey {
     group: MeshGroup;
     layerIndex: number;
     textureIndex: number;
+    useNormal: boolean;
     addAlpha: boolean;
 };
 
@@ -274,7 +277,7 @@ export class MapData {
             if (texture.textureAnim) {
                 textureIndex = texture.textureAnim.index + 1;
             }
-            const batchKey: RenderBatchKey = { group: meshPair.group, layerIndex: mesh.layer, textureIndex, addAlpha: mesh.addAlpha };
+            const batchKey: RenderBatchKey = { group: meshPair.group, layerIndex: mesh.layer, textureIndex, useNormal: mesh.useNormal, addAlpha: mesh.addAlpha };
             const batchKeyStr = JSON.stringify(batchKey);
             if (!mesh.translucent) {
                 if (!opaqueMeshMap.has(batchKeyStr)) {
@@ -342,6 +345,7 @@ export class MapData {
         }
         drawCall.textureIndex = batchKey.textureIndex;
         drawCall.translucent = translucent;
+        drawCall.useNormal = batchKey.useNormal;
         drawCall.addAlpha = batchKey.addAlpha;
         if (batchKey.textureIndex > 0) {
             drawCall.textureAnim = this.textureAnimations[batchKey.textureIndex - 1];
@@ -361,7 +365,7 @@ export class MapData {
     }
 
     private buildBuffersAndInputState(device: GfxDevice, meshesInDrawOrder: MAP.MapMesh[]) {
-        const vBuffer = new Float32Array(this.vertices * 21);
+        const vBuffer = new Float32Array(this.vertices * 24);
         const iBuffer = new Uint32Array(this.indices);
         let vBufferIndex = 0;
         let iBufferIndex = 0;
@@ -371,34 +375,39 @@ export class MapData {
                 continue;
             }
             const texScaleOffs = vec4.create();
-            const texClip = vec4.create();
-            const texRepeat = vec2.create();
             const texture = assertExists(mesh.texture);
             if (texture.textureAnim) {
-                texScaleOffs.set([
+                vec4.set(texScaleOffs,
                     mesh.textureBlock.width / texture.textureAnim.sheetWidth,
                     mesh.textureBlock.height / texture.textureAnim.sheetHeight,
                     -texture.clipLeft / texture.textureAnim.sheetWidth,
                     -texture.clipTop / texture.textureAnim.sheetHeight
-                ]);
+                );
+            } else if (mesh.useNormal) {
+                vec4.set(texScaleOffs,
+                    mesh.texture!.width() / this.atlasWidth * 0.5,
+                    mesh.texture!.height() / this.atlasHeight * 0.5,
+                    ((mesh.textureBlock.atlasX + mesh.texture!.clipLeft) * 2 + mesh.texture!.width()) / this.atlasWidth * 0.5,
+                    ((mesh.textureBlock.atlasY + mesh.texture!.clipTop) * 2 + mesh.texture!.height()) / this.atlasHeight * 0.5,
+                );
             } else {
-                texScaleOffs.set([
+                vec4.set(texScaleOffs,
                     mesh.textureBlock.width / this.atlasWidth,
                     mesh.textureBlock.height / this.atlasHeight,
                     mesh.textureBlock.atlasX / this.atlasWidth,
                     mesh.textureBlock.atlasY / this.atlasHeight
-                ]);
+                );
             }
-            texClip.set([
+            const texClip = vec4.fromValues(
                 (texture.clipLeft + 0.5) / mesh.textureBlock.width,
                 (texture.clipRight + 0.5) / mesh.textureBlock.width,
                 (texture.clipTop + 0.5) / mesh.textureBlock.height,
                 (texture.clipBottom + 0.5) / mesh.textureBlock.height
-            ]);
-            texRepeat.set([
+            );
+            const texRepeat = vec2.fromValues(
                 texture.tiledU ? mesh.textureBlock.width / texture.width() : 0.5,
                 texture.tiledV ? mesh.textureBlock.height / texture.height() : 0.5
-            ]);
+            );
             for (let i = 0; i < mesh.vtx.length; i++) {
                 vBuffer[vBufferIndex++] = mesh.vtx[i][0];
                 vBuffer[vBufferIndex++] = mesh.vtx[i][1];
@@ -421,6 +430,9 @@ export class MapData {
                 vBuffer[vBufferIndex++] = texScaleOffs[3];
                 vBuffer[vBufferIndex++] = mesh.uvScroll[0];
                 vBuffer[vBufferIndex++] = mesh.uvScroll[1];
+                vBuffer[vBufferIndex++] = mesh.normal.length > 0 ? mesh.normal[i][0] : 0;
+                vBuffer[vBufferIndex++] = mesh.normal.length > 0 ? mesh.normal[i][1] : 0;
+                vBuffer[vBufferIndex++] = mesh.normal.length > 0 ? mesh.normal[i][2] : 0;
             }
             for (let i = 0; i < mesh.ind.length; i++) {
                 iBuffer[iBufferIndex++] = mesh.ind[i] + lastInd;
@@ -439,9 +451,10 @@ export class MapData {
             { location: KingdomHeartsIIProgram.a_TexRepeat, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 13*0x04, },
             { location: KingdomHeartsIIProgram.a_TexScaleOffs, bufferIndex: 0, format: GfxFormat.F32_RGBA, bufferByteOffset: 15*0x04, },
             { location: KingdomHeartsIIProgram.a_TexScroll, bufferIndex: 0, format: GfxFormat.F32_RG, bufferByteOffset: 19*0x04, },
+            { location: KingdomHeartsIIProgram.a_Normal, bufferIndex: 0, format: GfxFormat.F32_RGB, bufferByteOffset: 21*0x04, },
         ];
         const vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[] = [
-            { byteStride: 21*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
+            { byteStride: 24*0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
         this.inputLayout = device.createInputLayout({
             indexBufferFormat: GfxFormat.U32_R,
@@ -556,6 +569,9 @@ class DrawCallInstance {
         if (!this.drawCall.translucent) {
             program.defines.set(`USE_ALPHA_MASK`, '1');
         }
+        if (this.drawCall.useNormal) {
+            program.defines.set(`USE_NORMAL`, '1');
+        }
         this.gfxProgram = null;
         this.program = program;
     }
@@ -589,8 +605,6 @@ class SceneRenderer {
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(this.megaStateFlags);
         template.filterKey = RenderPass.MAIN;
-
-        viewerInput.camera.setClipPlanes(/*n=*/20, /*f=*/500000);
 
         let offs = template.allocateUniformBuffer(KingdomHeartsIIProgram.ub_SceneParams, 20);
         const sceneParamsMapped = template.mapUniformBufferF32(KingdomHeartsIIProgram.ub_SceneParams);
@@ -670,7 +684,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Create main render pass.
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
+        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         executeOnPass(this.renderInstManager, device, passRenderer, RenderPass.MAIN);
         this.renderInstManager.resetRenderInsts();
         return passRenderer;

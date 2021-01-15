@@ -34,11 +34,11 @@
 // standard formats.
 
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { align, assert, hexzero, fallbackUndefined } from '../util';
+import { align, assert, hexzero, assertExists, nArray } from '../util';
 
 import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
-import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatTypeFlagsByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat, setFormatFlags } from '../gfx/platform/GfxPlatformFormat';
+import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat, setFormatFlags } from '../gfx/platform/GfxPlatformFormat';
 import { HashMap, nullHashFunc } from '../HashMap';
 
 // GX_SetVtxAttrFmt
@@ -69,7 +69,7 @@ export const enum VertexAttributeInput {
     TEX4567MTXIDX,
     POS,
     NRM,
-    // These are part of NBT in original Dolphin. We pack them as separate inputs.
+    // These are part of NBT in original GX. We pack them as separate inputs.
     BINRM,
     TANGENT,
     CLR0,
@@ -124,10 +124,25 @@ interface VertexLayout extends LoadedVertexLayout, VtxLoaderDesc {
     vatLayouts: (VatLayout | undefined)[];
 }
 
-export interface LoadedVertexPacket {
+// It is possible for the vertex display list to include indirect load commands, which request a synchronous
+// DMA into graphics memory from main memory. This is the standard way of doing vertex skinning in NW4R, for
+// instance, but it can be seen in other cases too. We handle this by splitting the data into multiple draw
+// commands per display list, which are the "LoadedVertexDraw" structures.
+
+// Note that the loader relies the common convention of the indexed load commands to produce the matrix tables
+// in each LoadedVertexDraw. GX establishes the conventions:
+//
+//  INDX_A = Position Matrices (=> posMatrixTable)
+//  INDX_B = Normal Matrices (currently unsupported)
+//  INDX_C = Texture Matrices (=> texMatrixTable)
+//  INDX_D = Light Objects (currently unsupported)
+//
+// Perhaps it might make sense to one day emulate main memory with a float texture, and then have the vertex
+// stream just change the index used in the rest of the stream, but for now, multiple draw commands seems fine.
+export interface LoadedVertexDraw {
     indexOffset: number;
     indexCount: number;
-    posNrmMatrixTable: number[];
+    posMatrixTable: number[];
     texMatrixTable: number[];
 }
 
@@ -137,18 +152,25 @@ export interface LoadedVertexData {
     totalIndexCount: number;
     totalVertexCount: number;
     vertexId: number;
-    packets: LoadedVertexPacket[];
+    draws: LoadedVertexDraw[];
+
+    // Internal. Used for re-running vertices.
+    dlView: DataView | null;
+    drawCalls: DrawCall[] | null;
 }
 
 export interface LoadOptions {
     firstVertexId?: number;
 }
 
-type VtxLoaderFunc = (vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions) => LoadedVertexData;
-
 export interface VtxLoader {
     loadedVertexLayout: LoadedVertexLayout;
-    runVertices: VtxLoaderFunc;
+    parseDisplayList: (srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions) => LoadedVertexData;
+    loadVertexDataInto: (dst: DataView, dstOffs: number, loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]) => void;
+    loadVertexData: (loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]) => void;
+
+    // Quick helper.
+    runVertices: (vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions) => LoadedVertexData;
 }
 
 //#region Vertex Attribute Setup
@@ -263,16 +285,8 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.C
         else if (compCnt === GX.CompCnt.POS_XYZ)
             return FormatCompFlags.COMP_RGB;
     case GX.Attr.NRM:
-        if (compCnt === GX.CompCnt.NRM_XYZ)
-            return FormatCompFlags.COMP_RGB;
-        // NBT*XYZ
-        // XXX(jstpierre): This is impossible in modern graphics APIs. We need to split this into three attributes...
-        // Thankfully, nobody seems to be using NRM_NBT.
-        else if (compCnt === GX.CompCnt.NRM_NBT)
-            return 9;
-        // Separated NBT has three components per index.
-        else if (compCnt === GX.CompCnt.NRM_NBT3)
-            return FormatCompFlags.COMP_RGB;
+        // Normals always have 3 components per index.
+        return FormatCompFlags.COMP_RGB;
     case GX.Attr.CLR0:
     case GX.Attr.CLR1:
         if (compCnt === GX.CompCnt.CLR_RGB)
@@ -329,7 +343,7 @@ function getComponentShift(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number
         return 0;
 
     // Normals *always* use either 6 or 14 for their shift values.
-    // The value in the VAT is ignored.
+    // The value in the VAT is ignored. Note that normals are also normalized, too.
     if (vtxAttrib === GX.Attr.NRM) {
         if (vatFormat.compType === GX.CompType.U8 || vatFormat.compType === GX.CompType.S8)
             return 6;
@@ -459,6 +473,11 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
     return { srcVertexSize, vatFormat, vcd };
 }
 
+function isVatLayoutNBT(vatLayout: VatLayout): boolean {
+    const compCnt = vatLayout.vatFormat[GX.Attr.NRM].compCnt;
+    return compCnt === GX.CompCnt.NRM_NBT || compCnt === GX.CompCnt.NRM_NBT3;
+}
+
 export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDesc[]): VertexLayout {
     // Copy inputs since we use them as a cache.
     vat = arrayCopy(vat, vatCopy);
@@ -519,8 +538,8 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
             input = allocateVertexInput(VertexAttributeInput.POS, inputFormat);
             fieldCompOffset = 3;
             fieldFormat = input.format;
-        } else if (vtxAttrib === GX.Attr.NBT) {
-            // NBT. Allocate layouts for all of NRM, BINRM, TANGENT.
+        } else if (vtxAttrib === GX.Attr.NRM && vatLayouts.some((vatLayout) => vatLayout !== undefined && isVatLayoutNBT(vatLayout))) {
+            // NBT. Allocate inputs for all of NRM, BINRM, TANGENT.
             input = allocateVertexInput(VertexAttributeInput.NRM, inputFormat);
             allocateVertexInput(VertexAttributeInput.BINRM, inputFormat);
             allocateVertexInput(VertexAttributeInput.TANGENT, inputFormat);
@@ -560,8 +579,9 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
 
 //#region Vertex Loader JIT
 type SingleVtxLoaderFunc = (dstVertexDataView: DataView, dstVertexDataOffs: number, dlView: DataView, dlOffs: number, vtxArrayViews: DataView[], vtxArrayStrides: number[]) => number;
+type SingleVatLoaderFunc = (dstVertexDataView: DataView, dstVertexDataOffs: number, loadedVertexLayout: LoadedVertexLayout, dlView: DataView, drawCalls: DrawCall[], vtxArrayViews: DataView[], vtxArrayStrides: number[]) => number;
 
-function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayout: VatLayout): SingleVtxLoaderFunc {
+function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: VatLayout): string {
     function compileVtxArrayViewName(vtxAttrib: GX.Attr): string {
         return `vtxArrayViews[${vtxAttrib}]`;
     }
@@ -692,6 +712,23 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
             }
         }
 
+        function compileOneAttribMtxIdx(viewName: string, attrOffs: string): string {
+            let S = ``;
+
+            const srcAttrCompSize = getAttributeComponentByteSize(vtxAttrib, vtxAttrFmt);
+            const srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
+            assertExists(srcAttrCompSize === 1 && srcAttrCompCount === 1);
+
+            const dstOffs = dstBaseOffs;
+            const srcOffs: string = `${attrOffs}`;
+            const value = compileReadOneComponent(viewName, srcOffs);
+
+            S += `
+    ${compileWriteOneComponent(dstOffs, `(${value} / 3)`)};`;
+
+            return S;
+        }
+
         function compileOneAttribOther(viewName: string, attrOffs: string): string {
             let S = ``;
 
@@ -699,7 +736,6 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
             const srcAttrCompCount = getAttributeComponentCount(vtxAttrib, vtxAttrFmt);
 
             const dstComponentSize = getFormatCompByteSize(dstFormat);
-            const dstComponentCount = getFormatComponentCount(dstFormat);
 
             for (let i = 0; i < srcAttrCompCount; i++) {
                 const dstOffs = dstBaseOffs + (i * dstComponentSize);
@@ -717,7 +753,9 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
             let S = ``;
 
             if (enableOutput) {
-                if (isVtxAttribColor(vtxAttrib))
+                if (isVtxAttribMtxIdx(vtxAttrib))
+                    S += compileOneAttribMtxIdx(viewName, attrOffsetBase);
+                else if (isVtxAttribColor(vtxAttrib))
                     S += compileOneAttribColor(viewName, attrOffsetBase);
                 else
                     S += compileOneAttribOther(viewName, attrOffsetBase);
@@ -747,11 +785,11 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
                 // Special case: NBT3.
                 return `
     // NRM
-    ${compileOneIndex(viewName, `${readIndex} + 0`, drawCallIdxIncr, `_N`)}
+    ${compileOneIndex(viewName, readIndex, drawCallIdxIncr, `_N`)}
     // BINRM
-    ${compileOneIndex(viewName, `${readIndex} + 3`, drawCallIdxIncr, `_B`)}
+    ${compileOneIndex(viewName, readIndex, drawCallIdxIncr, `_B`)}
     // TANGENT
-    ${compileOneIndex(viewName, `${readIndex} + 6`, drawCallIdxIncr, `_T`)}`;
+    ${compileOneIndex(viewName, readIndex, drawCallIdxIncr, `_T`)}`;
             } else {
                 return `
     // ${getAttrName(vtxAttrib)}
@@ -778,67 +816,112 @@ function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayou
         return S;
     }
 
-    const source = `
+    return compileVatLayout(vatLayout);
+}
+
+function compileFunction<T extends Function>(source: string, entryPoint: string): T {
+    const fullSource = `
 "use strict";
 
-return function(dstVertexDataView, dstVertexDataOffs, dlView, drawCallIdx, vtxArrayViews, vtxArrayStrides) {
-${compileVatLayout(vatLayout)}
+${source}
 
-    return drawCallIdx;
-};
+return function() {
+    return ${entryPoint};
+}();
 `;
 
-    const runVerticesGenerator = new Function(source);
-    const runVertices: SingleVtxLoaderFunc = runVerticesGenerator();
+    const generator = new Function(fullSource);
+    const func = generator() as T;
+    return func; 
+}
 
-    return runVertices;
+function compileSingleVtxLoader(loadedVertexLayout: LoadedVertexLayout, vatLayout: VatLayout): SingleVtxLoaderFunc {
+    const runVertices = generateRunVertices(loadedVertexLayout, vatLayout);
+    const source = `
+function runVertices(dstVertexDataView, dstVertexDataOffs, dlView, drawCallIdx, vtxArrayViews, vtxArrayStrides) {
+    ${runVertices}
+    return drawCallIdx;
+}
+`;
+    return compileFunction(source, `runVertices`);
+}
+
+function compileSingleVatLoader(loadedVertexLayout: LoadedVertexLayout, vatLayout: VatLayout): SingleVatLoaderFunc {
+    const runVertices = generateRunVertices(loadedVertexLayout, vatLayout);
+    const source = `
+function runVertices(dstVertexDataView, dstVertexDataOffs, loadedVertexLayout, dlView, drawCalls, vtxArrayViews, vtxArrayStrides) {
+    for (let i = 0; i < drawCalls.length; i++) {
+        const drawCall = drawCalls[i];
+
+        let drawCallIdx = drawCall.srcOffs;
+        for (let j = 0; j < drawCall.vertexCount; j++) {
+            ${runVertices}
+            dstVertexDataOffs += loadedVertexLayout.vertexBufferStrides[0];
+        }
+    }
+}
+`;
+    return compileFunction(source, `runVertices`);
+}
+
+interface DrawCall {
+    primType: number;
+    vertexFormat: GX.VtxFmt;
+    srcOffs: number;
+    vertexCount: number;
 }
 
 class VtxLoaderImpl implements VtxLoader {
     public vtxLoaders: SingleVtxLoaderFunc[] = [];
 
+    // For Single VAT cases (optimization).
+    public singleVatLoader: SingleVatLoaderFunc | null = null;
+
     constructor(public loadedVertexLayout: VertexLayout) {
+        let singleVat = -1;
         for (let i = 0; i < loadedVertexLayout.vatLayouts.length; i++) {
             const vatLayout = loadedVertexLayout.vatLayouts[i];
-            if (vatLayout !== undefined)
-                this.vtxLoaders[i] = compileSingleVtxLoader(loadedVertexLayout, vatLayout);
-        }
-    }
-
-    public runVertices(vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions): LoadedVertexData {
-        // TODO(jstpierre): Clean this up eventually
-
-        const firstVertexId = (loadOptions !== undefined && loadOptions.firstVertexId !== undefined) ? loadOptions.firstVertexId : 0;
-
-        const vtxArrayViews: DataView[] = [];
-        const vtxArrayStrides: number[] = [];
-        for (let i = 0; i < GX.Attr.MAX; i++) {
-            if (vtxArrays[i] !== undefined) {
-                vtxArrayViews[i] = vtxArrays[i].buffer.createDataView(vtxArrays[i].offs);
-                vtxArrayStrides[i] = vtxArrays[i].stride;
+            if (vatLayout) {
+                if (singleVat === -1)
+                    singleVat = i;
+                else
+                    singleVat = -2;
             }
         }
 
-        function newPacket(indexOffset: number): LoadedVertexPacket {
+        if (singleVat >= 0) {
+            this.singleVatLoader = compileSingleVatLoader(loadedVertexLayout, loadedVertexLayout.vatLayouts[singleVat]!);
+        } else {
+            // Initialize multi-VAT.
+            for (let i = 0; i < loadedVertexLayout.vatLayouts.length; i++) {
+                const vatLayout = loadedVertexLayout.vatLayouts[i];
+                if (vatLayout !== undefined)
+                    this.vtxLoaders[i] = compileSingleVtxLoader(loadedVertexLayout, vatLayout);
+            }
+        }
+    }
+
+    public parseDisplayList(srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions): LoadedVertexData {
+        // TODO(jstpierre): Clean this up eventually
+
+        function newDraw(indexOffset: number): LoadedVertexDraw {
             return {
                 indexOffset,
                 indexCount: 0,
-                posNrmMatrixTable: Array(10).fill(0xFFFF),
+                posMatrixTable: Array(10).fill(0xFFFF),
                 texMatrixTable: Array(10).fill(0xFFFF),
             };
         }
 
-        type DrawCall = { primType: number, vertexFormat: GfxFormat, srcOffs: number, vertexCount: number };
-
         // Parse display list.
         const dlView = srcBuffer.createDataView();
         const drawCalls: DrawCall[] = [];
-        const packets: LoadedVertexPacket[] = [];
+        const draws: LoadedVertexDraw[] = [];
         let totalVertexCount = 0;
         let totalIndexCount = 0;
         let drawCallIdx = 0;
-        let currentPacketDraw = null;
-        let currentPacketXfmem = null;
+        let currentDraw: LoadedVertexDraw | null = null;
+        let currentXfmem: LoadedVertexDraw | null = null;
 
         while (true) {
             if (drawCallIdx >= srcBuffer.byteLength)
@@ -850,15 +933,15 @@ class VtxLoaderImpl implements VtxLoader {
             // TODO(jstpierre): This hardcodes some assumptions about the arrays and indexed units.
             switch (cmd) {
             case GX.Command.LOAD_INDX_A: { // Position Matrices
-                currentPacketDraw = null;
-                if (currentPacketXfmem === null)
-                    currentPacketXfmem = newPacket(totalIndexCount);
+                currentDraw = null;
+                if (currentXfmem === null)
+                    currentXfmem = newDraw(totalIndexCount);
                 // PosMtx memory address space starts at 0x0000 and goes until 0x0400 (including TexMtx),
                 // each element being 3*4 in size.
                 const memoryElemSize = 3*4;
                 const memoryBaseAddr = 0x0000;
-                const table = currentPacketXfmem.posNrmMatrixTable;
-        
+                const table = currentXfmem.posMatrixTable;
+
                 const arrayIndex = dlView.getUint16(drawCallIdx + 0x01);
                 const addrLen = dlView.getUint16(drawCallIdx + 0x03);
                 const len = (addrLen >>> 12) + 1;
@@ -875,15 +958,15 @@ class VtxLoaderImpl implements VtxLoader {
                 continue;
             }
             case GX.Command.LOAD_INDX_C: { // Texture Matrices
-                currentPacketDraw = null;
-                if (currentPacketXfmem === null)
-                    currentPacketXfmem = newPacket(totalIndexCount);
+                currentDraw = null;
+                if (currentXfmem === null)
+                    currentXfmem = newDraw(totalIndexCount);
                 // TexMtx memory address space is the same as PosMtx memory address space, but by convention
                 // uses the upper 10 matrices. We enforce this convention.
                 // Elements should be 3*4 in size. GD has ways to break this but BRRES should not generate this.
                 const memoryElemSize = 3*4;
                 const memoryBaseAddr = 0x0078;
-                const table = currentPacketXfmem.texMatrixTable;
+                const table = currentXfmem.texMatrixTable;
 
                 const arrayIndex = dlView.getUint16(drawCallIdx + 0x01);
                 const addrLen = dlView.getUint16(drawCallIdx + 0x03);
@@ -915,14 +998,14 @@ class VtxLoaderImpl implements VtxLoader {
             const srcOffs = drawCallIdx;
             totalVertexCount += vertexCount;
 
-            if (currentPacketDraw === null) {
-                if (currentPacketXfmem !== null) {
-                    currentPacketDraw = currentPacketXfmem;
-                    currentPacketXfmem = null;
+            if (currentDraw === null) {
+                if (currentXfmem !== null) {
+                    currentDraw = currentXfmem;
+                    currentXfmem = null;
                 } else {
-                    currentPacketDraw = newPacket(totalIndexCount);
+                    currentDraw = newDraw(totalIndexCount);
                 }
-                packets.push(currentPacketDraw);
+                draws.push(currentDraw);
             }
 
             let indexCount = 0;
@@ -943,7 +1026,7 @@ class VtxLoaderImpl implements VtxLoader {
             }
 
             drawCalls.push({ primType, vertexFormat, srcOffs, vertexCount });
-            currentPacketDraw.indexCount += indexCount;
+            currentDraw.indexCount += indexCount;
             totalIndexCount += indexCount;
 
             const vatFormat = this.loadedVertexLayout.vatLayouts[vertexFormat];
@@ -954,19 +1037,16 @@ class VtxLoaderImpl implements VtxLoader {
             drawCallIdx += vatFormat.srcVertexSize * vertexCount;
         }
 
-        // Now make the data.
+        // Construct the index buffer.
+        const firstVertexId = (loadOptions !== undefined && loadOptions.firstVertexId !== undefined) ? loadOptions.firstVertexId : 0;
+
         let indexDataIdx = 0;
         const dstIndexData = new Uint16Array(totalIndexCount);
         let vertexId = firstVertexId;
 
-        const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * totalVertexCount;
-        const dstVertexData = new ArrayBuffer(dstVertexDataSize);
-        const dstVertexDataView = new DataView(dstVertexData);
-        let dstVertexDataOffs = 0;
-
         for (let z = 0; z < drawCalls.length; z++) {
             const drawCall = drawCalls[z];
-        
+
             // Convert topology to triangles.
             switch (drawCall.primType) {
             case GX.Command.DRAW_TRIANGLES:
@@ -1015,19 +1095,60 @@ class VtxLoaderImpl implements VtxLoader {
                     vertexId += 4;
                 }
             }
+        }
 
-            let drawCallIdx = drawCall.srcOffs;
-            for (let j = 0; j < drawCall.vertexCount; j++) {
-                drawCallIdx = this.vtxLoaders[drawCall.vertexFormat](dstVertexDataView, dstVertexDataOffs, dlView, drawCallIdx, vtxArrayViews, vtxArrayStrides);
-                dstVertexDataOffs += this.loadedVertexLayout.vertexBufferStrides[0];
+        const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * totalVertexCount;
+        const dstVertexData = new ArrayBuffer(dstVertexDataSize);
+        const vertexBuffers: ArrayBuffer[] = [dstVertexData];
+
+        const indexData = dstIndexData.buffer;
+        return { indexData, totalIndexCount, totalVertexCount, draws: draws, vertexId, vertexBuffers, dlView, drawCalls };
+    }
+
+    public loadVertexDataInto(dst: DataView, dstOffs: number, loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]): void {
+        const vtxArrayViews: DataView[] = [];
+        const vtxArrayStrides: number[] = [];
+        for (let i = 0; i <= GX.Attr.MAX; i++) {
+            if (vtxArrays[i] !== undefined) {
+                vtxArrayViews[i] = vtxArrays[i].buffer.createDataView(vtxArrays[i].offs);
+                vtxArrayStrides[i] = vtxArrays[i].stride;
             }
         }
-        
-        return {
-            indexData: dstIndexData.buffer,
-            vertexBuffers: [dstVertexData],
-            totalVertexCount, totalIndexCount, vertexId, packets
-        };
+
+        const dlView = assertExists(loadedVertexData.dlView);
+        const drawCalls = assertExists(loadedVertexData.drawCalls);
+
+        const dstVertexDataSize = this.loadedVertexLayout.vertexBufferStrides[0] * loadedVertexData.totalVertexCount;
+        assert(dst.byteLength >= dstVertexDataSize);
+        let dstVertexDataOffs = dstOffs;
+
+        // Now make the data.
+
+        if (this.singleVatLoader !== null) {
+            this.singleVatLoader(dst, dstVertexDataOffs, this.loadedVertexLayout, dlView, drawCalls, vtxArrayViews, vtxArrayStrides);
+        } else {
+            for (let i = 0; i < drawCalls.length; i++) {
+                const drawCall = drawCalls[i];
+
+                let drawCallIdx = drawCall.srcOffs;
+                for (let j = 0; j < drawCall.vertexCount; j++) {
+                    drawCallIdx = this.vtxLoaders[drawCall.vertexFormat](dst, dstVertexDataOffs, dlView, drawCallIdx, vtxArrayViews, vtxArrayStrides);
+                    dstVertexDataOffs += this.loadedVertexLayout.vertexBufferStrides[0];
+                }
+            }
+        }
+    }
+
+    public loadVertexData(loadedVertexData: LoadedVertexData, vtxArrays: GX_Array[]): void {
+        const dstVertexData = assertExists(loadedVertexData.vertexBuffers[0]);
+        const dstVertexDataView = new DataView(dstVertexData);
+        return this.loadVertexDataInto(dstVertexDataView, 0, loadedVertexData, vtxArrays);
+    }
+
+    public runVertices(vtxArrays: GX_Array[], srcBuffer: ArrayBufferSlice, loadOptions?: LoadOptions): LoadedVertexData {
+        const loadedVertexData = this.parseDisplayList(srcBuffer, loadOptions);
+        this.loadVertexData(loadedVertexData, vtxArrays);
+        return loadedVertexData;
     }
 }
 
@@ -1067,10 +1188,14 @@ function vtxAttrFmtEqual(a: GX_VtxAttrFmt | undefined, b: GX_VtxAttrFmt | undefi
 }
 
 function vatCopy(a: GX_VtxAttrFmt[]): GX_VtxAttrFmt[] {
-    return arrayCopy(a, vtxAttrFmtCopy) as GX_VtxAttrFmt[];
+    if (a === undefined)
+        return undefined as unknown as GX_VtxAttrFmt[];
+    else
+        return arrayCopy(a, vtxAttrFmtCopy) as GX_VtxAttrFmt[];
 }
 
 function vatEqual(a: GX_VtxAttrFmt[], b: GX_VtxAttrFmt[]): boolean {
+    if (a === undefined || b === undefined) return a === b;
     return arrayEqual(a, b, vtxAttrFmtEqual);
 }
 
@@ -1114,6 +1239,24 @@ export function compileVtxLoader(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]):
     const vat = [vatFormat];
     const desc = { vat, vcd };
     return compileVtxLoaderDesc(desc);
+}
+
+export function compilePartialVtxLoader(vtxLoader: VtxLoader, loadedVertexData: LoadedVertexData): VtxLoader {
+    const vertexLayout = (vtxLoader as VtxLoaderImpl).loadedVertexLayout;
+    const vat: GX_VtxAttrFmt[][] = [];
+    const vcd = vertexLayout.vcd;
+
+    const vatsUsed: boolean[] = nArray(8, () => false);
+    for (let i = 0; i < loadedVertexData.drawCalls!.length; i++) {
+        const drawCall = loadedVertexData.drawCalls![i];
+        vatsUsed[drawCall.vertexFormat] = true;
+    }
+
+    for (let i = 0; i < vatsUsed.length; i++)
+        if (vatsUsed[i])
+            vat[i] = vertexLayout.vat[i];
+
+    return compileVtxLoaderMultiVat(vat, vcd);
 }
 //#endregion
 
@@ -1311,24 +1454,40 @@ export function displayListRegistersInitGX(r: DisplayListRegisters): void {
 //#endregion
 
 //#region Utilities
-export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, loadedDatas: LoadedVertexData[]): LoadedVertexData {
+function canMergeDraws(a: LoadedVertexDraw, b: LoadedVertexDraw): boolean {
+    if (a.indexOffset !== b.indexOffset)
+        return false;
+    if (!arrayEqual(a.posMatrixTable, b.posMatrixTable, (i, j) => i === j))
+        return false;
+    if (!arrayEqual(a.texMatrixTable, b.texMatrixTable, (i, j) => i === j))
+        return false;
+    return true;
+}
+
+export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVertexData {
     let totalIndexCount = 0;
     let totalVertexCount = 0;
     let indexDataSize = 0;
     let packedVertexDataSize = 0;
-    const packets: LoadedVertexPacket[] = [];
+    const draws: LoadedVertexDraw[] = [];
 
     for (let i = 0; i < loadedDatas.length; i++) {
         const loadedData = loadedDatas[i];
         assert(loadedData.vertexBuffers.length === 1);
 
-        for (let j = 0; j < loadedData.packets.length; j++) {
-            const packet = loadedData.packets[j];
-            const indexOffset = totalIndexCount + packet.indexOffset;
-            const indexCount = packet.indexCount;
-            const posNrmMatrixTable = packet.posNrmMatrixTable;
-            const texMatrixTable = packet.texMatrixTable;
-            packets.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+        for (let j = 0; j < loadedData.draws.length; j++) {
+            const draw = loadedData.draws[j];
+            const existingDraw = draws.length > 0 ? draws[draws.length - 1] : null;
+
+            if (existingDraw !== null && canMergeDraws(draw, existingDraw)) {
+                existingDraw.indexCount += draw.indexCount;
+            } else {
+                const indexOffset = totalIndexCount + draw.indexOffset;
+                const indexCount = draw.indexCount;
+                const posNrmMatrixTable = draw.posMatrixTable;
+                const texMatrixTable = draw.texMatrixTable;
+                draws.push({ indexOffset, indexCount, posMatrixTable: posNrmMatrixTable, texMatrixTable });
+            }
         }
 
         totalIndexCount += loadedData.totalIndexCount;
@@ -1356,7 +1515,9 @@ export function coalesceLoadedDatas(loadedVertexLayout: LoadedVertexLayout, load
         totalIndexCount,
         totalVertexCount,
         vertexId: 0,
-        packets,
+        draws,
+        drawCalls: null,
+        dlView: null,
     };
 }
 //#endregion

@@ -1,9 +1,12 @@
 
-//@ts-ignore
 import * as defaultSaveStateData from './DefaultSaveStates.json';
 
 export type SettingCallback = (saveManager: SaveManager, key: string) => void;
 export type SaveStateCallback = (saveManager: SaveManager) => void;
+
+interface SaveStateMap {
+    [k: string]: string;
+}
 
 export const enum SaveStateLocation {
     LocalStorage,
@@ -49,7 +52,7 @@ export class SaveManager {
     }
 
     public saveSetting<T>(key: string, value: T, force: boolean = false): void {
-        if (force || (this.loadSetting<T | null>(key, null) === value))
+        if (!force && this.loadSetting<T | null>(key, null) === value)
             return;
         window.localStorage.setItem(this.getSettingKey(key), JSON.stringify(value));
         for (let i = 0; i < this.settingListeners.length; i++)
@@ -120,8 +123,8 @@ export class SaveManager {
         if (location === SaveStateLocation.SessionStorage)
             return window.sessionStorage.getItem(key);
 
-        if (location === SaveStateLocation.Defaults)
-            return defaultSaveStateData[key] || null;
+        if (location === SaveStateLocation.Defaults && key in defaultSaveStateData)
+            return (defaultSaveStateData as SaveStateMap)[key] || null;
 
         return null;
     }
@@ -139,7 +142,7 @@ export class SaveManager {
             return state;
 
         // Look up in default save state data.
-        state = defaultSaveStateData[key];
+        state = (defaultSaveStateData as SaveStateMap)[key];
         if (state)
             return state;
 

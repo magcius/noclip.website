@@ -220,8 +220,6 @@ export class Animator {
                 else {
                     if (!this.forceLoop)
                         return this.loopCount === 1;
-                    // should end, but loop anyway
-                    // causes some glitches, but e.g. lava is clearly supposed to loop
                     this.trackIndex = 0;
                 }
             }

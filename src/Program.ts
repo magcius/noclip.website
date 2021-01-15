@@ -1,33 +1,8 @@
 
 import CodeEditor from "./CodeEditor";
 import { assertExists } from "./util";
-import { GfxVendorInfo } from "./gfx/platform/GfxPlatform";
+import { GfxVendorInfo, GfxProgram, GfxDevice } from "./gfx/platform/GfxPlatform";
 import { preprocessShader_GLSL } from "./gfx/shaderc/GfxShaderCompiler";
-
-type DefineMap = Map<string, string>;
-
-function definesEqual(a: DefineMap, b: DefineMap): boolean {
-    if (a.size !== b.size)
-        return false;
-
-    for (const [k, v] of a.entries())
-        if (b.get(k) !== v)
-            return false;
-
-    return true;
-}
-
-export function deviceProgramEqual(a: DeviceProgram, b: DeviceProgram): boolean {
-    if (a.both !== b.both)
-        return false;
-    if (a.vert !== b.vert)
-        return false;
-    if (a.frag !== b.frag)
-        return false;
-    if (!definesEqual(a.defines, b.defines))
-        return false;
-    return true;
-}
 
 export class DeviceProgram {
     public name: string = '(unnamed)';
@@ -42,11 +17,35 @@ export class DeviceProgram {
     public frag: string = '';
     public defines = new Map<string, string>();
 
+    public definesChanged(): void {
+        this.preprocessedVert = '';
+        this.preprocessedFrag = '';
+    }
+
+    public setDefineString(name: string, v: string | null): void {
+        if (v)
+            this.defines.set(name, v);
+        else
+            this.defines.delete(name);
+        this.definesChanged();
+    }
+
+    public setDefineBool(name: string, v: boolean): void {
+        this.setDefineString(name, v ? '1' : null);
+    }
+
     public ensurePreprocessed(vendorInfo: GfxVendorInfo): void {
         if (this.preprocessedVert === '') {
             this.preprocessedVert = preprocessShader_GLSL(vendorInfo, 'vert', this.both + this.vert, this.defines);
             this.preprocessedFrag = preprocessShader_GLSL(vendorInfo, 'frag', this.both + this.frag, this.defines);
         }
+    }
+
+    private _gfxDevice: GfxDevice | null = null;
+    private _gfxProgram: GfxProgram | null = null;
+    public associate(device: GfxDevice, program: GfxProgram): void {
+        this._gfxDevice = device;
+        this._gfxProgram = program;
     }
 
     private _editShader(n: 'vert' | 'frag' | 'both') {
@@ -65,13 +64,24 @@ export class DeviceProgram {
             const tryCompile = () => {
                 timeout = 0;
                 this[n] = editor.getValue();
-                this.preprocessedVert = '';
+
+                if (this._gfxDevice !== null && this._gfxProgram !== null) {
+                    this.preprocessedVert = '';
+                    this.ensurePreprocessed(this._gfxDevice.queryVendorInfo());
+                    this._gfxDevice.programPatched(this._gfxProgram, this);
+                }
             };
 
-            editor.onvaluechanged = function() {
+            editor.onvaluechanged = function(immediate: boolean) {
                 if (timeout > 0)
                     clearTimeout(timeout);
-                timeout = window.setTimeout(tryCompile, 500);
+
+                if (immediate) {
+                    tryCompile();
+                } else {
+                    // debounce
+                    timeout = window.setTimeout(tryCompile, 500);
+                }
             };
             const onresize = win.onresize = () => {
                 editor.setSize(document.body.offsetWidth, window.innerHeight);

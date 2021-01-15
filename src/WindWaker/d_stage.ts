@@ -2,15 +2,57 @@
 import { Color, White, colorNewCopy, colorFromRGBA8, colorNewFromRGBA8 } from "../Color";
 import { DZS } from "./d_resorce";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { nArray, assert, hexdump, readString } from "../util";
+import { nArray, assert, readString } from "../util";
 import { dKy_tevstr_c } from "./d_kankyo";
 import { vec3 } from "gl-matrix";
 import { Endianness } from "../endian";
 import { dGlobals } from "./zww_scenes";
 import { fopAcM_prm_class, fpcLy_CurrentLayer, fpcSCtRq_Request } from "./framework";
 
+export class dPath__Point {
+    public arg0: number;
+    public arg1: number;
+    public arg2: number;
+    public arg3: number;
+    public pos = vec3.create();
+
+    public parse(buffer: ArrayBufferSlice): number {
+        const view = buffer.createDataView();
+        this.arg0 = view.getUint8(0x00);
+        this.arg1 = view.getUint8(0x01);
+        this.arg2 = view.getUint8(0x02);
+        this.arg3 = view.getUint8(0x03);
+        this.pos[0] = view.getFloat32(0x04);
+        this.pos[1] = view.getFloat32(0x08);
+        this.pos[2] = view.getFloat32(0x0C);
+        return 0x10;
+    }
+}
+
+export class dPath {
+    public nextPathId: number;
+    public arg0: number;
+    public loopFlag: number;
+    public points: dPath__Point[] = [];
+
+    public parse(buffer: ArrayBufferSlice, points: dPath__Point[]): number {
+        const view = buffer.createDataView();
+        const pointCount = view.getUint16(0x00);
+        this.nextPathId = view.getUint16(0x02);
+        this.arg0 = view.getUint8(0x03);
+        this.loopFlag = view.getUint8(0x04);
+        const pointOffs = view.getUint32(0x08);
+        assert((pointOffs % 0x10) === 0);
+        const firstPoint = (pointOffs / 0x10) | 0;
+        this.points = points.slice(firstPoint, firstPoint + pointCount);
+        return 0x0C;
+    }
+}
+
 class dStage_dt {
     public roomNo: number = -1;
+    public rpat: dPath[] = [];
+    public rppn: dPath__Point[] = [];
 }
 
 export class stage_palet_info_class__DifAmb {
@@ -21,6 +63,10 @@ export class stage_palet_info_class__DifAmb {
         this.C0 = colorNewCopy(baseColor);
         this.K0 = colorNewCopy(baseColor);
     }
+}
+
+function colorFromRGB8(dst: Color, n: number): void {
+    colorFromRGBA8(dst, (n & 0xFFFFFF00) | 0xFF);
 }
 
 export class stage_palet_info_class {
@@ -196,10 +242,13 @@ type dStage_dt_decode_handlerCB<T> = (globals: dGlobals, dt: T, buffer: ArrayBuf
 type dStage_dt_decode_handler<T> = { [k: string]: dStage_dt_decode_handlerCB<T> };
 
 export function dStage_dt_decode<T extends dStage_dt>(globals: dGlobals, dt: T, dzs: DZS, handlers: dStage_dt_decode_handler<T>, layer: number = -1): void {
-    for (const h of dzs.headers.values()) {
-        const cb = handlers[h.type];
-        if (cb !== undefined)
-            cb(globals, dt, dzs.buffer.slice(h.offs), h.count, dzs.buffer, layer);
+    for (const type in handlers) {
+        const h = dzs.headers.get(type);
+        if (h === undefined)
+            continue;
+
+        const cb = handlers[type];
+        cb(globals, dt, dzs.buffer.slice(h.offs), h.count, dzs.buffer, layer);
     }
 }
 
@@ -216,8 +265,7 @@ export function dStage_actorCreate(globals: dGlobals, processNameStr: string, ac
     actor.gbaName = objName.gbaName;
     actor.subtype = objName.subtype;
 
-    // This is supposed to be executing in the context of the stage, I believe.
-    // TODO(jstpierre): This can also be the room class!
+    // This is supposed to be executing in the context of the room or stage, I believe.
     assert(fpcLy_CurrentLayer(globals.frameworkGlobals) === globals.scnPlay.layer);
     const res = fpcSCtRq_Request(globals.frameworkGlobals, null, objName.pcName, actor);
     assert(res);
@@ -302,6 +350,24 @@ function layerLoader(globals: dGlobals, dt: dStage_dt, dzs: DZS): void {
     }
 }
 
+function dStage_rppnInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
+    let offs = 0;
+    for (let i = 0; i < count; i++) {
+        const pt = new dPath__Point();
+        offs += pt.parse(buffer.slice(offs));
+        dt.rppn.push(pt);
+    }
+}
+
+function dStage_rpatInfoInit(globals: dGlobals, dt: dStage_dt, buffer: ArrayBufferSlice, count: number, fileData: ArrayBufferSlice, layer: number): void {
+    let offs = 0;
+    for (let i = 0; i < count; i++) {
+        const path = new dPath();
+        offs += path.parse(buffer.slice(offs), dt.rppn);
+        dt.rpat.push(path);
+    }
+}
+
 //#region DZS
 export class dStage_stageDt_c extends dStage_dt {
     public pale: stage_palet_info_class[] = [];
@@ -312,10 +378,6 @@ export class dStage_stageDt_c extends dStage_dt {
     public stag: stage_stag_info_class;
     public lght: stage_plight_info_class[] = [];
     public rtbl: roomRead_class[] = [];
-}
-
-function colorFromRGB8(dst: Color, n: number): void {
-    colorFromRGBA8(dst, (n & 0xFFFFFF00) | 0xFF);
 }
 
 function dStage_paletInfoInit(globals: dGlobals, dt: dStage_stageDt_c, buffer: ArrayBufferSlice, count: number): void {
@@ -431,8 +493,8 @@ export function dStage_dt_c_stageLoader(globals: dGlobals, dt: dStage_stageDt_c,
         'LGHT': dStage_plightInfoInit,
         // PPNT
         // PATH
-        // RPPN
-        // RPAT
+        'RPPN': dStage_rppnInfoInit,
+        'RPAT': dStage_rpatInfoInit,
         // SOND
         'SCOB': dStage_tgscInfoInit,
         // EVNT
@@ -493,6 +555,8 @@ export function dStage_dt_c_roomLoader(globals: dGlobals, dt: dStage_roomDt_c, d
     dStage_dt_decode(globals, dt, dzs, {
         'FILI': dStage_filiInfoInit,
         'LGTV': dStage_lgtvInfoInit,
+        'RPPN': dStage_rppnInfoInit,
+        'RPAT': dStage_rpatInfoInit,
     });
 }
 
@@ -509,5 +573,8 @@ export function dStage_dt_c_roomReLoader(globals: dGlobals, dt: dStage_roomDt_c,
 
     layerLoader(globals, dt, dzs);
 }
-
 //#endregion
+
+export function dPath_GetRoomPath(globals: dGlobals, idx: number, roomNo: number): dPath {
+    return globals.roomStatus[roomNo].rpat[idx];
+}

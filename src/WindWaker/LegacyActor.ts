@@ -4,14 +4,15 @@ import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
 import { WindWakerRenderer, ZWWExtraTextures, dGlobals } from "./zww_scenes";
 import { mat4, vec3 } from "gl-matrix";
-import { J3DModelInstanceSimple, J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { LoopMode, ANK1, TTK1, TRK1, TPT1 } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { assertExists, hexzero, leftPad } from '../util';
 import { ResType, ResEntry, ResAssetType } from './d_resorce';
 import AnimationController from '../AnimationController';
 import { AABB } from '../Geometry';
-import { computeModelMatrixSRT } from '../MathHelpers';
+import { computeModelMatrixSRT, scaleMatrix } from '../MathHelpers';
 import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTevColorType } from './d_kankyo';
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA';
 import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework';
@@ -19,7 +20,6 @@ import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB }
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { cBgS_GndChk } from './d_bg';
-import { initModelForZelda } from './d_a';
 
 const scratchMat4a = mat4.create();
 const scratchVec3a = vec3.create();
@@ -101,7 +101,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
 
     function buildChildModelRes(model: J3DModelData): BMDObjectRenderer {
         const modelInstance = new J3DModelInstanceSimple(model);
-        initModelForZelda(modelInstance);
         renderer.extraTextures.fillExtraTextures(modelInstance);
         modelInstance.name = actorName!;
         modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 1);
@@ -146,8 +145,8 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         mat4.getTranslation(chk.pos, localModelMatrix);
         chk.pos[1] += 10.0;
         const y = globals.scnPlay.bgS.GroundCross(chk);
-        if (y === -Infinity)
-            debugger;
+        // if (y === -Infinity)
+        //     debugger;
         dstMatrix[13] = y;
     }
 
@@ -174,9 +173,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     }
 
     function createEmitter(context: WindWakerRenderer, resourceId: number): JPABaseEmitter {
-        const emitter = context.effectSystem!.createBaseEmitter(context.device, context.renderCache, resourceId);
-        // TODO(jstpierre): Scale, Rotation
-        return emitter;
+        return globals.particleCtrl.set(globals, 0, resourceId, null)!;
     }
 
     const objName = assertExists(globals.dStage_searchName(actorName));
@@ -639,21 +636,21 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     // Kreeb
     else if (actorName === 'Um1') fetchArchive(`Um`).then((rarc) => {
-        const m = buildModel(rarc, `bdl/um.bdl`);
-        buildChildModel(rarc, `bdlm/um01_head.bdl`).setParentJoint(m, `head`);
-        m.bindANK1(parseBCK(rarc, `bcks/um_wait01.bck`));
+        const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um02.bmt`);
+        buildChildModel(rarc, `bdlm/um02_head.bdl`).setParentJoint(m, `head`);
+        m.bindANK1(parseBCK(rarc, `bcks/um_happy02.bck`));
     });
     // Anton
     else if (actorName === 'Um2') fetchArchive(`Um`).then((rarc) => {
-        const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um02.bmt`);
-        buildChildModel(rarc, `bdlm/um02_head.bdl`).setParentJoint(m, `head`);
-        m.bindANK1(parseBCK(rarc, `bcks/um_wait01.bck`));
+        const m = buildModel(rarc, `bdl/um.bdl`);
+        buildChildModel(rarc, `bdlm/um01_head.bdl`).setParentJoint(m, `head`);
+        m.bindANK1(parseBCK(rarc, `bcks/um_walk.bck`));
     });
     // Kamo
     else if (actorName === 'Um3') fetchArchive(`Um`).then((rarc) => {
         const m = buildModelBMT(rarc, `bdl/um.bdl`, `bmt/um03.bmt`);
         buildChildModel(rarc, `bdlm/um03_head.bdl`).setParentJoint(m, `head`);
-        m.bindANK1(parseBCK(rarc, `bcks/um_wait01.bck`));
+        m.bindANK1(parseBCK(rarc, `bcks/um_wait02.bck`));
     });
     // Sam
     else if (actorName === 'Uo1') fetchArchive(`Uo`).then((rarc) => {
@@ -716,7 +713,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         m.bindANK1(parseBCK(rarc, `bcks/ho_wait01.bck`));
     });
     // Tott
-    else if (actorName === 'Tt') fetchArchive(`Tt`).then((rarc) => buildModel(rarc, `bdlm/tt.bdl`).bindANK1(parseBCK(rarc, `bck/wait01.bck`)));
+    else if (actorName === 'Tt') fetchArchive(`Tt`).then((rarc) => buildModel(rarc, `bdlm/tt.bdl`).bindANK1(parseBCK(rarc, `bck/step01.bck`)));
     // Maggie's Father (Rich)
     else if (actorName === 'Gp1') fetchArchive(`Gp`).then((rarc) => buildModel(rarc, `bdlm/gp.bdl`).bindANK1(parseBCK(rarc, `bcks/wait01.bck`)));
     // Maggie's Father (Poor)
@@ -1105,7 +1102,21 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'DmKmm') fetchArchive(`Demo_Kmm`).then((rarc) => buildModel(rarc, `bmd/ka.bmd`).bindANK1(parseBCK(rarc, `bcks/ka_wait1.bck`)));
     // else if (actorName === 'Kamome') fetchArchive(`Kamome`).then((rarc) => buildModel(rarc, `bdl/ka.bdl`).bindANK1(parseBCK(rarc, `bck/ka_wait2.bck`)));
     else if (actorName === 'kani') fetchArchive(`Kn`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`));
-    else if (actorName === 'Pig') fetchArchive(`Kb`).then((rarc) => buildModel(rarc, `bdlm/pg.bdl`));
+    else if (actorName === 'Pig') fetchArchive(`Kb`).then((rarc) => {
+        const color = actor.parameters & 0x3;
+        let bmtPaths = ['bmt/pg_pink.bmt', 'bmt/pg_buti.bmt', 'bmt/pg_kuro.bmt'];
+        const bdlmPaths = ['bdlm/pg.bdl', 'bdlm/pg_big.bdl'];
+
+        let model: BMDObjectRenderer;
+
+        if (actor.parameters == 0xFFFFFFFF) {
+            model = buildModelBMT(rarc, bdlmPaths[1], 'bmt/pg_pink.bmt');
+        } else {
+            model = buildModelBMT(rarc, bdlmPaths[0], bmtPaths[color]);
+        }
+
+        model.bindANK1(parseBCK(rarc, `bck/wait1.bck`));
+    });
     else if (actorName === 'kani') fetchArchive(`Kn`).then((rarc) => buildModel(rarc, `bdl/kn.bdl`).bindANK1(parseBCK(rarc, `bck/wait01.bck`)));
     else if (actorName === 'NpcSo') fetchArchive(`So`).then((rarc) => buildModel(rarc, `bdlm/so.bdl`).bindANK1(parseBCK(rarc, `bcks/so_wait01.bck`)));
     // Enemies
@@ -1334,10 +1345,10 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
             fetchArchive(`Sh`).then((rarc) => {
                 const mainModel = buildModel(rarc, `bmdm/shb.bmd`);
                 mainModel.bindANK1(parseBCK(rarc, 'bck/bfly.bck'));
-                mat4.scale(mainModel.modelMatrix, mainModel.modelMatrix, [9, 9, 9]);
+                scaleMatrix(mainModel.modelMatrix, mainModel.modelMatrix, 9);
                 const propellerModel = buildModel(rarc, `bmdm/shp.bmd`);
                 propellerModel.bindANK1(parseBCK(rarc, 'bck/pfly.bck'));
-                mat4.scale(propellerModel.modelMatrix, propellerModel.modelMatrix, [9, 9, 9]);
+                scaleMatrix(propellerModel.modelMatrix, propellerModel.modelMatrix, 9);
                 mat4.translate(propellerModel.modelMatrix, propellerModel.modelMatrix, [0, 50, 0]); // Estimated Y offset
             });
         } else {
@@ -1462,6 +1473,12 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const scale = 0.5;
         mat4.scale(m.modelMatrix, m.modelMatrix, [scale, scale, scale]);
     });
+    // House door
+    else if (actorName === 'KNOB00') fetchArchive(`Knob`).then((rarc) => {
+        const m = buildModel(rarc, `bdl/door_a.bdl`);
+        m.bindANK1(parseBCK(rarc, `bck/dooropenbdoor.bck`), animFrame(0));
+        m.lightTevColorType = LightType.BG0;
+    });
     else if (actorName === 'MKoppu') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/koppu.bdl`));
     else if (actorName === 'MOsara') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/osara.bdl`));
     else if (actorName === 'MPot') fetchArchive(`Mshokki`).then((rarc) => buildModel(rarc, `bdl/pot.bdl`));
@@ -1480,7 +1497,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Roten3') fetchArchive(`Roten`).then((rarc) => buildModel(rarc, `bdl/roten03.bdl`));
     else if (actorName === 'Roten4') fetchArchive(`Roten`).then((rarc) => buildModel(rarc, `bdl/roten04.bdl`));
     else if (actorName === 'Fdai') fetchArchive(`Fdai`).then((rarc) => buildModel(rarc, `bdl/fdai.bdl`));
-    else if (actorName === 'GBoard') fetchArchive(`Kaisen_e`).then((rarc) => buildModel(rarc, `bdl/akbod.bdl`));
     else if (actorName === 'Nzfall') fetchArchive(`Pfall`).then((rarc) => buildModel(rarc, `bdl/nz.bdl`).bindANK1(parseBCK(rarc, `bcks/nz_wait.bck`)));
     else if (actorName === 'Paper') fetchArchive(`Opaper`).then((rarc) => {
         const m = buildModel(rarc, `bdl/opaper.bdl`);
@@ -1547,7 +1563,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         const burningGroundEmitter = createEmitter(renderer, 0x461);
         const ringOfFlamesEmitter = createEmitter(renderer, 0x462);
         setModelMatrix(scratchMat4a);
-        vec3.set(scratchVec3a, 0, 0, 0);
+        vec3.zero(scratchVec3a);
         vec3.transformMat4(scratchVec3a, scratchVec3a, scratchMat4a);
         vec3.copy(burningGroundEmitter.globalTranslation, scratchVec3a);
         vec3.copy(ringOfFlamesEmitter.globalTranslation, scratchVec3a);
@@ -1725,7 +1741,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         // Gyorg spawners.
     } else if (actorName === 'agbTBOX' || actorName === 'agbMARK' || actorName === 'agbF' || actorName === 'agbA' || actorName === 'agbAT' || actorName === 'agbA2' || actorName === 'agbR' || actorName === 'agbB' || actorName === 'agbFA' || actorName === 'agbCSW') {
         // Markers for Tingle Tuner
-    } else if (actorName === 'AND_SW0' || actorName === 'AND_SW1' || actorName === 'AND_SW2' || actorName === 'SW_HIT0' || actorName === 'ALLdie' || actorName === 'SW_C00') {
+    } else if (actorName === 'AND_SW0' || actorName === 'AND_SW1' || actorName === 'AND_SW2' || actorName === 'ALLdie' || actorName === 'SW_C00') {
         // Logic flags used for gameplay, not spawnable objects.
     } else if (actorName === 'SwSlvg') {
         // SWitch SaLVaGe?
@@ -1751,8 +1767,6 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         // Other tags?
     } else if (actorName === 'HyoiKam') {
         // Misc. gameplay data
-    } else if (actorName === 'MtFlag' || actorName === 'SieFlag' || actorName === 'Gflag' || actorName === 'MjFlag') {
-        // Flags (only contains textures)
     } else if (actorName === 'Akabe') {
         // Collision
     } else {

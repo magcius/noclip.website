@@ -1,12 +1,11 @@
 
 import * as rw from 'librw';
-//@ts-ignore
 import * as meta from './scenes.json';
 import { SceneDesc, SceneGroup, SceneGfx } from '../viewer';
 import { initializeBasis, BasisFile, BasisFormat } from '../vendor/basis_universal';
 import { inflate } from 'pako';
 import { GfxDevice, GfxFormat } from '../gfx/platform/GfxPlatform';
-import { DataFetcher, DataFetcherFlags } from '../DataFetcher';
+import { DataFetcher } from '../DataFetcher';
 import { GTA3Renderer, SceneRenderer, DrawParams, Texture, TextureArray, MeshInstance, ModelCache, SkyRenderer, rwTexture, MeshFragData, AreaRenderer } from './render';
 import { SceneContext, Destroyable } from '../SceneBase';
 import { assert, assertExists, leftPad } from '../util';
@@ -66,7 +65,7 @@ interface GameMetadata {
     basisTextures: boolean;
     map: {
         name: string;
-        interiors: [string, number, string][];
+        interiors: { name: string, interior: number, suffix: string }[];
     };
 }
 
@@ -119,7 +118,7 @@ export class GTA3SceneDesc implements SceneDesc {
         path = `${this.meta.id}/${path}`;
         let buffer = this.assetCache.get(path);
         if (buffer === undefined) {
-            buffer = await dataFetcher.fetchData(path, DataFetcherFlags.ALLOW_404);
+            buffer = await dataFetcher.fetchData(path, { allow404: true });
             if (buffer.byteLength === 0) {
                 console.error('Not found', path);
                 return null;
@@ -485,7 +484,7 @@ function makeSceneGroup(meta: GameMetadata) {
     };
     if (meta.map.interiors.length > 0) {
         sceneGroup.sceneDescs.push('Interiors');
-        for (const [name, interior, suffix] of meta.map.interiors) {
+        for (const { name, interior, suffix } of meta.map.interiors) {
             const id = (suffix === '') ? String(interior) : `${interior}/${suffix.toLowerCase()}`;
             sceneGroup.sceneDescs.push(new GTA3SceneDesc(meta, name, interior, id));
         }

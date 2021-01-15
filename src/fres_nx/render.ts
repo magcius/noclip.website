@@ -150,7 +150,7 @@ class AglProgram extends DeviceProgram {
     public static globalDefinitions = `
 precision mediump float;
 
-layout(row_major, std140) uniform ub_ShapeParams {
+layout(std140) uniform ub_ShapeParams {
     Mat4x4 u_Projection;
     Mat4x3 u_ModelView;
 };
@@ -202,7 +202,7 @@ uniform sampler2D u_Samplers[8];
         try {
             const samplerIndex = this.lookupSamplerIndex(shadingModelSamplerBindingName);
             const uv = 'v_TexCoord0';
-            return `texture(u_Samplers[${samplerIndex}], ${uv})`;
+            return `texture(SAMPLER_2D(u_Samplers[${samplerIndex}]), ${uv})`;
         } catch(e) {
             // TODO(jstpierre): Figure out wtf is going on.
             console.warn(`${this.name}: No sampler by name ${shadingModelSamplerBindingName}`);

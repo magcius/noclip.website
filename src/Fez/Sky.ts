@@ -23,7 +23,7 @@ class SkyBackgroundProgram extends DeviceProgram {
     public static ub_Params = 0;
 
     public both: string = `
-layout(row_major, std140) uniform ub_Params {
+layout(std140) uniform ub_Params {
     vec4 u_ScaleOffset;
     vec4 u_Misc[1];
 };
@@ -50,7 +50,7 @@ void main() {
 in vec2 v_TexCoord;
 
 void main() {
-    vec4 color = texture(u_Texture, v_TexCoord);
+    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
     gl_FragColor = vec4(color.rgb, u_Alpha);
 }
 `;

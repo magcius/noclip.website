@@ -1,8 +1,9 @@
 
 import { GfxMegaStateDescriptor, GfxFrontFaceMode, GfxCullMode, GfxStencilOp, GfxCompareMode, GfxBlendFactor, GfxBlendMode, GfxAttachmentState, GfxColorWriteMask, GfxChannelBlendState } from "../platform/GfxPlatform";
-import { colorCopy, colorNewCopy, TransparentBlack } from "../../Color";
+import { colorNewCopy, TransparentBlack } from "../../Color";
 import { reverseDepthForCompareMode } from "./ReversedDepthHelpers";
 import { fallbackUndefined } from "../../util";
+import { gfxColorCopy } from "../platform/GfxPlatformUtil";
 
 function copyChannelBlendState(dst: GfxChannelBlendState, src: GfxChannelBlendState): void {
     dst.blendDstFactor = src.blendDstFactor;
@@ -39,7 +40,7 @@ export function setMegaStateFlags(dst: GfxMegaStateDescriptor, src: Partial<GfxM
         copyAttachmentsState(dst.attachmentsState, src.attachmentsState);
 
     if (src.blendConstant !== undefined)
-        colorCopy(dst.blendConstant, src.blendConstant);
+        gfxColorCopy(dst.blendConstant, src.blendConstant);
 
     dst.depthCompare = fallbackUndefined(src.depthCompare, dst.depthCompare);
     dst.depthWrite = fallbackUndefined(src.depthWrite, dst.depthWrite);
@@ -112,7 +113,7 @@ const defaultBlendState: GfxChannelBlendState = {
 
 export const defaultMegaState: GfxMegaStateDescriptor = {
     attachmentsState: [{
-        colorWriteMask: GfxColorWriteMask.ALL,
+        colorWriteMask: GfxColorWriteMask.COLOR,
         rgbBlendState: defaultBlendState,
         alphaBlendState: defaultBlendState,
     }],

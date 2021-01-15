@@ -67,18 +67,18 @@ export class NITRO_Program extends DeviceProgram {
 precision mediump float;
 
 // Expected to be constant across the entire scene.
-layout(row_major, std140) uniform ub_SceneParams {
+layout(std140) uniform ub_SceneParams {
     Mat4x4 u_Projection;
 };
 
 // Expected to change with each material.
-layout(row_major, std140) uniform ub_MaterialParams {
+layout(std140) uniform ub_MaterialParams {
     Mat4x2 u_TexMtx[1];
     vec4 u_Misc0;
 };
 #define u_TexCoordMode (u_Misc0.x)
 
-layout(row_major, std140) uniform ub_PacketParams {
+layout(std140) uniform ub_PacketParams {
     Mat4x3 u_PosMtx[32];
 };
 
@@ -111,14 +111,14 @@ void main() {
 `;
     public frag = `
 precision mediump float;
-in vec2 v_TexCoord;
 in vec4 v_Color;
+in vec2 v_TexCoord;
 
 void main() {
     gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
 
 #ifdef USE_TEXTURE
-    gl_FragColor *= texture(u_Texture, v_TexCoord);
+    gl_FragColor *= texture(SAMPLER_2D(u_Texture), v_TexCoord);
 #endif
 
 #ifdef USE_VERTEX_COLOR

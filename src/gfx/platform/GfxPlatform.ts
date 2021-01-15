@@ -5,7 +5,6 @@
 
 import { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
-import { NormalizedViewportCoords } from "../helpers/RenderTargetHelpers";
 
 export enum GfxCompareMode {
     NEVER   = WebGLRenderingContext.NEVER,
@@ -93,7 +92,7 @@ export interface GfxInputLayoutBufferDescriptor {
 }
 
 export const enum GfxTextureDimension {
-    n2D, n2D_ARRAY
+    n2D, n2DArray, Cube,
 }
 
 export interface GfxTextureDescriptor {
@@ -105,7 +104,6 @@ export interface GfxTextureDescriptor {
     numLevels: number;
 }
 
-// TODO(jstpierre): Should this be moved to ../helpers?
 export function makeTextureDescriptor2D(pixelFormat: GfxFormat, width: number, height: number, numLevels: number): GfxTextureDescriptor {
     const dimension = GfxTextureDimension.n2D, depth = 1;
     return { dimension, pixelFormat, width, height, depth, numLevels };
@@ -122,7 +120,7 @@ export interface GfxSamplerDescriptor {
 }
 
 export interface GfxAttachmentDescriptor {
-    format: GfxFormat;
+    pixelFormat: GfxFormat;
     width: number;
     height: number;
     numSamples: number;
@@ -137,6 +135,7 @@ export interface GfxBufferBinding {
 export interface GfxSamplerBinding {
     gfxTexture: GfxTexture | null;
     gfxSampler: GfxSampler | null;
+    lateBinding: string | null;
 }
 
 export interface GfxBindingLayoutDescriptor {
@@ -157,6 +156,7 @@ export interface GfxProgramDescriptorSimple {
 
 export interface GfxProgramDescriptor extends GfxProgramDescriptorSimple {
     ensurePreprocessed(vendorInfo: GfxVendorInfo): void;
+    associate(device: GfxDevice, program: GfxProgram): void;
 }
 
 export interface GfxInputLayoutDescriptor {
@@ -260,31 +260,45 @@ export interface GfxDebugGroup {
 }
 
 export interface GfxBugQuirks {
-    rowMajorMatricesBroken: boolean;
+}
+
+export const enum GfxClipSpaceNearZ {
+    NegativeOne,
+    Zero,
 }
 
 export interface GfxVendorInfo {
-    bugQuirks: GfxBugQuirks;
-    glslVersion: string;
-    explicitBindingLocations: boolean;
-    separateSamplerTextures: boolean;
+    readonly platformString: string;
+    readonly bugQuirks: GfxBugQuirks;
+    readonly glslVersion: string;
+    readonly explicitBindingLocations: boolean;
+    readonly separateSamplerTextures: boolean;
+    readonly clipSpaceNearZ: GfxClipSpaceNearZ;
 }
 
 export type GfxPlatformFramebuffer = WebGLFramebuffer;
 
+// Viewport in normalized coordinate space, from 0 to 1.
+export interface GfxNormalizedViewportCoords {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
 export interface GfxSwapChain {
-    configureSwapChain(width: number, height: number): void;
-    getDevice(): GfxDevice;
-    getOnscreenTexture(): GfxTexture;
     // WebXR requires presenting to a platform-defined framebuffer, for all that is unholy.
     // This hopefully is less terrible in the future. See https://github.com/immersive-web/webxr/issues/896
-    present(platformFramebuffer?: GfxPlatformFramebuffer, viewport?: NormalizedViewportCoords): void;
+    configureSwapChain(width: number, height: number, platformFramebuffer?: GfxPlatformFramebuffer): void;
+    getDevice(): GfxDevice;
+    getOnscreenTexture(): GfxTexture;
+    present(): void;
     createWebXRLayer(webXRSession: XRSession): XRWebGLLayer;
 }
 
 export interface GfxHostAccessPass {
     // Transfer commands.
-    uploadBufferData(buffer: GfxBuffer, dstWordOffset: number, data: Uint8Array, srcWordOffset?: number, wordCount?: number): void;
+    uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void;
     uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
 }
 
@@ -305,6 +319,22 @@ export interface GfxRenderPass {
 
 export type GfxPass = GfxRenderPass | GfxHostAccessPass;
 
+/**
+ * GfxDevice represents a "virtual GPU"; this is something that, in the abstract, has a bunch of resources
+ * and can execute passes. In the concrete, this is a wrapper around a CanvasWebGL2RenderingContext for the
+ * WebGL 2 backend, or a GPUDevice for the WebGPU backend.
+ *
+ * A bit about the design of this API; all resources are "opaque", meaning you cannot look at the
+ * implementation details or underlying fields of the resources, and most objects cannot have their
+ * creation parameters modified after they are created. So, while buffers and textures can have their
+ * contents changed through data upload passes, they cannot be resized after creation. Create a new object
+ * and destroy the old one if you wish to "resize" it.
+ * 
+ * To upload data to the GPU, create and submit a {@type GfxHostAccessPass}. Note that the pass-based
+ * upload API is a bit ugly, and might change in the future. Specifically, it might be more advantageous
+ * to force a "upload all data at the beginning of the frame" style API, which is practically how the host
+ * access pass is used today for dynamic data management.
+ */
 export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
     createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
@@ -319,6 +349,11 @@ export interface GfxDevice {
     createRenderPipeline(descriptor: GfxRenderPipelineDescriptor): GfxRenderPipeline;
     createReadback(elemCount: number): GfxReadback;
 
+    /**
+     * Destructors. You *must* call these on resources you create; they will not GC naturally. Call checkForLeaks()
+     * to ensure that you are not leaking any resources. (In the noclip codebase, this happens automatically if you
+     * set loadSceneDelta to 0 and switch scenes).
+     */
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
     destroySampler(o: GfxSampler): void;
@@ -353,6 +388,7 @@ export interface GfxDevice {
     setResourceName(o: GfxResource, s: string): void;
     setResourceLeakCheck(o: GfxResource, v: boolean): void;
     checkForLeaks(): void;
+    programPatched(o: GfxProgram, descriptor: GfxProgramDescriptorSimple): void;
     pushDebugGroup(debugGroup: GfxDebugGroup): void;
     popDebugGroup(): void;
 }

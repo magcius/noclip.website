@@ -13,9 +13,23 @@ import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from "../gx/gx_rende
 import AnimationController from "../AnimationController";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
-import { computeModelMatrixYBillboard, CameraController } from "../Camera";
+import { CameraController, Camera } from "../Camera";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { SceneContext } from "../SceneBase";
+
+function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
+    mat4.identity(out);
+
+    // Right vector
+    out[0] = camera.worldMatrix[0];
+    out[4] = camera.worldMatrix[4];
+    out[8] = camera.worldMatrix[8];
+
+    // Forward vector
+    out[2] = camera.worldMatrix[2];
+    out[6] = camera.worldMatrix[6];
+    out[10] = camera.worldMatrix[10];
+}
 
 const pathBase = `okami`;
 
