@@ -9,13 +9,14 @@ import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assertExists } from "../util";
+import { ViewerRenderInput } from "../viewer";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj, isInAreaObj } from "./AreaObj";
 import { CollisionParts, CollisionPartsFilterFunc, CollisionScaleType, getBindedFixReactionVector, getFirstPolyOnLineToMapExceptActor, invalidateCollisionParts, isBinded, isFloorPolygonAngle, isOnGround, isWallPolygonAngle, Triangle, validateCollisionParts } from "./Collision";
 import { GravityInfo, GravityTypeMask } from "./Gravity";
 import { HitSensor, sendMsgPush } from "./HitSensor";
 import { getJMapInfoScale, JMapInfoIter } from "./JMapInfo";
-import { getJMapInfoRotate, getJMapInfoTrans, LiveActor, LiveActorGroup, makeMtxTRFromActor, MsgSharedGroup } from "./LiveActor";
+import { getJMapInfoRotate, getJMapInfoTrans, isDead, LiveActor, LiveActorGroup, makeMtxTRFromActor, MsgSharedGroup } from "./LiveActor";
 import { ResourceHolder, SceneObj, SceneObjHolder } from "./Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "./NameObj";
 import { RailDirection } from "./RailRider";
@@ -106,6 +107,10 @@ export function connectToSceneMapObjDecorationStrongLight(sceneObjHolder: SceneO
 
 export function connectToSceneNpc(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Npc, CalcAnimType.Npc, DrawBufferType.Npc, -1);
+}
+
+export function connectToSceneNpcMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Npc, -1, -1, -1);
 }
 
 export function connectToSceneIndirectNpc(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
@@ -1763,4 +1768,9 @@ export function calcVecFromPlayerH(dst: vec3, sceneObjHolder: SceneObjHolder, ac
     getPlayerPos(scratchVec3a, sceneObjHolder);
     calcVecToTargetPosH(dst, actor, scratchVec3a, h);
     vec3.negate(dst, dst);
+}
+
+export function turnDirectionToTargetRadians(actor: LiveActor, dst: vec3, target: vec3, angle: number): void {
+    vec3.sub(scratchVec3a, target, actor.translation);
+    turnVecToVecCosOnPlane(dst, dst, scratchVec3a, actor.gravityVector, Math.cos(angle));
 }

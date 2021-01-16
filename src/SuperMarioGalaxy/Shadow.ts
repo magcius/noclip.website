@@ -1284,6 +1284,11 @@ export function setShadowDropPosition(actor: LiveActor, name: string | null, v: 
     actor.shadowControllerList!.getController(name)!.setDropPosFix(v);
 }
 
+export function setShadowDropPositionAtJoint(actor: LiveActor, name: string | null, jointName: string, offset: ReadonlyVec3): void {
+    const jointMtx = getJointMtxByName(actor, jointName);
+    actor.shadowControllerList!.getController(name)!.setDropPosMtxPtr(jointMtx, offset);
+}
+
 export function setShadowDropLength(actor: LiveActor, name: string | null, v: number): void {
     actor.shadowControllerList!.getController(name)!.setDropLength(v);
 }

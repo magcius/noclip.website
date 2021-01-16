@@ -585,6 +585,10 @@ export function validateHitSensors(actor: LiveActor): void {
     actor.hitSensorKeeper!.validate();
 }
 
+export function validateHitSensor(actor: LiveActor, name: string): void {
+    actor.hitSensorKeeper!.getSensor(name)!.validate();
+}
+
 export function setSensorRadius(actor: LiveActor, name: string, radius: number): void {
     actor.hitSensorKeeper!.getSensor(name)!.radius = radius;
 }

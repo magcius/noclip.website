@@ -20,12 +20,13 @@ import { CalcAnimType, DrawBufferType, DrawType, MovementType } from '../NameObj
 import { getRailArg, isConnectedWithRail } from '../RailRider';
 import { getShadowProjectedSensor, getShadowProjectionPos, initShadowFromCSV, initShadowVolumeOval, initShadowVolumeSphere, isShadowProjected, onCalcShadow, offCalcShadow, setShadowDropLength, getShadowNearProjectionLength, getShadowProjectionLength, initShadowVolumeFlatModel, initShadowController, addShadowVolumeFlatModel, addShadowVolumeBox, setShadowDropPosition, setShadowVolumeBoxSize } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep, NerveExecutor } from '../Spine';
-import { appearCoinPop, declareCoin, isEqualStageName, PartsModel } from './MiscActor';
+import { appearCoinPop, declareCoin, isEqualStageName } from './MiscActor';
 import { createModelObjBloomModel, createModelObjMapObj, ModelObj } from './ModelObj';
 import { getWaterAreaObj } from '../MiscMap';
 import { J3DModelData } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import { drawWorldSpaceFan, drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { Blue, Green, Red } from '../../Color';
+import { PartsModel } from './PartsModel';
 
 // Scratchpad
 const scratchVec3a = vec3.create();

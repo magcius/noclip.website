@@ -5,19 +5,21 @@ import { quat, vec3, ReadonlyVec3 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { isNearZero, MathConstants, quatFromEulerRadians, vec3SetAll, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback } from '../../util';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck } from '../ActorUtil';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
-import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, JMapInfoIter } from '../JMapInfo';
+import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor';
 import { getObjectName, SceneObjHolder } from '../Main';
-import { PartsModel } from './MiscActor';
 import { DrawBufferType } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate, calcNerveValue } from '../Spine';
-import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow, isExistShadow } from '../Shadow';
+import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow, isExistShadow, initShadowVolumeOval, setShadowDropPositionAtJoint } from '../Shadow';
 import { initLightCtrl } from '../LightData';
-import { HitSensorType, isSensorPlayer, HitSensor, isSensorNpc, sendArbitraryMsg } from '../HitSensor';
+import { HitSensorType, isSensorPlayer, HitSensor, isSensorNpc, sendArbitraryMsg, validateHitSensor, invalidateHitSensor } from '../HitSensor';
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { tryRegisterDemoCast } from '../Demo';
+import { createPartsModelMapObj, PartsModel } from './PartsModel';
+import { ViewerRenderInput } from '../../viewer';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -1137,5 +1139,116 @@ export class TicoRail extends LiveActor<TicoRailNrv> {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData('Tico');
+    }
+}
+
+const enum StrayTicoNrv { Wait }
+class StrayTico extends LiveActor<StrayTicoNrv> {
+    private poseQuat = quat.create();
+    private axisZ = vec3.create();
+    private initPos = vec3.create();
+    private itemBubble: PartsModel;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'StrayTico');
+
+        initDefaultPos(sceneObjHolder, this, infoIter);
+        this.initModelManagerWithAnm(sceneObjHolder, 'StrayTico');
+        connectToSceneNpc(sceneObjHolder, this);
+
+        quatFromEulerRadians(this.poseQuat, this.rotation[0], this.rotation[1], this.rotation[2]);
+        quatGetAxisZ(this.axisZ, this.poseQuat);
+        vec3.copy(this.initPos, this.translation);
+        calcGravity(sceneObjHolder, this);
+        this.initNerve(StrayTicoNrv.Wait);
+
+        // initSensor();
+        this.initHitSensor();
+        addHitSensorNpc(sceneObjHolder, this, 'Bubble', 8, 80.0, Vec3Zero);
+        addHitSensorNpc(sceneObjHolder, this, 'Body', 8, 45.0, Vec3Zero);
+        validateHitSensor(this, 'Bubble');
+        invalidateHitSensor(this, 'Body');
+
+        // initShadow();
+        initShadowVolumeOval(sceneObjHolder, this, vec3.set(scratchVec3a, 40.0, 40.0, 20.0));
+        setShadowDropPositionAtJoint(this, null, 'PowerStarC', Vec3Zero);
+        onCalcShadow(this);
+
+        this.initEffectKeeper(sceneObjHolder, null);
+        // initSound
+        this.initBinder(60.0, 20.0, 0);
+        this.calcBinderFlag = false;
+        this.itemBubble = createPartsModelMapObj(sceneObjHolder, this, 'ItemBubble');
+        this.itemBubble.initFixedPositionJoint(null, null, null);
+        // registerDemoSimpleCastAll(this.itemBubble);
+        startAction(this.itemBubble, 'Move');
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+
+        if (useStageSwitchReadAppear(sceneObjHolder, this, infoIter)) {
+            syncStageSwitchAppear(sceneObjHolder, this);
+            this.makeActorDead(sceneObjHolder);
+        } else {
+            this.makeActorAppeared(sceneObjHolder);
+        }
+    }
+
+    public calcAndSetBaseMtx(sceneObjHolder: SceneObjHolder): void {
+        makeMtxTRFromQuatVec(this.modelInstance!.modelMatrix, this.poseQuat, this.translation);
+    }
+
+    protected control(sceneObjHolder: SceneObjHolder, viewerInput: ViewerRenderInput): void {
+        super.control(sceneObjHolder, viewerInput);
+
+        vec3.negate(scratchVec3a, this.gravityVector);
+        blendQuatUpFront(this.poseQuat, this.poseQuat, scratchVec3a, this.axisZ, 0.2, 0.2);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: StrayTicoNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === StrayTicoNrv.Wait) {
+            if (isFirstStep(this))
+                startBck(this, 'Wait');
+
+            if (isNearPlayer(sceneObjHolder, this, 1000.0)) {
+                getPlayerPos(scratchVec3a, sceneObjHolder);
+                turnDirectionToTargetRadians(this, this.axisZ, scratchVec3a, 2.0 * MathConstants.DEG_TO_RAD);
+            }
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData('StrayTico');
+        sceneObjHolder.modelCache.requestObjectData('ItemBubble');
+    }
+}
+
+const enum CollectTicoNrv { Wait }
+export class CollectTico extends LiveActor<CollectTicoNrv> {
+    private strayTico: StrayTico[] = [];
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'CollectTico');
+        connectToSceneNpcMovement(sceneObjHolder, this);
+
+        iterChildObj(sceneObjHolder, infoIter, (childInfoIter, zoneAndLayer) => {
+            this.strayTico.push(new StrayTico(zoneAndLayer, sceneObjHolder, childInfoIter));
+        });
+
+        this.initEffectKeeper(sceneObjHolder, 'CollectTico');
+        // initSound
+        this.initNerve(CollectTicoNrv.Wait);
+        if (tryRegisterDemoCast(sceneObjHolder, this, infoIter)) {
+            // registerDemoActionFunctor
+        }
+
+        useStageSwitchWriteA(sceneObjHolder, this, infoIter);
+        // declarePowerStar
+        // invalidateClipping
+        this.makeActorDead(sceneObjHolder);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        StrayTico.requestArchives(sceneObjHolder);
     }
 }
