@@ -381,9 +381,9 @@ function mergeSurfaces(surfaces: Surface[]): MergedSurface {
     const srcDraw = surfaces[0].loadedVertexData.draws[0];
     const indexOffset = 0;
     const indexCount = totalIndexCount;
-    const posNrmMatrixTable = srcDraw.posNrmMatrixTable;
+    const posNrmMatrixTable = srcDraw.posMatrixTable;
     const texMatrixTable = srcDraw.texMatrixTable;
-    draws.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+    draws.push({ indexOffset, indexCount, posMatrixTable: posNrmMatrixTable, texMatrixTable });
 
     const newLoadedVertexData: LoadedVertexData = {
         indexData: indexData.buffer,

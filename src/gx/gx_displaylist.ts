@@ -132,7 +132,7 @@ interface VertexLayout extends LoadedVertexLayout, VtxLoaderDesc {
 // Note that the loader relies the common convention of the indexed load commands to produce the matrix tables
 // in each LoadedVertexDraw. GX establishes the conventions:
 //
-//  INDX_A = Position Matrices (=> posNrmMatrixTable)
+//  INDX_A = Position Matrices (=> posMatrixTable)
 //  INDX_B = Normal Matrices (currently unsupported)
 //  INDX_C = Texture Matrices (=> texMatrixTable)
 //  INDX_D = Light Objects (currently unsupported)
@@ -142,7 +142,7 @@ interface VertexLayout extends LoadedVertexLayout, VtxLoaderDesc {
 export interface LoadedVertexDraw {
     indexOffset: number;
     indexCount: number;
-    posNrmMatrixTable: number[];
+    posMatrixTable: number[];
     texMatrixTable: number[];
 }
 
@@ -237,10 +237,6 @@ function isVtxAttribTex(vtxAttrib: GX.Attr): boolean {
     }
 }
 
-function isVtxAttribNrm(vtxAttrib: GX.Attr): boolean {
-    return vtxAttrib === GX.Attr.NRM || vtxAttrib === GX.Attr.NBT;
-}
-
 function getAttributeComponentByteSize(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): CompSize {
     // MTXIDX fields don't have VAT entries.
     if (isVtxAttribMtxIdx(vtxAttrib))
@@ -289,7 +285,6 @@ export function getAttributeFormatCompFlagsRaw(vtxAttrib: GX.Attr, compCnt: GX.C
         else if (compCnt === GX.CompCnt.POS_XYZ)
             return FormatCompFlags.COMP_RGB;
     case GX.Attr.NRM:
-    case GX.Attr.NBT:
         // Normals always have 3 components per index.
         return FormatCompFlags.COMP_RGB;
     case GX.Attr.CLR0:
@@ -348,8 +343,8 @@ function getComponentShift(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number
         return 0;
 
     // Normals *always* use either 6 or 14 for their shift values.
-    // The value in the VAT is ignored.
-    if (isVtxAttribNrm(vtxAttrib)) {
+    // The value in the VAT is ignored. Note that normals are also normalized, too.
+    if (vtxAttrib === GX.Attr.NRM) {
         if (vatFormat.compType === GX.CompType.U8 || vatFormat.compType === GX.CompType.S8)
             return 6;
         else if (vatFormat.compType === GX.CompType.U16 || vatFormat.compType === GX.CompType.S16)
@@ -369,7 +364,7 @@ function getComponentType(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): GX.Comp
 }
 
 function getIndexNumComponents(vtxAttrib: GX.Attr, vatFormat: GX_VtxAttrFmt): number {
-    if (isVtxAttribNrm(vtxAttrib) && vatFormat.compCnt === GX.CompCnt.NRM_NBT3)
+    if (vtxAttrib === GX.Attr.NRM && vatFormat.compCnt === GX.CompCnt.NRM_NBT3)
         return 3;
     else
         return 1;
@@ -398,7 +393,6 @@ function getAttrName(vtxAttrib: GX.Attr): string {
     case GX.Attr.TEX5:       return `TEX5`;
     case GX.Attr.TEX6:       return `TEX6`;
     case GX.Attr.TEX7:       return `TEX7`;
-    case GX.Attr.NBT:        return `NBT`;
     default:
         throw new Error("whoops");
     }
@@ -479,8 +473,8 @@ function translateVatLayout(vatFormat: GX_VtxAttrFmt[], vcd: GX_VtxDesc[]): VatL
     return { srcVertexSize, vatFormat, vcd };
 }
 
-function isVatLayoutNBT(vatLayout: VatLayout, vtxAttrib: GX.Attr): boolean {
-    const compCnt = vatLayout.vatFormat[vtxAttrib].compCnt;
+function isVatLayoutNBT(vatLayout: VatLayout): boolean {
+    const compCnt = vatLayout.vatFormat[GX.Attr.NRM].compCnt;
     return compCnt === GX.CompCnt.NRM_NBT || compCnt === GX.CompCnt.NRM_NBT3;
 }
 
@@ -544,7 +538,7 @@ export function compileLoadedVertexLayout(vat: GX_VtxAttrFmt[][], vcd: GX_VtxDes
             input = allocateVertexInput(VertexAttributeInput.POS, inputFormat);
             fieldCompOffset = 3;
             fieldFormat = input.format;
-        } else if (isVtxAttribNrm(vtxAttrib) && vatLayouts.some((vatLayout) => vatLayout !== undefined && isVatLayoutNBT(vatLayout, vtxAttrib))) {
+        } else if (vtxAttrib === GX.Attr.NRM && vatLayouts.some((vatLayout) => vatLayout !== undefined && isVatLayoutNBT(vatLayout))) {
             // NBT. Allocate inputs for all of NRM, BINRM, TANGENT.
             input = allocateVertexInput(VertexAttributeInput.NRM, inputFormat);
             allocateVertexInput(VertexAttributeInput.BINRM, inputFormat);
@@ -787,7 +781,7 @@ function generateRunVertices(loadedVertexLayout: LoadedVertexLayout, vatLayout: 
         }
 
         function compileAttribIndex(viewName: string, readIndex: string, drawCallIdxIncr: number): string {
-            if (isVtxAttribNrm(vtxAttrib) && vtxAttrFmt.compCnt === GX.CompCnt.NRM_NBT3) {
+            if (vtxAttrib === GX.Attr.NRM && vtxAttrFmt.compCnt === GX.CompCnt.NRM_NBT3) {
                 // Special case: NBT3.
                 return `
     // NRM
@@ -914,7 +908,7 @@ class VtxLoaderImpl implements VtxLoader {
             return {
                 indexOffset,
                 indexCount: 0,
-                posNrmMatrixTable: Array(10).fill(0xFFFF),
+                posMatrixTable: Array(10).fill(0xFFFF),
                 texMatrixTable: Array(10).fill(0xFFFF),
             };
         }
@@ -946,7 +940,7 @@ class VtxLoaderImpl implements VtxLoader {
                 // each element being 3*4 in size.
                 const memoryElemSize = 3*4;
                 const memoryBaseAddr = 0x0000;
-                const table = currentXfmem.posNrmMatrixTable;
+                const table = currentXfmem.posMatrixTable;
 
                 const arrayIndex = dlView.getUint16(drawCallIdx + 0x01);
                 const addrLen = dlView.getUint16(drawCallIdx + 0x03);
@@ -1463,7 +1457,7 @@ export function displayListRegistersInitGX(r: DisplayListRegisters): void {
 function canMergeDraws(a: LoadedVertexDraw, b: LoadedVertexDraw): boolean {
     if (a.indexOffset !== b.indexOffset)
         return false;
-    if (!arrayEqual(a.posNrmMatrixTable, b.posNrmMatrixTable, (i, j) => i === j))
+    if (!arrayEqual(a.posMatrixTable, b.posMatrixTable, (i, j) => i === j))
         return false;
     if (!arrayEqual(a.texMatrixTable, b.texMatrixTable, (i, j) => i === j))
         return false;
@@ -1490,9 +1484,9 @@ export function coalesceLoadedDatas(loadedDatas: LoadedVertexData[]): LoadedVert
             } else {
                 const indexOffset = totalIndexCount + draw.indexOffset;
                 const indexCount = draw.indexCount;
-                const posNrmMatrixTable = draw.posNrmMatrixTable;
+                const posNrmMatrixTable = draw.posMatrixTable;
                 const texMatrixTable = draw.texMatrixTable;
-                draws.push({ indexOffset, indexCount, posNrmMatrixTable, texMatrixTable });
+                draws.push({ indexOffset, indexCount, posMatrixTable: posNrmMatrixTable, texMatrixTable });
             }
         }
 
