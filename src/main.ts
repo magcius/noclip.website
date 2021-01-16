@@ -40,7 +40,7 @@ import * as Scenes_Okami from './rres/Scenes_Okami';
 import * as Scenes_SonicColors from './rres/Scenes_SonicColors';
 import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl';
 import * as Scenes_Test from './Scenes_Test';
-import * as Scenes_WiiSportsResort from './rres/Scenes_WiiSportsResort';
+import * as Scenes_WiiSportsResort from './WiiSports/Scenes_WiiSportsResort';
 import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 import * as Scenes_InteractiveExamples from './InteractiveExamples/Scenes';
 import * as Scenes_Pilotwings64 from './Pilotwings64/Scenes';

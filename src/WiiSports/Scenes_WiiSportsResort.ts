@@ -1,12 +1,11 @@
-
 import * as Viewer from "../viewer";
 import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
-import * as U8 from "./u8";
+import * as U8 from "../rres/u8";
 import * as Yaz0 from "../Common/Compression/Yaz0";
-import * as BRRES from "./brres";
+import * as BRRES from "../rres/brres";
 import { assertExists, readString, assert } from "../util";
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
-import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
+import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "../rres/render";
 import AnimationController from "../AnimationController";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { mat4, vec3 } from "gl-matrix";
@@ -15,7 +14,7 @@ import { Magenta } from "../Color";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneContext } from "../SceneBase";
 import { DataFetcher } from "../DataFetcher";
-import { parseBLIGHT, EggLightManager } from "./Egg";
+import { parseBLIGHT, EggLightManager } from "../rres/Egg";
 
 class ResourceSystem {
     private mounts: U8.U8Archive[] = [];
@@ -68,40 +67,39 @@ async function fetchAndMount(resourceSystem: ResourceSystem, dataFetcher: DataFe
         resourceSystem.mountArchive(arcs[i]);
 }
 
-interface PMPEntry {
+interface PMPObject {
     objectId: number;
     modelMatrix: mat4;
 }
 
-function parsePMPF(buffer: ArrayBufferSlice): PMPEntry[] {
+function parsePMPF(buffer: ArrayBufferSlice): PMPObject[] {
     const view = buffer.createDataView();
     assertExists(readString(buffer, 0x00, 0x04) === 'PMPF');
 
-    const tableCount = view.getUint16(0x10);
-    const tableStart = view.getUint32(0x40);
-    assert(tableStart === 0x80);
+    const objectCount = view.getUint16(0x10);
+    const objectOffset = view.getUint32(0x40);
 
-    const entries: PMPEntry[] = [];
-    let tableIdx = tableStart;
-    for (let i = 0; i < tableCount; i++) {
-        const objectId = view.getUint32(tableIdx + 0x00);
-        assert(view.getUint32(tableIdx + 0x04) === 0);
-        const translationX = view.getFloat32(tableIdx + 0x08);
-        const translationY = view.getFloat32(tableIdx + 0x0C);
-        const translationZ = view.getFloat32(tableIdx + 0x10);
-        const scaleX = view.getFloat32(tableIdx + 0x14);
-        const scaleY = view.getFloat32(tableIdx + 0x18);
-        const scaleZ = view.getFloat32(tableIdx + 0x1C);
+    const entries: PMPObject[] = [];
+    let objectIdx = objectOffset;
+    for (let i = 0; i < objectCount; i++) {
+        const objectId = view.getUint32(objectIdx);
+        assert(view.getUint32(objectIdx + 0x04) === 0);
+        const translationX = view.getFloat32(objectIdx + 0x08);
+        const translationY = view.getFloat32(objectIdx + 0x0C);
+        const translationZ = view.getFloat32(objectIdx + 0x10);
+        const scaleX = view.getFloat32(objectIdx + 0x14);
+        const scaleY = view.getFloat32(objectIdx + 0x18);
+        const scaleZ = view.getFloat32(objectIdx + 0x1C);
 
-        const r20 = view.getFloat32(tableIdx + 0x20);
-        const r21 = view.getFloat32(tableIdx + 0x24);
-        const r22 = view.getFloat32(tableIdx + 0x28);
-        const r10 = view.getFloat32(tableIdx + 0x2C);
-        const r11 = view.getFloat32(tableIdx + 0x30);
-        const r12 = view.getFloat32(tableIdx + 0x34);
-        const r00 = view.getFloat32(tableIdx + 0x38);
-        const r01 = view.getFloat32(tableIdx + 0x3C);
-        const r02 = view.getFloat32(tableIdx + 0x40);
+        const r20 = view.getFloat32(objectIdx + 0x20);
+        const r21 = view.getFloat32(objectIdx + 0x24);
+        const r22 = view.getFloat32(objectIdx + 0x28);
+        const r10 = view.getFloat32(objectIdx + 0x2C);
+        const r11 = view.getFloat32(objectIdx + 0x30);
+        const r12 = view.getFloat32(objectIdx + 0x34);
+        const r00 = view.getFloat32(objectIdx + 0x38);
+        const r01 = view.getFloat32(objectIdx + 0x3C);
+        const r02 = view.getFloat32(objectIdx + 0x40);
 
         const modelMatrix = mat4.fromValues(
             scaleX * r00, scaleX * r01, scaleX * r02, 0,
@@ -111,7 +109,7 @@ function parsePMPF(buffer: ArrayBufferSlice): PMPEntry[] {
         );
 
         entries.push({ objectId, modelMatrix });
-        tableIdx += 0x58;
+        objectIdx += 0x58;
     }
 
     return entries;
@@ -123,7 +121,7 @@ class WS2_Renderer extends BasicGXRendererHelper {
     public modelInstances: MDL0ModelInstance[] = [];
     public textureHolder = new RRESTextureHolder();
     public scn0Animator: BRRES.SCN0Animator;
-    public pmp: PMPEntry[] = [];
+    public pmp: PMPObject[] = [];
     public debugObjects = false;
     public eggLightManager: EggLightManager;
 
@@ -188,29 +186,45 @@ const dataPath = `WiiSportsResort`;
 class IslandSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {}
 
-    private spawnObject(device: GfxDevice, renderer: WS2_Renderer, p: PMPEntry): boolean {
-        if (p.objectId === 0x00010000) { // Tree1
-            const tree3 = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree.brres');
-            const instance = renderer.spawnModel(device, tree3, 'WS2_common_tree_H');
-            mat4.copy(instance.modelMatrix, p.modelMatrix);
-        } else if (p.objectId === 0x00010001) { // Tree2
-            const tree3 = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree2.brres');
-            const instance = renderer.spawnModel(device, tree3, 'WS2_common_tree2_H');
-            mat4.copy(instance.modelMatrix, p.modelMatrix);
-        } else if (p.objectId === 0x00010002) { // Tree3
-            const tree3 = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree3.brres');
-            const instance = renderer.spawnModel(device, tree3, 'WS2_common_tree3');
-            mat4.copy(instance.modelMatrix, p.modelMatrix);
-        } else if (p.objectId === 0x0001001A) { // WindMill
-            const fountain = renderer.mountRRES(device, 'WindMill/G3D/WS2_common_windmill.brres');
-            const instance = renderer.spawnModel(device, fountain, 'WS2_common_windmill');
-            mat4.copy(instance.modelMatrix, p.modelMatrix);
-        } else if (p.objectId === 0x0001001E) { // Fountain
-            const fountain = renderer.mountRRES(device, 'Fountain/G3D/WS2_common_fountain.brres');
-            const instance = renderer.spawnModel(device, fountain, 'WS2_common_fountain');
-            mat4.copy(instance.modelMatrix, p.modelMatrix);
-        } else {
-            return false;
+    private spawnObject(device: GfxDevice, renderer: WS2_Renderer, p: PMPObject): boolean {
+        switch (p.objectId) {
+            case 0x00010000: {
+                // Tree1
+                const tree = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree.brres');
+                const instance = renderer.spawnModel(device, tree, 'WS2_common_tree_H');
+                mat4.copy(instance.modelMatrix, p.modelMatrix);
+                break;
+            }
+            case 0x00010001: {
+                // Tree2
+                const tree = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree2.brres');
+                const instance = renderer.spawnModel(device, tree, 'WS2_common_tree2_H');
+                mat4.copy(instance.modelMatrix, p.modelMatrix);
+                break;
+            }
+            case 0x00010002: {
+                // Tree3
+                const tree = renderer.mountRRES(device, 'Tree/G3D/WS2_common_tree3.brres');
+                const instance = renderer.spawnModel(device, tree, 'WS2_common_tree3');
+                mat4.copy(instance.modelMatrix, p.modelMatrix);
+                break;
+            }
+            case 0x0001001A: {
+                // WindMill
+                const windmill = renderer.mountRRES(device, 'WindMill/G3D/WS2_common_windmill.brres');
+                const instance = renderer.spawnModel(device, windmill, 'WS2_common_windmill');
+                mat4.copy(instance.modelMatrix, p.modelMatrix);
+                break;
+            }
+            case 0x0001001E: {
+                // Fountain
+                const fountain = renderer.mountRRES(device, 'Fountain/G3D/WS2_common_fountain.brres');
+                const instance = renderer.spawnModel(device, fountain, 'WS2_common_fountain');
+                mat4.copy(instance.modelMatrix, p.modelMatrix);
+                break;
+            }
+            default:
+                return false;
         }
 
         return true;
