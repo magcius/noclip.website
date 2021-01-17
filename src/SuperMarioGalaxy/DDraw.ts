@@ -10,7 +10,7 @@ import { GfxDevice, GfxInputLayout, GfxInputState, GfxIndexBufferDescriptor, Gfx
 import { createInputLayout } from '../gx/gx_render';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from '../gfx/helpers/TopologyHelpers';
 import { getSystemEndianness, Endianness } from '../endian';
-import { ReadonlyVec3 } from 'gl-matrix';
+import { ReadonlyVec2, ReadonlyVec3 } from 'gl-matrix';
 import { Color } from '../Color';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
@@ -205,6 +205,10 @@ export class TDDraw extends TDDrawVtxSpec {
         const offs = this.getOffs(this.currentVertex, attr);
         this.writeFloat32(offs + 0x00, s);
         this.writeFloat32(offs + 0x04, t);
+    }
+
+    public texCoord2vec2(attr: GX.Attr, v: ReadonlyVec2): void {
+        this.texCoord2f32(attr, v[0], v[1]);
     }
 
     public color4rgba8(attr: GX.Attr, r: number, g: number, b: number, a: number): void {

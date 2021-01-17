@@ -64,6 +64,7 @@ import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 import * as Scenes_FFX from './FinalFantasyX/scenes';
+import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -163,6 +164,7 @@ const sceneGroups = [
     Scenes_InteractiveExamples.sceneGroup,
     Scenes_SunshineWater.sceneGroup,
     Scenes_TheWitness.sceneGroup,
+    Scenes_WiiBanner.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
@@ -221,7 +223,6 @@ class Main {
     public groups: (string | SceneGroup)[];
     public ui: UI;
     public saveManager = GlobalSaveManager;
-    public paused: boolean = false;
 
     private droppedFileGroup: SceneGroup;
 
@@ -418,10 +419,6 @@ class Main {
         } else {
             this.webXRContext.end();
         }
-    }
-
-    public setPaused(v: boolean): void {
-        this.paused = v;
     }
 
     private _onPostAnimFrameUpdate = (updateInfo: ViewerUpdateInfo): void => {

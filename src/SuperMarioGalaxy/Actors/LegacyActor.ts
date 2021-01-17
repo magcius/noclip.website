@@ -256,7 +256,6 @@ export class NoclipLegacyActorSpawner {
             case 'SuperDreamer':
             case 'PetitPorterWarpPoint':
             case 'CoinLinkGroup':
-            case 'CollectTico':
             case 'InstantInferno':
             case 'FireRing':
             case 'JumpBeamer':

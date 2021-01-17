@@ -1,5 +1,5 @@
 
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 
 import { BMD, MaterialEntry, Shape, ShapeDisplayFlags, DRW1MatrixKind, TEX1, INF1, HierarchyNodeType, TexMtx, MAT3, TexMtxMapMode, JointTransformInfo, MtxGroup } from './J3DLoader';
 
@@ -263,7 +263,7 @@ function J3DMtxProjConcat(dst: mat4, a: mat4, b: mat4): void {
     dst[14] = a20*b03 + a21*b13 + a22*b23 + a23*b33;
 }
 
-function mat43Concat(dst: mat4, a: mat4, b: mat4): void {
+function mat43Concat(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4): void {
     // This is almost mat4.mul except the inputs/outputs are mat4x3s.
     // Slightly more efficient.
 

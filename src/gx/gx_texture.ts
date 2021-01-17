@@ -240,15 +240,16 @@ function decodePalette(paletteFormat: GX.TexPalette, paletteData: ArrayBufferSli
     }
 }
 
-function decode_Tiled(texture: TextureInputGX, bw: number, bh: number, decoder: (pixels: Uint8Array, dstOffs: number) => void): DecodedTexture {
+function decode_Tiled(texture: TextureInputGX, bw: number, bh: number, decoder: (pixels: Uint8Array, dstOffs: number, write: boolean) => void): DecodedTexture {
     const pixels = new Uint8Array(texture.width * texture.height * 4);
     for (let yy = 0; yy < texture.height; yy += bh) {
         for (let xx = 0; xx < texture.width; xx += bw) {
             for (let y = 0; y < bh; y++) {
                 for (let x = 0; x < bw; x++) {
+                    const write = xx + x < texture.width && yy + y < texture.height;
                     const dstPixel = (texture.width * (yy + y)) + xx + x;
                     const dstOffs = dstPixel * 4;
-                    decoder(pixels, dstOffs);
+                    decoder(pixels, dstOffs, write);
                 }
             }
         }
@@ -261,13 +262,15 @@ function decode_C4(texture: TextureInputGX): DecodedTexture {
     const view = texture.data!.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
-    return decode_Tiled(texture, 8, 8, (dst: Uint8Array, dstOffs: number): void => {
-        const ii = view.getUint8(srcOffs >> 1);
-        const i = ii >>> ((srcOffs & 1) ? 0 : 4) & 0x0F;
-        dst[dstOffs + 0] = paletteData[i * 4 + 0];
-        dst[dstOffs + 1] = paletteData[i * 4 + 1];
-        dst[dstOffs + 2] = paletteData[i * 4 + 2];
-        dst[dstOffs + 3] = paletteData[i * 4 + 3];
+    return decode_Tiled(texture, 8, 8, (dst: Uint8Array, dstOffs: number, write: boolean): void => {
+        if (write) {
+            const ii = view.getUint8(srcOffs >> 1);
+            const i = ii >>> ((srcOffs & 1) ? 0 : 4) & 0x0F;
+            dst[dstOffs + 0] = paletteData[i * 4 + 0];
+            dst[dstOffs + 1] = paletteData[i * 4 + 1];
+            dst[dstOffs + 2] = paletteData[i * 4 + 2];
+            dst[dstOffs + 3] = paletteData[i * 4 + 3];
+        }
         srcOffs++;
     });
 }
@@ -277,12 +280,14 @@ function decode_C8(texture: TextureInputGX): DecodedTexture {
     const view = texture.data!.createDataView();
     const paletteData: Uint8Array = decodePalette(texture.paletteFormat, texture.paletteData);
     let srcOffs = 0;
-    return decode_Tiled(texture, 8, 4, (dst: Uint8Array, dstOffs: number): void => {
-        const i = view.getUint8(srcOffs);
-        dst[dstOffs + 0] = paletteData[i * 4 + 0];
-        dst[dstOffs + 1] = paletteData[i * 4 + 1];
-        dst[dstOffs + 2] = paletteData[i * 4 + 2];
-        dst[dstOffs + 3] = paletteData[i * 4 + 3];
+    return decode_Tiled(texture, 8, 4, (dst: Uint8Array, dstOffs: number, write: boolean): void => {
+        if (write) {
+            const i = view.getUint8(srcOffs);
+            dst[dstOffs + 0] = paletteData[i * 4 + 0];
+            dst[dstOffs + 1] = paletteData[i * 4 + 1];
+            dst[dstOffs + 2] = paletteData[i * 4 + 2];
+            dst[dstOffs + 3] = paletteData[i * 4 + 3];
+        }
         srcOffs++;
     });
 }
