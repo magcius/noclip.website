@@ -11,7 +11,6 @@ import { PMP, PMPObject } from "./PMP";
 import { ResourceSystem } from "./ResouceSystem";
 import { assertExists } from "../util";
 import { colorNewFromRGBA } from "../Color";
-import { addHitSensorPosMapObj } from "../SuperMarioGalaxy/HitSensor";
 
 class WiiSportsRenderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
@@ -301,11 +300,12 @@ class GolfSceneDesc implements Viewer.SceneDesc {
         
         // Load main model
         const courseBRRES = renderer.mountRRES(device, `G3D/${golfName}.brres`);
-        const courseMDL0 = renderer.spawnModel(device, courseBRRES, golfName);     
+        const courseMDL0 = renderer.spawnModel(device, courseBRRES, golfName);   
 
-        renderer.bindAnimations(courseMDL0, courseBRRES, golfName);
         renderer.bindSCN0(assertExists(courseBRRES.scn0.find(x => x.name == sceneName)));
         courseMDL0.bindLightSetting(renderer.lightSetting);
+         
+        renderer.bindAnimations(courseMDL0, courseBRRES, golfName); 
 
         // Load PMP
         const pmp = PMP.parse(assertExists(resourceSystem.findFileData(`${golfName}.pmp`)));
