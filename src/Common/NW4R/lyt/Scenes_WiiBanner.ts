@@ -36,7 +36,7 @@ class BannerBinRenderer implements SceneGfx {
     private renderHelper: GXRenderHelperGfx;
     private resourceCollection: ArcLayoutResourceCollection;
     private layout: Layout;
-    private startLayoutAnimation: LayoutAnimation;
+    private startLayoutAnimation: LayoutAnimation | null = null;
     private loopLayoutAnimation: LayoutAnimation;
 
     constructor(device: GfxDevice, private arc: U8.U8Archive) {
@@ -52,11 +52,14 @@ class BannerBinRenderer implements SceneGfx {
 
         this.layout = new Layout(device, this.renderHelper.getCache(), rlyt, this.resourceCollection);
 
-        const startAnim = parseBRLAN(arc.findFileData('arc/anim/banner.brlan')!);
-        this.startLayoutAnimation = new LayoutAnimation(this.layout, startAnim);
+        let loopAnimData = arc.findFileData('arc/anim/banner_Loop.brlan');
+        if (loopAnimData === null)
+            loopAnimData = arc.findFileData('arc/anim/banner.brlan');
+        this.loopLayoutAnimation = new LayoutAnimation(this.layout, parseBRLAN(assertExists(loopAnimData)));
 
-        // const loopAnim = parseBRLAN(arc.findFileData('arc/anim/banner_Loop.brlan')!);
-        // this.loopLayoutAnimation = new LayoutAnimation(this.layout, loopAnim);
+        const startAnimData = arc.findFileData('arc/anim/banner_Start.brlan');
+        if (startAnimData !== null)
+            this.startLayoutAnimation = new LayoutAnimation(this.layout, parseBRLAN(startAnimData));
 
         const font_e = this.layout.findPaneByName('font_e');
         if (font_e !== null)
@@ -67,7 +70,7 @@ class BannerBinRenderer implements SceneGfx {
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         const deltaTimeFrames = getTimeInFrames(viewerInput.deltaTime, 60);
-        if (this.startLayoutAnimation.isOver())
+        if (this.startLayoutAnimation === null || this.startLayoutAnimation.isOver())
             this.loopLayoutAnimation.update(deltaTimeFrames);
         else
             this.startLayoutAnimation.update(deltaTimeFrames);
