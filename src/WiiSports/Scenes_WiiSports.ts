@@ -72,6 +72,35 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
     }
 }
 
+class TennisSceneDesc implements Viewer.SceneDesc {
+    constructor(public id: string, public name: string = id) {}
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const d = context.dataFetcher;
+
+        const tennisName = `tns_Field_${this.id}`;
+
+        const resourceSystem = new ResourceSystem();
+
+        await resourceSystem.fetchAndMount(d, [
+            `${dataPath}/Common/RPTnsScene/common.carc`,
+            `${dataPath}/Stage/RPTnsScene/${tennisName}.carc`
+        ]);
+
+        const renderer = new WiiSportsRenderer(device, resourceSystem);
+        
+        // Load main model
+        const fieldBRRES = renderer.mountRRES(device, `G3D/${tennisName}.brres`);
+        renderer.spawnModel(device, fieldBRRES, tennisName);
+
+        // Load net
+        const netBRRES = renderer.mountRRES(device, `G3D/tns_net_a.brres`);
+        renderer.spawnModel(device, netBRRES, 'tns_net_a');
+
+        return renderer;
+    }
+}
+
 class GolfSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {}
 
@@ -147,7 +176,7 @@ class GolfSceneDesc implements Viewer.SceneDesc {
 
         await resourceSystem.fetchAndMount(d, [
             `${dataPath}/Common/RPGolScene/common.carc`,
-            `${dataPath}/Stage/RPGolScene/${golfName}.carc`,
+            `${dataPath}/Stage/RPGolScene/${golfName}.carc`
         ]);
 
         const renderer = new WiiSportsRenderer(device, resourceSystem);
@@ -183,6 +212,8 @@ const name = "Wii Sports";
 
 const sceneDescs = [
     "Tennis",
+    new TennisSceneDesc("a", "Field"),
+    new TennisSceneDesc("b", "Training Field"),
     "Baseball",
     "Bowling",
     "Golf",
