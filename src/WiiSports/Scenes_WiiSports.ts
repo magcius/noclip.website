@@ -258,6 +258,34 @@ class GolfSceneDesc implements Viewer.SceneDesc {
     }
 }
 
+class BoxingSceneDesc implements Viewer.SceneDesc {
+    constructor(public id: string, public name: string = id) {}
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const d = context.dataFetcher;
+
+        const resourceSystem = new ResourceSystem();
+
+        await resourceSystem.fetchAndMount(d, [
+            `${dataPath}/Common/RPBoxScene/common.carc`,
+            `${dataPath}/Stage/RPBoxScene/MainGame.carc`
+        ]);
+
+        const renderer = new WiiSportsRenderer(device, resourceSystem);
+        
+        // Load main model
+        const stageBRRES = renderer.mountRRES(device, `G3D/${this.id}.brres`);
+        renderer.loadSCN0(assertExists(stageBRRES.scn0.find(x => x.name == this.id)));
+
+        for (let mdl0 of stageBRRES.mdl0) {
+            const instance = renderer.spawnModel(device, stageBRRES, mdl0.name);
+            instance.bindLightSetting(renderer.lightSetting);
+        }        
+
+        return renderer;
+    }
+}
+
 const dataPath = "WiiSports"
 const id = 'WiiSports';
 const name = "Wii Sports";
@@ -281,7 +309,9 @@ const sceneDescs = [
     new GolfSceneDesc("fc12", "Hole 7"),
     new GolfSceneDesc("fc9", "Hole 8"),
     new GolfSceneDesc("fc13", "Hole 9"),
-    "Boxing"
+    "Boxing",
+    new BoxingSceneDesc("box_ring", "Ring"),
+    new BoxingSceneDesc("box_gym", "Gym")
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
