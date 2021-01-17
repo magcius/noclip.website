@@ -10,6 +10,7 @@ import * as Viewer from "../viewer";
 import { PMP, PMPObject } from "./PMP";
 import { ResourceSystem } from "./ResouceSystem";
 import { assert, assertExists } from "../util";
+import { colorNewFromRGBA } from "../Color";
 
 class WiiSportsRenderer extends BasicGXRendererHelper {
     public animationController = new AnimationController();
@@ -36,7 +37,7 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
     public spawnModel(device: GfxDevice, rres: BRRES.RRES, modelName: string): MDL0ModelInstance {
         const mdl0Data = this.resourceSystem.mountMDL0(device, this.getCache(), rres, modelName);
         const instance = new MDL0ModelInstance(this.textureHolder, mdl0Data);
-        instance.bindRRESAnimations(this.animationController, rres);
+        //instance.bindRRESAnimations(this.animationController, rres);
         //instance.bindLightSetting(this.eggLightManager.lightSetting);
         this.modelInstances.push(instance);
 
@@ -55,6 +56,7 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
+
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
@@ -81,42 +83,55 @@ class GolfSceneDesc implements Viewer.SceneDesc {
             }
             case 0x00010001: {
                 // Golf hole
+                const brres = renderer.mountRRES(device, 'G3D/glf_pin1.brres');
+                const instance = renderer.spawnModel(device, brres, 'glf_pin1');
+                mat4.copy(instance.modelMatrix, object.modelMatrix);                
                 break;
             }
             case 0x00010002: {
                 // Tree 1
-                const tree = renderer.mountRRES(device, 'G3D/glf_tree1.brres');
-                const instance = renderer.spawnModel(device, tree, 'glf_tree1');
+                const brres = renderer.mountRRES(device, 'G3D/glf_tree1.brres');
+                const instance = renderer.spawnModel(device, brres, 'glf_tree1');
+                //const instanceShadow = renderer.spawnModel(device, brres, 'glf_tree1_sh');
                 mat4.copy(instance.modelMatrix, object.modelMatrix);
+                //mat4.copy(instanceShadow.modelMatrix, object.modelMatrix);
                 break;
             }
             case 0x00010003: {
                 // Tree 2
-                const tree = renderer.mountRRES(device, 'G3D/glf_tree2.brres');
-                const instance = renderer.spawnModel(device, tree, 'glf_tree2');
+                const brres = renderer.mountRRES(device, 'G3D/glf_tree2.brres');
+                const instance = renderer.spawnModel(device, brres, 'glf_tree2');
+                //const instanceShadow = renderer.spawnModel(device, brres, 'glf_tree2_sh');
                 mat4.copy(instance.modelMatrix, object.modelMatrix);
+                //mat4.copy(instanceShadow.modelMatrix, object.modelMatrix);
                 break;
             }
             case 0x00010004: {
                 // Tree 1 (mirrored)
-                const tree = renderer.mountRRES(device, 'G3D/glf_tree1.brres');
-                const instance = renderer.spawnModel(device, tree, 'glf_tree1');
-
-                const mirrorY = mat4.create();
-                mat4.fromScaling(mirrorY, vec3.fromValues(1, -1, 1));
-
-                mat4.multiply(instance.modelMatrix, mirrorY, object.modelMatrix);
+                const brres = renderer.mountRRES(device, 'G3D/glf_tree1.brres');
+                const instance = renderer.spawnModel(device, brres, 'glf_tree1_env');
+                mat4.copy(instance.modelMatrix, object.modelMatrix);
                 break;
             }
             case 0x00010005: {
                 // Tree 2 (mirrored)
-                const tree = renderer.mountRRES(device, 'G3D/glf_tree2.brres');
-                const instance = renderer.spawnModel(device, tree, 'glf_tree2');
-
-                const mirrorY = mat4.create();
-                mat4.fromScaling(mirrorY, vec3.fromValues(1, -1, 1));
-
-                mat4.multiply(instance.modelMatrix, mirrorY, object.modelMatrix);
+                const brres = renderer.mountRRES(device, 'G3D/glf_tree2.brres');
+                const instance = renderer.spawnModel(device, brres, 'glf_tree2_env');
+                mat4.copy(instance.modelMatrix, object.modelMatrix);
+                break;
+            }
+            case 0x00010008: {
+                // Sky
+                const brres = renderer.mountRRES(device, 'G3D/glf_sky.brres');
+                const instance = renderer.spawnModel(device, brres, 'glf_sky');
+                mat4.copy(instance.modelMatrix, object.modelMatrix);
+                break;
+            }
+            case 0x0001000A: {
+                // Tee object
+                const brres = renderer.mountRRES(device, 'G3D/glf_teeOBJ.brres');
+                const instance = renderer.spawnModel(device, brres, 'glf_teeOBJ');
+                mat4.copy(instance.modelMatrix, object.modelMatrix);
                 break;
             }
         }
@@ -144,7 +159,12 @@ class GolfSceneDesc implements Viewer.SceneDesc {
         renderer.loadSCN0(assertExists(courseBRRES.scn0.find(x => x.name == sceneName)));
         courseMDL0.bindLightSetting(renderer.lightSetting);
 
-        //courseMDL0.bindRRESAnimations(renderer.animationController, courseBRRES, sceneName);
+        // Hide the height map and show the normal texture for the green
+        const greenMaterial = assertExists(courseMDL0.materialInstances.find(x => x.materialData.material.name == "M_Green"));
+        greenMaterial.materialData.material.colorConstants[2] = colorNewFromRGBA(1, 1, 1, 1);
+        
+        // TODO: we need to create a new camera for the projection of the green texture
+        // Right now it uses the main camera, but should presumably use camera1Green_siba
 
         // Load PMP
         const pmp = PMP.parse(assertExists(resourceSystem.findFileData(`${golfName}.pmp`)));
