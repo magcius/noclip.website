@@ -17,7 +17,7 @@ export class PMP {
         pmp.objects = [];
 
         for (let i = 0; i < objectCount; i++) {
-            const objectId = view.getUint32(objectIdx);
+            const objectId = view.getUint32(objectIdx + 0x00);
             const translationX = view.getFloat32(objectIdx + 0x08);
             const translationY = view.getFloat32(objectIdx + 0x0C);
             const translationZ = view.getFloat32(objectIdx + 0x10);
@@ -34,7 +34,7 @@ export class PMP {
             const r00 = view.getFloat32(objectIdx + 0x38);
             const r01 = view.getFloat32(objectIdx + 0x3C);
             const r02 = view.getFloat32(objectIdx + 0x40);
-    
+
             const rotationMatrix = mat4.fromValues(
                 r00, r01, r02, 0,
                 r10, r11, r12, 0,
