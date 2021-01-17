@@ -18,6 +18,8 @@ import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../../../DebugJunk
 import { getPointHermite } from "../../../Spline";
 import { arrayCopy } from "../../../gfx/platform/GfxPlatformUtil";
 import { LoopMode } from "../../../rres/brres";
+import { TPLTextureHolder } from "../../../PaperMarioTTYD/render";
+import { TPL } from "../../../PaperMarioTTYD/tpl";
 
 //#region BRLYT
 interface RLYTSampler extends TEX1_SamplerSub {
@@ -576,6 +578,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                 const contentOffs = blockOffs + view.getUint32(paneOffs + 0x14);
                 parseBRLYT_WindowContent(window, buffer, contentOffs);
 
+                window.frames = [];
                 let frameTableIdx = blockOffs + view.getUint32(paneOffs + 0x18);
                 for (let i = 0; i < frameCount; i++, frameTableIdx += 0x04) {
                     const frameOffs = blockOffs + view.getUint32(frameTableIdx + 0x00);
@@ -758,6 +761,7 @@ interface RLANAnimation {
 
 interface RLAN {
     animations: RLANAnimation[];
+    textureNames: string[];
 }
 
 function parseBRLAN_AnimFourCCToTrackTypeBase(fourcc: string): RLANAnimationTrackType {
@@ -787,6 +791,8 @@ export function parseBRLAN(buffer: ArrayBufferSlice): RLAN {
     let tableIdx = rootSectionOffs + 0x00;
 
     const animations: RLANAnimation[] = [];
+    const textureNames: string[] = [];
+
     for (let i = 0; i < numSections; i++) {
         // blockSize includes the header.
         const blockOffs = tableIdx;
@@ -802,6 +808,7 @@ export function parseBRLAN(buffer: ArrayBufferSlice): RLAN {
             const loopMode = (!!loopFlag) ? LoopMode.REPEAT : LoopMode.ONCE;
             const textureTableCount = view.getUint16(blockContentsOffs + 0x04);
             const animTableCount = view.getUint16(blockContentsOffs + 0x06);
+
             let animBindTableIdx = blockOffs + view.getUint32(blockContentsOffs + 0x08);
             for (let i = 0; i < animTableCount; i++, animBindTableIdx += 0x04) {
                 const animBindOffs = blockOffs + view.getUint32(animBindTableIdx + 0x00);
@@ -862,10 +869,18 @@ export function parseBRLAN(buffer: ArrayBufferSlice): RLAN {
 
                 animations.push({ duration, loopMode, targetName, type, tracks });
             }
+
+            const textureTableOffs = blockContentsOffs + 0x0C;
+            let textureTableIndex = textureTableOffs;
+            for (let i = 0; i < textureTableCount; i++, textureTableIndex += 0x04) {
+                const textureNameOffs = textureTableOffs + view.getUint32(textureTableIndex + 0x00);
+                const name = readString(buffer, textureNameOffs + 0x00);
+                textureNames.push(name);
+            }
         }
     }
 
-    return { animations };
+    return { animations, textureNames };
 }
 
 function hermiteInterpolate(k0: RLANKeyframe, k1: RLANKeyframe, frame: number): number {
@@ -922,8 +937,20 @@ interface LayoutFont {
 }
 
 export class LayoutResourceCollection {
-    public textures: TextureMapping[] = [];
+    public textureHolder = new TPLTextureHolder();
     public fonts: LayoutFont[] = [];
+
+    public fillTextureByName(dst: TextureMapping, name: string): void {
+        this.textureHolder.fillTextureMapping(dst, name);
+    }
+
+    public addTPL(device: GfxDevice, tpl: TPL): void {
+        this.textureHolder.addTPLTextures(device, tpl);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.textureHolder.destroy(device);
+    }
 }
 
 const materialParams = new MaterialParams();
@@ -958,6 +985,10 @@ export class LayoutPane {
             const textbox = new LayoutTextbox();
             textbox.parse(rlyt as RLYTTextbox);
             return textbox;
+        } else if (rlyt.kind === RLYTPaneKind.Window) {
+            const window = new LayoutWindow();
+            window.parse(rlyt as RLYTWindow);
+            return window;
         } else {
             throw "whoops";
         }
@@ -1205,9 +1236,13 @@ export class LayoutTextbox extends LayoutPane {
     // TODO(jstpierre): Font drawing?
 }
 
+export class LayoutWindow extends LayoutPane {
+    // TODO(jstpierre)
+}
+
 class LayoutMaterial {
     public materialHelper: GXMaterialHelperGfx;
-    public textureIndices: number[] = [];
+    public textureNames: string[] = [];
     public textureSamplers: GfxSampler[] = [];
     public visible = true;
     public textureMatrices: RLYTTextureMatrix[];
@@ -1216,13 +1251,13 @@ class LayoutMaterial {
     public colorConstants: Color[];
     public colorMatReg: Color;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public material: RLYTMaterial, private resourceCollection: LayoutResourceCollection) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public material: RLYTMaterial, txl1: RLYTTextureBinding[], private resourceCollection: LayoutResourceCollection) {
         this.materialHelper = new GXMaterialHelperGfx(material.gxMaterial);
 
         for (let i = 0; i < this.material.samplers.length; i++) {
             const sampler = this.material.samplers[i];
             this.textureSamplers[i] = translateSampler(device, cache, sampler);
-            this.textureIndices[i] = sampler.textureIndex;
+            this.textureNames[i] = txl1[sampler.textureIndex].filename;
         }
 
         this.textureMatrices = arrayCopy(this.material.textureMatrices, rlytTextureMatrixCopy);
@@ -1319,18 +1354,19 @@ class LayoutMaterial {
             this.indirectTextureMatrices[subIdx].scaleT = value;
     }
 
-    private calcAnimationTrack(track: RLANAnimationTrack, time: number): void {
+    private calcAnimationTrack(track: RLANAnimationTrack, time: number, textureNames: string[]): void {
         if (track.type === RLANAnimationTrackType.TexturePattern_Index) {
-            this.textureIndices[track.subIdx] = sampleAnimationDataStep(track.frames, time);
+            // TODO(jstpierre): Requires some work to handle this properly...
+            this.textureNames[track.subIdx] = textureNames[sampleAnimationDataStep(track.frames, time)];
         } else {
             const value = sampleAnimationDataHermite(track.frames, time);
             this.setAnimationValueFloat(track.type, track.subIdx, value);
         }
     }
 
-    public calcAnimation(animation: RLANAnimation, time: number): void {
+    public calcAnimation(animation: RLANAnimation, time: number, textureNames: string[]): void {
         for (let i = 0; i < animation.tracks.length; i++)
-            this.calcAnimationTrack(animation.tracks[i], time);
+            this.calcAnimationTrack(animation.tracks[i], time, textureNames);
     }
 
     private calcTextureMatrix(dst: mat4, textureMatrix: RLYTTextureMatrix): void {
@@ -1351,9 +1387,9 @@ class LayoutMaterial {
             this.calcTextureMatrix(dst.u_TexMtx[i], this.textureMatrices[i]);
         for (let i = 0; i < this.material.indirectTextureMatrices.length; i++)
             this.calcTextureMatrix(dst.u_IndTexMtx[i], this.indirectTextureMatrices[i]);
-        for (let i = 0; i < this.textureIndices.length; i++) {
-            dst.m_TextureMapping[i].copy(this.resourceCollection.textures[this.textureIndices[i]]);
-            dst.m_TextureMapping[i].gfxSampler = this.textureSamplers[i]
+        for (let i = 0; i < this.textureNames.length; i++) {
+            this.resourceCollection.fillTextureByName(dst.m_TextureMapping[i], this.textureNames[i]);
+            dst.m_TextureMapping[i].gfxSampler = this.textureSamplers[i];
         }
     }
 }
@@ -1364,7 +1400,7 @@ export class Layout {
     public rootPane: LayoutPane;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private rlyt: RLYT, private resourceCollection: LayoutResourceCollection) {
-        this.materials = this.rlyt.mat1.map((material) => new LayoutMaterial(device, cache, material, resourceCollection));
+        this.materials = this.rlyt.mat1.map((material) => new LayoutMaterial(device, cache, material, this.rlyt.txl1, resourceCollection));
         this.rootPane = LayoutPane.parse(this.rlyt.rootPane);
 
         const ddraw = this.ddraw;
@@ -1398,6 +1434,10 @@ export class Layout {
         this.rootPane.draw(device, renderInstManager, this, this.ddraw, drawInfo.alpha);
         this.ddraw.endAndUpload(device, renderInstManager);
     }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
 }
 
 function getAnimFrame(anim: RLANAnimation, frame: number): number {
@@ -1420,9 +1460,9 @@ class LayoutAnimationEntry {
     constructor(public node: LayoutPane | LayoutMaterial, public animation: RLANAnimation) {
     }
 
-    public calcAnimation(time: number) {
+    public calcAnimation(time: number, textureNames: string[]): void {
         const animFrame = getAnimFrame(this.animation, time);
-        this.node.calcAnimation(this.animation, animFrame);
+        this.node.calcAnimation(this.animation, animFrame, textureNames);
     }
 }
 
@@ -1470,7 +1510,7 @@ export class LayoutAnimation {
     public update(deltaTimeFrames: number): void {
         this.currentFrame += deltaTimeFrames;
         for (let i = 0; i < this.entry.length; i++)
-            this.entry[i].calcAnimation(this.currentFrame);
+            this.entry[i].calcAnimation(this.currentFrame, this.animResource.textureNames);
     }
 }
 //#endregion

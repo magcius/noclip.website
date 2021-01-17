@@ -13,13 +13,28 @@ import { assertExists } from "../../../util";
 import { SceneDesc, SceneGfx, SceneGroup, ViewerRenderInput } from "../../../viewer";
 import { Layout, LayoutAnimation, LayoutDrawInfo, LayoutResourceCollection, parseBRLAN, parseBRLYT } from "./Layout";
 import { getTimeInFrames } from '../../../AnimationController';
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
+
+export class ArcLayoutResourceCollection extends LayoutResourceCollection {
+    public addTextureData(device: GfxDevice, name: string, buffer: ArrayBufferSlice): void {
+        if (!name.endsWith('.tpl'))
+            return;
+        const tpl = TPL.parse(buffer, [name]);
+        this.addTPL(device, tpl);
+    }
+
+    public addArcDir(device: GfxDevice, dir: U8.U8Dir): void {
+        for (let i = 0; i < dir.files.length; i++)
+            this.addTextureData(device, dir.files[i].name, dir.files[i].buffer);
+    }
+}
 
 class BannerBinRenderer implements SceneGfx {
     public renderTarget = new BasicRenderTarget();
-    public textureHolder = new TPLTextureHolder();
+    public textureHolder: TPLTextureHolder;
     private drawInfo = new LayoutDrawInfo();
     private renderHelper: GXRenderHelperGfx;
-    private resourceCollection: LayoutResourceCollection;
+    private resourceCollection: ArcLayoutResourceCollection;
     private layout: Layout;
     private startLayoutAnimation: LayoutAnimation;
     private loopLayoutAnimation: LayoutAnimation;
@@ -31,25 +46,17 @@ class BannerBinRenderer implements SceneGfx {
         const rlyt = parseBRLYT(brlytData);
         console.log(rlyt);
 
-        this.resourceCollection = new LayoutResourceCollection();
-        rlyt.txl1.map((txl1) => {
-            const path = `arc/timg/${txl1.filename}`;
-            const tplData = assertExists(arc.findFileData(path));
-            const tpl = TPL.parse(tplData, [txl1.filename]);
-            this.textureHolder.addTPLTextures(device, tpl);
-
-            const textureMapping = new TextureMapping();
-            this.textureHolder.fillTextureMapping(textureMapping, txl1.filename);
-            this.resourceCollection.textures.push(textureMapping);
-        });
+        this.resourceCollection = new ArcLayoutResourceCollection();
+        this.resourceCollection.addArcDir(device, arc.findDir('arc/timg')!);
+        this.textureHolder = this.resourceCollection.textureHolder;
 
         this.layout = new Layout(device, this.renderHelper.getCache(), rlyt, this.resourceCollection);
 
-        const startAnim = parseBRLAN(arc.findFileData('arc/anim/banner_Start.brlan')!);
+        const startAnim = parseBRLAN(arc.findFileData('arc/anim/banner.brlan')!);
         this.startLayoutAnimation = new LayoutAnimation(this.layout, startAnim);
 
-        const loopAnim = parseBRLAN(arc.findFileData('arc/anim/banner_Loop.brlan')!);
-        this.loopLayoutAnimation = new LayoutAnimation(this.layout, loopAnim);
+        // const loopAnim = parseBRLAN(arc.findFileData('arc/anim/banner_Loop.brlan')!);
+        // this.loopLayoutAnimation = new LayoutAnimation(this.layout, loopAnim);
 
         const font_e = this.layout.findPaneByName('font_e');
         if (font_e !== null)
@@ -87,7 +94,8 @@ class BannerBinRenderer implements SceneGfx {
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        this.textureHolder.destroy(device);
+        this.layout.destroy(device);
+        this.resourceCollection.destroy(device);
     }
 }
 
@@ -99,7 +107,8 @@ class BannerBinSceneDesc implements SceneDesc {
         const data = await dataFetcher.fetchData(`WiiBanner/${this.id}/banner.bin`);
         // ignore IMD5 header
         const arcData = data.slice(0x24);
-        const arc = U8.parse(CX.decompress(arcData));
+        const decompressed = CX.decompress(arcData);
+        const arc = U8.parse(decompressed);
         return new BannerBinRenderer(device, arc);
     }
 }
@@ -109,6 +118,7 @@ const name = 'Wii Banners';
 
 const sceneDescs = [
     new BannerBinSceneDesc('WiiShopChannel', 'Wii Shop Channel'),
+    new BannerBinSceneDesc('Fluidity', 'Fluidity'),
 ];
 
 export const sceneGroup: SceneGroup = {
