@@ -1,4 +1,4 @@
-import { mat4, vec3 } from "gl-matrix";
+import { mat4 } from "gl-matrix";
 import * as BRRES from "../rres/brres";
 import AnimationController from "../AnimationController";
 import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
@@ -9,7 +9,7 @@ import { SceneContext } from "../SceneBase";
 import * as Viewer from "../viewer";
 import { PMP, PMPObject } from "./PMP";
 import { ResourceSystem } from "./ResouceSystem";
-import { assert, assertExists } from "../util";
+import { assertExists } from "../util";
 import { colorNewFromRGBA } from "../Color";
 
 class WiiSportsRenderer extends BasicGXRendererHelper {
@@ -19,30 +19,33 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
     public scn0Animator: BRRES.SCN0Animator | null = null;
     public lightSetting: BRRES.LightSetting = new BRRES.LightSetting();
     //public eggLightManager: EggLightManager;
-    //public pmpObjects: PMPObject[] = [];
-    //public debugObjects = false;
 
     constructor(device: GfxDevice, private resourceSystem: ResourceSystem) {
         super(device);
     }
 
-    public loadSCN0(scn0: BRRES.SCN0): void {
+    public bindSCN0(scn0: BRRES.SCN0): void {
         this.scn0Animator = new BRRES.SCN0Animator(this.animationController, scn0);
     }
 
+    public bindAnimations(instance: MDL0ModelInstance, rres: BRRES.RRES, animationName: string) {
+        instance.bindRRESAnimations(this.animationController, rres, animationName);
+    }
 
     public mountRRES(device: GfxDevice, rresName: string): BRRES.RRES {
         return this.resourceSystem.mountRRES(device, this.textureHolder, rresName);
     }
+
     public spawnModel(device: GfxDevice, rres: BRRES.RRES, modelName: string): MDL0ModelInstance {
         const mdl0Data = this.resourceSystem.mountMDL0(device, this.getCache(), rres, modelName);
         const instance = new MDL0ModelInstance(this.textureHolder, mdl0Data);
-        //instance.bindRRESAnimations(this.animationController, rres);
         //instance.bindLightSetting(this.eggLightManager.lightSetting);
         this.modelInstances.push(instance);
 
         return instance;
     }
+
+
 
     protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
@@ -91,7 +94,10 @@ class TennisSceneDesc implements Viewer.SceneDesc {
         
         // Load main model
         const fieldBRRES = renderer.mountRRES(device, `G3D/${tennisName}.brres`);
-        renderer.spawnModel(device, fieldBRRES, tennisName);
+        const fieldMDL0 = renderer.spawnModel(device, fieldBRRES, tennisName);
+
+        renderer.bindAnimations(fieldMDL0, fieldBRRES, "tns_C1");
+        renderer.bindAnimations(fieldMDL0, fieldBRRES, "tns_C2");
 
         // Load net
         const netBRRES = renderer.mountRRES(device, `G3D/tns_net_a.brres`);
@@ -118,8 +124,11 @@ class BaseballSceneDesc implements Viewer.SceneDesc {
         
         // Load main model
         const fieldBRRES = renderer.mountRRES(device, `G3D/bbl_Field_a.brres`);
-        renderer.spawnModel(device, fieldBRRES, "bbl_Field_a");
+        const fieldMDL0 = renderer.spawnModel(device, fieldBRRES, "bbl_Field_a");
         
+        renderer.bindAnimations(fieldMDL0, fieldBRRES, "bbl_Field_cloud01");
+        renderer.bindAnimations(fieldMDL0, fieldBRRES, "bbl_Field_cloud02");
+
         // Load screen
         const screenBRRES = renderer.mountRRES(device, `G3D/bbl_Field_Screen.brres`);
         renderer.spawnModel(device, screenBRRES, "bbl_Field_Screen");
@@ -144,9 +153,13 @@ class BowlingSceneDesc implements Viewer.SceneDesc {
         
         // Load main model
         const stageBRRES = renderer.mountRRES(device, `G3D/${this.id}.brres`);
+        const scn0BRRES = renderer.mountRRES(device, `G3D/${this.id}_rsca.brres`);
+
+        renderer.bindSCN0(assertExists(scn0BRRES.scn0.find(x => x.name == "RPScene")));
 
         for (let mdl0 of stageBRRES.mdl0) {
-            renderer.spawnModel(device, stageBRRES, mdl0.name);
+            const instance = renderer.spawnModel(device, stageBRRES, mdl0.name);
+            instance.bindLightSetting(renderer.lightSetting);
         }
 
         return renderer;
@@ -203,6 +216,7 @@ class GolfSceneDesc implements Viewer.SceneDesc {
             }
             case 0x00010008: {
                 // Sky
+                // TODO: there is a glf_sk2 MDL0, don't know when it's loaded
                 const brres = renderer.mountRRES(device, 'G3D/glf_sky.brres');
                 const instance = renderer.spawnModel(device, brres, 'glf_sky');
                 mat4.copy(instance.modelMatrix, object.modelMatrix);
@@ -215,6 +229,26 @@ class GolfSceneDesc implements Viewer.SceneDesc {
                 mat4.copy(instance.modelMatrix, object.modelMatrix);
                 break;
             }
+            case 0x00010011: {
+                // Target object A
+                const brres = renderer.mountRRES(device, 'G3D/glf_mato.brres');
+                const instance = renderer.spawnModel(device, brres, 'glf_mato_A');
+                mat4.copy(instance.modelMatrix, object.modelMatrix);
+                break;
+            }
+            case 0x00010013: {
+                // Target object C
+                const brres = renderer.mountRRES(device, 'G3D/glf_mato.brres');
+                const instance = renderer.spawnModel(device, brres, 'glf_mato_C');
+                const instanceWater = renderer.spawnModel(device, brres, 'glf_matoWATER_C');
+                const instanceWave = renderer.spawnModel(device, brres, 'glf_matoWAVE_C');
+                mat4.copy(instance.modelMatrix, object.modelMatrix);
+                mat4.copy(instanceWater.modelMatrix, object.modelMatrix);
+                mat4.copy(instanceWave.modelMatrix, object.modelMatrix);
+                break;
+            }
+            default:
+                console.warn("Unknown object: ", object.objectId.toString(16))
         }
     }
 
@@ -237,12 +271,16 @@ class GolfSceneDesc implements Viewer.SceneDesc {
         const courseBRRES = renderer.mountRRES(device, `G3D/${golfName}.brres`);
         const courseMDL0 = renderer.spawnModel(device, courseBRRES, golfName);     
 
-        renderer.loadSCN0(assertExists(courseBRRES.scn0.find(x => x.name == sceneName)));
+        renderer.bindAnimations(courseMDL0, courseBRRES, golfName);
+        renderer.bindSCN0(assertExists(courseBRRES.scn0.find(x => x.name == sceneName)));
         courseMDL0.bindLightSetting(renderer.lightSetting);
 
         // Hide the height map and show the normal texture for the green
-        const greenMaterial = assertExists(courseMDL0.materialInstances.find(x => x.materialData.material.name == "M_Green"));
-        greenMaterial.materialData.material.colorConstants[2] = colorNewFromRGBA(1, 1, 1, 1);
+        const greenMaterial = courseMDL0.materialInstances.find(x => x.materialData.material.name == "M_Green");
+
+        if (greenMaterial) {
+            greenMaterial.materialData.material.colorConstants[2] = colorNewFromRGBA(1, 1, 1, 1);
+        }
         
         // TODO: we need to create a new camera for the projection of the green texture
         // Right now it uses the main camera, but should presumably use camera1Green_siba
@@ -275,13 +313,30 @@ class BoxingSceneDesc implements Viewer.SceneDesc {
         
         // Load main model
         const stageBRRES = renderer.mountRRES(device, `G3D/${this.id}.brres`);
-        renderer.loadSCN0(assertExists(stageBRRES.scn0.find(x => x.name == this.id)));
+        renderer.bindSCN0(assertExists(stageBRRES.scn0.find(x => x.name == this.id)));
 
-        for (let mdl0 of stageBRRES.mdl0) {
-            const instance = renderer.spawnModel(device, stageBRRES, mdl0.name);
-            instance.bindLightSetting(renderer.lightSetting);
-        }        
+        if (this.id === "box_ring") {
+            // The animation loops, for unknown reason. Set it to play once,
+            // and it will look correct
+            stageBRRES.pat0[0].loopMode = BRRES.LoopMode.ONCE;
 
+            // TODO: ring rope is not spawned correctly. Multiple instances
+            // also needs to be spawned
+    
+            for (let mdl0 of stageBRRES.mdl0) {
+                const instance = renderer.spawnModel(device, stageBRRES, mdl0.name);
+                instance.bindLightSetting(renderer.lightSetting);
+                renderer.bindAnimations(instance, stageBRRES, "box_hall");
+                //renderer.bindAnimations(instance, stageBRRES, "box_hall2");
+                renderer.bindAnimations(instance, stageBRRES, "box_light");
+            }
+        }
+        else {    
+            for (let mdl0 of stageBRRES.mdl0) {
+                renderer.spawnModel(device, stageBRRES, mdl0.name);
+            }
+        }
+        
         return renderer;
     }
 }
@@ -309,6 +364,9 @@ const sceneDescs = [
     new GolfSceneDesc("fc12", "Hole 7"),
     new GolfSceneDesc("fc9", "Hole 8"),
     new GolfSceneDesc("fc13", "Hole 9"),
+    new GolfSceneDesc("fc11", "Target Practice"),
+    new GolfSceneDesc("fc18", "fc18"),
+    new GolfSceneDesc("E3", "E3"),
     "Boxing",
     new BoxingSceneDesc("box_ring", "Ring"),
     new BoxingSceneDesc("box_gym", "Gym")
