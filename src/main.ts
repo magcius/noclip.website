@@ -40,6 +40,7 @@ import * as Scenes_Okami from './rres/Scenes_Okami';
 import * as Scenes_SonicColors from './rres/Scenes_SonicColors';
 import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl';
 import * as Scenes_Test from './Scenes_Test';
+import * as Scenes_WiiSports from './WiiSports/Scenes_WiiSports';
 import * as Scenes_WiiSportsResort from './WiiSports/Scenes_WiiSportsResort';
 import * as Scenes_Zelda_SkywardSword from './rres/Scenes_Zelda_SkywardSword';
 import * as Scenes_InteractiveExamples from './InteractiveExamples/Scenes';
@@ -99,6 +100,7 @@ const sceneGroups = [
     Scenes_SuperMarioGalaxy2.sceneGroup,
     Scenes_SuperPaperMario.sceneGroup,
     Scenes_SuperSmashBrosBrawl.sceneGroup,
+    Scenes_WiiSports.sceneGroup,
     Scenes_WiiSportsResort.sceneGroup,
     "GameCube",
     Scenes_LuigisMansion.sceneGroup,
