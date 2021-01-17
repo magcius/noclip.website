@@ -101,6 +101,33 @@ class TennisSceneDesc implements Viewer.SceneDesc {
     }
 }
 
+class BaseballSceneDesc implements Viewer.SceneDesc {
+    constructor(public id: string, public name: string = id) {}
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const d = context.dataFetcher;
+
+        const resourceSystem = new ResourceSystem();
+
+        await resourceSystem.fetchAndMount(d, [
+            `${dataPath}/Common/RPBsbScene/common.carc`,
+            `${dataPath}/Stage/RPBsbScene/ballpark00.carc`
+        ]);
+
+        const renderer = new WiiSportsRenderer(device, resourceSystem);
+        
+        // Load main model
+        const fieldBRRES = renderer.mountRRES(device, `G3D/bbl_Field_a.brres`);
+        renderer.spawnModel(device, fieldBRRES, "bbl_Field_a");
+        
+        // Load screen
+        const screenBRRES = renderer.mountRRES(device, `G3D/bbl_Field_Screen.brres`);
+        renderer.spawnModel(device, screenBRRES, "bbl_Field_Screen");
+
+        return renderer;
+    }
+}
+
 class GolfSceneDesc implements Viewer.SceneDesc {
     constructor(public id: string, public name: string = id) {}
 
@@ -215,6 +242,7 @@ const sceneDescs = [
     new TennisSceneDesc("a", "Field"),
     new TennisSceneDesc("b", "Training Field"),
     "Baseball",
+    new BaseballSceneDesc("Baseball", "Stage"),
     "Bowling",
     "Golf",
     new GolfSceneDesc("fc1", "Hole 1"),
