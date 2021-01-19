@@ -313,7 +313,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public o: (object | null)[] = [];
     public descriptor: GfxRenderPassDescriptor;
 
-    public reset() { this.u32.r(); this.f32.r(); this.o.length = 0; }
+    public reset() { this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
 
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
