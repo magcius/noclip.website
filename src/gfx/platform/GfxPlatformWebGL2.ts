@@ -313,7 +313,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public o: (object | null)[] = [];
     public descriptor: GfxRenderPassDescriptor;
 
-    public reset() { this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
+    public reset() { this.u32.r(); this.f32.r(); this.o.length = 0; }
 
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
@@ -340,8 +340,7 @@ class GfxHostAccessPassP_GL implements GfxHostAccessPass {
     public gfxr: (GfxResource | null)[] = [];
     public bufr: ArrayBufferView[] = [];
 
-    public g0 = 0;
-    public reset() { this.g0 = ++g0; this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
+    public reset() { this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
 
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
