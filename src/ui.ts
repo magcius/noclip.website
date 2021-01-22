@@ -2805,19 +2805,6 @@ me compare the two.</p>
 the source code to the site is available at <a href="https://github.com/magcius/noclip.website">GitHub</a>,
 whether you want to browse around, use it for your own purposes, or help contribute.</p>
 
-## Why does Skyward Sword have a level called Despacito? Is that its official name?
-
-<p>Nah. The internal names of a lot of the Zelda games is often just a letter-number code,
-something like 'F203_05'. Most of the maps have no real in-game name as far as I can
-tell, so I often spend a lot of time hunting down longplays on YouTube or playing the
-game myself to try and come up with a name for it. I had done this for most of
-Skyward Sword, but got a bit stumped on some of the maps, and put "Despacito" as an
-inside joke.</p>
-
-<p>If you come up with a better name for these maps, feel free to tell me, either on
-the <a href="https://discord.gg/bkJmKKv">official noclip.website Discord</a> or through
-<a href="https://twitter.com/JasperRLZ/">Twitter</a>.</p>
-
 ## Are you afraid of being taken down?
 
 <p>Less than you might think. Companies take down fan projects when they're competing
