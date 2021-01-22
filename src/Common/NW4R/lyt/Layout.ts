@@ -4,7 +4,7 @@ import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, Wh
 import { assert, assertExists, readString } from "../../../util";
 import * as GX from '../../../gx/gx_enum';
 import { mat4, ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
-import { computeModelMatrixS, MathConstants, saturate, setMatrixTranslation } from "../../../MathHelpers";
+import { computeModelMatrixSRT, MathConstants, saturate } from "../../../MathHelpers";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID } from "../../../gx/gx_material";
 import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
@@ -1067,12 +1067,10 @@ export class LayoutPane {
         if (!this.visible)
             return;
 
-        computeModelMatrixS(scratchMatrix, this.scale[0], this.scale[1], 1.0);
-        mat4.rotateX(scratchMatrix, scratchMatrix, this.rotation[0] * MathConstants.DEG_TO_RAD);
-        mat4.rotateY(scratchMatrix, scratchMatrix, this.rotation[1] * MathConstants.DEG_TO_RAD);
-        mat4.rotateZ(scratchMatrix, scratchMatrix, this.rotation[2] * MathConstants.DEG_TO_RAD);
-        setMatrixTranslation(scratchMatrix, this.translation);
-
+        computeModelMatrixSRT(scratchMatrix,
+            this.scale[0], this.scale[1], 1.0,
+            this.rotation[0] * MathConstants.DEG_TO_RAD, this.rotation[1] * MathConstants.DEG_TO_RAD, this.rotation[2] * MathConstants.DEG_TO_RAD,
+            this.translation[0], this.translation[1], this.translation[2]);
         mat4.mul(this.worldFromLocalMatrix, parentMatrix, scratchMatrix);
 
         for (let i = 0; i < this.children.length; i++)
