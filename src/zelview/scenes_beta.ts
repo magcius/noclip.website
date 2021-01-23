@@ -7,7 +7,6 @@ const pathBase = `zelview_beta`;
 const id = 'zelview_beta';
 const name = 'The Legend of Zelda: Ocarina of Time (F-Zero Overdump)';
 const sceneDescs = [
-    new ZelviewSceneDesc('11',  "Gerudo Training Ground", pathBase),
     new ZelviewSceneDesc('85',  "Kokiri Forest", pathBase),
     new ZelviewSceneDesc('01',  "Deku Tree", pathBase),
     new ZelviewSceneDesc('64',  "Gohma Room", pathBase),
@@ -27,6 +26,7 @@ const sceneDescs = [
     new ZelviewSceneDesc('84',  "Zora's River", pathBase),
     new ZelviewSceneDesc('91',  "Gerudo Valley", pathBase),
     new ZelviewSceneDesc('86',  "Horseback Archery", pathBase),
+    new ZelviewSceneDesc('11',  "Gerudo Training Ground", pathBase),
     new ZelviewSceneDesc('65',  "Spiral Structure", pathBase),
     new ZelviewSceneDesc('96',  "Death Mountain Trail", pathBase),
     new ZelviewSceneDesc('97',  "Death Mountain Crater", pathBase),
