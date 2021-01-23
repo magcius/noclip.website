@@ -91,6 +91,12 @@ function parseRoomTable(files: ZELVIEW0File[], buffer: ArrayBufferSlice, basedir
 
 function main() {
     const scenes = readdirSync(`${pathBaseIn}/scenes`);
+    scenes.sort((a, b) => {
+        const ai = parseInt(a, 10);
+        const bi = parseInt(b, 10);
+        return ai - bi;
+    });
+
     let sceneDescStr = '';
 
     mkdirSync(`${pathBaseOut}`, { recursive: true });
