@@ -182,8 +182,7 @@ class DrawCallInstance {
         if (!!(this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING))
             program.defines.set('LIGHTING', '1');
 
-        // FIXME: Levels disable the SHADE flags. wtf?
-        const shade = true; // (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADING_SMOOTH) !== 0;
+        const shade = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADING_SMOOTH) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
