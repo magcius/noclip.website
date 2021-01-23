@@ -168,7 +168,7 @@ class DrawCallInstance {
         }
 
         this.megaStateFlags = translateBlendMode(this.drawCall.DP_OtherModeL);
-        this.setBackfaceCullingEnabled(true);
+        this.setCullModeOverride(null);
         this.createProgram();
     }
 
@@ -204,8 +204,9 @@ class DrawCallInstance {
         this.gfxProgram = null;
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+    public setCullModeOverride(cullMode: GfxCullMode | null): void {
+        if (cullMode === null)
+            cullMode = translateCullMode(this.drawCall.SP_GeometryMode);
         this.megaStateFlags.cullMode = cullMode;
     }
 
@@ -320,9 +321,9 @@ class MeshRenderer {
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox);
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
+    public setCullModeOverride(cullMode: GfxCullMode | null): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].setBackfaceCullingEnabled(v);
+            this.drawCallInstances[i].setCullModeOverride(cullMode);
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -386,8 +387,8 @@ export class RootMeshRenderer {
         return geoNodeRenderer;
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
-        this.rootNodeRenderer.setBackfaceCullingEnabled(v);
+    public setCullModeOverride(cullMode: GfxCullMode): void {
+        this.rootNodeRenderer.setCullModeOverride(cullMode);
     }
 
     public setVertexColorsEnabled(v: boolean): void {

@@ -1,6 +1,6 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { makeClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { OpaqueBlack } from '../Color';
@@ -9,6 +9,7 @@ import { readZELVIEW0, Headers, ZELVIEW0 } from './zelview0';
 import { RootMeshRenderer, MeshData, Mesh } from './render';
 import { RSPState, RSPOutput } from './f3dzex';
 import { CameraController } from '../Camera';
+import * as UI from '../ui';
 
 const pathBase = `zelview`;
 
@@ -24,6 +25,21 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     constructor(device: GfxDevice, private zelview: ZELVIEW0) {
         this.renderHelper = new GfxRenderHelper(device);
         this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
+    }
+
+    public createPanels(): UI.Panel[] {
+        const renderHacksPanel = new UI.Panel();
+
+        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
+        const enableCullingCheckbox = new UI.Checkbox('Force Backfacing Culling', false);
+        enableCullingCheckbox.onchanged = () => {
+            for (let i = 0; i < this.meshRenderers.length; i++)
+                this.meshRenderers[i].setCullModeOverride(enableCullingCheckbox.checked ? GfxCullMode.BACK : GfxCullMode.NONE);
+        };
+        renderHacksPanel.contents.appendChild(enableCullingCheckbox.elem);
+
+        return [renderHacksPanel];
     }
 
     public adjustCameraController(c: CameraController) {
