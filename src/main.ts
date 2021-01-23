@@ -13,6 +13,7 @@ import * as Scenes_SuperMarioGalaxy1 from './SuperMarioGalaxy/Scenes_SuperMarioG
 import * as Scenes_SuperMarioGalaxy2 from './SuperMarioGalaxy/Scenes_SuperMarioGalaxy2';
 import * as Scenes_SuperMario64DS from './SuperMario64DS/scenes';
 import * as Scenes_Zelda_OcarinaOfTime from './zelview/scenes';
+import * as Scenes_Zelda_OcarinaOfTime_Beta from './zelview/scenes_beta';
 import * as Scenes_Zelda_OcarinaOfTime3D from './oot3d/oot3d_scenes';
 import * as Scenes_Zelda_MajorasMask3D from './oot3d/mm3d_scenes';
 import * as Scenes_LuigisMansion3D from './oot3d/lm3d_scenes';
@@ -167,6 +168,7 @@ const sceneGroups = [
     Scenes_SunshineWater.sceneGroup,
     Scenes_TheWitness.sceneGroup,
     Scenes_WiiBanner.sceneGroup,
+    Scenes_Zelda_OcarinaOfTime_Beta.sceneGroup,
 ];
 
 function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {

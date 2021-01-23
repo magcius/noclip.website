@@ -5,7 +5,7 @@ import { makeClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers
 import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
 import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
-import { readZELVIEW0, Headers } from './zelview0';
+import { readZELVIEW0, Headers, ZELVIEW0 } from './zelview0';
 import { RootMeshRenderer, MeshData, Mesh } from './render';
 import { RSPState, RSPOutput } from './f3dzex';
 import { CameraController } from '../Camera';
@@ -21,7 +21,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     private renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
 
-    constructor(device: GfxDevice) {
+    constructor(device: GfxDevice, private zelview: ZELVIEW0) {
         this.renderHelper = new GfxRenderHelper(device);
         this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
     }
@@ -63,59 +63,63 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     }
 }
 
-class ZelviewSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public name: string) {
+function createRendererFromZELVIEW0(device: GfxDevice, zelview: ZELVIEW0): ZelviewRenderer {
+    const renderer = new ZelviewRenderer(device, zelview);
+
+    const headers = zelview.loadScene(zelview.sceneFile);
+    // console.log(`headers: ${JSON.stringify(headers, null, '\t')}`);
+
+    function createMeshRenderer(rspOutput: (RSPOutput | null)) {
+        if (!rspOutput) {
+            return;
+        }
+        
+        const cache = renderer.renderHelper.getCache();
+        const mesh: Mesh = {
+            sharedOutput: zelview.sharedOutput,
+            rspState: new RSPState(headers.rom, zelview.sharedOutput),
+            rspOutput: rspOutput,
+        }
+
+        const meshData = new MeshData(device, cache, mesh);
+        const meshRenderer = new RootMeshRenderer(device, cache, meshData);
+        renderer.meshDatas.push(meshData);
+        renderer.meshRenderers.push(meshRenderer);
+    }
+
+    function createRenderer(headers: Headers) {
+        if (headers.mesh) {
+            for (let i = 0; i < headers.mesh.opaque.length; i++) {
+                createMeshRenderer(headers.mesh.opaque[i]);
+            }
+            
+            for (let i = 0; i < headers.mesh.transparent.length; i++) {
+                // FIXME: sort transparent meshes back-to-front
+                createMeshRenderer(headers.mesh.transparent[i]);
+            }
+        } else {
+            for (let i = 0; i < headers.rooms.length; i++) {
+                console.log(`Loading ${headers.filename} room ${i}...`);
+                createRenderer(headers.rooms[i]);
+            }
+        }
+    }
+
+    createRenderer(headers);
+
+    return renderer;
+}
+
+export class ZelviewSceneDesc implements Viewer.SceneDesc {
+    constructor(public id: string, public name: string, private base: string = pathBase) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const dataFetcher = context.dataFetcher;
-        const zelviewData = await dataFetcher.fetchData(`${pathBase}/${this.id}.zelview0`);
+        const zelviewData = await dataFetcher.fetchData(`${this.base}/${this.id}.zelview0`);
 
-        const renderer = new ZelviewRenderer(device);
-
-        const zelview = readZELVIEW0(zelviewData);
-        const headers = zelview.loadMainScene();
-        //console.log(`headers: ${JSON.stringify(headers, null, '\t')}`);
-
-        function createMeshRenderer(rspOutput: (RSPOutput | null)) {
-            if (!rspOutput) {
-                return;
-            }
-            
-            const cache = renderer.renderHelper.getCache();
-            const mesh: Mesh = {
-                sharedOutput: zelview.sharedOutput,
-                rspState: new RSPState(headers.rom, zelview.sharedOutput),
-                rspOutput: rspOutput,
-            }
-
-            const meshData = new MeshData(device, cache, mesh);
-            const meshRenderer = new RootMeshRenderer(device, cache, meshData);
-            renderer.meshDatas.push(meshData);
-            renderer.meshRenderers.push(meshRenderer);
-        }
-
-        function createRenderer(headers: Headers) {
-            if (headers.mesh) {
-                for (let i = 0; i < headers.mesh.opaque.length; i++) {
-                    createMeshRenderer(headers.mesh.opaque[i]);
-                }
-                
-                for (let i = 0; i < headers.mesh.transparent.length; i++) {
-                    // FIXME: sort transparent meshes back-to-front
-                    createMeshRenderer(headers.mesh.transparent[i]);
-                }
-            } else {
-                for (let i = 0; i < headers.rooms.length; i++) {
-                    console.log(`Loading ${headers.filename} room ${i}...`);
-                    createRenderer(headers.rooms[i]);
-                }
-            }
-        }
-
-        createRenderer(headers);
-
-        return renderer;
+        const zelview0 = readZELVIEW0(zelviewData);
+        return createRendererFromZELVIEW0(device, zelview0);
     }
 }
 
