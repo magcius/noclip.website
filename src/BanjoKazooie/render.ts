@@ -133,13 +133,6 @@ void main() {
         if (RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE)
             this.defines.set("TWO_CYCLE", "1");
         this.frag = this.generateFrag(combParams);
-
-        // let twoCycle = RDP.getCycleTypeFromOtherModeH(DP_OtherModeH) === RDP.OtherModeH_CycleType.G_CYC_2CYCLE;
-        // if (RDP.combineParamsUseCombinedInFirstCycle(combParams) || RDP.combineParamsUseT1InFirstCycle(combParams)) {
-        //     console.log(RDP.generateCombineParamsString(combParams, twoCycle));
-        // } else if (twoCycle && RDP.combineParamsUseTexelsInSecondCycle(combParams)) {
-        //     console.log(RDP.generateCombineParamsString(combParams, twoCycle));
-        // }
     }
 
     private generateClamp(): string {
