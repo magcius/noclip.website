@@ -1,4 +1,5 @@
 ﻿// Parses Amusement Vision GMA Format (GeoMetry Archive) files.
+// https://craftedcart.github.io/SMBLevelWorkshop/documentation/index.html?page=gmaFormat
 // https://gitlab.com/RaphaelTetreault/fzgx_documentation/-/blob/master/asset/GMA%20Structure.md
 
 import * as GX from "../gx/gx_enum";
@@ -64,10 +65,8 @@ interface VtxConType4{
 // GCMF Submesh
 export interface GcmfShape{
     material: GcmfMaterial,
-    // mtxIdxs: number[],
     boundingSphere: vec3,
     dlistHeaders: GcmfDisplaylistHeader[],
-
     loadedVertexLayout: LoadedVertexLayout,
     loadedVertexDatas: LoadedVertexData[]
 }
@@ -289,7 +288,7 @@ function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader{
         mtxIdxs.push(mtxIdx);
         offs += 0x01 * i;
     }
-    for(let i = 0; i < 8; i++){
+    for(let i = 0; i < 2; i++){
         let dlistSize = view.getUint32(offs);
         dlistSizes.push(dlistSize);
         offs += 0x04 * i;
@@ -314,7 +313,7 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
         return vatFormat;
     }
 
-    function generateLoadedVertexData(dlist: ArrayBufferSlice, vat: GX_VtxAttrFmt[][], fmtVat: GX.VtxFmt.VTXFMT0 | GX.VtxFmt.VTXFMT1, isNBT: boolean, loader: VtxLoader): LoadedVertexData{
+    function generateLoadedVertexData(dlist: ArrayBufferSlice, vat: GX_VtxAttrFmt[][], fmtVat: GX.VtxFmt.VTXFMT0 | GX.VtxFmt.VTXFMT1, isNBT: boolean, loader: VtxLoader, isCW: boolean): LoadedVertexData{
         const arrays: GX_Array[] = [];
         arrays[GX.Attr.POS]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.POS) };
         arrays[GX.Attr.NRM]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.NRM) * (isNBT ? 3 : 1) };
@@ -324,6 +323,18 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
         arrays[GX.Attr.TEX1]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX1) };
         arrays[GX.Attr.TEX2]  = { buffer: dlist, offs: 0x00, stride: getAttributeByteSize(vat[fmtVat], GX.Attr.TEX2) };
         const loadedVertexData = loader.runVertices(arrays, dlist);
+        if (isCW) {
+            // convert cw triangle-strip to ccw triangle-strip
+            const dstIndexData = new Uint16Array(loadedVertexData.indexData);
+            for (let i = 1; i < loadedVertexData.totalIndexCount+1; i++){
+                if (i % 3 == 0 && i > 0){
+                    let temp_indexData = dstIndexData[i-3];
+                    dstIndexData[i-3] = dstIndexData[i-1];
+                    dstIndexData[i-1] = temp_indexData;
+                }
+            }
+            loadedVertexData.indexData = dstIndexData.buffer;
+        }
         return loadedVertexData;
     }
 
@@ -391,10 +402,12 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
             if (size <= 0) {
                 continue;
             }
+            let isCW = i % 2 == 1;
             let dlisEndOffs = dlistOffs + size;
             let dlist = buffer.slice(dlistOffs + 0x01, dlisEndOffs);
-            const loadedVertexData = generateLoadedVertexData(dlist, vat, fmtVat, isNBT, loader);
+            const loadedVertexData = generateLoadedVertexData(dlist, vat, fmtVat, isNBT, loader, isCW);
             loadedVertexDatas.push(loadedVertexData);
+
             dlistOffs = dlisEndOffs;
         }
     });

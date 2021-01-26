@@ -3,71 +3,23 @@ import * as  GMA from './gma';
 import * as AVtpl from './AVtpl';
 import * as LZSS from "../Common/Compression/LZSS"
 
-import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance } from './render';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GcmfModel, GcmfModelInstance } from './render';
+import { GfxDevice, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import AnimationController from '../AnimationController';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXRenderHelperGfx, } from '../gx/gx_render';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
-import * as UI from '../ui';
 import { CameraController } from '../Camera';
+import { AmusementVisionSceneRenderer } from './AVscene';
 
 enum FZEROGXPass {
     SKYBOX = 0x01,
     MAIN = 0x02,
 }
 
-export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
-    public renderHelper: GXRenderHelperGfx;
-    public renderTarget = new BasicRenderTarget();
-
-    public textureHolder = new AmusementVisionTextureHolder();
-    public animationController = new AnimationController();
-
-    public modelInstances: GcmfModelInstance[] = [];
-    public modelData: GcmfModel[] = [];
-    
-    constructor(device: GfxDevice) {
-        this.renderHelper = new GXRenderHelperGfx(device);
-    }
-
-    public createPanels(): UI.Panel[] {
-        const renderHacksPanel = new UI.Panel();
-        renderHacksPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-        renderHacksPanel.setTitle(UI.RENDER_HACKS_ICON, 'Render Hacks');
-        const enableVertexColorsCheckbox = new UI.Checkbox('Enable Vertex Colors', true);
-        enableVertexColorsCheckbox.onchanged = () => {
-            const v = enableVertexColorsCheckbox.checked;
-            for (let i = 0; i < this.modelInstances.length; i++)
-                this.modelInstances[i].setVertexColorsEnabled(v);
-        };
-        renderHacksPanel.contents.appendChild(enableVertexColorsCheckbox.elem);
-        const enableTextures = new UI.Checkbox('Enable Textures', true);
-        enableTextures.onchanged = () => {
-            const v = enableTextures.checked;
-            for (let i = 0; i < this.modelInstances.length; i++)
-                this.modelInstances[i].setTexturesEnabled(v);
-        };
-        renderHacksPanel.contents.appendChild(enableTextures.elem);
-
-        return [renderHacksPanel];
-    }
-
+export class FZEROGXSceneRenderer extends AmusementVisionSceneRenderer {
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(8/60);
-    }
-
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
-        // this.animationController.setTimeInMilliseconds(viewerInput.time);
-
-        const template = this.renderHelper.pushTemplateRenderInst();
-        fillSceneParamsDataOnTemplate(template, viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender(device, hostAccessPass);
-        this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
@@ -77,7 +29,7 @@ export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
         
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
+        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
         executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, FZEROGXPass.SKYBOX);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
@@ -85,18 +37,6 @@ export class FZEROGXSceneRenderer implements Viewer.SceneGfx {
         executeOnPass(this.renderHelper.renderInstManager, device, mainPassRenderer, FZEROGXPass.MAIN);
         this.renderHelper.renderInstManager.resetRenderInsts();
         return mainPassRenderer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.textureHolder.destroy(device);
-        this.renderTarget.destroy(device);
-        this.renderHelper.destroy(device);
-
-        for (let i = 0; i < this.modelInstances.length; i++)
-            this.modelInstances[i].destroy(device);
-
-        for (let i = 0; i < this.modelData.length; i++)
-            this.modelData[i].destroy(device);
     }
 }
 
@@ -197,10 +137,10 @@ const sceneDescs = [
     new FZEROGXSceneDesc("40", "big_s", "Chapter 4"),
     new FZEROGXSceneDesc("41", "por_s", "Chapter 5"),
     new FZEROGXSceneDesc("42", "lig_s", "Chapter 6"),
-    new FZEROGXSceneDesc("43", "mut_s", "Chapter 7"), //
+    new FZEROGXSceneDesc("43", "mut_s", "Chapter 7"), // NBT
     new FZEROGXSceneDesc("44", "fir_s", "Chapter 8"),
     new FZEROGXSceneDesc("45", "rai_s", "Chapter 9"),
-    // new FZEROGXSceneDesc("43", "mut_s_jp", "[JP]Chapter 7"),
+    // new FZEROGXSceneDesc("43", "com_s_jp", "[JP]Chapter 7"),
     "MISC",
     new FZEROGXSceneDesc("49", "com", "Interview"),
     new FZEROGXSceneDesc("50", "com", "Victory Lap"),

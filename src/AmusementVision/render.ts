@@ -6,16 +6,15 @@ import { LoadedVertexData, LoadedVertexDraw } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from "../gfx/helpers/BufferHelpers";
 import { GfxDevice, GfxMipFilterMode, GfxNormalizedViewportCoords, GfxSampler, GfxTexFilterMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, PacketParams, translateTexFilterGfx, translateWrapModeGfx } from "../gx/gx_render";
-import { mat4, vec3 } from 'gl-matrix';
+import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, loadedDataCoalescerComboGfx, MaterialParams, PacketParams, translateWrapModeGfx } from "../gx/gx_render";
+import { mat4 } from 'gl-matrix';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
-import { Color } from '../Color';
+import { Color, colorCopy } from '../Color';
 import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyBias, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { nArray } from '../util';
 import { AABB, IntersectionState } from '../Geometry';
 import { ViewerRenderInput } from '../viewer';
 import { TextureMapping } from '../TextureHolder';
-import { CullMode } from '../gx/gx_enum';
 
 
 export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
@@ -84,7 +83,7 @@ const packetParams = new PacketParams();
 class ShapeInstance {
     public sortKeyBias = 0;
 
-    constructor(public shape: GMA.GcmfShape, public shapeData: GXShapeHelperGfx, public materialInstance: MaterialInstance) {
+    constructor(public shape: GMA.GcmfShape, public shapeData: GXShapeHelperGfx, public materialInstance: MaterialInstance, public shape_idx: number) {
     }
 
     public prepareToRender(device: GfxDevice, textureHolder: GXTextureHolder, renderInstManager: GfxRenderInstManager, depth: number, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, instanceStateData: InstanceStateData, isSkybox: boolean): void {
@@ -101,7 +100,7 @@ class ShapeInstance {
         materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
         const usesSkinning = this.shape.material.vtxRenderFlag < 0x08;
-        
+
         for(let i = 0; i < this.shape.material.samplerIdxs.length; i++){
             if (this.shape.material.samplerIdxs[i] < 0){
                 break;
@@ -110,19 +109,17 @@ class ShapeInstance {
         }
 
         packetParams.clear();
-        this.shape.loadedVertexDatas.forEach(loadedVertexDatas => {
-            for (let p = 0; p < loadedVertexDatas.draws.length; p++) {
-                const packet = loadedVertexDatas.draws[p];
-    
-                mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[0]);
-    
-                const renderInst = renderInstManager.newRenderInst();
-                this.shapeData.setOnRenderInst(renderInst, packet);
-                materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
-    
-                renderInstManager.submitRenderInst(renderInst);
-            }
-        });
+        for (let d = 0; d < this.shape.loadedVertexDatas[this.shape_idx].draws.length; d++) {
+            const draw = this.shape.loadedVertexDatas[this.shape_idx].draws[d];
+
+            mat4.copy(packetParams.u_PosMtx[0], instanceStateData.drawViewMatrixArray[0]);
+
+            const renderInst = renderInstManager.newRenderInst();
+            this.shapeData.setOnRenderInst(renderInst, draw);
+            materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+
+            renderInstManager.submitRenderInst(renderInst);
+        }
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -185,19 +182,19 @@ class MaterialInstance {
         mat4.mul(dstPost, matrixScratch, dstPost);
     }
 
-    // private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: Color): void {
-    //     const dst = materialParams.u_Color[i];
-    //     let color: Color;
-    //     if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
-    //         color = this.modelInstance.colorOverrides[i];
-    //     } else {
-    //         color = fallbackColor;
-    //     }
+    private calcColor(materialParams: MaterialParams, i: ColorKind, fallbackColor: Color): void {
+        const dst = materialParams.u_Color[i];
+        let color: Color;
+        if (this.modelInstance && this.modelInstance.colorOverrides[i]) {
+            color = this.modelInstance.colorOverrides[i];
+        } else {
+            color = fallbackColor;
+        }
 
-    //     colorCopy(dst, color);
-    // }
+        colorCopy(dst, color);
+    }
 
-    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, posNrmMatrixIdx: number, draw: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
         const material = this.materialData.material;
 
         for (let i = 0; i < 3; i++) {
@@ -261,7 +258,7 @@ export class GcmfModelInstance {
         for (let i = 0; i < this.gcmfModel.materialData.length; i++){
             this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.samplers);
         }
-        
+
         const gcmf = this.gcmfModel.gcmfEntry.gcmf;
         let idx = 0;
         for (let i = 0; i < gcmf.shapes.length; i++) {
@@ -269,7 +266,7 @@ export class GcmfModelInstance {
             const shape = gcmf.shapes[i];
             for (let j = 0; j < shape.loadedVertexDatas.length; j++){
                 const shapeData = this.gcmfModel.shapeHelperGfx[idx];
-                const shapeInstance = new ShapeInstance(shape, shapeData, materialInstance);
+                const shapeInstance = new ShapeInstance(shape, shapeData, materialInstance, j);
                 this.shapeInstances.push(shapeInstance);
                 idx++;
             }
@@ -365,7 +362,7 @@ class MaterialData {
             // 0x10: "LINER & MIPMAP NEAR, LINER"
             let texFilter = GfxTexFilterMode.POINT;
             let MipFilter = GfxMipFilterMode.NO_MIP;
-    
+
             if ((mipmapAV & (1 << 1)) !== 0){
                 texFilter = GfxTexFilterMode.BILINEAR;
                 MipFilter = GfxMipFilterMode.LINEAR;
@@ -373,11 +370,11 @@ class MaterialData {
 
             return [ texFilter, MipFilter ]
         }
-    
+
         for (let i = 0; i < 8; i++) {
             const [minFilter, mipFilter] = translateAVTexFilterGfx(sampler.mipmapAV);
             const [magFilter]            = translateAVTexFilterGfx(sampler.mipmapAV);
-            
+
             const gfxSampler = device.createSampler({
                 wrapS: translateWrapModeGfx(sampler.wrapS),
                 wrapT: translateWrapModeGfx(sampler.wrapT),
