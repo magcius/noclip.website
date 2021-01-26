@@ -1803,10 +1803,7 @@ export class JPABaseEmitter {
         }
     
         const bsp1 = this.resData.res.bsp1;
-
-        // JPA appends new particles to the *front* of its linked list. We append
-        // particles to the *end* of our array (since adding to the start is expensive).
-        const reverseOrder = bsp1.isDrawFwdAhead;
+        const reverseOrder = !bsp1.isDrawFwdAhead;
 
         const needsPrevPos = sp1.dirType === DirType.PrevPctl;
         if (needsPrevPos)
@@ -1995,7 +1992,7 @@ export class JPABaseEmitter {
 
             const n = this.aliveParticlesBase.length;
             for (let i = 0; i < n; i++) {
-                const index = (bsp1.isDrawFwdAhead) ? n - 1 - i : i;
+                const index = (bsp1.isDrawFwdAhead) ? i : n - 1 - i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesBase[index].drawP(device, renderInstManager, workData);
                 if (needsPrevPos)
@@ -2045,7 +2042,7 @@ export class JPABaseEmitter {
 
             const n = this.aliveParticlesChild.length;
             for (let i = 0; i < n; i++) {
-                const index = (bsp1.isDrawFwdAhead) ? n - 1 - i : i;
+                const index = (bsp1.isDrawFwdAhead) ? i : n - 1 - i;
                 workData.particleSortKey = setSortKeyBias(workData.particleSortKey, sortKeyBias++);
                 this.aliveParticlesChild[index].drawC(device, renderInstManager, workData);
                 if (needsPrevPos)

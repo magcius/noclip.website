@@ -1026,7 +1026,7 @@ function getJMapInfoV3f(dst: vec3, infoIter: JMapInfoIter, prefix: string): void
 function setUpShadowControlBaseMtxFromCSV(controller: ShadowController, actor: LiveActor, infoIter: JMapInfoIter): void {
     const jointName = infoIter.getValueString('Joint');
 
-    if (jointName === null || jointName === '::ACTOR_TRANS' || jointName === '::OTHER_TRANS') {
+    if (jointName === null || jointName === '' || jointName === '::ACTOR_TRANS' || jointName === '::OTHER_TRANS') {
         controller.setDropPosPtr(actor.translation);
     } else if (jointName === '::FIX_POSITION') {
         controller.setDropPosFix(actor.translation);
@@ -1284,8 +1284,17 @@ export function setShadowDropPosition(actor: LiveActor, name: string | null, v: 
     actor.shadowControllerList!.getController(name)!.setDropPosFix(v);
 }
 
+export function setShadowDropPositionAtJoint(actor: LiveActor, name: string | null, jointName: string, offset: ReadonlyVec3): void {
+    const jointMtx = getJointMtxByName(actor, jointName);
+    actor.shadowControllerList!.getController(name)!.setDropPosMtxPtr(jointMtx, offset);
+}
+
 export function setShadowDropLength(actor: LiveActor, name: string | null, v: number): void {
     actor.shadowControllerList!.getController(name)!.setDropLength(v);
+}
+
+export function setShadowDropDirection(actor: LiveActor, name: string | null, v: ReadonlyVec3): void {
+    actor.shadowControllerList!.getController(name)!.setDropDirPtr(v);
 }
 
 export function offCalcShadow(actor: LiveActor, name: string | null = null): void {

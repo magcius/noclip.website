@@ -5,14 +5,14 @@ import { copyMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
 type EqualFunc<K> = (a: K, b: K) => boolean;
 type CopyFunc<T> = (a: T) => T;
 
-function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
+export function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
     const b = Array(a.length);
     for (let i = 0; i < a.length; i++)
         b[i] = copyFunc(a[i]);
     return b;
 }
 
-function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
+export function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
     if (a.length !== b.length)
         return false;
     for (let i = 0; i < a.length; i++)

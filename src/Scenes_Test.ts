@@ -1,22 +1,58 @@
 
 import * as Viewer from "./viewer";
-import { GfxDevice, GfxRenderPass } from "./gfx/platform/GfxPlatform";
+import { GfxDevice } from "./gfx/platform/GfxPlatform";
 import { SceneContext } from "./SceneBase";
 
 import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
 import * as H3D from "./Common/CTR_H3D/H3D";
 import { CtrTextureHolder } from "./oot3d/render";
 import * as NARC from "./nns_g3d/narc";
+import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "./gfx/helpers/RenderTargetHelpers";
+import { parseBRLYT, RLYT, Layout, LayoutResourceCollection, LayoutDrawInfo, parseBRLAN, LayoutAnimation } from "./Common/NW4R/lyt/Layout";
+import * as Yaz0 from "./Common/Compression/Yaz0";
+import * as RARC from "./Common/JSYSTEM/JKRArchive";
+import * as U8 from "./rres/u8";
+import { TPLTextureHolder } from "./PaperMarioTTYD/render";
+import * as TPL from "./PaperMarioTTYD/tpl";
+import { assertExists } from "./util";
+import { TextureMapping } from "./TextureHolder";
+import { mat4 } from "gl-matrix";
+import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from "./gx/gx_render";
+import { decompress } from "./Common/Compression/CX";
+import { downloadBuffer, downloadBufferSlice } from "./DownloadUtils";
 
 const id = 'test';
 const name = "Test Scenes";
 
 export class EmptyScene implements Viewer.SceneGfx {
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        return null as unknown as GfxRenderPass;
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        return null;
     }
 
     public destroy(device: GfxDevice): void {
+    }
+}
+
+class EmptyClearScene implements Viewer.SceneGfx {
+    public renderTarget = new BasicRenderTarget();
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
+        const renderPass = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor, viewerInput.onscreenTexture);
+        device.submitPass(renderPass);
+        return null;
+    }
+
+    public destroy(device: GfxDevice): void {
+    }
+}
+
+class EmptyClearSceneDesc implements Viewer.SceneDesc {
+    constructor(public id: string, public name = id) {}
+
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        return new EmptyClearScene();
     }
 }
 
@@ -61,6 +97,7 @@ class NARCSceneDesc implements Viewer.SceneDesc {
 }
 
 const sceneDescs = [
+    new EmptyClearSceneDesc('EmptyClearScene'),
     new BasicRRESSceneDesc('test/dthro_cmn1.brres'),
     new H3DSceneDesc('test/cave_Common.bch'),
     new NARCSceneDesc('test/land_data.narc'),

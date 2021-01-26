@@ -1231,7 +1231,10 @@ export class Binder {
 }
 
 export function isBindedGround(actor: Readonly<LiveActor>): boolean {
-    return actor.binder!.floorHitInfo.distance >= 0.0;
+    if (actor.binder === null)
+        return false;
+
+    return actor.binder.floorHitInfo.distance >= 0.0;
 }
 
 export function isOnGround(actor: LiveActor): boolean {
@@ -1245,11 +1248,17 @@ export function isOnGround(actor: LiveActor): boolean {
 }
 
 export function isBindedRoof(actor: LiveActor): boolean {
-    return actor.binder!.ceilingHitInfo.distance >= 0.0;
+    if (actor.binder === null)
+        return false;
+
+    return actor.binder.ceilingHitInfo.distance >= 0.0;
 }
 
 export function isBindedWall(actor: LiveActor): boolean {
-    return actor.binder!.wallHitInfo.distance >= 0.0;
+    if (actor.binder === null)
+        return false;
+
+    return actor.binder.wallHitInfo.distance >= 0.0;
 }
 
 export function isBindedWallOfMoveLimit(actor: LiveActor): boolean {

@@ -264,6 +264,13 @@ export class HitSensorKeeper {
         return sensor;
     }
 
+    public addCallback(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor): HitSensor {
+        const sensor = new HitSensor(sceneObjHolder, sensorType, pairwiseCapacity, radius, actor);
+        const sensorInfo = new HitSensorInfo(name, sensor, null, null, radius, Vec3Zero, true);
+        this.registHitSensorInfo(sensorInfo);
+        return sensor;
+    }
+
     public addPos(sceneObjHolder: SceneObjHolder, name: string, sensorType: HitSensorType, pairwiseCapacity: number, radius: number, actor: LiveActor, pos: ReadonlyVec3, offset: ReadonlyVec3): HitSensor {
         const sensor = new HitSensor(sceneObjHolder, sensorType, pairwiseCapacity, radius, actor);
         const sensorInfo = new HitSensorInfo(name, sensor, pos, null, radius, offset, false);
@@ -524,6 +531,10 @@ export function addHitSensorMapObj(sceneObjHolder: SceneObjHolder, actor: LiveAc
     return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor, offset);
 }
 
+export function addHitSensorCallbackMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number) {
+    return actor.hitSensorKeeper!.addCallback(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor);
+}
+
 export function addHitSensorPosMapObj(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, pairwiseCapacity: number, radius: number, pos: ReadonlyVec3, offset: ReadonlyVec3) {
     return actor.hitSensorKeeper!.addPos(sceneObjHolder, name, HitSensorType.MapObj, pairwiseCapacity, radius, actor, pos, offset);
 }
@@ -572,6 +583,10 @@ export function invalidateHitSensors(actor: LiveActor): void {
 
 export function validateHitSensors(actor: LiveActor): void {
     actor.hitSensorKeeper!.validate();
+}
+
+export function validateHitSensor(actor: LiveActor, name: string): void {
+    actor.hitSensorKeeper!.getSensor(name)!.validate();
 }
 
 export function setSensorRadius(actor: LiveActor, name: string, radius: number): void {

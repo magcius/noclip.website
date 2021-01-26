@@ -19,6 +19,7 @@ import { colorCopy, Color } from '../Color';
 import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { LoadedVertexDraw } from '../gx/gx_displaylist';
+import { arrayCopy } from '../gfx/platform/GfxPlatformUtil';
 
 export class RRESTextureHolder extends GXTextureHolder<BRRES.TEX0> {
     public addRRESTextures(device: GfxDevice, rres: BRRES.RRES): void {
@@ -137,23 +138,15 @@ function mat4SwapTranslationColumns(m: mat4): void {
     m[9] = ty;
 }
 
-function colorChannelCopy(o: GX_Material.ColorChannelControl): GX_Material.ColorChannelControl {
-    return Object.assign({}, o);
+function colorChannelCopy(o: Readonly<GX_Material.ColorChannelControl>): GX_Material.ColorChannelControl {
+    const { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction } = o;
+    return { lightingEnabled, matColorSource, ambColorSource, litMask, diffuseFunction, attenuationFunction };
 }
 
-function lightChannelCopy(o: GX_Material.LightChannelControl): GX_Material.LightChannelControl {
+function lightChannelCopy(o: Readonly<GX_Material.LightChannelControl>): GX_Material.LightChannelControl {
     const colorChannel = colorChannelCopy(o.colorChannel);
     const alphaChannel = colorChannelCopy(o.alphaChannel);
     return { colorChannel, alphaChannel };
-}
-
-type CopyFunc<T> = (a: T) => T;
-
-function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
-    const b = Array(a.length);
-    for (let i = 0; i < a.length; i++)
-        b[i] = copyFunc(a[i]);
-    return b;
 }
 
 const materialParams = new MaterialParams();

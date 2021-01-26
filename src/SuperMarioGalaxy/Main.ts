@@ -24,7 +24,7 @@ import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../g
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { JMapInfoIter, createCsvParser, JMapLinkInfo } from './JMapInfo';
+import { JMapInfoIter, createCsvParser, JMapLinkInfo, JMapIdInfo } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
 import { EffectSystem } from './EffectSystem';
@@ -1619,6 +1619,21 @@ class StageDataHolder {
 
         for (let i = 0; i < this.localStageDataHolders.length; i++)
             this.localStageDataHolders[i].iterGeneralPos(callback);
+    }
+
+    public iterChildObjInternal(parentID: number, callback: LayerObjInfoCallback): void {
+        for (let i = LayerId.Common; i <= LayerId.LayerMax; i++) {
+            const layerDirName = getLayerDirName(i);
+
+            const childObjDir = this.zoneArchive.findDir(`jmp/ChildObj/${layerDirName}`);
+            if (childObjDir !== null) {
+                this.iterAllLayerJmpInfo(null, i, (infoIter, zoneAndLayer) => {
+                    const iterParentID = infoIter.getValueNumber('ParentID');
+                    if (iterParentID === parentID)
+                        callback(infoIter, zoneAndLayer);
+                }, childObjDir);
+            }
+        }
     }
 
     public createLocalStageDataHolders(sceneDesc: SMGSceneDescBase, modelCache: ModelCache, scenarioData: ScenarioData): void {

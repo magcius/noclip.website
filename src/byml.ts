@@ -262,7 +262,7 @@ function setUint24(view: DataView, offs: number, v: number, littleEndian: boolea
     }
 }
 
-class WritableStream {
+export class WritableStream {
     constructor(public buffer: GrowableBuffer = new GrowableBuffer(), public offs: number = 0) {
     }
 
@@ -286,6 +286,12 @@ class WritableStream {
     public writeString(v: string): void {
         this.setString(this.offs, v);
         this.offs += v.length;
+    }
+
+    public writeFixedString(v: string, s: number): void {
+        assert(v.length < s);
+        this.setString(this.offs, v);
+        this.offs += s;
     }
 
     public setUint8(offs: number, v: number): void {

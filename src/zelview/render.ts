@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import * as F3DZEX from './f3dzex';
 import { DeviceProgram } from "../Program";
-import { Texture, getImageFormatString, Vertex, DrawCall, translateBlendMode, RSP_Geometry, RSPSharedOutput } from "./f3dzex";
+import { Texture, getImageFormatString, Vertex, DrawCall, translateBlendMode, translateCullMode, RSP_Geometry, RSPSharedOutput } from "./f3dzex";
 import { GfxDevice, GfxFormat, GfxTexture, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxMegaStateDescriptor, GfxProgram, GfxBufferFrequencyHint, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { assert, nArray, align } from '../util';
@@ -142,19 +142,6 @@ export class RenderData {
     }
 }
 
-function translateCullMode(m: number): GfxCullMode {
-    const cullFront = !!(m & 0x0200);
-    const cullBack = !!(m & 0x0400);
-    if (cullFront && cullBack)
-        return GfxCullMode.FRONT_AND_BACK;
-    else if (cullFront)
-        return GfxCullMode.FRONT;
-    else if (cullBack)
-        return GfxCullMode.BACK;
-    else
-        return GfxCullMode.NONE;
-}
-
 const viewMatrixScratch = mat4.create();
 const modelViewScratch = mat4.create();
 const texMatrixScratch = mat4.create();
@@ -180,8 +167,8 @@ class DrawCallInstance {
             }
         }
 
-        this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL)
-        this.setBackfaceCullingEnabled(true);
+        this.megaStateFlags = translateBlendMode(this.drawCall.DP_OtherModeL);
+        this.setCullModeOverride(null);
         this.createProgram();
     }
 
@@ -195,8 +182,7 @@ class DrawCallInstance {
         if (!!(this.drawCall.SP_GeometryMode & RSP_Geometry.G_LIGHTING))
             program.defines.set('LIGHTING', '1');
 
-        // FIXME: Levels disable the SHADE flags. wtf?
-        const shade = true; // (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADING_SMOOTH) !== 0;
+        const shade = (this.drawCall.SP_GeometryMode & RSP_Geometry.G_SHADING_SMOOTH) !== 0;
         if (this.vertexColorsEnabled && shade)
             program.defines.set('USE_VERTEX_COLOR', '1');
 
@@ -218,8 +204,9 @@ class DrawCallInstance {
         this.gfxProgram = null;
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
-        const cullMode = v ? translateCullMode(this.drawCall.SP_GeometryMode) : GfxCullMode.NONE;
+    public setCullModeOverride(cullMode: GfxCullMode | null): void {
+        if (cullMode === null)
+            cullMode = translateCullMode(this.drawCall.SP_GeometryMode);
         this.megaStateFlags.cullMode = cullMode;
     }
 
@@ -334,9 +321,9 @@ class MeshRenderer {
             this.drawCallInstances[i].prepareToRender(device, renderInstManager, viewerInput, isSkybox);
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
+    public setCullModeOverride(cullMode: GfxCullMode | null): void {
         for (let i = 0; i < this.drawCallInstances.length; i++)
-            this.drawCallInstances[i].setBackfaceCullingEnabled(v);
+            this.drawCallInstances[i].setCullModeOverride(cullMode);
     }
 
     public setVertexColorsEnabled(v: boolean): void {
@@ -400,8 +387,8 @@ export class RootMeshRenderer {
         return geoNodeRenderer;
     }
 
-    public setBackfaceCullingEnabled(v: boolean): void {
-        this.rootNodeRenderer.setBackfaceCullingEnabled(v);
+    public setCullModeOverride(cullMode: GfxCullMode): void {
+        this.rootNodeRenderer.setCullModeOverride(cullMode);
     }
 
     public setVertexColorsEnabled(v: boolean): void {

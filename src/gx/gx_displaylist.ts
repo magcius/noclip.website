@@ -40,6 +40,7 @@ import * as GX from './gx_enum';
 import { Endianness, getSystemEndianness } from '../endian';
 import { GfxFormat, FormatCompFlags, FormatTypeFlags, getFormatCompByteSize, getFormatCompFlagsComponentCount, getFormatTypeFlags, getFormatComponentCount, getFormatFlags, FormatFlags, makeFormat, setFormatFlags } from '../gfx/platform/GfxPlatformFormat';
 import { HashMap, nullHashFunc } from '../HashMap';
+import { arrayCopy, arrayEqual } from '../gfx/platform/GfxPlatformUtil';
 
 // GX_SetVtxAttrFmt
 export interface GX_VtxAttrFmt {
@@ -1155,24 +1156,6 @@ class VtxLoaderImpl implements VtxLoader {
 interface VtxLoaderDesc {
     vat: GX_VtxAttrFmt[][];
     vcd: GX_VtxDesc[];
-}
-
-type EqualFunc<K> = (a: K, b: K) => boolean;
-type CopyFunc<T> = (a: T) => T;
-
-function arrayCopy<T>(a: T[], copyFunc: CopyFunc<T>): T[] {
-    const b = Array(a.length);
-    for (let i = 0; i < a.length; i++)
-        b[i] = copyFunc(a[i]);
-    return b;
-}
-
-function arrayEqual<T>(a: T[], b: T[], e: EqualFunc<T>): boolean {
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++)
-        if (!e(a[i], b[i]))
-            return false;
-    return true;
 }
 
 function vtxAttrFmtCopy(a: GX_VtxAttrFmt | undefined): GX_VtxAttrFmt | undefined {

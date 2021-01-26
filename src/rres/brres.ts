@@ -2848,21 +2848,11 @@ export function parse(buffer: ArrayBufferSlice): RRES {
     const view = buffer.createDataView();
 
     assert(readString(buffer, 0x00, 0x04) === 'bres');
-
-    let littleEndian: boolean;
-    switch (view.getUint16(0x04, false)) {
-    case 0xFEFF:
-        littleEndian = false;
-        break;
-    case 0xFFFE:
-        littleEndian = true;
-        break;
-    default:
-        throw new Error("Invalid BOM");
-    }
-
+    const littleEndianMarker = view.getUint16(0x04);
+    assert(littleEndianMarker === 0xFEFF || littleEndianMarker === 0xFFFE);
+    const littleEndian = (littleEndianMarker === 0xFFFE);
     assert(!littleEndian);
-
+    const fileVersion = view.getUint16(0x06);
     const fileLength = view.getUint32(0x08);
     const rootSectionOffs = view.getUint16(0x0C);
     const numSections = view.getUint16(0x0E);

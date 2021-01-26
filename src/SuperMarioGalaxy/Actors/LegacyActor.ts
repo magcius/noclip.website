@@ -2,9 +2,8 @@
 import { mat4, vec3 } from "gl-matrix";
 import { assertExists, fallback, hexzero } from "../../util";
 import { LiveActor, ZoneAndLayer, dynamicSpawnZoneAndLayer } from "../LiveActor";
-import { SceneObjHolder, getObjectName, getTimeFrames } from "../Main";
+import { SceneObjHolder, getObjectName } from "../Main";
 import { JMapInfoIter, createCsvParser, getJMapInfoScale, getJMapInfoRotateLocal, getJMapInfoTransLocal } from "../JMapInfo";
-import { ViewerRenderInput } from "../../viewer";
 import { initDefaultPos, isExistIndirectTexture, connectToSceneMapObjStrongLight, connectToSceneSky, connectToSceneIndirectMapObjStrongLight, connectToSceneBloom, isBrkExist, startBrk, startBtk, startBtp, setBtpFrameAndStop, startBrkIfExist, startBtkIfExist, startBva, startBck, startBckIfExist, setBckFrameAtRandom, getCamPos } from "../ActorUtil";
 import { MiniRouteGalaxy, MiniRoutePart, MiniRoutePoint } from "./MiscActor";
 import { isFirstStep } from "../Spine";
@@ -14,7 +13,6 @@ import { LightType } from "../DrawBuffer";
 import { emitEffect } from "../EffectSystem";
 import { createModelObjMapObj } from "./ModelObj";
 import { initLightCtrl } from "../LightData";
-import { getTimeInFrames } from "../../AnimationController";
 
 // The old actor code, before we started emulating things natively.
 // Mostly used for SMG2 as we do not have symbols.
@@ -258,7 +256,6 @@ export class NoclipLegacyActorSpawner {
             case 'SuperDreamer':
             case 'PetitPorterWarpPoint':
             case 'CoinLinkGroup':
-            case 'CollectTico':
             case 'InstantInferno':
             case 'FireRing':
             case 'JumpBeamer':

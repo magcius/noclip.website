@@ -6,7 +6,7 @@ import { GfxDevice, GfxRenderPass, GfxCullMode, GfxProgram, GfxMegaStateDescript
 import { SceneContext } from '../SceneBase';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { F3DEX_Program, textureToCanvas } from '../BanjoKazooie/render';
-import { translateBlendMode, RSP_Geometry } from '../zelview/f3dzex';
+import { translateBlendMode, RSP_Geometry, translateCullMode } from '../zelview/f3dzex';
 import { nArray, align, assert } from '../util';
 import { DeviceProgram } from '../Program';
 import { mat4, vec3 } from 'gl-matrix';
@@ -50,19 +50,6 @@ function translateSampler(device: GfxDevice, cache: GfxRenderCache, texture: Tex
     });
 }
 
-function translateCullMode(m: number): GfxCullMode {
-    const cullFront = !!(m & 0x0200);
-    const cullBack = !!(m & 0x0400);
-    if (cullFront && cullBack)
-        return GfxCullMode.FRONT_AND_BACK;
-    else if (cullFront)
-        return GfxCullMode.FRONT;
-    else if (cullBack)
-        return GfxCullMode.BACK;
-    else
-        return GfxCullMode.NONE;
-}
-
 function initDL(rspState: RSPState, opaque: boolean): void {
     rspState.gSPSetGeometryMode(RSP_Geometry.G_SHADE);
     if (opaque) {
@@ -103,7 +90,7 @@ class DrawCallInstance {
             }
         }
 
-        this.megaStateFlags = translateBlendMode(this.drawCall.SP_GeometryMode, this.drawCall.DP_OtherModeL);
+        this.megaStateFlags = translateBlendMode(this.drawCall.DP_OtherModeL);
         this.setBackfaceCullingEnabled(true);
         this.createProgram();
     }
