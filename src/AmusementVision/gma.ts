@@ -301,7 +301,7 @@ function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader{
 function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: number, vtxCon2Offs: number): GcmfShape{
     function fillVatFormat(vtxType: GX.CompType, isNBT: boolean): GX_VtxAttrFmt[] {
         const vatFormat: GX_VtxAttrFmt[] = [];
-        const compShift = 0x00;
+        const compShift = vtxType == GX.CompType.S16 ? 0x0D : 0x00;
         vatFormat[GX.Attr.POS] = { compCnt: GX.CompCnt.POS_XYZ, compType: vtxType, compShift };
         vatFormat[GX.Attr.NRM] = { compCnt: isNBT ? GX.CompCnt.NRM_NBT : GX.CompCnt.NRM_XYZ, compType: vtxType, compShift };
         vatFormat[GX.Attr.CLR0] = { compCnt: GX.CompCnt.CLR_RGBA, compType: GX.CompType.RGBA8, compShift };
