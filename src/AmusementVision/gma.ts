@@ -22,16 +22,18 @@ export interface GcmfAttribute{
 
 // GCMF Material
 export interface GcmfMaterial{
-    gxMaterial: GX_Material.GXMaterial;
-    color0: Color,
-    color1: Color,
-    color2: Color,
+    // gxMaterial: GX_Material.GXMaterial;
+    unk0x02: number,
+    unk0x03: number,
+    colors: Color[]
     emission: number,
     transparent: number,
     matCount: number,
     vtxRenderFlag: GX.AttrType,
     samplerIdxs: number[], // GMA can store max 3 sampler index
     vtxAttr: GX.Attr
+    unk0x14: number,
+    unk0x15:number
 }
 
 // GCMF VertexControlHeader
@@ -162,13 +164,14 @@ function parseMatrix(buffer: ArrayBufferSlice): mat4{
 
 function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
     const view = buffer.createDataView();
+    const colors: Color[] = []
     const samplerIdxs: number[] = [];
 
     const unk0x02 = view.getUint8(0x02);
     const unk0x03 = view.getUint8(0x03);
-    const color0: Color = colorNewFromRGBA(view.getUint8(0x04), view.getUint8(0x05), view.getUint8(0x06), view.getUint8(0x07));
-    const color1: Color = colorNewFromRGBA(view.getUint8(0x08), view.getUint8(0x09), view.getUint8(0x0A), view.getUint8(0x0B));
-    const color2: Color = colorNewFromRGBA(view.getUint8(0x0C), view.getUint8(0x0D), view.getUint8(0x0E), view.getUint8(0x0F));
+    colors.push( colorNewFromRGBA(view.getUint8(0x04), view.getUint8(0x05), view.getUint8(0x06), view.getUint8(0x07)) );
+    colors.push( colorNewFromRGBA(view.getUint8(0x08), view.getUint8(0x09), view.getUint8(0x0A), view.getUint8(0x0B)) );
+    colors.push( colorNewFromRGBA(view.getUint8(0x0C), view.getUint8(0x0D), view.getUint8(0x0E), view.getUint8(0x0F)) );
     const emission = view.getUint8(0x10);
     const transparent = view.getUint8(0x11);
     const matCount = view.getUint8(0x12);
@@ -182,100 +185,7 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
 
     const vtxAttr: GX.Attr = view.getUint32(0x1C);
 
-    // GX_Material
-    const texGen0 = {
-        idx: 0,
-        type: GX.TexGenType.MTX2x4,
-        source: GX.TexGenSrc.TEX0,
-        matrix: GX.TexGenMatrix.IDENTITY,
-        normalize: false,
-        postMatrix: GX.PostTexGenMatrix.PTIDENTITY
-    };
-    const texGens = [texGen0];
-
-    const lightChannel0: GX_Material.LightChannelControl = {
-        alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
-        colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
-    };
-
-    const lightChannels: GX_Material.LightChannelControl[] = [lightChannel0, lightChannel0];
-
-    const tevStage0: GX_Material.TevStage = {
-        channelId: GX.RasColorChannelID.COLOR0A0,
-
-        alphaInA: GX.CA.ZERO,
-        alphaInB: GX.CA.ZERO,
-        alphaInC: GX.CA.ZERO,
-        alphaInD: GX.CA.TEXA,
-        alphaOp: GX.TevOp.ADD,
-        alphaBias: GX.TevBias.ZERO,
-        alphaClamp: false,
-        alphaScale: GX.TevScale.SCALE_1,
-        alphaRegId: GX.Register.PREV,
-        konstAlphaSel: GX.KonstAlphaSel.KASEL_1,
-
-        colorInA: GX.CC.ZERO,
-        colorInB: GX.CC.ZERO,
-        colorInC: GX.CC.ZERO,
-        colorInD: GX.CC.TEXC,
-        colorOp: GX.TevOp.ADD,
-        colorBias: GX.TevBias.ZERO,
-        colorClamp: false,
-        colorScale: GX.TevScale.SCALE_1,
-        colorRegId: GX.Register.PREV,
-        konstColorSel: GX.KonstColorSel.KCSEL_1,
-
-        texCoordId: GX.TexCoordID.TEXCOORD0,
-        texMap: GX.TexMapID.TEXMAP0,
-
-        // We don't use indtex.
-        indTexStage: GX.IndTexStageID.STAGE0,
-        indTexMatrix: GX.IndTexMtxID.OFF,
-        indTexFormat: GX.IndTexFormat._8,
-        indTexBiasSel: GX.IndTexBiasSel.NONE,
-        indTexWrapS: GX.IndTexWrap.OFF,
-        indTexWrapT: GX.IndTexWrap.OFF,
-        indTexAddPrev: false,
-        indTexUseOrigLOD: false,
-    };
-    const tevStages: GX_Material.TevStage[] = [tevStage0];
-
-    // Filter any pixels less than 0.1.
-    const alphaTest: GX_Material.AlphaTest = {
-        op: GX.AlphaOp.AND,
-        compareA: GX.CompareType.GEQUAL,
-        compareB: GX.CompareType.ALWAYS,
-        referenceA: 0.1,
-        referenceB: 0.0,
-    };
-
-    const ropInfo: GX_Material.RopInfo = {
-        fogType: GX.FogType.NONE,
-        fogAdjEnabled: false,
-        blendMode: GX.BlendMode.NONE,
-        blendSrcFactor: GX.BlendFactor.ONE,
-        blendDstFactor: GX.BlendFactor.ONE,
-        blendLogicOp: GX.LogicOp.CLEAR,
-        depthFunc: GX.CompareType.LESS,
-        depthTest: true,
-        depthWrite: true,
-        colorUpdate: true,
-        alphaUpdate: false,
-    };
-
-    const gxMaterial: GX_Material.GXMaterial = {
-        // GMA not have Material name
-        name: `material_${idx}`,
-        cullMode: (unk0x03 & (1 << 1)) !== 0 ? GX.CullMode.NONE : GX.CullMode.FRONT,
-        lightChannels,
-        texGens,
-        tevStages,
-        alphaTest,
-        ropInfo,
-        indTexStages: [],
-    };
-
-    return { gxMaterial, color0, color1, color2, emission, transparent, matCount, vtxRenderFlag, samplerIdxs, vtxAttr };
+    return { unk0x02, unk0x03, colors, emission, transparent, matCount, unk0x14, unk0x15, vtxRenderFlag, samplerIdxs, vtxAttr };
 }
 
 function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader{

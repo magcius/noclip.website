@@ -1,4 +1,5 @@
 ﻿import * as GMA from './gma';
+import * as GX from "../gx/gx_enum";
 import * as GX_Material from '../gx/gx_material';
 import { AVTexture, AVTpl } from './AVtpl';
 
@@ -15,6 +16,7 @@ import { nArray } from '../util';
 import { AABB, IntersectionState } from '../Geometry';
 import { ViewerRenderInput } from '../viewer';
 import { TextureMapping } from '../TextureHolder';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 
 
 export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
@@ -152,11 +154,36 @@ class MaterialInstance {
     public visible = true;
 
     constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public samplers: GMA.GcmfSampler[]) {
-        const gxMaterial: GX_Material.GXMaterial = Object.assign({}, materialData.material.gxMaterial);
-        gxMaterial.lightChannels = arrayCopy(gxMaterial.lightChannels, lightChannelCopy);
-        gxMaterial.useTexMtxIdx = nArray(8, () => false);
+        const lightChannel0: GX_Material.LightChannelControl = {
+            alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
+            colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
+        };
+    
+        const lightChannels: GX_Material.LightChannelControl[] = [lightChannel0, lightChannel0];
 
-        this.materialHelper = new GXMaterialHelperGfx(gxMaterial, materialData.materialHacks);
+        // this.materialHelper = new GXMaterialHelperGfx(gxMaterial, materialData.materialHacks);
+
+        const mb = new GXMaterialBuilder();
+        mb.setTevDirect(0);
+        mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
+        mb.setCullMode( (this.materialData.material.unk0x03 & (1 << 1)) !== 0 ? GX.CullMode.NONE : GX.CullMode.FRONT );
+
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
+
+        // mb.setTevColorIn(0, GX.CC.TEXC, GX.CC.RASC, GX.CC.HALF, GX.CC.ZERO);
+        // mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+        // mb.setTevAlphaIn(0, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO, GX.CA.ZERO);
+        // mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.REG0);
+
+        mb.setTexCoordGen(0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
+        mb.setZMode(true, GX.CompareType.LESS, true);
+        mb.setAlphaCompare(GX.CompareType.GEQUAL, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish(), materialData.materialHacks);
+
         const layer = this.materialData.material.transparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.setSortKeyLayer(layer);
     }
