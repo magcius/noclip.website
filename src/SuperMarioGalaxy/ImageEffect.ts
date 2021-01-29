@@ -12,9 +12,9 @@ import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxTexture, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
+import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxTexture, GfxNormalizedViewportCoords, GfxFormat } from "../gfx/platform/GfxPlatform";
 import { TransparentBlack } from "../Color";
-import { copyRenderPassDescriptor, DepthStencilAttachment, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, ColorAttachment, ColorTexture, PostFXRenderTarget, BasicRenderTarget, noClearRenderPassDescriptor, setViewportOnRenderPass, IdentityViewportCoords, setScissorOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
+import { copyRenderPassDescriptor, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, Attachment, ColorTexture, BasicRenderTarget, noClearRenderPassDescriptor, setViewportOnRenderPass, IdentityViewportCoords, setScissorOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -146,11 +146,11 @@ class BloomPassBlur2Program extends BloomPassBlurProgram {
     }
 }
 
-export class WeirdFancyRenderTarget {
-    public colorAttachment = new ColorAttachment();
+class WeirdFancyRenderTarget {
+    public colorAttachment = new Attachment(GfxFormat.U8_RGBA_RT);
     private renderPassDescriptor = makeEmptyRenderPassDescriptor();
 
-    constructor(public depthStencilAttachment: DepthStencilAttachment) {
+    constructor(public depthStencilAttachment: Attachment) {
     }
 
     public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
@@ -197,6 +197,30 @@ function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, progra
         program: gfxProgram,
         sampleCount,
     });
+}
+
+// No depth buffer, designed for postprocessing.
+class PostFXRenderTarget {
+    public colorAttachment = new Attachment(GfxFormat.U8_RGBA_RT);
+    private renderPassDescriptor = makeEmptyRenderPassDescriptor();
+
+    public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
+        this.colorAttachment.setParameters(device, width, height, numSamples);
+    }
+
+    public createRenderPass(device: GfxDevice, viewport: Readonly<GfxNormalizedViewportCoords>, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
+        copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
+        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
+        this.renderPassDescriptor.colorResolveTo = colorResolveTo;
+        this.renderPassDescriptor.depthStencilAttachment = null;
+        const passRenderer = device.createRenderPass(this.renderPassDescriptor);
+        setViewportOnRenderPass(passRenderer, viewport, this.colorAttachment);
+        return passRenderer;
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.colorAttachment.destroy(device);
+    }
 }
 
 export class BloomPostFXRenderer {
