@@ -900,6 +900,7 @@ export class SignBoard extends NPCActor<SignBoardNrv> {
         caps.hitSensorOffset[1] = 130.0;
         caps.initLightCtrl = false;
         caps.initBinder = false;
+        this.initialize(sceneObjHolder, infoIter, caps);
     }
 }
 
