@@ -27,18 +27,27 @@ export const enum RenderTargetAttachmentSlot {
     Color0, DepthStencil,
 }
 
-class SceneGraphPassImpl {
+interface SceneGraphPass {
+    setDebugName(debugName: string): void;
+    attachRenderTargetID(attachmentSlot: RenderTargetAttachmentSlot, renderTargetID: number): void;
+    attachResolveTexture(resolveTextureID: number): void;
+    exec(func: SceneGraphPassExecFunc): void;
+    present(): void;
+}
+
+class SceneGraphPassImpl implements SceneGraphPass {
+    // Input state used for scheduling.
+
     // RenderTargetAttachmentSlot => renderTargetID
     public renderTargetIDs: number[] = [];
     // RenderTargetAttachmentSlot => resolveTextureID
     public resolveTextureOutputIDs: number[] = [];
     // List of resolveTextureIDs that we have a reference to.
     public resolveTextureInputIDs: number[] = [];
-    public func: SceneGraphFunc | null = null;
-    public present: boolean = false;
+    public doPresent: boolean = false;
     public viewport: GfxNormalizedViewportCoords = IdentityViewportCoords;
 
-    // Execution state stored by the schedule.
+    // Execution state computed by scheduling.
     public descriptor: GfxRenderPassDescriptor = {
         colorAttachment: null,
         colorResolveTo: null,
@@ -54,7 +63,32 @@ class SceneGraphPassImpl {
     public viewportW: number = 0;
     public viewportH: number = 0;
 
-    constructor(private debugName: string) {
+    // Execution callback from user.
+    public func: SceneGraphPassExecFunc | null = null;
+
+    // Misc. state.
+    public debugName: string;
+
+    public setDebugName(debugName: string): void {
+        this.debugName = debugName;
+    }
+
+    public attachRenderTargetID(attachmentSlot: RenderTargetAttachmentSlot, renderTargetID: number): void {
+        assert(this.renderTargetIDs[attachmentSlot] === undefined);
+        this.renderTargetIDs[attachmentSlot] = renderTargetID;
+    }
+
+    public attachResolveTexture(resolveTextureID: number): void {
+        this.resolveTextureInputIDs.push(resolveTextureID);
+    }
+
+    public exec(func: SceneGraphPassExecFunc): void {
+        assert(this.func === null);
+        this.func = func;
+    }
+
+    public present(): void {
+        this.doPresent = true;
     }
 }
 
@@ -62,7 +96,8 @@ interface SceneGraphPassScope {
     getResolveTextureForID(id: number): GfxTexture;
 }
 
-type SceneGraphFunc = (renderPass: GfxRenderPass, scope: SceneGraphPassScope) => void;
+type SceneGraphPassSetupFunc = (renderPass: SceneGraphPass) => void;
+type SceneGraphPassExecFunc = (passRenderer: GfxRenderPass, scope: SceneGraphPassScope) => void;
 
 class SceneGraph {
     // Used for determining scheduling.
@@ -74,37 +109,25 @@ class SceneGraph {
 
 export class SceneGraphBuilder {
     private currentGraph: SceneGraph | null = null;
-    private currentPass: SceneGraphPassImpl | null = null;
 
     public begin() {
-        assert(this.currentPass === null);
         this.currentGraph = new SceneGraph();
     }
 
     public end(): SceneGraph {
-        assert(this.currentPass === null);
         const sceneGraph = assertExists(this.currentGraph);
         this.currentGraph = null;
         return sceneGraph;
     }
 
-    public beginPass(debugName: string): void {
-        assert(this.currentPass === null);
-        this.currentPass = new SceneGraphPassImpl(debugName);
-        this.currentGraph!.passes.push(this.currentPass);
+    public pushPass(setupFunc: SceneGraphPassSetupFunc): void {
+        const pass = new SceneGraphPassImpl();
+        setupFunc(pass);
+        this.currentGraph!.passes.push(pass);
     }
 
     public createRenderTargetID(desc: RenderTargetDescription): number {
         return this.currentGraph!.renderTargetDescriptions.push(desc) - 1;
-    }
-
-    public attachRenderTargetID(attachment: RenderTargetAttachmentSlot, renderTargetID: number): void {
-        assert(this.currentPass!.renderTargetIDs[attachment] === undefined);
-        this.currentPass!.renderTargetIDs[attachment] = renderTargetID;
-    }
-
-    public attachResolveTexture(resolveTextureID: number): void {
-        this.currentPass!.resolveTextureInputIDs.push(resolveTextureID);
     }
 
     private createResolveTextureID(renderTargetID: number): number {
@@ -124,11 +147,13 @@ export class SceneGraphBuilder {
     public resolveRenderTargetToColorTexture(renderTargetID: number): number {
         const resolveTextureID = this.createResolveTextureID(renderTargetID);
 
+        /*
         // We must be in a pass to resolve.
         const currentPass = assertExists(this.currentPass);
 
         // The render target we're fetching to resolve must *not* be one we're rendering to.
         assert(!currentPass.renderTargetIDs.includes(renderTargetID));
+        */
 
         // Find the last pass that rendered to this render target, and resolve it now.
 
@@ -142,20 +167,6 @@ export class SceneGraphBuilder {
         renderPass.resolveTextureOutputIDs[attachmentSlot] = resolveTextureID;
 
         return resolveTextureID;
-    }
-
-    public exec(func: SceneGraphFunc): void {
-        assert(this.currentPass!.func === null);
-        this.currentPass!.func = func;
-    }
-
-    public present(): void {
-        this.currentPass!.present = true;
-    }
-
-    public endPass(): void {
-        assert(this.currentPass !== null);
-        this.currentPass = null;
     }
 }
 
@@ -377,7 +388,7 @@ export class SceneGraphExecutor {
         pass.descriptor.depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
         pass.descriptor.stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
 
-        pass.descriptor.colorResolveTo = pass.present ? presentColorTexture : this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.Color0]);
+        pass.descriptor.colorResolveTo = pass.doPresent ? presentColorTexture : this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.Color0]);
         pass.descriptor.depthStencilResolveTo = this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.DepthStencil]);
 
         if (color0RenderTarget !== null)
