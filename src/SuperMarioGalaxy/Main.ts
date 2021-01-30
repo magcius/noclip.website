@@ -24,7 +24,7 @@ import { LoadedVertexData, LoadedVertexLayout, VertexAttributeInput } from '../g
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { JMapInfoIter, createCsvParser, JMapLinkInfo, JMapIdInfo } from './JMapInfo';
+import { JMapInfoIter, createCsvParser, JMapLinkInfo } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
 import { EffectSystem } from './EffectSystem';
@@ -142,6 +142,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
     public textureHolder: TextureListHolder;
 
     public isInteractive = true;
+
+    private renderGraph = new GfxrRenderGraph();
+    private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+    private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F_S8);
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
@@ -282,7 +286,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.executeOnPass(passRenderer, createFilterKeyForDrawType(drawType));
     }
 
-    private sceneGraphExecutor = new GfxrRenderGraph();
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
         this.sceneObjHolder.viewerInput = viewerInput;
 
@@ -337,24 +340,22 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
         renderInstManager.popTemplateRenderInst();
 
-        const sceneGraphBuilder = this.sceneGraphExecutor.getGraphBuilder();
+        const sceneGraphBuilder = this.renderGraph.getGraphBuilder();
         sceneGraphBuilder.begin();
 
-        const mainColorDesc = new GfxrRenderTargetDescription('Main Color', GfxFormat.U8_RGBA_RT);
-        mainColorDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        mainColorDesc.colorClearColor = TransparentBlack;
+        this.mainColorDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.mainColorDesc.colorClearColor = TransparentBlack;
 
-        const mainDepthDesc = new GfxrRenderTargetDescription('Main Depth', GfxFormat.D32F_S8);
-        mainDepthDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
+        this.mainDepthDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
 
-        const mainColorTargetID = sceneGraphBuilder.createRenderTargetID(mainColorDesc);
+        const mainColorTargetID = sceneGraphBuilder.createRenderTargetID(this.mainColorDesc, 'Main Color');
 
         sceneGraphBuilder.pushPass((pass) => {
             pass.setDebugName('Skybox');
 
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            const skyboxDepthTargetID = sceneGraphBuilder.createRenderTargetID(mainDepthDesc);
+            const skyboxDepthTargetID = sceneGraphBuilder.createRenderTargetID(this.mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
                 this.drawOpa(passRenderer, DrawBufferType.AstroDomeSky);
@@ -371,7 +372,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
-        const mainDepthTargetID = sceneGraphBuilder.createRenderTargetID(mainDepthDesc);
+        const mainDepthTargetID = sceneGraphBuilder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
         sceneGraphBuilder.pushPass((pass) => {
             pass.setDebugName('Opaque before Shadow');
@@ -525,11 +526,11 @@ export class SMGRenderer implements Viewer.SceneGfx {
             if (imageEffectDirector.isOnNormalBloom(this.sceneObjHolder) && this.bloomRenderer.pipelinesReady(device)) {
                 // Render Bloom Objects
 
-                const bloomObjectsDesc = new GfxrRenderTargetDescription('Bloom Objects Target', GfxFormat.U8_RGBA_RT);
+                const bloomObjectsDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
                 bloomObjectsDesc.colorClearColor = TransparentBlack;
                 bloomObjectsDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-                const bloomObjectsTargetID = sceneGraphBuilder.createRenderTargetID(bloomObjectsDesc);
+                const bloomObjectsTargetID = sceneGraphBuilder.createRenderTargetID(bloomObjectsDesc, 'Bloom Objects');
 
                 sceneGraphBuilder.pushPass((pass) => {
                     pass.setDebugName('Bloom Objects');
@@ -573,7 +574,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device, hostAccessPass);
         device.submitPass(hostAccessPass);
 
-        this.sceneGraphExecutor.execGraph(device, sceneGraph, viewerInput.onscreenTexture);
+        this.renderGraph.execGraph(device, sceneGraph, viewerInput.onscreenTexture);
 
         // this.sceneObjHolder.drawSyncManager.endFrame(device, this.mainRenderTarget.depthStencilAttachment);
         renderInstManager.resetRenderInsts();
@@ -595,7 +596,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.sceneGraphExecutor.destroy(device);
+        this.renderGraph.destroy(device);
     }
 }
 

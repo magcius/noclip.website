@@ -13,7 +13,7 @@ export class GfxrRenderTargetDescription {
     public depthClearValue: number | 'load' = 'load';
     public stencilClearValue: number | 'load' = 'load';
 
-    constructor(public debugName: string, public pixelFormat: GfxFormat) {
+    constructor(public pixelFormat: GfxFormat) {
     }
 
     public setParameters(width: number, height: number, numSamples = DEFAULT_NUM_SAMPLES): void {
@@ -112,17 +112,20 @@ class GraphImpl {
     [Symbol.species]?: 'GfxrGraph';
 
     // Used for determining scheduling.
-    public renderTargetDescriptions: GfxrRenderTargetDescription[] = [];
+    public renderTargetDescriptions: Readonly<GfxrRenderTargetDescription>[] = [];
     public resolveTextureRenderTargetIDs: number[] = [];
 
     public passes: PassImpl[] = [];
+
+    // Debugging.
+    public renderTargetDebugNames: string[] = [];
 }
 
 export interface GfxrGraphBuilder {
     begin(): void;
     end(): GfxrGraph;
     pushPass(setupFunc: PassSetupFunc): void;
-    createRenderTargetID(desc: GfxrRenderTargetDescription): number;
+    createRenderTargetID(desc: Readonly<GfxrRenderTargetDescription>, debugName: string): number;
     resolveRenderTargetToColorTexture(renderTargetID: number): number;
 }
 
@@ -145,7 +148,8 @@ class GraphBuilderImpl implements GfxrGraphBuilder {
         this.currentGraph!.passes.push(pass);
     }
 
-    public createRenderTargetID(desc: GfxrRenderTargetDescription): number {
+    public createRenderTargetID(desc: Readonly<GfxrRenderTargetDescription>, debugName: string): number {
+        this.currentGraph!.renderTargetDebugNames.push(debugName);
         return this.currentGraph!.renderTargetDescriptions.push(desc) - 1;
     }
 
@@ -184,8 +188,6 @@ class GraphBuilderImpl implements GfxrGraphBuilder {
 // Whenever we need to resolve a multi-sampled render target to a single-sampled texture,
 // we record an extra single-sampled texture here.
 class SingleSampledTexture {
-    public debugName: string;
-
     public readonly dimension = GfxTextureDimension.n2D;
     public readonly depth = 1;
     public readonly numLevels = 1;
@@ -198,8 +200,6 @@ class SingleSampledTexture {
     public age: number = 0;
 
     constructor(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>) {
-        this.debugName = desc.debugName;
-
         this.pixelFormat = desc.pixelFormat;
         this.width = desc.width;
         this.height = desc.height;
@@ -214,7 +214,6 @@ class SingleSampledTexture {
     public reset(desc: Readonly<GfxrRenderTargetDescription>): void {
         assert(this.matchesDescription(desc));
         this.age = 0;
-        this.debugName = desc.debugName;
     }
 
     public destroy(device: GfxDevice): void {
@@ -240,7 +239,6 @@ class RenderTarget {
     public age: number = 0;
 
     constructor(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>) {
-        this.debugName = desc.debugName;
         this.pixelFormat = desc.pixelFormat;
         this.width = desc.width;
         this.height = desc.height;
@@ -265,7 +263,6 @@ class RenderTarget {
     public reset(desc: Readonly<GfxrRenderTargetDescription>): void {
         assert(this.matchesDescription(desc));
         this.age = 0;
-        this.debugName = desc.debugName;
     }
 
     public destroy(device: GfxDevice): void {
@@ -298,7 +295,7 @@ export class GfxrRenderGraph {
             const freeRenderTarget = this.renderTargetDeadPool[i];
             if (freeRenderTarget.matchesDescription(desc)) {
                 // Pop it off the list.
-                freeRenderTarget.age = 0;
+                freeRenderTarget.reset(desc);
                 this.renderTargetDeadPool.splice(i--, 1);
                 return freeRenderTarget;
             }
@@ -360,7 +357,9 @@ export class GfxrRenderGraph {
 
         if (!this.renderTargetAliveForID[renderTargetID]) {
             const desc = graph.renderTargetDescriptions[renderTargetID];
-            this.renderTargetAliveForID[renderTargetID] = this.acquireRenderTargetForDescription(device, desc);
+            const newRenderTarget = this.acquireRenderTargetForDescription(device, desc);
+            newRenderTarget.debugName = graph.renderTargetDebugNames[renderTargetID];
+            this.renderTargetAliveForID[renderTargetID] = newRenderTarget;
         }
 
         return this.renderTargetAliveForID[renderTargetID];

@@ -277,17 +277,17 @@ export class BloomPostFXRenderer {
         return true;
     }
 
+    private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+
     public pushBloomPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number, viewerInput: ViewerRenderInput): void {
-        // Downsample.
         const targetWidth = viewerInput.backbufferWidth >> 2;
         const targetHeight = viewerInput.backbufferHeight >> 2;
 
-        const targetColorDesc = new GfxrRenderTargetDescription('Bloom Downsample', GfxFormat.U8_RGBA_RT);
-        targetColorDesc.setParameters(targetWidth, targetHeight, 1);
+        this.targetColorDesc.setParameters(targetWidth, targetHeight, 1);
 
-        const downsampleColorTargetID = sceneGraphBuilder.createRenderTargetID(targetColorDesc);
-        const blurL1ColorTargetID = sceneGraphBuilder.createRenderTargetID(targetColorDesc);
-        const blurL2ColorTargetID = sceneGraphBuilder.createRenderTargetID(targetColorDesc);
+        const downsampleColorTargetID = sceneGraphBuilder.createRenderTargetID(this.targetColorDesc, 'Bloom Downsample');
+        const blurL1ColorTargetID = sceneGraphBuilder.createRenderTargetID(this.targetColorDesc, 'Bloom Blur L1');
+        const blurL2ColorTargetID = sceneGraphBuilder.createRenderTargetID(this.targetColorDesc, 'Bloom Blur L2');
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setMegaStateFlags(fullscreenMegaState);
