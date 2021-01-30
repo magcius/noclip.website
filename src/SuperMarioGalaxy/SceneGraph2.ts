@@ -1,7 +1,7 @@
 
 import { Color } from "../Color";
 import { DEFAULT_NUM_SAMPLES, IdentityViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxAttachment, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxTexture, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
+import { GfxAttachment, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
 import { assert, assertExists } from "../util";
 
 export class RenderTargetDescription {
@@ -38,6 +38,12 @@ class SceneGraphPass {
     public present: boolean = false;
     public viewport: GfxNormalizedViewportCoords = IdentityViewportCoords;
 
+    public descriptor: GfxRenderPassDescriptor;
+    public viewportX: number = 0;
+    public viewportY: number = 0;
+    public viewportW: number = 0;
+    public viewportH: number = 0;
+
     constructor(private debugName: string) {
     }
 }
@@ -49,10 +55,12 @@ interface SceneGraphPassScope {
 type SceneGraphFunc = (renderPass: GfxRenderPass, scope: SceneGraphPassScope) => void;
 
 class SceneGraph {
-    public renderTargetRefCounts: number[] = [];
+    // Used for determining scheduling.
+    public renderTargetUseCounts: number[] = [];
     public renderTargetDescriptions: RenderTargetDescription[] = [];
-    public resolveTextureRefCounts: number[] = [];
+    public resolveTextureUseCounts: number[] = [];
     public resolveTextureRenderTargetIDs: number[] = [];
+
     public passes: SceneGraphPass[] = [];
 }
 
@@ -80,24 +88,24 @@ export class SceneGraphBuilder {
 
     public createRenderTargetID(desc: RenderTargetDescription): number {
         const renderTargetID = this.currentGraph!.renderTargetDescriptions.push(desc) - 1;
-        this.currentGraph!.renderTargetRefCounts[renderTargetID] = 0;
+        this.currentGraph!.renderTargetUseCounts[renderTargetID] = 0;
         return renderTargetID;
     }
 
     public attachRenderTargetID(attachment: RenderTargetAttachmentSlot, renderTargetID: number): void {
         assert(this.currentPass!.renderTargetIDs[attachment] === undefined);
         this.currentPass!.renderTargetIDs[attachment] = renderTargetID;
-        this.currentGraph!.renderTargetRefCounts[renderTargetID]++;
+        this.currentGraph!.renderTargetUseCounts[renderTargetID]++;
     }
 
     public attachResolveTexture(resolveTextureID: number): void {
-        this.currentGraph!.resolveTextureRefCounts[resolveTextureID]++;
+        this.currentGraph!.resolveTextureUseCounts[resolveTextureID]++;
         this.currentPass!.resolveTextureInputIDs.push(resolveTextureID);
     }
 
     private createResolveTextureID(renderTargetID: number): number {
         const resolveTextureID = this.currentGraph!.resolveTextureRenderTargetIDs.push(renderTargetID) - 1;
-        this.currentGraph!.resolveTextureRefCounts[resolveTextureID] = 0;
+        this.currentGraph!.resolveTextureUseCounts[resolveTextureID] = 0;
         return resolveTextureID;
     }
 
@@ -226,7 +234,7 @@ class RenderTarget {
 export class SceneGraphExecutor {
     private renderTargetAliveForID: RenderTarget[] = [];
     private renderTargetDeadPool: RenderTarget[] = [];
-    private resolveTextureAliveForID: ResolveTexture[] = [];
+    private resolveTextureForID: ResolveTexture[] = [];
     private resolveTextureDeadPool: ResolveTexture[] = [];
 
     // For debugging and scope callbacks.
@@ -252,7 +260,7 @@ export class SceneGraphExecutor {
         if (renderTargetID === undefined)
             return null;
 
-        assert(graph.renderTargetRefCounts[renderTargetID] > 0);
+        assert(graph.renderTargetUseCounts[renderTargetID] > 0);
 
         if (!this.renderTargetAliveForID[renderTargetID]) {
             const desc = graph.renderTargetDescriptions[renderTargetID];
@@ -266,9 +274,9 @@ export class SceneGraphExecutor {
         if (renderTargetID === undefined)
             return;
 
-        assert(graph.renderTargetRefCounts[renderTargetID] > 0);
+        assert(graph.renderTargetUseCounts[renderTargetID] > 0);
 
-        if (--graph.renderTargetRefCounts[renderTargetID] === 0) {
+        if (--graph.renderTargetUseCounts[renderTargetID] === 0) {
             // This was the last reference to this RT -- steal it from the alive list, and put it back into the pool.
             const renderTarget = assertExists(this.renderTargetAliveForID[renderTargetID]);
             renderTarget.needsClear = true;
@@ -297,42 +305,53 @@ export class SceneGraphExecutor {
         if (resolveTextureID === undefined)
             return null;
 
-        assert(graph.resolveTextureRefCounts[resolveTextureID] > 0);
+        assert(graph.resolveTextureUseCounts[resolveTextureID] > 0);
 
-        if (!this.resolveTextureAliveForID[resolveTextureID]) {
+        if (!this.resolveTextureForID[resolveTextureID]) {
             const associatedRenderTargetID = assertExists(graph.resolveTextureRenderTargetIDs[resolveTextureID]);
             const desc = assertExists(graph.renderTargetDescriptions[associatedRenderTargetID]);
-            this.resolveTextureAliveForID[resolveTextureID] = this.acquireResolveTextureForDescription(device, desc);
+            this.resolveTextureForID[resolveTextureID] = this.acquireResolveTextureForDescription(device, desc);
         }
 
-        return this.resolveTextureAliveForID[resolveTextureID].texture;
+        return this.resolveTextureForID[resolveTextureID].texture;
     }
 
     private releaseResolveTextureForID(graph: SceneGraph, resolveTextureID: number | undefined): void {
         if (resolveTextureID === undefined)
             return;
 
-        assert(graph.resolveTextureRefCounts[resolveTextureID] > 0);
+        assert(graph.resolveTextureUseCounts[resolveTextureID] > 0);
 
-        if (--graph.resolveTextureRefCounts[resolveTextureID] === 0) {
-            // This was the last reference to this RT -- steal it from the alive list, and put it back into the pool.
-            const resolveTexture = assertExists(this.resolveTextureAliveForID[resolveTextureID]);
-            delete this.resolveTextureAliveForID[resolveTextureID];
+        if (--graph.resolveTextureUseCounts[resolveTextureID] === 0) {
+            // This was the last reference to this resolve texture -- put it back in the dead pool to be reused.
+            // Note that we don't remove it from the for-ID pool, because it's still needed in the scope. If
+            // we revise this API a bit more, then we can be a bit clearer about this.
+            const resolveTexture = assertExists(this.resolveTextureForID[resolveTextureID]);
             this.resolveTextureDeadPool.push(resolveTexture);
         }
     }
 
     public getResolveTextureForID(resolveTextureID: number): GfxTexture {
-        assert(this.currentGraph!.resolveTextureRefCounts[resolveTextureID] > 0);
         assert(this.currentGraphPass!.resolveTextureInputIDs.includes(resolveTextureID));
-
-        return this.resolveTextureAliveForID[resolveTextureID].texture;
+        return this.resolveTextureForID[resolveTextureID].texture;
     }
 
-    private execPass(device: GfxDevice, graph: SceneGraph, pass: SceneGraphPass, presentColorTexture: GfxTexture | null): void {
+    private execPass(device: GfxDevice, pass: SceneGraphPass): void {
         assert(this.currentGraphPass === null);
         this.currentGraphPass = pass;
 
+        const renderPass = device.createRenderPass(pass.descriptor);
+
+        renderPass.setViewport(pass.viewportX, pass.viewportY, pass.viewportW, pass.viewportH);
+
+        for (let i = 0; i < pass.funcs.length; i++)
+            pass.funcs[i](renderPass, this);
+
+        device.submitPass(renderPass);
+        this.currentGraphPass = null;
+    }
+
+    private schedulePass(device: GfxDevice, graph: SceneGraph, pass: SceneGraphPass, presentColorTexture: GfxTexture | null) {
         const color0RenderTargetID = pass.renderTargetIDs[RenderTargetAttachmentSlot.Color0];
         const depthStencilRenderTargetID = pass.renderTargetIDs[RenderTargetAttachmentSlot.DepthStencil];
 
@@ -348,7 +367,7 @@ export class SceneGraphExecutor {
         const colorResolveTo = pass.present ? presentColorTexture : this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.Color0]);
         const depthStencilResolveTo = this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.DepthStencil]);
 
-        const renderPass = device.createRenderPass({
+        pass.descriptor = {
             colorAttachment,
             depthStencilAttachment,
 
@@ -358,9 +377,7 @@ export class SceneGraphExecutor {
 
             colorResolveTo,
             depthStencilResolveTo,
-        });
-
-        let attachmentWidth = 0, attachmentHeight = 0;
+        };
 
         if (color0RenderTarget !== null)
             color0RenderTarget.needsClear = false;
@@ -373,6 +390,8 @@ export class SceneGraphExecutor {
             assert(color0RenderTarget.height === depthStencilRenderTarget.height);
             assert(color0RenderTarget.numSamples === depthStencilRenderTarget.numSamples);
         }
+
+        let attachmentWidth = 0, attachmentHeight = 0;
 
         if (color0RenderTarget !== null) {
             attachmentWidth = color0RenderTarget.width;
@@ -387,27 +406,20 @@ export class SceneGraphExecutor {
             const y = attachmentHeight * pass.viewport.y;
             const w = attachmentWidth * pass.viewport.w;
             const h = attachmentHeight * pass.viewport.h;
-            renderPass.setViewport(x, y, w, h);
+            pass.viewportX = x;
+            pass.viewportY = y;
+            pass.viewportW = w;
+            pass.viewportH = h;
         }
-
-        for (let i = 0; i < pass.funcs.length; i++)
-            pass.funcs[i](renderPass, this);
-
-        device.submitPass(renderPass);
 
         // Now that we're done with the pass, release our resources back to the pool.
         for (let i = 0; i < pass.renderTargetIDs.length; i++)
             this.releaseRenderTargetForID(graph, pass.renderTargetIDs[i]);
         for (let i = 0; i < pass.resolveTextureInputIDs.length; i++)
             this.releaseResolveTextureForID(graph, pass.resolveTextureInputIDs[i]);
-
-        this.currentGraphPass = null;
     }
 
-    public execGraph(device: GfxDevice, graph: SceneGraph, presentColorTexture: GfxTexture | null = null): void {
-        assert(this.currentGraph === null);
-        this.currentGraph = graph;
-
+    private scheduleGraph(device: GfxDevice, graph: SceneGraph, presentColorTexture: GfxTexture | null): void {
         // Go through and increment the age of everything in our dead pools.
         for (let i = 0; i < this.renderTargetDeadPool.length; i++)
             this.renderTargetDeadPool[i].age++;
@@ -415,17 +427,15 @@ export class SceneGraphExecutor {
             this.resolveTextureDeadPool[i].age++;
 
         for (let i = 0; i < graph.passes.length; i++)
-            this.execPass(device, graph, graph.passes[i], presentColorTexture);
+            this.schedulePass(device, graph, graph.passes[i], presentColorTexture);
 
         // Double-check all of our sanity.
-        for (let i = 0; i < graph.renderTargetRefCounts.length; i++)
-            assert(graph.renderTargetRefCounts[i] === 0);
-        for (let i = 0; i < graph.resolveTextureRefCounts.length; i++)
-            assert(graph.resolveTextureRefCounts[i] === 0);
+        for (let i = 0; i < graph.renderTargetUseCounts.length; i++)
+            assert(graph.renderTargetUseCounts[i] === 0);
+        for (let i = 0; i < graph.resolveTextureUseCounts.length; i++)
+            assert(graph.resolveTextureUseCounts[i] === 0);
         for (let i = 0; i < this.renderTargetAliveForID.length; i++)
             assert(this.renderTargetAliveForID[i] === undefined);
-        for (let i = 0; i < this.resolveTextureAliveForID.length; i++)
-            assert(this.resolveTextureAliveForID[i] === undefined);
 
         // Now go through and kill anything that's over our age threshold (hasn't been used in a bit)
         for (let i = 0; i < this.renderTargetDeadPool.length; i++) {
@@ -441,16 +451,30 @@ export class SceneGraphExecutor {
                 this.resolveTextureDeadPool.splice(i--, 1);
             }
         }
+    }
+
+    public execGraph(device: GfxDevice, graph: SceneGraph, presentColorTexture: GfxTexture | null = null): void {
+        // Schedule our graph.
+        this.scheduleGraph(device, graph, presentColorTexture);
+
+        assert(this.currentGraph === null);
+        this.currentGraph = graph;
+
+        for (let i = 0; i < graph.passes.length; i++)
+            this.execPass(device, graph.passes[i]);
 
         this.currentGraph = null;
+
+        // Clear our transient scope state.
+        this.resolveTextureForID.length = 0;
     }
 
     public destroy(device: GfxDevice): void {
         // At the time this is called, we shouldn't have anything alive.
         for (let i = 0; i < this.renderTargetAliveForID.length; i++)
             assert(this.renderTargetAliveForID[i] === undefined);
-        for (let i = 0; i < this.resolveTextureAliveForID.length; i++)
-            assert(this.resolveTextureAliveForID[i] === undefined);
+        for (let i = 0; i < this.resolveTextureForID.length; i++)
+            assert(this.resolveTextureForID[i] === undefined);
 
         for (let i = 0; i < this.renderTargetDeadPool.length; i++)
             this.renderTargetDeadPool[i].destroy(device);
