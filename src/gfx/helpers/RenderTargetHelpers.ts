@@ -140,7 +140,7 @@ export function makeClearRenderPassDescriptor(clearColor: Readonly<GfxColor> | '
 export const standardFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(0.88, 0.88, 0.88, 1.0));
 export const opaqueBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
 export const transparentBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(TransparentBlack);
-export const depthClearRenderPassDescriptor = makeClearRenderPassDescriptor(TransparentBlack);
+export const depthClearRenderPassDescriptor = makeClearRenderPassDescriptor('load');
 export const noClearRenderPassDescriptor: GfxRenderPassDescriptor = {
     colorAttachment: null,
     colorResolveTo: null,
