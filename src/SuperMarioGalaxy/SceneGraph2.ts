@@ -164,7 +164,9 @@ export class SceneGraphBuilder {
     }
 }
 
-class ResolveTexture {
+// Whenever we need to resolve a multi-sampled render target to a single-sampled texture,
+// we record an extra single-sampled texture here.
+class SingleSampledTexture {
     public debugName: string;
 
     public readonly dimension = GfxTextureDimension.n2D;
@@ -268,7 +270,7 @@ export class SceneGraphExecutor {
 
     //#region Resource Creation & Caching
     private renderTargetDeadPool: RenderTarget[] = [];
-    private resolveTextureDeadPool: ResolveTexture[] = [];
+    private singleSampledTextureDeadPool: SingleSampledTexture[] = [];
 
     private acquireRenderTargetForDescription(device: GfxDevice, desc: Readonly<RenderTargetDescription>): RenderTarget {
         for (let i = 0; i < this.renderTargetDeadPool.length; i++) {
@@ -285,19 +287,19 @@ export class SceneGraphExecutor {
         return new RenderTarget(device, desc);
     }
 
-    private acquireResolveTextureForDescription(device: GfxDevice, desc: Readonly<RenderTargetDescription>): ResolveTexture {
-        for (let i = 0; i < this.resolveTextureDeadPool.length; i++) {
-            const freeResolveTexture = this.resolveTextureDeadPool[i];
-            if (freeResolveTexture.matchesDescription(desc)) {
+    private acquireSingleSampledTextureForDescription(device: GfxDevice, desc: Readonly<RenderTargetDescription>): SingleSampledTexture {
+        for (let i = 0; i < this.singleSampledTextureDeadPool.length; i++) {
+            const freeSingleSampledTexture = this.singleSampledTextureDeadPool[i];
+            if (freeSingleSampledTexture.matchesDescription(desc)) {
                 // Pop it off the list.
-                freeResolveTexture.reset(desc);
-                this.resolveTextureDeadPool.splice(i--, 1);
-                return freeResolveTexture;
+                freeSingleSampledTexture.reset(desc);
+                this.singleSampledTextureDeadPool.splice(i--, 1);
+                return freeSingleSampledTexture;
             }
         }
 
         // Allocate a new resolve texture.
-        return new ResolveTexture(device, desc);
+        return new SingleSampledTexture(device, desc);
     }
     //#endregion
 
@@ -306,7 +308,7 @@ export class SceneGraphExecutor {
     private resolveTextureUseCount: number[] = [];
 
     private renderTargetAliveForID: RenderTarget[] = [];
-    private resolveTextureForID: ResolveTexture[] = [];
+    private singleSampledTextureForResolveTextureID: SingleSampledTexture[] = [];
 
     private scheduleAddUseCount(graph: SceneGraph, pass: SceneGraphPassImpl): void {
         for (let i = 0; i < pass.renderTargetIDs.length; i++) {
@@ -343,20 +345,23 @@ export class SceneGraphExecutor {
         return this.renderTargetAliveForID[renderTargetID];
     }
 
-    private releaseRenderTargetForID(renderTargetID: number | undefined): void {
+    private releaseRenderTargetForID(renderTargetID: number | undefined): RenderTarget | null {
         if (renderTargetID === undefined)
-            return;
+            return null;
 
         assert(this.renderTargetUseCount[renderTargetID] > 0);
 
+        const renderTarget = assertExists(this.renderTargetAliveForID[renderTargetID]);
+
         if (--this.renderTargetUseCount[renderTargetID] === 0) {
             // This was the last reference to this RT -- steal it from the alive list, and put it back into the pool.
-            const renderTarget = assertExists(this.renderTargetAliveForID[renderTargetID]);
             renderTarget.needsClear = true;
 
             delete this.renderTargetAliveForID[renderTargetID];
             this.renderTargetDeadPool.push(renderTarget);
         }
+
+        return renderTarget;
     }
 
     private acquireResolveTextureOutputForID(device: GfxDevice, graph: SceneGraph, srcRenderTargetID: number, resolveTextureID: number | undefined): GfxTexture | null {
@@ -372,46 +377,41 @@ export class SceneGraphExecutor {
         if (renderTarget.texture !== null)
             return null;
 
-        if (!this.resolveTextureForID[resolveTextureID]) {
+        if (!this.singleSampledTextureForResolveTextureID[resolveTextureID]) {
             const desc = assertExists(graph.renderTargetDescriptions[srcRenderTargetID]);
-            this.resolveTextureForID[resolveTextureID] = this.acquireResolveTextureForDescription(device, desc);
+            this.singleSampledTextureForResolveTextureID[resolveTextureID] = this.acquireSingleSampledTextureForDescription(device, desc);
         }
 
-        return this.resolveTextureForID[resolveTextureID].texture;
+        return this.singleSampledTextureForResolveTextureID[resolveTextureID].texture;
     }
 
     private acquireResolveTextureInputTextureForID(graph: SceneGraph, resolveTextureID: number): GfxTexture {
         const renderTargetID = graph.resolveTextureRenderTargetIDs[resolveTextureID];
 
-        // First check the resolve texture pool in case we actually needed to resolve.
-        const resolveTexture = this.resolveTextureForID[resolveTextureID];
-
-        if (resolveTexture) {
-            this.releaseRenderTargetForID(renderTargetID);
-            return resolveTexture.texture;
-        } else {
-            // In this case, we should be rendering to a texture-backed RT.
-            const renderTarget = assertExists(this.renderTargetAliveForID[renderTargetID]);
-            this.releaseRenderTargetForID(renderTargetID);
-            return assertExists(renderTarget.texture);
-        }
-    }
-
-    private releaseResolveTextureInputForID(resolveTextureID: number | undefined): void {
-        if (resolveTextureID === undefined)
-            return;
-
         assert(this.resolveTextureUseCount[resolveTextureID] > 0);
 
-        if (--this.resolveTextureUseCount[resolveTextureID] === 0) {
-            // This was the last reference to this resolve texture -- put it back in the dead pool to be reused.
-            // Note that we don't remove it from the for-ID pool, because it's still needed in the scope. If
-            // we revise this API a bit more, then we can be a bit clearer about this.
-            const resolveTexture = this.resolveTextureForID[resolveTextureID];
+        let shouldFree = false;
+        if (--this.resolveTextureUseCount[resolveTextureID] === 0)
+            shouldFree = true;
 
-            // The resolve texture can be missing if we never needed to resolve to begin with.
-            if (resolveTexture)
-                this.resolveTextureDeadPool.push(resolveTexture);
+        const renderTarget = assertExists(this.releaseRenderTargetForID(renderTargetID));
+
+        if (renderTarget.texture === null) {
+            // The resolved texture belonging to this RT is backed by our own single-sampled texture.
+
+            const singleSampledTexture = assertExists(this.singleSampledTextureForResolveTextureID[resolveTextureID]);
+
+            if (shouldFree) {
+                // Release this single-sampled texture back to the pool, if this is the last use of it.
+                this.singleSampledTextureDeadPool.push(singleSampledTexture);
+            }
+
+            return singleSampledTexture.texture;
+        } else {
+            assert(this.singleSampledTextureForResolveTextureID[resolveTextureID] === undefined);
+
+            // The resolved texture belonging to this RT is backed by our render target.
+            return assertExists(renderTarget.texture);
         }
     }
 
@@ -469,11 +469,9 @@ export class SceneGraphExecutor {
             pass.resolveTextureInputTextures[i] = this.acquireResolveTextureInputTextureForID(graph, resolveTextureID);
         }
 
-        // Now that we're done with the pass, release our resources back to the pool.
+        // Now that we're done with the pass, release our render targets back to the pool.
         for (let i = 0; i < pass.renderTargetIDs.length; i++)
             this.releaseRenderTargetForID(pass.renderTargetIDs[i]);
-        for (let i = 0; i < pass.resolveTextureInputIDs.length; i++)
-            this.releaseResolveTextureInputForID(pass.resolveTextureInputIDs[i]);
     }
 
     private scheduleGraph(device: GfxDevice, graph: SceneGraph, presentColorTexture: GfxTexture | null): void {
@@ -483,8 +481,8 @@ export class SceneGraphExecutor {
         // Go through and increment the age of everything in our dead pools to mark that it's old.
         for (let i = 0; i < this.renderTargetDeadPool.length; i++)
             this.renderTargetDeadPool[i].age++;
-        for (let i = 0; i < this.resolveTextureDeadPool.length; i++)
-            this.resolveTextureDeadPool[i].age++;
+        for (let i = 0; i < this.singleSampledTextureDeadPool.length; i++)
+            this.singleSampledTextureDeadPool[i].age++;
 
         // Schedule our resources -- first, count up all uses of resources, then hand them out.
 
@@ -518,10 +516,10 @@ export class SceneGraphExecutor {
             }
         }
 
-        for (let i = 0; i < this.resolveTextureDeadPool.length; i++) {
-            if (this.resolveTextureDeadPool[i].age >= ageThreshold) {
-                this.resolveTextureDeadPool[i].destroy(device);
-                this.resolveTextureDeadPool.splice(i--, 1);
+        for (let i = 0; i < this.singleSampledTextureDeadPool.length; i++) {
+            if (this.singleSampledTextureDeadPool[i].age >= ageThreshold) {
+                this.singleSampledTextureDeadPool[i].destroy(device);
+                this.singleSampledTextureDeadPool.splice(i--, 1);
             }
         }
 
@@ -560,7 +558,7 @@ export class SceneGraphExecutor {
         this.currentGraph = null;
 
         // Clear our transient scope state.
-        this.resolveTextureForID.length = 0;
+        this.singleSampledTextureForResolveTextureID.length = 0;
     }
     //#endregion
 
@@ -577,12 +575,12 @@ export class SceneGraphExecutor {
         // At the time this is called, we shouldn't have anything alive.
         for (let i = 0; i < this.renderTargetAliveForID.length; i++)
             assert(this.renderTargetAliveForID[i] === undefined);
-        for (let i = 0; i < this.resolveTextureForID.length; i++)
-            assert(this.resolveTextureForID[i] === undefined);
+        for (let i = 0; i < this.singleSampledTextureForResolveTextureID.length; i++)
+            assert(this.singleSampledTextureForResolveTextureID[i] === undefined);
 
         for (let i = 0; i < this.renderTargetDeadPool.length; i++)
             this.renderTargetDeadPool[i].destroy(device);
-        for (let i = 0; i < this.resolveTextureDeadPool.length; i++)
-            this.resolveTextureDeadPool[i].destroy(device);
+        for (let i = 0; i < this.singleSampledTextureDeadPool.length; i++)
+            this.singleSampledTextureDeadPool[i].destroy(device);
     }
 }
