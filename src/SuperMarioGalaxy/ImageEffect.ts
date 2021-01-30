@@ -12,8 +12,8 @@ import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxRenderPassDescriptor, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxTexture, GfxNormalizedViewportCoords, GfxFormat } from "../gfx/platform/GfxPlatform";
-import { copyRenderPassDescriptor, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, Attachment, setViewportOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxDevice, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxFormat } from "../gfx/platform/GfxPlatform";
+import { DEFAULT_NUM_SAMPLES } from "../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -145,32 +145,6 @@ class BloomPassBlur2Program extends BloomPassBlurProgram {
     }
 }
 
-class WeirdFancyRenderTarget {
-    public colorAttachment = new Attachment(GfxFormat.U8_RGBA_RT);
-    private renderPassDescriptor = makeEmptyRenderPassDescriptor();
-
-    constructor(public depthStencilAttachment: Attachment) {
-    }
-
-    public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
-        this.colorAttachment.setParameters(device, width, height, numSamples);
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.colorAttachment.destroy(device);
-    }
-
-    public createRenderPass(device: GfxDevice, viewport: GfxNormalizedViewportCoords, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
-        copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
-        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
-        this.renderPassDescriptor.colorResolveTo = colorResolveTo;
-        this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment.gfxAttachment;
-        const passRenderer = device.createRenderPass(this.renderPassDescriptor);
-        setViewportOnRenderPass(passRenderer, viewport, this.colorAttachment);
-        return passRenderer;
-    }
-}
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 
 function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, program: DeviceProgram, megaStateDescriptor: GfxMegaStateDescriptor = fullscreenMegaState, sampleCount: number = DEFAULT_NUM_SAMPLES): GfxRenderPipeline {
@@ -185,7 +159,60 @@ function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, progra
     });
 }
 
-export class BloomPostFXRenderer {
+abstract class ImageEffectBase extends NameObj {
+    public active = false;
+    public visible = false;
+    public strength = 0.0;
+
+    public pipelinesReady(sceneObjHolder: SceneObjHolder): boolean {
+        return false;
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+        const strengthAdj = getDeltaTimeFrames(sceneObjHolder.viewerInput) / 30.0;
+
+        if (this.active) {
+            this.visible = true;
+            this.strength += strengthAdj;
+            if (this.strength > 1.0)
+                this.strength = 1.0;
+        } else if (this.visible) {
+            this.strength -= strengthAdj;
+            if (this.strength <= 0.0) {
+                this.strength = 0.0;
+                this.visible = false;
+            }
+        }
+
+        this.calcAnimSub(sceneObjHolder);
+    }
+
+    public calcAnimSub(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyTurnOn(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyTurnOff(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyForceOn(sceneObjHolder: SceneObjHolder): void {
+    }
+
+    public notifyForceOff(sceneObjHolder: SceneObjHolder): void {
+    }
+}
+
+function connectToSceneNormalBloom(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
+    connectToScene(sceneObjHolder, nameObj, -1, CalcAnimType.Environment, -1, -1);
+}
+
+export class BloomEffect extends ImageEffectBase {
+    public bloomIntensity: number = 0;
+    public threshold: number = 0;
+    public intensity1: number = 0;
+    public intensity2: number = 0;
+
     private thresholdPipeline: GfxRenderPipeline;
     private blur1Pipeline: GfxRenderPipeline;
     private blur2Pipeline: GfxRenderPipeline;
@@ -194,7 +221,14 @@ export class BloomPostFXRenderer {
     private bloomSampler: GfxSampler;
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
 
-    constructor(device: GfxDevice, cache: GfxRenderCache) {
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'BloomEffect');
+
+        connectToSceneNormalBloom(sceneObjHolder, this);
+        sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
+
+        const device = sceneObjHolder.modelCache.device;
+        const cache = sceneObjHolder.modelCache.cache;
         this.bloomSampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
@@ -231,7 +265,8 @@ export class BloomPostFXRenderer {
         return parameterBufferOffs;
     }
 
-    public pipelinesReady(device: GfxDevice): boolean {
+    public pipelinesReady(sceneObjHolder: SceneObjHolder): boolean {
+        const device = sceneObjHolder.modelCache.device;
         if (!device.queryPipelineReady(this.thresholdPipeline))
             return false;
         if (!device.queryPipelineReady(this.blur1Pipeline))
@@ -327,64 +362,6 @@ export class BloomPostFXRenderer {
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
             });
         });
-    }
-}
-
-abstract class ImageEffectBase extends NameObj {
-    public active = false;
-    public visible = false;
-    public strength = 0.0;
-
-    public calcAnim(sceneObjHolder: SceneObjHolder): void {
-        const strengthAdj = getDeltaTimeFrames(sceneObjHolder.viewerInput) / 30.0;
-
-        if (this.active) {
-            this.visible = true;
-            this.strength += strengthAdj;
-            if (this.strength > 1.0)
-                this.strength = 1.0;
-        } else if (this.visible) {
-            this.strength -= strengthAdj;
-            if (this.strength <= 0.0) {
-                this.strength = 0.0;
-                this.visible = false;
-            }
-        }
-
-        this.calcAnimSub(sceneObjHolder);
-    }
-
-    public calcAnimSub(sceneObjHolder: SceneObjHolder): void {
-    }
-
-    public notifyTurnOn(sceneObjHolder: SceneObjHolder): void {
-    }
-
-    public notifyTurnOff(sceneObjHolder: SceneObjHolder): void {
-    }
-
-    public notifyForceOn(sceneObjHolder: SceneObjHolder): void {
-    }
-
-    public notifyForceOff(sceneObjHolder: SceneObjHolder): void {
-    }
-}
-
-function connectToSceneNormalBloom(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    connectToScene(sceneObjHolder, nameObj, -1, CalcAnimType.Environment, -1, -1);
-}
-
-export class BloomEffect extends ImageEffectBase {
-    public bloomIntensity: number = 0;
-    public threshold: number = 0;
-    public intensity1: number = 0;
-    public intensity2: number = 0;
-
-    constructor(sceneObjHolder: SceneObjHolder) {
-        super(sceneObjHolder, 'BloomEffect');
-
-        connectToSceneNormalBloom(sceneObjHolder, this);
-        sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
     }
 }
 
@@ -527,6 +504,10 @@ class ImageEffectDirector extends NameObj {
         this.currentState = this.stateNull;
 
         connectToSceneImageEffectMovement(sceneObjHolder, this);
+    }
+
+    public pipelinesReady(sceneObjHolder: SceneObjHolder): boolean {
+        return this.currentEffect !== null && this.currentEffect.pipelinesReady(sceneObjHolder);
     }
 
     public isOnNormalBloom(sceneObjHolder: SceneObjHolder): boolean {

@@ -10,7 +10,7 @@ import { OceanRing, isEqualStageName, HeatHazeDirector, WhirlPoolAccelerator } f
 import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";
-import { fallback } from "../util";
+import { assert, fallback } from "../util";
 import { OceanSphere } from "./Actors/OceanSphere";
 import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
@@ -64,7 +64,7 @@ export class WaterAreaHolder extends NameObj {
     public oceanRing: OceanRing[] = [];
     public oceanSphere: OceanSphere[] = [];
     private useBloom: boolean = false;
-    private cameraFilter: WaterCameraFilter;
+    private waterCameraFilter: WaterCameraFilter;
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'WaterAreaHolder');
@@ -76,7 +76,11 @@ export class WaterAreaHolder extends NameObj {
 
         connectToSceneScreenEffectMovement(sceneObjHolder, this);
 
-        this.cameraFilter = new WaterCameraFilter(dynamicSpawnZoneAndLayer, sceneObjHolder);
+        this.waterCameraFilter = new WaterCameraFilter(dynamicSpawnZoneAndLayer, sceneObjHolder);
+    }
+
+    public isOnWaterCameraFilter(): boolean {
+        return this.waterCameraFilter.isOnWaterCameraFilter();
     }
 
     public entryOceanBowl(oceanBowl: OceanBowl): void {
@@ -247,7 +251,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         const arc = sceneObjHolder.modelCache.getObjectData('WaterCameraFilter');
         this.filterTexture = loadBTIData(sceneObjHolder, arc, 'WaterCameraFilter.bti');
         this.filterTexture.fillTextureMapping(this.materialParams.m_TextureMapping[0]);
-        sceneObjHolder.specialTextureBinder.registerTextureMapping(this.materialParams.m_TextureMapping[1], SpecialTextureType.ImageEffectTexture1);
+        sceneObjHolder.specialTextureBinder.registerTextureMapping(this.materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
 
         this.makeActorAppeared(sceneObjHolder);
 
@@ -317,10 +321,14 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         }
     }
 
+    public isOnWaterCameraFilter(): boolean {
+        return this.getCurrentNerve() !== WaterCameraFilterNrv.Air;
+    }
+
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
-        if (this.getCurrentNerve() === WaterCameraFilterNrv.Air)
+        if (!this.isOnWaterCameraFilter())
             return;
 
         // Captured already.

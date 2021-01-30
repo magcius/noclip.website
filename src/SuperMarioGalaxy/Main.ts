@@ -41,7 +41,7 @@ import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
 import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
 import { MapPartsRailGuideHolder } from './MapParts';
-import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr, BloomPostFXRenderer } from './ImageEffect';
+import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr } from './ImageEffect';
 import { LensFlareDirector, DrawSyncManager } from './Actors/LensFlare';
 import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
@@ -131,8 +131,6 @@ class RenderParams {
 
 const sceneParams = new SceneParams();
 export class SMGRenderer implements Viewer.SceneGfx {
-    private bloomRenderer: BloomPostFXRenderer;
-
     private currentScenarioIndex: number = -1;
     private scenarioSelect: UI.SingleSelect | null = null;
 
@@ -149,7 +147,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
-        this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache);
 
         if (this.sceneObjHolder.sceneDesc.scenarioOverride !== null)
             this.currentScenarioIndex = this.sceneObjHolder.sceneDesc.scenarioOverride;
@@ -506,24 +503,26 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
-        builder.pushPass((pass) => {
-            pass.setDebugName('Water Filter');
-            const waterFilterOpaqueColorTextureID = builder.resolveRenderTargetToColorTexture(mainColorTargetID);
-            pass.attachResolveTexture(waterFilterOpaqueColorTextureID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer, scope) => {
-                const opaqueTexture = scope.getResolveTextureForID(waterFilterOpaqueColorTextureID);
-                this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, opaqueTexture);
-    
-                this.execute(passRenderer, DrawType.WaterCameraFilter);
+        const waterAreaHolder = this.sceneObjHolder.waterAreaHolder;
+        if (waterAreaHolder !== null && waterAreaHolder.isOnWaterCameraFilter()) {
+            builder.pushPass((pass) => {
+                pass.setDebugName('Water Filter');
+                const waterFilterOpaqueColorTextureID = builder.resolveRenderTargetToColorTexture(mainColorTargetID);
+                pass.attachResolveTexture(waterFilterOpaqueColorTextureID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+                pass.exec((passRenderer, scope) => {
+                    const opaqueTexture = scope.getResolveTextureForID(waterFilterOpaqueColorTextureID);
+                    this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, opaqueTexture);
+
+                    this.execute(passRenderer, DrawType.WaterCameraFilter);
+                });
             });
-        });
+        }
 
-        if (this.sceneObjHolder.imageEffectSystemHolder !== null) {
-            const imageEffectDirector = this.sceneObjHolder.imageEffectSystemHolder.imageEffectDirector;
-
-            if (imageEffectDirector.isOnNormalBloom(this.sceneObjHolder) && this.bloomRenderer.pipelinesReady(device)) {
+        const imageEffectDirector = this.sceneObjHolder.imageEffectSystemHolder !== null ? this.sceneObjHolder.imageEffectSystemHolder.imageEffectDirector : null;
+        if (imageEffectDirector !== null && imageEffectDirector.pipelinesReady(this.sceneObjHolder)) {
+            if (imageEffectDirector.isOnNormalBloom(this.sceneObjHolder)) {
                 // Render Bloom Objects
 
                 const bloomObjectsDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
@@ -545,7 +544,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                     });
                 });
 
-                this.bloomRenderer.pushBloomPasses(this.sceneObjHolder, builder, renderInstManager, bloomObjectsTargetID, mainColorTargetID, viewerInput);
+                this.sceneObjHolder.bloomEffect!.pushBloomPasses(this.sceneObjHolder, builder, renderInstManager, bloomObjectsTargetID, mainColorTargetID, viewerInput);
             }
         }
 
