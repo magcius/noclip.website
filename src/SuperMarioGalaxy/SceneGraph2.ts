@@ -47,6 +47,8 @@ class SceneGraphPassImpl implements SceneGraphPass {
     public doPresent: boolean = false;
     public viewport: GfxNormalizedViewportCoords = IdentityViewportCoords;
 
+    public resolveTextureInputTextures: GfxTexture[] = [];
+
     // Execution state computed by scheduling.
     public descriptor: GfxRenderPassDescriptor = {
         colorAttachment: null,
@@ -147,14 +149,6 @@ export class SceneGraphBuilder {
     public resolveRenderTargetToColorTexture(renderTargetID: number): number {
         const resolveTextureID = this.createResolveTextureID(renderTargetID);
 
-        /*
-        // We must be in a pass to resolve.
-        const currentPass = assertExists(this.currentPass);
-
-        // The render target we're fetching to resolve must *not* be one we're rendering to.
-        assert(!currentPass.renderTargetIDs.includes(renderTargetID));
-        */
-
         // Find the last pass that rendered to this render target, and resolve it now.
 
         // If you wanted a previous snapshot copy of it, you should have created a separate,
@@ -176,6 +170,7 @@ class ResolveTexture {
     public readonly dimension = GfxTextureDimension.n2D;
     public readonly depth = 1;
     public readonly numLevels = 1;
+
     public pixelFormat: GfxFormat;
     public width: number = 0;
     public height: number = 0;
@@ -211,12 +206,17 @@ class ResolveTexture {
 class RenderTarget {
     public debugName: string;
 
+    public readonly dimension = GfxTextureDimension.n2D;
+    public readonly depth = 1;
+    public readonly numLevels = 1;
+
     public pixelFormat: GfxFormat;
     public width: number = 0;
     public height: number = 0;
     public numSamples: number = 0;
 
     public needsClear: boolean = true;
+    public texture: GfxTexture | null = null;
     public attachment: GfxAttachment;
     public age: number = 0;
 
@@ -227,7 +227,16 @@ class RenderTarget {
         this.height = desc.height;
         this.numSamples = desc.numSamples;
 
-        this.attachment = device.createAttachment(this);
+        assert(this.numSamples >= 1);
+
+        if (this.numSamples > 1) {
+            // MSAA render targets must be backed by attachments.
+            this.attachment = device.createAttachment(this);
+        } else {
+            // Single-sampled textures can be backed by regular textures.
+            this.texture = device.createTexture(this);
+            this.attachment = device.createAttachmentFromTexture(this.texture);
+        }
     }
 
     public matchesDescription(desc: Readonly<RenderTargetDescription>): boolean {
@@ -241,6 +250,8 @@ class RenderTarget {
     }
 
     public destroy(device: GfxDevice): void {
+        if (this.texture !== null)
+            device.destroyTexture(this.texture);
         device.destroyAttachment(this.attachment);
     }
 }
@@ -297,7 +308,7 @@ export class SceneGraphExecutor {
     private renderTargetAliveForID: RenderTarget[] = [];
     private resolveTextureForID: ResolveTexture[] = [];
 
-    private scheduleAddUseCount(pass: SceneGraphPassImpl): void {
+    private scheduleAddUseCount(graph: SceneGraph, pass: SceneGraphPassImpl): void {
         for (let i = 0; i < pass.renderTargetIDs.length; i++) {
             const renderTargetID = pass.renderTargetIDs[i];
             if (renderTargetID === undefined)
@@ -312,6 +323,9 @@ export class SceneGraphExecutor {
                 continue;
 
             this.resolveTextureUseCount[resolveTextureID]++;
+
+            const renderTargetID = graph.resolveTextureRenderTargetIDs[resolveTextureID];
+            this.renderTargetUseCount[renderTargetID]++;
         }
     }
 
@@ -329,7 +343,7 @@ export class SceneGraphExecutor {
         return this.renderTargetAliveForID[renderTargetID];
     }
 
-    private releaseRenderTargetForID(graph: SceneGraph, renderTargetID: number | undefined): void {
+    private releaseRenderTargetForID(renderTargetID: number | undefined): void {
         if (renderTargetID === undefined)
             return;
 
@@ -345,22 +359,45 @@ export class SceneGraphExecutor {
         }
     }
 
-    private acquireResolveTextureForID(device: GfxDevice, graph: SceneGraph, resolveTextureID: number | undefined): GfxTexture | null {
+    private acquireResolveTextureOutputForID(device: GfxDevice, graph: SceneGraph, srcRenderTargetID: number, resolveTextureID: number | undefined): GfxTexture | null {
         if (resolveTextureID === undefined)
             return null;
 
+        assert(srcRenderTargetID === graph.resolveTextureRenderTargetIDs[resolveTextureID]);
         assert(this.resolveTextureUseCount[resolveTextureID] > 0);
 
+        const renderTarget = assertExists(this.renderTargetAliveForID[srcRenderTargetID]);
+
+        // No need to resolve -- we're already rendering into a texture-backed RT.
+        if (renderTarget.texture !== null)
+            return null;
+
         if (!this.resolveTextureForID[resolveTextureID]) {
-            const associatedRenderTargetID = assertExists(graph.resolveTextureRenderTargetIDs[resolveTextureID]);
-            const desc = assertExists(graph.renderTargetDescriptions[associatedRenderTargetID]);
+            const desc = assertExists(graph.renderTargetDescriptions[srcRenderTargetID]);
             this.resolveTextureForID[resolveTextureID] = this.acquireResolveTextureForDescription(device, desc);
         }
 
         return this.resolveTextureForID[resolveTextureID].texture;
     }
 
-    private releaseResolveTextureForID(graph: SceneGraph, resolveTextureID: number | undefined): void {
+    private acquireResolveTextureInputTextureForID(graph: SceneGraph, resolveTextureID: number): GfxTexture {
+        const renderTargetID = graph.resolveTextureRenderTargetIDs[resolveTextureID];
+
+        // First check the resolve texture pool in case we actually needed to resolve.
+        const resolveTexture = this.resolveTextureForID[resolveTextureID];
+
+        if (resolveTexture) {
+            this.releaseRenderTargetForID(renderTargetID);
+            return resolveTexture.texture;
+        } else {
+            // In this case, we should be rendering to a texture-backed RT.
+            const renderTarget = assertExists(this.renderTargetAliveForID[renderTargetID]);
+            this.releaseRenderTargetForID(renderTargetID);
+            return assertExists(renderTarget.texture);
+        }
+    }
+
+    private releaseResolveTextureInputForID(resolveTextureID: number | undefined): void {
         if (resolveTextureID === undefined)
             return;
 
@@ -370,8 +407,11 @@ export class SceneGraphExecutor {
             // This was the last reference to this resolve texture -- put it back in the dead pool to be reused.
             // Note that we don't remove it from the for-ID pool, because it's still needed in the scope. If
             // we revise this API a bit more, then we can be a bit clearer about this.
-            const resolveTexture = assertExists(this.resolveTextureForID[resolveTextureID]);
-            this.resolveTextureDeadPool.push(resolveTexture);
+            const resolveTexture = this.resolveTextureForID[resolveTextureID];
+
+            // The resolve texture can be missing if we never needed to resolve to begin with.
+            if (resolveTexture)
+                this.resolveTextureDeadPool.push(resolveTexture);
         }
     }
 
@@ -388,8 +428,8 @@ export class SceneGraphExecutor {
         pass.descriptor.depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
         pass.descriptor.stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
 
-        pass.descriptor.colorResolveTo = pass.doPresent ? presentColorTexture : this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.Color0]);
-        pass.descriptor.depthStencilResolveTo = this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.DepthStencil]);
+        pass.descriptor.colorResolveTo = pass.doPresent ? presentColorTexture : this.acquireResolveTextureOutputForID(device, graph, color0RenderTargetID, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.Color0]);
+        pass.descriptor.depthStencilResolveTo = this.acquireResolveTextureOutputForID(device, graph, depthStencilRenderTargetID, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.DepthStencil]);
 
         if (color0RenderTarget !== null)
             color0RenderTarget.needsClear = false;
@@ -424,11 +464,16 @@ export class SceneGraphExecutor {
             pass.viewportH = h;
         }
 
+        for (let i = 0; i < pass.resolveTextureInputIDs.length; i++) {
+            const resolveTextureID = pass.resolveTextureInputIDs[i];
+            pass.resolveTextureInputTextures[i] = this.acquireResolveTextureInputTextureForID(graph, resolveTextureID);
+        }
+
         // Now that we're done with the pass, release our resources back to the pool.
         for (let i = 0; i < pass.renderTargetIDs.length; i++)
-            this.releaseRenderTargetForID(graph, pass.renderTargetIDs[i]);
+            this.releaseRenderTargetForID(pass.renderTargetIDs[i]);
         for (let i = 0; i < pass.resolveTextureInputIDs.length; i++)
-            this.releaseResolveTextureForID(graph, pass.resolveTextureInputIDs[i]);
+            this.releaseResolveTextureInputForID(pass.resolveTextureInputIDs[i]);
     }
 
     private scheduleGraph(device: GfxDevice, graph: SceneGraph, presentColorTexture: GfxTexture | null): void {
@@ -449,7 +494,7 @@ export class SceneGraphExecutor {
 
         // Count.
         for (let i = 0; i < graph.passes.length; i++)
-            this.scheduleAddUseCount(graph.passes[i]);
+            this.scheduleAddUseCount(graph, graph.passes[i]);
 
         // Now hand out resources.
         for (let i = 0; i < graph.passes.length; i++)
@@ -521,8 +566,10 @@ export class SceneGraphExecutor {
 
     //#region SceneGraphPassScope
     public getResolveTextureForID(resolveTextureID: number): GfxTexture {
-        assert(this.currentGraphPass!.resolveTextureInputIDs.includes(resolveTextureID));
-        return this.resolveTextureForID[resolveTextureID].texture;
+        const currentGraphPass = this.currentGraphPass!;
+        const i = currentGraphPass.resolveTextureInputIDs.indexOf(resolveTextureID);
+        assert(i >= 0);
+        return assertExists(currentGraphPass.resolveTextureInputTextures[i]);
     }
     //#endregion
 
