@@ -1,7 +1,7 @@
 
 import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachmentDescriptor, GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
-import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags } from "./GfxPlatformFormat";
+import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize } from "./GfxPlatformFormat";
 
 import { gfxColorEqual, range, assert, assertExists, leftPad, gfxColorCopy, nullify } from './GfxPlatformUtil';
 import { copyMegaState, defaultMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
@@ -758,7 +758,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             throw "whoops";
         }
     }
-    
+
     private translateTextureFormat(fmt: GfxFormat): GLenum {
         if (this.isTextureFormatCompressed(fmt))
             return this.translateTextureInternalFormat(fmt);
@@ -774,16 +774,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             break;
         }
 
+        const isInteger = isFormatSizedInteger(fmt);
+
         const compFlags: FormatCompFlags = getFormatCompFlags(fmt);
         switch (compFlags) {
         case FormatCompFlags.COMP_R:
-            return WebGL2RenderingContext.RED;
+            return isInteger ? WebGL2RenderingContext.RED_INTEGER : WebGL2RenderingContext.RED;
         case FormatCompFlags.COMP_RG:
-            return WebGL2RenderingContext.RG;
+            return isInteger ? WebGL2RenderingContext.RG_INTEGER : WebGL2RenderingContext.RG;
         case FormatCompFlags.COMP_RGB:
-            return WebGL2RenderingContext.RGB;
+            return isInteger ? WebGL2RenderingContext.RGB_INTEGER : WebGL2RenderingContext.RGB;
         case FormatCompFlags.COMP_RGBA:
-            return WebGL2RenderingContext.RGBA;
+            return isInteger ? WebGL2RenderingContext.RGBA_INTEGER : WebGL2RenderingContext.RGBA;
         }
     }
     
@@ -1130,11 +1132,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         return pipeline;
     }
 
-    public createReadback(elemCount: number): GfxReadback {
+    public createReadback(byteCount: number): GfxReadback {
         const gl = this.gl;
         const gl_pbo = this.ensureResourceExists(gl.createBuffer());
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, gl_pbo);
-        gl.bufferData(gl.PIXEL_PACK_BUFFER, elemCount * 0x04, gl.STREAM_READ);
+        gl.bufferData(gl.PIXEL_PACK_BUFFER, byteCount, gl.STREAM_READ);
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
         const readback: GfxReadbackP_GL = { _T: _T.Readback, ResourceUniqueId: this.getNextUniqueId(), gl_pbo, gl_sync: null };
         if (this._resourceCreationTracker !== null)
@@ -1295,7 +1297,12 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const texture = a as GfxTextureP_GL;
         gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture.gl_texture, 0);
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, readback.gl_pbo);
-        gl.readPixels(x, y, 1, 1, gl.RED_INTEGER, gl.UNSIGNED_INT, dstOffset * 0x04);
+
+        const gl_format = this.translateTextureFormat(texture.pixelFormat);
+        const gl_type = this.translateTextureType(texture.pixelFormat);
+        const formatByteSize = getFormatByteSize(texture.pixelFormat);
+
+        gl.readPixels(x, y, 1, 1, gl_format, gl_type, dstOffset * formatByteSize);
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     }
 

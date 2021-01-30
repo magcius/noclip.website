@@ -51,7 +51,7 @@ class PeekZFrame {
     public readback: GfxReadback;
 
     constructor(device: GfxDevice, maxCount: number) {
-        const byteCount = maxCount;
+        const byteCount = maxCount * 0x04;
         this.readback = device.createReadback(byteCount);
     }
 
