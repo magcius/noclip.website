@@ -27,15 +27,15 @@ export const enum GfxrAttachmentSlotSlot {
     Color0, DepthStencil,
 }
 
-export interface GfxrSceneGraphPass {
+export interface GfxrPass {
     setDebugName(debugName: string): void;
     attachRenderTargetID(attachmentSlot: GfxrAttachmentSlotSlot, renderTargetID: number): void;
     attachResolveTexture(resolveTextureID: number): void;
-    exec(func: SceneGraphPassExecFunc): void;
+    exec(func: PassExecFunc): void;
     present(): void;
 }
 
-class SceneGraphPassImpl implements GfxrSceneGraphPass {
+class PassImpl implements GfxrPass {
     // Input state used for scheduling.
 
     // RenderTargetAttachmentSlot => renderTargetID
@@ -66,7 +66,7 @@ class SceneGraphPassImpl implements GfxrSceneGraphPass {
     public viewportH: number = 0;
 
     // Execution callback from user.
-    public func: SceneGraphPassExecFunc | null = null;
+    public func: PassExecFunc | null = null;
 
     // Misc. state.
     public debugName: string;
@@ -84,7 +84,7 @@ class SceneGraphPassImpl implements GfxrSceneGraphPass {
         this.resolveTextureInputIDs.push(resolveTextureID);
     }
 
-    public exec(func: SceneGraphPassExecFunc): void {
+    public exec(func: PassExecFunc): void {
         assert(this.func === null);
         this.func = func;
     }
@@ -94,38 +94,38 @@ class SceneGraphPassImpl implements GfxrSceneGraphPass {
     }
 }
 
-export interface GfxrSceneGraphPassScope {
+export interface GfxrPassScope {
     getResolveTextureForID(id: number): GfxTexture;
 }
 
-type SceneGraphPassSetupFunc = (renderPass: GfxrSceneGraphPass) => void;
-type SceneGraphPassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrSceneGraphPassScope) => void;
+type PassSetupFunc = (renderPass: GfxrPass) => void;
+type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
 
 // TODO(jstpierre): These classes might go away...
 
-class SceneGraph {
+class Graph {
     // Used for determining scheduling.
     public renderTargetDescriptions: GfxrRenderTargetDescription[] = [];
     public resolveTextureRenderTargetIDs: number[] = [];
 
-    public passes: SceneGraphPassImpl[] = [];
+    public passes: PassImpl[] = [];
 }
 
-export class GfxrSceneGraphBuilder {
-    private currentGraph: SceneGraph | null = null;
+export class GfxrGraphBuilder {
+    private currentGraph: Graph | null = null;
 
     public begin() {
-        this.currentGraph = new SceneGraph();
+        this.currentGraph = new Graph();
     }
 
-    public end(): SceneGraph {
+    public end(): Graph {
         const sceneGraph = assertExists(this.currentGraph);
         this.currentGraph = null;
         return sceneGraph;
     }
 
-    public pushPass(setupFunc: SceneGraphPassSetupFunc): void {
-        const pass = new SceneGraphPassImpl();
+    public pushPass(setupFunc: PassSetupFunc): void {
+        const pass = new PassImpl();
         setupFunc(pass);
         this.currentGraph!.passes.push(pass);
     }
@@ -138,7 +138,7 @@ export class GfxrSceneGraphBuilder {
         return this.currentGraph!.resolveTextureRenderTargetIDs.push(renderTargetID) - 1;
     }
 
-    private findLastPassForRenderTarget(renderTargetID: number): SceneGraphPassImpl | null {
+    private findLastPassForRenderTarget(renderTargetID: number): PassImpl | null {
         for (let i = this.currentGraph!.passes.length - 1; i >= 0; i--) {
             const pass = this.currentGraph!.passes[i];
             if (pass.renderTargetIDs.includes(renderTargetID))
@@ -265,10 +265,10 @@ function fillArray<T>(L: T[], n: number, v: T): void {
     L.fill(v);
 }
 
-export class GfxrSceneGraphExecutor {
+export class GfxrGraphExecutor {
     // For debugging and scope callbacks.
-    private currentGraph: SceneGraph | null = null;
-    private currentGraphPass: SceneGraphPassImpl | null = null;
+    private currentGraph: Graph | null = null;
+    private currentPass: PassImpl | null = null;
 
     //#region Resource Creation & Caching
     private renderTargetDeadPool: RenderTarget[] = [];
@@ -312,7 +312,7 @@ export class GfxrSceneGraphExecutor {
     private renderTargetAliveForID: RenderTarget[] = [];
     private singleSampledTextureForResolveTextureID: SingleSampledTexture[] = [];
 
-    private scheduleAddUseCount(graph: SceneGraph, pass: SceneGraphPassImpl): void {
+    private scheduleAddUseCount(graph: Graph, pass: PassImpl): void {
         for (let i = 0; i < pass.renderTargetIDs.length; i++) {
             const renderTargetID = pass.renderTargetIDs[i];
             if (renderTargetID === undefined)
@@ -333,7 +333,7 @@ export class GfxrSceneGraphExecutor {
         }
     }
 
-    private acquireRenderTargetForID(device: GfxDevice, graph: SceneGraph, renderTargetID: number | undefined): RenderTarget | null {
+    private acquireRenderTargetForID(device: GfxDevice, graph: Graph, renderTargetID: number | undefined): RenderTarget | null {
         if (renderTargetID === undefined)
             return null;
 
@@ -366,7 +366,7 @@ export class GfxrSceneGraphExecutor {
         return renderTarget;
     }
 
-    private acquireResolveTextureOutputForID(device: GfxDevice, graph: SceneGraph, srcRenderTargetID: number, resolveTextureID: number | undefined): GfxTexture | null {
+    private acquireResolveTextureOutputForID(device: GfxDevice, graph: Graph, srcRenderTargetID: number, resolveTextureID: number | undefined): GfxTexture | null {
         if (resolveTextureID === undefined)
             return null;
 
@@ -387,7 +387,7 @@ export class GfxrSceneGraphExecutor {
         return this.singleSampledTextureForResolveTextureID[resolveTextureID].texture;
     }
 
-    private acquireResolveTextureInputTextureForID(graph: SceneGraph, resolveTextureID: number): GfxTexture {
+    private acquireResolveTextureInputTextureForID(graph: Graph, resolveTextureID: number): GfxTexture {
         const renderTargetID = graph.resolveTextureRenderTargetIDs[resolveTextureID];
 
         assert(this.resolveTextureUseCount[resolveTextureID] > 0);
@@ -417,7 +417,7 @@ export class GfxrSceneGraphExecutor {
         }
     }
 
-    private schedulePass(device: GfxDevice, graph: SceneGraph, pass: SceneGraphPassImpl, presentColorTexture: GfxTexture | null) {
+    private schedulePass(device: GfxDevice, graph: Graph, pass: PassImpl, presentColorTexture: GfxTexture | null) {
         const color0RenderTargetID = pass.renderTargetIDs[GfxrAttachmentSlotSlot.Color0];
         const depthStencilRenderTargetID = pass.renderTargetIDs[GfxrAttachmentSlotSlot.DepthStencil];
 
@@ -476,7 +476,7 @@ export class GfxrSceneGraphExecutor {
             this.releaseRenderTargetForID(pass.renderTargetIDs[i]);
     }
 
-    private scheduleGraph(device: GfxDevice, graph: SceneGraph, presentColorTexture: GfxTexture | null): void {
+    private scheduleGraph(device: GfxDevice, graph: Graph, presentColorTexture: GfxTexture | null): void {
         assert(this.renderTargetUseCount.length === 0);
         assert(this.resolveTextureUseCount.length === 0);
 
@@ -532,9 +532,9 @@ export class GfxrSceneGraphExecutor {
     //#endregion
 
     //#region Execution
-    private execPass(device: GfxDevice, pass: SceneGraphPassImpl): void {
-        assert(this.currentGraphPass === null);
-        this.currentGraphPass = pass;
+    private execPass(device: GfxDevice, pass: PassImpl): void {
+        assert(this.currentPass === null);
+        this.currentPass = pass;
 
         const renderPass = device.createRenderPass(pass.descriptor);
 
@@ -544,10 +544,10 @@ export class GfxrSceneGraphExecutor {
             pass.func(renderPass, this);
 
         device.submitPass(renderPass);
-        this.currentGraphPass = null;
+        this.currentPass = null;
     }
 
-    public execGraph(device: GfxDevice, graph: SceneGraph, presentColorTexture: GfxTexture | null = null): void {
+    public execGraph(device: GfxDevice, graph: Graph, presentColorTexture: GfxTexture | null = null): void {
         // Schedule our graph.
         this.scheduleGraph(device, graph, presentColorTexture);
 
@@ -566,7 +566,7 @@ export class GfxrSceneGraphExecutor {
 
     //#region SceneGraphPassScope
     public getResolveTextureForID(resolveTextureID: number): GfxTexture {
-        const currentGraphPass = this.currentGraphPass!;
+        const currentGraphPass = this.currentPass!;
         const i = currentGraphPass.resolveTextureInputIDs.indexOf(resolveTextureID);
         assert(i >= 0);
         return assertExists(currentGraphPass.resolveTextureInputTextures[i]);

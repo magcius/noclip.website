@@ -19,7 +19,7 @@ import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
-import { GfxrAttachmentSlotSlot, GfxrRenderTargetDescription, GfxrSceneGraphBuilder } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlotSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
 
 const scratchVec3 = vec3.create();
 
@@ -277,7 +277,7 @@ export class BloomPostFXRenderer {
         return true;
     }
 
-    public pushBloomPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrSceneGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number, viewerInput: ViewerRenderInput): void {
+    public pushBloomPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number, viewerInput: ViewerRenderInput): void {
         // Downsample.
         const targetWidth = viewerInput.backbufferWidth >> 2;
         const targetHeight = viewerInput.backbufferHeight >> 2;

@@ -50,7 +50,7 @@ import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
-import { GfxrRenderTargetDescription, GfxrSceneGraphBuilder, GfxrSceneGraphExecutor, GfxrAttachmentSlotSlot } from '../gfx/render/GfxRenderGraph';
+import { GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrGraphExecutor, GfxrAttachmentSlotSlot } from '../gfx/render/GfxRenderGraph';
 import { TransparentBlack } from '../Color';
 
 // Galaxy ticks at 60fps.
@@ -282,7 +282,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.executeOnPass(passRenderer, createFilterKeyForDrawType(drawType));
     }
 
-    private sceneGraphExecutor = new GfxrSceneGraphExecutor();
+    private sceneGraphExecutor = new GfxrGraphExecutor();
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
         this.sceneObjHolder.viewerInput = viewerInput;
 
@@ -345,7 +345,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
         */
 
-        const sceneGraphBuilder = new GfxrSceneGraphBuilder();
+        const sceneGraphBuilder = new GfxrGraphBuilder();
         sceneGraphBuilder.begin();
 
         const mainColorDesc = new GfxrRenderTargetDescription('Main Color', GfxFormat.U8_RGBA_RT);
