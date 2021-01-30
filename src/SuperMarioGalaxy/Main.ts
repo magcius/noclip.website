@@ -13,7 +13,7 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { BasicRenderTarget, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
@@ -50,7 +50,7 @@ import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
-import { GfxrRenderTargetDescription, GfxrGraphBuilder, GfxrGraphExecutor, GfxrAttachmentSlotSlot } from '../gfx/render/GfxRenderGraph';
+import { GfxrRenderTargetDescription, GfxrRenderGraph, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { TransparentBlack } from '../Color';
 
 // Galaxy ticks at 60fps.
@@ -282,7 +282,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.executeOnPass(passRenderer, createFilterKeyForDrawType(drawType));
     }
 
-    private sceneGraphExecutor = new GfxrGraphExecutor();
+    private sceneGraphExecutor = new GfxrRenderGraph();
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
         this.sceneObjHolder.viewerInput = viewerInput;
 
@@ -337,15 +337,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
         renderInstManager.popTemplateRenderInst();
 
-        // TODO(jstpierre): Make this generic to ImageEffectDirector.
-        /*
-        let bloomParameterBufferOffs = -1;
-        if (this.sceneObjHolder.imageEffectSystemHolder !== null && this.sceneObjHolder.imageEffectSystemHolder.imageEffectDirector.isOnNormalBloom(this.sceneObjHolder) && this.bloomRenderer.pipelinesReady(device)) {
-            bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(this.renderHelper.uniformBuffer, this.sceneObjHolder.bloomEffect!);
-        }
-        */
-
-        const sceneGraphBuilder = new GfxrGraphBuilder();
+        const sceneGraphBuilder = this.sceneGraphExecutor.getGraphBuilder();
         sceneGraphBuilder.begin();
 
         const mainColorDesc = new GfxrRenderTargetDescription('Main Color', GfxFormat.U8_RGBA_RT);
@@ -361,9 +353,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         sceneGraphBuilder.pushPass((pass) => {
             pass.setDebugName('Skybox');
 
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             const skyboxDepthTargetID = sceneGraphBuilder.createRenderTargetID(mainDepthDesc);
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.DepthStencil, skyboxDepthTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
                 this.drawOpa(passRenderer, DrawBufferType.AstroDomeSky);
                 this.drawXlu(passRenderer, DrawBufferType.AstroDomeSky);
@@ -383,8 +375,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         sceneGraphBuilder.pushPass((pass) => {
             pass.setDebugName('Opaque before Shadow');
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.DepthStencil, mainDepthTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                 this.drawOpa(passRenderer, DrawBufferType.Crystal);
                 this.drawXlu(passRenderer, DrawBufferType.Crystal);
@@ -410,8 +402,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.setDebugName('Main Opaque');
             const shadowColorTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(mainColorTargetID);
             pass.attachResolveTexture(shadowColorTextureID);
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.DepthStencil, mainDepthTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer, scope) => {
                 const shadowTexture = scope.getResolveTextureForID(shadowColorTextureID);
                 this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, shadowTexture);
@@ -482,8 +474,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.setDebugName('Indirect');
             const indirectOpaqueColorTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(mainColorTargetID);
             pass.attachResolveTexture(indirectOpaqueColorTextureID);
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.DepthStencil, mainDepthTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer, scope) => {
                 const opaqueTexture = scope.getResolveTextureForID(indirectOpaqueColorTextureID);
                 this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, opaqueTexture);
@@ -517,8 +509,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.setDebugName('Water Filter');
             const waterFilterOpaqueColorTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(mainColorTargetID);
             pass.attachResolveTexture(waterFilterOpaqueColorTextureID);
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.DepthStencil, mainDepthTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer, scope) => {
                 const opaqueTexture = scope.getResolveTextureForID(waterFilterOpaqueColorTextureID);
                 this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, opaqueTexture);
@@ -541,8 +533,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
                 sceneGraphBuilder.pushPass((pass) => {
                     pass.setDebugName('Bloom Objects');
-                    pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, bloomObjectsTargetID);
-                    pass.attachRenderTargetID(GfxrAttachmentSlotSlot.DepthStencil, mainDepthTargetID);
+                    pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, bloomObjectsTargetID);
+                    pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
                     pass.exec((passRenderer) => {
                         this.drawOpa(passRenderer, DrawBufferType.BloomModel);
                         this.drawXlu(passRenderer, DrawBufferType.BloomModel);
@@ -558,8 +550,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         sceneGraphBuilder.pushPass((pass) => {
             pass.setDebugName('After Image Effect');
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.DepthStencil, mainDepthTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
                     this.execute(passRenderer, DrawType.EffectDrawAfterImageEffect);
                 this.execute(passRenderer, DrawType.GravityExplainer);

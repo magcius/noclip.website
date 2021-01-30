@@ -19,7 +19,7 @@ import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
-import { GfxrAttachmentSlotSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
 
 const scratchVec3 = vec3.create();
 
@@ -300,7 +300,7 @@ export class BloomPostFXRenderer {
         // Downsample and threshold.
         sceneGraphBuilder.pushPass((pass) => {
             pass.setDebugName('Bloom Downsample');
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, downsampleColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
 
             const bloomObjectsResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(bloomObjectsTargetID);
             pass.attachResolveTexture(bloomObjectsResolveTextureID);
@@ -316,7 +316,7 @@ export class BloomPostFXRenderer {
         // Blur L1.
         sceneGraphBuilder.pushPass((pass) => {
             pass.setDebugName('Bloom Blur L1');
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, blurL1ColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurL1ColorTargetID);
 
             const bloomDownsampleResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(downsampleColorTargetID);
             pass.attachResolveTexture(bloomDownsampleResolveTextureID);
@@ -334,7 +334,7 @@ export class BloomPostFXRenderer {
         // Blur L2.
         sceneGraphBuilder.pushPass((pass) => {
             pass.setDebugName('Bloom Blur L2');
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, blurL2ColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurL2ColorTargetID);
 
             const bloomBlurL1ResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(blurL1ColorTargetID);
             pass.attachResolveTexture(bloomBlurL1ResolveTextureID);
@@ -349,7 +349,7 @@ export class BloomPostFXRenderer {
 
         sceneGraphBuilder.pushPass((pass) => {
             pass.setDebugName('Bloom Combine');
-            pass.attachRenderTargetID(GfxrAttachmentSlotSlot.Color0, resultBlendTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, resultBlendTargetID);
 
             const bloomBlurL2ResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(blurL2ColorTargetID);
             pass.attachResolveTexture(bloomBlurL2ResolveTextureID);
