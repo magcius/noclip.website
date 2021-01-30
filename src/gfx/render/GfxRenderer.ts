@@ -218,6 +218,7 @@ export class GfxRenderInst {
         this.filterKey = 0;
         this._renderPipeline = null;
         this._flags = 0;
+        this._inputState = null;
     }
 
     /**
