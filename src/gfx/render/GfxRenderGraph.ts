@@ -1,10 +1,10 @@
 
-import { Color } from "../Color";
-import { DEFAULT_NUM_SAMPLES, IdentityViewportCoords } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxAttachment, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension } from "../gfx/platform/GfxPlatform";
-import { assert, assertExists } from "../util";
+import { Color } from "../../Color";
+import { DEFAULT_NUM_SAMPLES, IdentityViewportCoords } from "../helpers/RenderTargetHelpers";
+import { GfxAttachment, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension } from "../platform/GfxPlatform";
+import { assert, assertExists } from "../../util";
 
-export class RenderTargetDescription {
+export class GfxrRenderTargetDescription {
     public width: number = 0;
     public height: number = 0;
     public numSamples: number = 0;
@@ -23,19 +23,19 @@ export class RenderTargetDescription {
     }
 }
 
-export const enum RenderTargetAttachmentSlot {
+export const enum GfxrAttachmentSlotSlot {
     Color0, DepthStencil,
 }
 
-interface SceneGraphPass {
+export interface GfxrSceneGraphPass {
     setDebugName(debugName: string): void;
-    attachRenderTargetID(attachmentSlot: RenderTargetAttachmentSlot, renderTargetID: number): void;
+    attachRenderTargetID(attachmentSlot: GfxrAttachmentSlotSlot, renderTargetID: number): void;
     attachResolveTexture(resolveTextureID: number): void;
     exec(func: SceneGraphPassExecFunc): void;
     present(): void;
 }
 
-class SceneGraphPassImpl implements SceneGraphPass {
+class SceneGraphPassImpl implements GfxrSceneGraphPass {
     // Input state used for scheduling.
 
     // RenderTargetAttachmentSlot => renderTargetID
@@ -75,7 +75,7 @@ class SceneGraphPassImpl implements SceneGraphPass {
         this.debugName = debugName;
     }
 
-    public attachRenderTargetID(attachmentSlot: RenderTargetAttachmentSlot, renderTargetID: number): void {
+    public attachRenderTargetID(attachmentSlot: GfxrAttachmentSlotSlot, renderTargetID: number): void {
         assert(this.renderTargetIDs[attachmentSlot] === undefined);
         this.renderTargetIDs[attachmentSlot] = renderTargetID;
     }
@@ -94,22 +94,24 @@ class SceneGraphPassImpl implements SceneGraphPass {
     }
 }
 
-interface SceneGraphPassScope {
+export interface GfxrSceneGraphPassScope {
     getResolveTextureForID(id: number): GfxTexture;
 }
 
-type SceneGraphPassSetupFunc = (renderPass: SceneGraphPass) => void;
-type SceneGraphPassExecFunc = (passRenderer: GfxRenderPass, scope: SceneGraphPassScope) => void;
+type SceneGraphPassSetupFunc = (renderPass: GfxrSceneGraphPass) => void;
+type SceneGraphPassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrSceneGraphPassScope) => void;
+
+// TODO(jstpierre): These classes might go away...
 
 class SceneGraph {
     // Used for determining scheduling.
-    public renderTargetDescriptions: RenderTargetDescription[] = [];
+    public renderTargetDescriptions: GfxrRenderTargetDescription[] = [];
     public resolveTextureRenderTargetIDs: number[] = [];
 
     public passes: SceneGraphPassImpl[] = [];
 }
 
-export class SceneGraphBuilder {
+export class GfxrSceneGraphBuilder {
     private currentGraph: SceneGraph | null = null;
 
     public begin() {
@@ -128,7 +130,7 @@ export class SceneGraphBuilder {
         this.currentGraph!.passes.push(pass);
     }
 
-    public createRenderTargetID(desc: RenderTargetDescription): number {
+    public createRenderTargetID(desc: GfxrRenderTargetDescription): number {
         return this.currentGraph!.renderTargetDescriptions.push(desc) - 1;
     }
 
@@ -157,7 +159,7 @@ export class SceneGraphBuilder {
         // If there was no pass that wrote to this RT, well there's no point in resolving it, is there?
         const renderPass = assertExists(this.findLastPassForRenderTarget(renderTargetID));
 
-        const attachmentSlot: RenderTargetAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
+        const attachmentSlot: GfxrAttachmentSlotSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
         renderPass.resolveTextureOutputIDs[attachmentSlot] = resolveTextureID;
 
         return resolveTextureID;
@@ -180,7 +182,7 @@ class SingleSampledTexture {
     public texture: GfxTexture;
     public age: number = 0;
 
-    constructor(device: GfxDevice, desc: Readonly<RenderTargetDescription>) {
+    constructor(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>) {
         this.debugName = desc.debugName;
 
         this.pixelFormat = desc.pixelFormat;
@@ -190,11 +192,11 @@ class SingleSampledTexture {
         this.texture = device.createTexture(this);
     }
 
-    public matchesDescription(desc: Readonly<RenderTargetDescription>): boolean {
+    public matchesDescription(desc: Readonly<GfxrRenderTargetDescription>): boolean {
         return this.pixelFormat === desc.pixelFormat && this.width === desc.width && this.height === desc.height;
     }
 
-    public reset(desc: Readonly<RenderTargetDescription>): void {
+    public reset(desc: Readonly<GfxrRenderTargetDescription>): void {
         assert(this.matchesDescription(desc));
         this.age = 0;
         this.debugName = desc.debugName;
@@ -222,7 +224,7 @@ class RenderTarget {
     public attachment: GfxAttachment;
     public age: number = 0;
 
-    constructor(device: GfxDevice, desc: Readonly<RenderTargetDescription>) {
+    constructor(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>) {
         this.debugName = desc.debugName;
         this.pixelFormat = desc.pixelFormat;
         this.width = desc.width;
@@ -241,11 +243,11 @@ class RenderTarget {
         }
     }
 
-    public matchesDescription(desc: Readonly<RenderTargetDescription>): boolean {
+    public matchesDescription(desc: Readonly<GfxrRenderTargetDescription>): boolean {
         return this.pixelFormat === desc.pixelFormat && this.width === desc.width && this.height === desc.height && this.numSamples === desc.numSamples;
     }
 
-    public reset(desc: Readonly<RenderTargetDescription>): void {
+    public reset(desc: Readonly<GfxrRenderTargetDescription>): void {
         assert(this.matchesDescription(desc));
         this.age = 0;
         this.debugName = desc.debugName;
@@ -263,7 +265,7 @@ function fillArray<T>(L: T[], n: number, v: T): void {
     L.fill(v);
 }
 
-export class SceneGraphExecutor {
+export class GfxrSceneGraphExecutor {
     // For debugging and scope callbacks.
     private currentGraph: SceneGraph | null = null;
     private currentGraphPass: SceneGraphPassImpl | null = null;
@@ -272,7 +274,7 @@ export class SceneGraphExecutor {
     private renderTargetDeadPool: RenderTarget[] = [];
     private singleSampledTextureDeadPool: SingleSampledTexture[] = [];
 
-    private acquireRenderTargetForDescription(device: GfxDevice, desc: Readonly<RenderTargetDescription>): RenderTarget {
+    private acquireRenderTargetForDescription(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>): RenderTarget {
         for (let i = 0; i < this.renderTargetDeadPool.length; i++) {
             const freeRenderTarget = this.renderTargetDeadPool[i];
             if (freeRenderTarget.matchesDescription(desc)) {
@@ -287,7 +289,7 @@ export class SceneGraphExecutor {
         return new RenderTarget(device, desc);
     }
 
-    private acquireSingleSampledTextureForDescription(device: GfxDevice, desc: Readonly<RenderTargetDescription>): SingleSampledTexture {
+    private acquireSingleSampledTextureForDescription(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>): SingleSampledTexture {
         for (let i = 0; i < this.singleSampledTextureDeadPool.length; i++) {
             const freeSingleSampledTexture = this.singleSampledTextureDeadPool[i];
             if (freeSingleSampledTexture.matchesDescription(desc)) {
@@ -416,8 +418,8 @@ export class SceneGraphExecutor {
     }
 
     private schedulePass(device: GfxDevice, graph: SceneGraph, pass: SceneGraphPassImpl, presentColorTexture: GfxTexture | null) {
-        const color0RenderTargetID = pass.renderTargetIDs[RenderTargetAttachmentSlot.Color0];
-        const depthStencilRenderTargetID = pass.renderTargetIDs[RenderTargetAttachmentSlot.DepthStencil];
+        const color0RenderTargetID = pass.renderTargetIDs[GfxrAttachmentSlotSlot.Color0];
+        const depthStencilRenderTargetID = pass.renderTargetIDs[GfxrAttachmentSlotSlot.DepthStencil];
 
         const color0RenderTarget = this.acquireRenderTargetForID(device, graph, color0RenderTargetID);
         pass.descriptor.colorAttachment = color0RenderTarget !== null ? color0RenderTarget.attachment : null;
@@ -428,8 +430,8 @@ export class SceneGraphExecutor {
         pass.descriptor.depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
         pass.descriptor.stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
 
-        pass.descriptor.colorResolveTo = pass.doPresent ? presentColorTexture : this.acquireResolveTextureOutputForID(device, graph, color0RenderTargetID, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.Color0]);
-        pass.descriptor.depthStencilResolveTo = this.acquireResolveTextureOutputForID(device, graph, depthStencilRenderTargetID, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.DepthStencil]);
+        pass.descriptor.colorResolveTo = pass.doPresent ? presentColorTexture : this.acquireResolveTextureOutputForID(device, graph, color0RenderTargetID, pass.resolveTextureOutputIDs[GfxrAttachmentSlotSlot.Color0]);
+        pass.descriptor.depthStencilResolveTo = this.acquireResolveTextureOutputForID(device, graph, depthStencilRenderTargetID, pass.resolveTextureOutputIDs[GfxrAttachmentSlotSlot.DepthStencil]);
 
         if (color0RenderTarget !== null)
             color0RenderTarget.needsClear = false;
