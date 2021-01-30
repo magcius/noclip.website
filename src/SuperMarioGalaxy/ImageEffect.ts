@@ -6,21 +6,20 @@ import { vec3 } from "gl-matrix";
 import { AreaObj, AreaObjMgr, AreaFormType } from "./AreaObj";
 import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3 } from "./JMapInfo";
 import { ZoneAndLayer } from "./LiveActor";
-import { fallback } from "../util";
+import { assertExists, fallback } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
 import { GfxRenderPassDescriptor, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxTexture, GfxNormalizedViewportCoords, GfxFormat } from "../gfx/platform/GfxPlatform";
-import { TransparentBlack } from "../Color";
-import { copyRenderPassDescriptor, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, Attachment, ColorTexture, BasicRenderTarget, noClearRenderPassDescriptor, setViewportOnRenderPass, IdentityViewportCoords, setScissorOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
+import { copyRenderPassDescriptor, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, Attachment, setViewportOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
-import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
+import { RenderTargetAttachmentSlot, RenderTargetDescription, SceneGraphBuilder } from "./SceneGraph2";
 
 const scratchVec3 = vec3.create();
 
@@ -228,14 +227,8 @@ export class BloomPostFXRenderer {
 
     private bloomSampler: GfxSampler;
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
-    private bloomObjectsTexture = new ColorTexture();
-    private bloomObjectsTarget: WeirdFancyRenderTarget;
-    private scratch1ColorTarget = new PostFXRenderTarget();
-    private scratch1ColorTexture = new ColorTexture();
-    private scratch2ColorTarget = new PostFXRenderTarget();
-    private scratch2ColorTexture = new ColorTexture();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, mainRenderTarget: BasicRenderTarget) {
+    constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.bloomSampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
@@ -247,8 +240,6 @@ export class BloomPostFXRenderer {
         });
         this.textureMapping[0].gfxSampler = this.bloomSampler;
 
-        this.bloomObjectsTarget = new WeirdFancyRenderTarget(mainRenderTarget.depthStencilAttachment);
-
         this.thresholdPipeline = makeFullscreenPipeline(device, cache, new BloomPassThresholdPipeline());
         this.blur1Pipeline = makeFullscreenPipeline(device, cache, new BloomPassBlur1Program());
         this.blur2Pipeline = makeFullscreenPipeline(device, cache, new BloomPassBlur2Program());
@@ -259,9 +250,9 @@ export class BloomPostFXRenderer {
         }), fullscreenMegaState));
     }
 
-    public allocateParameterBuffer(uniformBuffer: GfxRenderDynamicUniformBuffer, bloomEffect: BloomEffect): number {
-        const parameterBufferOffs = uniformBuffer.allocateChunk(4);
-        const d = uniformBuffer.mapBufferF32();
+    private allocateParameterBuffer(renderInst: GfxRenderInst, bloomEffect: BloomEffect): number {
+        const parameterBufferOffs = renderInst.allocateUniformBuffer(0, 4);
+        const d = renderInst.mapUniformBufferF32(0);
 
         const bloomIntensity = (bloomEffect.bloomIntensity * bloomEffect.strength) / 0xFF;
         const threshold = bloomEffect.threshold / 0xFF;
@@ -286,84 +277,90 @@ export class BloomPostFXRenderer {
         return true;
     }
 
-    public renderBeginObjects(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
-        assert(this.pipelinesReady(device));
-
-        this.bloomObjectsTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.bloomObjectsTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        return this.bloomObjectsTarget.createRenderPass(device, viewerInput.viewport, bloomClearRenderPassDescriptor, this.bloomObjectsTexture.gfxTexture);
-    }
-
-    public renderEndObjects(device: GfxDevice, objectsPassRenderer: GfxRenderPass, renderInstManager: GfxRenderInstManager, mainRenderTarget: BasicRenderTarget, viewerInput: ViewerRenderInput, template: GfxRenderInst, parameterBufferOffs: number): GfxRenderPass {
-        device.submitPass(objectsPassRenderer);
-
+    public pushBloomPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: SceneGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number, viewerInput: ViewerRenderInput): void {
         // Downsample.
         const targetWidth = viewerInput.backbufferWidth >> 2;
         const targetHeight = viewerInput.backbufferHeight >> 2;
 
-        const downsampleColorTarget = this.scratch1ColorTarget;
-        const downsampleColorTexture = this.scratch1ColorTexture;
-        downsampleColorTarget.setParameters(device, targetWidth, targetHeight, 1);
-        downsampleColorTexture.setParameters(device, targetWidth, targetHeight);
+        const targetColorDesc = new RenderTargetDescription('Bloom Downsample', GfxFormat.U8_RGBA_RT);
+        targetColorDesc.setParameters(targetWidth, targetHeight, 1);
+
+        const downsampleColorTargetID = sceneGraphBuilder.createRenderTargetID(targetColorDesc);
+        const blurL1ColorTargetID = sceneGraphBuilder.createRenderTargetID(targetColorDesc);
+        const blurL2ColorTargetID = sceneGraphBuilder.createRenderTargetID(targetColorDesc);
 
         const renderInst = renderInstManager.newRenderInst();
-        renderInst.setFromTemplate(template);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
-        renderInst.setUniformBufferOffset(0, parameterBufferOffs, 4);
+        this.allocateParameterBuffer(renderInst, assertExists(sceneObjHolder.bloomEffect));
         renderInst.drawPrimitives(3);
 
+        const device = sceneObjHolder.modelCache.device;
+
         // Downsample and threshold.
-        const downsamplePassRenderer = downsampleColorTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor, downsampleColorTexture.gfxTexture);
-        renderInst.setGfxRenderPipeline(this.thresholdPipeline);
-        this.textureMapping[0].gfxTexture = this.bloomObjectsTexture.gfxTexture!;
-        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, downsamplePassRenderer);
-        device.submitPass(downsamplePassRenderer);
+        sceneGraphBuilder.pushPass((pass) => {
+            pass.setDebugName('Bloom Downsample');
+            pass.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, downsampleColorTargetID);
+
+            const bloomObjectsResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(bloomObjectsTargetID);
+            pass.attachResolveTexture(bloomObjectsResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxRenderPipeline(this.thresholdPipeline);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomObjectsResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
 
         // Blur L1.
-        const blur1ColorTarget = this.scratch2ColorTarget;
-        const blur1ColorTexture = this.scratch2ColorTexture;
-        blur1ColorTarget.setParameters(device, targetWidth, targetHeight, 1);
-        blur1ColorTexture.setParameters(device, targetWidth, targetHeight);
-        const blur1PassRenderer = blur1ColorTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor, blur1ColorTexture.gfxTexture);
-        renderInst.setGfxRenderPipeline(this.blur1Pipeline);
-        this.textureMapping[0].gfxTexture = downsampleColorTexture.gfxTexture!;
-        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, blur1PassRenderer);
-        device.submitPass(blur1PassRenderer);
+        sceneGraphBuilder.pushPass((pass) => {
+            pass.setDebugName('Bloom Blur L1');
+            pass.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, blurL1ColorTargetID);
+
+            const bloomDownsampleResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(downsampleColorTargetID);
+            pass.attachResolveTexture(bloomDownsampleResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxRenderPipeline(this.blur1Pipeline);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomDownsampleResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
 
         // TODO(jstpierre): Downsample blur / bokeh as well.
 
         // Blur L2.
-        // We can ditch the second render target now, so just reuse it.
-        const blur2ColorTarget = this.scratch1ColorTarget;
-        const blur2ColorTexture = this.scratch1ColorTexture;
-        const blur2PassRenderer = blur2ColorTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor, blur2ColorTexture.gfxTexture);
-        renderInst.setGfxRenderPipeline(this.blur2Pipeline);
-        this.textureMapping[0].gfxTexture = blur1ColorTexture.gfxTexture!;
-        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, blur2PassRenderer);
-        device.submitPass(blur2PassRenderer);
+        sceneGraphBuilder.pushPass((pass) => {
+            pass.setDebugName('Bloom Blur L2');
+            pass.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, blurL2ColorTargetID);
 
-        // Combine.
-        const combinePassRenderer = mainRenderTarget.createRenderPass(device, IdentityViewportCoords, noClearRenderPassDescriptor);
-        setScissorOnRenderPass(combinePassRenderer, viewerInput.viewport, mainRenderTarget.colorAttachment);
-        renderInst.setGfxRenderPipeline(this.combinePipeline);
-        this.textureMapping[0].gfxTexture = blur2ColorTexture.gfxTexture!;
-        renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-        renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, combinePassRenderer);
+            const bloomBlurL1ResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(blurL1ColorTargetID);
+            pass.attachResolveTexture(bloomBlurL1ResolveTextureID);
 
-        return combinePassRenderer;
-    }
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxRenderPipeline(this.blur2Pipeline);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomBlurL1ResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
 
-    public destroy(device: GfxDevice): void {
-        this.bloomObjectsTexture.destroy(device);
-        this.bloomObjectsTarget.destroy(device);
-        this.scratch1ColorTarget.destroy(device);
-        this.scratch1ColorTexture.destroy(device);
-        this.scratch2ColorTarget.destroy(device);
-        this.scratch2ColorTexture.destroy(device);
+        sceneGraphBuilder.pushPass((pass) => {
+            pass.setDebugName('Bloom Combine');
+            pass.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, resultBlendTargetID);
+
+            const bloomBlurL2ResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(blurL2ColorTargetID);
+            pass.attachResolveTexture(bloomBlurL2ResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxRenderPipeline(this.combinePipeline);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomBlurL2ResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
     }
 }
 

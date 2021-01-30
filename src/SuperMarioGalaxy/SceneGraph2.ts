@@ -9,7 +9,7 @@ export class RenderTargetDescription {
     public height: number = 0;
     public numSamples: number = 0;
 
-    public colorClearColor: Color | 'load' = 'load';
+    public colorClearColor: Readonly<Color> | 'load' = 'load';
     public depthClearValue: number | 'load' = 'load';
     public stencilClearValue: number | 'load' = 'load';
 
