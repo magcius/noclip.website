@@ -50,7 +50,7 @@ import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
-import { RenderTargetDescription, SceneGraphBuilder, SceneGraphExecutor, RenderTargetAttachmentSlot } from './SceneGraph2';
+import { RenderTargetDescription, SceneGraphBuilder, SceneGraphExecutor, RenderTargetAttachmentSlot } from './SceneGraph';
 import { TransparentBlack } from '../Color';
 
 // Galaxy ticks at 60fps.

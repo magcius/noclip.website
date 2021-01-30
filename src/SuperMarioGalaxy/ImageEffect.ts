@@ -19,7 +19,7 @@ import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
-import { RenderTargetAttachmentSlot, RenderTargetDescription, SceneGraphBuilder } from "./SceneGraph2";
+import { RenderTargetAttachmentSlot, RenderTargetDescription, SceneGraphBuilder } from "./SceneGraph";
 
 const scratchVec3 = vec3.create();
 
