@@ -1,6 +1,6 @@
 
 import { GfxDevice, GfxFormat, GfxRenderPass, GfxSamplerBinding, GfxPrimitiveTopology, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
-import { GfxReadback, GfxAttachment, GfxBindings, GfxRenderPipeline, GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
+import { GfxReadback, GfxAttachment, GfxBindings, GfxRenderPipeline, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { ColorTexture, makeEmptyRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -218,6 +218,22 @@ void main() {
         return frame;
     }
 
+    private submitFramePost(device: GfxDevice, frame: PeekZFrame, depthColorTexture: GfxTexture, width: number, height: number): void {
+        // Now go through and start submitting readbacks on our texture.
+        for (let i = 0; i < frame.entries.length; i++) {
+            const entry = frame.entries[i];
+
+            // User specifies coordinates in -1 to 1 normalized space. Convert to attachment space.
+            entry.attachmentX = (((entry.normalizedX * 0.5) + 0.5) * width + 0.5) | 0;
+            entry.attachmentY = (((entry.normalizedY * 0.5) + 0.5) * height + 0.5) | 0;
+
+            device.readPixelFromTexture(frame.readback, i, depthColorTexture, entry.attachmentX, entry.attachmentY);
+        }
+
+        device.submitReadback(frame.readback);
+        this.submittedFrames.push(frame);
+    }
+
     public submitFrame(device: GfxDevice, depthStencilAttachment: GfxAttachment): void {
         const frame = this.stealCurrentFrameAndCheck(device);
         if (frame === null)
@@ -261,19 +277,7 @@ void main() {
         renderPass.draw(3, 0);
         device.submitPass(renderPass);
 
-        // Now go through and start submitting readbacks on our texture.
-        for (let i = 0; i < frame.entries.length; i++) {
-            const entry = frame.entries[i];
-
-            // User specifies coordinates in -1 to 1 normalized space. Convert to attachment space.
-            entry.attachmentX = (((entry.normalizedX * 0.5) + 0.5) * this.colorAttachment.colorTexture.width + 0.5) | 0;
-            entry.attachmentY = (((entry.normalizedY * 0.5) + 0.5) * this.colorAttachment.colorTexture.height + 0.5) | 0;
-
-            device.readPixelFromTexture(frame.readback, i, this.colorAttachment.colorTexture.gfxTexture!, entry.attachmentX, entry.attachmentY);
-        }
-
-        device.submitReadback(frame.readback);
-        this.submittedFrames.push(frame);
+        this.submitFramePost(device, frame, this.colorAttachment.colorTexture.gfxTexture!, this.colorAttachment.colorTexture.width, this.colorAttachment.colorTexture.height);
     }
 
     public pushPasses(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, width: number, height: number, depthTargetID: number): void {
@@ -306,20 +310,7 @@ void main() {
 
             pass.post((scope) => {
                 const colorTexture = assertExists(scope.getRenderTargetTexture(GfxrAttachmentSlot.Color0));
-
-                // Now go through and start submitting readbacks on our texture.
-                for (let i = 0; i < frame.entries.length; i++) {
-                    const entry = frame.entries[i];
-
-                    // User specifies coordinates in -1 to 1 normalized space. Convert to attachment space.
-                    entry.attachmentX = (((entry.normalizedX * 0.5) + 0.5) * width + 0.5) | 0;
-                    entry.attachmentY = (((entry.normalizedY * 0.5) + 0.5) * height + 0.5) | 0;
-
-                    device.readPixelFromTexture(frame.readback, i, colorTexture, entry.attachmentX, entry.attachmentY);
-                }
-
-                device.submitReadback(frame.readback);
-                this.submittedFrames.push(frame);
+                this.submitFramePost(device, frame, colorTexture, width, height);
             });
         });
     }
