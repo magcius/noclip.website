@@ -24,7 +24,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private zelview: ZELVIEW0) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
+        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
     }
 
     public createPanels(): UI.Panel[] {

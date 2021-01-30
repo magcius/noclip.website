@@ -87,9 +87,9 @@ class BARRenderer implements SceneGfx {
         }
 
         if (uven === null) {
-            this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(0.1, 0.1, 0.1));
+            this.renderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(0.1, 0.1, 0.1));
         } else {
-            this.renderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
+            this.renderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(uven.clearR / 0xFF, uven.clearG / 0xFF, uven.clearB / 0xFF));
         }
 
         // TODO: should this be lazy?

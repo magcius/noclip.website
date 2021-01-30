@@ -28,7 +28,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice) {
         this.renderHelper = new GfxRenderHelper(device);
-        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
+        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
     }
 
     public adjustCameraController(c: CameraController) {
@@ -74,7 +74,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
 
     // ScriptHost
     public setBGColor(color: Color): void {
-        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(true, color);
+        this.clearRenderPassDescriptor = makeClearRenderPassDescriptor(color);
     }
 
     public setModelTexAnimGroupEnabled(modelId: number, enabled: boolean): void {

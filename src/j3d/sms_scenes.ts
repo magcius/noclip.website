@@ -276,7 +276,7 @@ export class SunshineRenderer implements Viewer.SceneGfx {
     public modelInstances: J3DModelInstanceSimple[] = [];
     public destroyables: Destroyable[] = [];
     public modelCache = new Map<RARC.RARCFile, J3DModelData>();
-    private clearDescriptor = makeClearRenderPassDescriptor(true, colorNewCopy(OpaqueBlack));
+    private clearDescriptor = makeClearRenderPassDescriptor(colorNewCopy(OpaqueBlack));
 
     constructor(device: GfxDevice, public rarc: RARC.JKRArchive) {
         this.renderHelper = new GXRenderHelperGfx(device);

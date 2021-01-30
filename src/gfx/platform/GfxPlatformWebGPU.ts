@@ -1,5 +1,5 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxLoadDisposition, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachment, GfxAttachmentDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ } from "./GfxPlatform";
+import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachment, GfxAttachmentDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ } from "./GfxPlatform";
 import { _T, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
 import { getFormatByteSize } from "./GfxPlatformFormat";
 import { assertExists, assert, leftPad, align } from "../../util";
@@ -534,7 +534,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             const colorAttachment = descriptor.colorAttachment as GfxAttachmentP_WebGPU;
             const dstAttachment = this.colorAttachments[0];
             dstAttachment.attachment = colorAttachment.gpuTextureView;
-            dstAttachment.loadValue = descriptor.colorLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : descriptor.colorClearColor;
+            dstAttachment.loadValue = descriptor.colorClearColor;
             dstAttachment.storeOp = 'store';
             dstAttachment.resolveTarget = undefined;
             this.renderPassDescriptor.colorAttachments = this.colorAttachments;
@@ -550,8 +550,8 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
             const dsAttachment = descriptor.depthStencilAttachment as GfxAttachmentP_WebGPU;
             const dstAttachment = this.depthStencilAttachment;
             dstAttachment.attachment = dsAttachment.gpuTextureView;
-            dstAttachment.depthLoadValue = descriptor.depthLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : descriptor.depthClearValue;
-            dstAttachment.stencilLoadValue = descriptor.stencilLoadDisposition === GfxLoadDisposition.LOAD ? 'load' : descriptor.stencilClearValue;
+            dstAttachment.depthLoadValue = descriptor.depthClearValue;
+            dstAttachment.stencilLoadValue = descriptor.stencilClearValue;
             dstAttachment.depthStoreOp = 'store';
             dstAttachment.stencilStoreOp = 'store';
             this.renderPassDescriptor.depthStencilAttachment = this.depthStencilAttachment;

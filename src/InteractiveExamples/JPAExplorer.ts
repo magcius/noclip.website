@@ -199,7 +199,7 @@ function makeDataList(strings: string[]): HTMLDataListElement {
 
 const enum Pass { MAIN, INDIRECT }
 
-const clearPass = makeClearRenderPassDescriptor(true, colorNewFromRGBA(0.2, 0.2, 0.2, 1.0));
+const clearPass = makeClearRenderPassDescriptor(colorNewFromRGBA(0.2, 0.2, 0.2, 1.0));
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class Explorer implements SceneGfx {

@@ -400,7 +400,7 @@ class FurObj {
     }
 }
 
-const clearPass = makeClearRenderPassDescriptor(true, TransparentBlack);
+const clearPass = makeClearRenderPassDescriptor(TransparentBlack);
 export class SceneRenderer implements SceneGfx {
     private renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;

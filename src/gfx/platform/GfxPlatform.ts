@@ -48,7 +48,6 @@ export enum GfxBlendMode {
     REVERSE_SUBTRACT = WebGLRenderingContext.FUNC_REVERSE_SUBTRACT,
 }
 
-export const enum GfxLoadDisposition { CLEAR, LOAD }
 export const enum GfxWrapMode { CLAMP, REPEAT, MIRROR }
 export const enum GfxTexFilterMode { POINT, BILINEAR }
 // TODO(jstpierre): remove NO_MIP
@@ -236,14 +235,11 @@ export interface GfxColor {
 export interface GfxRenderPassDescriptor {
     colorAttachment: GfxAttachment | null;
     colorResolveTo: GfxTexture | null;
-    colorLoadDisposition: GfxLoadDisposition;
-    colorClearColor: GfxColor;
+    colorClearColor: GfxColor | 'load';
     depthStencilAttachment: GfxAttachment | null;
     depthStencilResolveTo: GfxTexture | null;
-    depthLoadDisposition: GfxLoadDisposition;
-    depthClearValue: number;
-    stencilLoadDisposition: GfxLoadDisposition;
-    stencilClearValue: number;
+    depthClearValue: number | 'load';
+    stencilClearValue: number | 'load';
 }
 
 export interface GfxDeviceLimits {

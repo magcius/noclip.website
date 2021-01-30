@@ -424,6 +424,16 @@ export class GfxRenderInst {
         }
     }
 
+    public hasLateSamplerBinding(name: string): boolean {
+        for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
+            const dst = this._bindingDescriptors[0].samplerBindings[i];
+            if (dst.lateBinding === name)
+                return true;
+        }
+
+        return false;
+    }
+
     /**
      * Resolve a previously registered "late bound" sampler binding for the given {@param name} to the provided
      * {@param binding}, as registered through {@see setSamplerBindingsFromTextureMappings}.
@@ -575,6 +585,13 @@ export class GfxRenderInstList {
         }
 
         this.checkUsePostSort();
+    }
+
+    public hasLateSamplerBinding(name: string): boolean {
+        for (let i = 0; i < this.renderInsts.length; i++)
+            if (this.renderInsts[i].hasLateSamplerBinding(name))
+                return true;
+        return false;
     }
 
     /**

@@ -6,13 +6,14 @@ import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneDesc, SceneContext } from "../SceneBase";
 import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolveSymbol } from "./SYSDOLPHIN";
-import { colorFromRGBA8 } from "../Color";
+import { colorNewFromRGBA8 } from "../Color";
 import { assertExists, assert, fallbackUndefined } from "../util";
 import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ftData } from "./Melee_ft";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
 import { Melee_map_headData_Load } from "./Melee_map_head";
 import { CameraController } from "../Camera";
+import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];
@@ -253,7 +254,7 @@ class MeleeTitleDesc implements SceneDesc {
         const arc = HSD_ArchiveParse(await dataFetcher.fetchData(`${pathBase}/GmTtAll.usd`));
 
         const scene = new MeleeRenderer(device);
-        colorFromRGBA8(scene.clearRenderPassDescriptor.colorClearColor, 0x262626FF);
+        scene.clearRenderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA8(0x262626FF));
 
         const ctx = new HSD_LoadContext(arc);
         const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(HSD_JObjLoadJoint(ctx, assertExists(HSD_Archive_FindPublic(arc, `TtlBg_Top_joint`)))!));

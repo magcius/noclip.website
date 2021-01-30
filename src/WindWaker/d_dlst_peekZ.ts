@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxFormat, GfxRenderPass, GfxSamplerBinding, GfxPrimitiveTopology, GfxLoadDisposition, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxFormat, GfxRenderPass, GfxSamplerBinding, GfxPrimitiveTopology, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxReadback, GfxAttachment, GfxBindings, GfxRenderPipeline, GfxProgram, GfxSampler } from "../gfx/platform/GfxPlatformImpl";
 import { ColorTexture, makeEmptyRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
@@ -79,8 +79,8 @@ export class PeekZManager {
     constructor(public maxCount: number = 50) {
         this.resultBuffer = new Uint32Array(this.maxCount);
 
-        this.resolveRenderPassDescriptor.depthLoadDisposition = GfxLoadDisposition.LOAD;
-        this.resolveRenderPassDescriptor.stencilLoadDisposition = GfxLoadDisposition.LOAD;
+        this.resolveRenderPassDescriptor.depthClearValue = 'load';
+        this.resolveRenderPassDescriptor.stencilClearValue = 'load';
     }
 
     private returnFrame(frame: PeekZFrame): void {

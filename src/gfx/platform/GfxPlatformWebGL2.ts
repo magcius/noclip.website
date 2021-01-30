@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxLoadDisposition, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachmentDescriptor, GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachmentDescriptor, GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags } from "./GfxPlatformFormat";
 
@@ -1235,27 +1235,42 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (pass === undefined)
             pass = new GfxRenderPassP_GL();
 
+        let colorClearColorR = 0;
+        let colorClearColorG = 0;
+        let colorClearColorB = 0;
+        let colorClearColorA = 0;
         let clearBits: number = 0;
         if (descriptor.colorAttachment !== null) {
-            if (descriptor.colorLoadDisposition === GfxLoadDisposition.CLEAR)
+            if (descriptor.colorClearColor !== 'load') {
                 clearBits |= WebGL2RenderingContext.COLOR_BUFFER_BIT;
+                colorClearColorR = descriptor.colorClearColor.r;
+                colorClearColorG = descriptor.colorClearColor.g;
+                colorClearColorB = descriptor.colorClearColor.b;
+                colorClearColorA = descriptor.colorClearColor.a;
+            }
         }
 
+        let depthClearValue = 0;
+        let stencilClearValue = 0;
         if (descriptor.depthStencilAttachment !== null) {
             const attachment = descriptor.depthStencilAttachment as GfxAttachmentP_GL;
             const flags = getFormatFlags(attachment.pixelFormat);
-            if (!!(flags & FormatFlags.DEPTH) && descriptor.depthLoadDisposition === GfxLoadDisposition.CLEAR)
+            if (!!(flags & FormatFlags.DEPTH) && descriptor.depthClearValue !== 'load') {
                 clearBits |= WebGL2RenderingContext.DEPTH_BUFFER_BIT;
-            if (!!(flags & FormatFlags.STENCIL) && descriptor.stencilLoadDisposition === GfxLoadDisposition.CLEAR)
+                depthClearValue = descriptor.depthClearValue;
+            }
+            if (!!(flags & FormatFlags.STENCIL) && descriptor.stencilClearValue !== 'load') {
                 clearBits |= WebGL2RenderingContext.STENCIL_BUFFER_BIT;
+                stencilClearValue = descriptor.stencilClearValue;
+            }
         }
 
         // TODO(jstpierre): This isn't kosher.
         pass.descriptor = descriptor;
 
-        const { colorAttachment, colorResolveTo, depthStencilAttachment, depthStencilResolveTo, colorClearColor, depthClearValue, stencilClearValue } = descriptor;
+        const { colorAttachment, colorResolveTo, depthStencilAttachment, depthStencilResolveTo } = descriptor;
 
-        pass.setRenderPassParameters(colorAttachment, colorResolveTo, depthStencilAttachment, depthStencilResolveTo, clearBits, colorClearColor.r, colorClearColor.g, colorClearColor.b, colorClearColor.a, depthClearValue, stencilClearValue);
+        pass.setRenderPassParameters(colorAttachment, colorResolveTo, depthStencilAttachment, depthStencilResolveTo, clearBits, colorClearColorR, colorClearColorG, colorClearColorB, colorClearColorA, depthClearValue, stencilClearValue);
         return pass;
     }
 

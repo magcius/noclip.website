@@ -1,16 +1,20 @@
 
-import { GfxDevice, GfxAttachment, GfxLoadDisposition, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, makeTextureDescriptor2D, GfxColor, GfxNormalizedViewportCoords } from "../platform/GfxPlatform";
-import { colorNewFromRGBA, TransparentBlack, Color, OpaqueBlack } from "../../Color";
+import { GfxDevice, GfxAttachment, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, makeTextureDescriptor2D, GfxColor, GfxNormalizedViewportCoords, GfxTextureDimension } from "../platform/GfxPlatform";
+import { colorNewFromRGBA, TransparentBlack, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 
 export const DEFAULT_NUM_SAMPLES = 4;
 
 export class ColorTexture {
+    public readonly dimension = GfxTextureDimension.n2D;
+    public readonly depth: number = 1;
+    public readonly numLevels: number = 1;
+
     public gfxTexture: GfxTexture | null = null;
     public width: number = 0;
     public height: number = 0;
 
-    constructor(public format: GfxFormat = GfxFormat.U8_RGBA_RT) {
+    constructor(public pixelFormat: GfxFormat = GfxFormat.U8_RGBA_RT) {
     }
 
     public setParameters(device: GfxDevice, width: number, height: number): boolean {
@@ -18,7 +22,7 @@ export class ColorTexture {
             this.destroy(device);
             this.width = width;
             this.height = height;
-            this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.format, width, height, 1));
+            this.gfxTexture = device.createTexture(this);
             return true;
         } else {
             return false;
@@ -65,15 +69,12 @@ export class Attachment {
 
 export function copyRenderPassDescriptor(dst: GfxRenderPassDescriptor, src: GfxRenderPassDescriptor): void {
     dst.colorClearColor = src.colorClearColor;
-    dst.colorLoadDisposition = src.colorLoadDisposition;
     dst.depthClearValue = src.depthClearValue;
-    dst.depthLoadDisposition = src.depthLoadDisposition;
     dst.stencilClearValue = src.stencilClearValue;
-    dst.stencilLoadDisposition = src.stencilLoadDisposition;
 }
 
 export function makeEmptyRenderPassDescriptor(): GfxRenderPassDescriptor {
-    return makeClearRenderPassDescriptor(false, TransparentBlack);
+    return makeClearRenderPassDescriptor('load');
 }
 
 export function setViewportOnRenderPass(renderPass: GfxRenderPass, viewport: Readonly<GfxNormalizedViewportCoords>, attachment: Attachment): void {
@@ -124,34 +125,28 @@ export class BasicRenderTarget {
     }
 }
 
-export function makeClearRenderPassDescriptor(shouldClearColor: boolean, clearColor: Readonly<GfxColor>): GfxRenderPassDescriptor {
+export function makeClearRenderPassDescriptor(clearColor: Readonly<GfxColor> | 'load'): GfxRenderPassDescriptor {
     return {
         colorAttachment: null,
         colorResolveTo: null,
         depthStencilAttachment: null,
         colorClearColor: clearColor,
         depthStencilResolveTo: null,
-        colorLoadDisposition: shouldClearColor ? GfxLoadDisposition.CLEAR : GfxLoadDisposition.LOAD,
         depthClearValue: reverseDepthForClearValue(1.0),
-        depthLoadDisposition: GfxLoadDisposition.CLEAR,
         stencilClearValue: 0.0,
-        stencilLoadDisposition: GfxLoadDisposition.CLEAR,
     }
 }
 
-export const standardFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(true, colorNewFromRGBA(0.88, 0.88, 0.88, 1.0));
-export const opaqueBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
-export const transparentBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(true, TransparentBlack);
-export const depthClearRenderPassDescriptor = makeClearRenderPassDescriptor(false, TransparentBlack);
+export const standardFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(0.88, 0.88, 0.88, 1.0));
+export const opaqueBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
+export const transparentBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(TransparentBlack);
+export const depthClearRenderPassDescriptor = makeClearRenderPassDescriptor(TransparentBlack);
 export const noClearRenderPassDescriptor: GfxRenderPassDescriptor = {
     colorAttachment: null,
     colorResolveTo: null,
     depthStencilAttachment: null,
     depthStencilResolveTo: null,
-    colorClearColor: TransparentBlack,
-    colorLoadDisposition: GfxLoadDisposition.LOAD,
-    depthClearValue: reverseDepthForClearValue(1.0),
-    depthLoadDisposition: GfxLoadDisposition.LOAD,
-    stencilClearValue: 0.0,
-    stencilLoadDisposition: GfxLoadDisposition.LOAD,
+    colorClearColor: 'load',
+    depthClearValue: 'load',
+    stencilClearValue: 'load',
 };

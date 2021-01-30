@@ -12,7 +12,7 @@ import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxRenderPassDescriptor, GfxLoadDisposition, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxTexture, GfxNormalizedViewportCoords, GfxFormat } from "../gfx/platform/GfxPlatform";
+import { GfxRenderPassDescriptor, GfxDevice, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxTexture, GfxNormalizedViewportCoords, GfxFormat } from "../gfx/platform/GfxPlatform";
 import { TransparentBlack } from "../Color";
 import { copyRenderPassDescriptor, DEFAULT_NUM_SAMPLES, makeEmptyRenderPassDescriptor, Attachment, ColorTexture, BasicRenderTarget, noClearRenderPassDescriptor, setViewportOnRenderPass, IdentityViewportCoords, setScissorOnRenderPass } from "../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
@@ -176,13 +176,10 @@ const bloomClearRenderPassDescriptor: GfxRenderPassDescriptor = {
     colorAttachment: null,
     colorResolveTo: null,
     depthStencilAttachment: null,
-    colorClearColor: TransparentBlack,
+    colorClearColor: 'load',
     depthStencilResolveTo: null,
-    colorLoadDisposition: GfxLoadDisposition.CLEAR,
     depthClearValue: 1.0,
-    depthLoadDisposition: GfxLoadDisposition.LOAD,
     stencilClearValue: 0.0,
-    stencilLoadDisposition: GfxLoadDisposition.LOAD,
 };
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];

@@ -68,7 +68,7 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
 // TODO(jstpierre): Find a more elegant way to write this that doesn't take as many resources.
 class ClearScene {
     public colorAttachment = new Attachment(GfxFormat.U8_RGBA_RT);
-    private renderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
+    private renderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
 
     public minimize(device: GfxDevice): void {
         this.colorAttachment.setParameters(device, 1, 1, 1);

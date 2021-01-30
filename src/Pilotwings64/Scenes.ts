@@ -30,6 +30,7 @@ import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { F3DEX_Program } from "../BanjoKazooie/render";
 import { calcTextureScaleForShift } from '../Common/N64/RSP';
+import { colorNewFromRGBA } from '../Color';
 
 interface Pilotwings64FSFileChunk {
     tag: string;
@@ -3078,7 +3079,8 @@ class Pilotwings64SceneDesc implements SceneDesc {
         };
 
         const renderer = new Pilotwings64Renderer(device, dataHolder, modelBuilder);
-        renderer.renderPassDescriptor = makeClearRenderPassDescriptor(true, {r: skybox.clearColor[0], g: skybox.clearColor[1], b: skybox.clearColor[2], a: 1});
+        const clearColor = colorNewFromRGBA(skybox.clearColor[0], skybox.clearColor[1], skybox.clearColor[2]);
+        renderer.renderPassDescriptor = makeClearRenderPassDescriptor(clearColor);
         const isMap = this.weatherConditions < 0;
 
         if (skybox.skyboxModel !== undefined) {

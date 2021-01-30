@@ -1082,7 +1082,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-        const clearColorPassDescriptor = makeClearRenderPassDescriptor(true, this.clearColor);
+        const clearColorPassDescriptor = makeClearRenderPassDescriptor(this.clearColor);
 
         if (this.renderHacks.skydome) {
             const skydomePassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearColorPassDescriptor);

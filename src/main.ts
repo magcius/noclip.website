@@ -820,7 +820,7 @@ class Main {
 
     // Hooks for people who want to mess with stuff.
     public getStandardClearColor(): Color {
-        return standardFullClearRenderPassDescriptor.colorClearColor;
+        return standardFullClearRenderPassDescriptor.colorClearColor as Color;
     }
 
     public get scene() {
