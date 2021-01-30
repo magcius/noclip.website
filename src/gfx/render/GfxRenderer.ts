@@ -791,6 +791,19 @@ export class GfxRenderInstManager {
     /**
      * {@deprecated}
      */
+    public hasAnyWithFilterKeyExact(filterKey: number): boolean {
+        const list = assertExists(this.simpleRenderInstList);
+
+        for (let i = 0; i < this.instPool.allocCount; i++)
+            if (!!(this.instPool.pool[i]._flags & GfxRenderInstFlags.Draw) && this.instPool.pool[i].filterKey === filterKey)
+                return true;
+
+        return false;
+    }
+
+    /**
+     * {@deprecated}
+     */
     public hasAnyVisible(): boolean {
         const list = assertExists(this.simpleRenderInstList);
         return list.renderInsts.length > 0;

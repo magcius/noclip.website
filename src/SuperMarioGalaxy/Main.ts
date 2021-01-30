@@ -13,7 +13,7 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { BasicRenderTarget, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { BasicRenderTarget, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
 import * as GX from '../gx/gx_enum';
 import * as Yaz0 from '../Common/Compression/Yaz0';
@@ -50,6 +50,8 @@ import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
+import { RenderTargetDescription, SceneGraphBuilder, SceneGraphExecutor, RenderTargetAttachmentSlot } from './SceneGraph2';
+import { TransparentBlack } from '../Color';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -82,7 +84,7 @@ export const enum SpecialTextureType {
 
 class SpecialTextureBinder {
     private mirrorSampler: GfxSampler;
-    private textureMapping = new TextureMapping();
+    private textureMapping = new Map<SpecialTextureType, TextureMapping>();
 
     constructor(device: GfxDevice, cache: GfxRenderCache) {
         this.mirrorSampler = cache.createSampler(device, {
@@ -94,6 +96,15 @@ class SpecialTextureBinder {
             wrapS: GfxWrapMode.MIRROR,
             wrapT: GfxWrapMode.MIRROR,
         });
+
+        this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.mirrorSampler);
+        this.registerSpecialTextureType(SpecialTextureType.ImageEffectTexture1, this.mirrorSampler);
+    }
+
+    private registerSpecialTextureType(textureType: SpecialTextureType, gfxSampler: GfxSampler): void {
+        const m = new TextureMapping();
+        m.gfxSampler = gfxSampler;
+        this.textureMapping.set(textureType, m);
     }
 
     public registerTextureMapping(m: TextureMapping, textureType: SpecialTextureType): void {
@@ -103,10 +114,13 @@ class SpecialTextureBinder {
         m.lateBinding = textureType;
     }
 
-    public lateBindTexture(list: GfxRenderInstList, textureType: SpecialTextureType, gfxTexture: GfxTexture): void {
-        this.textureMapping.gfxTexture = gfxTexture;
-        this.textureMapping.gfxSampler = this.mirrorSampler;
-        list.resolveLateSamplerBinding(textureType, this.textureMapping);
+    public lateBindTexture(textureType: SpecialTextureType, gfxTexture: GfxTexture): void {
+        this.textureMapping.get(textureType)!.gfxTexture = gfxTexture;
+    }
+
+    public resolveLateBindTexture(list: GfxRenderInstList): void {
+        for (const [textureType, textureMapping] of this.textureMapping.entries())
+            list.resolveLateSamplerBinding(textureType, textureMapping);
     }
 }
 
@@ -119,12 +133,12 @@ const sceneParams = new SceneParams();
 export class SMGRenderer implements Viewer.SceneGfx {
     private bloomRenderer: BloomPostFXRenderer;
 
-    private mainRenderTarget = new BasicRenderTarget();
+    // private mainRenderTarget = new BasicRenderTarget();
 
     // Opaque scene texture for indirect to work on top of.
-    private opaqueSceneTexture = new ColorTexture();
+    // private opaqueSceneTexture = new ColorTexture();
     // Water camera filter.
-    private imageEffectTexture1 = new ColorTexture();
+    // private imageEffectTexture1 = new ColorTexture();
 
     private currentScenarioIndex: number = -1;
     private scenarioSelect: UI.SingleSelect | null = null;
@@ -138,7 +152,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {
         this.textureHolder = this.sceneObjHolder.modelCache.textureListHolder;
-        this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
+        // this.bloomRenderer = new BloomPostFXRenderer(device, this.renderHelper.renderInstManager.gfxRenderCache, this.mainRenderTarget);
 
         if (this.sceneObjHolder.sceneDesc.scenarioOverride !== null)
             this.currentScenarioIndex = this.sceneObjHolder.sceneDesc.scenarioOverride;
@@ -246,13 +260,19 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
     }
 
+    private hasFilterKey(filterKey: number): boolean {
+        return this.renderHelper.renderInstManager.hasAnyWithFilterKeyExact(filterKey);
+    }
+
+    private hasExecute(drawType: DrawType): boolean {
+        return this.hasFilterKey(createFilterKeyForDrawType(drawType));
+    }
+
     private executeOnPass(passRenderer: GfxRenderPass, filterKey: number): void {
         const r = this.renderHelper.renderInstManager;
         r.setVisibleByFilterKeyExact(filterKey);
 
-        const t = this.sceneObjHolder.specialTextureBinder;
-        t.lateBindTexture(r.simpleRenderInstList!, SpecialTextureType.OpaqueSceneTexture, this.opaqueSceneTexture.gfxTexture!);
-        t.lateBindTexture(r.simpleRenderInstList!, SpecialTextureType.ImageEffectTexture1, this.imageEffectTexture1.gfxTexture!);
+        this.sceneObjHolder.specialTextureBinder.resolveLateBindTexture(r.simpleRenderInstList!);
 
         r.drawOnPassRenderer(this.sceneObjHolder.modelCache.device, passRenderer);
     }
@@ -269,7 +289,280 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.executeOnPass(passRenderer, createFilterKeyForDrawType(drawType));
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
+    private sceneGraphExecutor = new SceneGraphExecutor();
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {        this.sceneObjHolder.viewerInput = viewerInput;
+
+        const executor = this.sceneObjHolder.sceneNameObjListExecutor;
+        const camera = viewerInput.camera;
+
+        camera.setClipPlanes(100, 800000);
+
+        this.sceneObjHolder.drawSyncManager.beginFrame(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+
+        executor.executeMovement(this.sceneObjHolder, viewerInput);
+        executor.executeCalcAnim(this.sceneObjHolder);
+
+        // Prepare our two scene params buffers.
+        const sceneParamsOffs3D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
+        fillSceneParams(sceneParams, viewerInput.camera.projectionMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(), sceneParamsOffs3D, sceneParams);
+        this.sceneObjHolder.renderParams.sceneParamsOffs3D = sceneParamsOffs3D;
+
+        const sceneParamsOffs2D = this.renderHelper.uniformBuffer.allocateChunk(ub_SceneParamsBufferSize);
+        computeProjectionMatrixFromCuboid(scratchMatrix, 0, viewerInput.backbufferWidth, 0, viewerInput.backbufferHeight, -10000.0, 10000.0);
+        fillSceneParams(sceneParams, scratchMatrix, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        fillSceneParamsData(this.renderHelper.uniformBuffer.mapBufferF32(), sceneParamsOffs2D, sceneParams);
+        this.sceneObjHolder.renderParams.sceneParamsOffs2D = sceneParamsOffs2D;
+
+        const renderInstManager = this.renderHelper.renderInstManager;
+        const template = this.renderHelper.pushTemplateRenderInst();
+
+        const effectSystem = this.sceneObjHolder.effectSystem;
+        if (effectSystem !== null) {
+            const deltaTime = getDeltaTimeFrames(viewerInput);
+            effectSystem.calc(deltaTime);
+
+            const indDummy = effectSystem.particleResourceHolder.getTextureMappingReference('IndDummy');
+            if (indDummy !== null)
+                this.sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
+        }
+
+        // Prepare all of our NameObjs.
+        executor.calcViewAndEntry(this.sceneObjHolder, DrawCameraType.DrawCameraType_3D, viewerInput);
+        executor.calcViewAndEntry(this.sceneObjHolder, DrawCameraType.DrawCameraType_2D, viewerInput);
+
+        executor.executeDrawAll(this.sceneObjHolder, this.renderHelper.renderInstManager, viewerInput);
+
+        // Draw our render insts.
+        this.drawAllEffects(viewerInput);
+
+        const template2 = this.renderHelper.renderInstManager.pushTemplateRenderInst();
+        template2.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs3D, ub_SceneParamsBufferSize);
+        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_3D);
+        template2.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs2D, ub_SceneParamsBufferSize);
+        executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+
+        this.renderHelper.renderInstManager.popTemplateRenderInst();
+
+        // TODO(jstpierre): Make this generic to ImageEffectDirector.
+        /*
+        let bloomParameterBufferOffs = -1;
+        if (this.sceneObjHolder.imageEffectSystemHolder !== null && this.sceneObjHolder.imageEffectSystemHolder.imageEffectDirector.isOnNormalBloom(this.sceneObjHolder) && this.bloomRenderer.pipelinesReady(device)) {
+            bloomParameterBufferOffs = this.bloomRenderer.allocateParameterBuffer(this.renderHelper.uniformBuffer, this.sceneObjHolder.bloomEffect!);
+        }
+        */
+
+        // Now that we've completed our UBOs, upload.
+        const hostAccessPass = device.createHostAccessPass();
+        this.renderHelper.prepareToRender(device, hostAccessPass);
+        device.submitPass(hostAccessPass);
+
+        const sceneGraphBuilder = new SceneGraphBuilder();
+        sceneGraphBuilder.begin();
+
+        const mainColorDesc = new RenderTargetDescription('Main Color', GfxFormat.U8_RGBA_RT);
+        mainColorDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        mainColorDesc.colorClearColor = TransparentBlack;
+
+        const mainDepthDesc = new RenderTargetDescription('Main Depth', GfxFormat.D32F_S8);
+        mainDepthDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
+
+        const mainColorTargetID = sceneGraphBuilder.createRenderTargetID(mainColorDesc);
+
+        sceneGraphBuilder.beginPass('Skybox');
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, mainColorTargetID);
+        const skyboxDepthTargetID = sceneGraphBuilder.createRenderTargetID(mainDepthDesc);
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+        sceneGraphBuilder.exec((passRenderer) => {
+            this.drawOpa(passRenderer, DrawBufferType.AstroDomeSky);
+            this.drawXlu(passRenderer, DrawBufferType.AstroDomeSky);
+
+            if (isExistPriorDrawAir(this.sceneObjHolder)) {
+                this.drawOpa(passRenderer, DrawBufferType.Sky);
+                this.drawOpa(passRenderer, DrawBufferType.Air);
+                this.drawOpa(passRenderer, DrawBufferType.Sun);
+                this.drawXlu(passRenderer, DrawBufferType.Sky);
+                this.drawXlu(passRenderer, DrawBufferType.Air);
+                this.drawXlu(passRenderer, DrawBufferType.Sun);
+            }
+        });
+        sceneGraphBuilder.endPass();
+
+        sceneGraphBuilder.beginPass('Opaque before Shadow');
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, mainColorTargetID);
+        const mainDepthTargetID = sceneGraphBuilder.createRenderTargetID(mainDepthDesc);
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.DepthStencil, mainDepthTargetID);
+        sceneGraphBuilder.exec((passRenderer) => {
+            this.drawOpa(passRenderer, DrawBufferType.Crystal);
+            this.drawXlu(passRenderer, DrawBufferType.Crystal);
+    
+            this.drawOpa(passRenderer, DrawBufferType.Planet);
+            this.drawOpa(passRenderer, 0x05); // planet strong light?
+            // execute(0x19);
+            this.drawOpa(passRenderer, DrawBufferType.Environment);
+            this.drawOpa(passRenderer, DrawBufferType.MapObj);
+            this.drawOpa(passRenderer, DrawBufferType.MapObjStrongLight);
+            this.drawOpa(passRenderer, DrawBufferType.MapObjWeakLight);
+            this.drawOpa(passRenderer, 0x1F); // player light?
+    
+            this.execute(passRenderer, DrawType.ShadowVolume);
+    
+            // executeDrawBufferListNormalOpaBeforeSilhouette()
+            this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObj);
+            this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
+        });
+        sceneGraphBuilder.endPass();
+
+        sceneGraphBuilder.beginPass('Main Opaque');
+        const shadowColorTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(mainColorTargetID);
+        sceneGraphBuilder.attachResolveTexture(shadowColorTextureID);
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, mainColorTargetID);
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.DepthStencil, mainDepthTargetID);
+        sceneGraphBuilder.exec((passRenderer, scope) => {
+            const shadowTexture = scope.getResolveTextureForID(shadowColorTextureID);
+            this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, shadowTexture);
+            this.execute(passRenderer, DrawType.AlphaShadow);
+
+            this.drawOpa(passRenderer, DrawBufferType.NoSilhouettedMapObj);
+            this.drawOpa(passRenderer, DrawBufferType.NoSilhouettedMapObjWeakLight);
+            this.drawOpa(passRenderer, DrawBufferType.NoSilhouettedMapObjStrongLight);
+            this.drawOpa(passRenderer, DrawBufferType.Npc);
+            this.drawOpa(passRenderer, DrawBufferType.Ride);
+            this.drawOpa(passRenderer, DrawBufferType.Enemy);
+            this.drawOpa(passRenderer, DrawBufferType.EnemyDecoration);
+            this.drawOpa(passRenderer, 0x15);
+            if (!isExistPriorDrawAir(this.sceneObjHolder)) {
+                this.drawOpa(passRenderer, DrawBufferType.Sky);
+                this.drawOpa(passRenderer, DrawBufferType.Air);
+                this.drawOpa(passRenderer, DrawBufferType.Sun);
+                this.drawXlu(passRenderer, DrawBufferType.Sky);
+                this.drawXlu(passRenderer, DrawBufferType.Air);
+                this.drawXlu(passRenderer, DrawBufferType.Sun);
+            }
+    
+            // executeDrawListOpa();
+            this.execute(passRenderer, DrawType.OceanRingOutside);
+            this.execute(passRenderer, DrawType.SwingRope);
+            this.execute(passRenderer, DrawType.Creeper);
+            this.execute(passRenderer, DrawType.Trapeze);
+            this.execute(passRenderer, DrawType.WarpPodPath);
+            this.execute(passRenderer, DrawType.WaterPlant);
+            this.execute(passRenderer, DrawType.AstroDomeOrbit);
+            this.execute(passRenderer, DrawType.Fur);
+            this.execute(passRenderer, DrawType.OceanSphere);
+            this.execute(passRenderer, DrawType.WhirlPoolAccelerator);
+            this.execute(passRenderer, DrawType.Flag);
+    
+            this.drawOpa(passRenderer, 0x18);
+    
+            // executeDrawBufferListNormalXlu()
+            this.drawXlu(passRenderer, DrawBufferType.Planet);
+            this.drawXlu(passRenderer, 0x05);
+            this.drawXlu(passRenderer, DrawBufferType.Environment);
+            this.drawXlu(passRenderer, DrawBufferType.EnvironmentStrongLight);
+            this.drawXlu(passRenderer, DrawBufferType.MapObj);
+            this.drawXlu(passRenderer, DrawBufferType.MapObjWeakLight);
+            this.drawXlu(passRenderer, 0x1F);
+            this.drawXlu(passRenderer, DrawBufferType.MapObjStrongLight);
+            this.drawXlu(passRenderer, DrawBufferType.NoShadowedMapObj);
+            this.drawXlu(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
+            this.drawXlu(passRenderer, DrawBufferType.NoSilhouettedMapObj);
+            this.drawXlu(passRenderer, DrawBufferType.NoSilhouettedMapObjWeakLight);
+            this.drawXlu(passRenderer, DrawBufferType.NoSilhouettedMapObjStrongLight);
+            this.drawXlu(passRenderer, DrawBufferType.Npc);
+            this.drawXlu(passRenderer, DrawBufferType.Ride);
+            this.drawXlu(passRenderer, DrawBufferType.Enemy);
+            this.drawXlu(passRenderer, DrawBufferType.EnemyDecoration);
+            this.drawXlu(passRenderer, DrawBufferType.TornadoMario);
+            // executeDrawListXlu()
+            this.drawXlu(passRenderer, 0x18);
+    
+            this.execute(passRenderer, DrawType.ShadowSurface);
+            this.execute(passRenderer, DrawType.EffectDraw3D);
+            this.execute(passRenderer, DrawType.EffectDrawForBloomEffect);
+            // execute(0x2f);
+        });
+        sceneGraphBuilder.endPass();
+
+        sceneGraphBuilder.beginPass('Indirect');
+        const indirectOpaqueColorTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(mainColorTargetID);
+        sceneGraphBuilder.attachResolveTexture(indirectOpaqueColorTextureID);
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, mainColorTargetID);
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.DepthStencil, mainDepthTargetID);
+        sceneGraphBuilder.exec((passRenderer, scope) => {
+            const opaqueTexture = scope.getResolveTextureForID(indirectOpaqueColorTextureID);
+            this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, opaqueTexture);
+
+            // executeDrawAfterIndirect()
+            this.drawOpa(passRenderer, DrawBufferType.IndirectPlanet);
+            this.drawOpa(passRenderer, DrawBufferType.IndirectMapObj);
+            this.drawOpa(passRenderer, DrawBufferType.IndirectMapObjStrongLight);
+            this.drawOpa(passRenderer, DrawBufferType.IndirectNpc);
+            this.drawOpa(passRenderer, DrawBufferType.IndirectEnemy);
+            this.drawOpa(passRenderer, DrawBufferType.GlaringLight);
+            this.drawOpa(passRenderer, 0x17);
+            this.drawOpa(passRenderer, 0x16);
+            this.drawXlu(passRenderer, DrawBufferType.IndirectPlanet);
+            this.drawXlu(passRenderer, DrawBufferType.IndirectMapObj);
+            this.drawXlu(passRenderer, DrawBufferType.IndirectMapObjStrongLight);
+            this.drawXlu(passRenderer, DrawBufferType.IndirectNpc);
+            this.drawXlu(passRenderer, DrawBufferType.IndirectEnemy);
+            this.drawXlu(passRenderer, DrawBufferType.GlaringLight);
+            this.drawXlu(passRenderer, 0x17);
+            this.drawXlu(passRenderer, 0x16);
+            this.execute(passRenderer, DrawType.ElectricRailHolder);
+            this.execute(passRenderer, DrawType.OceanRing);
+            this.execute(passRenderer, DrawType.OceanBowl);
+            this.execute(passRenderer, DrawType.EffectDrawIndirect);
+            this.execute(passRenderer, DrawType.EffectDrawAfterIndirect);
+        });
+        sceneGraphBuilder.endPass();
+
+        sceneGraphBuilder.beginPass('Water Filter');
+        const waterFilterOpaqueColorTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(mainColorTargetID);
+        sceneGraphBuilder.attachResolveTexture(waterFilterOpaqueColorTextureID);
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, mainColorTargetID);
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.DepthStencil, mainDepthTargetID);
+        sceneGraphBuilder.exec((passRenderer, scope) => {
+            const opaqueTexture = scope.getResolveTextureForID(waterFilterOpaqueColorTextureID);
+            this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, opaqueTexture);
+
+            this.execute(passRenderer, DrawType.WaterCameraFilter);
+        });
+        sceneGraphBuilder.endPass();
+
+        // TODO(jstpierre): Prove out ImageEffect / Bloom
+
+        sceneGraphBuilder.beginPass('After Image Effect');
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.Color0, mainColorTargetID);
+        sceneGraphBuilder.attachRenderTargetID(RenderTargetAttachmentSlot.DepthStencil, mainDepthTargetID);
+        sceneGraphBuilder.exec((passRenderer) => {
+
+            this.execute(passRenderer, DrawType.EffectDrawAfterImageEffect);
+            this.execute(passRenderer, DrawType.GravityExplainer);
+
+            // GameScene::draw2D()
+
+            // exceuteDrawList2DNormal()
+            this.drawOpa(passRenderer, DrawBufferType.Model3DFor2D);
+            this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
+        });
+        sceneGraphBuilder.present();
+        sceneGraphBuilder.endPass();
+
+        const sceneGraph = sceneGraphBuilder.end();
+        this.sceneGraphExecutor.execGraph(device, sceneGraph, viewerInput.onscreenTexture);
+
+        // this.sceneObjHolder.drawSyncManager.endFrame(device, this.mainRenderTarget.depthStencilAttachment);
+        this.renderHelper.renderInstManager.resetRenderInsts();
+
+        return null;
+    }
+
+    /*
+    public render2(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
         this.sceneObjHolder.viewerInput = viewerInput;
 
         const executor = this.sceneObjHolder.sceneNameObjListExecutor;
@@ -280,7 +573,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.imageEffectTexture1.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.sceneObjHolder.drawSyncManager.beginFrame(device, this.mainRenderTarget.depthStencilAttachment);
+        this.sceneObjHolder.drawSyncManager.beginFrame(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         executor.executeMovement(this.sceneObjHolder, viewerInput);
         executor.executeCalcAnim(this.sceneObjHolder);
@@ -533,6 +826,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderInstManager.resetRenderInsts();
         return null;
     }
+    */
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
         const view = new DataView(dst);
@@ -548,10 +842,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.mainRenderTarget.destroy(device);
-        this.opaqueSceneTexture.destroy(device);
-        this.imageEffectTexture1.destroy(device);
-        this.bloomRenderer.destroy(device);
+        this.sceneGraphExecutor.destroy(device);
     }
 }
 

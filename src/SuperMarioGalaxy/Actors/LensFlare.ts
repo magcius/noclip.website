@@ -12,7 +12,7 @@ import { isFirstStep } from "../Spine";
 import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers";
 import { divideByW } from "../../Camera";
 import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ";
-import { GfxDevice, GfxCompareMode } from "../../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxCompareMode, GfxAttachment } from "../../gfx/platform/GfxPlatform";
 import { Attachment } from "../../gfx/helpers/RenderTargetHelpers";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers";
 
@@ -23,12 +23,12 @@ function calcRotateY(x: number, y: number): number {
 export class DrawSyncManager {
     public peekZ = new PeekZManager();
 
-    public beginFrame(device: GfxDevice, depthStencilAttachment: Attachment): void {
-        this.peekZ.setParameters(device, depthStencilAttachment.width!, depthStencilAttachment.height!);
+    public beginFrame(device: GfxDevice, width: number, height: number): void {
+        this.peekZ.setParameters(device, width, height);
     }
 
-    public endFrame(device: GfxDevice, depthStencilAttachment: Attachment): void {
-        this.peekZ.submitFrame(device, depthStencilAttachment.gfxAttachment!);
+    public endFrame(device: GfxDevice, depthStencilAttachment: GfxAttachment): void {
+        this.peekZ.submitFrame(device, depthStencilAttachment);
         this.peekZ.peekData(device);
     }
 
