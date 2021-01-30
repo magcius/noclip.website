@@ -357,7 +357,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.exec((passRenderer) => {
                 this.drawOpa(passRenderer, DrawBufferType.AstroDomeSky);
                 this.drawXlu(passRenderer, DrawBufferType.AstroDomeSky);
-    
+
                 if (isExistPriorDrawAir(this.sceneObjHolder)) {
                     this.drawOpa(passRenderer, DrawBufferType.Sky);
                     this.drawOpa(passRenderer, DrawBufferType.Air);
@@ -378,7 +378,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.exec((passRenderer) => {
                 this.drawOpa(passRenderer, DrawBufferType.Crystal);
                 this.drawXlu(passRenderer, DrawBufferType.Crystal);
-        
+
                 this.drawOpa(passRenderer, DrawBufferType.Planet);
                 this.drawOpa(passRenderer, 0x05); // planet strong light?
                 // execute(0x19);
@@ -387,9 +387,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawOpa(passRenderer, DrawBufferType.MapObjStrongLight);
                 this.drawOpa(passRenderer, DrawBufferType.MapObjWeakLight);
                 this.drawOpa(passRenderer, 0x1F); // player light?
-        
+
                 this.execute(passRenderer, DrawType.ShadowVolume);
-        
+
                 // executeDrawBufferListNormalOpaBeforeSilhouette()
                 this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObj);
                 this.drawOpa(passRenderer, DrawBufferType.NoShadowedMapObjStrongLight);
@@ -423,7 +423,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                     this.drawXlu(passRenderer, DrawBufferType.Air);
                     this.drawXlu(passRenderer, DrawBufferType.Sun);
                 }
-        
+
                 // executeDrawListOpa();
                 this.execute(passRenderer, DrawType.OceanRingOutside);
                 this.execute(passRenderer, DrawType.SwingRope);
@@ -436,9 +436,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.execute(passRenderer, DrawType.OceanSphere);
                 this.execute(passRenderer, DrawType.WhirlPoolAccelerator);
                 this.execute(passRenderer, DrawType.Flag);
-        
+
                 this.drawOpa(passRenderer, 0x18);
-        
+
                 // executeDrawBufferListNormalXlu()
                 this.drawXlu(passRenderer, DrawBufferType.Planet);
                 this.drawXlu(passRenderer, 0x05);
@@ -460,7 +460,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.TornadoMario);
                 // executeDrawListXlu()
                 this.drawXlu(passRenderer, 0x18);
-        
+
                 this.execute(passRenderer, DrawType.ShadowSurface);
                 this.execute(passRenderer, DrawType.EffectDraw3D);
                 this.execute(passRenderer, DrawType.EffectDrawForBloomEffect);
@@ -477,7 +477,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.exec((passRenderer, scope) => {
                 const opaqueTexture = scope.getResolveTextureForID(indirectOpaqueColorTextureID);
                 this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, opaqueTexture);
-    
+
                 // executeDrawAfterIndirect()
                 this.drawOpa(passRenderer, DrawBufferType.IndirectPlanet);
                 this.drawOpa(passRenderer, DrawBufferType.IndirectMapObj);
@@ -555,9 +555,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.exec((passRenderer) => {
                     this.execute(passRenderer, DrawType.EffectDrawAfterImageEffect);
                 this.execute(passRenderer, DrawType.GravityExplainer);
-    
+
                 // GameScene::draw2D()
-    
+
                 // exceuteDrawList2DNormal()
                 this.drawOpa(passRenderer, DrawBufferType.Model3DFor2D);
                 this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
@@ -820,7 +820,7 @@ export class ResourceHolder {
         const prefix = (filenameWithoutExtension.toLowerCase() === objectName.toLowerCase()) ? objectName : `${objectName}/${filenameWithoutExtension}`;
         for (let i = 0; i < tex1Data.viewerTextures.length; i++) {
             const texture = tex1Data.viewerTextures[i];
-            if (texture === null) 
+            if (texture === null)
                 continue;
             texture.name = `${prefix}/${texture.name}`;
             this.viewerTextures.push(texture);

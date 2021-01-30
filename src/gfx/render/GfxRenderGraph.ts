@@ -465,7 +465,7 @@ export class GfxrRenderGraph {
         pass.descriptor.colorResolveTo = pass.doPresent ? presentColorTexture : this.acquireResolveTextureOutputForID(device, graph, color0RenderTargetID, pass.resolveTextureOutputIDs[GfxrAttachmentSlot.Color0]);
         pass.descriptor.depthStencilResolveTo = this.acquireResolveTextureOutputForID(device, graph, depthStencilRenderTargetID, pass.resolveTextureOutputIDs[GfxrAttachmentSlot.DepthStencil]);
 
-        let rtWidth = 0, rtHeight = 0;
+        let rtWidth = 0, rtHeight = 0, rtNumSamples = 0;
         for (let i = 0; i < pass.renderTargets.length; i++) {
             const renderTarget = pass.renderTargets[i];
             if (!renderTarget)
@@ -474,10 +474,12 @@ export class GfxrRenderGraph {
             if (rtWidth === 0) {
                 rtWidth = renderTarget.width;
                 rtHeight = renderTarget.height;
+                rtNumSamples = renderTarget.numSamples;
             }
 
             assert(renderTarget.width === rtWidth);
             assert(renderTarget.height === rtHeight);
+            assert(renderTarget.numSamples === rtNumSamples);
             renderTarget.needsClear = false;
         }
 
