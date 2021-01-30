@@ -32,6 +32,7 @@ export interface GfxrPass {
     attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: number): void;
     attachResolveTexture(resolveTextureID: number): void;
     exec(func: PassExecFunc): void;
+    post(func: PassPostFunc): void;
     present(): void;
 }
 
@@ -48,6 +49,8 @@ class PassImpl implements GfxrPass {
     public viewport: GfxNormalizedViewportCoords = IdentityViewportCoords;
 
     public resolveTextureInputTextures: GfxTexture[] = [];
+
+    public renderTargets: (RenderTarget | null)[] = [];
 
     // Execution state computed by scheduling.
     public descriptor: GfxRenderPassDescriptor = {
@@ -66,7 +69,8 @@ class PassImpl implements GfxrPass {
     public viewportH: number = 0;
 
     // Execution callback from user.
-    public func: PassExecFunc | null = null;
+    public execFunc: PassExecFunc | null = null;
+    public postFunc: PassPostFunc | null = null;
 
     // Misc. state.
     public debugName: string;
@@ -85,8 +89,13 @@ class PassImpl implements GfxrPass {
     }
 
     public exec(func: PassExecFunc): void {
-        assert(this.func === null);
-        this.func = func;
+        assert(this.execFunc === null);
+        this.execFunc = func;
+    }
+
+    public post(func: PassPostFunc): void {
+        assert(this.postFunc === null);
+        this.postFunc = func;
     }
 
     public present(): void {
@@ -96,10 +105,13 @@ class PassImpl implements GfxrPass {
 
 export interface GfxrPassScope {
     getResolveTextureForID(id: number): GfxTexture;
+    getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxAttachment | null;
+    getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null;
 }
 
 type PassSetupFunc = (renderPass: GfxrPass) => void;
 type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
+type PassPostFunc = (scope: GfxrPassScope) => void;
 
 // TODO(jstpierre): These classes might go away...
 
@@ -440,10 +452,12 @@ export class GfxrRenderGraph {
         const depthStencilRenderTargetID = pass.renderTargetIDs[GfxrAttachmentSlot.DepthStencil];
 
         const color0RenderTarget = this.acquireRenderTargetForID(device, graph, color0RenderTargetID);
+        pass.renderTargets[GfxrAttachmentSlot.Color0] = color0RenderTarget;
         pass.descriptor.colorAttachment = color0RenderTarget !== null ? color0RenderTarget.attachment : null;
         pass.descriptor.colorClearColor = (color0RenderTarget !== null && color0RenderTarget.needsClear) ? graph.renderTargetDescriptions[color0RenderTargetID].colorClearColor : 'load';
 
         const depthStencilRenderTarget = this.acquireRenderTargetForID(device, graph, depthStencilRenderTargetID);
+        pass.renderTargets[GfxrAttachmentSlot.DepthStencil] = depthStencilRenderTarget;
         pass.descriptor.depthStencilAttachment = depthStencilRenderTarget !== null ? depthStencilRenderTarget.attachment : null;
         pass.descriptor.depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
         pass.descriptor.stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
@@ -451,33 +465,27 @@ export class GfxrRenderGraph {
         pass.descriptor.colorResolveTo = pass.doPresent ? presentColorTexture : this.acquireResolveTextureOutputForID(device, graph, color0RenderTargetID, pass.resolveTextureOutputIDs[GfxrAttachmentSlot.Color0]);
         pass.descriptor.depthStencilResolveTo = this.acquireResolveTextureOutputForID(device, graph, depthStencilRenderTargetID, pass.resolveTextureOutputIDs[GfxrAttachmentSlot.DepthStencil]);
 
-        if (color0RenderTarget !== null)
-            color0RenderTarget.needsClear = false;
-        if (depthStencilRenderTarget !== null)
-            depthStencilRenderTarget.needsClear = false;
+        let rtWidth = 0, rtHeight = 0;
+        for (let i = 0; i < pass.renderTargets.length; i++) {
+            const renderTarget = pass.renderTargets[i];
+            if (!renderTarget)
+                continue;
 
-        if (color0RenderTarget !== null && depthStencilRenderTarget !== null) {
-            // Parameters for all attachments must match.
-            assert(color0RenderTarget.width === depthStencilRenderTarget.width);
-            assert(color0RenderTarget.height === depthStencilRenderTarget.height);
-            assert(color0RenderTarget.numSamples === depthStencilRenderTarget.numSamples);
+            if (rtWidth === 0) {
+                rtWidth = renderTarget.width;
+                rtHeight = renderTarget.height;
+            }
+
+            assert(renderTarget.width === rtWidth);
+            assert(renderTarget.height === rtHeight);
+            renderTarget.needsClear = false;
         }
 
-        let attachmentWidth = 0, attachmentHeight = 0;
-
-        if (color0RenderTarget !== null) {
-            attachmentWidth = color0RenderTarget.width;
-            attachmentHeight = color0RenderTarget.height;
-        } else if (depthStencilRenderTarget !== null) {
-            attachmentWidth = depthStencilRenderTarget.width;
-            attachmentHeight = depthStencilRenderTarget.height;
-        }
-
-        if (attachmentWidth > 0 && attachmentHeight > 0) {
-            const x = attachmentWidth * pass.viewport.x;
-            const y = attachmentHeight * pass.viewport.y;
-            const w = attachmentWidth * pass.viewport.w;
-            const h = attachmentHeight * pass.viewport.h;
+        if (rtWidth > 0 && rtHeight > 0) {
+            const x = rtWidth  * pass.viewport.x;
+            const y = rtHeight * pass.viewport.y;
+            const w = rtWidth  * pass.viewport.w;
+            const h = rtHeight * pass.viewport.h;
             pass.viewportX = x;
             pass.viewportY = y;
             pass.viewportW = w;
@@ -558,10 +566,14 @@ export class GfxrRenderGraph {
 
         renderPass.setViewport(pass.viewportX, pass.viewportY, pass.viewportW, pass.viewportH);
 
-        if (pass.func !== null)
-            pass.func(renderPass, this);
+        if (pass.execFunc !== null)
+            pass.execFunc(renderPass, this);
 
         device.submitPass(renderPass);
+
+        if (pass.postFunc !== null)
+            pass.postFunc(this);
+
         this.currentPass = null;
     }
 
@@ -590,6 +602,22 @@ export class GfxrRenderGraph {
         const i = currentGraphPass.resolveTextureInputIDs.indexOf(resolveTextureID);
         assert(i >= 0);
         return assertExists(currentGraphPass.resolveTextureInputTextures[i]);
+    }
+
+    public getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxAttachment | null {
+        const currentGraphPass = this.currentPass!;
+        const renderTarget = currentGraphPass.renderTargets[slot];
+        if (!renderTarget)
+            return null;
+        return renderTarget.attachment;
+    }
+
+    public getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null {
+        const currentGraphPass = this.currentPass!;
+        const renderTarget = currentGraphPass.renderTargets[slot];
+        if (!renderTarget)
+            return null;
+        return renderTarget.texture;
     }
     //#endregion
 

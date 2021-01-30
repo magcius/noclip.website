@@ -294,7 +294,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         camera.setClipPlanes(100, 800000);
 
-        this.sceneObjHolder.drawSyncManager.beginFrame(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.sceneObjHolder.drawSyncManager.beginFrame(device);
 
         executor.executeMovement(this.sceneObjHolder, viewerInput);
         executor.executeCalcAnim(this.sceneObjHolder);
@@ -340,8 +340,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
         renderInstManager.popTemplateRenderInst();
 
-        const sceneGraphBuilder = this.renderGraph.getGraphBuilder();
-        sceneGraphBuilder.begin();
+        const builder = this.renderGraph.getGraphBuilder();
+        builder.begin();
 
         this.mainColorDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.mainColorDesc.colorClearColor = TransparentBlack;
@@ -349,13 +349,13 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.mainDepthDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
 
-        const mainColorTargetID = sceneGraphBuilder.createRenderTargetID(this.mainColorDesc, 'Main Color');
+        const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
 
-        sceneGraphBuilder.pushPass((pass) => {
+        builder.pushPass((pass) => {
             pass.setDebugName('Skybox');
 
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            const skyboxDepthTargetID = sceneGraphBuilder.createRenderTargetID(this.mainDepthDesc, 'Skybox Depth');
+            const skyboxDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
                 this.drawOpa(passRenderer, DrawBufferType.AstroDomeSky);
@@ -372,9 +372,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
-        const mainDepthTargetID = sceneGraphBuilder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
+        const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
-        sceneGraphBuilder.pushPass((pass) => {
+        builder.pushPass((pass) => {
             pass.setDebugName('Opaque before Shadow');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -399,9 +399,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
-        sceneGraphBuilder.pushPass((pass) => {
+        builder.pushPass((pass) => {
             pass.setDebugName('Main Opaque');
-            const shadowColorTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(mainColorTargetID);
+            const shadowColorTextureID = builder.resolveRenderTargetToColorTexture(mainColorTargetID);
             pass.attachResolveTexture(shadowColorTextureID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -471,9 +471,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
-        sceneGraphBuilder.pushPass((pass) => {
+        builder.pushPass((pass) => {
             pass.setDebugName('Indirect');
-            const indirectOpaqueColorTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(mainColorTargetID);
+            const indirectOpaqueColorTextureID = builder.resolveRenderTargetToColorTexture(mainColorTargetID);
             pass.attachResolveTexture(indirectOpaqueColorTextureID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -506,9 +506,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
-        sceneGraphBuilder.pushPass((pass) => {
+        builder.pushPass((pass) => {
             pass.setDebugName('Water Filter');
-            const waterFilterOpaqueColorTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(mainColorTargetID);
+            const waterFilterOpaqueColorTextureID = builder.resolveRenderTargetToColorTexture(mainColorTargetID);
             pass.attachResolveTexture(waterFilterOpaqueColorTextureID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -530,9 +530,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 bloomObjectsDesc.colorClearColor = TransparentBlack;
                 bloomObjectsDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
-                const bloomObjectsTargetID = sceneGraphBuilder.createRenderTargetID(bloomObjectsDesc, 'Bloom Objects');
+                const bloomObjectsTargetID = builder.createRenderTargetID(bloomObjectsDesc, 'Bloom Objects');
 
-                sceneGraphBuilder.pushPass((pass) => {
+                builder.pushPass((pass) => {
                     pass.setDebugName('Bloom Objects');
                     pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, bloomObjectsTargetID);
                     pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -545,11 +545,11 @@ export class SMGRenderer implements Viewer.SceneGfx {
                     });
                 });
 
-                this.bloomRenderer.pushBloomPasses(this.sceneObjHolder, sceneGraphBuilder, renderInstManager, bloomObjectsTargetID, mainColorTargetID, viewerInput);
+                this.bloomRenderer.pushBloomPasses(this.sceneObjHolder, builder, renderInstManager, bloomObjectsTargetID, mainColorTargetID, viewerInput);
             }
         }
 
-        sceneGraphBuilder.pushPass((pass) => {
+        builder.pushPass((pass) => {
             pass.setDebugName('After Image Effect');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -566,7 +566,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.present();
         });
 
-        const sceneGraph = sceneGraphBuilder.end();
+        this.sceneObjHolder.drawSyncManager.endFrame(device, renderInstManager, builder, viewerInput.backbufferWidth, viewerInput.backbufferHeight, mainDepthTargetID);
+
+        const sceneGraph = builder.end();
 
         renderInstManager.popTemplateRenderInst();
 
@@ -576,7 +578,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         this.renderGraph.execGraph(device, sceneGraph, viewerInput.onscreenTexture);
 
-        // this.sceneObjHolder.drawSyncManager.endFrame(device, this.mainRenderTarget.depthStencilAttachment);
         renderInstManager.resetRenderInsts();
 
         return null;

@@ -4,7 +4,9 @@ import { GfxReadback, GfxAttachment, GfxBindings, GfxRenderPipeline, GfxProgram,
 import { ColorTexture, makeEmptyRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { assertExists } from "../util";
+import { assert, assertExists } from "../util";
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 
 class ColorTextureAttachment {
     public colorTexture: ColorTexture;
@@ -108,40 +110,34 @@ export class PeekZManager {
         return true;
     }
 
+    private ensureCurrentFrame(device: GfxDevice): void {
+        assert(this.currentFrame === null);
+
+        if (this.framePool.length > 0)
+            this.currentFrame = this.framePool.pop()!;
+        else
+            this.currentFrame = new PeekZFrame(device, this.maxCount);
+    }
+
     public setParameters(device: GfxDevice, width: number, height: number): void {
         this.colorAttachment.setParameters(device, width, height)
 
         if (this.depthTexture.setParameters(device, width, height)) {
-            if (this.depthSampler === null) {
-                // According to the GLES spec, depth textures *must* be filtered as NEAREST.
-                // https://github.com/google/angle/blob/49a53d684affafc0bbaa2d4c2414113fe95329ce/src/libANGLE/Texture.cpp#L362-L383
-                this.depthSampler = device.createSampler({
-                    minFilter: GfxTexFilterMode.POINT,
-                    magFilter: GfxTexFilterMode.POINT,
-                    mipFilter: GfxMipFilterMode.NO_MIP,
-                    wrapS: GfxWrapMode.CLAMP,
-                    wrapT: GfxWrapMode.CLAMP,
-                    minLOD: 0,
-                    maxLOD: 100,
-                });
-            }
+            if (this.fullscreenCopyBindings !== null)
+                device.destroyBindings(this.fullscreenCopyBindings);
 
             const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: this.depthTexture.gfxTexture, gfxSampler: this.depthSampler, lateBinding: null }];
             this.fullscreenCopyBindings = device.createBindings({ bindingLayout: { numSamplers: 1, numUniformBuffers: 0 }, samplerBindings, uniformBufferBindings: [], });
         }
 
-        if (this.currentFrame === null) {
-            if (this.framePool.length > 0)
-                this.currentFrame = this.framePool.pop()!;
-            else
-                this.currentFrame = new PeekZFrame(device, this.maxCount);
-        }
+        this.ensureCurrentFrame(device);
     }
 
-    public submitFrame(device: GfxDevice, depthStencilAttachment: GfxAttachment): void {
-        if (this.currentFrame === null)
-            return;
+    public beginFrame(device: GfxDevice): void {
+        this.ensureCurrentFrame(device);
+    }
 
+    private ensureResources(device: GfxDevice): void {
         // Kick off pipeline compilation ASAP.
         if (this.fullscreenCopyPipeline === null) {
             const fullscreenVS: string = `
@@ -177,23 +173,55 @@ void main() {
             });
         }
 
+        if (this.depthSampler === null) {
+            // According to the GLES spec, depth textures *must* be filtered as NEAREST.
+            // https://github.com/google/angle/blob/49a53d684affafc0bbaa2d4c2414113fe95329ce/src/libANGLE/Texture.cpp#L362-L383
+            this.depthSampler = device.createSampler({
+                minFilter: GfxTexFilterMode.POINT,
+                magFilter: GfxTexFilterMode.POINT,
+                mipFilter: GfxMipFilterMode.NO_MIP,
+                wrapS: GfxWrapMode.CLAMP,
+                wrapT: GfxWrapMode.CLAMP,
+                minLOD: 0,
+                maxLOD: 100,
+            });
+        }
+    }
+
+    private stealCurrentFrameAndCheck(device: GfxDevice): PeekZFrame | null {
         const frame = this.currentFrame;
         this.currentFrame = null;
 
-        if (!device.queryPipelineReady(this.fullscreenCopyPipeline)) {
+        if (frame === null)
+            return null;
+
+        this.ensureResources(device);
+
+        if (!device.queryPipelineReady(this.fullscreenCopyPipeline!)) {
             // Pipeline not ready yet.
-            return this.returnFrame(frame);
+            this.returnFrame(frame);
+            return null;
         }
 
         if (this.submittedFrames.length >= this.maxSubmittedFrames) {
             // Too many frames in flight, discard this one.
-            return this.returnFrame(frame);
+            this.returnFrame(frame);
+            return null;
         }
 
         if (frame.entries.length === 0) {
             // No need to copy if we aren't trying to read.
-            return this.returnFrame(frame);
+            this.returnFrame(frame);
+            return null;
         }
+
+        return frame;
+    }
+
+    public submitFrame(device: GfxDevice, depthStencilAttachment: GfxAttachment): void {
+        const frame = this.stealCurrentFrameAndCheck(device);
+        if (frame === null)
+            return;
 
         // Quick note on strategy: GLES has a restriction on glReadPixels for GL_DEPTH_COMPONENT,
         // even when the framebuffer isn't multi-sampled. In order to go from an MSAA depth buffer
@@ -246,6 +274,54 @@ void main() {
 
         device.submitReadback(frame.readback);
         this.submittedFrames.push(frame);
+    }
+
+    public pushPasses(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, width: number, height: number, depthTargetID: number): void {
+        const frame = this.stealCurrentFrameAndCheck(device);
+        if (frame === null)
+            return;
+
+        const colorTargetDesc = new GfxrRenderTargetDescription(GfxFormat.U32_R);
+        colorTargetDesc.setParameters(width, height, 1);
+        const colorTargetID = builder.createRenderTargetID(colorTargetDesc, 'PeekZ Color Buffer');
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('PeekZ');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, colorTargetID);
+            const resolvedDepthTextureID = builder.resolveRenderTargetToColorTexture(depthTargetID);
+            pass.attachResolveTexture(resolvedDepthTextureID);
+            pass.exec((passRenderer, scope) => {
+                const resolvedDepthTexture = scope.getResolveTextureForID(resolvedDepthTextureID);
+
+                const renderInst = renderInstManager.newRenderInst();
+                renderInst.setGfxRenderPipeline(this.fullscreenCopyPipeline!);
+                renderInst.setBindingLayouts([{ numSamplers: 1, numUniformBuffers: 0 }]);
+                renderInst.drawPrimitives(3);
+
+                const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: resolvedDepthTexture, gfxSampler: this.depthSampler, lateBinding: null }];
+                renderInst.setSamplerBindingsFromTextureMappings(samplerBindings);
+
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+
+            pass.post((scope) => {
+                const colorTexture = assertExists(scope.getRenderTargetTexture(GfxrAttachmentSlot.Color0));
+
+                // Now go through and start submitting readbacks on our texture.
+                for (let i = 0; i < frame.entries.length; i++) {
+                    const entry = frame.entries[i];
+
+                    // User specifies coordinates in -1 to 1 normalized space. Convert to attachment space.
+                    entry.attachmentX = (((entry.normalizedX * 0.5) + 0.5) * width + 0.5) | 0;
+                    entry.attachmentY = (((entry.normalizedY * 0.5) + 0.5) * height + 0.5) | 0;
+
+                    device.readPixelFromTexture(frame.readback, i, colorTexture, entry.attachmentX, entry.attachmentY);
+                }
+
+                device.submitReadback(frame.readback);
+                this.submittedFrames.push(frame);
+            });
+        });
     }
 
     public peekData(device: GfxDevice): void {

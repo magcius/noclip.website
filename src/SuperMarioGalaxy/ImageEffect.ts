@@ -171,16 +171,6 @@ class WeirdFancyRenderTarget {
     }
 }
 
-const bloomClearRenderPassDescriptor: GfxRenderPassDescriptor = {
-    colorAttachment: null,
-    colorResolveTo: null,
-    depthStencilAttachment: null,
-    colorClearColor: 'load',
-    depthStencilResolveTo: null,
-    depthClearValue: 1.0,
-    stencilClearValue: 0.0,
-};
-
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 
 function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, program: DeviceProgram, megaStateDescriptor: GfxMegaStateDescriptor = fullscreenMegaState, sampleCount: number = DEFAULT_NUM_SAMPLES): GfxRenderPipeline {
@@ -193,30 +183,6 @@ function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, progra
         program: gfxProgram,
         sampleCount,
     });
-}
-
-// No depth buffer, designed for postprocessing.
-class PostFXRenderTarget {
-    public colorAttachment = new Attachment(GfxFormat.U8_RGBA_RT);
-    private renderPassDescriptor = makeEmptyRenderPassDescriptor();
-
-    public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
-        this.colorAttachment.setParameters(device, width, height, numSamples);
-    }
-
-    public createRenderPass(device: GfxDevice, viewport: Readonly<GfxNormalizedViewportCoords>, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
-        copyRenderPassDescriptor(this.renderPassDescriptor, renderPassDescriptor);
-        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
-        this.renderPassDescriptor.colorResolveTo = colorResolveTo;
-        this.renderPassDescriptor.depthStencilAttachment = null;
-        const passRenderer = device.createRenderPass(this.renderPassDescriptor);
-        setViewportOnRenderPass(passRenderer, viewport, this.colorAttachment);
-        return passRenderer;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.colorAttachment.destroy(device);
-    }
 }
 
 export class BloomPostFXRenderer {
