@@ -12,7 +12,7 @@ import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, A
 import { mat4, vec3, vec4 } from 'gl-matrix';
 import { depthClearRenderPassDescriptor, BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';

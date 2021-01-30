@@ -2,7 +2,7 @@
 import * as Viewer from '../viewer';
 import { GfxDevice, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxCullMode } from '../gfx/platform/GfxPlatform';
 import { makeClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
 import { readZELVIEW0, Headers, ZELVIEW0 } from './zelview0';

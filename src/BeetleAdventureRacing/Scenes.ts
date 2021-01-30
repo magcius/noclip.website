@@ -3,7 +3,7 @@ import { colorNewFromRGBA } from "../Color";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
 import { executeOnPass } from "../gfx/render/GfxRenderer";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import InputManager from "../InputManager";
 import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import * as UI from '../ui';

@@ -10,7 +10,7 @@ import { fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';
 import { TextureMapping } from '../TextureHolder';

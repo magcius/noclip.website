@@ -12,7 +12,7 @@ import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxT
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, quat, vec3, vec2, vec4 } from "gl-matrix";
 import { computeViewSpaceDepthFromWorldSpaceAABB, FPSCameraController, CameraController } from "../Camera";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { assert } from "../util";
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";

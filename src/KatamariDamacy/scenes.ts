@@ -9,7 +9,7 @@ import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor 
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { Vec3Zero, MathConstants, setMatrixTranslation } from '../MathHelpers';
 import { SceneContext } from '../SceneBase';
 import { FakeTextureHolder, TextureMapping } from '../TextureHolder';

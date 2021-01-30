@@ -15,7 +15,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { OrbitCameraController } from '../Camera';
 
 export class GrezzoTextureHolder extends CtrTextureHolder {

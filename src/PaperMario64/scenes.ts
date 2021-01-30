@@ -10,7 +10,7 @@ import { OpaqueBlack, Color } from '../Color';
 import * as BYML from '../byml';
 import { ScriptExecutor } from './script';
 import { SceneContext } from '../SceneBase';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { CameraController } from '../Camera';
 
 const pathBase = `pm64`;

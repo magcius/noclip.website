@@ -2,7 +2,7 @@
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { BasicRenderTarget, makeClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
 import * as JPA from '../Common/JSYSTEM/JPA';

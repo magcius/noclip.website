@@ -15,7 +15,7 @@ import { GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, makeSortKey } 
 import { AABB, squaredDistanceFromPointToAABB } from '../Geometry';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { assert, nArray } from '../util';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { FPSCameraController, computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from '../Camera';
 import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';

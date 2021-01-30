@@ -3,7 +3,7 @@ import * as Viewer from '../viewer';
 import { BasicRenderTarget, makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture } from "../gfx/platform/GfxPlatform";
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { SceneContext } from '../SceneBase';
 import { FakeTextureHolder } from '../TextureHolder';
 import { hexzero, nArray } from '../util';

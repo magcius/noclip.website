@@ -15,7 +15,7 @@ import { DeviceProgram } from '../Program';
 import { fillMatrix4x3, fillMatrix4x4, fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { mat4 } from 'gl-matrix';
 import { computeModelMatrixSRT, clamp } from '../MathHelpers';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { captureScene } from '../CaptureHelpers';
 import { downloadBuffer } from '../DownloadUtils';
 import { makeZipFile } from '../ZipFile';

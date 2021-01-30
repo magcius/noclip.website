@@ -21,7 +21,7 @@ import { TransparentBlack, colorNewFromRGBA, White } from '../Color';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
-import { GfxRenderHelper } from '../gfx/render/GfxRenderGraph';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { MathConstants, scaleMatrix } from "../MathHelpers";
 import { CameraController } from '../Camera';
 
