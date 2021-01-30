@@ -34,11 +34,21 @@ class SceneGraphPass {
     public resolveTextureOutputIDs: number[] = [];
     // List of resolveTextureIDs that we have a reference to.
     public resolveTextureInputIDs: number[] = [];
-    public funcs: SceneGraphFunc[] = [];
+    public func: SceneGraphFunc | null = null;
     public present: boolean = false;
     public viewport: GfxNormalizedViewportCoords = IdentityViewportCoords;
 
-    public descriptor: GfxRenderPassDescriptor;
+    // Execution state stored by the schedule.
+    public descriptor: GfxRenderPassDescriptor = {
+        colorAttachment: null,
+        colorResolveTo: null,
+        depthStencilAttachment: null,
+        depthStencilResolveTo: null,
+        colorClearColor: 'load',
+        depthClearValue: 'load',
+        stencilClearValue: 'load',
+    };
+
     public viewportX: number = 0;
     public viewportY: number = 0;
     public viewportW: number = 0;
@@ -143,7 +153,8 @@ export class SceneGraphBuilder {
     }
 
     public exec(func: SceneGraphFunc): void {
-        this.currentPass!.funcs.push(func);
+        assert(this.currentPass!.func === null);
+        this.currentPass!.func = func;
     }
 
     public present(): void {
@@ -344,8 +355,8 @@ export class SceneGraphExecutor {
 
         renderPass.setViewport(pass.viewportX, pass.viewportY, pass.viewportW, pass.viewportH);
 
-        for (let i = 0; i < pass.funcs.length; i++)
-            pass.funcs[i](renderPass, this);
+        if (pass.func !== null)
+            pass.func(renderPass, this);
 
         device.submitPass(renderPass);
         this.currentGraphPass = null;
@@ -356,28 +367,16 @@ export class SceneGraphExecutor {
         const depthStencilRenderTargetID = pass.renderTargetIDs[RenderTargetAttachmentSlot.DepthStencil];
 
         const color0RenderTarget = this.acquireRenderTargetForID(device, graph, color0RenderTargetID);
-        const colorAttachment = color0RenderTarget !== null ? color0RenderTarget.attachment : null;
-        const colorClearColor = (color0RenderTarget !== null && color0RenderTarget.needsClear) ? graph.renderTargetDescriptions[color0RenderTargetID].colorClearColor : 'load';
+        pass.descriptor.colorAttachment = color0RenderTarget !== null ? color0RenderTarget.attachment : null;
+        pass.descriptor.colorClearColor = (color0RenderTarget !== null && color0RenderTarget.needsClear) ? graph.renderTargetDescriptions[color0RenderTargetID].colorClearColor : 'load';
 
         const depthStencilRenderTarget = this.acquireRenderTargetForID(device, graph, depthStencilRenderTargetID);
-        const depthStencilAttachment = depthStencilRenderTarget !== null ? depthStencilRenderTarget.attachment : null;
-        const depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
-        const stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
+        pass.descriptor.depthStencilAttachment = depthStencilRenderTarget !== null ? depthStencilRenderTarget.attachment : null;
+        pass.descriptor.depthClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].depthClearValue : 'load';
+        pass.descriptor.stencilClearValue = (depthStencilRenderTarget !== null && depthStencilRenderTarget.needsClear) ? graph.renderTargetDescriptions[depthStencilRenderTargetID].stencilClearValue : 'load';
 
-        const colorResolveTo = pass.present ? presentColorTexture : this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.Color0]);
-        const depthStencilResolveTo = this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.DepthStencil]);
-
-        pass.descriptor = {
-            colorAttachment,
-            depthStencilAttachment,
-
-            colorClearColor,
-            depthClearValue,
-            stencilClearValue,
-
-            colorResolveTo,
-            depthStencilResolveTo,
-        };
+        pass.descriptor.colorResolveTo = pass.present ? presentColorTexture : this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.Color0]);
+        pass.descriptor.depthStencilResolveTo = this.acquireResolveTextureForID(device, graph, pass.resolveTextureOutputIDs[RenderTargetAttachmentSlot.DepthStencil]);
 
         if (color0RenderTarget !== null)
             color0RenderTarget.needsClear = false;
