@@ -23,6 +23,40 @@ import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } fro
 
 const scratchVec3 = vec3.create();
 
+const ImageEffectShaderLib = `
+float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
+vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b)); }
+
+float Monochrome(vec3 t_Color) {
+    // NTSC primaries.
+    return dot(t_Color.rgb, vec3(0.299, 0.587, 0.114));
+}
+`;
+
+function generateBlurShader(functionName: string, samplerName: string, tapCount: number, radiusStr: string, intensityStr: string, angleOffset: number = 0.0): string {
+    let S = `
+vec3 ${functionName}(in vec2 t_TexCoord) {
+    vec3 c = vec3(0.0);
+`;
+
+    const aspect = 16/9;
+    const invAspect = 1/aspect;
+
+    for (let i = 0; i < tapCount; i++) {
+        const theta = angleOffset + (MathConstants.TAU * (i / tapCount));
+        const x = invAspect * Math.cos(theta), y = -Math.sin(theta);
+
+        S += `
+c += (texture(SAMPLER_2D(${samplerName}), t_TexCoord + vec2(${x.toFixed(5)} * ${radiusStr}, ${y.toFixed(5)} * ${radiusStr})).rgb * ${intensityStr});`;
+    }
+
+    S += `
+    return TevOverflow(c);
+}
+`;
+    return S;
+}
+
 // Should I try to do this with GX? lol.
 class BloomPassBaseProgram extends DeviceProgram {
     public static BindingsDefinition = `
@@ -68,13 +102,9 @@ void main() {
 class BloomPassThresholdPipeline extends BloomPassBaseProgram {
     public frag: string = `
 ${BloomPassBaseProgram.BindingsDefinition}
+${ImageEffectShaderLib}
 
 in vec2 v_TexCoord;
-
-float Monochrome(vec3 t_Color) {
-    // NTSC primaries.
-    return dot(t_Color.rgb, vec3(0.299, 0.587, 0.114));
-}
 
 void main() {
     vec4 c = texture(SAMPLER_2D(u_Texture), v_TexCoord);
@@ -84,39 +114,37 @@ void main() {
 }
 
 abstract class BloomPassBlurProgram extends BloomPassBaseProgram {
-    constructor(radiusL: number[], ofsL: number[], count: number, intensityVar: string) {
+    constructor(radiusL: number[], ofsL: number[], tapCount: number, intensityVar: string) {
         super();
 
         assert(radiusL.length === ofsL.length);
 
+
+        let funcs = ``;
+        let main = ``;
+
+        const samplerName = `u_Texture`;
+        for (let i = 0; i < radiusL.length; i++) {
+            const funcName = `BlurPass${i}`;
+            const radius = radiusL[i];
+            const radiusStr = radius.toFixed(5);
+            const angleOffset = ofsL[i];
+            funcs += generateBlurShader(funcName, samplerName, tapCount, radiusStr, intensityVar, angleOffset);
+            main += `f += ${funcName}(v_TexCoord);\n`;
+        }
+
         this.frag = `
 ${BloomPassBaseProgram.BindingsDefinition}
+${ImageEffectShaderLib}
 
 in vec2 v_TexCoord;
 
-float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
-vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b)); }
-void main() {
-    vec3 c;
-    vec3 f = vec3(0.0);
-`;
+${funcs}
 
-        const aspect = 16/9;
-        const invAspect = 1/aspect;
-        for (let i = 0; i < radiusL.length; i++) {
-            const radius = radiusL[i], ofs = ofsL[i];
-            this.frag += `
-    // Pass ${i + 1}
-    c = vec3(0.0);`;
-            for (let j = 0; j < count; j++) {
-                const theta = ofs + (MathConstants.TAU * (j / count));
-                const x = invAspect * radius * Math.cos(theta), y = radius * Math.sin(theta);
-                this.frag += `
-    c += (texture(SAMPLER_2D(u_Texture), v_TexCoord + vec2(${x.toFixed(5)}, -1.0 * ${y.toFixed(5)})).rgb * ${intensityVar});`;
-            }
-            this.frag += `
-    f += TevOverflow(c);`;
-        }
+void main() {
+    vec3 f = vec3(0.0);
+    ${main}
+`;
     }
 }
 
