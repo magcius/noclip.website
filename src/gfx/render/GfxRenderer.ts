@@ -457,7 +457,7 @@ export class GfxRenderInst {
 
         this._renderPipelineDescriptor.colorAttachmentFormats[0] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
         this._renderPipelineDescriptor.depthStencilAttachmentFormat = depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.pixelFormat : null;
-        this._renderPipelineDescriptor.sampleCount = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.numSamples : depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.numSamples : 0;
+        this._renderPipelineDescriptor.sampleCount = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.sampleCount : depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.sampleCount : 0;
     }
 
     public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {

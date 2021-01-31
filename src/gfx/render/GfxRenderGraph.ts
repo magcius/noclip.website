@@ -24,7 +24,7 @@ import { assert, assertExists } from "../../util";
 export class GfxrRenderTargetDescription {
     public width: number = 0;
     public height: number = 0;
-    public numSamples: number = 0;
+    public sampleCount: number = 0;
 
     public colorClearColor: Readonly<Color> | 'load' = 'load';
     public depthClearValue: number | 'load' = 'load';
@@ -36,10 +36,10 @@ export class GfxrRenderTargetDescription {
     /**
      * Set the dimensions of a render target description.
      */
-    public setParameters(width: number, height: number, numSamples = DEFAULT_NUM_SAMPLES): void {
+    public setParameters(width: number, height: number, sampleCount = DEFAULT_NUM_SAMPLES): void {
         this.width = width;
         this.height = height;
-        this.numSamples = numSamples;
+        this.sampleCount = sampleCount;
     }
 }
 
@@ -262,7 +262,7 @@ class RenderTarget {
     public pixelFormat: GfxFormat;
     public width: number = 0;
     public height: number = 0;
-    public numSamples: number = 0;
+    public sampleCount: number = 0;
 
     public needsClear: boolean = true;
     public texture: GfxTexture | null = null;
@@ -273,11 +273,11 @@ class RenderTarget {
         this.pixelFormat = desc.pixelFormat;
         this.width = desc.width;
         this.height = desc.height;
-        this.numSamples = desc.numSamples;
+        this.sampleCount = desc.sampleCount;
 
-        assert(this.numSamples >= 1);
+        assert(this.sampleCount >= 1);
 
-        if (this.numSamples > 1) {
+        if (this.sampleCount > 1) {
             // MSAA render targets must be backed by attachments.
             this.attachment = device.createAttachment(this);
         } else {
@@ -288,7 +288,7 @@ class RenderTarget {
     }
 
     public matchesDescription(desc: Readonly<GfxrRenderTargetDescription>): boolean {
-        return this.pixelFormat === desc.pixelFormat && this.width === desc.width && this.height === desc.height && this.numSamples === desc.numSamples;
+        return this.pixelFormat === desc.pixelFormat && this.width === desc.width && this.height === desc.height && this.sampleCount === desc.sampleCount;
     }
 
     public reset(desc: Readonly<GfxrRenderTargetDescription>): void {
@@ -607,7 +607,7 @@ export class GfxrRenderGraphImpl {
         pass.descriptor.colorResolveTo = this.determineResolveToTexture(device, graph, pass, GfxrAttachmentSlot.Color0);
         pass.descriptor.depthStencilResolveTo = this.determineResolveToTexture(device, graph, pass, GfxrAttachmentSlot.DepthStencil);
 
-        let rtWidth = 0, rtHeight = 0, rtNumSamples = 0;
+        let rtWidth = 0, rtHeight = 0, rtSampleCount = 0;
         for (let i = 0; i < pass.renderTargets.length; i++) {
             const renderTarget = pass.renderTargets[i];
             if (!renderTarget)
@@ -616,12 +616,12 @@ export class GfxrRenderGraphImpl {
             if (rtWidth === 0) {
                 rtWidth = renderTarget.width;
                 rtHeight = renderTarget.height;
-                rtNumSamples = renderTarget.numSamples;
+                rtSampleCount = renderTarget.sampleCount;
             }
 
             assert(renderTarget.width === rtWidth);
             assert(renderTarget.height === rtHeight);
-            assert(renderTarget.numSamples === rtNumSamples);
+            assert(renderTarget.sampleCount === rtSampleCount);
             renderTarget.needsClear = false;
         }
 

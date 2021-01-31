@@ -34,7 +34,7 @@ interface GfxAttachmentP_GL extends GfxAttachment {
     pixelFormat: GfxFormat;
     width: number;
     height: number;
-    numSamples: number;
+    sampleCount: number;
 }
 
 interface GfxSamplerP_GL extends GfxSampler {
@@ -993,17 +993,17 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment {
-        const { pixelFormat, width, height, numSamples } = descriptor;
+        const { pixelFormat, width, height, sampleCount } = descriptor;
         const gl = this.gl;
 
         const gl_renderbuffer = this.ensureResourceExists(gl.createRenderbuffer());
         gl.bindRenderbuffer(gl.RENDERBUFFER, gl_renderbuffer);
-        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, numSamples, this.translateTextureInternalFormat(pixelFormat), width, height);
+        gl.renderbufferStorageMultisample(gl.RENDERBUFFER, sampleCount, this.translateTextureInternalFormat(pixelFormat), width, height);
 
         const attachment: GfxAttachmentP_GL = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(),
             gl_renderbuffer,
             gfxTexture: null,
-            pixelFormat, width, height, numSamples,
+            pixelFormat, width, height, sampleCount,
         };
 
         if (this._resourceCreationTracker !== null)
@@ -1020,7 +1020,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const attachment: GfxAttachmentP_GL = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(),
             gl_renderbuffer: null,
             gfxTexture,
-            pixelFormat, width, height, numSamples: 1,
+            pixelFormat, width, height, sampleCount: 1,
         };
 
         if (this._resourceCreationTracker !== null)
@@ -1701,11 +1701,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 continue;
 
             if (sampleCount === -1) {
-                sampleCount = attachment.numSamples;
+                sampleCount = attachment.sampleCount;
                 width = attachment.width;
                 height = attachment.height;
             } else {
-                assert(sampleCount === attachment.numSamples);
+                assert(sampleCount === attachment.sampleCount);
                 assert(width === attachment.width);
                 assert(height === attachment.height);
             }
@@ -1713,11 +1713,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (this._currentDepthStencilAttachment !== null) {
             if (sampleCount === -1) {
-                sampleCount = this._currentDepthStencilAttachment.numSamples;
+                sampleCount = this._currentDepthStencilAttachment.sampleCount;
                 width = this._currentDepthStencilAttachment.width;
                 height = this._currentDepthStencilAttachment.height;
             } else {
-                assert(sampleCount === this._currentDepthStencilAttachment.numSamples);
+                assert(sampleCount === this._currentDepthStencilAttachment.sampleCount);
                 assert(width === this._currentDepthStencilAttachment.width);
                 assert(height === this._currentDepthStencilAttachment.height);
             }

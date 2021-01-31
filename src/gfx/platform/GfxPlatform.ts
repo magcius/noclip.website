@@ -122,7 +122,7 @@ export interface GfxAttachmentDescriptor {
     pixelFormat: GfxFormat;
     width: number;
     height: number;
-    numSamples: number;
+    sampleCount: number;
 }
 
 export interface GfxBufferBinding {

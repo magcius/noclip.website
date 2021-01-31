@@ -41,17 +41,17 @@ export class Attachment {
     public gfxAttachment: GfxAttachment | null = null;
     public width: number = 0;
     public height: number = 0;
-    public numSamples: number = 0;
+    public sampleCount: number = 0;
 
     constructor(public pixelFormat: GfxFormat) {
     }
 
-    public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): boolean {
-        if (this.width !== width || this.height !== height || this.numSamples !== numSamples) {
+    public setParameters(device: GfxDevice, width: number, height: number, sampleCount: number = DEFAULT_NUM_SAMPLES): boolean {
+        if (this.width !== width || this.height !== height || this.sampleCount !== sampleCount) {
             this.destroy(device);
             this.width = width;
             this.height = height;
-            this.numSamples = numSamples;
+            this.sampleCount = sampleCount;
             this.gfxAttachment = device.createAttachment(this);
             return true;
         } else {
@@ -104,9 +104,9 @@ export class BasicRenderTarget {
         this.colorAttachment = new Attachment(colorFormat);
     }
 
-    public setParameters(device: GfxDevice, width: number, height: number, numSamples: number = DEFAULT_NUM_SAMPLES): void {
-        this.colorAttachment.setParameters(device, width, height, numSamples);
-        this.depthStencilAttachment.setParameters(device, width, height, numSamples);
+    public setParameters(device: GfxDevice, width: number, height: number, sampleCount: number = DEFAULT_NUM_SAMPLES): void {
+        this.colorAttachment.setParameters(device, width, height, sampleCount);
+        this.depthStencilAttachment.setParameters(device, width, height, sampleCount);
     }
 
     public createRenderPass(device: GfxDevice, viewport: Readonly<GfxNormalizedViewportCoords>, renderPassDescriptor: GfxRenderPassDescriptor, colorResolveTo: GfxTexture | null = null): GfxRenderPass {
