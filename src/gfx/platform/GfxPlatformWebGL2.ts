@@ -1680,15 +1680,15 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         program.compileState = GfxProgramCompileStateP_GL.Compiling;
     }
 
-    private _bindFramebufferAttachment(binding: GLenum, attachment: GfxAttachmentP_GL | null): void {
+    private _bindFramebufferAttachment(framebuffer: GLenum, binding: GLenum, attachment: GfxAttachmentP_GL | null): void {
         const gl = this.gl;
 
         if (attachment === null)
-            gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, binding, gl.RENDERBUFFER, null);
+            gl.framebufferRenderbuffer(framebuffer, binding, gl.RENDERBUFFER, null);
         else if (attachment.gl_renderbuffer !== null)
-            gl.framebufferRenderbuffer(gl.DRAW_FRAMEBUFFER, binding, gl.RENDERBUFFER, attachment.gl_renderbuffer);
+            gl.framebufferRenderbuffer(framebuffer, binding, gl.RENDERBUFFER, attachment.gl_renderbuffer);
         else if (attachment.gfxTexture !== null)
-            gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, binding, gl.TEXTURE_2D, getPlatformTexture(attachment.gfxTexture), 0);
+            gl.framebufferTexture2D(framebuffer, binding, gl.TEXTURE_2D, getPlatformTexture(attachment.gfxTexture), 0);
     }
 
     private _validateCurrentAttachments(): void {
@@ -1742,7 +1742,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             const colorAttachment = colorResources[i + 0] as GfxAttachmentP_GL, colorResolveTo = colorResources[i + 1] as GfxTextureP_GL;
             if (this._currentColorAttachments[i] !== colorAttachment) {
                 this._currentColorAttachments[i] = colorAttachment;
-                this._bindFramebufferAttachment(gl.COLOR_ATTACHMENT0 + i, colorAttachment);
+                this._bindFramebufferAttachment(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, colorAttachment);
                 this._resolveColorAttachmentsChanged = true;
             }
 
@@ -1756,7 +1756,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (this._currentDepthStencilAttachment !== depthStencilAttachment) {
             this._currentDepthStencilAttachment = depthStencilAttachment as GfxAttachmentP_GL;
-            this._bindFramebufferAttachment(gl.DEPTH_STENCIL_ATTACHMENT, this._currentDepthStencilAttachment);
+            this._bindFramebufferAttachment(gl.DRAW_FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, this._currentDepthStencilAttachment);
             this._resolveDepthStencilAttachmentsChanged = true;
         }
 
@@ -1992,7 +1992,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 const colorResolveFrom = assertExists(this._currentColorAttachments[i]);
                 assert(colorResolveFrom.width === colorResolveTo.width && colorResolveFrom.height === colorResolveTo.height);
                 assert(colorResolveFrom.pixelFormat === colorResolveTo.pixelFormat);
-                assert(colorResolveFrom.gl_renderbuffer !== null);
+
+                // TODO(jstpierre): Re-enable this? It is currently possible to "resolve" from a single-sampled attachment
+                // to another one, as a way of doing a copy. With a smarter GfxRenderGraph, we might be able to cull this
+
+                // assert(colorResolveFrom.gl_renderbuffer !== null);
 
                 gl.disable(gl.SCISSOR_TEST);
                 gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveColorReadFramebuffer);
@@ -2002,7 +2006,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._scPlatformFramebuffer);
 
                     if (this._resolveColorAttachmentsChanged) {
-                        gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colorResolveFrom.gl_renderbuffer);
+                        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom);
                     }
 
                     gl.blitFramebuffer(0, 0, colorResolveFrom.width, colorResolveFrom.height, 0, 0, colorResolveTo.width, colorResolveTo.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
@@ -2011,7 +2015,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveColorDrawFramebuffer);
 
                     if (this._resolveColorAttachmentsChanged) {
-                        gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colorResolveFrom.gl_renderbuffer);
+                        this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, colorResolveFrom);
                         gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorResolveTo.gl_texture, 0);
                     }
 
