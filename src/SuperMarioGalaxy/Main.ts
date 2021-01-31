@@ -41,7 +41,7 @@ import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
 import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
 import { MapPartsRailGuideHolder } from './MapParts';
-import { ImageEffectSystemHolder, BloomEffect, ImageEffectAreaMgr } from './ImageEffect';
+import { ImageEffectSystemHolder, BloomEffect, BloomEffectSimple, ImageEffectAreaMgr } from './ImageEffect';
 import { LensFlareDirector, DrawSyncManager } from './Actors/LensFlare';
 import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
@@ -523,7 +523,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
 
         const imageEffectDirector = this.sceneObjHolder.imageEffectSystemHolder !== null ? this.sceneObjHolder.imageEffectSystemHolder.imageEffectDirector : null;
-        if (imageEffectDirector !== null && imageEffectDirector.pipelinesReady(this.sceneObjHolder)) {
+        if (imageEffectDirector !== null) {
             if (imageEffectDirector.isOnNormalBloom(this.sceneObjHolder)) {
                 // Render Bloom Objects
 
@@ -544,7 +544,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
                     });
                 });
 
-                this.sceneObjHolder.bloomEffect!.pushBloomPasses(this.sceneObjHolder, builder, renderInstManager, bloomObjectsTargetID, mainColorTargetID);
+                this.sceneObjHolder.bloomEffect!.pushPassesBloom(this.sceneObjHolder, builder, renderInstManager, bloomObjectsTargetID, mainColorTargetID);
+            } else if (imageEffectDirector.currentEffect !== null) {
+                imageEffectDirector.currentEffect.pushPasses(this.sceneObjHolder, builder, renderInstManager, mainColorTargetID, mainDepthTargetID, mainColorTargetID);
             }
         }
 
@@ -1171,6 +1173,7 @@ export class SceneObjHolder {
     public liveActorGroupArray: LiveActorGroupArray | null = null;
     public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
     public bloomEffect: BloomEffect | null = null;
+    public bloomEffectSimple: BloomEffectSimple | null = null;
     public lensFlareDirector: LensFlareDirector | null = null;
     public furDrawManager: FurDrawManager | null = null;
     public namePosHolder: NamePosHolder | null = null;
@@ -1234,6 +1237,8 @@ export class SceneObjHolder {
             return this.imageEffectSystemHolder;
         else if (sceneObj === SceneObj.BloomEffect)
             return this.bloomEffect;
+        else if (sceneObj === SceneObj.BloomEffectSimple)
+            return this.bloomEffectSimple;
         else if (sceneObj === SceneObj.LensFlareDirector)
             return this.lensFlareDirector;
         else if (sceneObj === SceneObj.FurDrawManager)
@@ -1298,6 +1303,8 @@ export class SceneObjHolder {
             this.imageEffectSystemHolder = new ImageEffectSystemHolder(this);
         else if (sceneObj === SceneObj.BloomEffect)
             this.bloomEffect = new BloomEffect(this);
+        else if (sceneObj === SceneObj.BloomEffectSimple)
+            this.bloomEffectSimple = new BloomEffectSimple(this);
         else if (sceneObj === SceneObj.LensFlareDirector)
             this.lensFlareDirector = new LensFlareDirector(this);
         else if (sceneObj === SceneObj.FurDrawManager)
