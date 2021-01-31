@@ -1,7 +1,7 @@
 
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { createGlobalConeGravityObj, createGlobalCubeGravityObj, createGlobalDiskGravityObj, createGlobalPlaneGravityObj, createGlobalPlaneInBoxGravityObj, createGlobalPlaneInCylinderGravityObj, createGlobalPointGravityObj, createGlobalSegmentGravityObj, createGlobalWireGravityObj, createGlobalDiskTorusGravityObj } from './Gravity';
-import { createBloomCube, createBloomCylinder, createBloomSphere, createSimpleBloomCube } from './ImageEffect';
+import { createBloomCube, createBloomCylinder, createBloomSphere, createSimpleBloomCube, createDepthOfFieldCube } from './ImageEffect';
 import { createCsvParser, JMapInfoIter } from "./JMapInfo";
 import { createLensFlareArea, requestArchivesLensFlareArea } from './Actors/LensFlare';
 import { createLightCtrlCube, createLightCtrlCylinder } from './LightData';
@@ -794,11 +794,12 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     E("BloomCube",                    createBloomCube),
     E("BloomCylinder",                createBloomCylinder),
     E("BloomSphere",                  createBloomSphere),
+    E("SimpleBloomCube",              createSimpleBloomCube),
+    E("DepthOfFieldCube",             createDepthOfFieldCube),
     E("DeathCube",                    createDeathCube),
     E("LensFlareArea",                createLensFlareArea, requestArchivesLensFlareArea),
     E("LightCtrlCube",                createLightCtrlCube),
     E("LightCtrlCylinder",            createLightCtrlCylinder),
-    E("SimpleBloomCube",              createSimpleBloomCube),
     E("SwitchCube",                   createSwitchCube),
     E("SwitchSphere",                 createSwitchSphere),
     E("SwitchCylinder",               createSwitchCylinder),
@@ -843,7 +844,6 @@ const ActorTable: NameObjFactoryTableEntry[] = [
     N("MirrorAreaCube"),
     N("FallsCube"),
     N("RestartCube"),
-    N("DepthOfFieldCube"),
     N("GlaringLightAreaCylinder"),
     N("BigBubbleCameraBox"),
     N("BigBubbleCameraCylinder"),

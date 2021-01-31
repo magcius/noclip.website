@@ -45,6 +45,10 @@ vec3 saturate(vec3 v) { return clamp(v, vec3(0.0), vec3(1.0)); }
 vec4 saturate(vec4 v) { return clamp(v, vec4(0.0), vec4(1.0)); }
 `;
 
+export const invlerp: string = `
+float invlerp(float v, float min, float max) { return (v - min) / (max - min); }
+`;
+
 // Vertex shader for indexbuffer-less full-screen triangle
 export const fullscreenVS: string = `
 out vec2 v_TexCoord;
@@ -54,6 +58,15 @@ void main() {
     v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
     gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
     gl_Position.zw = vec2(1, 1);
+}
+`;
+
+export const fullscreenBlitOneTexPS: string = `
+uniform sampler2D u_Texture;
+in vec2 v_TexCoord;
+
+void main() {
+    gl_FragColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
 }
 `;
 

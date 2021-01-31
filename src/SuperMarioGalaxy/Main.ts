@@ -11,7 +11,7 @@ import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
@@ -41,7 +41,7 @@ import { AreaObjMgr, AreaObj } from './AreaObj';
 import { CollisionDirector } from './Collision';
 import { StageSwitchContainer, SleepControllerHolder, initSyncSleepController, SwitchWatcherHolder } from './Switch';
 import { MapPartsRailGuideHolder } from './MapParts';
-import { ImageEffectSystemHolder, BloomEffect, BloomEffectSimple, ImageEffectAreaMgr } from './ImageEffect';
+import { ImageEffectSystemHolder, BloomEffect, BloomEffectSimple, DepthOfFieldBlur, ImageEffectAreaMgr } from './ImageEffect';
 import { LensFlareDirector, DrawSyncManager } from './Actors/LensFlare';
 import { DrawCameraType } from './DrawBuffer';
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from '../gx/gx_material';
@@ -1174,6 +1174,7 @@ export class SceneObjHolder {
     public imageEffectSystemHolder: ImageEffectSystemHolder | null = null;
     public bloomEffect: BloomEffect | null = null;
     public bloomEffectSimple: BloomEffectSimple | null = null;
+    public depthOfFieldBlur: DepthOfFieldBlur | null = null;
     public lensFlareDirector: LensFlareDirector | null = null;
     public furDrawManager: FurDrawManager | null = null;
     public namePosHolder: NamePosHolder | null = null;
@@ -1239,6 +1240,8 @@ export class SceneObjHolder {
             return this.bloomEffect;
         else if (sceneObj === SceneObj.BloomEffectSimple)
             return this.bloomEffectSimple;
+        else if (sceneObj === SceneObj.DepthOfFieldBlur)
+            return this.depthOfFieldBlur;
         else if (sceneObj === SceneObj.LensFlareDirector)
             return this.lensFlareDirector;
         else if (sceneObj === SceneObj.FurDrawManager)
@@ -1305,6 +1308,8 @@ export class SceneObjHolder {
             this.bloomEffect = new BloomEffect(this);
         else if (sceneObj === SceneObj.BloomEffectSimple)
             this.bloomEffectSimple = new BloomEffectSimple(this);
+        else if (sceneObj === SceneObj.DepthOfFieldBlur)
+            this.depthOfFieldBlur = new DepthOfFieldBlur(this);
         else if (sceneObj === SceneObj.LensFlareDirector)
             this.lensFlareDirector = new LensFlareDirector(this);
         else if (sceneObj === SceneObj.FurDrawManager)

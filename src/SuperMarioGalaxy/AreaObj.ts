@@ -17,8 +17,8 @@ interface AreaFormBase {
 }
 
 export const enum AreaFormType {
-    Cube,
-    OriginCube,
+    CenterOriginCube,
+    BaseOriginCube,
     Sphere,
     Cylinder,
     Bowl,
@@ -58,7 +58,7 @@ class AreaFormCube implements AreaFormBase {
         this.aabb.maxY =  0.5 * scratchVec3a[1] * 1000;
         this.aabb.maxZ =  0.5 * scratchVec3a[2] * 1000;
 
-        if (type === AreaFormType.OriginCube) {
+        if (type === AreaFormType.BaseOriginCube) {
             this.aabb.minY += 0.5 * scratchVec3a[1] * 1000;
             this.aabb.maxY += 0.5 * scratchVec3a[1] * 1000;
         }
@@ -194,10 +194,10 @@ export class AreaObj extends NameObj {
     constructor(private zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
         super(sceneObjHolder, getObjectName(infoIter));
 
-        if (formType === AreaFormType.Cube)
-            this.form = new AreaFormCube(sceneObjHolder, infoIter, AreaFormType.Cube);
-        else if (formType === AreaFormType.OriginCube)
-            this.form = new AreaFormCube(sceneObjHolder, infoIter, AreaFormType.OriginCube);
+        if (formType === AreaFormType.CenterOriginCube)
+            this.form = new AreaFormCube(sceneObjHolder, infoIter, AreaFormType.CenterOriginCube);
+        else if (formType === AreaFormType.BaseOriginCube)
+            this.form = new AreaFormCube(sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
         else if (formType === AreaFormType.Sphere)
             this.form = new AreaFormSphere(sceneObjHolder, infoIter);
         else if (formType === AreaFormType.Cylinder)

@@ -2,7 +2,7 @@
 import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
 import { NameObj, CalcAnimType, MovementType } from "./NameObj";
 import { getMatrixTranslation } from "../MathHelpers";
-import { vec3 } from "gl-matrix";
+import { ReadonlyMat4, vec3 } from "gl-matrix";
 import { AreaObj, AreaObjMgr, AreaFormType } from "./AreaObj";
 import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3 } from "./JMapInfo";
 import { ZoneAndLayer } from "./LiveActor";
@@ -19,6 +19,7 @@ import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "..
 import { MathConstants } from "../MathHelpers";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
+import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
 
 const scratchVec3 = vec3.create();
 
@@ -110,7 +111,7 @@ function connectToSceneImageEffect(sceneObjHolder: SceneObjHolder, nameObj: Name
     connectToScene(sceneObjHolder, nameObj, MovementType.ImageEffect, CalcAnimType.Environment, -1, -1);
 }
 
-const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
+const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 2 }];
 
 // Should I try to do this with GX? lol.
 
@@ -130,16 +131,9 @@ layout(std140) uniform ub_Params {
     public vert = GfxShaderLibrary.fullscreenVS;
 }
 
-class BloomPassFullscreenCopyProgram extends BloomPassBaseProgram {
-    public frag: string = `
-${BloomPassBaseProgram.BindingsDefinition}
-
-in vec2 v_TexCoord;
-
-void main() {
-    gl_FragColor = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-}
-`;
+class FullscreenBlitProgram extends DeviceProgram {
+    public vert = GfxShaderLibrary.fullscreenVS;
+    public frag = GfxShaderLibrary.fullscreenBlitOneTexPS;
 }
 
 class BloomPassThresholdProgram extends BloomPassBaseProgram {
@@ -225,7 +219,7 @@ export class BloomEffect extends ImageEffectBase {
     private thresholdProgram: GfxProgram;
     private blur1Program: GfxProgram;
     private blur2Program: GfxProgram;
-    private combineProgram: GfxProgram;
+    private blitProgram: GfxProgram;
 
     private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
         blendMode: GfxBlendMode.ADD,
@@ -233,7 +227,6 @@ export class BloomEffect extends ImageEffectBase {
         blendDstFactor: GfxBlendFactor.ONE,
     }), fullscreenMegaState);
 
-    private bloomSampler: GfxSampler;
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
 
     private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
@@ -245,7 +238,7 @@ export class BloomEffect extends ImageEffectBase {
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        this.bloomSampler = cache.createSampler(device, {
+        const linearSampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
             minFilter: GfxTexFilterMode.BILINEAR,
@@ -254,16 +247,16 @@ export class BloomEffect extends ImageEffectBase {
             minLOD: 0,
             maxLOD: 100,
         });
-        this.textureMapping[0].gfxSampler = this.bloomSampler;
+        this.textureMapping[0].gfxSampler = linearSampler;
 
         this.thresholdProgram = cache.createProgram(device, new BloomPassThresholdProgram());
         this.blur1Program = cache.createProgram(device, new BloomPassBlur1Program());
         this.blur2Program = cache.createProgram(device, new BloomPassBlur2Program());
-        this.combineProgram = cache.createProgram(device, new BloomPassFullscreenCopyProgram());
+        this.blitProgram = cache.createProgram(device, new FullscreenBlitProgram());
     }
 
-    private allocateParameterBuffer(renderInst: GfxRenderInst): number {
-        const parameterBufferOffs = renderInst.allocateUniformBuffer(0, 4);
+    private allocateParameterBuffer(renderInst: GfxRenderInst) {
+        let offs = renderInst.allocateUniformBuffer(0, 4);
         const d = renderInst.mapUniformBufferF32(0);
 
         const bloomIntensity = (this.bloomIntensity * this.strength) / 0xFF;
@@ -271,10 +264,7 @@ export class BloomEffect extends ImageEffectBase {
         const intensity1 = this.intensity1 / 0xFF;
         const intensity2 = this.intensity2 / 0xFF;
 
-        let offs = parameterBufferOffs;
         offs += fillVec4(d, offs, bloomIntensity, threshold, intensity1, intensity2);
-
-        return parameterBufferOffs;
     }
 
     public pushPassesBloom(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number): void {
@@ -360,7 +350,7 @@ export class BloomEffect extends ImageEffectBase {
             pass.attachResolveTexture(bloomBlurL2ResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxProgram(this.combineProgram);
+                renderInst.setGfxProgram(this.blitProgram);
                 renderInst.setMegaStateFlags(this.combineMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomBlurL2ResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
@@ -418,10 +408,11 @@ class BloomSimpleBlurProgram extends DeviceProgram {
 
     constructor(tapCount: number, radius: number, intensity: number) {
         super();
+        const intensityPerTap = intensity / tapCount;
         this.frag = `
 ${BloomSimplePSCommon}
 
-${generateBlurFunction(`Blur`, `u_Texture`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensity))}
+${generateBlurFunction(`Blur`, `u_Texture`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap))}
 
 void main() {
     float t_BlurredValue = saturate(Blur(v_TexCoord).r);
@@ -446,7 +437,6 @@ export class BloomEffectSimple extends ImageEffectBase {
         blendDstFactor: GfxBlendFactor.ONE,
     }), fullscreenMegaState);
 
-    private bloomSampler: GfxSampler;
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
 
     private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
@@ -458,7 +448,7 @@ export class BloomEffectSimple extends ImageEffectBase {
         sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
 
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
-        this.bloomSampler = cache.createSampler(device, {
+        const linearSampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
             minFilter: GfxTexFilterMode.BILINEAR,
@@ -467,24 +457,21 @@ export class BloomEffectSimple extends ImageEffectBase {
             minLOD: 0,
             maxLOD: 100,
         });
-        this.textureMapping[0].gfxSampler = this.bloomSampler;
+        this.textureMapping[0].gfxSampler = linearSampler;
 
         this.thresholdProgram = cache.createProgram(device, new BloomSimpleThresholdProgram());
         this.blurProgram = cache.createProgram(device, new BloomSimpleBlurProgram(8, 0.009, 1.0));
     }
 
-    private allocateParameterBuffer(renderInst: GfxRenderInst): number {
-        const parameterBufferOffs = renderInst.allocateUniformBuffer(0, 4);
+    private allocateParameterBuffer(renderInst: GfxRenderInst) {
+        let offs = renderInst.allocateUniformBuffer(0, 4);
         const d = renderInst.mapUniformBufferF32(0);
 
         const maskFilter = this.maskFilter;
         const threshold = this.threshold / 0xFF;
         const intensity = (this.intensity * this.strength);
 
-        let offs = parameterBufferOffs;
         offs += fillVec4(d, offs, maskFilter, threshold, intensity);
-
-        return parameterBufferOffs;
     }
 
     public pushPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, resultBlendTargetID: number): void {
@@ -536,6 +523,200 @@ export class BloomEffectSimple extends ImageEffectBase {
                 renderInst.setGfxProgram(this.blurProgram);
                 renderInst.setMegaStateFlags(this.combineMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+    }
+}
+
+class DepthOfFieldProgram extends DeviceProgram {
+    public static Common = `
+uniform sampler2D u_TextureColor;
+uniform sampler2D u_TextureDepth;
+
+layout(std140) uniform ub_Params {
+    vec4 u_Misc[1];
+};
+#define u_Intensity         (u_Misc[0].x)
+#define u_BlurMaxDist       (u_Misc[0].y)
+#define u_BlurMinDist       (u_Misc[0].z)
+#define u_IsDepthReversed   (u_Misc[0].w)
+`;
+
+    public vert = `
+${DepthOfFieldProgram.Common}
+${GfxShaderLibrary.fullscreenVS}
+`;
+
+    public frag = `
+${DepthOfFieldProgram.Common}
+${ImageEffectShaderLib}
+${GfxShaderLibrary.invlerp}
+
+in vec2 v_TexCoord;
+
+/*
+float UnprojectViewSpaceDepth(float t_DepthSample) {
+    // NDC.Z = (ProjMtx.Z * View.Z) / (ProjMtx.W * View.Z)
+    //   expand out ProjMtx mul, assuming View.W = 1.0 and ProjMtx.X = 0.0 and ProjMtx.Y = 0.0
+    // NDC.Z = (ProjMtx.ZZ*View.Z + ProjMtx.ZW) / (ProjMtx.WZ*View.Z + ProjMtx.WW)
+    //   solve for View.Z
+    // View.Z = (NDC.Z/ProjMtx.ZZ - ProjMtx.ZW) / (NDC.Z/ProjMtx.WZ - ProjMtx.WW)
+    //        = (NDC.Z*ProjMtx.WZ - ProjMtx.WW) / (NDC.Z*ProjMtx.ZZ - ProjMtx.ZW)
+
+    float ProjMtx_ZZ = u_UnprojectParams[0];
+    float ProjMtx_ZW = u_UnprojectParams[1];
+    float ProjMtx_WZ = u_UnprojectParams[2];
+    float ProjMtx_WW = u_UnprojectParams[3];
+    float NDC_Z = t_DepthSample;
+
+    return (NDC_Z*ProjMtx_WZ - ProjMtx_WW) / (NDC_Z*ProjMtx_ZZ - ProjMtx_ZW);
+}
+*/
+
+${generateBlurFunction(`Blur`, `u_TextureColor`, 4, `u_Intensity`, glslGenerateFloat(1/4))}
+
+void main() {
+    float t_DepthSample = texture(SAMPLER_2D(u_TextureDepth), v_TexCoord).r;
+    if (u_IsDepthReversed != 0.0)
+        t_DepthSample = 1.0 - t_DepthSample;
+    float t_BlurAmount = saturate(invlerp(t_DepthSample, u_BlurMinDist, u_BlurMaxDist));
+
+    vec3 t_BlurredSample = Blur(v_TexCoord);
+    // t_BlurredSample.rgb = vec3(t_BlurAmount);
+    gl_FragColor = vec4(t_BlurredSample, t_BlurAmount);
+}
+`;
+}
+
+function fillUnprojectParams(d: Float32Array, offs: number, projectionMatrix: ReadonlyMat4): number {
+    // 0 4 8  12
+    // 1 5 9  13
+    // 2 6 10 14
+    // 3 7 11 15
+    // We want lower-right quadrant for unprojection.
+    const projMtx_ZZ = projectionMatrix[10];
+    const projMtx_ZW = projectionMatrix[14];
+    const projMtx_WZ = projectionMatrix[11];
+    const projMtx_WW = projectionMatrix[15];
+    return fillVec4(d, offs, projMtx_ZZ, projMtx_ZW, projMtx_WZ, projMtx_WW);
+}
+
+export class DepthOfFieldBlur extends ImageEffectBase {
+    public intensity: number = 1.0;
+    public blurMaxDist: number = 0xF8;
+    public blurMinDist: number = 0xF2;
+
+    private textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
+
+    private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
+        blendMode: GfxBlendMode.ADD,
+        blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
+        blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
+    }), fullscreenMegaState);
+
+    private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+
+    private blitProgram: GfxProgram;
+    private depthOfFieldProgram: DepthOfFieldProgram;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'DepthOfFieldBlur');
+
+        connectToSceneImageEffect(sceneObjHolder, this);
+        sceneObjHolder.create(SceneObj.ImageEffectSystemHolder);
+
+        const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
+        const linearSampler = cache.createSampler(device, {
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.textureMapping[0].gfxSampler = linearSampler;
+
+        const nearestSampler = cache.createSampler(device, {
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.textureMapping[1].gfxSampler = nearestSampler;
+
+        this.blitProgram = cache.createProgram(device, new FullscreenBlitProgram());
+        this.depthOfFieldProgram = new DepthOfFieldProgram();
+    }
+
+    private allocateParameterBuffer(renderInst: GfxRenderInst) {
+        let offs = renderInst.allocateUniformBuffer(0, 4);
+        const d = renderInst.mapUniformBufferF32(0);
+
+        const intensity = this.intensity * this.strength * 0.005;
+        const blurMaxDist = this.blurMaxDist / 0xFF;
+        const blurMinDist = this.blurMinDist / 0xFF;
+        offs += fillVec4(d, offs, intensity, blurMaxDist, blurMinDist, IS_DEPTH_REVERSED ? 1.0 : 0.0);
+    }
+
+    public pushPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, resultBlendTargetID: number): void {
+        if (!this.active && !this.visible)
+            return;
+
+        const device = sceneObjHolder.modelCache.device;
+
+        const mainColorTargetDesc = sceneGraphBuilder.getRenderTargetDescription(mainColorTargetID);
+        const targetWidth = mainColorTargetDesc.width >> 2;
+        const targetHeight = mainColorTargetDesc.height >> 2;
+        this.targetColorDesc.setDimensions(targetWidth, targetHeight, 1);
+
+        const downsampleColorTargetID = sceneGraphBuilder.createRenderTargetID(this.targetColorDesc, 'Bloom Simple Downsample');
+
+        const renderInst = renderInstManager.newRenderInst();
+        renderInst.setAllowSkippingIfPipelineNotReady(false);
+        renderInst.setMegaStateFlags(fullscreenMegaState);
+        renderInst.setBindingLayouts(bindingLayouts);
+        this.allocateParameterBuffer(renderInst);
+        renderInst.drawPrimitives(3);
+
+        // Downsample.
+        sceneGraphBuilder.pushPass((pass) => {
+            pass.setDebugName('Depth of Field Downsample');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
+
+            const mainColorResolveTextureID = sceneGraphBuilder.resolveRenderTarget(mainColorTargetID);
+            pass.attachResolveTexture(mainColorResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blitProgram);
+                renderInst.setMegaStateFlags(fullscreenMegaState);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+
+        // Combine.
+        sceneGraphBuilder.pushPass((pass) => {
+            pass.setDebugName('Depth of Field Combine');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, resultBlendTargetID);
+
+            const downsampleResolveTextureID = sceneGraphBuilder.resolveRenderTarget(downsampleColorTargetID);
+            pass.attachResolveTexture(downsampleResolveTextureID);
+            const mainDepthResolveTextureID = sceneGraphBuilder.resolveRenderTarget(mainDepthTargetID);
+            pass.attachResolveTexture(mainDepthResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                this.depthOfFieldProgram.ensurePreprocessed(device.queryVendorInfo());
+                renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.depthOfFieldProgram));
+                renderInst.setMegaStateFlags(this.combineMegaState);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
+                this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
             });
@@ -680,6 +861,24 @@ class ImageEffectStateBloomSimple extends ImageEffectState {
     }
 }
 
+class ImageEffectStateDepthOfField extends ImageEffectState {
+    public getEffect(sceneObjHolder: SceneObjHolder): DepthOfFieldBlur | null {
+        return sceneObjHolder.depthOfFieldBlur;
+    }
+
+    public setIntensity(sceneObjHolder: SceneObjHolder, v: number): void {
+        this.getEffect(sceneObjHolder)!.intensity = v;
+    }
+
+    public setBlurMaxDist(sceneObjHolder: SceneObjHolder, v: number): void {
+        this.getEffect(sceneObjHolder)!.blurMaxDist = v;
+    }
+
+    public setBlurMinDist(sceneObjHolder: SceneObjHolder, v: number): void {
+        this.getEffect(sceneObjHolder)!.blurMinDist = v;
+    }
+}
+
 function connectToSceneImageEffectMovement(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
     connectToScene(sceneObjHolder, nameObj, MovementType.ImageEffect, -1, -1, -1);
 }
@@ -690,6 +889,7 @@ class ImageEffectDirector extends NameObj {
     private currentState: ImageEffectState;
     private stateBloomNormal = new ImageEffectStateBloomNormal();
     private stateBloomSimple = new ImageEffectStateBloomSimple();
+    private stateDepthOfField = new ImageEffectStateDepthOfField();
     private stateNull = new ImageEffectStateNull();
 
     constructor(sceneObjHolder: SceneObjHolder) {
@@ -757,6 +957,13 @@ class ImageEffectDirector extends NameObj {
         this.stateBloomSimple.setIntensity(sceneObjHolder, area.intensity / 0xFF);
     }
 
+    private setDepthOfFieldParams(sceneObjHolder: SceneObjHolder, area: DepthOfFieldArea): void {
+        // TODO(jstpierre): mPlayerSyncIntensity
+        this.stateDepthOfField.setIntensity(sceneObjHolder, area.intensity);
+        this.stateDepthOfField.setBlurMaxDist(sceneObjHolder, area.blurMaxDist);
+        this.stateDepthOfField.setBlurMinDist(sceneObjHolder, area.blurMinDist);
+    }
+
     public setCurrentEffect(effect: ImageEffectBase | null): void {
         if (this.currentEffect === effect)
             return;
@@ -776,6 +983,9 @@ class ImageEffectDirector extends NameObj {
         } else if (areaObj.effectType === ImageEffectType.BloomSimple) {
             this.setBloomSimpleParams(sceneObjHolder, areaObj as SimpleBloomArea);
             this.setState(sceneObjHolder, this.stateBloomSimple);
+        } else if (areaObj.effectType === ImageEffectType.DepthOfField) {
+            this.setDepthOfFieldParams(sceneObjHolder, areaObj as DepthOfFieldArea);
+            this.setState(sceneObjHolder, this.stateDepthOfField);
         }
     }
 
@@ -859,6 +1069,22 @@ export class SimpleBloomArea extends ImageEffectArea {
     }
 }
 
+export class DepthOfFieldArea extends ImageEffectArea {
+    public intensity: number;
+    public blurMaxDist: number;
+    public blurMinDist: number;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, formType: AreaFormType) {
+        super(zoneAndLayer, sceneObjHolder, ImageEffectType.DepthOfField, infoIter, formType);
+
+        createDepthOfFieldBlur(sceneObjHolder);
+
+        this.intensity = fallback(getJMapInfoArg1(infoIter), 0xFF) / 0xFF;
+        this.blurMaxDist = getJMapInfoArg2(infoIter)!;
+        this.blurMinDist = getJMapInfoArg3(infoIter)!;
+    }
+}
+
 export class ImageEffectAreaMgr extends AreaObjMgr<ImageEffectArea> {
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, "ImageEffectArea");
@@ -877,7 +1103,7 @@ export class ImageEffectAreaMgr extends AreaObjMgr<ImageEffectArea> {
 }
 
 export function createBloomCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function createBloomSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
@@ -889,7 +1115,11 @@ export function createBloomCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: 
 }
 
 export function createSimpleBloomCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new SimpleBloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new SimpleBloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
+}
+
+export function createDepthOfFieldCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
+    return new DepthOfFieldArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CenterOriginCube);
 }
 
 export function createNormalBloom(sceneObjHolder: SceneObjHolder): void {
@@ -898,4 +1128,8 @@ export function createNormalBloom(sceneObjHolder: SceneObjHolder): void {
 
 function createSimpleBloom(sceneObjHolder: SceneObjHolder): void {
     sceneObjHolder.create(SceneObj.BloomEffectSimple);
+}
+
+function createDepthOfFieldBlur(sceneObjHolder: SceneObjHolder): void {
+    sceneObjHolder.create(SceneObj.DepthOfFieldBlur);
 }

@@ -204,7 +204,7 @@ export function isCameraInWater(sceneObjHolder: SceneObjHolder): boolean {
 }
 
 export function createWaterAreaCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function createWaterAreaCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
@@ -442,7 +442,7 @@ export class SwitchArea extends AreaObj {
 }
 
 export function createSwitchCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SwitchArea {
-    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function createSwitchSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SwitchArea {
@@ -472,7 +472,7 @@ export class HazeCube extends AreaObj {
 }
 
 export function createHazeCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): HazeCube {
-    return new HazeCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new HazeCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function requestArchivesHazeCube(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -493,7 +493,7 @@ export class MercatorTransformCube extends AreaObj {
 }
 
 export function createMercatorCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): MercatorTransformCube {
-    return new MercatorTransformCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new MercatorTransformCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 //#endregion
 
@@ -514,7 +514,7 @@ export class DeathArea extends AreaObj {
 }
 
 export function createDeathCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function createDeathSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
