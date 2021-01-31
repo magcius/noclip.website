@@ -9,6 +9,7 @@ import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec4 } from "../gfx/helper
 import { White, colorNewCopy } from "../Color";
 import { mat4 } from "gl-matrix";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
+import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 class GridPlaneProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -45,14 +46,12 @@ precision highp float;
 
 in vec2 v_SurfCoord;
 
-float Saturate(float v) {
-    return clamp(v, 0.0, 1.0);
-}
+${GfxShaderLibrary.saturate}
 
 // 1 at t=0, 0 at t=N, 0 at t=1-N, 1 at t=1
 float Notch(float t, float N) {
     float inv = 1.0/N;
-    return Saturate((t - (1.0 - N))*inv) + Saturate(1.0 - (t * inv));
+    return saturate((t - (1.0 - N))*inv) + Saturate(1.0 - (t * inv));
 }
 
 void main() {

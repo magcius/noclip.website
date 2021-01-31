@@ -14,6 +14,7 @@ import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { nArray } from "../util";
 import { TheWitnessGlobals } from "./Globals";
+import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 const pathBase = `TheWitness`;
 
@@ -80,9 +81,7 @@ in vec3 v_TangentSpaceBasis0;
 in vec3 v_TangentSpaceBasis1;
 in vec3 v_TangentSpaceBasis2;
 
-float Saturate(float v) {
-    return clamp(v, 0.0, 1.0);
-}
+${GfxShaderLibrary.saturate}
 
 vec3 UnpackNormalMap(in vec4 t_NormalMapSample) {
     vec3 t_Normal;
@@ -104,7 +103,7 @@ void main() {
     // Compute albedo color from the blend map
     float t_BlendRange = 1.0 / u_BlendRanges.x;
     float t_BlendMapSample = texture(SAMPLER_2D(u_BlendMap[0]), v_TexCoord0).x - v_Color0.a;
-    float t_Blend1 = Saturate((t_BlendMapSample * t_BlendRange) + 0.5);
+    float t_Blend1 = saturate((t_BlendMapSample * t_BlendRange) + 0.5);
     float t_Blend0 = 1.0 - t_Blend1;
 
     if (t_Blend0 >= 0.0)

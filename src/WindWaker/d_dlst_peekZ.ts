@@ -1,12 +1,13 @@
 
-import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxPrimitiveTopology, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
-import { GfxReadback, GfxRenderPipeline, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
+import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxReadback, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
 import { makeEmptyRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { assert, assertExists } from "../util";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 export class PeekZResult {
     public normalizedX: number;
@@ -93,16 +94,6 @@ export class PeekZManager {
     private ensureResources(device: GfxDevice): void {
         // Kick off pipeline compilation ASAP.
         if (this.fullscreenCopyProgram === null) {
-            const fullscreenVS: string = `
-out vec2 v_TexCoord;
-
-void main() {
-    v_TexCoord.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    v_TexCoord.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = v_TexCoord * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(1, 1);
-}
-`;
             const fullscreenFS: string = `
 uniform sampler2D u_Texture;
 in vec2 v_TexCoord;
@@ -114,7 +105,7 @@ void main() {
     o_Output = uint(color.r * 4294967295.0);
 }
 `;
-            const fullscreenProgramDescriptor = preprocessProgram_GLSL(device.queryVendorInfo(), fullscreenVS, fullscreenFS);
+            const fullscreenProgramDescriptor = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, fullscreenFS);
             this.fullscreenCopyProgram = device.createProgramSimple(fullscreenProgramDescriptor);
         }
 
