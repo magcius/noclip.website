@@ -311,10 +311,10 @@
     "@webassemblyjs/wast-parser" "1.9.0"
     "@xtuc/long" "4.2.2"
 
-"@webgpu/types@^0.0.23":
-  version "0.0.23"
-  resolved "https://registry.yarnpkg.com/@webgpu/types/-/types-0.0.23.tgz#089792ca967d60d89a277749b47e5a03afbff0f8"
-  integrity sha512-Nv+OuFIzxqpv41KbwcT24KZ+RfuLRas4oFXMufS7HiQGqYgXQ+wCNCVqXlbtH799s+JL501Q7t0uVJXg/tsS6A==
+"@webgpu/types@^0.0.34":
+  version "0.0.34"
+  resolved "https://registry.yarnpkg.com/@webgpu/types/-/types-0.0.34.tgz#1b109f25689a7c1f24c804d790b3d19f03ae15f9"
+  integrity sha512-PKaA151d75u76I33Kod6fOqL7xLXM1XXYcCE5UqoqAgPkecyW0cWqUflMACoR14iuDlhtGUaflu0iFxzAAAqSA==
 
 "@xtuc/ieee754@^1.2.0":
   version "1.2.0"
