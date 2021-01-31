@@ -837,11 +837,24 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    private _useProgram(program: GfxProgramP_GL): void {
-        if (this._currentProgram !== program) {
-            this.gl.useProgram(program.gl_program);
-            this._currentProgram = program;
+    private _programCompiled(program: GfxProgramP_GL): void {
+        assert(program.compileState !== GfxProgramCompileStateP_GL.NeedsCompile);
+
+        if (program.compileState === GfxProgramCompileStateP_GL.Compiling) {
+            program.compileState = GfxProgramCompileStateP_GL.NeedsBind;
+
+            if (this._shaderDebug)
+                this._checkProgramCompilationForErrors(program);
         }
+    }
+
+    private _useProgram(program: GfxProgramP_GL): void {
+        if (this._currentProgram === program)
+            return;
+
+        this._programCompiled(program);
+        this.gl.useProgram(program.gl_program);
+        this._currentProgram = program;
     }
 
     private ensureResourceExists<T>(resource: T | null): T {
@@ -1430,12 +1443,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 complete = true;
             }
 
-            if (complete) {
-                program.compileState = GfxProgramCompileStateP_GL.NeedsBind;
-
-                if (this._shaderDebug)
-                    this._checkProgramCompilationForErrors(program);
-            }
+            if (complete)
+                this._programCompiled(program);
 
             return complete;
         }
