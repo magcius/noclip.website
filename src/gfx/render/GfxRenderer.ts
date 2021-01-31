@@ -189,6 +189,7 @@ export class GfxRenderInst {
         this.filterKey = 0;
         this._flags = GfxRenderInstFlags.AllowSkippingIfPipelineNotReady;
         this._inputState = null;
+        this._renderPipelineDescriptor.inputLayout = null;
     }
 
     /**
