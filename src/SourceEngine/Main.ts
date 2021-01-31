@@ -970,7 +970,7 @@ export class SourceRenderer implements SceneGfx {
         mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
         mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
 
-        const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F_S8);
+        const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
         mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
         mainDepthDesc.copyDimensions(mainColorDesc);
 

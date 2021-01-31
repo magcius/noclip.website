@@ -143,7 +143,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
     private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
-    private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F_S8);
+    private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private bloomObjectsDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
     constructor(device: GfxDevice, private renderHelper: GXRenderHelperGfx, private spawner: SMGSpawner, private sceneObjHolder: SceneObjHolder) {

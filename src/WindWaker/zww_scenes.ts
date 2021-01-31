@@ -534,7 +534,7 @@ const scratchMatrix = mat4.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
-    private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F_S8);
+    private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private opaqueSceneTextureMapping = new TextureMapping();
 
     public renderHelper: GXRenderHelperGfx;
