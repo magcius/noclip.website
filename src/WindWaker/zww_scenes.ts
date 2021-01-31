@@ -8,7 +8,6 @@ import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import * as BYML from '../byml';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
-import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as UI from '../ui';
 import * as GX from '../gx/gx_enum';
 
@@ -18,9 +17,9 @@ import { Camera, texProjCameraSceneTex } from '../Camera';
 import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, MaterialParams, ColorKind, SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask, GfxBlendMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, depthClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor, transparentBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { range, getMatrixAxisZ, computeProjectionMatrixFromCuboid } from '../MathHelpers';
@@ -38,7 +37,7 @@ import { LegacyActor__RegisterFallbackConstructor } from './LegacyActor';
 import { PeekZManager } from './d_dlst_peekZ';
 import { dBgS } from './d_bg';
 import { dfRange } from '../DebugFloaters';
-import { colorNewCopy, White, colorCopy } from '../Color';
+import { colorNewCopy, White, colorCopy, TransparentBlack } from '../Color';
 import { GX_Array, GX_VtxAttrFmt, compileVtxLoader, GX_VtxDesc } from '../gx/gx_displaylist';
 import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
@@ -46,6 +45,7 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TSDraw } from '../SuperMarioGalaxy/DDraw';
 import { d_a_sea } from './d_a_sea';
 import { dPa_control_c } from './d_particle';
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -532,8 +532,11 @@ const enum EffectDrawGroup {
 
 const scratchMatrix = mat4.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
-    private renderTarget = new BasicRenderTarget();
-    public opaqueSceneTexture = new ColorTexture();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
+    private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+    private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F_S8);
+    private opaqueSceneTextureMapping = new TextureMapping();
+
     public renderHelper: GXRenderHelperGfx;
 
     public rooms: WindWakerRoom[] = [];
@@ -694,7 +697,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         renderInstManager.setCurrentRenderInstList(dlst.main[0]);
         {
             this.globals.particleCtrl.calc(viewerInput);
-            this.globals.particleCtrl.setOpaqueSceneTexture(this.opaqueSceneTexture.gfxTexture!);
 
             for (let group = EffectDrawGroup.Main; group <= EffectDrawGroup.Indirect; group++) {
                 let texPrjMtx: mat4 | null = null;
@@ -725,47 +727,81 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.executeList(device, renderInstManager, pass, listSet[1]);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass | null {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
         const dlst = this.globals.dlst;
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        dlst.peekZ.setParameters(device, this.renderTarget.depthStencilAttachment.width, this.renderTarget.depthStencilAttachment.height);
-
-        const renderInstManager = this.renderHelper.renderInstManager;
+        dlst.peekZ.beginFrame(device);
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        // First, render the skybox.
-        const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, transparentBlackFullClearRenderPassDescriptor);
-        this.executeListSet(device, renderInstManager, skyboxPassRenderer, dlst.sky);
-        device.submitPass(skyboxPassRenderer);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-        // Now do main pass.
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
-        this.executeList(device, renderInstManager, mainPassRenderer, dlst.sea);
-        this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.main);
+        this.mainColorDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.mainColorDesc.colorClearColor = TransparentBlack;
 
-        // Execute our alpha model stuff.
-        this.executeList(device, renderInstManager, mainPassRenderer, dlst.alphaModel);
+        this.mainDepthDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
 
-        this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Main]);
-        this.executeList(device, renderInstManager, mainPassRenderer, dlst.wetherEffect);
-        this.executeListSet(device, renderInstManager, mainPassRenderer, dlst.ui);
-        device.submitPass(mainPassRenderer);
+        const builder = this.renderGraph.getGraphBuilder();
+        builder.begin();
 
-        // Execute PeekZ.
-        dlst.peekZ.submitFrame(device, this.renderTarget.depthStencilAttachment.gfxAttachment!);
+        const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Skybox');
+
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyboxDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Skybox Depth');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.executeListSet(device, renderInstManager, passRenderer, dlst.sky);
+            });
+        });
+
+        const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.executeList(device, renderInstManager, passRenderer, dlst.sea);
+                this.executeListSet(device, renderInstManager, passRenderer, dlst.main);
+
+                // Execute our alpha model stuff.
+                this.executeList(device, renderInstManager, passRenderer, dlst.alphaModel);
+        
+                this.executeList(device, renderInstManager, passRenderer, dlst.effect[EffectDrawGroup.Main]);
+                this.executeList(device, renderInstManager, passRenderer, dlst.wetherEffect);
+                this.executeListSet(device, renderInstManager, passRenderer, dlst.ui);
+            });
+        });
+
+        dlst.peekZ.pushPasses(device, renderInstManager, builder, viewerInput.backbufferWidth, viewerInput.backbufferHeight, mainDepthTargetID);
         dlst.peekZ.peekData(device);
 
-        // Now indirect stuff.
-        const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, viewerInput.onscreenTexture);
-        this.executeList(device, renderInstManager, mainPassRenderer, dlst.effect[EffectDrawGroup.Indirect]);
+        builder.pushPass((pass) => {
+            pass.setDebugName('Indirect');
 
-        device.submitPass(indirectPassRenderer);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
 
+            const opaqueSceneTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            pass.attachResolveTexture(opaqueSceneTextureID);
+            pass.exec((passRenderer, scope) => {
+                this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
+                dlst.effect[EffectDrawGroup.Indirect].resolveLateSamplerBinding('OpaqueSceneTexture', this.opaqueSceneTextureMapping);
+                this.executeList(device, renderInstManager, passRenderer, dlst.effect[EffectDrawGroup.Indirect]);
+            });
+        });
+
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+        const graph = builder.end();
+
+        this.renderGraph.execute(device, graph);
         dlst.reset();
         renderInstManager.resetRenderInsts();
 
@@ -774,9 +810,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.opaqueSceneTexture.destroy(device);
         this.extraTextures.destroy(device);
-        this.renderTarget.destroy(device);
         this.globals.destroy(device);
         this.globals.frameworkGlobals.delete(this.globals);
     }

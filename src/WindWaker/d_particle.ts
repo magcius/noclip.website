@@ -5,7 +5,7 @@ import { mat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Color, colorCopy } from "../Color";
 import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw, BaseEmitterFlags, JPAEmitterWorkData } from "../Common/JSYSTEM/JPA";
 import { Frustum } from "../Geometry";
-import { GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material";
 import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers";
@@ -18,7 +18,6 @@ import { cLib_addCalc2, cM__Short2Rad } from "./SComponent";
 import { dGlobals } from "./zww_scenes";
 import * as GX from '../gx/gx_enum';
 import { ColorKind } from "../gx/gx_render";
-import { drawWorldSpaceLine, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from "../DebugJunk";
 
 export abstract class dPa_levelEcallBack extends JPAEmitterCallBack {
     constructor(protected globals: dGlobals) {
@@ -34,11 +33,11 @@ const enum EffectDrawGroup {
     Indirect = 1,
 }
 
-function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
-    m.gfxTexture = sceneTexture;
+function setTextureMappingIndirect(m: TextureMapping): void {
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;
     m.flipY = true;
+    m.lateBinding = 'OpaqueSceneTexture';
 }
 
 export class dPa_control_c {
@@ -49,15 +48,14 @@ export class dPa_control_c {
 
     constructor(device: GfxDevice, private jpac: JPAC[]) {
         this.emitterManager = new JPAEmitterManager(device, 6000, 300);
-        for (let i = 0; i < this.jpac.length; i++)
-            this.jpacData.push(new JPACData(this.jpac[i]));
-    }
+        for (let i = 0; i < this.jpac.length; i++) {
+            const jpacData = new JPACData(this.jpac[i]);
 
-    public setOpaqueSceneTexture(opaqueSceneTexture: GfxTexture): void {
-        for (let i = 0; i < this.jpacData.length; i++) {
-            const m = this.jpacData[i].getTextureMappingReference('AK_kagerouSwap00');
+            const m = jpacData.getTextureMappingReference('AK_kagerouSwap00');
             if (m !== null)
-                setTextureMappingIndirect(m, opaqueSceneTexture);
+                setTextureMappingIndirect(m);
+
+            this.jpacData.push(jpacData);
         }
     }
 

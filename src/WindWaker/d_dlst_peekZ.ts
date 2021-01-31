@@ -74,7 +74,6 @@ export class PeekZManager {
     private colorAttachment = new ColorTextureAttachment(GfxFormat.U32_R);
     private depthTexture = new ColorTexture(GfxFormat.D32F_S8);
     private depthSampler: GfxSampler | null = null;
-    private fullscreenCopyBindings: GfxBindings | null = null;
     private fullscreenCopyPipeline: GfxRenderPipeline | null = null;
     private fullscreenCopyProgram: GfxProgram | null = null;
 
@@ -117,20 +116,6 @@ export class PeekZManager {
             this.currentFrame = this.framePool.pop()!;
         else
             this.currentFrame = new PeekZFrame(device, this.maxCount);
-    }
-
-    public setParameters(device: GfxDevice, width: number, height: number): void {
-        this.colorAttachment.setParameters(device, width, height)
-
-        if (this.depthTexture.setParameters(device, width, height)) {
-            if (this.fullscreenCopyBindings !== null)
-                device.destroyBindings(this.fullscreenCopyBindings);
-
-            const samplerBindings: GfxSamplerBinding[] = [{ gfxTexture: this.depthTexture.gfxTexture, gfxSampler: this.depthSampler, lateBinding: null }];
-            this.fullscreenCopyBindings = device.createBindings({ bindingLayout: { numSamplers: 1, numUniformBuffers: 0 }, samplerBindings, uniformBufferBindings: [], });
-        }
-
-        this.ensureCurrentFrame(device);
     }
 
     public beginFrame(device: GfxDevice): void {
@@ -234,52 +219,6 @@ void main() {
         this.submittedFrames.push(frame);
     }
 
-    public submitFrame(device: GfxDevice, depthStencilAttachment: GfxAttachment): void {
-        const frame = this.stealCurrentFrameAndCheck(device);
-        if (frame === null)
-            return;
-
-        // Quick note on strategy: GLES has a restriction on glReadPixels for GL_DEPTH_COMPONENT,
-        // even when the framebuffer isn't multi-sampled. In order to go from an MSAA depth buffer
-        // to something we can glReadPixels, we first have to resolve the MSAA depth buffer to a
-        // single-sampled depth texture using glBlitFramebuffer. GLES spec says this resolve is
-        // implementation-defined, ANGLE seems to just use a custom shader which pulls out the
-        // first sample, which is good enough for our purposes.
-        //
-        // Unfortunately, for reasons currently unknown, this causes two full-screen passes in ANGLE,
-        // rather than just one. Not great, but nothing we can really do about that right now.
-        //
-        // We still can't read this texture though, so we have to convert it to a color buffer
-        // using a shader pass we write ourselves, and then we can finally submit a glReadPixels PBO.
-        //
-        // So, this is three full-screen passes for what should have been at most one. GLES...
-        // isn't... good... !!
-
-        let renderPass: GfxRenderPass;
-
-        // Resolve MSAA depth buffer to single-sampled depth texture.
-        this.resolveRenderPassDescriptor.colorAttachment = null;
-        this.resolveRenderPassDescriptor.colorResolveTo = null;
-        this.resolveRenderPassDescriptor.depthStencilAttachment = depthStencilAttachment;
-        this.resolveRenderPassDescriptor.depthStencilResolveTo = this.depthTexture.gfxTexture;
-        renderPass = device.createRenderPass(this.resolveRenderPassDescriptor);
-        device.submitPass(renderPass);
-
-        // Resolve depth texture to color texture.
-        this.resolveRenderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment!;
-        this.resolveRenderPassDescriptor.colorResolveTo = null;
-        this.resolveRenderPassDescriptor.depthStencilAttachment = null;
-        this.resolveRenderPassDescriptor.depthStencilResolveTo = null;
-        renderPass = device.createRenderPass(this.resolveRenderPassDescriptor);
-        renderPass.setPipeline(this.fullscreenCopyPipeline!);
-        renderPass.setBindings(0, this.fullscreenCopyBindings!, []);
-        renderPass.setInputState(null);
-        renderPass.draw(3, 0);
-        device.submitPass(renderPass);
-
-        this.submitFramePost(device, frame, this.colorAttachment.colorTexture.gfxTexture!, this.colorAttachment.colorTexture.width, this.colorAttachment.colorTexture.height);
-    }
-
     public pushPasses(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, width: number, height: number, depthTargetID: number): void {
         const frame = this.stealCurrentFrameAndCheck(device);
         if (frame === null)
@@ -338,8 +277,6 @@ void main() {
             this.submittedFrames[i].destroy(device);
         for (let i = 0; i < this.framePool.length; i++)
             this.framePool[i].destroy(device);
-        if (this.fullscreenCopyBindings !== null)
-            device.destroyBindings(this.fullscreenCopyBindings);
         if (this.fullscreenCopyProgram !== null)
             device.destroyProgram(this.fullscreenCopyProgram);
         if (this.fullscreenCopyPipeline !== null)
