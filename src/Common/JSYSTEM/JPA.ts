@@ -411,15 +411,17 @@ function shapeTypeSupported(shapeType: ShapeType): boolean {
 export class JPACData {
     // TODO(jstpierre): Use a global JPAResourceManager for textures.
 
-    private texData: BTIData[] = [];
+    public texData: BTIData[] = [];
     public textureMapping: TextureMapping[] = [];
 
     constructor(public jpac: JPAC) {
     }
 
     public ensureTexture(device: GfxDevice, cache: GfxRenderCache, index: number): void {
-        if (this.textureMapping[index] === undefined) {
+        if (this.texData[index] === undefined)
             this.texData[index] = new BTIData(device, cache, this.jpac.textures[index].texture);
+
+        if (this.textureMapping[index] === undefined) {
             this.textureMapping[index] = new TextureMapping();
             this.texData[index].fillTextureMapping(this.textureMapping[index]);
         }
