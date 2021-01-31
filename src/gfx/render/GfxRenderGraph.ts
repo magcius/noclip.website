@@ -525,27 +525,6 @@ export class GfxrRenderGraphImpl {
         return renderTarget;
     }
 
-    private acquireResolveTextureOutputForID(device: GfxDevice, graph: GraphImpl, srcRenderTargetID: number, resolveTextureID: number | undefined): GfxTexture | null {
-        if (resolveTextureID === undefined)
-            return null;
-
-        assert(srcRenderTargetID === graph.resolveTextureRenderTargetIDs[resolveTextureID]);
-        assert(this.resolveTextureUseCount[resolveTextureID] > 0);
-
-        const renderTarget = assertExists(this.renderTargetAliveForID[srcRenderTargetID]);
-
-        // No need to resolve -- we're already rendering into a texture-backed RT.
-        if (renderTarget.texture !== null)
-            return null;
-
-        if (!this.singleSampledTextureForResolveTextureID[resolveTextureID]) {
-            const desc = assertExists(graph.renderTargetDescriptions[srcRenderTargetID]);
-            this.singleSampledTextureForResolveTextureID[resolveTextureID] = this.acquireSingleSampledTextureForDescription(device, desc);
-        }
-
-        return this.singleSampledTextureForResolveTextureID[resolveTextureID].texture;
-    }
-
     private acquireResolveTextureInputTextureForID(graph: GraphImpl, resolveTextureID: number): GfxTexture {
         const renderTargetID = graph.resolveTextureRenderTargetIDs[resolveTextureID];
 
@@ -557,10 +536,10 @@ export class GfxrRenderGraphImpl {
 
         const renderTarget = assertExists(this.releaseRenderTargetForID(renderTargetID));
 
-        if (renderTarget.texture === null) {
+        if (this.singleSampledTextureForResolveTextureID[resolveTextureID] !== undefined) {
             // The resolved texture belonging to this RT is backed by our own single-sampled texture.
 
-            const singleSampledTexture = assertExists(this.singleSampledTextureForResolveTextureID[resolveTextureID]);
+            const singleSampledTexture = this.singleSampledTextureForResolveTextureID[resolveTextureID];
 
             if (shouldFree) {
                 // Release this single-sampled texture back to the pool, if this is the last use of it.
@@ -569,8 +548,6 @@ export class GfxrRenderGraphImpl {
 
             return singleSampledTexture.texture;
         } else {
-            assert(this.singleSampledTextureForResolveTextureID[resolveTextureID] === undefined);
-
             // The resolved texture belonging to this RT is backed by our render target.
             return assertExists(renderTarget.texture);
         }
@@ -587,7 +564,21 @@ export class GfxrRenderGraphImpl {
         assert(!(hasResolveTextureOutputID && hasExternalTexture));
 
         if (hasResolveTextureOutputID) {
-            return this.acquireResolveTextureOutputForID(device, graph, renderTargetID, resolveTextureOutputID);
+            assert(graph.resolveTextureRenderTargetIDs[resolveTextureOutputID] === renderTargetID);
+            assert(this.resolveTextureUseCount[resolveTextureOutputID] > 0);
+
+            const renderTarget = assertExists(this.renderTargetAliveForID[renderTargetID]);
+
+            // No need to resolve -- we're already rendering into a texture-backed RT.
+            if (renderTarget.texture !== null && pass.renderTargets[slot] !== renderTarget)
+                return null;
+
+            if (!this.singleSampledTextureForResolveTextureID[resolveTextureOutputID]) {
+                const desc = assertExists(graph.renderTargetDescriptions[renderTargetID]);
+                this.singleSampledTextureForResolveTextureID[resolveTextureOutputID] = this.acquireSingleSampledTextureForDescription(device, desc);
+            }
+
+            return this.singleSampledTextureForResolveTextureID[resolveTextureOutputID].texture;
         } else if (hasExternalTexture) {
             return externalTexture;
         } else {

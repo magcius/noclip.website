@@ -2036,14 +2036,14 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (depthStencilResolveFrom !== null && depthStencilResolveTo !== null) {
             assert(depthStencilResolveFrom.width === depthStencilResolveTo.width && depthStencilResolveFrom.height === depthStencilResolveTo.height);
-            assert(depthStencilResolveFrom.gl_renderbuffer !== null);
+            // assert(depthStencilResolveFrom.gl_renderbuffer !== null);
 
             gl.disable(gl.SCISSOR_TEST);
             gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this._resolveDepthStencilReadFramebuffer);
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this._resolveDepthStencilDrawFramebuffer);
 
             if (this._resolveDepthStencilAttachmentsChanged) {
-                gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, this.framebufferAttachmentForFormat(depthStencilResolveFrom.pixelFormat), gl.RENDERBUFFER, depthStencilResolveFrom.gl_renderbuffer);
+                this._bindFramebufferAttachment(gl.READ_FRAMEBUFFER, this.framebufferAttachmentForFormat(depthStencilResolveFrom.pixelFormat), depthStencilResolveFrom);
                 gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, this.framebufferAttachmentForFormat(depthStencilResolveTo.pixelFormat), gl.TEXTURE_2D, depthStencilResolveTo.gl_texture, 0);
             }
 
