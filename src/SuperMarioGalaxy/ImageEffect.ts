@@ -556,25 +556,6 @@ ${GfxShaderLibrary.invlerp}
 
 in vec2 v_TexCoord;
 
-/*
-float UnprojectViewSpaceDepth(float t_DepthSample) {
-    // NDC.Z = (ProjMtx.Z * View.Z) / (ProjMtx.W * View.Z)
-    //   expand out ProjMtx mul, assuming View.W = 1.0 and ProjMtx.X = 0.0 and ProjMtx.Y = 0.0
-    // NDC.Z = (ProjMtx.ZZ*View.Z + ProjMtx.ZW) / (ProjMtx.WZ*View.Z + ProjMtx.WW)
-    //   solve for View.Z
-    // View.Z = (NDC.Z/ProjMtx.ZZ - ProjMtx.ZW) / (NDC.Z/ProjMtx.WZ - ProjMtx.WW)
-    //        = (NDC.Z*ProjMtx.WZ - ProjMtx.WW) / (NDC.Z*ProjMtx.ZZ - ProjMtx.ZW)
-
-    float ProjMtx_ZZ = u_UnprojectParams[0];
-    float ProjMtx_ZW = u_UnprojectParams[1];
-    float ProjMtx_WZ = u_UnprojectParams[2];
-    float ProjMtx_WW = u_UnprojectParams[3];
-    float NDC_Z = t_DepthSample;
-
-    return (NDC_Z*ProjMtx_WZ - ProjMtx_WW) / (NDC_Z*ProjMtx_ZZ - ProjMtx_ZW);
-}
-*/
-
 ${generateBlurFunction(`Blur`, `u_TextureColor`, 4, `u_Intensity`, glslGenerateFloat(1/4))}
 
 void main() {
@@ -584,23 +565,9 @@ void main() {
     float t_BlurAmount = saturate(invlerp(t_DepthSample, u_BlurMinDist, u_BlurMaxDist));
 
     vec3 t_BlurredSample = Blur(v_TexCoord);
-    // t_BlurredSample.rgb = vec3(t_BlurAmount);
     gl_FragColor = vec4(t_BlurredSample, t_BlurAmount);
 }
 `;
-}
-
-function fillUnprojectParams(d: Float32Array, offs: number, projectionMatrix: ReadonlyMat4): number {
-    // 0 4 8  12
-    // 1 5 9  13
-    // 2 6 10 14
-    // 3 7 11 15
-    // We want lower-right quadrant for unprojection.
-    const projMtx_ZZ = projectionMatrix[10];
-    const projMtx_ZW = projectionMatrix[14];
-    const projMtx_WZ = projectionMatrix[11];
-    const projMtx_WW = projectionMatrix[15];
-    return fillVec4(d, offs, projMtx_ZZ, projMtx_ZW, projMtx_WZ, projMtx_WW);
 }
 
 export class DepthOfFieldBlur extends ImageEffectBase {
