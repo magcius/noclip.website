@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxAttachment, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, GfxColor, GfxNormalizedViewportCoords, GfxTextureDimension } from "../platform/GfxPlatform";
+import { GfxDevice, GfxRenderTarget, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, GfxColor, GfxNormalizedViewportCoords, GfxTextureDimension } from "../platform/GfxPlatform";
 import { colorNewFromRGBA, TransparentBlack, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 
@@ -38,7 +38,7 @@ export class ColorTexture {
 }
 
 export class Attachment {
-    public gfxAttachment: GfxAttachment | null = null;
+    public gfxAttachment: GfxRenderTarget | null = null;
     public width: number = 0;
     public height: number = 0;
     public sampleCount: number = 0;
@@ -52,7 +52,7 @@ export class Attachment {
             this.width = width;
             this.height = height;
             this.sampleCount = sampleCount;
-            this.gfxAttachment = device.createAttachment(this);
+            this.gfxAttachment = device.createRenderTarget(this);
             return true;
         } else {
             return false;
@@ -61,7 +61,7 @@ export class Attachment {
 
     public destroy(device: GfxDevice): void {
         if (this.gfxAttachment !== null) {
-            device.destroyAttachment(this.gfxAttachment);
+            device.destroyRenderTarget(this.gfxAttachment);
             this.gfxAttachment = null;
         }
     }

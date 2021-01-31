@@ -1644,7 +1644,7 @@ class mgameboard_seres {
             return status;
 
         if (this.decodeState === cPhs__Status.Started) {
-            ctx.ctx.decodeAudioData(globals.modelCache.getFileData(this.filename).arrayBuffer).then((buffer) => {
+            ctx.ctx.decodeAudioData(globals.modelCache.getFileData(this.filename).arrayBuffer as ArrayBuffer).then((buffer) => {
                 this.buffer = buffer;
                 this.decodeState = cPhs__Status.Complete;
             });

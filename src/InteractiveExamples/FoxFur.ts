@@ -471,7 +471,7 @@ export class FoxFur implements SceneDesc {
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<SceneGfx> {
         const foxFurObjBuffer = await context.dataFetcher.fetchData(`${pathBase}/foxtail.obj`);
-        const foxFurObjText = new TextDecoder('utf8').decode(foxFurObjBuffer.arrayBuffer);
+        const foxFurObjText = new TextDecoder('utf8').decode(foxFurObjBuffer.arrayBuffer as ArrayBuffer);
         const bodyTex = await fetchPNG(`${pathBase}/furtex.png`);
         const r = new SceneRenderer(device);
         const o = new FurObj(device, foxFurObjText, bodyTex);

@@ -211,7 +211,7 @@ function createFurDensityMap(mapDensity: ReadonlyVec4, mapThickness: ReadonlyVec
     return btiTexture;
 }
 
-function calcFurVertexData(shape: Shape, lengthMap: BTI_Texture | null, maxLength: number): ArrayBuffer {
+function calcFurVertexData(shape: Shape, lengthMap: BTI_Texture | null, maxLength: number): ArrayBufferLike {
     const loadedVertexLayout = shape.loadedVertexLayout;
 
     // Create a new vertex array with the data we want.

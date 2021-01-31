@@ -1,7 +1,7 @@
 
 import { Color } from "../../Color";
 import { IdentityViewportCoords } from "../helpers/RenderTargetHelpers";
-import { GfxAttachment, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension } from "../platform/GfxPlatform";
+import { GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension } from "../platform/GfxPlatform";
 import { assert, assertExists } from "../../util";
 
 // GfxrRenderGraph is a simple, automatically managed "frame graph".
@@ -204,7 +204,7 @@ class PassImpl implements GfxrPass {
 
 export interface GfxrPassScope {
     getResolveTextureForID(id: number): GfxTexture;
-    getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxAttachment | null;
+    getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxRenderTarget | null;
     getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null;
 }
 
@@ -294,7 +294,7 @@ class RenderTarget {
 
     public needsClear: boolean = true;
     public texture: GfxTexture | null = null;
-    public attachment: GfxAttachment;
+    public attachment: GfxRenderTarget;
     public age: number = 0;
 
     constructor(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>) {
@@ -307,11 +307,11 @@ class RenderTarget {
 
         if (this.sampleCount > 1) {
             // MSAA render targets must be backed by attachments.
-            this.attachment = device.createAttachment(this);
+            this.attachment = device.createRenderTarget(this);
         } else {
             // Single-sampled textures can be backed by regular textures.
             this.texture = device.createTexture(this);
-            this.attachment = device.createAttachmentFromTexture(this.texture);
+            this.attachment = device.createRenderTargetFromTexture(this.texture);
         }
     }
 
@@ -327,7 +327,7 @@ class RenderTarget {
     public destroy(device: GfxDevice): void {
         if (this.texture !== null)
             device.destroyTexture(this.texture);
-        device.destroyAttachment(this.attachment);
+        device.destroyRenderTarget(this.attachment);
     }
 }
 
@@ -766,7 +766,7 @@ export class GfxrRenderGraphImpl {
         return assertExists(currentGraphPass.resolveTextureInputTextures[i]);
     }
 
-    public getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxAttachment | null {
+    public getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxRenderTarget | null {
         const currentGraphPass = this.currentPass!;
         const renderTarget = currentGraphPass.renderTargets[slot];
         if (!renderTarget)

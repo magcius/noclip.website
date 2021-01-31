@@ -526,7 +526,7 @@ function translateAttributeFormat(attributeFormat: AttributeFormat): GfxFormat {
 
 interface ConvertedVertexAttribute {
     format: GfxFormat;
-    data: ArrayBuffer;
+    data: ArrayBufferLike;
     stride: number;
 }
 

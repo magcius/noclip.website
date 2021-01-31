@@ -102,7 +102,7 @@ class StudioModelMeshData {
 
     public stripGroupData: StudioModelStripGroupData[] = [];
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, public materialNames: string[], vertexData: ArrayBuffer, indexData: ArrayBuffer) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public materialNames: string[], vertexData: ArrayBufferLike, indexData: ArrayBufferLike) {
         this.vertexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.VERTEX, vertexData);
         this.indexBuffer = makeStaticDataBuffer(device, GfxBufferUsage.INDEX, indexData);
 

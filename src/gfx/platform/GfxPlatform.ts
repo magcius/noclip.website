@@ -3,7 +3,7 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
+import { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 
 export enum GfxCompareMode {
@@ -118,7 +118,7 @@ export interface GfxSamplerDescriptor {
     maxLOD: number;
 }
 
-export interface GfxAttachmentDescriptor {
+export interface GfxRenderTargetDescriptor {
     pixelFormat: GfxFormat;
     width: number;
     height: number;
@@ -232,10 +232,10 @@ export interface GfxColor {
 
 // TODO(jstpierre): Support MRT. This might be tricksy.
 export interface GfxRenderPassDescriptor {
-    colorAttachment: GfxAttachment | null;
+    colorAttachment: GfxRenderTarget | null;
     colorResolveTo: GfxTexture | null;
     colorClearColor: GfxColor | 'load';
-    depthStencilAttachment: GfxAttachment | null;
+    depthStencilAttachment: GfxRenderTarget | null;
     depthStencilResolveTo: GfxTexture | null;
     depthClearValue: number | 'load';
     stencilClearValue: number | 'load';
@@ -324,8 +324,8 @@ export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
     createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
-    createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment;
-    createAttachmentFromTexture(texture: GfxTexture): GfxAttachment;
+    createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget;
+    createRenderTargetFromTexture(texture: GfxTexture): GfxRenderTarget;
     createProgram(program: GfxProgramDescriptor): GfxProgram;
     createProgramSimple(program: GfxProgramDescriptorSimple): GfxProgram;
     createBindings(bindingsDescriptor: GfxBindingsDescriptor): GfxBindings;
@@ -342,7 +342,7 @@ export interface GfxDevice {
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
     destroySampler(o: GfxSampler): void;
-    destroyAttachment(o: GfxAttachment): void;
+    destroyRenderTarget(o: GfxRenderTarget): void;
     destroyProgram(o: GfxProgram): void;
     destroyBindings(o: GfxBindings): void;
     destroyInputLayout(o: GfxInputLayout): void;
@@ -371,7 +371,7 @@ export interface GfxDevice {
     queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;
     queryRenderPass(o: GfxRenderPass): Readonly<GfxRenderPassDescriptor>;
-    queryAttachment(o: GfxAttachment): Readonly<GfxAttachmentDescriptor>;
+    queryRenderTarget(o: GfxRenderTarget): Readonly<GfxRenderTargetDescriptor>;
 
     // Debugging.
     setResourceName(o: GfxResource, s: string): void;
@@ -382,5 +382,5 @@ export interface GfxDevice {
     popDebugGroup(): void;
 }
 
-export { GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
+export { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
 export { GfxFormat };

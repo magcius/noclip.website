@@ -32,7 +32,7 @@ function stringToFourCC(s: string): number {
     return (s.charCodeAt(0) << 24) | (s.charCodeAt(1) << 16) | (s.charCodeAt(2) << 8) | s.charCodeAt(3)
 }
 
-function loadZLB(compData: ArrayBufferSlice): ArrayBuffer {
+function loadZLB(compData: ArrayBufferSlice): ArrayBufferLike {
     const dv = compData.createDataView();
     const header = new ZLBHeader(dv);
 
@@ -49,7 +49,7 @@ function loadDIRn(data: ArrayBufferSlice): ArrayBuffer {
     return data.copyToBuffer(0x20, size);
 }
 
-function loadLZOn(data: ArrayBufferSlice, srcOffs: number): ArrayBuffer {
+function loadLZOn(data: ArrayBufferSlice, srcOffs: number): ArrayBufferLike {
     const dv = data.createDataView();
     const uncompSize = dv.getUint32(srcOffs + 0x8)
     srcOffs += 0x10

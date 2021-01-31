@@ -311,7 +311,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
 
         const animController = new SFAAnimationController();
         const materialFactory = new MaterialFactory(device);
-        const mapsJsonString = new TextDecoder('utf-8').decode(mapsJsonBuffer.arrayBuffer);
+        const mapsJsonString = new TextDecoder('utf-8').decode(mapsJsonBuffer.arrayBuffer as ArrayBuffer);
         const mapsJson = JSON.parse(mapsJsonString);
         const map = mapsJson[this.mapKey];
 

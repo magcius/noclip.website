@@ -148,8 +148,8 @@ export interface LoadedVertexDraw {
 }
 
 export interface LoadedVertexData {
-    indexData: ArrayBuffer;
-    vertexBuffers: ArrayBuffer[];
+    indexData: ArrayBufferLike;
+    vertexBuffers: ArrayBufferLike[];
     totalIndexCount: number;
     totalVertexCount: number;
     vertexId: number;

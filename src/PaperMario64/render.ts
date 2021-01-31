@@ -34,7 +34,7 @@ class PaperMario64Program extends DeviceProgram {
     public both = PaperMario64Program.program;
 }
 
-function makeVertexBufferData(v: Vertex[]): ArrayBuffer {
+function makeVertexBufferData(v: Vertex[]): ArrayBufferLike {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
     for (let i = 0; i < v.length; i++) {

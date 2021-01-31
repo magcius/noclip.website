@@ -1,5 +1,5 @@
 
-import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachment, GfxAttachmentDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ } from "./GfxPlatform";
+import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxRenderTarget, GfxRenderTargetDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ } from "./GfxPlatform";
 import { _T, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { getFormatByteSize } from "./GfxPlatformFormat";
 import { assertExists, assert, leftPad, align } from "../../util";
@@ -18,7 +18,7 @@ interface GfxTextureP_WebGPU extends GfxTexture {
     gpuTextureView: GPUTextureView;
 }
 
-interface GfxAttachmentP_WebGPU extends GfxAttachment {
+interface GfxAttachmentP_WebGPU extends GfxRenderTarget {
     gpuTexture: GPUTexture;
     gpuTextureView: GPUTextureView;
     pixelFormat: GfxFormat;
@@ -653,7 +653,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return sampler;
     }
 
-    public createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment {
+    public createRenderTarget(descriptor: GfxRenderTargetDescriptor): GfxRenderTarget {
         const { pixelFormat, width, height, sampleCount } = descriptor;
         const gpuTexture = this.device.createTexture({
             size: [width, height, 1],
@@ -663,18 +663,18 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         });
         const gpuTextureView = gpuTexture.createView();
 
-        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(),
+        const attachment: GfxAttachmentP_WebGPU = { _T: _T.RenderTarget, ResourceUniqueId: this.getNextUniqueId(),
             gpuTexture, gpuTextureView,
             pixelFormat, width, height, sampleCount: sampleCount,
         };
         return attachment;
     }
 
-    public createAttachmentFromTexture(gfxTexture: GfxTexture): GfxAttachment {
+    public createRenderTargetFromTexture(gfxTexture: GfxTexture): GfxRenderTarget {
         const { pixelFormat, width, height, gpuTexture } = gfxTexture as GfxTextureP_WebGPU;
         const sampleCount = 1;
         const gpuTextureView = gpuTexture.createView();
-        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView,
+        const attachment: GfxAttachmentP_WebGPU = { _T: _T.RenderTarget, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView,
             pixelFormat, width, height, sampleCount,
         };
         return attachment;
@@ -884,7 +884,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     public destroySampler(o: GfxSampler): void {
     }
 
-    public destroyAttachment(o: GfxAttachment): void {
+    public destroyRenderTarget(o: GfxRenderTarget): void {
         const attachment = o as GfxAttachmentP_WebGPU;
         attachment.gpuTexture.destroy();
     }
@@ -986,7 +986,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return pass.descriptor;
     }
 
-    public queryAttachment(o: GfxAttachment): Readonly<GfxAttachmentDescriptor> {
+    public queryRenderTarget(o: GfxRenderTarget): Readonly<GfxRenderTargetDescriptor> {
         const attachment = o as GfxAttachmentP_WebGPU;
         return attachment;
     }
@@ -1000,7 +1000,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         } else if (o._T === _T.Texture) {
             const r = o as GfxTextureP_WebGPU;
             r.gpuTexture.label = s;
-        } else if (o._T === _T.Attachment) {
+        } else if (o._T === _T.RenderTarget) {
             const r = o as GfxAttachmentP_WebGPU;
             r.gpuTexture.label = s;
             r.gpuTextureView.label = s;
