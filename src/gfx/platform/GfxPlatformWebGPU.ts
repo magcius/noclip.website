@@ -1,6 +1,6 @@
 
 import { GfxSwapChain, GfxDevice, GfxTexture, GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxBindingsDescriptor, GfxTextureDescriptor, GfxSamplerDescriptor, GfxInputLayoutDescriptor, GfxInputLayout, GfxVertexBufferDescriptor, GfxInputState, GfxRenderPipelineDescriptor, GfxRenderPipeline, GfxSampler, GfxProgram, GfxBindings, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxDebugGroup, GfxPass, GfxRenderPassDescriptor, GfxRenderPass, GfxHostAccessPass, GfxDeviceLimits, GfxFormat, GfxVendorInfo, GfxTextureDimension, GfxBindingLayoutDescriptor, GfxPrimitiveTopology, GfxMegaStateDescriptor, GfxCullMode, GfxFrontFaceMode, GfxAttachmentState, GfxChannelBlendState, GfxBlendFactor, GfxBlendMode, GfxCompareMode, GfxVertexBufferFrequency, GfxIndexBufferDescriptor, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachment, GfxAttachmentDescriptor, makeTextureDescriptor2D, GfxClipSpaceNearZ } from "./GfxPlatform";
-import { _T, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
+import { _T, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { getFormatByteSize } from "./GfxPlatformFormat";
 import { assertExists, assert, leftPad, align } from "../../util";
 import glslang, { ShaderStage, Glslang } from '../../vendor/glslang/glslang';
@@ -654,7 +654,6 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGPU';
-    public readonly bugQuirks = new GfxBugQuirksImpl();
     public readonly glslVersion = `#version 450`;
     public readonly explicitBindingLocations = true;
     public readonly separateSamplerTextures = true;

@@ -250,9 +250,6 @@ export interface GfxDebugGroup {
     triangleCount: number;
 }
 
-export interface GfxBugQuirks {
-}
-
 export const enum GfxClipSpaceNearZ {
     NegativeOne,
     Zero,
@@ -260,7 +257,6 @@ export const enum GfxClipSpaceNearZ {
 
 export interface GfxVendorInfo {
     readonly platformString: string;
-    readonly bugQuirks: GfxBugQuirks;
     readonly glslVersion: string;
     readonly explicitBindingLocations: boolean;
     readonly separateSamplerTextures: boolean;

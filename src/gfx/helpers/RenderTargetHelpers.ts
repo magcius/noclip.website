@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxAttachment, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, makeTextureDescriptor2D, GfxColor, GfxNormalizedViewportCoords, GfxTextureDimension } from "../platform/GfxPlatform";
+import { GfxDevice, GfxAttachment, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, GfxColor, GfxNormalizedViewportCoords, GfxTextureDimension } from "../platform/GfxPlatform";
 import { colorNewFromRGBA, TransparentBlack, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 

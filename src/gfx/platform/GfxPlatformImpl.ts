@@ -1,8 +1,6 @@
 
 // Things that should only be required by platform implementations.
 
-import { GfxBugQuirks } from "./GfxPlatform";
-
 // Hack to get nominal typing.
 export enum _T { Buffer, Texture, Attachment, Sampler, Program, Bindings, InputLayout, InputState, RenderPipeline, Readback };
 
@@ -20,6 +18,3 @@ export interface GfxReadback extends GfxResourceBase { _T: _T.Readback };
 
 export type GfxResource =
     GfxBuffer | GfxTexture | GfxAttachment | GfxSampler | GfxProgram | GfxBindings | GfxInputLayout | GfxInputState | GfxRenderPipeline | GfxReadback;
-
-export class GfxBugQuirksImpl implements GfxBugQuirks {
-}

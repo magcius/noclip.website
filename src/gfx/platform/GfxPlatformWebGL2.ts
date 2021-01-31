@@ -1,6 +1,6 @@
 
 import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachmentDescriptor, GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './GfxPlatform';
-import { _T, GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxBugQuirksImpl, GfxReadback } from "./GfxPlatformImpl";
+import { _T, GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize } from "./GfxPlatformFormat";
 
 import { gfxColorEqual, range, assert, assertExists, leftPad, gfxColorCopy, nullify } from './GfxPlatformUtil';
@@ -601,7 +601,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     // GfxVendorInfo
     public readonly platformString: string = 'WebGL2';
-    public readonly bugQuirks = new GfxBugQuirksImpl();
     public readonly glslVersion = `#version 300 es`;
     public readonly explicitBindingLocations = false;
     public readonly separateSamplerTextures = false;

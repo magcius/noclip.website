@@ -1,43 +1,12 @@
 
 import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxPrimitiveTopology, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
-import { GfxReadback, GfxAttachment, GfxRenderPipeline, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
-import { ColorTexture, makeEmptyRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxReadback, GfxRenderPipeline, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
+import { makeEmptyRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { assert, assertExists } from "../util";
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-
-class ColorTextureAttachment {
-    public colorTexture: ColorTexture;
-    public gfxAttachment: GfxAttachment | null = null;
-
-    constructor(format: GfxFormat = GfxFormat.U8_RGBA_NORM) {
-        this.colorTexture = new ColorTexture(format);
-    }
-
-    public setParameters(device: GfxDevice, width: number, height: number): boolean {
-        if (this.colorTexture.setParameters(device, width, height)) {
-            this.destroyAttachment(device);
-            this.gfxAttachment = device.createAttachmentFromTexture(this.colorTexture.gfxTexture!);
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    private destroyAttachment(device: GfxDevice): void {
-        if (this.gfxAttachment !== null) {
-            device.destroyAttachment(this.gfxAttachment);
-            this.gfxAttachment = null;
-        }
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.colorTexture.destroy(device);
-        this.destroyAttachment(device);
-    }
-}
 
 export class PeekZResult {
     public normalizedX: number;
