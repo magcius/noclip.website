@@ -210,11 +210,6 @@ export interface GfxMegaStateDescriptor {
     polygonOffset: boolean;
 }
 
-export interface GfxRenderTargetDescriptor {
-    colorAttachment: GfxAttachment | null;
-    depthStencilAttachment: GfxAttachment | null;
-}
-
 export interface GfxRenderPipelineDescriptor {
     bindingLayouts: GfxBindingLayoutDescriptor[];
     inputLayout: GfxInputLayout | null;

@@ -61,6 +61,11 @@ export interface GfxrPass {
     attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: number): void;
 
     /**
+     * Set the viewport used by this rendering pass.
+     */
+    setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void;
+
+    /**
      * Attach the resolve texture ID to the given pass. All resolve textures used within the pass
      * must be attached before-hand in order for the scheduler to properly allocate our resolve texture.
      */
@@ -123,6 +128,10 @@ class PassImpl implements GfxrPass {
 
     public setDebugName(debugName: string): void {
         this.debugName = debugName;
+    }
+
+    public setViewport(viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        this.viewport = viewport;
     }
 
     public attachRenderTargetID(attachmentSlot: GfxrAttachmentSlot, renderTargetID: number): void {
@@ -235,6 +244,12 @@ export interface GfxrGraphBuilder {
      * Warning: This API might change in the near future.
      */
     resolveRenderTargetToExternalTexture(renderTargetID: number, texture: GfxTexture): void;
+
+    /**
+     * Return the description that a render target was created with. This allows the creator to
+     * not have to pass information to any dependent modules to derive from it.
+     */
+    getRenderTargetDescription(renderTargetID: number): Readonly<GfxrRenderTargetDescription>;
 }
 
 class RenderTarget {
@@ -434,6 +449,10 @@ export class GfxrRenderGraphImpl {
 
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
         renderPass.resolveTextureOutputExternalTextures[attachmentSlot] = texture;
+    }
+
+    public getRenderTargetDescription(renderTargetID: number): Readonly<GfxrRenderTargetDescription> {
+        return assertExists(this.currentGraph!.renderTargetDescriptions[renderTargetID]);
     }
     //#endregion
 

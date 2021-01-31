@@ -308,9 +308,11 @@ export class BloomEffect extends ImageEffectBase {
 
     private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
-    public pushBloomPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number, viewerInput: ViewerRenderInput): void {
-        const targetWidth = viewerInput.backbufferWidth >> 2;
-        const targetHeight = viewerInput.backbufferHeight >> 2;
+    public pushBloomPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number): void {
+        const bloomObjectsTargetDesc = sceneGraphBuilder.getRenderTargetDescription(bloomObjectsTargetID);
+
+        const targetWidth = bloomObjectsTargetDesc.width >> 2;
+        const targetHeight = bloomObjectsTargetDesc.height >> 2;
 
         this.targetColorDesc.setParameters(targetWidth, targetHeight, 1);
 

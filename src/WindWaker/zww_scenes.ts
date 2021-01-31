@@ -780,7 +780,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
             });
         });
 
-        dlst.peekZ.pushPasses(device, renderInstManager, builder, viewerInput.backbufferWidth, viewerInput.backbufferHeight, mainDepthTargetID);
+        dlst.peekZ.pushPasses(device, renderInstManager, builder, mainDepthTargetID);
         dlst.peekZ.peekData(device);
 
         builder.pushPass((pass) => {

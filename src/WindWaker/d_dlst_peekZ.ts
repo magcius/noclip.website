@@ -71,11 +71,11 @@ export class PeekZManager {
     private resultBuffer: Uint32Array;
 
     private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
-    private colorAttachment = new ColorTextureAttachment(GfxFormat.U32_R);
-    private depthTexture = new ColorTexture(GfxFormat.D32F_S8);
     private depthSampler: GfxSampler | null = null;
     private fullscreenCopyPipeline: GfxRenderPipeline | null = null;
     private fullscreenCopyProgram: GfxProgram | null = null;
+
+    private colorTargetDesc = new GfxrRenderTargetDescription(GfxFormat.U32_R);
 
     constructor(public maxCount: number = 50) {
         this.resultBuffer = new Uint32Array(this.maxCount);
@@ -219,14 +219,16 @@ void main() {
         this.submittedFrames.push(frame);
     }
 
-    public pushPasses(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, width: number, height: number, depthTargetID: number): void {
+    public pushPasses(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: number): void {
         const frame = this.stealCurrentFrameAndCheck(device);
         if (frame === null)
             return;
 
-        const colorTargetDesc = new GfxrRenderTargetDescription(GfxFormat.U32_R);
-        colorTargetDesc.setParameters(width, height, 1);
-        const colorTargetID = builder.createRenderTargetID(colorTargetDesc, 'PeekZ Color Buffer');
+        const depthTargetDesc = builder.getRenderTargetDescription(depthTargetID);
+        const width = depthTargetDesc.width, height = depthTargetDesc.height;
+
+        this.colorTargetDesc.setParameters(width, height, 1);
+        const colorTargetID = builder.createRenderTargetID(this.colorTargetDesc, 'PeekZ Color Buffer');
 
         builder.pushPass((pass) => {
             pass.setDebugName('PeekZ');
@@ -283,7 +285,5 @@ void main() {
             device.destroyRenderPipeline(this.fullscreenCopyPipeline);
         if (this.depthSampler !== null)
             device.destroySampler(this.depthSampler);
-        this.depthTexture.destroy(device);
-        this.colorAttachment.destroy(device);
     }
 }
