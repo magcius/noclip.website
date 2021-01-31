@@ -310,11 +310,11 @@ class Growable<T extends ArrayBufferView2> {
     }
 }
 
-const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setScissor, setBindings, setPipeline, setInputState, setStencilRef, draw, drawIndexed, drawIndexedInstanced, end, invalid = 0x1234 };
+const enum RenderPassCmd { setRenderPassParameters = 471, setViewport, setScissor, setBindings, setPipeline, setInputState, setStencilRef, setDebugPointer, draw, drawIndexed, drawIndexedInstanced, end, invalid = 0x1234 };
 class GfxRenderPassP_GL implements GfxRenderPass {
     public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
     public f32: Growable<Float32Array> = new Growable((n) => new Float32Array(n));
-    public o: (object | null)[] = [];
+    public o: any[] = [];
     public descriptor: GfxRenderPassDescriptor;
 
     public reset() { this.u32.r(); this.f32.r(); this.o.length = 0; }
@@ -322,7 +322,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public pu32(c: number) { this.u32.n(c); }
     public pcmd(c: number) { this.pu32(c); }
     public pf32(c: number) { this.f32.n(c); }
-    public po(r: object | null) { this.o.push(r); }
+    public po(r: any) { this.o.push(r); }
 
     public end() { this.pcmd(RenderPassCmd.end); }
     public setRenderPassParameters(ca: GfxAttachment | null, cr: GfxTexture | null, dsa: GfxAttachment | null, dsr: GfxTexture | null, c: number, r: number, g: number, b: number, a: number, d: number, s: number) { this.pcmd(RenderPassCmd.setRenderPassParameters); this.pu32(ca !== null ? 1 : 0); if (ca !== null) { this.po(ca); this.po(cr); } this.po(dsa); this.po(dsr); this.pu32(c); this.pf32(r); this.pf32(g); this.pf32(b); this.pf32(a); this.pf32(d); this.pf32(s); }
@@ -332,6 +332,7 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public setBindings(n: number, r: GfxBindings, o: number[]) { this.pcmd(RenderPassCmd.setBindings); this.pu32(n); this.po(r); this.pu32(o.length); for (let i = 0; i < o.length; i++) this.pu32(o[i]); }
     public setInputState(r: GfxInputState | null) { this.pcmd(RenderPassCmd.setInputState); this.po(r); }
     public setStencilRef(v: number)               { this.pcmd(RenderPassCmd.setStencilRef); this.pf32(v); }
+    public setDebugPointer(v: any)                { this.pcmd(RenderPassCmd.setDebugPointer); this.po(v); }
     public draw(a: number, b: number)             { this.pcmd(RenderPassCmd.draw); this.pu32(a); this.pu32(b); }
     public drawIndexed(a: number, b: number)      { this.pcmd(RenderPassCmd.drawIndexed); this.pu32(a); this.pu32(b); }
     public drawIndexedInstanced(a: number, b: number, c: number) { this.pcmd(RenderPassCmd.drawIndexedInstanced); this.pu32(a); this.pu32(b); this.pu32(c); }
@@ -1509,6 +1510,8 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 this.setInputState(gfxr[igfxr++] as GfxInputState | null);
             } else if (cmd === RenderPassCmd.setStencilRef) {
                 this.setStencilRef(f32[if32++]);
+            } else if (cmd === RenderPassCmd.setDebugPointer) {
+                this.setDebugPointer(gfxr[igfxr++]);
             } else if (cmd === RenderPassCmd.draw) {
                 this.draw(u32[iu32++], u32[iu32++]);
             } else if (cmd === RenderPassCmd.drawIndexed) {
@@ -1937,6 +1940,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private setStencilRef(value: number): void {
         const gl = this.gl;
         gl.stencilFunc(this._currentMegaState.stencilCompare, value, 0xFF);
+    }
+
+    private _debugPointer: any;
+    private setDebugPointer(value: any): void {
+        this._debugPointer = value;
     }
 
     private draw(count: number, firstVertex: number): void {

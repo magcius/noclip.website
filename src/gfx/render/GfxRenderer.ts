@@ -8,6 +8,7 @@ import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/G
 
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
+import { IS_DEVELOPMENT } from "../../BuildVersion";
 
 // The "Render" subsystem is a high-level scene graph, built on top of gfx/platform and gfx/helpers.
 // A rough overview of the design:
@@ -143,6 +144,8 @@ const enum GfxRenderInstFlags {
     // Which flags are inherited from templates...
     InheritedFlags = Indexed | AllowSkippingIfPipelineNotReady,
 }
+
+const SET_DEBUG_POINTER = IS_DEVELOPMENT;
 
 export class GfxRenderInst {
     public sortKey: number = 0;
@@ -467,6 +470,10 @@ export class GfxRenderInst {
         const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
         if (!!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady) && !device.queryPipelineReady(gfxPipeline))
             return false;
+
+        if (SET_DEBUG_POINTER)
+            passRenderer.setDebugPointer(this);
+
         passRenderer.setPipeline(gfxPipeline);
 
         passRenderer.setInputState(this._inputState);

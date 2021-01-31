@@ -301,6 +301,7 @@ export interface GfxRenderPass {
     setBindings(bindingLayoutIndex: number, bindings: GfxBindings, dynamicByteOffsets: number[]): void;
     setInputState(inputState: GfxInputState | null): void;
     setStencilRef(value: number): void;
+    setDebugPointer(value: any): void;
 
     // Draw commands.
     draw(vertexCount: number, firstVertex: number): void;

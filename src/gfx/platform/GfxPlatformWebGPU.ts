@@ -509,6 +509,7 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
     private renderPassDescriptor: GPURenderPassDescriptor;
     private colorAttachments: GPURenderPassColorAttachmentDescriptor[];
     private depthStencilAttachment: GPURenderPassDepthStencilAttachmentDescriptor;
+    private debugPointer: any;
 
     constructor(private device: GPUDevice) {
         this.colorAttachments = [{
@@ -618,6 +619,10 @@ class GfxRenderPassP_WebGPU implements GfxRenderPass {
 
     public drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void {
         this.renderPassEncoder!.drawIndexed(indexCount, instanceCount, firstIndex, 0, 0);
+    }
+
+    public setDebugPointer(value: any): void {
+        this.debugPointer = value;
     }
 
     public finish(): GPUCommandBuffer {
