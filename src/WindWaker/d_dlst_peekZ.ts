@@ -41,7 +41,6 @@ export class PeekZManager {
 
     private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
     private depthSampler: GfxSampler | null = null;
-    private fullscreenCopyPipeline: GfxRenderPipeline | null = null;
     private fullscreenCopyProgram: GfxProgram | null = null;
 
     private colorTargetDesc = new GfxrRenderTargetDescription(GfxFormat.U32_R);
@@ -93,7 +92,7 @@ export class PeekZManager {
 
     private ensureResources(device: GfxDevice): void {
         // Kick off pipeline compilation ASAP.
-        if (this.fullscreenCopyPipeline === null) {
+        if (this.fullscreenCopyProgram === null) {
             const fullscreenVS: string = `
 out vec2 v_TexCoord;
 
@@ -117,14 +116,6 @@ void main() {
 `;
             const fullscreenProgramDescriptor = preprocessProgram_GLSL(device.queryVendorInfo(), fullscreenVS, fullscreenFS);
             this.fullscreenCopyProgram = device.createProgramSimple(fullscreenProgramDescriptor);
-            this.fullscreenCopyPipeline = device.createRenderPipeline({
-                bindingLayouts: [{ numSamplers: 1, numUniformBuffers: 0 }],
-                inputLayout: null,
-                megaStateDescriptor: fullscreenMegaState,
-                program: this.fullscreenCopyProgram,
-                sampleCount: 1,
-                topology: GfxPrimitiveTopology.TRIANGLES,
-            });
         }
 
         if (this.depthSampler === null) {
@@ -150,12 +141,6 @@ void main() {
             return null;
 
         this.ensureResources(device);
-
-        if (!device.queryPipelineReady(this.fullscreenCopyPipeline!)) {
-            // Pipeline not ready yet.
-            this.returnFrame(frame);
-            return null;
-        }
 
         if (this.submittedFrames.length >= this.maxSubmittedFrames) {
             // Too many frames in flight, discard this one.
@@ -208,7 +193,9 @@ void main() {
                 const resolvedDepthTexture = scope.getResolveTextureForID(resolvedDepthTextureID);
 
                 const renderInst = renderInstManager.newRenderInst();
-                renderInst.setGfxRenderPipeline(this.fullscreenCopyPipeline!);
+                renderInst.setAllowSkippingIfPipelineNotReady(false);
+                renderInst.setGfxProgram(this.fullscreenCopyProgram!);
+                renderInst.setMegaStateFlags(fullscreenMegaState);
                 renderInst.setBindingLayouts([{ numSamplers: 1, numUniformBuffers: 0 }]);
                 renderInst.drawPrimitives(3);
 
@@ -250,8 +237,6 @@ void main() {
             this.framePool[i].destroy(device);
         if (this.fullscreenCopyProgram !== null)
             device.destroyProgram(this.fullscreenCopyProgram);
-        if (this.fullscreenCopyPipeline !== null)
-            device.destroyRenderPipeline(this.fullscreenCopyPipeline);
         if (this.depthSampler !== null)
             device.destroySampler(this.depthSampler);
     }

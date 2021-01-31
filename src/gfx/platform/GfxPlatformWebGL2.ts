@@ -42,8 +42,9 @@ interface GfxSamplerP_GL extends GfxSampler {
 
 const enum GfxProgramCompileStateP_GL {
     NeedsCompile,
+    Compiling,
     NeedsBind,
-    Ready,
+    ReadyToUse,
 }
 
 interface GfxProgramP_GL extends GfxProgram {
@@ -93,7 +94,6 @@ interface GfxRenderPipelineP_GL extends GfxRenderPipeline {
     drawMode: GLenum;
     megaState: GfxMegaStateDescriptor;
     inputLayout: GfxInputLayoutP_GL | null;
-    ready: boolean;
 }
 
 interface GfxReadbackP_GL extends GfxReadback {
@@ -1125,7 +1125,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         const program = descriptor.program as GfxProgramP_GL;
         const megaState = descriptor.megaStateDescriptor;
         const inputLayout = descriptor.inputLayout as GfxInputLayoutP_GL | null;
-        const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(), bindingLayouts, drawMode, program, megaState, inputLayout, ready: false };
+        const pipeline: GfxRenderPipelineP_GL = { _T: _T.RenderPipeline, ResourceUniqueId: this.getNextUniqueId(), bindingLayouts, drawMode, program, megaState, inputLayout };
         if (this._resourceCreationTracker !== null)
             this._resourceCreationTracker.trackResourceCreated(pipeline);
         return pipeline;
@@ -1357,30 +1357,38 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         }
     }
 
-    public queryPipelineReady(o: GfxRenderPipeline): boolean {
-        const pipeline = o as GfxRenderPipelineP_GL;
-        if (pipeline.ready)
-            return true;
-
-        if (pipeline.program.gl_program === null)
-            return false;
-
+    private queryProgramReady(program: GfxProgramP_GL): boolean {
         const gl = this.gl;
-        const prog = pipeline.program.gl_program;
 
-        if (this._KHR_parallel_shader_compile !== null) {
-            // With asynchronous pipeline compilation, we need to ask whether the pipeline is ready...
-            pipeline.ready = gl.getProgramParameter(prog, this._KHR_parallel_shader_compile.COMPLETION_STATUS_KHR);
-        } else {
-            // With synchronous pipeline compilation, pipelines are ready as soon as they're created...
-            pipeline.ready = true;
+        if (program.compileState === GfxProgramCompileStateP_GL.NeedsCompile) {
+            // This should not happen.
+            throw "whoops";
+        } if (program.compileState === GfxProgramCompileStateP_GL.Compiling) {
+            let complete: boolean;
+
+            if (this._KHR_parallel_shader_compile !== null) {
+                complete = gl.getProgramParameter(program.gl_program, this._KHR_parallel_shader_compile!.COMPLETION_STATUS_KHR);
+            } else {
+                // If we don't have async shader compilation, assume all compilation is done immediately :/
+                complete = true;
+            }
+
+            if (complete) {
+                program.compileState = GfxProgramCompileStateP_GL.NeedsBind;
+
+                if (this._shaderDebug)
+                    this._checkProgramCompilationForErrors(program);
+            }
+
+            return complete;
         }
 
-        // Check for errors.
-        if (pipeline.ready && this._shaderDebug)
-            this._checkProgramCompilationForErrors(pipeline.program);
+        return program.compileState === GfxProgramCompileStateP_GL.NeedsBind || program.compileState === GfxProgramCompileStateP_GL.ReadyToUse;
+    }
 
-        return pipeline.ready;
+    public queryPipelineReady(o: GfxRenderPipeline): boolean {
+        const pipeline = o as GfxRenderPipelineP_GL;
+        return this.queryProgramReady(pipeline.program);
     }
 
     public queryPlatformAvailable(): boolean {
@@ -1649,7 +1657,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         gl.attachShader(program.gl_program, program.gl_shader_frag);
         gl.linkProgram(program.gl_program);
 
-        program.compileState = GfxProgramCompileStateP_GL.NeedsBind;
+        program.compileState = GfxProgramCompileStateP_GL.Compiling;
     }
 
     private _bindFramebufferAttachment(binding: GLenum, attachment: GfxAttachmentP_GL | null): void {
@@ -1804,7 +1812,10 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
     private setPipeline(pipeline: GfxRenderPipeline): void {
         this._currentPipeline = pipeline as GfxRenderPipelineP_GL;
-        assert(this.queryPipelineReady(this._currentPipeline));
+
+        // We allow users to use "non-ready" pipelines for emergencies. In this case, there can be a bit of stuttering.
+        // assert(this.queryPipelineReady(this._currentPipeline));
+
         this._setMegaState(this._currentPipeline.megaState);
 
         const program = this._currentPipeline.program;
@@ -1833,7 +1844,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 samplerIndex += arraySize;
             }
 
-            program.compileState = GfxProgramCompileStateP_GL.Ready;
+            program.compileState = GfxProgramCompileStateP_GL.ReadyToUse;
         }
     }
 

@@ -12,7 +12,7 @@ import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxDevice, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxFormat } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxPrimitiveTopology, GfxRenderPipeline, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { DEFAULT_NUM_SAMPLES } from "../gfx/helpers/RenderTargetHelpers";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -99,7 +99,7 @@ void main() {
 `;
 }
 
-class BloomPassThresholdPipeline extends BloomPassBaseProgram {
+class BloomPassThresholdProgram extends BloomPassBaseProgram {
     public frag: string = `
 ${BloomPassBaseProgram.BindingsDefinition}
 ${ImageEffectShaderLib}
@@ -241,10 +241,16 @@ export class BloomEffect extends ImageEffectBase {
     public intensity1: number = 0;
     public intensity2: number = 0;
 
-    private thresholdPipeline: GfxRenderPipeline;
-    private blur1Pipeline: GfxRenderPipeline;
-    private blur2Pipeline: GfxRenderPipeline;
-    private combinePipeline: GfxRenderPipeline;
+    private thresholdProgram: GfxProgram;
+    private blur1Program: GfxProgram;
+    private blur2Program: GfxProgram;
+    private combineProgram: GfxProgram;
+
+    private combineMegaState: GfxMegaStateDescriptor = makeMegaState(setAttachmentStateSimple({}, {
+        blendMode: GfxBlendMode.ADD,
+        blendSrcFactor: GfxBlendFactor.ONE,
+        blendDstFactor: GfxBlendFactor.ONE,
+    }), fullscreenMegaState);
 
     private bloomSampler: GfxSampler;
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
@@ -268,14 +274,10 @@ export class BloomEffect extends ImageEffectBase {
         });
         this.textureMapping[0].gfxSampler = this.bloomSampler;
 
-        this.thresholdPipeline = makeFullscreenPipeline(device, cache, new BloomPassThresholdPipeline());
-        this.blur1Pipeline = makeFullscreenPipeline(device, cache, new BloomPassBlur1Program());
-        this.blur2Pipeline = makeFullscreenPipeline(device, cache, new BloomPassBlur2Program());
-        this.combinePipeline = makeFullscreenPipeline(device, cache, new BloomPassFullscreenCopyProgram(), makeMegaState(setAttachmentStateSimple({}, {
-            blendMode: GfxBlendMode.ADD,
-            blendSrcFactor: GfxBlendFactor.ONE,
-            blendDstFactor: GfxBlendFactor.ONE,
-        }), fullscreenMegaState));
+        this.thresholdProgram = cache.createProgram(device, new BloomPassThresholdProgram());
+        this.blur1Program = cache.createProgram(device, new BloomPassBlur1Program());
+        this.blur2Program = cache.createProgram(device, new BloomPassBlur2Program());
+        this.combineProgram = cache.createProgram(device, new BloomPassFullscreenCopyProgram());
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst, bloomEffect: BloomEffect): number {
@@ -294,15 +296,6 @@ export class BloomEffect extends ImageEffectBase {
     }
 
     public pipelinesReady(sceneObjHolder: SceneObjHolder): boolean {
-        const device = sceneObjHolder.modelCache.device;
-        if (!device.queryPipelineReady(this.thresholdPipeline))
-            return false;
-        if (!device.queryPipelineReady(this.blur1Pipeline))
-            return false;
-        if (!device.queryPipelineReady(this.blur2Pipeline))
-            return false;
-        if (!device.queryPipelineReady(this.combinePipeline))
-            return false;
         return true;
     }
 
@@ -321,6 +314,7 @@ export class BloomEffect extends ImageEffectBase {
         const blurL2ColorTargetID = sceneGraphBuilder.createRenderTargetID(this.targetColorDesc, 'Bloom Blur L2');
 
         const renderInst = renderInstManager.newRenderInst();
+        renderInst.setAllowSkippingIfPipelineNotReady(false);
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst, assertExists(sceneObjHolder.bloomEffect));
@@ -337,7 +331,8 @@ export class BloomEffect extends ImageEffectBase {
             pass.attachResolveTexture(bloomObjectsResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxRenderPipeline(this.thresholdPipeline);
+                renderInst.setGfxProgram(this.thresholdProgram);
+                renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomObjectsResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
@@ -353,7 +348,8 @@ export class BloomEffect extends ImageEffectBase {
             pass.attachResolveTexture(bloomDownsampleResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxRenderPipeline(this.blur1Pipeline);
+                renderInst.setGfxProgram(this.blur1Program);
+                renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomDownsampleResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
@@ -371,7 +367,8 @@ export class BloomEffect extends ImageEffectBase {
             pass.attachResolveTexture(bloomBlurL1ResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxRenderPipeline(this.blur2Pipeline);
+                renderInst.setGfxProgram(this.blur2Program);
+                renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomBlurL1ResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
@@ -386,7 +383,8 @@ export class BloomEffect extends ImageEffectBase {
             pass.attachResolveTexture(bloomBlurL2ResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                renderInst.setGfxRenderPipeline(this.combinePipeline);
+                renderInst.setGfxProgram(this.combineProgram);
+                renderInst.setMegaStateFlags(this.combineMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomBlurL2ResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
