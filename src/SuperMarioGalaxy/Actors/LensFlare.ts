@@ -12,7 +12,7 @@ import { isFirstStep } from "../Spine";
 import { saturate, MathConstants, setMatrixTranslation, transformVec3Mat4w1, vec3SetAll } from "../../MathHelpers";
 import { divideByW } from "../../Camera";
 import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ";
-import { GfxDevice, GfxCompareMode, GfxAttachment } from "../../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxCompareMode } from "../../gfx/platform/GfxPlatform";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers";
 import { GfxrGraphBuilder } from "../../gfx/render/GfxRenderGraph";
 import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
@@ -28,8 +28,8 @@ export class DrawSyncManager {
         this.peekZ.beginFrame(device);
     }
 
-    public endFrame(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, width: number, height: number, depthTargetID: number): void {
-        this.peekZ.pushPasses(device, renderInstManager, builder, width, height, depthTargetID);
+    public endFrame(device: GfxDevice, renderInstManager: GfxRenderInstManager, builder: GfxrGraphBuilder, depthTargetID: number): void {
+        this.peekZ.pushPasses(device, renderInstManager, builder, depthTargetID);
         this.peekZ.peekData(device);
     }
 
