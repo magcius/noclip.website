@@ -13,13 +13,18 @@ import { assert, assertExists } from "../../util";
 // TODO(jstpierre):
 //   - Port over remaining games
 //
-//   - Clean up the render target algorithm a bit, and document it. I think resolveTextureUseCount can be simplified.
+//   - Clean up the algorithm? I think resolveTextureUseCount can be simplified.
+//     - Add graph pass "culling" a la Frostbite frame graphs?
+//     - Turn resolves into pseudo-passes?
+//     - MoveResource?
 //
 //   - Design an API for "temporal" cases -- any time a resource wants to "outlive" the frame.
 //     There is currently the resolveToExternalTexture API which works well enough for now, but
 //     the user has to manage the GfxTexture / GfxAttachment themselves.
+//     - Frostbite just has the user do external textures that get imported into the FrameGraph.
 //
 //   - Unify render target / resolve texture ID spaces?
+//     - Add more resource types?
 
 export class GfxrRenderTargetDescription {
     public width: number = 0;

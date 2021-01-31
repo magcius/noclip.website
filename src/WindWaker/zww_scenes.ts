@@ -809,6 +809,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
+        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
         this.extraTextures.destroy(device);
         this.globals.destroy(device);
