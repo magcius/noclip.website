@@ -180,34 +180,16 @@ class GraphImpl {
 }
 
 export interface GfxrGraphBuilder {
-    begin(): void;
-    end(): GfxrGraph;
-    pushPass(setupFunc: PassSetupFunc): void;
-    createRenderTargetID(desc: Readonly<GfxrRenderTargetDescription>, debugName: string): number;
-    resolveRenderTarget(renderTargetID: number): number;
-    resolveRenderTargetToExternalTexture(renderTargetID: number, texture: GfxTexture): void;
-}
-
-class GraphBuilderImpl implements GfxrGraphBuilder {
-    private currentGraph: GraphImpl | null = null;
-
     /**
      * Begin a new render graph.
      */
-    public begin() {
-        assert(this.currentGraph === null);
-        this.currentGraph = new GraphImpl();
-    }
+    begin(): void;
 
     /**
      * Stop building the render graph, and return it. This should be passed to
      * {@see GfxrRenderGraph::execute} when the user wants to run it.
      */
-    public end(): GfxrGraph {
-        const graph = assertExists(this.currentGraph);
-        this.currentGraph = null;
-        return graph;
-    }
+    end(): GfxrGraph;
 
     /**
      * Add a new pass. {@param setupFunc} will be called *immediately* to set up the
@@ -215,11 +197,7 @@ class GraphBuilderImpl implements GfxrGraphBuilder {
      * is possible I might change this in the future to limit the allocations caused
      * by closures.
      */
-    public pushPass(setupFunc: PassSetupFunc): void {
-        const pass = new PassImpl();
-        setupFunc(pass);
-        this.currentGraph!.passes.push(pass);
-    }
+    pushPass(setupFunc: PassSetupFunc): void;
 
     /**
      * Tell the system about a render target with the given descriptions. Render targets
@@ -236,24 +214,7 @@ class GraphBuilderImpl implements GfxrGraphBuilder {
      * use the {@see GfxrPassScope} given to the pass's execution or post callbacks, however
      * this usage should be rarer than the resolve case.
      */
-    public createRenderTargetID(desc: Readonly<GfxrRenderTargetDescription>, debugName: string): number {
-        this.currentGraph!.renderTargetDebugNames.push(debugName);
-        return this.currentGraph!.renderTargetDescriptions.push(desc) - 1;
-    }
-
-    private createResolveTextureID(renderTargetID: number): number {
-        return this.currentGraph!.resolveTextureRenderTargetIDs.push(renderTargetID) - 1;
-    }
-
-    private findLastPassForRenderTarget(renderTargetID: number): PassImpl | null {
-        for (let i = this.currentGraph!.passes.length - 1; i >= 0; i--) {
-            const pass = this.currentGraph!.passes[i];
-            if (pass.renderTargetIDs.includes(renderTargetID))
-                return pass;
-        }
-
-        return null;
-    }
+    createRenderTargetID(desc: Readonly<GfxrRenderTargetDescription>, debugName: string): number;
 
     /**
      * Resolve the render target ID {@param renderTargetID}, and return the resolved texture ID.
@@ -264,22 +225,7 @@ class GraphBuilderImpl implements GfxrGraphBuilder {
      * you can retrieve a proper {@param GfxTexture} for a resolve texture ID with
      * {@see GfxrPassScope::getResolveTextureForID}}.
      */
-    public resolveRenderTarget(renderTargetID: number): number {
-        const resolveTextureID = this.createResolveTextureID(renderTargetID);
-
-        // Find the last pass that rendered to this render target, and resolve it now.
-
-        // If you wanted a previous snapshot copy of it, you should have created a separate,
-        // intermediate pass to copy that out. Perhaps we should have a helper for this?
-
-        // If there was no pass that wrote to this RT, well there's no point in resolving it, is there?
-        const renderPass = assertExists(this.findLastPassForRenderTarget(renderTargetID));
-
-        const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
-        renderPass.resolveTextureOutputIDs[attachmentSlot] = resolveTextureID;
-
-        return resolveTextureID;
-    }
+    resolveRenderTarget(renderTargetID: number): number;
 
     /**
      * Specify that the render target ID {@param renderTargetID} should be resolved to an
@@ -288,12 +234,7 @@ class GraphBuilderImpl implements GfxrGraphBuilder {
      *
      * Warning: This API might change in the near future.
      */
-    public resolveRenderTargetToExternalTexture(renderTargetID: number, texture: GfxTexture): void {
-        const renderPass = assertExists(this.findLastPassForRenderTarget(renderTargetID));
-
-        const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
-        renderPass.resolveTextureOutputExternalTextures[attachmentSlot] = texture;
-    }
+    resolveRenderTargetToExternalTexture(renderTargetID: number, texture: GfxTexture): void;
 }
 
 class RenderTarget {
@@ -402,10 +343,6 @@ export class GfxrRenderGraphImpl {
     private renderTargetDeadPool: RenderTarget[] = [];
     private singleSampledTextureDeadPool: SingleSampledTexture[] = [];
 
-    public getGraphBuilder(): GfxrGraphBuilder {
-        return new GraphBuilderImpl();
-    }
-
     private acquireRenderTargetForDescription(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>): RenderTarget {
         for (let i = 0; i < this.renderTargetDeadPool.length; i++) {
             const freeRenderTarget = this.renderTargetDeadPool[i];
@@ -434,6 +371,69 @@ export class GfxrRenderGraphImpl {
 
         // Allocate a new resolve texture.
         return new SingleSampledTexture(device, desc);
+    }
+    //#endregion
+
+    //#region Graph Builder
+    private currentGraph: GraphImpl | null = null;
+    public begin() {
+        assert(this.currentGraph === null);
+        this.currentGraph = new GraphImpl();
+    }
+
+    public end(): GfxrGraph {
+        const graph = assertExists(this.currentGraph);
+        this.currentGraph = null;
+        return graph;
+    }
+
+    public pushPass(setupFunc: PassSetupFunc): void {
+        const pass = new PassImpl();
+        setupFunc(pass);
+        this.currentGraph!.passes.push(pass);
+    }
+
+    public createRenderTargetID(desc: Readonly<GfxrRenderTargetDescription>, debugName: string): number {
+        this.currentGraph!.renderTargetDebugNames.push(debugName);
+        return this.currentGraph!.renderTargetDescriptions.push(desc) - 1;
+    }
+
+    private createResolveTextureID(renderTargetID: number): number {
+        return this.currentGraph!.resolveTextureRenderTargetIDs.push(renderTargetID) - 1;
+    }
+
+    private findLastPassForRenderTarget(renderTargetID: number): PassImpl | null {
+        for (let i = this.currentGraph!.passes.length - 1; i >= 0; i--) {
+            const pass = this.currentGraph!.passes[i];
+            if (pass.renderTargetIDs.includes(renderTargetID))
+                return pass;
+        }
+
+        return null;
+    }
+
+    public resolveRenderTarget(renderTargetID: number): number {
+        const resolveTextureID = this.createResolveTextureID(renderTargetID);
+
+        // Find the last pass that rendered to this render target, and resolve it now.
+
+        // If you wanted a previous snapshot copy of it, you should have created a separate,
+        // intermediate pass to copy that out. Perhaps we should have a helper for this?
+
+        // If there was no pass that wrote to this RT, well there's no point in resolving it, is there?
+        const renderPass = assertExists(this.findLastPassForRenderTarget(renderTargetID));
+
+        const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
+        renderPass.resolveTextureOutputIDs[attachmentSlot] = resolveTextureID;
+
+        return resolveTextureID;
+    }
+
+    public resolveRenderTargetToExternalTexture(renderTargetID: number, texture: GfxTexture): void {
+        const renderPass = assertExists(this.findLastPassForRenderTarget(renderTargetID));
+
+        const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
+        renderPass.resolveTextureOutputExternalTextures[attachmentSlot] = texture;
     }
     //#endregion
 
@@ -740,6 +740,10 @@ export class GfxrRenderGraphImpl {
         return renderTarget.texture;
     }
     //#endregion
+
+    public getGraphBuilder(): GfxrGraphBuilder {
+        return this;
+    }
 
     public destroy(device: GfxDevice): void {
         // At the time this is called, we shouldn't have anything alive.
