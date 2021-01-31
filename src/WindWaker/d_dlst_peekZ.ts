@@ -181,7 +181,7 @@ void main() {
         const depthTargetDesc = builder.getRenderTargetDescription(depthTargetID);
         const width = depthTargetDesc.width, height = depthTargetDesc.height;
 
-        this.colorTargetDesc.setParameters(width, height, 1);
+        this.colorTargetDesc.setDimensions(width, height, 1);
         const colorTargetID = builder.createRenderTargetID(this.colorTargetDesc, 'PeekZ Color Buffer');
 
         builder.pushPass((pass) => {

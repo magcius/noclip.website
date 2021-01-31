@@ -9,7 +9,7 @@ import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config 
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { Attachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { Attachment, DEFAULT_NUM_SAMPLES, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
@@ -35,6 +35,7 @@ export interface ViewerRenderInput {
     backbufferHeight: number;
     viewport: Readonly<GfxNormalizedViewportCoords>;
     onscreenTexture: GfxTexture;
+    sampleCount: number;
 }
 
 export interface SceneGfx {
@@ -133,6 +134,7 @@ export class Viewer {
             backbufferHeight: 0,
             viewport: this.viewport,
             onscreenTexture: null!,
+            sampleCount: DEFAULT_NUM_SAMPLES,
         };
     }
 

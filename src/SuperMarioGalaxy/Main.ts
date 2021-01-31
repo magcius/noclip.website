@@ -341,10 +341,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
         const builder = this.renderGraph.getGraphBuilder();
         builder.begin();
 
-        this.mainColorDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
         this.mainColorDesc.colorClearColor = TransparentBlack;
 
-        this.mainDepthDesc.setParameters(viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        this.mainDepthDesc.copyDimensions(this.mainColorDesc);
         this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
 
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
@@ -528,7 +528,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             if (imageEffectDirector.isOnNormalBloom(this.sceneObjHolder)) {
                 // Render Bloom Objects
 
-                this.bloomObjectsDesc.setParameters(this.mainColorDesc.width, this.mainColorDesc.height);
+                this.bloomObjectsDesc.copyDimensions(this.mainColorDesc);
                 this.bloomObjectsDesc.colorClearColor = TransparentBlack;
                 const bloomObjectsTargetID = builder.createRenderTargetID(this.bloomObjectsDesc, 'Bloom Objects');
 

@@ -1,6 +1,6 @@
 
 import { Color } from "../../Color";
-import { DEFAULT_NUM_SAMPLES, IdentityViewportCoords } from "../helpers/RenderTargetHelpers";
+import { IdentityViewportCoords } from "../helpers/RenderTargetHelpers";
 import { GfxAttachment, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension } from "../platform/GfxPlatform";
 import { assert, assertExists } from "../../util";
 
@@ -36,10 +36,16 @@ export class GfxrRenderTargetDescription {
     /**
      * Set the dimensions of a render target description.
      */
-    public setParameters(width: number, height: number, sampleCount = DEFAULT_NUM_SAMPLES): void {
+    public setDimensions(width: number, height: number, sampleCount: number): void {
         this.width = width;
         this.height = height;
         this.sampleCount = sampleCount;
+    }
+
+    public copyDimensions(desc: Readonly<GfxrRenderTargetDescription>): void {
+        this.width = desc.width;
+        this.height = desc.height;
+        this.sampleCount = desc.sampleCount;
     }
 }
 

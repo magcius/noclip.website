@@ -293,7 +293,7 @@ export class BloomEffect extends ImageEffectBase {
         const targetWidth = bloomObjectsTargetDesc.width >> 2;
         const targetHeight = bloomObjectsTargetDesc.height >> 2;
 
-        this.targetColorDesc.setParameters(targetWidth, targetHeight, 1);
+        this.targetColorDesc.setDimensions(targetWidth, targetHeight, 1);
 
         const downsampleColorTargetID = sceneGraphBuilder.createRenderTargetID(this.targetColorDesc, 'Bloom Downsample');
         const blurL1ColorTargetID = sceneGraphBuilder.createRenderTargetID(this.targetColorDesc, 'Bloom Blur L1');
