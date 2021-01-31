@@ -14,6 +14,7 @@ import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
 import { IS_DEVELOPMENT } from './BuildVersion';
+import { GlobalSaveManager } from './SaveManager';
 
 export interface ViewerUpdateInfo {
     time: number;
@@ -136,6 +137,11 @@ export class Viewer {
             onscreenTexture: null!,
             sampleCount: DEFAULT_NUM_SAMPLES,
         };
+
+        GlobalSaveManager.addSettingListener('Antialiasing', (saveManager, key) => {
+            const antialiasing = saveManager.loadSetting<boolean>(key, true);
+            this.viewerRenderInput.sampleCount = antialiasing ? DEFAULT_NUM_SAMPLES : 1;
+        });
     }
 
     private onKeyMoveSpeed(): void {
