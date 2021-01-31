@@ -21,6 +21,9 @@ interface GfxTextureP_WebGPU extends GfxTexture {
 interface GfxAttachmentP_WebGPU extends GfxAttachment {
     gpuTexture: GPUTexture;
     gpuTextureView: GPUTextureView;
+    pixelFormat: GfxFormat;
+    width: number;
+    height: number;
     numSamples: number;
 }
 
@@ -750,24 +753,29 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
     }
 
     public createAttachment(descriptor: GfxAttachmentDescriptor): GfxAttachment {
-        const width = descriptor.width, height = descriptor.height, format = descriptor.pixelFormat, numSamples = descriptor.numSamples;
+        const { pixelFormat, width, height, numSamples } = descriptor;
         const gpuTexture = this.device.createTexture({
             size: [width, height, 1],
             sampleCount: numSamples,
-            format: translateTextureFormat(format),
+            format: translateTextureFormat(pixelFormat),
             usage: GPUTextureUsage.OUTPUT_ATTACHMENT,
         });
         const gpuTextureView = gpuTexture.createView();
 
-        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView, numSamples };
+        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(),
+            gpuTexture, gpuTextureView,
+            pixelFormat, width, height, numSamples,
+        };
         return attachment;
     }
 
     public createAttachmentFromTexture(gfxTexture: GfxTexture): GfxAttachment {
-        const { gpuTexture } = gfxTexture as GfxTextureP_WebGPU;
+        const { pixelFormat, width, height, gpuTexture } = gfxTexture as GfxTextureP_WebGPU;
         const numSamples = 1;
         const gpuTextureView = gpuTexture.createView();
-        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView, numSamples };
+        const attachment: GfxAttachmentP_WebGPU = { _T: _T.Attachment, ResourceUniqueId: this.getNextUniqueId(), gpuTexture, gpuTextureView,
+            pixelFormat, width, height, numSamples,
+        };
         return attachment;
     }
 
@@ -1074,9 +1082,14 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
         return this;
     }
 
-    public queryRenderPass(o: GfxRenderPass): GfxRenderPassDescriptor {
+    public queryRenderPass(o: GfxRenderPass): Readonly<GfxRenderPassDescriptor> {
         const pass = o as GfxRenderPassP_WebGPU;
         return pass.descriptor;
+    }
+
+    public queryAttachment(o: GfxAttachment): Readonly<GfxAttachmentDescriptor> {
+        const attachment = o as GfxAttachmentP_WebGPU;
+        return attachment;
     }
 
     public setResourceName(o: GfxResource, s: string): void {

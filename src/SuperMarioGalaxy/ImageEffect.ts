@@ -175,18 +175,6 @@ class BloomPassBlur2Program extends BloomPassBlurProgram {
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 1, numSamplers: 1 }];
 
-function makeFullscreenPipeline(device: GfxDevice, cache: GfxRenderCache, program: DeviceProgram, megaStateDescriptor: GfxMegaStateDescriptor = fullscreenMegaState, sampleCount: number = DEFAULT_NUM_SAMPLES): GfxRenderPipeline {
-    const gfxProgram = cache.createProgram(device, program);
-    return cache.createRenderPipeline(device, {
-        bindingLayouts,
-        inputLayout: null,
-        megaStateDescriptor,
-        topology: GfxPrimitiveTopology.TRIANGLES,
-        program: gfxProgram,
-        sampleCount,
-    });
-}
-
 abstract class ImageEffectBase extends NameObj {
     public active = false;
     public visible = false;

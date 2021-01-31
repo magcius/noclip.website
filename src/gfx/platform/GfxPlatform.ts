@@ -216,6 +216,10 @@ export interface GfxRenderPipelineDescriptor {
     program: GfxProgram;
     topology: GfxPrimitiveTopology;
     megaStateDescriptor: GfxMegaStateDescriptor;
+
+    // Attachment data.
+    colorAttachmentFormats: (GfxFormat | null)[];
+    depthStencilAttachmentFormat: GfxFormat | null;
     sampleCount: number;
 }
 
@@ -369,7 +373,8 @@ export interface GfxDevice {
     queryPipelineReady(o: GfxRenderPipeline): boolean;
     queryPlatformAvailable(): boolean;
     queryVendorInfo(): GfxVendorInfo;
-    queryRenderPass(o: GfxRenderPass): GfxRenderPassDescriptor;
+    queryRenderPass(o: GfxRenderPass): Readonly<GfxRenderPassDescriptor>;
+    queryAttachment(o: GfxAttachment): Readonly<GfxAttachmentDescriptor>;
 
     // Debugging.
     setResourceName(o: GfxResource, s: string): void;

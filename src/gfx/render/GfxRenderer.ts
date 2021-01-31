@@ -2,10 +2,9 @@
 import { nArray, assert, assertExists, spliceBisectRight, setBitFlagEnabled } from "../../util";
 import { clamp } from "../../MathHelpers";
 
-import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxBindings, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxBuffer, GfxRenderPipeline } from "../platform/GfxPlatform";
+import { GfxMegaStateDescriptor, GfxInputState, GfxDevice, GfxRenderPass, GfxRenderPipelineDescriptor, GfxPrimitiveTopology, GfxBindingLayoutDescriptor, GfxBindingsDescriptor, GfxSamplerBinding, GfxProgram, GfxInputLayout, GfxFormat, GfxRenderPassDescriptor } from "../platform/GfxPlatform";
 
 import { defaultMegaState, copyMegaState, setMegaStateFlags } from "../helpers/GfxMegaStateDescriptorHelpers";
-import { DEFAULT_NUM_SAMPLES } from "../helpers/RenderTargetHelpers";
 
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
@@ -171,8 +170,9 @@ export class GfxRenderInst {
             megaStateDescriptor: copyMegaState(defaultMegaState),
             program: null!,
             topology: GfxPrimitiveTopology.TRIANGLES,
-            // TODO(jstpierre): Not great, need to figure out how to not do this...
-            sampleCount: DEFAULT_NUM_SAMPLES,
+            colorAttachmentFormats: [],
+            depthStencilAttachmentFormat: null,
+            sampleCount: 1,
         };
 
         this.reset();
@@ -202,6 +202,11 @@ export class GfxRenderInst {
         this._renderPipelineDescriptor.program = o._renderPipelineDescriptor.program;
         this._renderPipelineDescriptor.inputLayout = o._renderPipelineDescriptor.inputLayout;
         this._renderPipelineDescriptor.topology = o._renderPipelineDescriptor.topology;
+        this._renderPipelineDescriptor.colorAttachmentFormats.length = Math.max(this._renderPipelineDescriptor.colorAttachmentFormats.length, o._renderPipelineDescriptor.colorAttachmentFormats.length);
+        for (let i = 0; i < o._renderPipelineDescriptor.colorAttachmentFormats.length; i++)
+            this._renderPipelineDescriptor.colorAttachmentFormats[i] = o._renderPipelineDescriptor.colorAttachmentFormats[i];
+        this._renderPipelineDescriptor.depthStencilAttachmentFormat = o._renderPipelineDescriptor.depthStencilAttachmentFormat;
+        this._renderPipelineDescriptor.sampleCount = o._renderPipelineDescriptor.sampleCount;
         this._inputState = o._inputState;
         this._uniformBuffer = o._uniformBuffer;
         this._drawCount = o._drawCount;
@@ -269,7 +274,7 @@ export class GfxRenderInst {
             this._bindingDescriptors[0].samplerBindings.push({ gfxSampler: null, gfxTexture: null, lateBinding: null });
     }
 
-    /**
+     /**
      * Sets the {@see GfxBindingLayoutDescriptor}s that this render inst will render with.
      */
     public setBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): void {
@@ -444,7 +449,20 @@ export class GfxRenderInst {
         this._flags = setBitFlagEnabled(this._flags, GfxRenderInstFlags.AllowSkippingIfPipelineNotReady, v);
     }
 
+    private setAttachmentFormatsFromRenderPass(device: GfxDevice, passRenderer: GfxRenderPass): void {
+        const passDescriptor = device.queryRenderPass(passRenderer);
+
+        const colorAttachmentDescriptor = passDescriptor.colorAttachment !== null ? device.queryAttachment(passDescriptor.colorAttachment) : null;
+        const depthStencilAttachmentDescriptor = passDescriptor.depthStencilAttachment !== null ? device.queryAttachment(passDescriptor.depthStencilAttachment) : null;
+
+        this._renderPipelineDescriptor.colorAttachmentFormats[0] = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.pixelFormat : null;
+        this._renderPipelineDescriptor.depthStencilAttachmentFormat = depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.pixelFormat : null;
+        this._renderPipelineDescriptor.sampleCount = colorAttachmentDescriptor !== null ? colorAttachmentDescriptor.numSamples : depthStencilAttachmentDescriptor !== null ? depthStencilAttachmentDescriptor.numSamples : 0;
+    }
+
     public drawOnPass(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): boolean {
+        this.setAttachmentFormatsFromRenderPass(device, passRenderer);
+
         const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);
         if (!!(this._flags & GfxRenderInstFlags.AllowSkippingIfPipelineNotReady) && !device.queryPipelineReady(gfxPipeline))
             return false;
