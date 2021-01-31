@@ -806,7 +806,7 @@ class ImageEffectStateBloomNormal extends ImageEffectState {
     }
 
     public setIntensity2Default(): void {
-        this.intensity1Target = 21;
+        this.intensity2Target = 21;
     }
 }
 
@@ -891,12 +891,12 @@ class ImageEffectDirector extends NameObj {
         this.stateBloomNormal.setBloomIntensity(area.bloomIntensity);
         this.stateBloomNormal.setThreshold(area.threshold);
 
-        if (area.intensity1 > -1)
+        if (area.intensity1 >= 0)
             this.stateBloomNormal.setIntensity1(area.intensity1);
         else
             this.stateBloomNormal.setIntensity1Default();
 
-        if (area.intensity2 > -1)
+        if (area.intensity2 >= 0)
             this.stateBloomNormal.setIntensity2(area.intensity2);
         else
             this.stateBloomNormal.setIntensity2Default();
