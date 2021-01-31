@@ -50,7 +50,7 @@ import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
-import { GfxrRenderTargetDescription, GfxrRenderGraph, GfxrAttachmentSlot, GfxrRenderGraphImpl } from '../gfx/render/GfxRenderGraph';
+import { GfxrRenderTargetDescription, GfxrRenderGraph, GfxrAttachmentSlot, GfxrRenderGraphImpl, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { TransparentBlack } from '../Color';
 
 // Galaxy ticks at 60fps.
@@ -114,7 +114,7 @@ class SpecialTextureBinder {
         m.lateBinding = textureType;
     }
 
-    public lateBindTexture(textureType: SpecialTextureType, gfxTexture: GfxTexture): void {
+    public lateBindTexture(textureType: SpecialTextureType, gfxTexture: GfxTexture | null): void {
         this.textureMapping.get(textureType)!.gfxTexture = gfxTexture;
     }
 
@@ -142,6 +142,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
     public isInteractive = true;
 
     private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
+    private mainColorTemporalTexture = new GfxrTemporalTexture();
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private bloomObjectsDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
@@ -346,6 +347,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
         this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
 
+        this.mainColorTemporalTexture.setDescription(device, this.mainColorDesc);
+
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
 
         builder.pushPass((pass) => {
@@ -378,6 +381,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
+                this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.OpaqueSceneTexture, this.mainColorTemporalTexture.getTextureForSampling());
                 this.drawOpa(passRenderer, DrawBufferType.Crystal);
                 this.drawXlu(passRenderer, DrawBufferType.Crystal);
 
@@ -565,8 +569,15 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
             });
         });
-
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
+        // Maybe have copyTextureToTexture as a native device method?
+        builder.pushPass((pass) => {
+            pass.setDebugName('Copy to Temporal Texture');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.mainColorTemporalTexture.getTextureForResolving());
 
         this.sceneObjHolder.drawSyncManager.endFrame(device, renderInstManager, builder, mainDepthTargetID);
 
@@ -594,6 +605,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderGraph.destroy(device);
+        this.mainColorTemporalTexture.destroy(device);
     }
 }
 
