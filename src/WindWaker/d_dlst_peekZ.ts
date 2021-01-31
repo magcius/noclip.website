@@ -292,7 +292,7 @@ void main() {
         builder.pushPass((pass) => {
             pass.setDebugName('PeekZ');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, colorTargetID);
-            const resolvedDepthTextureID = builder.resolveRenderTargetToColorTexture(depthTargetID);
+            const resolvedDepthTextureID = builder.resolveRenderTarget(depthTargetID);
             pass.attachResolveTexture(resolvedDepthTextureID);
             pass.exec((passRenderer, scope) => {
                 const resolvedDepthTexture = scope.getResolveTextureForID(resolvedDepthTextureID);

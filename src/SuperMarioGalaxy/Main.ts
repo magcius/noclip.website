@@ -11,7 +11,7 @@ import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstList, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 
@@ -50,7 +50,7 @@ import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
-import { GfxrRenderTargetDescription, GfxrRenderGraph, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { GfxrRenderTargetDescription, GfxrRenderGraph, GfxrAttachmentSlot, GfxrRenderGraphImpl } from '../gfx/render/GfxRenderGraph';
 import { TransparentBlack } from '../Color';
 
 // Galaxy ticks at 60fps.
@@ -141,7 +141,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
     public isInteractive = true;
 
-    private renderGraph = new GfxrRenderGraph();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F_S8);
 
@@ -398,7 +398,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Main Opaque');
-            const shadowColorTextureID = builder.resolveRenderTargetToColorTexture(mainColorTargetID);
+            const shadowColorTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(shadowColorTextureID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -470,7 +470,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         builder.pushPass((pass) => {
             pass.setDebugName('Indirect');
-            const indirectOpaqueColorTextureID = builder.resolveRenderTargetToColorTexture(mainColorTargetID);
+            const indirectOpaqueColorTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(indirectOpaqueColorTextureID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -507,7 +507,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         if (waterAreaHolder !== null && waterAreaHolder.isOnWaterCameraFilter()) {
             builder.pushPass((pass) => {
                 pass.setDebugName('Water Filter');
-                const waterFilterOpaqueColorTextureID = builder.resolveRenderTargetToColorTexture(mainColorTargetID);
+                const waterFilterOpaqueColorTextureID = builder.resolveRenderTarget(mainColorTargetID);
                 pass.attachResolveTexture(waterFilterOpaqueColorTextureID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
@@ -562,8 +562,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawOpa(passRenderer, DrawBufferType.Model3DFor2D);
                 this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
             });
-            pass.present();
         });
+
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.sceneObjHolder.drawSyncManager.endFrame(device, renderInstManager, builder, viewerInput.backbufferWidth, viewerInput.backbufferHeight, mainDepthTargetID);
 
@@ -575,7 +576,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device, hostAccessPass);
         device.submitPass(hostAccessPass);
 
-        this.renderGraph.execGraph(device, sceneGraph, viewerInput.onscreenTexture);
+        this.renderGraph.execute(device, sceneGraph);
 
         renderInstManager.resetRenderInsts();
 

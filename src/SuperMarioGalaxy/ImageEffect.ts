@@ -331,7 +331,7 @@ export class BloomEffect extends ImageEffectBase {
             pass.setDebugName('Bloom Downsample');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
 
-            const bloomObjectsResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(bloomObjectsTargetID);
+            const bloomObjectsResolveTextureID = sceneGraphBuilder.resolveRenderTarget(bloomObjectsTargetID);
             pass.attachResolveTexture(bloomObjectsResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
@@ -347,7 +347,7 @@ export class BloomEffect extends ImageEffectBase {
             pass.setDebugName('Bloom Blur L1');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurL1ColorTargetID);
 
-            const bloomDownsampleResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(downsampleColorTargetID);
+            const bloomDownsampleResolveTextureID = sceneGraphBuilder.resolveRenderTarget(downsampleColorTargetID);
             pass.attachResolveTexture(bloomDownsampleResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
@@ -365,7 +365,7 @@ export class BloomEffect extends ImageEffectBase {
             pass.setDebugName('Bloom Blur L2');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurL2ColorTargetID);
 
-            const bloomBlurL1ResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(blurL1ColorTargetID);
+            const bloomBlurL1ResolveTextureID = sceneGraphBuilder.resolveRenderTarget(blurL1ColorTargetID);
             pass.attachResolveTexture(bloomBlurL1ResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
@@ -380,7 +380,7 @@ export class BloomEffect extends ImageEffectBase {
             pass.setDebugName('Bloom Combine');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, resultBlendTargetID);
 
-            const bloomBlurL2ResolveTextureID = sceneGraphBuilder.resolveRenderTargetToColorTexture(blurL2ColorTargetID);
+            const bloomBlurL2ResolveTextureID = sceneGraphBuilder.resolveRenderTarget(blurL2ColorTargetID);
             pass.attachResolveTexture(bloomBlurL2ResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
