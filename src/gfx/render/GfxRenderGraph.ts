@@ -311,8 +311,12 @@ class RenderTarget {
         } else {
             // Single-sampled textures can be backed by regular textures.
             this.texture = device.createTexture(this);
+            device.setResourceName(this.texture, this.debugName);
+
             this.attachment = device.createRenderTargetFromTexture(this.texture);
         }
+
+        device.setResourceName(this.attachment, this.debugName);
     }
 
     public matchesDescription(desc: Readonly<GfxrRenderTargetDescription>): boolean {
@@ -599,6 +603,7 @@ export class GfxrRenderGraphImpl {
             if (!this.singleSampledTextureForResolveTextureID[resolveTextureOutputID]) {
                 const desc = assertExists(graph.renderTargetDescriptions[renderTargetID]);
                 this.singleSampledTextureForResolveTextureID[resolveTextureOutputID] = this.acquireSingleSampledTextureForDescription(device, desc);
+                device.setResourceName(this.singleSampledTextureForResolveTextureID[resolveTextureOutputID].texture, renderTarget.debugName + ` (Resolve ${resolveTextureOutputID})`);
             }
 
             return this.singleSampledTextureForResolveTextureID[resolveTextureOutputID].texture;

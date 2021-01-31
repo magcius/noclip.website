@@ -619,7 +619,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
     private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
     private blitProgram: GfxProgram;
-    private depthOfFieldProgram: DepthOfFieldProgram;
+    private depthOfFieldProgram: GfxProgram;
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'DepthOfFieldBlur');
@@ -651,7 +651,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         this.textureMapping[1].gfxSampler = nearestSampler;
 
         this.blitProgram = cache.createProgram(device, new FullscreenBlitProgram());
-        this.depthOfFieldProgram = new DepthOfFieldProgram();
+        this.depthOfFieldProgram = cache.createProgram(device, new DepthOfFieldProgram());
     }
 
     private allocateParameterBuffer(renderInst: GfxRenderInst) {
@@ -696,6 +696,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
                 renderInst.setGfxProgram(this.blitProgram);
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.textureMapping[1].gfxTexture = null;
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
             });
@@ -712,8 +713,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
             pass.attachResolveTexture(mainDepthResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                this.depthOfFieldProgram.ensurePreprocessed(device.queryVendorInfo());
-                renderInst.setGfxProgram(renderInstManager.gfxRenderCache.createProgram(device, this.depthOfFieldProgram));
+                renderInst.setGfxProgram(this.depthOfFieldProgram);
                 renderInst.setMegaStateFlags(this.combineMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsampleResolveTextureID);
                 this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
