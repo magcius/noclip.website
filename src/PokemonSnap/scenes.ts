@@ -119,8 +119,8 @@ class SnapRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        renderInstManager.resetRenderInsts();
         this.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {

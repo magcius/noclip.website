@@ -2916,8 +2916,8 @@ class Pilotwings64Renderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        renderInstManager.resetRenderInsts();
         this.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public setCurrentTask(index: number): void {
