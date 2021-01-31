@@ -19,7 +19,7 @@ import * as GX from "../../gx/gx_enum";
 import { assert, readString, assertExists, nArray } from "../../util";
 import { vec3, mat4, vec2 } from "gl-matrix";
 import { Endianness } from "../../endian";
-import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxHostAccessPass, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxInputLayout, GfxInputState, GfxBuffer, GfxFormat, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBufferUsage, GfxBufferFrequencyHint, GfxIndexBufferDescriptor, GfxInputLayoutBufferDescriptor } from "../../gfx/platform/GfxPlatform";
 import { getPointHermite } from "../../Spline";
 import { getVertexInputLocation, GX_Program } from "../../gx/gx_material";
 import { Color, colorNewFromRGBA, colorCopy, colorNewCopy, White, colorFromRGBA8, colorLerp, colorMult, colorNewFromRGBA8 } from "../../Color";
@@ -970,11 +970,11 @@ class StripeBufferManager {
         return entry;
     }
 
-    public upload(hostAccessPass: GfxHostAccessPass): void {
+    public upload(device: GfxDevice): void {
         for (let i = 0; i < this.stripeEntry.length; i++) {
             const entry = this.stripeEntry[i];
             if (entry.isInUse)
-                hostAccessPass.uploadBufferData(entry.gfxBuffer, 0, entry.shadowBufferU8);
+                device.uploadBufferData(entry.gfxBuffer, 0, entry.shadowBufferU8);
         }
     }
 
@@ -1093,9 +1093,7 @@ export class JPAEmitterManager {
                 this.aliveEmitters[i].draw(device, renderInstManager, this.workData);
         }
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.stripeBufferManager.upload(hostAccessPass);
-        device.submitPass(hostAccessPass);
+        this.stripeBufferManager.upload(device);
         this.stripeBufferManager.reset();
     }
 

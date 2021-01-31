@@ -2,7 +2,7 @@ import * as UI from '../ui';
 import * as Viewer from '../viewer';
 import * as BYML from '../byml';
 
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { SceneContext } from '../SceneBase';
@@ -77,7 +77,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.globals.update(viewerInput);
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.modelRenderers.length; i++)
@@ -85,7 +85,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         this.globals.particles.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -117,9 +117,7 @@ class SnapRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         renderInstManager.resetRenderInsts();
         this.renderGraph.execute(device, builder);

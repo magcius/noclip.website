@@ -70,17 +70,15 @@ class MyShapeHelper {
     }
 
     public uploadData(device: GfxDevice, uploadVertices: boolean, uploadIndices: boolean) {
-        const hostAccessPass = device.createHostAccessPass();
+
 
         if (uploadVertices) {
             for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++)
-                hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
+                device.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
         }
 
         if (uploadIndices)
-            hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
-
-        device.submitPass(hostAccessPass);
+            device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexDraw | null = null): void {

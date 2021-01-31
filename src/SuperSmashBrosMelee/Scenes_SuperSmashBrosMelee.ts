@@ -1,6 +1,6 @@
 
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { HSD_JObjRoot_Instance, HSD_JObjRoot_Data, HSD_AObj_Instance } from "./SYSDOLPHIN_Render";
 import { ViewerRenderInput, SceneGfx, SceneGroup } from "../viewer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -50,7 +50,7 @@ export class MeleeRenderer extends BasicGXRendererHelper {
         c.setSceneMoveSpeedMult(4/60);
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
         const template = this.renderHelper.pushTemplateRenderInst();
 
@@ -66,7 +66,7 @@ export class MeleeRenderer extends BasicGXRendererHelper {
         }
 
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public destroy(device: GfxDevice): void {

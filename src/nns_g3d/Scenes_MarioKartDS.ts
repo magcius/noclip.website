@@ -7,7 +7,7 @@ import * as NARC from './narc';
 
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { MDL0Renderer, G3DPass, nnsG3dBindingLayouts } from './render';
 import { assert, readString, assertExists } from '../util';
 import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -77,7 +77,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
         this.textureHolder = new FakeTextureHolder(this.courseRenderer.viewerTextures);
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
 
@@ -93,7 +93,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
             this.objectRenderers[i].prepareToRender(this.renderInstManager, viewerInput);
         this.renderInstManager.popTemplateRenderInst();
 
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+        this.uniformBuffer.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -125,9 +125,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();

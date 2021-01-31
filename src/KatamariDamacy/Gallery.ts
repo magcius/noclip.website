@@ -7,7 +7,7 @@ import { gsMemoryMapNew } from '../Common/PS2/GS';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxProgram, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
@@ -236,7 +236,7 @@ export class GallerySceneRenderer implements SceneGfx {
         return orbit;
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         const offs = template.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16 + 20);
@@ -249,7 +249,7 @@ export class GallerySceneRenderer implements SceneGfx {
             this.objectRenderers[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, katamariWorldSpaceToNoclipSpace, 0);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
@@ -258,9 +258,7 @@ export class GallerySceneRenderer implements SceneGfx {
         if (this.context.inputManager.isKeyDownEventTriggered('Space'))
             this.setObjectRandom();
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);

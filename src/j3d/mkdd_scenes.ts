@@ -8,7 +8,7 @@ import { mat3, mat4, quat, vec3 } from 'gl-matrix';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { J3DModelData } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { bindTTK1MaterialInstance, J3DModelInstanceSimple } from '../Common/JSYSTEM/J3D/J3DGraphSimple';
 import { BCK, BMD, BTK, BRK, BTP, BCA } from '../Common/JSYSTEM/J3D/J3DLoader';
@@ -74,7 +74,7 @@ class MKDDRenderer implements Viewer.SceneGfx {
         this.modelInstances.push(scene);
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const template = this.renderHelper.pushTemplateRenderInst();
@@ -83,13 +83,11 @@ class MKDDRenderer implements Viewer.SceneGfx {
             this.modelInstances[i].prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);

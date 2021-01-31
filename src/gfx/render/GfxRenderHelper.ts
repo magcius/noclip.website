@@ -1,7 +1,7 @@
 
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { GfxRenderInstManager, GfxRenderInst } from "./GfxRenderer";
-import { GfxDevice, GfxHostAccessPass } from "../platform/GfxPlatform";
+import { GfxDevice } from "../platform/GfxPlatform";
 import { GfxRenderCache } from "./GfxRenderCache";
 
 // Experiments in building a common-esque scene graph.
@@ -20,8 +20,8 @@ export class GfxRenderHelper {
         return template;
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass): void {
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+    public prepareToRender(device: GfxDevice): void {
+        this.uniformBuffer.prepareToRender(device);
     }
 
     public destroy(device: GfxDevice): void {

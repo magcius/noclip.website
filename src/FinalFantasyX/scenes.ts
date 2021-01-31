@@ -2,7 +2,7 @@ import * as BIN from "./bin";
 import * as Viewer from '../viewer';
 import { BasicRenderTarget, makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxRenderPass, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { SceneContext } from '../SceneBase';
 import { FakeTextureHolder } from '../TextureHolder';
@@ -45,9 +45,7 @@ class FFXRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
@@ -59,7 +57,7 @@ class FFXRenderer implements Viewer.SceneGfx {
         return passRenderer;
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(.1);
         this.animationController.setTimeFromViewerInput(viewerInput);
 
@@ -106,7 +104,7 @@ class FFXRenderer implements Viewer.SceneGfx {
             this.levelObjects.parts[i].prepareToRender(this.renderHelper.renderInstManager, viewerInput, this.textureRemaps);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public destroy(device: GfxDevice): void {

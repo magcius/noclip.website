@@ -2,7 +2,7 @@ import * as RDP from '../Common/N64/RDP';
 
 import {
     GfxDevice, GfxBuffer, GfxInputLayout, GfxInputState, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency,
-    GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
+    GfxRenderPass, GfxBindingLayoutDescriptor, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode,
     GfxSampler, GfxBlendFactor, GfxBlendMode, GfxTexture, GfxMegaStateDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D, GfxProgram,
 } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput, Texture } from "../viewer";
@@ -1956,10 +1956,9 @@ class TextureData {
 
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.levels.length));
         device.setResourceName(this.gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
+
         const levels = texture.levels.filter((t) => !t.usesPaired).map((t) => t.pixels);
-        hostAccessPass.uploadTextureData(this.gfxTexture, 0, levels);
-        device.submitPass(hostAccessPass);
+        device.uploadTextureData(this.gfxTexture, 0, levels);
 
         this.gfxSampler = device.createSampler({
             wrapS: translateCM(texture.cms),
@@ -2844,7 +2843,7 @@ class Pilotwings64Renderer implements SceneGfx {
         c.setSceneMoveSpeedMult(128/60);
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         template.setMegaStateFlags(setAttachmentStateSimple({}, {
@@ -2875,7 +2874,7 @@ class Pilotwings64Renderer implements SceneGfx {
             this.snowRenderer.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     // For console runtime debugging.
@@ -2915,9 +2914,7 @@ class Pilotwings64Renderer implements SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         renderInstManager.resetRenderInsts();
         this.renderGraph.execute(device, builder);

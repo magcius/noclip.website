@@ -82,10 +82,8 @@ export class SFARenderer extends SFARendererHelper {
     protected endPass(device: GfxDevice) {
         this.renderInstManager.popTemplateRenderInst();
 
-        let hostAccessPass = device.createHostAccessPass();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
-        device.submitPass(hostAccessPass);
-        
+        this.renderHelper.prepareToRender(device);
+
         this.renderInstManager.drawOnPassRenderer(device, this.renderPass);
         this.renderInstManager.resetRenderInsts();
 

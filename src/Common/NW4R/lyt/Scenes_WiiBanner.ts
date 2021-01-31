@@ -1,6 +1,6 @@
 
 import { mat4 } from "gl-matrix";
-import { GfxDevice, GfxHostAccessPass } from "../../../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../../../gfx/platform/GfxPlatform";
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../../../gx/gx_render";
 import { TPLTextureHolder } from "../../../PaperMarioTTYD/render";
 import * as TPL from "../../../PaperMarioTTYD/tpl";
@@ -62,7 +62,7 @@ class BannerBinRenderer extends BasicGXRendererHelper {
             font_e.visible = true;
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const deltaTimeFrames = getTimeInFrames(viewerInput.deltaTime, 60);
         if (this.startLayoutAnimation === null || this.startLayoutAnimation.isOver())
             this.loopLayoutAnimation.update(deltaTimeFrames);
@@ -76,7 +76,7 @@ class BannerBinRenderer extends BasicGXRendererHelper {
         this.layout.draw(device, this.renderHelper.renderInstManager, this.drawInfo);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public destroy(device: GfxDevice): void {

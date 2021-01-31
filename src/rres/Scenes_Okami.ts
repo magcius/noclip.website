@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
@@ -284,7 +284,7 @@ export class OkamiRenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(8/60);
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
 
         this.animationController.setTimeInMilliseconds(viewerInput.time);
@@ -294,14 +294,12 @@ export class OkamiRenderer implements Viewer.SceneGfx {
             this.mapPartInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
         for (let i = 0; i < this.objectInstances.length; i++)
             this.objectInstances[i].prepareToRender(device, this.renderHelper, viewerInput);
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         const renderInstManager = this.renderHelper.renderInstManager;
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);

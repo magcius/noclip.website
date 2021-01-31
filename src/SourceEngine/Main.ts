@@ -11,7 +11,7 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { fillColor, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxHostAccessPass, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { GfxrAttachmentSlot, GfxrRenderGraphImpl, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
@@ -889,7 +889,7 @@ export class SourceRenderer implements SceneGfx {
         return false;
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         // globalTime is in seconds.
         this.renderContext.globalTime = viewerInput.time / 1000.0;
         this.renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
@@ -950,7 +950,7 @@ export class SourceRenderer implements SceneGfx {
         // Update our lightmaps right before rendering.
         this.renderContext.lightmapManager.prepareToRender(device);
 
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     private executeOnPass(passRenderer: GfxRenderPass, filterKey: FilterKey): void {
@@ -1041,9 +1041,7 @@ export class SourceRenderer implements SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderGraph.execute(device, builder);
 

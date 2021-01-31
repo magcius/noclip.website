@@ -2,7 +2,7 @@
 import { OrbitCameraController } from '../Camera';
 
 import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase";
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
@@ -43,10 +43,9 @@ function fetchPNG(path: string): Promise<ImageData> {
 }
 
 function makeTextureFromImageData(device: GfxDevice, imageData: ImageData): GfxTexture {
-    const hostAccessPass = device.createHostAccessPass();
+
     const texture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, imageData.width, imageData.height, 1));
-    hostAccessPass.uploadTextureData(texture, 0, [new Uint8Array(imageData.data.buffer)]);
-    device.submitPass(hostAccessPass);
+    device.uploadTextureData(texture, 0, [new Uint8Array(imageData.data.buffer)]);
     return texture;
 }
 
@@ -214,9 +213,7 @@ function createPoreMapTexture(device: GfxDevice, width: number, height: number):
         data[i++] = clamp(Math.random() * 0xFF + 0x80, 0, 0xFF);
         data[i++] = Math.random() * 0xFF;
     }
-    const hostAccessPass = device.createHostAccessPass();
-    hostAccessPass.uploadTextureData(poreTex, 0, [data]);
-    device.submitPass(hostAccessPass);
+    device.uploadTextureData(poreTex, 0, [data]);
     return poreTex;
 }
 
@@ -230,9 +227,7 @@ function createIndMapTexture(device: GfxDevice, width: number, height: number): 
         data[i++] = Math.random() * 0x10 + 0x40;
         data[i++] = Math.random() * 0x20 + 0x80;
     }
-    const hostAccessPass = device.createHostAccessPass();
-    hostAccessPass.uploadTextureData(indTex, 0, [data]);
-    device.submitPass(hostAccessPass);
+    device.uploadTextureData(indTex, 0, [data]);
     return indTex;
 }
 
@@ -416,21 +411,19 @@ export class SceneRenderer implements SceneGfx {
         return new OrbitCameraController();
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
         for (let i = 0; i < this.obj.length; i++)
             this.obj[i].prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 

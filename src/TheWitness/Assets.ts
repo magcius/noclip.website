@@ -147,9 +147,7 @@ class Texture_Asset {
             d = Math.max((d >>> 1), 1);
         }
 
-        const pass = device.createHostAccessPass();
-        pass.uploadTextureData(this.texture, 0, levelData);
-        device.submitPass(pass);
+        device.uploadTextureData(this.texture, 0, levelData);
     }
 
     public fillTextureMapping(m: TextureMapping): void {

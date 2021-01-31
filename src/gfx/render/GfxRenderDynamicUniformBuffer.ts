@@ -1,5 +1,5 @@
 
-import { GfxBuffer, GfxDevice, GfxHostAccessPass, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
+import { GfxBuffer, GfxDevice, GfxBufferUsage, GfxBufferFrequencyHint } from "../platform/GfxPlatform";
 import { assert, assertExists, alignNonPowerOfTwo } from "../../util";
 
 // TODO(jstpierre): Maybe this makes more sense as a native platform object
@@ -71,7 +71,7 @@ export class GfxRenderDynamicUniformBuffer {
         return assertExists(this.shadowBufferF32);
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass): void {
+    public prepareToRender(device: GfxDevice): void {
         if (this.shadowBufferF32 === null) {
             // Nothing to do.
             return;
@@ -93,7 +93,7 @@ export class GfxRenderDynamicUniformBuffer {
             throw new Error(`Assert fail: wordCount [${wordCount}] (${this.currentWordOffset} aligned ${this.uniformBufferMaxPageWordSize}) <= this.currentBufferWordSize [${this.currentBufferWordSize}]`);
 
         const gfxBuffer = assertExists(this.gfxBuffer);
-        hostAccessPass.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount * 4);
+        device.uploadBufferData(gfxBuffer, 0, this.shadowBufferU8!, 0, wordCount * 4);
 
         // Reset the offset for next frame.
         // TODO(jstpierre): Should this be a separate step?

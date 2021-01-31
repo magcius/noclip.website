@@ -7,7 +7,7 @@ import { DataFetcher } from "../DataFetcher";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { Vec3Zero, MathConstants, setMatrixTranslation } from '../MathHelpers';
@@ -221,9 +221,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
@@ -259,7 +257,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         return offs;
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         const offs = template.allocateUniformBuffer(KatamariDamacyProgram.ub_SceneParams, 16 + 20);
@@ -277,7 +275,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
                 this.currentPalette, this.cameraGameState);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public setCurrentAreaNo(areaNo: number): void {

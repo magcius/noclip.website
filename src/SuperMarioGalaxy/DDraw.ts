@@ -290,10 +290,8 @@ export class TDDraw extends TDDrawVtxSpec {
 
     private endAndUploadCache(device: GfxDevice, cache: GfxRenderCache): void {
         this.flushDeviceObjects(device, cache);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
-        hostAccessPass.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
-        device.submitPass(hostAccessPass);
+        device.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
+        device.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
     }
 
     public endAndUpload(device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
@@ -494,10 +492,8 @@ export class TSDraw extends TDDrawVtxSpec {
 
     public endDraw(device: GfxDevice, cache: GfxRenderCache): void {
         this.flushDeviceObjects(device, cache);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
-        hostAccessPass.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
-        device.submitPass(hostAccessPass);
+        device.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
+        device.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
     }
 
     public destroy(device: GfxDevice): void {

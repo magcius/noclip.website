@@ -8,7 +8,7 @@ import { parseMPH_Model, parseTEX0Texture } from './mph_binModel';
 
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass } from '../gfx/platform/GfxPlatform';
 import { MPHRenderer, G3DPass } from './render';
 import { assert, assertExists } from '../util';
 import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -82,7 +82,7 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(8/60);
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
         this.stageRenderer.prepareToRender(this.renderInstManager, viewerInput);
@@ -90,13 +90,11 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
             this.objectRenderers[i].prepareToRender(this.renderInstManager, viewerInput);
         this.renderInstManager.popTemplateRenderInst();
 
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+        this.uniformBuffer.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 

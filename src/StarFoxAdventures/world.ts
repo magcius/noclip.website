@@ -394,9 +394,7 @@ class WorldRenderer extends SFARenderer {
         // Custom version of this.endPass(device)
         this.renderInstManager.popTemplateRenderInst();
 
-        let hostAccessPass = device.createHostAccessPass();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
-        device.submitPass(hostAccessPass);
+        this.renderHelper.prepareToRender(device);
         
         const renderIntoPass = (keys: number[]) => {
             this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.sceneTexture.gfxTexture);

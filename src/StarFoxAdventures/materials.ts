@@ -1308,9 +1308,7 @@ export class MaterialFactory {
 
         plot(0, 0, 127, 127, 127, 127);
 
-        const hostAccessPass = this.device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-        this.device.submitPass(hostAccessPass);
+        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.rampTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
         return this.rampTexture;
@@ -1351,9 +1349,7 @@ export class MaterialFactory {
             }
         }
 
-        const hostAccessPass = this.device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-        this.device.submitPass(hostAccessPass);
+        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.rampTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
         return this.rampTexture;
@@ -1415,9 +1411,7 @@ export class MaterialFactory {
             }
         }
 
-        const hostAccessPass = this.device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-        this.device.submitPass(hostAccessPass);
+        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.causticTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
         return this.causticTexture;
@@ -1469,9 +1463,7 @@ export class MaterialFactory {
             }
         }
 
-        const hostAccessPass = this.device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-        this.device.submitPass(hostAccessPass);
+        this.device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.wavyTexture = makeMaterialTexture({ gfxTexture, gfxSampler, width, height });
         return this.wavyTexture;

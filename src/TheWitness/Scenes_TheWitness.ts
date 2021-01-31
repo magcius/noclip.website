@@ -1,6 +1,6 @@
 
 import { SceneGroup, SceneDesc, SceneGfx, ViewerRenderInput } from "../viewer";
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxBindingLayoutDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { SceneContext } from "../SceneBase";
 import * as ZipFile from '../ZipFile';
 import { Asset_Manager, Asset_Type, Mesh_Asset, Render_Material } from "./Assets";
@@ -213,7 +213,7 @@ class TheWitnessRenderer implements SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
 
@@ -225,13 +225,11 @@ class TheWitnessRenderer implements SceneGfx {
         for (let i = 0; i < this.mesh_instance_array.length; i++)
             this.mesh_instance_array[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         const renderInstManager = this.renderHelper.renderInstManager;

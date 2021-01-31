@@ -5,7 +5,7 @@ import * as Viewer from '../viewer';
 // @ts-ignore
 import program_glsl from './program.glsl';
 import { DeviceProgram } from "../Program";
-import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxHostAccessPass, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -167,9 +167,8 @@ export class MapData {
     private translateTextureAnimation(device: GfxDevice, textureAnim: MAP.TextureAnimation): GfxTexture {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, textureAnim.sheetWidth, textureAnim.sheetHeight, 1));
         device.setResourceName(gfxTexture, `texa${textureAnim.index}`);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [textureAnim.pixels]);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(gfxTexture, 0, [textureAnim.pixels]);
         return gfxTexture;
     }
 
@@ -231,9 +230,8 @@ export class MapData {
         }
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, this.atlasWidth, this.atlasHeight, 1));
         device.setResourceName(gfxTexture, `textureAtlas`);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(gfxTexture, 0, [pixels]);
         return gfxTexture;
     }
 
@@ -663,14 +661,14 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel, new UI.LayerPanel(this.mapData.layers)];
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput) {
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
         for (let i = 0; i < this.sceneRenderers.length; i++) {
             this.sceneRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
         }
         this.renderInstManager.popTemplateRenderInst();
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+        this.uniformBuffer.prepareToRender(device);
 
         for (const textureAnim of this.mapData.textureAnimations) {
             textureAnim.advanceTime(viewerInput.deltaTime);
@@ -678,9 +676,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Create main render pass.

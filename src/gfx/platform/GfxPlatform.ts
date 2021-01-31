@@ -287,12 +287,6 @@ export interface GfxSwapChain {
     createWebXRLayer(webXRSession: XRSession): XRWebGLLayer;
 }
 
-export interface GfxHostAccessPass {
-    // Transfer commands.
-    uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void;
-    uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
-}
-
 export interface GfxRenderPass {
     // State management.
     setViewport(x: number, y: number, w: number, h: number): void;
@@ -309,7 +303,7 @@ export interface GfxRenderPass {
     drawIndexedInstanced(indexCount: number, firstIndex: number, instanceCount: number): void;
 };
 
-export type GfxPass = GfxRenderPass | GfxHostAccessPass;
+export type GfxPass = GfxRenderPass;
 
 /**
  * GfxDevice represents a "virtual GPU"; this is something that, in the abstract, has a bunch of resources
@@ -322,10 +316,9 @@ export type GfxPass = GfxRenderPass | GfxHostAccessPass;
  * contents changed through data upload passes, they cannot be resized after creation. Create a new object
  * and destroy the old one if you wish to "resize" it.
  * 
- * To upload data to the GPU, create and submit a {@type GfxHostAccessPass}. Note that the pass-based
- * upload API is a bit ugly, and might change in the future. Specifically, it might be more advantageous
- * to force a "upload all data at the beginning of the frame" style API, which is practically how the host
- * access pass is used today for dynamic data management.
+ * To upload data to the GPU, call either {@see uploadBufferData} or {@see uploadTextureData}. Note that
+ * this happens on the GPU timeline. Where possible, do try to upload data at the beginning of the frame.
+ * There might be additional support for more passes in the future.
  */
 export interface GfxDevice {
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
@@ -358,10 +351,13 @@ export interface GfxDevice {
     destroyReadback(o: GfxReadback): void;
 
     // Command submission.
-    createHostAccessPass(): GfxHostAccessPass;
     createRenderPass(renderPassDescriptor: GfxRenderPassDescriptor): GfxRenderPass;
     // Consumes and destroys the pass.
     submitPass(o: GfxPass): void;
+
+    // Data submission
+    uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void;
+    uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
 
     // Readback system.
     readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void;

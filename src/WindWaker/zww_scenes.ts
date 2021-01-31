@@ -17,7 +17,7 @@ import { Camera, texProjCameraSceneTex } from '../Camera';
 import { fillSceneParamsDataOnTemplate, GXMaterialHelperGfx, GXShapeHelperGfx, loadedDataCoalescerComboGfx, PacketParams, MaterialParams, ColorKind, SceneParams, fillSceneParamsData, ub_SceneParamsBufferSize } from '../gx/gx_render';
 import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInitGX } from '../gx/gx_displaylist';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { GfxDevice, GfxRenderPass, GfxHostAccessPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderer';
 import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -448,9 +448,7 @@ class DynToonTex {
 
             // Recreate toon texture.
             this.fillTextureData(this.texPower);
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(this.gfxTexture, 0, this.textureData);
-            device.submitPass(hostAccessPass);
+            device.uploadTextureData(this.gfxTexture, 0, this.textureData);
         }
     }
 
@@ -633,7 +631,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         return -1;
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
 
@@ -713,7 +711,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
 
         this.globals.renderHacks.renderHacksChanged = false;
     }
@@ -732,9 +730,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
         dlst.peekZ.beginFrame(device);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         const renderInstManager = this.renderHelper.renderInstManager;
 

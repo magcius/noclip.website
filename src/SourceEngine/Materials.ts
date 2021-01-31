@@ -2206,9 +2206,8 @@ class LightmapPage {
         }
 
         if (anyDirty) {
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(this.gfxTexture, 0, [data]);
-            device.submitPass(hostAccessPass);
+
+            device.uploadTextureData(this.gfxTexture, 0, [data]);
         }
     }
 

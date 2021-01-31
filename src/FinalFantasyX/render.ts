@@ -517,9 +517,8 @@ export class TextureData {
     constructor(device: GfxDevice, public data: BIN.Texture) {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, data.width, data.height, 1));
         device.setResourceName(gfxTexture, data.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [data.pixels]);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(gfxTexture, 0, [data.pixels]);
         this.gfxTexture = gfxTexture;
 
         this.viewerTexture = textureToCanvas(data, data.name, data.pixels);

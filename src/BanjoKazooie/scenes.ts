@@ -6,7 +6,7 @@ import * as Flipbook from './flipbook';
 import * as BYML from '../byml';
 import * as Actors from './actors';
 
-import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, BKPass, GeometryRenderer, RenderData, AnimationFile, AnimationTrack, AnimationTrackType, AnimationKeyframe, BoneAnimator, FlipbookRenderer, GeometryData, FlipbookData, MovementController, SpawnedObjects, layerFromFlags, BKLayer } from './render';
 import { mat4, vec3, vec4 } from 'gl-matrix';
@@ -97,7 +97,7 @@ class BKRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.geoRenderers.length; i++)
             this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -105,7 +105,7 @@ class BKRenderer implements Viewer.SceneGfx {
             this.flipbookRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.sceneEmitters.prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -137,9 +137,7 @@ class BKRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();

@@ -5,7 +5,7 @@ import * as rw from 'librw';
 import * as UI from "../ui";
 import * as Viewer from '../viewer';
 import * as Assets from './assets';
-import { GfxDevice, GfxRenderPass, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxBuffer, GfxInputLayout, GfxInputState, GfxMegaStateDescriptor, GfxProgram, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxInputLayoutBufferDescriptor, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxIndexBufferDescriptor, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxBindingLayoutDescriptor, GfxTexture, GfxSampler, makeTextureDescriptor2D, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCompareMode } from '../gfx/platform/GfxPlatform';
 import { MeshFragData, Texture, rwTexture } from '../GrandTheftAuto3/render';
 import { vec3, vec2, mat4, quat } from 'gl-matrix';
 import { colorNewCopy, White, colorNewFromRGBA, Color, colorCopy, TransparentBlack } from '../Color';
@@ -84,9 +84,8 @@ export class TextureData {
             return;
 
         this.gfxTexture = device.createTexture(makeTextureDescriptor2D(this.texture.pixelFormat, this.texture.width, this.texture.height, 1));
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(this.gfxTexture, 0, [this.texture.levels[0]]);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(this.gfxTexture, 0, [this.texture.levels[0]]);
 
         this.gfxSampler = device.createSampler({
             magFilter: this.filter,
@@ -1022,7 +1021,7 @@ export class BFBBRenderer implements Viewer.SceneGfx {
 
     private scratchVec3 = vec3.create();
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const fogEnabled = this.renderHacks.fog && this.fog;
         this.clearColor = fogEnabled ? this.fog!.bkgndColor : TransparentBlack;
         const fogColor = fogEnabled ? this.fog!.fogColor : TransparentBlack;
@@ -1070,15 +1069,13 @@ export class BFBBRenderer implements Viewer.SceneGfx {
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 

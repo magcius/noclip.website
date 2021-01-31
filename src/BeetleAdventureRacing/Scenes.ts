@@ -1,7 +1,7 @@
 import { CameraController } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
 import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
 import { executeOnPass } from "../gfx/render/GfxRenderer";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import InputManager from "../InputManager";
@@ -223,7 +223,7 @@ class BARRenderer implements SceneGfx {
     }
 
     // Builds a scene graph and uses the hostAccessPass to upload data to the GPU
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         viewerInput.camera.setClipPlanes(0.1);
 
         // Update animations
@@ -253,7 +253,7 @@ class BARRenderer implements SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         // Upload uniform data to the GPU
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
 
         // For the extra track data display, check to see if we need to toggle the nearest plane on/off
         this.checkCheckpointPlaneToggle(viewerInput);
@@ -271,19 +271,8 @@ class BARRenderer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-
-        // Create pass to upload data to the GPU
-        // Sidenote: textures, indices, vertices, etc. have already been uploaded (e.g. in the MaterialRenderer constructor)
-        // (and under the covers noclip actually creates a host access pass to do this)
-        // So the only thing (right now) that this is used for in my code is uploading the uniform buffers.
-        // (which happens in renderHelper.prepareToRender())
-        const hostAccessPass = device.createHostAccessPass();
-
         // Build scene graph and send buffers to host access pass
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-
-        // Submitting actually performs the upload of the buffers
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         // renderInstManager manages the scene graph
         const renderInstManager = this.renderHelper.renderInstManager;

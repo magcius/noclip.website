@@ -1,6 +1,6 @@
 
 import { MDL0Renderer, nnsG3dBindingLayouts } from "./render";
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxRenderPass } from "../gfx/platform/GfxPlatform";
 import { FakeTextureHolder } from "../TextureHolder";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
 import ArrayBufferSlice from "../ArrayBufferSlice";
@@ -24,7 +24,7 @@ class BasicNSBMDRenderer implements SceneGfx {
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
 
@@ -37,7 +37,7 @@ class BasicNSBMDRenderer implements SceneGfx {
             this.mdl0Renderers[i].prepareToRender(this.renderInstManager, viewerInput);
         this.renderInstManager.popTemplateRenderInst();
 
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+        this.uniformBuffer.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
@@ -60,9 +60,7 @@ class BasicNSBMDRenderer implements SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderGraph.execute(device, builder);
 

@@ -1,5 +1,5 @@
 
-import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxHostAccessPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachmentDescriptor, GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './GfxPlatform';
+import { GfxBufferUsage, GfxBindingLayoutDescriptor, GfxBufferFrequencyHint, GfxTexFilterMode, GfxMipFilterMode, GfxPrimitiveTopology, GfxSwapChain, GfxDevice, GfxSamplerDescriptor, GfxWrapMode, GfxVertexBufferDescriptor, GfxRenderPipelineDescriptor, GfxBufferBinding, GfxSamplerBinding, GfxDeviceLimits, GfxVertexAttributeDescriptor, GfxRenderPass, GfxPass, GfxMegaStateDescriptor, GfxCompareMode, GfxBlendMode, GfxCullMode, GfxBlendFactor, GfxVertexBufferFrequency, GfxRenderPassDescriptor, GfxTextureDescriptor, GfxTextureDimension, makeTextureDescriptor2D, GfxBindingsDescriptor, GfxDebugGroup, GfxInputLayoutDescriptor, GfxAttachmentState as GfxAttachmentStateDescriptor, GfxColorWriteMask, GfxPlatformFramebuffer, GfxVendorInfo, GfxInputLayoutBufferDescriptor, GfxIndexBufferDescriptor, GfxChannelBlendState, GfxProgramDescriptor, GfxProgramDescriptorSimple, GfxAttachmentDescriptor, GfxClipSpaceNearZ, GfxNormalizedViewportCoords } from './GfxPlatform';
 import { _T, GfxBuffer, GfxTexture, GfxAttachment, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat, getFormatCompByteSize, FormatTypeFlags, FormatCompFlags, FormatFlags, getFormatTypeFlags, getFormatCompFlags, getFormatFlags, getFormatByteSize } from "./GfxPlatformFormat";
 
@@ -338,41 +338,6 @@ class GfxRenderPassP_GL implements GfxRenderPass {
     public drawIndexedInstanced(a: number, b: number, c: number) { this.pcmd(RenderPassCmd.drawIndexedInstanced); this.pu32(a); this.pu32(b); this.pu32(c); }
 }
 
-enum HostAccessPassCmd { uploadBufferData = 491, uploadTextureData, end };
-class GfxHostAccessPassP_GL implements GfxHostAccessPass {
-    public u32: Growable<Uint32Array> = new Growable((n) => new Uint32Array(n));
-    public gfxr: (GfxResource | null)[] = [];
-    public bufr: ArrayBufferView[] = [];
-
-    public reset() { this.u32.r(); this.gfxr.length = 0; this.bufr.length = 0; }
-
-    public pu32(c: number) { this.u32.n(c); }
-    public pcmd(c: number) { this.pu32(c); }
-    public pgfxr(r: GfxResource | null) { this.gfxr.push(r); }
-    public pbufr(r: ArrayBufferView) { this.bufr.push(r); }
-
-    public end() { this.pcmd(HostAccessPassCmd.end); }
-    public uploadBufferData(r: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteSize?: number) {
-        assert(!!r);
-        this.pcmd(HostAccessPassCmd.uploadBufferData); this.pgfxr(r);
-        if (srcByteOffset === undefined)
-            srcByteOffset = 0;
-        if (byteSize === undefined)
-            byteSize = data.byteLength - srcByteOffset;
-        this.pu32(dstByteOffset);
-        this.pbufr(data);
-        this.pu32(srcByteOffset);
-        this.pu32(byteSize);
-    }
-
-    public uploadTextureData(r: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]) {
-        this.pcmd(HostAccessPassCmd.uploadTextureData); this.pgfxr(r);
-        this.pu32(firstMipLevel);
-        this.pu32(levelDatas.length);
-        for (let i = 0; i < levelDatas.length; i++) this.pbufr(levelDatas[i]);
-    }
-}
-
 function isBlendStateNone(blendState: GfxChannelBlendState): boolean {
     return (
         blendState.blendMode == GfxBlendMode.ADD &&
@@ -566,7 +531,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     private _uniformBufferMaxPageByteSize: number;
 
     // Object pools
-    private _hostAccessPassPool: GfxHostAccessPassP_GL[] = [];
     private _renderPassPool: GfxRenderPassP_GL[] = [];
 
     // Swap Chain
@@ -1240,13 +1204,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this._resourceCreationTracker.trackResourceDestroyed(o);
     }
 
-    public createHostAccessPass(): GfxHostAccessPass {
-        let pass = this._hostAccessPassPool.pop();
-        if (pass === undefined)
-            pass = new GfxHostAccessPassP_GL();
-        return pass;
-    }
-
     public createRenderPass(descriptor: GfxRenderPassDescriptor): GfxRenderPassP_GL {
         let pass = this._renderPassPool.pop();
         if (pass === undefined)
@@ -1297,12 +1254,96 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
             this.executeRenderPass(o.u32.b, o.f32.b, o.o);
             o.reset();
             this._renderPassPool.push(o);
-        } else if (o instanceof GfxHostAccessPassP_GL) {
-            o.end();
-            this.executeHostAccessPass(o.u32.b, o.gfxr, o.bufr);
-            o.reset();
-            this._hostAccessPassPool.push(o);
         }
+    }
+
+    public uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number = 0, byteSize: number = data.byteLength - srcByteOffset): void {
+        const gl = this.gl;
+        const { gl_target, byteSize: dstByteSize, pageByteSize: dstPageByteSize } = buffer as GfxBufferP_GL;
+        if (gl_target === gl.UNIFORM_BUFFER) {
+            // Manually check asserts for speed.
+            if (!((dstByteOffset % dstPageByteSize) === 0))
+                throw new Error(`Assert fail: (dstByteOffset [${dstByteOffset}] % dstPageByteSize [${dstPageByteSize}]) === 0`);
+            if (!((byteSize % dstPageByteSize) === 0))
+                throw new Error(`Assert fail: (byteSize [${byteSize}] % dstPageByteSize [${dstPageByteSize}]) === 0`);
+        }
+        if (!((dstByteOffset + byteSize) <= dstByteSize))
+            throw new Error(`Assert fail: (dstByteOffset [${dstByteOffset}] + byteSize [${byteSize}]) <= dstByteSize [${dstByteSize}], gl_target ${gl_target}`);
+
+        const virtBufferByteOffsetEnd = dstByteOffset + byteSize;
+        let virtBufferByteOffset = dstByteOffset;
+        let physBufferByteOffset = dstByteOffset % dstPageByteSize;
+        while (virtBufferByteOffset < virtBufferByteOffsetEnd) {
+            gl.bindBuffer(gl.COPY_WRITE_BUFFER, getPlatformBuffer(buffer, virtBufferByteOffset));
+            gl.bufferSubData(gl.COPY_WRITE_BUFFER, physBufferByteOffset, data, srcByteOffset, Math.min(virtBufferByteOffsetEnd - virtBufferByteOffset, dstPageByteSize));
+            virtBufferByteOffset += dstPageByteSize;
+            physBufferByteOffset = 0;
+            srcByteOffset += dstPageByteSize;
+            this._debugGroupStatisticsBufferUpload();
+        }
+    }
+
+    private uploadTextureDataInternal(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[], levelDatasOffs: number, levelDatasSize: number): void {
+        const gl = this.gl;
+       
+        const { gl_texture, gl_target, pixelFormat, width, height, depth, numLevels } = texture as GfxTextureP_GL;
+        const isCompressed = this.isTextureFormatCompressed(pixelFormat);
+        const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
+        const isCube = gl_target === WebGL2RenderingContext.TEXTURE_CUBE_MAP;
+
+        this._setActiveTexture(gl.TEXTURE0);
+        this._currentTextures[0] = null;
+        gl.bindTexture(gl_target, gl_texture);
+        let w = width, h = height, d = depth;
+        const maxMipLevel = Math.min(firstMipLevel + levelDatasSize, numLevels);
+
+        const gl_format = this.translateTextureFormat(pixelFormat);
+
+        for (let i = 0; i < maxMipLevel; i++) {
+            if (i >= firstMipLevel) {
+                const levelData = levelDatas[levelDatasOffs++] as ArrayBufferView;
+
+                if (gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY && isCompressed) {
+                    // Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=1004511
+                    const imageSize = levelData.byteLength / depth;
+                    for (let z = 0; z < depth; z++) {
+                        gl.compressedTexSubImage3D(gl_target, i, 0, 0, z, w, h, 1, gl_format, levelData, z * imageSize, imageSize);
+                    }
+                } else if (isCube) {
+                    const imageSize = levelData.byteLength / depth;
+                    for (let z = 0; z < depth; z++) {
+                        const face_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X + (z % 6);
+                        if (isCompressed) {
+                            gl.compressedTexSubImage2D(face_target, i, 0, 0, w, h, gl_format, levelData, z * imageSize, imageSize);
+                        } else {
+                            const gl_type = this.translateTextureType(pixelFormat);
+                            gl.texSubImage2D(face_target, i, 0, 0, w, h, gl_format, gl_type, levelData, z * imageSize);
+                        }
+                    }
+                } else if (is3D) {
+                    if (isCompressed) {
+                        gl.compressedTexSubImage3D(gl_target, i, 0, 0, 0, w, h, d, gl_format, levelData);
+                    } else {
+                        const gl_type = this.translateTextureType(pixelFormat);
+                        gl.texSubImage3D(gl_target, i, 0, 0, 0, w, h, d, gl_format, gl_type, levelData);
+                    }
+                } else {
+                    if (isCompressed) {
+                        gl.compressedTexSubImage2D(gl_target, i, 0, 0, w, h, gl_format, levelData);
+                    } else {
+                        const gl_type = this.translateTextureType(pixelFormat);
+                        gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
+                    }
+                }
+            }
+
+            w = Math.max((w / 2) | 0, 1);
+            h = Math.max((h / 2) | 0, 1);
+        }
+    }
+
+    public uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void {
+        this.uploadTextureDataInternal(texture, firstMipLevel, levelDatas, 0, levelDatas.length);
     }
 
     public readPixelFromTexture(o: GfxReadback, dstOffset: number, a: GfxTexture, x: number, y: number): void {
@@ -1523,82 +1564,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
                 return;
             } else {
                 const m: RenderPassCmd.invalid = cmd;
-                throw new Error("Invalid execution");
-            }
-        }
-    }
-
-    public executeHostAccessPass(u32: Uint32Array, gfxr: (GfxResource | null)[], bufr: ArrayBufferView[]): void {
-        let iu32 = 0, igfxr = 0, ibufr = 0;
-        while (true) {
-            const cmd = u32[iu32++] as HostAccessPassCmd;
-
-            if (cmd === HostAccessPassCmd.uploadBufferData) {
-                this.uploadBufferData(gfxr[igfxr++] as GfxBuffer, u32[iu32++], bufr[ibufr++] as Uint8Array, u32[iu32++], u32[iu32++]);
-            } else if (cmd === HostAccessPassCmd.uploadTextureData) {
-                // Implement inline to prevent allocation.
-                const texture = gfxr[igfxr++] as GfxTexture;
-                const firstMipLevelToUpload = u32[iu32++];
-                const numMipLevelsToUpload = u32[iu32++];
-
-                const gl = this.gl;
-                const { gl_texture, gl_target, pixelFormat, width, height, depth, numLevels } = texture as GfxTextureP_GL;
-                const isCompressed = this.isTextureFormatCompressed(pixelFormat);
-                const is3D = gl_target === WebGL2RenderingContext.TEXTURE_3D || gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY;
-                const isCube = gl_target === WebGL2RenderingContext.TEXTURE_CUBE_MAP;
-
-                this._setActiveTexture(gl.TEXTURE0);
-                this._currentTextures[0] = null;
-                gl.bindTexture(gl_target, gl_texture);
-                let w = width, h = height, d = depth;
-                const maxMipLevel = Math.min(firstMipLevelToUpload + numMipLevelsToUpload, numLevels);
-
-                const gl_format = this.translateTextureFormat(pixelFormat);
-
-                for (let i = 0; i < maxMipLevel; i++) {
-                    if (i >= firstMipLevelToUpload) {
-                        const levelData = bufr[ibufr++] as ArrayBufferView;
-
-                        if (gl_target === WebGL2RenderingContext.TEXTURE_2D_ARRAY && isCompressed) {
-                            // Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=1004511
-                            const imageSize = levelData.byteLength / depth;
-                            for (let z = 0; z < depth; z++) {
-                                gl.compressedTexSubImage3D(gl_target, i, 0, 0, z, w, h, 1, gl_format, levelData, z * imageSize, imageSize);
-                            }
-                        } else if (isCube) {
-                            const imageSize = levelData.byteLength / depth;
-                            for (let z = 0; z < depth; z++) {
-                                const face_target = WebGL2RenderingContext.TEXTURE_CUBE_MAP_POSITIVE_X + (z % 6);
-                                if (isCompressed) {
-                                    gl.compressedTexSubImage2D(face_target, i, 0, 0, w, h, gl_format, levelData, z * imageSize, imageSize);
-                                } else {
-                                    const gl_type = this.translateTextureType(pixelFormat);
-                                    gl.texSubImage2D(face_target, i, 0, 0, w, h, gl_format, gl_type, levelData, z * imageSize);
-                                }
-                            }
-                        } else if (is3D) {
-                            if (isCompressed) {
-                                gl.compressedTexSubImage3D(gl_target, i, 0, 0, 0, w, h, d, gl_format, levelData);
-                            } else {
-                                const gl_type = this.translateTextureType(pixelFormat);
-                                gl.texSubImage3D(gl_target, i, 0, 0, 0, w, h, d, gl_format, gl_type, levelData);
-                            }
-                        } else {
-                            if (isCompressed) {
-                                gl.compressedTexSubImage2D(gl_target, i, 0, 0, w, h, gl_format, levelData);
-                            } else {
-                                const gl_type = this.translateTextureType(pixelFormat);
-                                gl.texSubImage2D(gl_target, i, 0, 0, w, h, gl_format, gl_type, levelData);
-                            }
-                        }
-                    }
-
-                    w = Math.max((w / 2) | 0, 1);
-                    h = Math.max((h / 2) | 0, 1);
-                }
-            } else if (cmd === HostAccessPassCmd.end) {
-                return;
-            } else {
                 throw new Error("Invalid execution");
             }
         }
@@ -2075,32 +2040,6 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         if (!didUnbind) {
             // If we did not unbind from a resolve, then we need to unbind our render pass draw FBO here.
             gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-        }
-    }
-
-    private uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset: number, byteSize: number): void {
-        const gl = this.gl;
-        const { gl_target, byteSize: dstByteSize, pageByteSize: dstPageByteSize } = buffer as GfxBufferP_GL;
-        if (gl_target === gl.UNIFORM_BUFFER) {
-            // Manually check asserts for speed.
-            if (!((dstByteOffset % dstPageByteSize) === 0))
-                throw new Error(`Assert fail: (dstByteOffset [${dstByteOffset}] % dstPageByteSize [${dstPageByteSize}]) === 0`);
-            if (!((byteSize % dstPageByteSize) === 0))
-                throw new Error(`Assert fail: (byteSize [${byteSize}] % dstPageByteSize [${dstPageByteSize}]) === 0`);
-        }
-        if (!((dstByteOffset + byteSize) <= dstByteSize))
-            throw new Error(`Assert fail: (dstByteOffset [${dstByteOffset}] + byteSize [${byteSize}]) <= dstByteSize [${dstByteSize}], gl_target ${gl_target}`);
-
-        const virtBufferByteOffsetEnd = dstByteOffset + byteSize;
-        let virtBufferByteOffset = dstByteOffset;
-        let physBufferByteOffset = dstByteOffset % dstPageByteSize;
-        while (virtBufferByteOffset < virtBufferByteOffsetEnd) {
-            gl.bindBuffer(gl.COPY_WRITE_BUFFER, getPlatformBuffer(buffer, virtBufferByteOffset));
-            gl.bufferSubData(gl.COPY_WRITE_BUFFER, physBufferByteOffset, data, srcByteOffset, Math.min(virtBufferByteOffsetEnd - virtBufferByteOffset, dstPageByteSize));
-            virtBufferByteOffset += dstPageByteSize;
-            physBufferByteOffset = 0;
-            srcByteOffset += dstPageByteSize;
-            this._debugGroupStatisticsBufferUpload();
         }
     }
     //#endregion

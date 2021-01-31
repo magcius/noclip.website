@@ -10,7 +10,7 @@ import { mat4, ReadonlyMat4 } from 'gl-matrix';
 import { assert, nArray, setBitFlagEnabled } from '../util';
 import AnimationController from '../AnimationController';
 import { DeviceProgram } from '../Program';
-import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxHostAccessPass, GfxProgram, GfxMegaStateDescriptor, GfxCullMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxBindingLayoutDescriptor, GfxProgram, GfxMegaStateDescriptor, GfxCullMode, GfxClipSpaceNearZ } from '../gfx/platform/GfxPlatform';
 import { fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
@@ -585,7 +585,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
         this.rootNode.stopAnimation();
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         if (this.evtctx !== null)
             this.evtctx.exec();
 
@@ -608,7 +608,7 @@ export class WorldRenderer extends BasicGXRendererHelper {
             this.mobj[i].prepareToRender(device, renderInstManager, viewerInput);
 
         renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public createPanels(): UI.Panel[] {

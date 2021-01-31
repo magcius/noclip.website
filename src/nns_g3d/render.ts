@@ -126,9 +126,8 @@ class MaterialInstance {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
         device.setResourceName(gfxTexture, textureName);
         this.gfxTextures.push(gfxTexture);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, [pixels]);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(gfxTexture, 0, [pixels]);
 
         this.viewerTextures.push(textureToCanvas(texture, pixels, fullTextureName));
         return texture;

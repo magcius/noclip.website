@@ -9,7 +9,7 @@ import * as BHD from "./bhd";
 import * as BND3 from "./bnd3";
 import * as FLVER from "./flver";
 
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DataFetcher } from "../DataFetcher";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DDSTextureHolder } from "./dds";
@@ -72,14 +72,14 @@ class DKSRenderer implements Viewer.SceneGfx {
         return [layerPanel];
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderInstManager.pushTemplateRenderInst();
         template.setUniformBuffer(this.uniformBuffer);
 
         for (let i = 0; i < this.msbRenderers.length; i++)
             this.msbRenderers[i].prepareToRender(this.renderContext, device, this.renderInstManager, viewerInput);
 
-        this.uniformBuffer.prepareToRender(device, hostAccessPass);
+        this.uniformBuffer.prepareToRender(device);
 
         this.renderInstManager.popTemplateRenderInst();
     }
@@ -105,9 +105,7 @@ class DKSRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderGraph.execute(device, builder);
     }

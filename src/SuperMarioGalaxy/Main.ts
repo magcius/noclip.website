@@ -570,9 +570,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         renderInstManager.popTemplateRenderInst();
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
-        device.submitPass(hostAccessPass);
+        this.renderHelper.prepareToRender(device);
 
         this.renderGraph.execute(device, builder);
 

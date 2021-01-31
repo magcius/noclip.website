@@ -4,7 +4,7 @@ import * as UI from '../ui';
 import * as Geo from '../BanjoKazooie/geo';
 import * as BYML from '../byml';
 
-import { GfxDevice, GfxHostAccessPass, GfxBufferUsage } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBufferUsage } from '../gfx/platform/GfxPlatform';
 import { FakeTextureHolder, TextureHolder } from '../TextureHolder';
 import { textureToCanvas, BKPass, RenderData, GeometryData, BoneAnimator, AnimationMode } from '../BanjoKazooie/render';
 import { GeometryRenderer, layerFromFlags, BTLayer, LowObjectFlags } from './render';
@@ -74,12 +74,12 @@ class BTRenderer implements Viewer.SceneGfx {
         return [renderHacksPanel];
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
         for (let i = 0; i < this.geoRenderers.length; i++)
             this.geoRenderers[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -111,9 +111,7 @@ class BTRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        this.prepareToRender(device, viewerInput);
 
         this.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();

@@ -1,7 +1,7 @@
 import { mat4 } from "gl-matrix";
 import * as BRRES from "../rres/brres";
 import AnimationController from "../AnimationController";
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
 import { EggLightManager } from "../rres/Egg";
 import { MDL0ModelInstance, RRESTextureHolder } from "../rres/render";
@@ -45,7 +45,7 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
         return instance;
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         if (this.scn0Animator !== null) {
@@ -59,7 +59,7 @@ class WiiSportsRenderer extends BasicGXRendererHelper {
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     public destroy(device: GfxDevice): void {
