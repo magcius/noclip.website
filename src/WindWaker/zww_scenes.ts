@@ -727,7 +727,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.executeList(device, renderInstManager, pass, listSet[1]);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const dlst = this.globals.dlst;
 
         dlst.peekZ.beginFrame(device);
@@ -744,8 +744,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
         this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
 
-        const builder = this.renderGraph.getGraphBuilder();
-        builder.begin();
+        const builder = this.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
 
@@ -799,13 +798,10 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         });
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-        const graph = builder.end();
+        this.renderGraph.execute(device, builder);
 
-        this.renderGraph.execute(device, graph);
         dlst.reset();
         renderInstManager.resetRenderInsts();
-
-        return null;
     }
 
     public destroy(device: GfxDevice): void {

@@ -963,8 +963,7 @@ export class SourceRenderer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        const builder = this.renderGraph.getGraphBuilder();
-        builder.begin();
+        const builder = this.renderGraph.newGraphBuilder();
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
@@ -1041,17 +1040,14 @@ export class SourceRenderer implements SceneGfx {
             });
         });
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
-        const graph = builder.end();
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderGraph.execute(device, graph);
+        this.renderGraph.execute(device, builder);
 
         this.renderHelper.renderInstManager.resetRenderInsts();
-
-        return null;
     }
 
     public destroy(device: GfxDevice): void {

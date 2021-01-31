@@ -284,7 +284,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.executeOnPass(passRenderer, createFilterKeyForDrawType(drawType));
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): null {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         this.sceneObjHolder.viewerInput = viewerInput;
 
         const executor = this.sceneObjHolder.sceneNameObjListExecutor;
@@ -338,8 +338,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
         renderInstManager.popTemplateRenderInst();
 
-        const builder = this.renderGraph.getGraphBuilder();
-        builder.begin();
+        const builder = this.renderGraph.newGraphBuilder();
 
         this.mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
         this.mainColorDesc.colorClearColor = TransparentBlack;
@@ -569,19 +568,15 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         this.sceneObjHolder.drawSyncManager.endFrame(device, renderInstManager, builder, mainDepthTargetID);
 
-        const sceneGraph = builder.end();
-
         renderInstManager.popTemplateRenderInst();
 
         const hostAccessPass = device.createHostAccessPass();
         this.renderHelper.prepareToRender(device, hostAccessPass);
         device.submitPass(hostAccessPass);
 
-        this.renderGraph.execute(device, sceneGraph);
+        this.renderGraph.execute(device, builder);
 
         renderInstManager.resetRenderInsts();
-
-        return null;
     }
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {

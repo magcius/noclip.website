@@ -47,7 +47,7 @@ export interface SceneGfx {
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
-    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass | null;
+    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass | void;
     destroy(device: GfxDevice): void;
 }
 
@@ -155,7 +155,7 @@ export class Viewer {
     }
 
     private renderViewport(): void {
-        let renderPass: GfxRenderPass | null = null;
+        let renderPass: GfxRenderPass | null | void = null;
         if (this.scene !== null) {
             renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
             this.clearScene.minimize(this.gfxDevice);
@@ -163,7 +163,7 @@ export class Viewer {
             this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
         }
 
-        if (renderPass !== null) {
+        if (renderPass) {
             // Legacy API: needs resolve.
             const descriptor = this.gfxDevice.queryRenderPass(renderPass);
 

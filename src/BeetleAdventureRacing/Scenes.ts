@@ -270,7 +270,7 @@ class BARRenderer implements SceneGfx {
         }
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass | null {
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
 
         // Create pass to upload data to the GPU
         // Sidenote: textures, indices, vertices, etc. have already been uploaded (e.g. in the MaterialRenderer constructor)
@@ -304,10 +304,6 @@ class BARRenderer implements SceneGfx {
 
         // Now that we're done rendering, clean up the scene graph
         renderInstManager.resetRenderInsts();
-
-        // If we want, we can return our final pass and noclip will submit it and then submit a subsequent pass to render it to viewerInput.onscreenTexture
-        // I prefer to just do it all in here so we'll just return null
-        return null;
     }
 
     public destroy(device: GfxDevice): void {

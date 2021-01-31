@@ -5,9 +5,9 @@ import * as Viewer from '../viewer';
 import * as CX from '../Common/Compression/CX';
 import * as BRRES from './brres';
 import * as U8 from './u8';
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxHostAccessPass } from '../gfx/platform/GfxPlatform';
 import { RRESTextureHolder, MDL0ModelInstance, MDL0Model } from './render';
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor, depthClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { assert } from '../util';
@@ -16,6 +16,7 @@ import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
 import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 const id = 'klonoa';
 const name = "Klonoa";
@@ -29,8 +30,8 @@ const enum KlonoaPass {
 }
 
 class KlonoaRenderer implements Viewer.SceneGfx {
-    public mainRenderTarget = new BasicRenderTarget();
-    public opaqueSceneTexture = new ColorTexture();
+    public renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
+
     public modelInstances: MDL0ModelInstance[] = [];
     public modelData: MDL0Model[] = [];
 
@@ -57,49 +58,70 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const hostAccessPass = device.createHostAccessPass();
+        this.prepareToRender(device, hostAccessPass, viewerInput);
+        device.submitPass(hostAccessPass);
+
+
+        const builder = this.renderGraph.newGraphBuilder();
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
+            pass.exec((passRenderer) => {
+                executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, KlonoaPass.SKYBOX);
+            });
+        });
+
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, KlonoaPass.MAIN);
+            });
+        });
+
+        if (hasAnyVisible(this.renderHelper.renderInstManager, KlonoaPass.INDIRECT)) {
+            builder.pushPass((pass) => {
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+                const opaqueSceneTextureID = builder.resolveRenderTarget(mainColorTargetID);
+                pass.attachResolveTexture(opaqueSceneTextureID);
+
+                pass.exec((passRenderer, scope) => {
+                    const textureOverride: TextureOverride = { gfxTexture: scope.getResolveTextureForID(opaqueSceneTextureID), width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
+                    this.textureHolder.setTextureOverride("ph_dummy128", textureOverride);
+                    executeOnPass(this.renderHelper.renderInstManager, device, passRenderer, KlonoaPass.INDIRECT);
+                });
+            });
+        }
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderGraph.execute(device, builder);
+
+        this.renderHelper.renderInstManager.resetRenderInsts();
+    }
+
     public destroy(device: GfxDevice): void {
+        this.renderGraph.destroy(device);
         this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
-        this.mainRenderTarget.destroy(device);
-        this.opaqueSceneTexture.destroy(device);
 
         for (let i = 0; i < this.modelData.length; i++)
             this.modelData[i].destroy(device);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].destroy(device);
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
-
-        this.mainRenderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-
-        const skyboxPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        executeOnPass(this.renderHelper.renderInstManager, device, skyboxPassRenderer, KlonoaPass.SKYBOX);
-        device.submitPass(skyboxPassRenderer);
-
-        const opaquePassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.opaqueSceneTexture.gfxTexture);
-        executeOnPass(this.renderHelper.renderInstManager, device, opaquePassRenderer, KlonoaPass.MAIN);
-
-        let lastPassRenderer: GfxRenderPass;
-        if (hasAnyVisible(this.renderHelper.renderInstManager, KlonoaPass.INDIRECT)) {
-            device.submitPass(opaquePassRenderer);
-
-            const textureOverride: TextureOverride = { gfxTexture: this.opaqueSceneTexture.gfxTexture!, width: EFB_WIDTH, height: EFB_HEIGHT, flipY: true };
-            this.textureHolder.setTextureOverride("ph_dummy128", textureOverride);
-
-            const indTexPassRenderer = this.mainRenderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
-            executeOnPass(this.renderHelper.renderInstManager, device, indTexPassRenderer, KlonoaPass.INDIRECT);
-            lastPassRenderer = indTexPassRenderer;
-        } else {
-            lastPassRenderer = opaquePassRenderer;
-        }
-
-        this.renderHelper.renderInstManager.resetRenderInsts();
-        return lastPassRenderer;
     }
 }
 

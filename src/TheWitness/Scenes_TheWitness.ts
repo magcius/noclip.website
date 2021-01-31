@@ -228,7 +228,7 @@ class TheWitnessRenderer implements SceneGfx {
         this.renderHelper.prepareToRender(device, hostAccessPass);
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass | null {
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);

@@ -47,11 +47,44 @@ export class GfxrRenderTargetDescription {
         this.sampleCount = sampleCount;
     }
 
+    public setDimensionsFromRenderInput(renderInput: RenderInput): void {
+        this.setDimensions(renderInput.backbufferWidth, renderInput.backbufferHeight, renderInput.sampleCount);
+    }
+
     public copyDimensions(desc: Readonly<GfxrRenderTargetDescription>): void {
         this.width = desc.width;
         this.height = desc.height;
         this.sampleCount = desc.sampleCount;
     }
+}
+
+interface RenderInput {
+    backbufferWidth: number;
+    backbufferHeight: number;
+    sampleCount: number;
+}
+
+function selectFormatSimple(slot: GfxrAttachmentSlot): GfxFormat {
+    if (slot === GfxrAttachmentSlot.Color0)
+        return GfxFormat.U8_RGBA_RT;
+    else if (slot === GfxrAttachmentSlot.DepthStencil)
+        return GfxFormat.D32F;
+    else
+        throw "whoops";
+}
+
+export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: RenderInput, clearDescriptor: GfxRenderPassDescriptor | null = null): GfxrRenderTargetDescription {
+    const pixelFormat = selectFormatSimple(slot);
+    const desc = new GfxrRenderTargetDescription(pixelFormat);
+    desc.setDimensionsFromRenderInput(renderInput);
+
+    if (clearDescriptor !== null) {
+        desc.colorClearColor = clearDescriptor.colorClearColor;
+        desc.depthClearValue = clearDescriptor.depthClearValue;
+        desc.stencilClearValue = clearDescriptor.stencilClearValue;
+    }
+
+    return desc;
 }
 
 export const enum GfxrAttachmentSlot {
@@ -181,11 +214,6 @@ type PassPostFunc = (scope: GfxrPassScope) => void;
 
 // TODO(jstpierre): These classes might go away...
 
-export interface GfxrGraph {
-    // Opaque graph type.
-    [Symbol.species]?: 'GfxrGraph';
-}
-
 class GraphImpl {
     [Symbol.species]?: 'GfxrGraph';
 
@@ -200,17 +228,6 @@ class GraphImpl {
 }
 
 export interface GfxrGraphBuilder {
-    /**
-     * Begin a new render graph.
-     */
-    begin(): void;
-
-    /**
-     * Stop building the render graph, and return it. This should be passed to
-     * {@see GfxrRenderGraph::execute} when the user wants to run it.
-     */
-    end(): GfxrGraph;
-
     /**
      * Add a new pass. {@param setupFunc} will be called *immediately* to set up the
      * pass. This is wrapped in a function simply to limit the scope of a pass. It
@@ -356,8 +373,8 @@ function fillArray<T>(L: T[], n: number, v: T): void {
 }
 
 export interface GfxrRenderGraph {
-    getGraphBuilder(): GfxrGraphBuilder;
-    execute(device: GfxDevice, graph: GfxrGraph): void;
+    newGraphBuilder(): GfxrGraphBuilder;
+    execute(device: GfxDevice, builder: GfxrGraphBuilder): void;
     destroy(device: GfxDevice): void;
 }
 
@@ -402,12 +419,13 @@ export class GfxrRenderGraphImpl {
 
     //#region Graph Builder
     private currentGraph: GraphImpl | null = null;
-    public begin() {
+
+    public beginGraphBuilder() {
         assert(this.currentGraph === null);
         this.currentGraph = new GraphImpl();
     }
 
-    public end(): GfxrGraph {
+    public endGraphBuilder(): GraphImpl {
         const graph = assertExists(this.currentGraph);
         this.currentGraph = null;
         return graph;
@@ -723,9 +741,7 @@ export class GfxrRenderGraphImpl {
         this.currentPass = null;
     }
 
-    public execute(device: GfxDevice, graph_: GfxrGraph): void {
-        const graph = graph_ as GraphImpl;
-
+    private execGraph(device: GfxDevice, graph: GraphImpl): void {
         // Schedule our graph.
         this.scheduleGraph(device, graph);
 
@@ -734,6 +750,11 @@ export class GfxrRenderGraphImpl {
 
         // Clear our transient scope state.
         this.singleSampledTextureForResolveTextureID.length = 0;
+    }
+
+    public execute(device: GfxDevice, builder: GfxrGraphBuilder): void {
+        assert(builder === this);
+        this.execGraph(device, this.endGraphBuilder());
     }
     //#endregion
 
@@ -762,7 +783,8 @@ export class GfxrRenderGraphImpl {
     }
     //#endregion
 
-    public getGraphBuilder(): GfxrGraphBuilder {
+    public newGraphBuilder(): GfxrGraphBuilder {
+        this.beginGraphBuilder();
         return this;
     }
 

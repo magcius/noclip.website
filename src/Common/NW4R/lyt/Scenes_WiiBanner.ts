@@ -1,14 +1,12 @@
 
 import { mat4 } from "gl-matrix";
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../../../gfx/helpers/RenderTargetHelpers";
-import { GfxDevice } from "../../../gfx/platform/GfxPlatform";
-import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from "../../../gx/gx_render";
+import { GfxDevice, GfxHostAccessPass } from "../../../gfx/platform/GfxPlatform";
+import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../../../gx/gx_render";
 import { TPLTextureHolder } from "../../../PaperMarioTTYD/render";
 import * as TPL from "../../../PaperMarioTTYD/tpl";
 import * as U8 from "../../../rres/u8";
 import * as CX from "../../Compression/CX"
 import { SceneContext } from "../../../SceneBase";
-import { TextureMapping } from "../../../TextureHolder";
 import { assertExists } from "../../../util";
 import { SceneDesc, SceneGfx, SceneGroup, ViewerRenderInput } from "../../../viewer";
 import { Layout, LayoutAnimation, LayoutDrawInfo, LayoutResourceCollection, parseBRLAN, parseBRLYT } from "./Layout";
@@ -29,18 +27,16 @@ export class ArcLayoutResourceCollection extends LayoutResourceCollection {
     }
 }
 
-class BannerBinRenderer implements SceneGfx {
-    public renderTarget = new BasicRenderTarget();
+class BannerBinRenderer extends BasicGXRendererHelper {
     public textureHolder: TPLTextureHolder;
     private drawInfo = new LayoutDrawInfo();
-    private renderHelper: GXRenderHelperGfx;
     private resourceCollection: ArcLayoutResourceCollection;
     private layout: Layout;
     private startLayoutAnimation: LayoutAnimation | null = null;
     private loopLayoutAnimation: LayoutAnimation;
 
     constructor(device: GfxDevice, private arc: U8.U8Archive) {
-        this.renderHelper = new GXRenderHelperGfx(device);
+        super(device);
 
         const brlytData = arc.findFileData('arc/blyt/banner.brlyt')!;
         const rlyt = parseBRLYT(brlytData);
@@ -66,9 +62,7 @@ class BannerBinRenderer implements SceneGfx {
             font_e.visible = true;
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-
+    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
         const deltaTimeFrames = getTimeInFrames(viewerInput.deltaTime, 60);
         if (this.startLayoutAnimation === null || this.startLayoutAnimation.isOver())
             this.loopLayoutAnimation.update(deltaTimeFrames);
@@ -82,21 +76,12 @@ class BannerBinRenderer implements SceneGfx {
         this.layout.draw(device, this.renderHelper.renderInstManager, this.drawInfo);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
 
-        const hostAccessPass = device.createHostAccessPass();
         this.renderHelper.prepareToRender(device, hostAccessPass);
-        device.submitPass(hostAccessPass);
-
-        const renderPass = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor, viewerInput.onscreenTexture);
-        this.renderHelper.renderInstManager.drawOnPassRenderer(device, renderPass);
-        device.submitPass(renderPass);
-
-        this.renderHelper.renderInstManager.resetRenderInsts();
-        return null;
     }
 
     public destroy(device: GfxDevice): void {
+        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
         this.layout.destroy(device);
         this.resourceCollection.destroy(device);
     }

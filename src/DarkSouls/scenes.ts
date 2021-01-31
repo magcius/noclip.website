@@ -9,7 +9,7 @@ import * as BHD from "./bhd";
 import * as BND3 from "./bnd3";
 import * as FLVER from "./flver";
 
-import { GfxDevice, GfxHostAccessPass, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
 import { DataFetcher } from "../DataFetcher";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DDSTextureHolder } from "./dds";
@@ -20,8 +20,9 @@ import { SceneContext } from "../SceneBase";
 import * as MTD from "./mtd";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 
 interface CRG1Arc {
     Files: { [filename: string]: ArrayBufferSlice };
@@ -53,9 +54,9 @@ class ResourceSystem {
 
 class DKSRenderer implements Viewer.SceneGfx {
     public msbRenderers: MSBRenderer[] = [];
-    private renderTarget = new BasicRenderTarget();
     private renderInstManager = new GfxRenderInstManager();
     private uniformBuffer: GfxRenderDynamicUniformBuffer;
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private renderContext = new RenderContext();
 
     constructor(device: GfxDevice, public textureHolder: DDSTextureHolder) {
@@ -83,22 +84,36 @@ class DKSRenderer implements Viewer.SceneGfx {
         this.renderInstManager.popTemplateRenderInst();
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderInstManager;
         this.renderContext.prepareToRender(viewerInput);
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const builder = this.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         const hostAccessPass = device.createHostAccessPass();
         this.prepareToRender(device, hostAccessPass, viewerInput);
         device.submitPass(hostAccessPass);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        this.renderInstManager.drawOnPassRenderer(device, passRenderer);
-        this.renderInstManager.resetRenderInsts();
-        return passRenderer;
+        this.renderGraph.execute(device, builder);
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderTarget.destroy(device);
+        this.renderGraph.destroy(device);
         this.renderInstManager.destroy(device);
         this.uniformBuffer.destroy(device);
         for (let i = 0; i < this.msbRenderers.length; i++)
