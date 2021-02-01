@@ -108,6 +108,7 @@ class DKSRenderer implements Viewer.SceneGfx {
         this.prepareToRender(device, viewerInput);
 
         this.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
