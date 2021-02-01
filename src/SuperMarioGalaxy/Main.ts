@@ -26,7 +26,7 @@ import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, T
 import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { JMapInfoIter, createCsvParser, JMapLinkInfo } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
-import { SceneNameObjListExecutor, DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu, DrawType, createFilterKeyForDrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
+import { SceneNameObjListExecutor, DrawBufferType, DrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
 import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder } from './Actors/MiscActor';
@@ -153,6 +153,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         if (this.sceneObjHolder.sceneDesc.scenarioOverride !== null)
             this.currentScenarioIndex = this.sceneObjHolder.sceneDesc.scenarioOverride;
 
+        this.renderHelper.renderInstManager.disableSimpleMode();
         this.applyCurrentScenario();
     }
 
@@ -238,9 +239,11 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         const effectSystem = this.sceneObjHolder.effectSystem;
 
+        const renderInstManager = this.renderHelper.renderInstManager;
+
         for (let drawType = DrawType.EffectDraw3D; drawType <= DrawType.EffectDrawAfterImageEffect; drawType++) {
+            renderInstManager.setCurrentRenderInstList(this.sceneObjHolder.sceneNameObjListExecutor.ensureRenderInstListExecute(drawType));
             const template = this.renderHelper.renderInstManager.pushTemplateRenderInst();
-            template.filterKey = createFilterKeyForDrawType(drawType);
             template.setUniformBufferOffset(GX_Program.ub_SceneParams, this.sceneObjHolder.renderParams.sceneParamsOffs3D, ub_SceneParamsBufferSize);
 
             let texPrjMtx: mat4 | null = null;
@@ -256,33 +259,23 @@ export class SMGRenderer implements Viewer.SceneGfx {
         }
     }
 
-    private hasFilterKey(filterKey: number): boolean {
-        return this.renderHelper.renderInstManager.hasAnyWithFilterKeyExact(filterKey);
-    }
-
-    private hasExecute(drawType: DrawType): boolean {
-        return this.hasFilterKey(createFilterKeyForDrawType(drawType));
-    }
-
-    private executeOnPass(passRenderer: GfxRenderPass, filterKey: number): void {
-        const r = this.renderHelper.renderInstManager;
-        r.setVisibleByFilterKeyExact(filterKey);
-
-        this.sceneObjHolder.specialTextureBinder.resolveLateBindTexture(r.simpleRenderInstList!);
-
-        r.drawOnPassRenderer(this.sceneObjHolder.modelCache.device, passRenderer);
+    private executeOnPass(passRenderer: GfxRenderPass, list: GfxRenderInstList | null): void {
+        if (list === null)
+            return;
+        this.sceneObjHolder.specialTextureBinder.resolveLateBindTexture(list);
+        list.drawOnPassRenderer(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager.gfxRenderCache, passRenderer);
     }
 
     private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
-        this.executeOnPass(passRenderer, createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType));
+        this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListOpa(drawBufferType));
     }
 
     private drawXlu(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
-        this.executeOnPass(passRenderer, createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType));
+        this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListXlu(drawBufferType));
     }
 
     private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
-        this.executeOnPass(passRenderer, createFilterKeyForDrawType(drawType));
+        this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListExecute(drawType));
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -584,9 +577,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.prepareToRender(device);
-
         this.renderGraph.execute(device, builder);
 
+        this.sceneObjHolder.sceneNameObjListExecutor.reset();
         renderInstManager.resetRenderInsts();
     }
 

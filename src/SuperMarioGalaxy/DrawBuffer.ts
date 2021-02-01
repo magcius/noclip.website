@@ -3,8 +3,8 @@ import { LiveActor } from "./LiveActor";
 import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { Camera } from "../Camera";
 import { GfxDevice, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
-import { DrawBufferType, createFilterKeyForDrawBufferType, OpaXlu } from "./NameObj";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { DrawBufferType } from "./NameObj";
+import { GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { range } from "../MathHelpers";
 
 export const enum LightType {
@@ -154,15 +154,20 @@ class DrawBufferExecuter {
 export class DrawBufferGroup {
     private drawBufferExecuters: DrawBufferExecuter[] = [];
 
+    public renderInstListOpa = new GfxRenderInstList(null, GfxRenderInstExecutionOrder.Forwards);
+    public renderInstListXlu = new GfxRenderInstList();
+
     constructor(public tableEntry: DrawBufferInitialTableEntry) {
     }
 
     public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        renderInstManager.setCurrentRenderInstList(this.renderInstListOpa);
         for (let i = 0; i < this.drawBufferExecuters.length; i++)
             this.drawBufferExecuters[i].drawOpa(device, renderInstManager, camera, viewport);
     }
 
     public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        renderInstManager.setCurrentRenderInstList(this.renderInstListXlu);
         for (let i = 0; i < this.drawBufferExecuters.length; i++)
             this.drawBufferExecuters[i].drawXlu(device, renderInstManager, camera, viewport);
     }
@@ -182,6 +187,11 @@ export class DrawBufferGroup {
             if (this.drawBufferExecuters[i].modelInstance.visible)
                 return true;
         return false;
+    }
+
+    public reset(): void {
+        this.renderInstListOpa.reset();
+        this.renderInstListXlu.reset();
     }
 }
 
@@ -212,8 +222,6 @@ export class DrawBufferHolder {
     public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, cameraType: DrawCameraType): void {
         for (let i = 0; i < this.groups.length; i++) {
             const group = this.groups[i];
-            if (group === undefined)
-                continue;
             if (group.tableEntry.DrawCameraType !== cameraType)
                 continue;
             this.drawOpa(device, renderInstManager, camera, viewport, i);
@@ -221,21 +229,28 @@ export class DrawBufferHolder {
         }
     }
 
-    private drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawBufferType: DrawBufferType): void {
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.filterKey = createFilterKeyForDrawBufferType(OpaXlu.OPA, drawBufferType);
+    public drawOpa(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawBufferType: DrawBufferType): void {
         this.groups[drawBufferType].drawOpa(device, renderInstManager, camera, viewport);
-        renderInstManager.popTemplateRenderInst();
     }
 
-    private drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawBufferType: DrawBufferType): void {
-        const template = renderInstManager.pushTemplateRenderInst();
-        template.filterKey = createFilterKeyForDrawBufferType(OpaXlu.XLU, drawBufferType);
+    public drawXlu(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, drawBufferType: DrawBufferType): void {
         this.groups[drawBufferType].drawXlu(device, renderInstManager, camera, viewport);
-        renderInstManager.popTemplateRenderInst();
+    }
+
+    public getRenderInstListOpa(drawBufferType: DrawBufferType): GfxRenderInstList {
+        return this.groups[drawBufferType].renderInstListOpa;
+    }
+
+    public getRenderInstListXlu(drawBufferType: DrawBufferType): GfxRenderInstList {
+        return this.groups[drawBufferType].renderInstListXlu;
     }
 
     public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {
         return this.groups[drawBufferType].hasVisible();
+    }
+
+    public reset(): void {
+        for (let i = 0; i < this.groups.length; i++)
+            this.groups[i].reset();
     }
 }
