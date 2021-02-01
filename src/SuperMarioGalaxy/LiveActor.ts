@@ -305,6 +305,21 @@ function patchModelData(bmdModel: J3DModelData): void {
 
 export type ResTable<T> = Map<string, T>;
 
+export function initEachResTable<T>(arc: JKRArchive, table: ResTable<T>, extensions: string[], constructor: (file: RARCFile, ext: string, filenameWithoutExtension: string) => T, includeExtension: boolean = false): void {
+    for (let i = 0; i < arc.files.length; i++) {
+        const file = arc.files[i];
+
+        for (let j = 0; j < extensions.length; j++) {
+            const ext = extensions[j];
+            if (file.name.endsWith(ext)) {
+                const filenameWithoutExtension = file.name.slice(0, -ext.length).toLowerCase();
+                const key = includeExtension ? file.name : filenameWithoutExtension;
+                table.set(key, constructor(file, ext, filenameWithoutExtension));
+            }
+        }
+    }
+}
+
 export class ResourceHolder {
     public modelTable = new Map<string, J3DModelData>();
     public motionTable = new Map<string, ANK1>();
@@ -317,7 +332,7 @@ export class ResourceHolder {
     public viewerTextures: Viewer.Texture[] = [];
 
     constructor(device: GfxDevice, cache: GfxRenderCache, objectName: string, public arc: JKRArchive) {
-        this.initEachResTable(this.modelTable, ['.bdl', '.bmd'], (file, ext, filenameWithoutExtension) => {
+        initEachResTable(this.arc, this.modelTable, ['.bdl', '.bmd'], (file, ext, filenameWithoutExtension) => {
             const bmd = BMD.parse(file.buffer);
             patchBMD(bmd);
             const modelData = new J3DModelData(device, cache, bmd);
@@ -326,7 +341,7 @@ export class ResourceHolder {
             return modelData;
         });
 
-        this.initEachResTable(this.motionTable, ['.bck', '.bca'], (file, ext) => {
+        initEachResTable(this.arc, this.motionTable, ['.bck', '.bca'], (file, ext) => {
             if (ext === '.bca')
                 debugger;
 
@@ -334,14 +349,14 @@ export class ResourceHolder {
         });
 
         // .blk
-        this.initEachResTable(this.btkTable, ['.btk'], (file) => BTK.parse(file.buffer));
-        this.initEachResTable(this.bpkTable, ['.bpk'], (file) => BPK.parse(file.buffer));
-        this.initEachResTable(this.btpTable, ['.btp'], (file) => BTP.parse(file.buffer));
-        this.initEachResTable(this.brkTable, ['.brk'], (file) => BRK.parse(file.buffer));
+        initEachResTable(this.arc, this.btkTable, ['.btk'], (file) => BTK.parse(file.buffer));
+        initEachResTable(this.arc, this.bpkTable, ['.bpk'], (file) => BPK.parse(file.buffer));
+        initEachResTable(this.arc, this.btpTable, ['.btp'], (file) => BTP.parse(file.buffer));
+        initEachResTable(this.arc, this.brkTable, ['.brk'], (file) => BRK.parse(file.buffer));
         // .bas
         // .bmt
-        this.initEachResTable(this.bvaTable, ['.bva'], (file) => BVA.parse(file.buffer));
-        this.initEachResTable(this.banmtTable, ['.banmt'], (file) => BckCtrl.parse(file.buffer));
+        initEachResTable(this.arc, this.bvaTable, ['.bva'], (file) => BVA.parse(file.buffer));
+        initEachResTable(this.arc, this.banmtTable, ['.banmt'], (file) => BckCtrl.parse(file.buffer));
     }
 
     private addTEX1(tex1Data: TEX1Data | null, objectName: string, filenameWithoutExtension: string): void {
@@ -370,22 +385,8 @@ export class ResourceHolder {
         return table.has(name.toLowerCase());
     }
 
-    private initEachResTable<T>(table: ResTable<T>, extensions: string[], constructor: (file: RARCFile, ext: string, filenameWithoutExtension: string) => T): void {
-        for (let i = 0; i < this.arc.files.length; i++) {
-            const file = this.arc.files[i];
-
-            for (let j = 0; j < extensions.length; j++) {
-                const ext = extensions[j];
-                if (file.name.endsWith(ext)) {
-                    const filenameWithoutExtension = file.name.slice(0, -ext.length).toLowerCase();
-                    table.set(filenameWithoutExtension, constructor(file, ext, filenameWithoutExtension));
-                }
-            }
-        }
-    }
-
     public destroy(device: GfxDevice): void {
-        for (const [, v] of this.modelTable)
+        for (const v of this.modelTable.values())
             v.destroy(device);
     }
 }

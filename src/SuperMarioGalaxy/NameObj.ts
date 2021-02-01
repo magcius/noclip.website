@@ -8,7 +8,7 @@ import { gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder, GfxRenderInst
 import { LiveActor } from "./LiveActor";
 import { JMapInfoIter } from "./JMapInfo";
 import { mat4 } from "gl-matrix";
-import { assert, fallbackUndefined } from "../util";
+import { assert, nullify } from "../util";
 import { ub_SceneParamsBufferSize } from "../gx/gx_render";
 import { GX_Program } from "../gx/gx_material";
 
@@ -26,7 +26,9 @@ export const enum MovementType {
     MsgSharedGroup                 = 0x06,
     DemoDirector                   = 0x0B,
     AreaObj                        = 0x0D,
-    Model3DFor2D                   = 0x0E,
+    Layout                         = 0x0E,
+    LayoutDecoration               = 0x0F,
+    LayoutOnPause                  = 0x12,
     ImageEffect                    = 0x17,
     SwitchWatcherHolder            = 0x1B,
     Planet                         = 0x1D,
@@ -55,7 +57,8 @@ export const enum CalcAnimType {
     Npc                            = 0x06,
     Enemy                          = 0x08,
     MapObjDecoration               = 0x0B,
-    Model3DFor2D                   = 0x0D,
+    Layout                         = 0x0D,
+    LayoutDecoration               = 0x0E,
     Item                           = 0x10,
 }
 
@@ -93,6 +96,9 @@ export const enum DrawBufferType {
     AstroDomeSky                        = 0x23,
     Model3DFor2D                        = 0x24,
     MirrorMapObj                        = 0x27,
+
+    // noclip additions
+    AstroMapBoard                       = 0x60,
 }
 
 export const enum DrawType {
@@ -342,17 +348,7 @@ export class SceneNameObjListExecutor {
     }
 
     public getRenderInstListExecute(drawType: DrawType): GfxRenderInstList | null {
-        return fallbackUndefined(this.executeDrawRenderInstList[drawType], null);
-    }
-
-    public reset(): void {
-        for (let i = 0; i < this.executeDrawRenderInstList.length; i++) {
-            if (this.executeDrawRenderInstList[i] === undefined)
-                continue;
-            this.executeDrawRenderInstList[i].reset();
-        }
-
-        this.drawBufferHolder.reset();
+        return nullify(this.executeDrawRenderInstList[drawType]);
     }
 }
 

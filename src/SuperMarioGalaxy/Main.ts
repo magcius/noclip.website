@@ -18,10 +18,9 @@ import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTarg
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
 
-import { MaterialParams, PacketParams, SceneParams, fillSceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from '../gx/gx_render';
+import { SceneParams, fillSceneParams, ub_SceneParamsBufferSize, fillSceneParamsData } from '../gx/gx_render';
 import { GXRenderHelperGfx } from '../gx/gx_render';
-import { BMD, JSystemFileReaderHelper, ShapeDisplayFlags, TexMtxMapMode, ANK1, TTK1, TPT1, TRK1, VAF1, BCK, BTK, BPK, BTP, BRK, BVA } from '../Common/JSYSTEM/J3D/J3DLoader';
-import { TEX1Data, J3DModelData, MaterialInstance } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { JSystemFileReaderHelper } from '../Common/JSYSTEM/J3D/J3DLoader';
 import { JMapInfoIter, createCsvParser, JMapLinkInfo } from './JMapInfo';
 import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, DrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
@@ -31,7 +30,6 @@ import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGrou
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray, getJMapInfoTrans, getJMapInfoRotate, ResourceHolder } from './LiveActor';
 import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
-import { BckCtrl } from './Animation';
 import { WaterAreaHolder, WaterAreaMgr, HazeCube, SwitchArea, MercatorTransformCube, DeathArea } from './MiscMap';
 import { SensorHitChecker } from './HitSensor';
 import { PlanetGravityManager } from './Gravity';
@@ -48,8 +46,10 @@ import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
-import { GfxrRenderTargetDescription, GfxrRenderGraph, GfxrAttachmentSlot, GfxrRenderGraphImpl, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
+import { GfxrRenderTargetDescription, GfxrRenderGraph, GfxrAttachmentSlot, GfxrRenderGraphImpl, GfxrTemporalTexture, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 import { TransparentBlack } from '../Color';
+import { LayoutHolder } from './Layout';
+import { GalaxyMapController } from './Actors/GalaxyMap';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -77,7 +77,7 @@ function isExistPriorDrawAir(sceneObjHolder: SceneObjHolder): boolean {
 
 export const enum SpecialTextureType {
     OpaqueSceneTexture = 'opaque-scene-texture',
-    ImageEffectTexture1 = 'image-effect-texture-1',
+    AstroMapBoard = 'astro-map-board',
 }
 
 class SpecialTextureBinder {
@@ -96,7 +96,7 @@ class SpecialTextureBinder {
         });
 
         this.registerSpecialTextureType(SpecialTextureType.OpaqueSceneTexture, this.mirrorSampler);
-        this.registerSpecialTextureType(SpecialTextureType.ImageEffectTexture1, this.mirrorSampler);
+        this.registerSpecialTextureType(SpecialTextureType.AstroMapBoard, this.mirrorSampler);
     }
 
     private registerSpecialTextureType(textureType: SpecialTextureType, gfxSampler: GfxSampler): void {
@@ -273,6 +273,21 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListXlu(drawBufferType));
     }
 
+    private hasAnyRenderInstList(renderInstList: GfxRenderInstList | null): boolean {
+        if (renderInstList !== null)
+            return renderInstList.renderInsts.length > 0;
+        else
+            return false;
+    }
+
+    private hasAnyDrawBuffer(drawBufferType: DrawBufferType): boolean {
+        if (this.hasAnyRenderInstList(this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListOpa(drawBufferType)))
+            return true;
+        if (this.hasAnyRenderInstList(this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListXlu(drawBufferType)))
+            return true;
+        return false;
+    }
+
     private execute(passRenderer: GfxRenderPass, drawType: DrawType): void {
         this.executeOnPass(passRenderer, this.sceneObjHolder.sceneNameObjListExecutor.getRenderInstListExecute(drawType));
     }
@@ -315,6 +330,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
         }
 
+        const builder = this.renderGraph.newGraphBuilder();
+        this.sceneObjHolder.graphBuilder = builder;
+
         // Prepare all of our NameObjs.
         executor.calcViewAndEntry(this.sceneObjHolder, DrawCameraType.DrawCameraType_3D, viewerInput);
         executor.calcViewAndEntry(this.sceneObjHolder, DrawCameraType.DrawCameraType_2D, viewerInput);
@@ -330,8 +348,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         template.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneParamsOffs2D, ub_SceneParamsBufferSize);
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
         renderInstManager.popTemplateRenderInst();
-
-        const builder = this.renderGraph.newGraphBuilder();
 
         this.mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
         this.mainColorDesc.colorClearColor = TransparentBlack;
@@ -501,6 +517,27 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
+        if (this.hasAnyDrawBuffer(DrawBufferType.AstroMapBoard)) {
+            const galaxyMapController = this.sceneObjHolder.galaxyMapController!;
+            const layoutTargetID = galaxyMapController.pushPasses(this.sceneObjHolder, renderInstManager);
+
+            builder.pushPass((pass) => {
+                pass.setDebugName('Astro Map Board');
+                const layoutResolveTextureID = builder.resolveRenderTarget(layoutTargetID);
+                pass.attachResolveTexture(layoutResolveTextureID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+                pass.exec((passRenderer, scope) => {
+                    const layoutTexture = scope.getResolveTextureForID(layoutResolveTextureID);
+                    this.sceneObjHolder.specialTextureBinder.lateBindTexture(SpecialTextureType.AstroMapBoard, layoutTexture);
+
+                    this.drawOpa(passRenderer, DrawBufferType.AstroMapBoard);
+                    this.drawXlu(passRenderer, DrawBufferType.AstroMapBoard);
+                });
+            });
+        }
+
         const waterAreaHolder = this.sceneObjHolder.waterAreaHolder;
         if (waterAreaHolder !== null && waterAreaHolder.isOnWaterCameraFilter()) {
             builder.pushPass((pass) => {
@@ -578,7 +615,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device);
         this.renderGraph.execute(device, builder);
 
-        this.sceneObjHolder.sceneNameObjListExecutor.reset();
         renderInstManager.resetRenderInsts();
     }
 
@@ -633,6 +669,7 @@ export class ModelCache {
     public archivePromiseCache = new Map<string, Promise<RARC.JKRArchive | null>>();
     public archiveCache = new Map<string, RARC.JKRArchive | null>();
     public archiveResourceHolder = new Map<string, ResourceHolder>();
+    public archiveLayoutHolder = new Map<string, LayoutHolder>();
     public extraDataPromiseCache = new Map<string, Promise<ArrayBufferSlice>>();
     public extraDataCache = new Map<string, ArrayBufferSlice>();
     public cache = new GfxRenderCache();
@@ -684,12 +721,20 @@ export class ModelCache {
         return this.requestArchiveData(`ObjectData/${objectName}.arc`);
     }
 
+    public requestLayoutData(layoutName: string) {
+        return this.requestArchiveData(`LayoutData/${layoutName}.arc`);
+    }
+
     public isObjectDataExist(objectName: string): boolean {
         return this.isArchiveExist(`ObjectData/${objectName}.arc`);
     }
 
     public getObjectData(objectName: string): RARC.JKRArchive {
         return assertExists(this.getArchive(`ObjectData/${objectName}.arc`));
+    }
+
+    public getLayoutData(layoutName: string): RARC.JKRArchive {
+        return assertExists(this.getArchive(`LayoutData/${layoutName}.arc`));
     }
 
     private async requestExtraDataInternal(path: string, abortedCallback: AbortedCallback): Promise<ArrayBufferSlice> {
@@ -724,10 +769,23 @@ export class ModelCache {
         return resourceHolder;
     }
 
+    public getLayoutHolder(layoutName: string): LayoutHolder {
+        if (this.archiveLayoutHolder.has(layoutName))
+            return this.archiveLayoutHolder.get(layoutName)!;
+
+        const arc = this.getLayoutData(layoutName);
+        const layoutHolder = new LayoutHolder(this.device, this.cache, layoutName, arc);
+        // this.textureListHolder.addTextures(layoutHolder.viewerTextures);
+        this.archiveLayoutHolder.set(layoutName, layoutHolder);
+        return layoutHolder;
+    }
+
     public destroy(device: GfxDevice): void {
         this.cache.destroy(device);
         for (const resourceHolder of this.archiveResourceHolder.values())
             resourceHolder.destroy(device);
+        for (const layoutHolder of this.archiveLayoutHolder.values())
+            layoutHolder.destroy(device);
     }
 }
 
@@ -949,6 +1007,7 @@ export class SceneObjHolder {
     public waterPressureBulletHolder: WaterPressureBulletHolder | null = null;
     public miniatureGalaxyHolder: MiniatureGalaxyHolder | null = null;
     public priorDrawAirHolder: PriorDrawAirHolder | null = null;
+    public galaxyMapController: GalaxyMapController | null = null;
 
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
@@ -962,6 +1021,7 @@ export class SceneObjHolder {
     // Noclip-specific stuff.
     public specialTextureBinder: SpecialTextureBinder;
     public renderParams = new RenderParams();
+    public graphBuilder: GfxrGraphBuilder;
     public viewerInput: Viewer.ViewerRenderInput;
     public uiContainer: HTMLElement;
 
@@ -1035,6 +1095,8 @@ export class SceneObjHolder {
             return this.miniatureGalaxyHolder;
         else if (sceneObj === SceneObj.PriorDrawAirHolder)
             return this.priorDrawAirHolder;
+        else if (sceneObj === SceneObj.GalaxyMapController)
+            return this.galaxyMapController;
         return null;
     }
 
@@ -1103,6 +1165,8 @@ export class SceneObjHolder {
             this.miniatureGalaxyHolder = new MiniatureGalaxyHolder(this);
         else if (sceneObj === SceneObj.PriorDrawAirHolder)
             this.priorDrawAirHolder = new PriorDrawAirHolder(this);
+        else if (sceneObj === SceneObj.GalaxyMapController)
+            this.galaxyMapController = new GalaxyMapController(this);
     }
 
     public requestArchives(): void {

@@ -91,6 +91,10 @@ export const enum GfxrAttachmentSlot {
     Color0, DepthStencil,
 }
 
+type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
+type PassPostFunc = (scope: GfxrPassScope) => void;
+type PassPostFrameFunc = () => void;
+
 export interface GfxrPass {
     /**
      * Set the debug name of a given pass. Strongly encouraged.
@@ -127,6 +131,12 @@ export interface GfxrPass {
      * seldomly used.
      */
     post(func: PassPostFunc): void;
+
+    /**
+     * Set the pass's post frame callback. This will be called after all passes are submitted,
+     * allowing you do any cleanup work that you might need to.
+     */
+    postFrame(func: PassPostFrameFunc): void;
 }
 
 class PassImpl implements GfxrPass {
@@ -166,6 +176,7 @@ class PassImpl implements GfxrPass {
     // Execution callback from user.
     public execFunc: PassExecFunc | null = null;
     public postFunc: PassPostFunc | null = null;
+    public postFrameFunc: PassPostFrameFunc | null = null;
 
     // Misc. state.
     public debugName: string;
@@ -200,6 +211,11 @@ class PassImpl implements GfxrPass {
         assert(this.postFunc === null);
         this.postFunc = func;
     }
+
+    public postFrame(func: PassPostFrameFunc): void {
+        assert(this.postFrameFunc === null);
+        this.postFrameFunc = func;
+    }
 }
 
 export interface GfxrPassScope {
@@ -207,10 +223,6 @@ export interface GfxrPassScope {
     getRenderTargetAttachment(slot: GfxrAttachmentSlot): GfxRenderTarget | null;
     getRenderTargetTexture(slot: GfxrAttachmentSlot): GfxTexture | null;
 }
-
-type PassSetupFunc = (renderPass: GfxrPass) => void;
-type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
-type PassPostFunc = (scope: GfxrPassScope) => void;
 
 // TODO(jstpierre): These classes might go away...
 
@@ -226,6 +238,8 @@ class GraphImpl {
     // Debugging.
     public renderTargetDebugNames: string[] = [];
 }
+
+type PassSetupFunc = (renderPass: GfxrPass) => void;
 
 export interface GfxrGraphBuilder {
     /**
@@ -802,6 +816,12 @@ export class GfxrRenderGraphImpl {
 
         // Clear our transient scope state.
         this.singleSampledTextureForResolveTextureID.length = 0;
+
+        for (let i = 0; i < graph.passes.length; i++) {
+            const pass = graph.passes[i];
+            if (pass.postFrameFunc !== null)
+                pass.postFrameFunc();
+        }
     }
 
     public execute(device: GfxDevice, builder: GfxrGraphBuilder): void {

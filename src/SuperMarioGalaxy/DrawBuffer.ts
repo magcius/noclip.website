@@ -44,7 +44,7 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
     { DrawBufferType: 0x1F,                                          LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: 0x00,                                          LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: 0x18,                                          LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
-    { DrawBufferType: 0x19,                                          LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
+    { DrawBufferType: DrawBufferType.IndirectMapObj,                 LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.IndirectMapObjStrongLight,      LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.IndirectNpc,                    LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.IndirectEnemy,                  LightType: LightType.Strong, DrawCameraType: DrawCameraType.DrawCameraType_3D },
@@ -72,6 +72,8 @@ export const drawBufferInitialTable: DrawBufferInitialTableEntry[] = [
     { DrawBufferType: DrawBufferType.BloomModel,                     LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
     { DrawBufferType: DrawBufferType.Model3DFor2D,                   LightType: LightType.None,   DrawCameraType: DrawCameraType.DrawCameraType_2D },
     { DrawBufferType: 0x25,                                          LightType: LightType.None,   DrawCameraType: DrawCameraType.DrawCameraType_2D },
+
+    { DrawBufferType: DrawBufferType.AstroMapBoard,                  LightType: LightType.Planet, DrawCameraType: DrawCameraType.DrawCameraType_3D },
 ];
 
 // The original drawing code's entry point (drawOpa used for example, but drawXlu also exists...)
@@ -188,11 +190,6 @@ export class DrawBufferGroup {
                 return true;
         return false;
     }
-
-    public reset(): void {
-        this.renderInstListOpa.reset();
-        this.renderInstListXlu.reset();
-    }
 }
 
 export class DrawBufferHolder {
@@ -222,6 +219,8 @@ export class DrawBufferHolder {
     public drawAllBuffers(device: GfxDevice, renderInstManager: GfxRenderInstManager, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, cameraType: DrawCameraType): void {
         for (let i = 0; i < this.groups.length; i++) {
             const group = this.groups[i];
+            if (group === undefined)
+                continue;
             if (group.tableEntry.DrawCameraType !== cameraType)
                 continue;
             this.drawOpa(device, renderInstManager, camera, viewport, i);
@@ -247,10 +246,5 @@ export class DrawBufferHolder {
 
     public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {
         return this.groups[drawBufferType].hasVisible();
-    }
-
-    public reset(): void {
-        for (let i = 0; i < this.groups.length; i++)
-            this.groups[i].reset();
     }
 }

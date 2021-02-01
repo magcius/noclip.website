@@ -309,21 +309,6 @@ export class dDlst_list_c {
         this.alphaModel0 = new dDlst_alphaModel_c(device, cache, symbolMap);
     }
 
-    public reset(): void {
-        this.sky[0].reset();
-        this.sky[1].reset();
-        this.sea.reset();
-        this.main[0].reset();
-        this.main[1].reset();
-        this.wetherEffect.reset();
-        for (let i = 0; i < this.effect.length; i++)
-            this.effect[i].reset();
-        this.ui[0].reset();
-        this.ui[1].reset();
-        this.alphaModel.reset();
-        this.alphaModel0.reset();
-    }
-
     public destroy(device: GfxDevice): void {
         this.peekZ.destroy(device);
         this.alphaModel0.destroy(device);
@@ -796,7 +781,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
         this.renderGraph.execute(device, builder);
 
-        dlst.reset();
         renderInstManager.resetRenderInsts();
     }
 

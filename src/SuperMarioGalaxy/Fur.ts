@@ -1,6 +1,6 @@
 
 import { vec4, vec3, mat4, ReadonlyVec4 } from "gl-matrix";
-import { fallbackUndefined, assert, decodeString, assertExists } from "../util";
+import { assert, decodeString, assertExists, nullify } from "../util";
 
 import { J3DModelData, ShapeData, prepareShapeMtxGroup } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { LiveActor } from "./LiveActor";
@@ -580,7 +580,7 @@ class FurBank {
     public furMultis: FurMulti[] = [];
 
     public check(modelData: J3DModelData, materialBits: number): FurMulti | null {
-        return fallbackUndefined(this.furMultis.find((multi) => multi.modelData === modelData && (multi.materialBits & materialBits) === materialBits), null);
+        return nullify(this.furMultis.find((multi) => multi.modelData === modelData && (multi.materialBits & materialBits) === materialBits));
     }
 
     public regist(multi: FurMulti): void {

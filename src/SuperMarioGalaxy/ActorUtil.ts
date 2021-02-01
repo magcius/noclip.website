@@ -184,7 +184,7 @@ export function connectToSceneScreenEffectMovement(sceneObjHolder: SceneObjHolde
 }
 
 export function connectToScene3DModelFor2D(sceneObjHolder: SceneObjHolder, nameObj: NameObj): void {
-    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Model3DFor2D, CalcAnimType.Model3DFor2D, DrawBufferType.Model3DFor2D, -1);
+    sceneObjHolder.sceneNameObjListExecutor.registerActor(nameObj, MovementType.Layout, CalcAnimType.Layout, DrawBufferType.Model3DFor2D, -1);
 }
 
 export function getJointMtx(actor: LiveActor, i: number): mat4 {

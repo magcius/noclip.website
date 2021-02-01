@@ -9,11 +9,11 @@ import * as CX from "../../Compression/CX"
 import { SceneContext } from "../../../SceneBase";
 import { assertExists } from "../../../util";
 import { SceneDesc, SceneGfx, SceneGroup, ViewerRenderInput } from "../../../viewer";
-import { Layout, LayoutAnimation, LayoutDrawInfo, LayoutResourceCollection, parseBRLAN, parseBRLYT } from "./Layout";
+import { Layout, LayoutAnimation, LayoutDrawInfo, LayoutResourceCollectionBasic, parseBRLAN, parseBRLYT } from "./Layout";
 import { getTimeInFrames } from '../../../AnimationController';
 import ArrayBufferSlice from "../../../ArrayBufferSlice";
 
-export class ArcLayoutResourceCollection extends LayoutResourceCollection {
+export class ArcLayoutResourceCollection extends LayoutResourceCollectionBasic {
     public addTextureData(device: GfxDevice, name: string, buffer: ArrayBufferSlice): void {
         if (!name.endsWith('.tpl'))
             return;

@@ -167,7 +167,7 @@ export class J3DFrameCtrl {
     }
 
     public hasStopped(): boolean {
-        return this.currentTimeInFrames === 0 || !!(this.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped);
+        return this.speedInFrames === 0 || !!(this.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped);
     }
 }
 

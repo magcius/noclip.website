@@ -564,12 +564,7 @@ export class GfxRenderInstList {
             this.renderInsts[i].resolveLateSamplerBinding(name, binding);
     }
 
-    /**
-     * Execute all scheduled render insts in this list onto the {@param GfxRenderPass},
-     * using {@param device} and {@param cache} to create any device-specific resources
-     * necessary to complete the draws.
-     */
-    public drawOnPassRenderer(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+    private drawOnPassRendererNoReset(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
         if (this.renderInsts.length === 0)
             return;
 
@@ -589,6 +584,16 @@ export class GfxRenderInstList {
 
     public reset(): void {
         this.renderInsts.length = 0;
+    }
+
+    /**
+     * Execute all scheduled render insts in this list onto the {@param GfxRenderPass},
+     * using {@param device} and {@param cache} to create any device-specific resources
+     * necessary to complete the draws.
+     */
+    public drawOnPassRenderer(device: GfxDevice, cache: GfxRenderCache, passRenderer: GfxRenderPass): void {
+        this.drawOnPassRendererNoReset(device, cache, passRenderer);
+        this.reset();
     }
 }
 //#endregion
@@ -739,19 +744,6 @@ export class GfxRenderInstManager {
         for (let i = 0; i < this.instPool.allocCount; i++)
             if (!!(this.instPool.pool[i]._flags & GfxRenderInstFlags.Draw) && this.instPool.pool[i].filterKey === filterKey)
                 list.insertSorted(this.instPool.pool[i]);
-    }
-
-    /**
-     * {@deprecated}
-     */
-    public hasAnyWithFilterKeyExact(filterKey: number): boolean {
-        const list = assertExists(this.simpleRenderInstList);
-
-        for (let i = 0; i < this.instPool.allocCount; i++)
-            if (!!(this.instPool.pool[i]._flags & GfxRenderInstFlags.Draw) && this.instPool.pool[i].filterKey === filterKey)
-                return true;
-
-        return false;
     }
 
     /**
