@@ -64,6 +64,10 @@ abstract class ImageEffectBase extends NameObj {
     public visible = false;
     public strength = 0.0;
 
+    public isOn(): boolean {
+        return this.visible || this.active;
+    }
+
     public calcAnim(sceneObjHolder: SceneObjHolder): void {
         const strengthAdj = getDeltaTimeFrames(sceneObjHolder.viewerInput) / 30.0;
 
@@ -268,7 +272,7 @@ export class BloomEffect extends ImageEffectBase {
     }
 
     public pushPassesBloom(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, bloomObjectsTargetID: number, resultBlendTargetID: number): void {
-        if (!this.active && !this.visible)
+        if (!this.isOn())
             return;
 
         const device = sceneObjHolder.modelCache.device;
@@ -475,7 +479,7 @@ export class BloomEffectSimple extends ImageEffectBase {
     }
 
     public pushPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, resultBlendTargetID: number): void {
-        if (!this.active && !this.visible)
+        if (!this.isOn())
             return;
 
         const device = sceneObjHolder.modelCache.device;
@@ -632,7 +636,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
     }
 
     public pushPasses(sceneObjHolder: SceneObjHolder, sceneGraphBuilder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, resultBlendTargetID: number): void {
-        if (!this.active && !this.visible)
+        if (!this.isOn())
             return;
 
         const device = sceneObjHolder.modelCache.device;
@@ -867,8 +871,8 @@ class ImageEffectDirector extends NameObj {
         connectToSceneImageEffectMovement(sceneObjHolder, this);
     }
 
-    public isOnNormalBloom(sceneObjHolder: SceneObjHolder): boolean {
-        return this.currentEffect === this.stateBloomNormal.getEffect(sceneObjHolder);
+    public isNormalBloomOn(sceneObjHolder: SceneObjHolder): boolean {
+        return sceneObjHolder.bloomEffect !== null && sceneObjHolder.bloomEffect.isOn();
     }
 
     public turnOnNormal(sceneObjHolder: SceneObjHolder): void {
