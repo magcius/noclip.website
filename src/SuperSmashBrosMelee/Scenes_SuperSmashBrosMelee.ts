@@ -7,7 +7,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { SceneDesc, SceneContext } from "../SceneBase";
 import { HSD_ArchiveParse, HSD_JObjLoadJoint, HSD_JObjRoot, HSD_Archive_FindPublic, HSD_AObjLoadAnimJoint, HSD_AObjLoadMatAnimJoint, HSD_AObjLoadShapeAnimJoint, HSD_Archive, HSD_LoadContext, HSD_LoadContext__ResolvePtr, HSD_LoadContext__ResolveSymbol } from "./SYSDOLPHIN";
 import { colorNewFromRGBA8 } from "../Color";
-import { assertExists, assert, fallbackUndefined } from "../util";
+import { assertExists, assert, nullify } from "../util";
 import { Melee_ftData_Load, Melee_SplitDataAJ, Melee_figatree_Load, figatree, ftData } from "./Melee_ft";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
@@ -293,7 +293,7 @@ class MeleeMapDesc implements SceneDesc {
             if (bg_gobj.jobj === null)
                 continue;
             const bg = new HSD_JObjRoot_Instance(scene.modelCache.loadJObjRoot(bg_gobj.jobj));
-            bg.addAnimAll(fallbackUndefined(bg_gobj.anim[0], null), fallbackUndefined(bg_gobj.matAnim[0], null), fallbackUndefined(bg_gobj.shapeAnim[0], null));
+            bg.addAnimAll(nullify(bg_gobj.anim[0]), nullify(bg_gobj.matAnim[0]), nullify(bg_gobj.shapeAnim[0]));
             scene.jobjRoots.push(bg);
         }
 

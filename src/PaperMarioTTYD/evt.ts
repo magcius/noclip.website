@@ -3,7 +3,7 @@
 // https://github.com/PistonMiner/ttyd-tools/blob/master/ttyd-tools/docs/ttyd-opc-summary.txt
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { hexzero0x, hexzero, decodeString, fallbackUndefined, readString, assert } from "../util";
+import { hexzero0x, hexzero, decodeString, fallbackUndefined, readString, assert, nullify } from "../util";
 import { WorldRenderer } from "./render";
 
 enum op {
@@ -154,7 +154,7 @@ export class evt_map {
     }
 
     public getSymbol(addr: number): evt_sym | null {
-        return fallbackUndefined(this.symbols.get(addr), null);
+        return nullify(this.symbols.get(addr));
     }
 }
 
