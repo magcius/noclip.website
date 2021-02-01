@@ -13,7 +13,6 @@ import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import * as TPL from "../PaperMarioTTYD/tpl";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { mat4 } from "gl-matrix";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { LoopMode as J3DLoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { LoopMode as NW4RLoopMode } from "../rres/brres";
@@ -135,7 +134,6 @@ class LayoutPaneInfo {
     }
 }
 
-const scratchDrawInfo = new LayoutDrawInfo();
 class LayoutManager {
     private layoutHolder: LayoutHolder;
     private animations = new Map<string, LayoutAnimation>();
@@ -220,14 +218,11 @@ class LayoutManager {
             this.groupCtrl[i].calcAnim(sceneObjHolder);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
         if (this.isHidden)
             return;
 
-        mat4.identity(scratchDrawInfo.viewMatrix);
-        scratchDrawInfo.alpha = 1.0;
-
-        this.layout.draw(sceneObjHolder.modelCache.device, renderInstManager, scratchDrawInfo);
+        this.layout.draw(sceneObjHolder.modelCache.device, renderInstManager, drawInfo);
     }
 }
 
@@ -291,11 +286,11 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         this.layoutManager.calcAnim(sceneObjHolder);
     }
 
-    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
+    public drawLayout(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
         if (!this.visibleAlive || this.layoutManager === null)
             return;
 
-        this.layoutManager.draw(sceneObjHolder, renderInstManager);
+        this.layoutManager.draw(sceneObjHolder, renderInstManager, drawInfo);
     }
 
     public startAnim(animName: string, index: number = 0): void {

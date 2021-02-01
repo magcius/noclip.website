@@ -1,6 +1,7 @@
 
 import { mat4 } from "gl-matrix";
 import { TransparentBlack } from "../../Color";
+import { LayoutDrawInfo } from "../../Common/NW4R/lyt/Layout";
 import { GfxFormat } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../../gfx/render/GfxRenderGraph";
@@ -38,9 +39,9 @@ export class GalaxyMap extends LayoutActor {
         // initTicoIcon
     }
 
-    public drawForCapture(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager): void {
+    public drawForCapture(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
         // No difference in our case.
-        this.draw(sceneObjHolder, renderInstManager);
+        this.drawLayout(sceneObjHolder, renderInstManager, drawInfo);
     }
 
     private forceToGalaxyMap(sceneObjHolder: SceneObjHolder): void {
@@ -73,7 +74,9 @@ function connectToSceneLayoutOnPause(sceneObjHolder: SceneObjHolder, nameObj: Na
 }
 
 const scratchMatrix = mat4.create();
+const scratchDrawInfo = new LayoutDrawInfo();
 const sceneParams = new SceneParams();
+
 const enum GalaxyMapControllerNrv { Wait }
 export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
     private renderInstList = new GfxRenderInstList();
@@ -115,8 +118,12 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
         fillSceneParams(sceneParams, scratchMatrix, desc.width, desc.height);
         fillSceneParamsData(d, offs, sceneParams);
 
-        this.galaxyMapBackground.draw(sceneObjHolder, renderInstManager);
-        this.galaxyMap.drawForCapture(sceneObjHolder, renderInstManager);
+        scratchDrawInfo.aspectAdjust = true;
+        scratchDrawInfo.aspectAdjustScaleX = 0.75;
+        scratchDrawInfo.aspectAdjustScaleY = 1.0;
+
+        this.galaxyMapBackground.drawLayout(sceneObjHolder, renderInstManager, scratchDrawInfo);
+        this.galaxyMap.drawForCapture(sceneObjHolder, renderInstManager, scratchDrawInfo);
 
         renderInstManager.popTemplateRenderInst();
     }

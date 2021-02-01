@@ -415,7 +415,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                 for (let i = 0; i < indirectTextureMatrixCount; i++) {
                     const textureMatrix = {} as RLYTTextureMatrix;
                     materialIdx += parseBRLYT_TextureMatrix(textureMatrix, buffer, materialIdx);
-                    textureMatrices.push(textureMatrix);
+                    indirectTextureMatrices.push(textureMatrix);
                 }
 
                 for (let i = 0; i < indirectTextureStageCount; i++) {
@@ -485,7 +485,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                     const indTexStage: GX.IndTexStageID = indB0;
                     const indFormat: GX.IndTexFormat = (indB3 >>> 0) & 0x03;
                     const indBiasSel: GX.IndTexBiasSel = (indB1 >>> 0) & 0x07;
-                    const indMtxID: GX.IndTexMtxID = (indB1 >>> 0) & 0x03;
+                    const indMtxID: GX.IndTexMtxID = (indB1 >>> 3) & 0x0F;
                     const indWrapS: GX.IndTexWrap = (indB2 >>> 0) & 0x07;
                     const indWrapT: GX.IndTexWrap = (indB2 >>> 3) & 0x07;
                     const indAddPrev = !!((indB3 >>> 2) & 0x01);
@@ -946,6 +946,10 @@ function sampleAnimationDataStep(frames: RLANKeyframe[], time: number): number {
 export class LayoutDrawInfo {
     public viewMatrix = mat4.create();
     public alpha: number = 1.0;
+
+    public aspectAdjust: boolean = false;
+    public aspectAdjustScaleX: number = 1.0;
+    public aspectAdjustScaleY: number = 1.0;
 }
 
 interface LayoutFont {
@@ -984,6 +988,7 @@ export class LayoutPane {
     public userData: string;
     public alpha = 1.0;
     public propagateAlpha = false;
+    public aspectAdjust = false;
     public basePosition: RLYTBasePosition;
     public translation = vec3.create();
     public rotation = vec3.create();
@@ -1020,6 +1025,7 @@ export class LayoutPane {
         this.userData = rlyt.userData;
         this.alpha = rlyt.alpha;
         this.propagateAlpha = !!(rlyt.flags & RLYTPaneFlags.PropagateAlpha);
+        this.aspectAdjust = !!(rlyt.flags & RLYTPaneFlags.AspectAdjust);
         this.basePosition = rlyt.basePosition;
         vec3.copy(this.translation, rlyt.translation);
         vec3.copy(this.rotation, rlyt.rotation);
@@ -1083,18 +1089,25 @@ export class LayoutPane {
             this.calcAnimationTrack(animation.tracks[i], time);
     }
 
-    public calcMatrix(parentMatrix: ReadonlyMat4): void {
+    public calcMatrix(drawInfo: Readonly<LayoutDrawInfo>, parentMatrix: ReadonlyMat4): void {
         if (!this.visible)
             return;
 
+        let scaleX = this.scale[0];
+        let scaleY = this.scale[1];
+        if (this.aspectAdjust && drawInfo.aspectAdjust) {
+            scaleX *= drawInfo.aspectAdjustScaleX;
+            scaleY *= drawInfo.aspectAdjustScaleY;
+        }
+
         computeModelMatrixSRT(scratchMatrix,
-            this.scale[0], this.scale[1], 1.0,
+            scaleX, scaleY, 1.0,
             this.rotation[0] * MathConstants.DEG_TO_RAD, this.rotation[1] * MathConstants.DEG_TO_RAD, this.rotation[2] * MathConstants.DEG_TO_RAD,
             this.translation[0], this.translation[1], this.translation[2]);
         mat4.mul(this.worldFromLocalMatrix, parentMatrix, scratchMatrix);
 
         for (let i = 0; i < this.children.length; i++)
-            this.children[i].calcMatrix(this.worldFromLocalMatrix);
+            this.children[i].calcMatrix(drawInfo, this.worldFromLocalMatrix);
     }
 
     public getBasePositionX(): number {
@@ -1645,7 +1658,7 @@ export class Layout {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
-        this.rootPane.calcMatrix(drawInfo.viewMatrix);
+        this.rootPane.calcMatrix(drawInfo, drawInfo.viewMatrix);
 
         this.ddraw.beginDraw();
         this.rootPane.draw(device, renderInstManager, this, this.ddraw, drawInfo.alpha);
