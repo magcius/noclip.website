@@ -380,6 +380,9 @@ export class GfxrTemporalTexture {
     private outputTexture: SingleSampledTexture | null = null;
 
     public setDescription(device: GfxDevice, desc: Readonly<GfxrRenderTargetDescription>): void {
+        if (this.outputTexture !== null && this.outputTexture.matchesDescription(desc))
+            return;
+
         // Updating the description will happen at the start of the frame,
         // so we need to keep the inputTexture alive (the previous frame's texture),
         // and create a new outputTexture.
@@ -395,6 +398,8 @@ export class GfxrTemporalTexture {
         assert(this.inputTexture === this.outputTexture);
 
         this.outputTexture = new SingleSampledTexture(device, desc);
+        if (this.inputTexture === null)
+            this.inputTexture = this.outputTexture;
     }
 
     public getTextureForSampling(): GfxTexture | null {
