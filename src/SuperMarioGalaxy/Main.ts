@@ -528,7 +528,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
         const imageEffectDirector = this.sceneObjHolder.imageEffectSystemHolder !== null ? this.sceneObjHolder.imageEffectSystemHolder.imageEffectDirector : null;
         if (imageEffectDirector !== null) {
-            if (imageEffectDirector.isOnNormalBloom(this.sceneObjHolder)) {
+            if (imageEffectDirector.isNormalBloomOn(this.sceneObjHolder)) {
                 // Render Bloom Objects
 
                 this.bloomObjectsDesc.copyDimensions(this.mainColorDesc);
