@@ -20,7 +20,7 @@ export const enum AreaFormType {
     CenterOriginCube,
     BaseOriginCube,
     Sphere,
-    Cylinder,
+    BaseOriginCylinder,
     Bowl,
 }
 
@@ -200,7 +200,7 @@ export class AreaObj extends NameObj {
             this.form = new AreaFormCube(sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
         else if (formType === AreaFormType.Sphere)
             this.form = new AreaFormSphere(sceneObjHolder, infoIter);
-        else if (formType === AreaFormType.Cylinder)
+        else if (formType === AreaFormType.BaseOriginCylinder)
             this.form = new AreaFormCylinder(sceneObjHolder, infoIter);
         else if (formType === AreaFormType.Bowl)
             this.form = new AreaFormBowl(sceneObjHolder, infoIter);
@@ -273,7 +273,7 @@ export class AreaObjMgr<T extends AreaObj> extends NameObj {
     }
 
     public find_in(v: ReadonlyVec3): T | null {
-        for (let i = 0; i < this.areaObj.length; i++)
+        for (let i = this.areaObj.length - 1; i >= 0; i--)
             if (this.areaObj[i].isInVolume(v))
                 return this.areaObj[i];
         return null;

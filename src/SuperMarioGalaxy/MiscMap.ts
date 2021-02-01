@@ -208,7 +208,7 @@ export function createWaterAreaCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: 
 }
 
 export function createWaterAreaCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCylinder);
 }
 
 export function createWaterAreaSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
@@ -450,7 +450,7 @@ export function createSwitchSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: S
 }
 
 export function createSwitchCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SwitchArea {
-    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCylinder);
 }
 //#endregion
 
@@ -522,6 +522,6 @@ export function createDeathSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: Sc
 }
 
 export function createDeathCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCylinder);
 }
 //#endregion

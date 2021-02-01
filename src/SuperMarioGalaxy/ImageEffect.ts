@@ -560,7 +560,7 @@ ${GfxShaderLibrary.invlerp}
 
 in vec2 v_TexCoord;
 
-${generateBlurFunction(`Blur`, `u_TextureColor`, 4, `u_Intensity`, glslGenerateFloat(1/4))}
+${generateBlurFunction(`Blur`, `u_TextureColor`, 4, `u_Intensity * 0.005`, glslGenerateFloat(1/4))}
 
 void main() {
     float t_DepthSample = texture(SAMPLER_2D(u_TextureDepth), v_TexCoord).r;
@@ -569,7 +569,7 @@ void main() {
     float t_BlurAmount = saturate(invlerp(t_DepthSample, u_BlurMinDist, u_BlurMaxDist));
 
     vec3 t_BlurredSample = Blur(v_TexCoord);
-    gl_FragColor = vec4(t_BlurredSample, t_BlurAmount);
+    gl_FragColor = vec4(t_BlurredSample, t_BlurAmount * u_Intensity);
 }
 `;
 }
@@ -629,7 +629,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         let offs = renderInst.allocateUniformBuffer(0, 4);
         const d = renderInst.mapUniformBufferF32(0);
 
-        const intensity = this.intensity * this.strength * 0.005;
+        const intensity = this.intensity * this.strength;
         const blurMaxDist = this.blurMaxDist / 0xFF;
         const blurMinDist = this.blurMinDist / 0xFF;
         offs += fillVec4(d, offs, intensity, blurMaxDist, blurMinDist, IS_DEPTH_REVERSED ? 1.0 : 0.0);
@@ -1068,13 +1068,13 @@ export class ImageEffectAreaMgr extends AreaObjMgr<ImageEffectArea> {
     private sort(): void {
         // Sort by highest priority.
         this.areaObj.sort((a, b) => {
-            return b.priority - a.priority;
+            return a.priority - b.priority;
         });
     }
 }
 
 export function createBloomCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
+    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CenterOriginCube);
 }
 
 export function createBloomSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
@@ -1082,11 +1082,11 @@ export function createBloomSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: Sc
 }
 
 export function createBloomCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+    return new BloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCylinder);
 }
 
 export function createSimpleBloomCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new SimpleBloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
+    return new SimpleBloomArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.CenterOriginCube);
 }
 
 export function createDepthOfFieldCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
