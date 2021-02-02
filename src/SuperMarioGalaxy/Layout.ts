@@ -1,5 +1,5 @@
 
-import { getDeltaTimeFrames, SceneObjHolder } from "./Main";
+import { getDeltaTimeFrames, SceneObj, SceneObjHolder } from "./Main";
 import { NameObj } from "./NameObj";
 import { Spine } from "./Spine";
 import { RLYT, RLAN, parseBRLYT, parseBRLAN, Layout, LayoutDrawInfo, LayoutAnimation, LayoutPane } from "../Common/NW4R/lyt/Layout";
@@ -16,14 +16,14 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { LoopMode as J3DLoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { LoopMode as NW4RLoopMode } from "../rres/brres";
+import { parseBRFNT, RFNT } from "../Common/NW4R/lyt/Font";
 
 export class LayoutHolder {
     public rlytTable = new Map<string, RLYT>();
     public rlanTable = new Map<string, RLAN>();
     public timgTable = new Map<string, BTIData>();
-    // public rfntTable = new Map<string, any>();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, layoutName: string, public arc: JKRArchive) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private gameSystemFontHolder: GameSystemFontHolder, layoutName: string, public arc: JKRArchive) {
         initEachResTable(this.arc, this.rlytTable, ['.brlyt'], (file) => parseBRLYT(file.buffer));
         initEachResTable(this.arc, this.rlanTable, ['.brlan'], (file) => parseBRLAN(file.buffer));
         initEachResTable(this.arc, this.timgTable, ['.tpl'], (file) => {
@@ -36,6 +36,10 @@ export class LayoutHolder {
 
     public fillTextureByName(m: TextureMapping, name: string): void {
         this.timgTable.get(name.toLowerCase())!.fillTextureMapping(m);
+    }
+
+    public getFontByName(name: string) {
+        return null!;
     }
 
     public destroy(device: GfxDevice): void {
@@ -146,7 +150,9 @@ class LayoutManager {
     constructor(sceneObjHolder: SceneObjHolder, layoutName: string, numRootAnm: number) {
         const device = sceneObjHolder.modelCache.device, cache = sceneObjHolder.modelCache.cache;
 
-        this.layoutHolder = sceneObjHolder.modelCache.getLayoutHolder(layoutName);
+        sceneObjHolder.create(SceneObj.GameSystemFontHolder);
+        this.layoutHolder = sceneObjHolder.modelCache.getLayoutHolder(sceneObjHolder.gameSystemFontHolder!, layoutName);
+
         const layoutRes = assertExists(getRes(this.layoutHolder.rlytTable, layoutName));
         this.layout = new Layout(device, cache, layoutRes, this.layoutHolder);
         this.layoutHolder.rlanTable.forEach((rlan, key) => {
@@ -324,6 +330,10 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         const frameCtrl = this.layoutManager!.getPaneCtrl().getFrameCtrl(index);
         this.setAnimFrameAndStop(frameCtrl.endFrame, index);
     }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        GameSystemFontHolder.requestArchives(sceneObjHolder);
+    }
 }
 
 export function hideLayout(actor: LayoutActor): void {
@@ -334,4 +344,19 @@ export function hideLayout(actor: LayoutActor): void {
 export function showLayout(actor: LayoutActor): void {
     actor.isStopDraw = false;
     actor.isStopCalcAnim = false;
+}
+
+export class GameSystemFontHolder extends NameObj {
+    private rfntTable = new Map<string, RFNT>();
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'GameSystemFontHolder');
+
+        const arc = sceneObjHolder.modelCache.getLayoutData('Font');
+        initEachResTable(arc, this.rfntTable, ['.brfnt'], (file) => parseBRFNT(file.buffer));
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestLayoutData('Font');
+    }
 }

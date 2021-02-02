@@ -48,7 +48,7 @@ import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
 import { GfxrRenderTargetDescription, GfxrRenderGraph, GfxrAttachmentSlot, GfxrRenderGraphImpl, GfxrTemporalTexture, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 import { TransparentBlack } from '../Color';
-import { LayoutHolder } from './Layout';
+import { GameSystemFontHolder, LayoutHolder } from './Layout';
 import { GalaxyMapController } from './Actors/GalaxyMap';
 
 // Galaxy ticks at 60fps.
@@ -769,13 +769,12 @@ export class ModelCache {
         return resourceHolder;
     }
 
-    public getLayoutHolder(layoutName: string): LayoutHolder {
+    public getLayoutHolder(gameSystemFontHolder: GameSystemFontHolder, layoutName: string): LayoutHolder {
         if (this.archiveLayoutHolder.has(layoutName))
             return this.archiveLayoutHolder.get(layoutName)!;
 
         const arc = this.getLayoutData(layoutName);
-        const layoutHolder = new LayoutHolder(this.device, this.cache, layoutName, arc);
-        // this.textureListHolder.addTextures(layoutHolder.viewerTextures);
+        const layoutHolder = new LayoutHolder(this.device, this.cache, gameSystemFontHolder, layoutName, arc);
         this.archiveLayoutHolder.set(layoutName, layoutHolder);
         return layoutHolder;
     }
@@ -963,6 +962,7 @@ export const enum SceneObj {
 
     // Noclip additions
     GalaxyNameSortTable            = 0xA0,
+    GameSystemFontHolder           = 0xA1,
 }
 
 export class SceneObjHolder {
@@ -1011,7 +1011,10 @@ export class SceneObjHolder {
     public miniatureGalaxyHolder: MiniatureGalaxyHolder | null = null;
     public priorDrawAirHolder: PriorDrawAirHolder | null = null;
     public galaxyMapController: GalaxyMapController | null = null;
+
+    // noclip additions -- some of these are singletons in the original game.
     public galaxyNameSortTable: GalaxyNameSortTable | null = null;
+    public gameSystemFontHolder: GameSystemFontHolder | null = null;
 
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
@@ -1102,6 +1105,8 @@ export class SceneObjHolder {
             return this.galaxyMapController;
         else if (sceneObj === SceneObj.GalaxyNameSortTable)
             return this.galaxyNameSortTable;
+        else if (sceneObj === SceneObj.GameSystemFontHolder)
+            return this.gameSystemFontHolder;
         return null;
     }
 
@@ -1174,6 +1179,8 @@ export class SceneObjHolder {
             this.galaxyMapController = new GalaxyMapController(this);
         else if (sceneObj === SceneObj.GalaxyNameSortTable)
             this.galaxyNameSortTable = new GalaxyNameSortTable(this);
+        else if (sceneObj === SceneObj.GameSystemFontHolder)
+            this.gameSystemFontHolder = new GameSystemFontHolder(this);
     }
 
     public requestArchives(): void {

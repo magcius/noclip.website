@@ -254,8 +254,6 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
     const rootSectionOffs = view.getUint16(0x0C);
     const numSections = view.getUint16(0x0E);
 
-    let tableIdx = rootSectionOffs + 0x00;
-
     let originType: number = 0;
     let width: number = 0;
     let height: number = 0;
@@ -266,6 +264,8 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
     const groupStack: RLYTGroup[] = [];
     let rootPaneTemp: RLYTPaneBase | null = null;
     let rootGroupTemp: RLYTGroup | null = null;
+
+    let tableIdx = rootSectionOffs + 0x00;
 
     for (let i = 0; i < numSections; i++) {
         // blockSize includes the header.
@@ -952,19 +952,22 @@ export class LayoutDrawInfo {
 }
 
 interface LayoutFont {
-    // TODO(jstpierre): Figure out our font system.
 }
 
 interface LayoutResourceCollection {
     fillTextureByName(dst: TextureMapping, name: string): void;
+    getFontByName(name: string): LayoutFont;
 }
 
 export class LayoutResourceCollectionBasic {
     public textureHolder = new TPLTextureHolder();
-    public fonts: LayoutFont[] = [];
 
     public fillTextureByName(dst: TextureMapping, name: string): void {
         this.textureHolder.fillTextureMapping(dst, name);
+    }
+
+    public getFontByName(name: string): LayoutFont {
+        return null!;
     }
 
     public addTPL(device: GfxDevice, tpl: TPL): void {
@@ -1272,7 +1275,34 @@ export class LayoutPicture extends LayoutPane {
 }
 
 export class LayoutTextbox extends LayoutPane {
-    // TODO(jstpierre): Font drawing?
+    public maxLength: number;
+    public materialIndex: number;
+    public fontIndex: number;
+    public textPosition: number;
+    public textAlignment: RLYTTextAlignment;
+    public colorT: Color;
+    public colorB: Color;
+    public fontWidth: number;
+    public fontHeight: number;
+    public charWidth: number;
+    public charHeight: number;
+    public str: string;
+
+    public parse(rlyt: RLYTTextbox): void {
+        super.parse(rlyt);
+        this.maxLength = rlyt.maxLength;
+        this.materialIndex = rlyt.materialIndex;
+        this.fontIndex = rlyt.fontIndex;
+        this.textPosition = rlyt.textPosition;
+        this.textAlignment = rlyt.textAlignment;
+        this.colorT = rlyt.colorT;
+        this.colorB = rlyt.colorB;
+        this.fontWidth = rlyt.fontWidth;
+        this.fontHeight = rlyt.fontHeight;
+        this.charWidth = rlyt.charWidth;
+        this.charHeight = rlyt.charHeight;
+        this.str = rlyt.str;
+    }
 }
 
 const scratchVec4 = vec4.create();
@@ -1625,12 +1655,14 @@ class LayoutMaterial {
 
 export class Layout {
     private ddraw = new TDDraw();
+    private fontList: RLYTTextureBinding[];
     public materials: LayoutMaterial[];
     public rootPane: LayoutPane;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private rlyt: RLYT, private resourceCollection: LayoutResourceCollection) {
-        this.materials = this.rlyt.mat1.map((material) => new LayoutMaterial(device, cache, material, this.rlyt.txl1, resourceCollection));
-        this.rootPane = LayoutPane.parse(this.rlyt.rootPane);
+    constructor(device: GfxDevice, cache: GfxRenderCache, rlyt: RLYT, resourceCollection: LayoutResourceCollection) {
+        this.materials = rlyt.mat1.map((material) => new LayoutMaterial(device, cache, material, rlyt.txl1, resourceCollection));
+        this.fontList = rlyt.fnl1.slice();
+        this.rootPane = LayoutPane.parse(rlyt.rootPane);
 
         const ddraw = this.ddraw;
         ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);

@@ -27,6 +27,7 @@ export class GalaxyMapBackground extends LayoutActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        super.requestArchives(sceneObjHolder);
         sceneObjHolder.modelCache.requestLayoutData('MapGalaxyBg');
     }
 }
@@ -86,6 +87,7 @@ class GalaxyMapIcon extends LayoutActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        super.requestArchives(sceneObjHolder);
         sceneObjHolder.modelCache.requestLayoutData('MapGalaxyIcon');
     }
 }
@@ -112,6 +114,7 @@ class GalaxyMapMarioIcon extends LayoutActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        super.requestArchives(sceneObjHolder);
         sceneObjHolder.modelCache.requestLayoutData('IconMario');
     }
 }
@@ -191,6 +194,7 @@ class GalaxyMap extends LayoutActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        super.requestArchives(sceneObjHolder);
         GalaxyNameSortTable.requestArchives(sceneObjHolder);
         GalaxyMapIcon.requestArchives(sceneObjHolder);
         GalaxyMapMarioIcon.requestArchives(sceneObjHolder);
@@ -281,6 +285,7 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        super.requestArchives(sceneObjHolder);
         GalaxyMapBackground.requestArchives(sceneObjHolder);
         GalaxyMap.requestArchives(sceneObjHolder);
     }
