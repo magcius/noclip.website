@@ -14,7 +14,6 @@ import { TextureMapping } from "../../../TextureHolder";
 import { TDDraw } from "../../../SuperMarioGalaxy/DDraw";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../../../gx/gx_render";
 import { TEX1_SamplerSub, translateSampler } from "../../JSYSTEM/JUTTexture";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../../../DebugJunk";
 import { getPointHermite } from "../../../Spline";
 import { arrayCopy } from "../../../gfx/platform/GfxPlatformUtil";
 import { LoopMode } from "../../../rres/brres";
@@ -168,11 +167,11 @@ function calcTextureMatrix(dst: mat4, scaleS: number, scaleT: number, rotation: 
 
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleT * -sinR;
-    dst[12] = translationS + 0.5 - (scaleS * cosR * 0.5) + (scaleS * sinR * 0.5);
+    dst[12] = translationS + 0.5 - (scaleS * cosR * 0.5) + (scaleT * sinR * 0.5);
 
     dst[1]  = scaleS *  sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = translationT + 0.5 - (scaleS * sinR * 0.5) - (scaleS * cosR * 0.5);
+    dst[13] = translationT + 0.5 - (scaleS * sinR * 0.5) - (scaleT * cosR * 0.5);
 }
 
 function parseBRLYT_PaneBase(dst: RLYTPaneBase, buffer: ArrayBufferSlice, offs: number): number {
@@ -348,10 +347,10 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                 for (let i = 0; i < samplerCount; i++, materialIdx += 0x04) {
                     const textureIndex = view.getUint16(materialIdx + 0x00);
                     const flags = view.getUint16(materialIdx + 0x02);
-                    const wrapS: GX.WrapMode = (flags >>> 0) & 0x03;
-                    const wrapT: GX.WrapMode = (flags >>> 8) & 0x03;
-                    const minFilter: GX.TexFilter = ((flags >>>  2) & 0x03) + 1;
-                    const magFilter: GX.TexFilter = ((flags >>> 10) & 0x03) + 1;
+                    const wrapS: GX.WrapMode = (flags >>> 8) & 0x03;
+                    const wrapT: GX.WrapMode = (flags >>> 0) & 0x03;
+                    const minFilter: GX.TexFilter = ((flags >>> 10) & 0x03) + 1;
+                    const magFilter: GX.TexFilter = ((flags >>>  2) & 0x03) + 1;
                     const minLOD = 0;
                     const maxLOD = 100;
                     samplers.push({ textureIndex, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD });

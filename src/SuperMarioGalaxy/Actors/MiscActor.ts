@@ -7578,10 +7578,11 @@ export class AstroDomeSky extends LiveActor<AstroDomeSkyNrv> {
     }
 }
 
-export class GalaxyNameSortTable {
-    private infoIter: JMapInfoIter;
+export class GalaxyNameSortTable extends NameObj {
+    public infoIter: JMapInfoIter;
 
     constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, 'GalaxyNameSortTable');
         const buffer = sceneObjHolder.modelCache.getExtraData(`ExtraNoclipData/GalaxyNameSortTable.bcsv`);
         this.infoIter = createCsvParser(buffer);
     }
@@ -7621,8 +7622,7 @@ export class MiniatureGalaxyHolder extends NameObj {
     }
 
     public calcIndex(sceneObjHolder: SceneObjHolder, galaxy: MiniatureGalaxy): number {
-        if (sceneObjHolder.galaxyNameSortTable === null)
-            sceneObjHolder.galaxyNameSortTable = new GalaxyNameSortTable(sceneObjHolder);
+        sceneObjHolder.create(SceneObj.GalaxyNameSortTable);
 
         const galaxyNameSortTable = sceneObjHolder.galaxyNameSortTable!;
         const powerStarNum = galaxyNameSortTable.getPowerStarNumToOpenGalaxy(galaxy.galaxyName);

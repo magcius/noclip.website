@@ -960,6 +960,9 @@ export const enum SceneObj {
     MoviePlayingSequenceHolder     = 0x78,
     PrologueHolder                 = 0x79,
     StaffRoll                      = 0x7A,
+
+    // Noclip additions
+    GalaxyNameSortTable            = 0xA0,
 }
 
 export class SceneObjHolder {
@@ -1008,10 +1011,10 @@ export class SceneObjHolder {
     public miniatureGalaxyHolder: MiniatureGalaxyHolder | null = null;
     public priorDrawAirHolder: PriorDrawAirHolder | null = null;
     public galaxyMapController: GalaxyMapController | null = null;
+    public galaxyNameSortTable: GalaxyNameSortTable | null = null;
 
     // Other singletons that are not SceneObjHolder.
     public drawSyncManager = new DrawSyncManager();
-    public galaxyNameSortTable: GalaxyNameSortTable | null = null;
     public sceneNameObjListExecutor = new SceneNameObjListExecutor();
     public nameObjHolder = new NameObjHolder();
 
@@ -1097,6 +1100,8 @@ export class SceneObjHolder {
             return this.priorDrawAirHolder;
         else if (sceneObj === SceneObj.GalaxyMapController)
             return this.galaxyMapController;
+        else if (sceneObj === SceneObj.GalaxyNameSortTable)
+            return this.galaxyNameSortTable;
         return null;
     }
 
@@ -1167,6 +1172,8 @@ export class SceneObjHolder {
             this.priorDrawAirHolder = new PriorDrawAirHolder(this);
         else if (sceneObj === SceneObj.GalaxyMapController)
             this.galaxyMapController = new GalaxyMapController(this);
+        else if (sceneObj === SceneObj.GalaxyNameSortTable)
+            this.galaxyNameSortTable = new GalaxyNameSortTable(this);
     }
 
     public requestArchives(): void {

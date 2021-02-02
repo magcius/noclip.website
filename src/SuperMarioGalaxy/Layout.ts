@@ -73,7 +73,7 @@ class LayoutAnmPlayer {
 }
 
 class LayoutPaneCtrl {
-    private pane: LayoutPane;
+    public pane: LayoutPane;
     private anmPlayer: LayoutAnmPlayer[] = [];
 
     constructor(layoutManager: LayoutManager, paneName: string, numAnm: number) {
@@ -165,7 +165,7 @@ class LayoutManager {
             this.createAndAddPaneCtrl(this.layout.rootPane.name, numRootAnm);
     }
 
-    private createAndAddPaneCtrl(name: string, numAnm: number): void {
+    public createAndAddPaneCtrl(name: string, numAnm: number): void {
         const index = this.getIndexOfPane(name);
         const paneInfo = this.paneInfo[index];
         if (paneInfo.paneCtrl === null)
@@ -185,11 +185,23 @@ class LayoutManager {
         throw "whoops";
     }
 
-    public getPaneCtrl(name: string | null = null): LayoutPaneCtrl {
+    private getPaneInfo(name: string | null = null): LayoutPaneInfo {
         if (name === null)
-            return assertExists(this.paneInfo[0].paneCtrl);
+            return this.paneInfo[0];
         else
-            return assertExists(this.paneInfo[this.getIndexOfPane(name)].paneCtrl);
+            return this.paneInfo[this.getIndexOfPane(name)];
+    }
+
+    public getPaneCtrl(name: string | null = null): LayoutPaneCtrl {
+        return assertExists(this.getPaneInfo(name).paneCtrl);
+    }
+
+    public getPane(name: string | null = null): LayoutPane {
+        return this.getPaneInfo(name).pane;
+    }
+
+    public getRootPane(): LayoutPane {
+        return this.getPane(null);
     }
 
     public getAnimTransform(name: string): LayoutAnimation | null {
@@ -231,6 +243,9 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
     public spine: Spine<TNerve> | null = null;
     public layoutManager: LayoutManager | null = null;
 
+    public isStopDraw = false;
+    public isStopCalcAnim = false;
+
     constructor(sceneObjHolder: SceneObjHolder, name: string) {
         super(sceneObjHolder, name);
     }
@@ -240,8 +255,8 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         this.spine.initNerve(nerve);
     }
 
-    public initLayoutManager(sceneObjHolder: SceneObjHolder, name: string, rootIndex: number): void {
-        this.layoutManager = new LayoutManager(sceneObjHolder, name, rootIndex);
+    public initLayoutManager(sceneObjHolder: SceneObjHolder, name: string, numAnm: number): void {
+        this.layoutManager = new LayoutManager(sceneObjHolder, name, numAnm);
     }
 
     public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
@@ -280,14 +295,14 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
     }
 
     public calcAnim(sceneObjHolder: SceneObjHolder): void {
-        if (!this.visibleAlive || this.layoutManager === null)
+        if (this.isStopCalcAnim || !this.visibleAlive || this.layoutManager === null)
             return;
 
         this.layoutManager.calcAnim(sceneObjHolder);
     }
 
     public drawLayout(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
-        if (!this.visibleAlive || this.layoutManager === null)
+        if (this.isStopDraw || !this.visibleAlive || this.layoutManager === null)
             return;
 
         this.layoutManager.draw(sceneObjHolder, renderInstManager, drawInfo);
@@ -309,4 +324,14 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         const frameCtrl = this.layoutManager!.getPaneCtrl().getFrameCtrl(index);
         this.setAnimFrameAndStop(frameCtrl.endFrame, index);
     }
+}
+
+export function hideLayout(actor: LayoutActor): void {
+    actor.isStopDraw = true;
+    actor.isStopCalcAnim = true;
+}
+
+export function showLayout(actor: LayoutActor): void {
+    actor.isStopDraw = false;
+    actor.isStopCalcAnim = false;
 }

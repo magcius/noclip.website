@@ -1,17 +1,19 @@
 
-import { mat4 } from "gl-matrix";
+import { mat4, vec2, vec3 } from "gl-matrix";
 import { TransparentBlack } from "../../Color";
-import { LayoutDrawInfo } from "../../Common/NW4R/lyt/Layout";
+import { Layout, LayoutDrawInfo } from "../../Common/NW4R/lyt/Layout";
 import { GfxFormat } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../../gfx/render/GfxRenderGraph";
 import { GX_Program } from "../../gx/gx_material";
 import { fillSceneParams, fillSceneParamsData, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
-import { computeProjectionMatrixFromCuboid } from "../../MathHelpers";
+import { computeProjectionMatrixFromCuboid, getMatrixTranslation } from "../../MathHelpers";
+import { assertExists } from "../../util";
 import { connectToScene } from "../ActorUtil";
-import { LayoutActor } from "../Layout";
-import { SceneObjHolder } from "../Main";
+import { hideLayout, LayoutActor, showLayout } from "../Layout";
+import { SceneObj, SceneObjHolder } from "../Main";
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj } from "../NameObj";
+import { GalaxyNameSortTable } from "./MiscActor";
 
 export class GalaxyMapBackground extends LayoutActor {
     constructor(sceneObjHolder: SceneObjHolder) {
@@ -29,19 +31,143 @@ export class GalaxyMapBackground extends LayoutActor {
     }
 }
 
-export class GalaxyMap extends LayoutActor {
+function setLayoutScalePosAtPaneScaleTrans(dst: LayoutActor, src: LayoutActor, paneName: string): void {
+    const srcPane = assertExists(src.layoutManager!.getPane(paneName));
+    const dstPane = dst.layoutManager!.getRootPane();
+    getMatrixTranslation(dstPane.translation, srcPane.worldFromLocalMatrix);
+    vec2.copy(dstPane.scale, srcPane.scale);
+}
+
+const enum GalaxyMapIconStatus { Hidden, Completed, Opened, CanOpen }
+class GalaxyMapIcon extends LayoutActor {
+    constructor(sceneObjHolder: SceneObjHolder, private galaxyName: string, private parent: LayoutActor, private mapPaneName: string) {
+        super(sceneObjHolder, 'GalaxyMapIcon');
+        this.initLayoutManager(sceneObjHolder, 'MapGalaxyIcon', 2);
+        this.layoutManager!.createAndAddPaneCtrl('GalaxyIcon', 1);
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+        setLayoutScalePosAtPaneScaleTrans(this, this.parent, this.mapPaneName);
+        super.calcAnim(sceneObjHolder);
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        this.syncStatus(sceneObjHolder);
+    }
+
+    private examineIconStatus(sceneObjHolder: SceneObjHolder): GalaxyMapIconStatus {
+        return GalaxyMapIconStatus.Completed;
+    }
+
+    private isBlink(sceneObjHolder: SceneObjHolder, iconStatus: GalaxyMapIconStatus): boolean {
+        // if (this.isNewGalaxyDiscover)
+
+        if (iconStatus === GalaxyMapIconStatus.Completed)
+            return false;
+
+        return true;
+    }
+
+    private syncStatus(sceneObjHolder: SceneObjHolder): void {
+        const iconStatus = this.examineIconStatus(sceneObjHolder);
+        if (iconStatus === GalaxyMapIconStatus.Hidden) {
+            hideLayout(this);
+        } else {
+            showLayout(this);
+            this.startAnim('Status');
+            this.setAnimFrameAndStop(iconStatus);
+
+            if (this.isBlink(sceneObjHolder, iconStatus))
+                this.startAnim('NewBlink', 1);
+            else
+                this.startAnim('NewWait', 1);
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestLayoutData('MapGalaxyIcon');
+    }
+}
+
+class GalaxyMapMarioIcon extends LayoutActor {
+    constructor(sceneObjHolder: SceneObjHolder, private parent: LayoutActor, private mapPaneName: string) {
+        super(sceneObjHolder, 'GalaxyMapIconMario');
+        this.initLayoutManager(sceneObjHolder, 'IconMario', 2);
+
+        this.startAnim('Luigi', 1);
+        const isLuigi = false;
+        this.setAnimFrameAndStop(isLuigi ? 1 : 0, 1);
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+        setLayoutScalePosAtPaneScaleTrans(this, this.parent, this.mapPaneName);
+        this.layoutManager!.getRootPane().alpha = this.parent.layoutManager!.getPane(this.mapPaneName).alpha;
+        super.calcAnim(sceneObjHolder);
+    }
+
+    public showBlink(sceneObjHolder: SceneObjHolder): void {
+        this.makeActorAppeared(sceneObjHolder);
+        this.startAnim('Wait', 0);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestLayoutData('IconMario');
+    }
+}
+
+class GalaxyMap extends LayoutActor {
+    private galaxyMapIcon: GalaxyMapIcon[] = [];
+    private galaxyMapMarioIcon: GalaxyMapMarioIcon;
+
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'GalaxyMap');
         this.initLayoutManager(sceneObjHolder, 'MapGrandGalaxy', 1);
 
         // initDomeIcon
-        // initMarioIcon
+        this.initMarioIcon(sceneObjHolder);
         // initTicoIcon
+        this.initPaneCtrlPointing(sceneObjHolder);
+    }
+
+    private initMarioIcon(sceneObjHolder: SceneObjHolder): void {
+        const mapPaneName = 'Mario7';
+        this.galaxyMapMarioIcon = new GalaxyMapMarioIcon(sceneObjHolder, this, mapPaneName);
+    }
+
+    private initPaneCtrlPointing(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.create(SceneObj.GalaxyNameSortTable);
+
+        sceneObjHolder.galaxyNameSortTable!.infoIter.mapRecords((infoIter) => {
+            const mapPaneName = infoIter.getValueString('MapPaneName');
+            if (mapPaneName === null || mapPaneName === '' || mapPaneName === 'dummy')
+                return;
+
+            const galaxyName = assertExists(infoIter.getValueString('name'));
+            this.layoutManager!.createAndAddPaneCtrl(mapPaneName, 1);
+            this.galaxyMapIcon.push(new GalaxyMapIcon(sceneObjHolder, galaxyName, this, mapPaneName));
+        });
+    }
+
+    public makeActorAppeared(sceneObjHolder: SceneObjHolder): void {
+        super.makeActorAppeared(sceneObjHolder);
+        for (let i = 0; i < this.galaxyMapIcon.length; i++)
+            this.galaxyMapIcon[i].makeActorAppeared(sceneObjHolder);
+        this.galaxyMapMarioIcon.showBlink(sceneObjHolder);
+    }
+
+    public calcAnim(sceneObjHolder: SceneObjHolder): void {
+        super.calcAnim(sceneObjHolder);
+        for (let i = 0; i < this.galaxyMapIcon.length; i++)
+            this.galaxyMapIcon[i].calcAnim(sceneObjHolder);
+        this.galaxyMapMarioIcon.calcAnim(sceneObjHolder);
     }
 
     public drawForCapture(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
-        // No difference in our case.
         this.drawLayout(sceneObjHolder, renderInstManager, drawInfo);
+        for (let i = 0; i < this.galaxyMapIcon.length; i++)
+            this.galaxyMapIcon[i].drawLayout(sceneObjHolder, renderInstManager, drawInfo);
+        this.galaxyMapMarioIcon.drawLayout(sceneObjHolder, renderInstManager, drawInfo);
     }
 
     private forceToGalaxyMap(sceneObjHolder: SceneObjHolder): void {
@@ -65,6 +191,9 @@ export class GalaxyMap extends LayoutActor {
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        GalaxyNameSortTable.requestArchives(sceneObjHolder);
+        GalaxyMapIcon.requestArchives(sceneObjHolder);
+        GalaxyMapMarioIcon.requestArchives(sceneObjHolder);
         sceneObjHolder.modelCache.requestLayoutData('MapGrandGalaxy');
     }
 }
