@@ -95,7 +95,7 @@ export interface MipChain {
     fullTextureSize: number;
 }
 
-export function calcMipChain(texture: TextureInputGX, mipCount: number): MipChain {
+export function calcMipChain(texture: TextureInputGX, mipCount: number = texture.mipCount): MipChain {
     const mipLevels: TextureInputGX[] = [];
     const name = texture.name;
 

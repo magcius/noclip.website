@@ -203,7 +203,6 @@ export function loadTextureFromMipChain(device: GfxDevice, mipChain: GX_Texture.
     const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, firstMipLevel.width, firstMipLevel.height, mipChain.mipLevels.length));
     device.setResourceName(gfxTexture, mipChain.name);
 
-
     const promises: Promise<void>[] = [];
     for (let i = 0; i < mipChain.mipLevels.length; i++) {
         const level = i;

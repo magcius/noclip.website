@@ -1,12 +1,12 @@
 
 import ArrayBufferSlice from "../../../ArrayBufferSlice";
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../../../Color";
+import { Color, colorCopy, colorMultAlpha, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../../../Color";
 import { assert, assertExists, nArray, readString } from "../../../util";
 import * as GX from '../../../gx/gx_enum';
 import { mat4, ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
 import { computeModelMatrixSRT, MathConstants, saturate } from "../../../MathHelpers";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
-import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID } from "../../../gx/gx_material";
+import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID, GX_Program } from "../../../gx/gx_material";
 import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
 import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache";
@@ -19,6 +19,8 @@ import { arrayCopy } from "../../../gfx/platform/GfxPlatformUtil";
 import { LoopMode } from "../../../rres/brres";
 import { TPLTextureHolder } from "../../../PaperMarioTTYD/render";
 import { TPL } from "../../../PaperMarioTTYD/tpl";
+import { CharWriter, ResFont } from "./Font";
+import { fillMatrix4x3 } from "../../../gfx/helpers/UniformBufferHelpers";
 
 //#region BRLYT
 interface RLYTSampler extends TEX1_SamplerSub {
@@ -374,7 +376,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                     mb.setTexCoordGen(i, type, source, matrix);
                 }
 
-                let vertexColorEnabled = false;
+                let vertexColorEnabled: boolean;
                 if (hasChanCtrl) {
                     const matSrcColor: GX.ColorSrc = view.getUint8(materialIdx + 0x00);
                     const matSrcAlpha: GX.ColorSrc = view.getUint8(materialIdx + 0x01);
@@ -384,6 +386,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                     materialIdx += 0x04;
                 } else {
                     mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+                    vertexColorEnabled = true;
                 }
 
                 let colorMatReg: Color;
@@ -951,12 +954,9 @@ export class LayoutDrawInfo {
     public aspectAdjustScaleY: number = 1.0;
 }
 
-interface LayoutFont {
-}
-
 interface LayoutResourceCollection {
     fillTextureByName(dst: TextureMapping, name: string): void;
-    getFontByName(name: string): LayoutFont;
+    getFontByName(name: string): ResFont;
 }
 
 export class LayoutResourceCollectionBasic {
@@ -966,7 +966,7 @@ export class LayoutResourceCollectionBasic {
         this.textureHolder.fillTextureMapping(dst, name);
     }
 
-    public getFontByName(name: string): LayoutFont {
+    public getFontByName(name: string): ResFont {
         return null!;
     }
 
@@ -980,7 +980,6 @@ export class LayoutResourceCollectionBasic {
 }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
 
 const scratchMatrix = mat4.create();
 export class LayoutPane {
@@ -999,29 +998,29 @@ export class LayoutPane {
     public height: number;
     public worldFromLocalMatrix = mat4.create();
 
-    public static parse(rlyt: RLYTPaneBase): LayoutPane {
+    public static parse(rlyt: RLYTPaneBase, layout: Layout): LayoutPane {
         if (rlyt.kind === RLYTPaneKind.Pane || rlyt.kind === RLYTPaneKind.Bounding) {
             const pane = new LayoutPane();
-            pane.parse(rlyt);
+            pane.parse(rlyt, layout);
             return pane;
         } else if (rlyt.kind === RLYTPaneKind.Picture) {
             const picture = new LayoutPicture();
-            picture.parse(rlyt as RLYTPicture);
+            picture.parse(rlyt as RLYTPicture, layout);
             return picture;
         } else if (rlyt.kind === RLYTPaneKind.Textbox) {
             const textbox = new LayoutTextbox();
-            textbox.parse(rlyt as RLYTTextbox);
+            textbox.parse(rlyt as RLYTTextbox, layout);
             return textbox;
         } else if (rlyt.kind === RLYTPaneKind.Window) {
             const window = new LayoutWindow();
-            window.parse(rlyt as RLYTWindow);
+            window.parse(rlyt as RLYTWindow, layout);
             return window;
         } else {
             throw "whoops";
         }
     }
 
-    public parse(rlyt: RLYTPaneBase): void {
+    public parse(rlyt: RLYTPaneBase, layout: Layout): void {
         this.visible = !!(rlyt.flags & RLYTPaneFlags.Visible);
         this.name = rlyt.name;
         this.userData = rlyt.userData;
@@ -1036,7 +1035,7 @@ export class LayoutPane {
         this.height = rlyt.height;
 
         for (let i = 0; i < rlyt.children.length; i++)
-            this.children.push(LayoutPane.parse(rlyt.children[i]));
+            this.children.push(LayoutPane.parse(rlyt.children[i], layout));
     }
 
     public findPaneByName(name: string): LayoutPane | null {
@@ -1136,6 +1135,12 @@ export class LayoutPane {
             throw "whoops";
     }
 
+    protected setOnRenderInst(renderInst: GfxRenderInst): void {
+        let offs = renderInst.allocateUniformBuffer(GX_Program.ub_DrawParams, 16);
+        const d = renderInst.mapUniformBufferF32(GX_Program.ub_DrawParams);
+        offs += fillMatrix4x3(d, offs, this.worldFromLocalMatrix);
+    }
+
     protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
     }
 
@@ -1180,22 +1185,19 @@ function drawQuad(ddraw: TDDraw, x: number, y: number, z: number, w: number, h: 
     }
 }
 
-function drawGetMaterial(layout: Layout, content: RLYTWindowContent): LayoutMaterial | null {
+function drawGetMaterial(layout: Layout, content: { materialIndex: number }): LayoutMaterial | null {
     const material = layout.materials[content.materialIndex];
     if (!material.visible)
         return null;
     return material;
 }
 
-function drawSubmitRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, pane: LayoutPane, material: LayoutMaterial): void {
-    material.fillMaterialParams(materialParams);
+function drawSubmitRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, material: LayoutMaterial, alpha: number): void {
+    material.fillMaterialParams(materialParams, alpha);
     material.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
     renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
 
-    mat4.copy(packetParams.u_PosMtx[0], pane.worldFromLocalMatrix);
-
     material.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-    material.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
     renderInstManager.submitRenderInst(renderInst);
 }
 
@@ -1213,8 +1215,8 @@ export class LayoutPicture extends LayoutPane {
     public vertexColors: Color[];
     public texCoords: ReadonlyVec2[][];
 
-    public parse(rlyt: RLYTPicture): void {
-        super.parse(rlyt);
+    public parse(rlyt: RLYTPicture, layout: Layout): void {
+        super.parse(rlyt, layout);
         parseWindowContent(this, rlyt);
     }
 
@@ -1269,8 +1271,11 @@ export class LayoutPicture extends LayoutPane {
         drawQuad(ddraw, baseX, baseY, baseZ, this.width, -this.height, vertexColors, alpha, this.texCoords);
         ddraw.end();
 
+        const template = renderInstManager.pushTemplateRenderInst();
+        this.setOnRenderInst(template);
         const renderInst = ddraw.makeRenderInst(device, renderInstManager);
-        drawSubmitRenderInst(device, renderInstManager, renderInst, this, material);
+        drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
+        renderInstManager.popTemplateRenderInst();
     }
 }
 
@@ -1288,8 +1293,10 @@ export class LayoutTextbox extends LayoutPane {
     public charHeight: number;
     public str: string;
 
-    public parse(rlyt: RLYTTextbox): void {
-        super.parse(rlyt);
+    private font: ResFont;
+
+    public parse(rlyt: RLYTTextbox, layout: Layout): void {
+        super.parse(rlyt, layout);
         this.maxLength = rlyt.maxLength;
         this.materialIndex = rlyt.materialIndex;
         this.fontIndex = rlyt.fontIndex;
@@ -1302,6 +1309,43 @@ export class LayoutTextbox extends LayoutPane {
         this.charWidth = rlyt.charWidth;
         this.charHeight = rlyt.charHeight;
         this.str = rlyt.str;
+
+        const fontName = layout.fontNames[this.fontIndex];
+        this.font = layout.resourceCollection.getFontByName(fontName);
+    }
+
+    protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+        const material = drawGetMaterial(layout, this);
+        if (material === null)
+            return;
+
+        if (alpha <= 0.0)
+            return;
+
+        if (this.str.length === 0)
+            return;
+
+        if (this.scale[0] <= 0.0 || this.scale[1] <= 0.0)
+            return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        this.setOnRenderInst(template);
+   
+        const charWriter = layout.charWriter;
+        charWriter.font = this.font;
+        charWriter.setFontSize(this.fontWidth, this.fontHeight);
+        colorMultAlpha(charWriter.colorT, this.colorT, alpha);
+        colorMultAlpha(charWriter.colorB, this.colorB, alpha);
+        colorCopy(charWriter.color0, material.colorRegisters[0]);
+        colorCopy(charWriter.color1, material.colorRegisters[1]);
+
+        // TODO(jstpierre): Multi-line / measurement / alignment
+        charWriter.cursor[0] = this.getBasePositionX();
+        charWriter.cursor[1] = this.getBasePositionY();
+
+        charWriter.drawString(device, renderInstManager, ddraw, this.str);
+
+        renderInstManager.popTemplateRenderInst();
     }
 }
 
@@ -1318,8 +1362,8 @@ export class LayoutWindow extends LayoutPane {
     private paddingT: number;
     private paddingB: number;
 
-    public parse(rlyt: RLYTWindow): void {
-        super.parse(rlyt);
+    public parse(rlyt: RLYTWindow, layout: Layout): void {
+        super.parse(rlyt, layout);
         parseWindowContent(this, rlyt);
 
         this.frames = rlyt.frames;
@@ -1422,7 +1466,7 @@ export class LayoutWindow extends LayoutPane {
         ddraw.end();
 
         const renderInst = ddraw.makeRenderInst(device, renderInstManager);
-        drawSubmitRenderInst(device, renderInstManager, renderInst, this, material);
+        drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
     }
 
     private getFrameMaterial_FrameFromPosition(position: RLYTBasePosition): RLYTWindowFrame {
@@ -1469,10 +1513,13 @@ export class LayoutWindow extends LayoutPane {
         ddraw.end();
 
         const renderInst = ddraw.makeRenderInst(device, renderInstManager);
-        drawSubmitRenderInst(device, renderInstManager, renderInst, this, material);
+        drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
     }
 
     protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        this.setOnRenderInst(template);
+
         this.drawContent(device, renderInstManager, layout, ddraw, alpha);
 
         if (this.frames.length === 1) {
@@ -1482,6 +1529,8 @@ export class LayoutWindow extends LayoutPane {
         } else {
             throw "whoops";
         }
+
+        renderInstManager.popTemplateRenderInst();
     }
 }
 
@@ -1618,7 +1667,7 @@ class LayoutMaterial {
         calcTextureMatrix(dst, textureMatrix.scaleS, textureMatrix.scaleT, textureMatrix.rotation, textureMatrix.translationS, textureMatrix.translationT);
     }
 
-    public fillMaterialParams(dst: MaterialParams): void {
+    public fillMaterialParams(dst: MaterialParams, alpha: number): void {
         colorCopy(dst.u_Color[ColorKind.C0], this.colorRegisters[0]);
         colorCopy(dst.u_Color[ColorKind.C1], this.colorRegisters[1]);
         colorCopy(dst.u_Color[ColorKind.C2], this.colorRegisters[2]);
@@ -1626,7 +1675,7 @@ class LayoutMaterial {
         colorCopy(dst.u_Color[ColorKind.K1], this.colorConstants[1]);
         colorCopy(dst.u_Color[ColorKind.K2], this.colorConstants[2]);
         colorCopy(dst.u_Color[ColorKind.K3], this.colorConstants[3]);
-        colorCopy(dst.u_Color[ColorKind.MAT0], this.colorMatReg);
+        colorMultAlpha(dst.u_Color[ColorKind.MAT0], this.colorMatReg, alpha);
 
         for (let i = 0; i < this.material.textureMatrices.length; i++)
             this.calcTextureMatrix(dst.u_TexMtx[i], this.textureMatrices[i]);
@@ -1655,14 +1704,15 @@ class LayoutMaterial {
 
 export class Layout {
     private ddraw = new TDDraw();
-    private fontList: RLYTTextureBinding[];
+    public fontNames: string[];
     public materials: LayoutMaterial[];
     public rootPane: LayoutPane;
+    public charWriter = new CharWriter();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, rlyt: RLYT, resourceCollection: LayoutResourceCollection) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, rlyt: RLYT, public resourceCollection: LayoutResourceCollection) {
         this.materials = rlyt.mat1.map((material) => new LayoutMaterial(device, cache, material, rlyt.txl1, resourceCollection));
-        this.fontList = rlyt.fnl1.slice();
-        this.rootPane = LayoutPane.parse(rlyt.rootPane);
+        this.fontNames = rlyt.fnl1.map((font) => font.filename);
+        this.rootPane = LayoutPane.parse(rlyt.rootPane, this);
 
         const ddraw = this.ddraw;
         ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);

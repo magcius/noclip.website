@@ -243,7 +243,7 @@ export class TDDraw extends TDDrawVtxSpec {
 
         if ((this.recreateVertexBuffer || this.recreateIndexBuffer) && this.startIndex > 0) {
             console.warn(`DDraw: Recreating buffers when render insts already made. This will cause illegal warnings. Use allocatePrimitives() to prevent this.`);
-            debugger;
+            // debugger;
         }
 
         if (this.recreateVertexBuffer) {
@@ -277,6 +277,10 @@ export class TDDraw extends TDDrawVtxSpec {
 
             this.inputState = device.createInputState(this.inputLayout!, buffers, indexBuffer);
         }
+    }
+
+    public canMakeRenderInst(): boolean {
+        return this.currentIndex > this.startIndex;
     }
 
     public makeRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {

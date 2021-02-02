@@ -2,7 +2,7 @@
 import { getDeltaTimeFrames, SceneObj, SceneObjHolder } from "./Main";
 import { NameObj } from "./NameObj";
 import { Spine } from "./Spine";
-import { RLYT, RLAN, parseBRLYT, parseBRLAN, Layout, LayoutDrawInfo, LayoutAnimation, LayoutPane } from "../Common/NW4R/lyt/Layout";
+import { RLYT, RLAN, parseBRLYT, parseBRLAN, Layout, LayoutDrawInfo, LayoutAnimation, LayoutPane, LayoutTextbox } from "../Common/NW4R/lyt/Layout";
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -16,7 +16,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { LoopMode as J3DLoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { LoopMode as NW4RLoopMode } from "../rres/brres";
-import { parseBRFNT, RFNT } from "../Common/NW4R/lyt/Font";
+import { parseBRFNT, ResFont, RFNT } from "../Common/NW4R/lyt/Font";
 
 export class LayoutHolder {
     public rlytTable = new Map<string, RLYT>();
@@ -39,7 +39,7 @@ export class LayoutHolder {
     }
 
     public getFontByName(name: string) {
-        return null!;
+        return this.gameSystemFontHolder.getFontByName(name);
     }
 
     public destroy(device: GfxDevice): void {
@@ -138,6 +138,21 @@ class LayoutPaneInfo {
     }
 }
 
+const LanguagePrefixes = [
+    'JpJa', // JpJapanese
+    'UsEn', // UsEnglish
+    'UsSp', // UsSpanish
+    'UsFr', // UsFrench
+    'EuEn', // EuEnglish
+    'EuSp', // EuSpanish
+    'EuFr', // EuFrench
+    'EuGe', // EuGerman
+    'EuIt', // EuItalian
+    'EuDu', // EuDutch
+    'CnSi', // CnSimplifiedChinese
+    'KrKo', // KrKorean
+]
+
 class LayoutManager {
     private layoutHolder: LayoutHolder;
     private animations = new Map<string, LayoutAnimation>();
@@ -159,16 +174,52 @@ class LayoutManager {
             this.animations.set(key, new LayoutAnimation(this.layout, rlan));
         });
 
-        // removeUnnecessaryPanes
-
+        this.removeUnnecessaryPanes(this.layout.rootPane);
         this.initPaneInfoRecursive(this.layout.rootPane);
 
         // initGroupCtrlList
         // initDrawInfo
-        // initTextBoxRecursive
+        this.initTextBoxRecursive(sceneObjHolder, this.layout.rootPane, null, layoutName);
 
         if (numRootAnm > 0)
             this.createAndAddPaneCtrl(this.layout.rootPane.name, numRootAnm);
+    }
+
+    private initTextBoxRecursive(sceneObjHolder: SceneObjHolder, pane: LayoutPane, userData: string | null, layoutName: string): void {
+        if (pane.userData !== "")
+            userData = pane.userData;
+
+        if (pane instanceof LayoutTextbox) {
+            if (userData !== null) {
+                const messageID = `Layout_${layoutName}${userData}`;
+                pane.str = sceneObjHolder.messageDataHolder!.getStringById(messageID)!;
+            }
+        }
+
+        for (let i = 0; i < pane.children.length; i++)
+            this.initTextBoxRecursive(sceneObjHolder, pane.children[i], userData, layoutName);
+    }
+
+    private isUnnecessaryPane(pane: LayoutPane): boolean {
+        const name = pane.name;
+        const CurrentLanguage = 1; // UsEnglish
+        for (let i = 0; i < LanguagePrefixes.length; i++) {
+            if (i === CurrentLanguage)
+                continue;
+            if (name.endsWith(LanguagePrefixes[i]))
+                return true;
+        }
+
+        return false;
+    }
+
+    private removeUnnecessaryPanes(pane: LayoutPane): void {
+        for (let i = 0; i < pane.children.length; i++) {
+            if (this.isUnnecessaryPane(pane.children[i]))
+                pane.children.splice(i--, 1);
+            else
+                this.removeUnnecessaryPanes(pane.children[i]);
+        }
     }
 
     public createAndAddPaneCtrl(name: string, numAnm: number): void {
@@ -347,13 +398,25 @@ export function showLayout(actor: LayoutActor): void {
 }
 
 export class GameSystemFontHolder extends NameObj {
-    private rfntTable = new Map<string, RFNT>();
+    private rfntTable = new Map<string, ResFont>();
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'GameSystemFontHolder');
 
         const arc = sceneObjHolder.modelCache.getLayoutData('Font');
-        initEachResTable(arc, this.rfntTable, ['.brfnt'], (file) => parseBRFNT(file.buffer));
+        initEachResTable(arc, this.rfntTable, ['.brfnt'], (file) => {
+            const rfnt = parseBRFNT(file.buffer);
+            return new ResFont(sceneObjHolder.modelCache.device, rfnt);
+        }, true);
+    }
+
+    public destroy(device: GfxDevice): void {
+        for (const v of this.rfntTable.values())
+            v.destroy(device);
+    }
+
+    public getFontByName(name: string): ResFont {
+        return assertExists(getRes(this.rfntTable, name.toLowerCase()));
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {

@@ -1,7 +1,7 @@
 
-import { mat4, vec2, vec3 } from "gl-matrix";
+import { mat4, vec2 } from "gl-matrix";
 import { TransparentBlack } from "../../Color";
-import { Layout, LayoutDrawInfo } from "../../Common/NW4R/lyt/Layout";
+import { LayoutDrawInfo } from "../../Common/NW4R/lyt/Layout";
 import { GfxFormat } from "../../gfx/platform/GfxPlatform";
 import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../../gfx/render/GfxRenderGraph";
@@ -39,7 +39,7 @@ function setLayoutScalePosAtPaneScaleTrans(dst: LayoutActor, src: LayoutActor, p
     vec2.copy(dstPane.scale, srcPane.scale);
 }
 
-const enum GalaxyMapIconStatus { Hidden, Completed, Opened, CanOpen }
+const enum GalaxyMapIconStatus { Hidden, CanOpen, Opened, Completed }
 class GalaxyMapIcon extends LayoutActor {
     constructor(sceneObjHolder: SceneObjHolder, private galaxyName: string, private parent: LayoutActor, private mapPaneName: string) {
         super(sceneObjHolder, 'GalaxyMapIcon');
