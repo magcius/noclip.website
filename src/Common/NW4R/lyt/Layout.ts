@@ -117,8 +117,8 @@ interface RLYTTextbox extends RLYTPaneBase {
     colorB: Color;
     fontWidth: number;
     fontHeight: number;
-    charWidth: number;
-    charHeight: number;
+    charSpacing: number;
+    lineHeight: number;
     str: string;
 }
 
@@ -611,8 +611,8 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                 textbox.colorB = colorNewFromRGBA8(view.getUint32(paneOffs + 0x14));
                 textbox.fontWidth = view.getFloat32(paneOffs + 0x18);
                 textbox.fontHeight = view.getFloat32(paneOffs + 0x1C);
-                textbox.charWidth = view.getFloat32(paneOffs + 0x20);
-                textbox.charHeight = view.getFloat32(paneOffs + 0x24);
+                textbox.charSpacing = view.getFloat32(paneOffs + 0x20);
+                textbox.lineHeight = view.getFloat32(paneOffs + 0x24);
                 textbox.str = readString(buffer, strOffs, strLength, false, 'utf-16be');
             }
 
@@ -1148,12 +1148,18 @@ export class LayoutPane {
         if (!this.visible)
             return;
 
+        if (this.scale[0] <= 0.0 || this.scale[1] <= 0.0)
+            return;
+
         let thisAlpha = parentAlpha * this.alpha;
-        this.drawSelf(device, renderInstManager, layout, ddraw, thisAlpha);
+        if (thisAlpha > 0.0)
+            this.drawSelf(device, renderInstManager, layout, ddraw, thisAlpha);
 
         const childAlpha = this.propagateAlpha ? thisAlpha : parentAlpha;
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].draw(device, renderInstManager, layout, ddraw, childAlpha);
+        if (childAlpha > 0.0) {
+            for (let i = 0; i < this.children.length; i++)
+                this.children[i].draw(device, renderInstManager, layout, ddraw, childAlpha);
+        }
     }
 }
 
@@ -1289,8 +1295,8 @@ export class LayoutTextbox extends LayoutPane {
     public colorB: Color;
     public fontWidth: number;
     public fontHeight: number;
-    public charWidth: number;
-    public charHeight: number;
+    public charSpacing: number;
+    public lineHeight: number;
     public str: string;
 
     private font: ResFont;
@@ -1306,12 +1312,59 @@ export class LayoutTextbox extends LayoutPane {
         this.colorB = rlyt.colorB;
         this.fontWidth = rlyt.fontWidth;
         this.fontHeight = rlyt.fontHeight;
-        this.charWidth = rlyt.charWidth;
-        this.charHeight = rlyt.charHeight;
+        this.charSpacing = rlyt.charSpacing;
+        this.lineHeight = rlyt.lineHeight;
         this.str = rlyt.str;
 
         const fontName = layout.fontNames[this.fontIndex];
         this.font = layout.resourceCollection.getFontByName(fontName);
+    }
+
+    private getTextPositionX(): number {
+        const textPositionX = this.textPosition % 3;
+        if (textPositionX === 0) // left
+            return 0.0;
+        else if (textPositionX === 1) // center
+            return 0.5;
+        else if (textPositionX === 2) // right
+            return 1.0;
+        else
+            throw "whoops";
+    }
+
+    private getTextPositionY(): number {
+        const textPositionY = (this.textPosition / 3) | 0;
+        if (textPositionY === 0) // top
+            return 0.0;
+        else if (textPositionY === 1) // middle
+            return 0.5;
+        else if (textPositionY === 2) // bottom
+            return 1.0;
+        else
+            throw "whoops";
+    }
+
+    public getTextAlignment(): number {
+        if (this.textAlignment === RLYTTextAlignment.Justify)
+            return this.getTextPositionX();
+        else if (this.textAlignment === RLYTTextAlignment.Left)
+            return 0.0;
+        else if (this.textAlignment === RLYTTextAlignment.Center)
+            return 0.5;
+        else if (this.textAlignment === RLYTTextAlignment.Right)
+            return 1.0;
+        else
+            throw "whoops";
+    }
+
+    private setCharWriterFont(charWriter: CharWriter): void {
+        charWriter.setFont(this.font, this.charSpacing, this.lineHeight, this.fontWidth, this.fontHeight);
+    }
+
+    public getTextDrawRect(dst: vec4, layout: Layout): void {
+        const charWriter = layout.charWriter;
+        this.setCharWriterFont(charWriter);
+        charWriter.calcRect(dst, this.str);
     }
 
     protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
@@ -1319,30 +1372,27 @@ export class LayoutTextbox extends LayoutPane {
         if (material === null)
             return;
 
-        if (alpha <= 0.0)
-            return;
-
         if (this.str.length === 0)
-            return;
-
-        if (this.scale[0] <= 0.0 || this.scale[1] <= 0.0)
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();
         this.setOnRenderInst(template);
-   
+
         const charWriter = layout.charWriter;
-        charWriter.font = this.font;
-        charWriter.setFontSize(this.fontWidth, this.fontHeight);
+        this.setCharWriterFont(charWriter);
+        charWriter.calcRect(scratchVec4, this.str);
+
         colorMultAlpha(charWriter.colorT, this.colorT, alpha);
         colorMultAlpha(charWriter.colorB, this.colorB, alpha);
         colorCopy(charWriter.color0, material.colorRegisters[0]);
         colorCopy(charWriter.color1, material.colorRegisters[1]);
+        const rx0 = scratchVec4[0], ry0 = scratchVec4[1], rx1 = scratchVec4[2], ry1 = scratchVec4[3];
+        const w = rx1 - rx0, h = ry1 - ry0;
 
-        // TODO(jstpierre): Multi-line / measurement / alignment
-        charWriter.cursor[0] = this.getBasePositionX();
-        charWriter.cursor[1] = this.getBasePositionY();
+        const x0 = this.getBasePositionX() + (this.width  - w) * this.getTextPositionX();
+        const y0 = this.getBasePositionY() - (this.height - h) * this.getTextPositionY();
 
+        vec3.set(charWriter.cursor, x0, y0, 0);
         charWriter.drawString(device, renderInstManager, ddraw, this.str);
 
         renderInstManager.popTemplateRenderInst();

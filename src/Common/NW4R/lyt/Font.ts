@@ -3,13 +3,13 @@ import { assert, assertExists, nArray, readString } from "../../../util";
 import * as GX from '../../../gx/gx_enum';
 import { calcMipChain, TextureInputGX } from '../../../gx/gx_texture';
 import { NamedArrayBufferSlice } from "../../../DataFetcher";
-import { GfxDevice, GfxMipFilterMode, GfxSampler, GfxTexFilterMode, GfxTexture, GfxWrapMode } from "../../../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, GfxWrapMode } from "../../../gfx/platform/GfxPlatform";
 import { ColorKind, GXMaterialHelperGfx, loadTextureFromMipChain, MaterialParams } from "../../../gx/gx_render";
 import { Texture } from "../../../viewer";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
 import { TDDraw } from "../../../SuperMarioGalaxy/DDraw";
 import { colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color";
-import { vec3 } from "gl-matrix";
+import { vec3, vec4 } from "gl-matrix";
 import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
 import { TextureMapping } from "../../../TextureHolder";
 
@@ -40,6 +40,7 @@ interface GlyphInfo {
 }
 
 interface RFNTFINF {
+    advanceHeight: number;
     encoding: RFNTEncoding;
     width: number;
     height: number;
@@ -111,11 +112,11 @@ export function parseBRFNT(buffer: NamedArrayBufferSlice): RFNT {
             // const cwdhOffs = view.getUint32(blockContentsOffs + 0x0C);
             // const cmapOffs = view.getUint32(blockContentsOffs + 0x10);
 
-            const height = view.getUint8(blockContentsOffs + 0x15);
-            const width = view.getUint8(blockContentsOffs + 0x14);
+            const height = view.getUint8(blockContentsOffs + 0x14);
+            const width = view.getUint8(blockContentsOffs + 0x15);
             const ascent = view.getUint8(blockContentsOffs + 0x16);
 
-            finf = { encoding, width, height, ascent, defaultGlyphIndex, defaultCWDH };
+            finf = { advanceHeight, encoding, width, height, ascent, defaultGlyphIndex, defaultCWDH };
         } else if (fourcc === 'TGLP') {
             const glyphCellW = view.getUint8(blockContentsOffs + 0x00);
             const glyphCellH = view.getUint8(blockContentsOffs + 0x01);
@@ -186,7 +187,7 @@ export function parseBRFNT(buffer: NamedArrayBufferSlice): RFNT {
             } else if (kind === RFNTCMAPKind.Dict) {
                 const entryNum = view.getUint16(blockContentsOffs + 0x0C);
                 let tableIdx = blockContentsOffs + 0x0A;
-                for (let i = 0; i < entryNum; i++, tableIdx += 0x04)
+                for (let i = 0; i <= entryNum; i++, tableIdx += 0x04)
                     cmap[view.getUint16(tableIdx + 0x00)] = view.getUint16(tableIdx + 0x02);
             }
         } else {
@@ -248,11 +249,21 @@ export class ResFont {
     }
 }
 
+function glyphIndexFromChar(rfnt: RFNT, char: number): number {
+    const glyphIndex = rfnt.cmap[char];
+    if (glyphIndex === 0xFFFF)
+        return rfnt.defaultGlyphIndex;
+    return glyphIndex;
+}
+
 const materialParams = new MaterialParams();
 export class CharWriter {
     public font: ResFont;
     public cursor = vec3.create();
     public scale = vec3.create();
+
+    public charSpacing: number = 0;
+    public lineHeight: number = 0;
 
     // Gradient colors
     public colorT = colorNewCopy(White);
@@ -263,13 +274,56 @@ export class CharWriter {
 
     private textureMapping = nArray(1, () => new TextureMapping());
 
-    private drawGlyphQuad(ddraw: TDDraw, glyf: GlyphInfo): void {
+    public setFont(font: ResFont, charSpacing: number, lineHeight: number, fontWidth: number, fontHeight: number): void {
+        this.font = font;
+        const rfnt = this.font.rfnt;
+        this.charSpacing = charSpacing;
+        this.scale[0] = fontWidth / rfnt.width;
+        this.scale[1] = fontHeight / rfnt.height;
+        // TODO(jstpierre): This isn't correct
+        this.lineHeight = lineHeight - (rfnt.advanceHeight * this.scale[1]);
+    }
+
+    public calcRect(dst: vec4, str: string): void {
+        const rfnt = this.font.rfnt;
+
+        let needsSpacing = false;
+    
+        let x = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+    
+            if (char < 0x20) {
+                // Control code.
+                continue;
+            }
+    
+            if (needsSpacing)
+                x += this.charSpacing;
+            needsSpacing = true;
+    
+            const glyphIndex = glyphIndexFromChar(rfnt, char);
+            const glyphInfo = rfnt.glyphInfo[glyphIndex];
+    
+            const glyphWidth = glyphInfo.cwdh.advanceWidth * this.scale[0];
+    
+            x += glyphWidth;
+        }
+    
+        const y = this.lineHeight;
+    
+        const x0 = Math.min(x, 0), x1 = Math.max(x, 0);
+        const y0 = Math.min(y, 0), y1 = Math.max(y, 0);
+        vec4.set(dst, x0, y0, x1, y1);
+    }
+
+    private drawStringGlyph(ddraw: TDDraw, glyf: GlyphInfo): void {
         const rfnt = this.font.rfnt;
         const cwdh = glyf.cwdh;
 
-        const x0 = this.cursor[0] + cwdh.leftSideBearing;
+        const x0 = this.cursor[0] + cwdh.leftSideBearing * this.scale[0];
         const x1 = x0 + cwdh.width * this.scale[0];
-        const y0 = this.cursor[1];
+        const y0 = this.cursor[1] - (rfnt.ascent - rfnt.glyphBaseline) * this.scale[1];
         const y1 = y0 - rfnt.height * this.scale[1];
         const z = this.cursor[2];
 
@@ -294,25 +348,9 @@ export class CharWriter {
         ddraw.texCoord2f32(GX.Attr.TEX0, glyf.s0, glyf.t1);
 
         ddraw.end();
-
-        return glyf;
     }
 
-    private glyphIndexFromChar(char: number): number {
-        const rfnt = this.font.rfnt;
-        const glyphIndex = rfnt.cmap[char];
-        if (glyphIndex === 0xFFFF)
-            return rfnt.defaultGlyphIndex;
-        return glyphIndex;
-    }
-
-    public setFontSize(width: number, height: number): void {
-        const rfnt = this.font.rfnt;
-        this.scale[0] = width / rfnt.width;
-        this.scale[1] = height / rfnt.height;
-    }
-
-    private flush(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw): void {
+    private drawStringFlush(device: GfxDevice, renderInstManager: GfxRenderInstManager, ddraw: TDDraw): void {
         if (!ddraw.canMakeRenderInst())
             return;
 
@@ -342,6 +380,8 @@ export class CharWriter {
 
         this.textureMapping[0].gfxTexture = null;
 
+        const rfnt = this.font.rfnt;
+        let needsSpacing = false;
         for (let i = 0; i < str.length; i++) {
             const char = str.charCodeAt(i);
 
@@ -350,22 +390,26 @@ export class CharWriter {
                 continue;
             }
 
-            const glyphIndex = this.glyphIndexFromChar(char);
-            const glyphInfo = this.font.rfnt.glyphInfo[glyphIndex];
+            if (needsSpacing)
+                this.cursor[0] += this.charSpacing;
+            needsSpacing = true;
+
+            const glyphIndex = glyphIndexFromChar(rfnt, char);
+            const glyphInfo = rfnt.glyphInfo[glyphIndex];
 
             // If we're going to switch textures, flush the previous batch.
             const gfxTexture = this.font.gfxTextures[glyphInfo.textureIndex];
             if (gfxTexture !== this.textureMapping[0].gfxTexture) {
-                this.flush(device, renderInstManager, ddraw);
+                this.drawStringFlush(device, renderInstManager, ddraw);
                 this.textureMapping[0].gfxTexture = gfxTexture;
             }
 
-            // Draw and advance curosr.
-            this.drawGlyphQuad(ddraw, glyphInfo);
+            // Draw and advance cursor.
+            this.drawStringGlyph(ddraw, glyphInfo);
             this.cursor[0] += glyphInfo.cwdh.advanceWidth * this.scale[0];
         }
 
-        this.flush(device, renderInstManager, ddraw);
+        this.drawStringFlush(device, renderInstManager, ddraw);
         renderInstManager.popTemplateRenderInst();
     }
 }

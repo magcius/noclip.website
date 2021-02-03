@@ -17,6 +17,7 @@ import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { LoopMode as J3DLoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { LoopMode as NW4RLoopMode } from "../rres/brres";
 import { parseBRFNT, ResFont, RFNT } from "../Common/NW4R/lyt/Font";
+import { vec4 } from "gl-matrix";
 
 export class LayoutHolder {
     public rlytTable = new Map<string, RLYT>();
@@ -104,6 +105,10 @@ class LayoutPaneCtrl {
 
         anmPlayer.start(layoutManager, animName);
         // bindPaneCtrlAnim
+    }
+
+    public isAnimStopped(index: number): boolean {
+        return this.anmPlayer[index].isStop();
     }
 
     public getFrameCtrl(index: number): J3DFrameCtrl {
@@ -312,6 +317,10 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         this.spine.initNerve(nerve);
     }
 
+    public setNerve(nerve: TNerve): void {
+        this.spine!.setNerve(nerve);
+    }
+
     public initLayoutManager(sceneObjHolder: SceneObjHolder, name: string, numAnm: number): void {
         this.layoutManager = new LayoutManager(sceneObjHolder, name, numAnm);
     }
@@ -371,6 +380,10 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
         paneCtrl.start(layoutManager, animName, index);
     }
 
+    public isAnimStopped(index: number = 0): boolean {
+        return this.layoutManager!.getPaneCtrl().isAnimStopped(index);
+    }
+
     public setAnimFrameAndStop(frame: number, index: number = 0): void {
         const frameCtrl = this.layoutManager!.getPaneCtrl().getFrameCtrl(index);
         frameCtrl.currentTimeInFrames = frame;
@@ -385,16 +398,6 @@ export class LayoutActor<TNerve extends number = number> extends NameObj {
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         GameSystemFontHolder.requestArchives(sceneObjHolder);
     }
-}
-
-export function hideLayout(actor: LayoutActor): void {
-    actor.isStopDraw = true;
-    actor.isStopCalcAnim = true;
-}
-
-export function showLayout(actor: LayoutActor): void {
-    actor.isStopDraw = false;
-    actor.isStopCalcAnim = false;
 }
 
 export class GameSystemFontHolder extends NameObj {
@@ -422,4 +425,63 @@ export class GameSystemFontHolder extends NameObj {
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         sceneObjHolder.modelCache.requestLayoutData('Font');
     }
+}
+
+export function hideLayout(actor: LayoutActor): void {
+    actor.isStopDraw = true;
+    actor.isStopCalcAnim = true;
+}
+
+export function showLayout(actor: LayoutActor): void {
+    actor.isStopDraw = false;
+    actor.isStopCalcAnim = false;
+}
+
+function setPaneVisibleRecursiveInternal(pane: LayoutPane, v: boolean): void {
+    pane.visible = v;
+
+    for (let i = 0; i < pane.children.length; i++)
+        setPaneVisibleRecursiveInternal(pane.children[i], v);
+}
+
+export function showPaneRecursive(actor: LayoutActor, paneName: string): void {
+    setPaneVisibleRecursiveInternal(actor.layoutManager!.getPane(paneName), true);
+}
+
+export function hidePaneRecursive(actor: LayoutActor, paneName: string): void {
+    setPaneVisibleRecursiveInternal(actor.layoutManager!.getPane(paneName), false);
+}
+
+function setTextBoxRecursiveInternal(pane: LayoutPane, v: string): void {
+    if (pane instanceof LayoutTextbox)
+        pane.str = v;
+
+    for (let i = 0; i < pane.children.length; i++)
+        setTextBoxRecursiveInternal(pane.children[i], v);
+}
+
+export function setTextBoxRecursive(actor: LayoutActor, paneName: string, v: string): void {
+    setTextBoxRecursiveInternal(actor.layoutManager!.getPane(paneName), v);
+}
+
+const scratchVec4a = vec4.create(), scratchVec4b = vec4.create();
+function getTextDrawRectRecursive(dst: vec4, layout: Layout, pane: LayoutPane): void {
+    vec4.set(dst, Infinity, Infinity, -Infinity, -Infinity);
+    if (pane instanceof LayoutTextbox) {
+        pane.getTextDrawRect(scratchVec4a, layout);
+        dst[0] = Math.min(dst[0], scratchVec4a[0]);
+        dst[1] = Math.min(dst[1], scratchVec4a[1]);
+        dst[2] = Math.max(dst[2], scratchVec4a[2]);
+        dst[3] = Math.max(dst[3], scratchVec4a[3]);
+    }
+
+    for (let i = 0; i < pane.children.length; i++)
+        getTextDrawRectRecursive(dst, layout, pane.children[i]);
+}
+
+export function setAnimFrameAndStopAdjustTextWidth(actor: LayoutActor, paneName: string, anmIndex: number): void {
+    const layoutManager = actor.layoutManager!;
+    getTextDrawRectRecursive(scratchVec4b, layoutManager.layout, layoutManager.getPane(paneName));
+    const width = scratchVec4b[2] - scratchVec4b[0];
+    actor.setAnimFrameAndStop(width, anmIndex);
 }
