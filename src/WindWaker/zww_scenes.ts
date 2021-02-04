@@ -215,7 +215,7 @@ class dDlst_alphaModel_c {
         this.orthoQuad.endDraw(device, cache);
     }
 
-    public reset(): void {
+    private reset(): void {
         this.datas.length = 0;
     }
 
@@ -267,6 +267,8 @@ class dDlst_alphaModel_c {
         mat4.identity(packetParams.u_PosMtx[0]);
         this.materialHelperDrawAlpha.allocatePacketParamsDataOnInst(renderInst, packetParams);
         renderInstManager.submitRenderInst(renderInst);
+
+        this.reset();
     }
 
     public destroy(device: GfxDevice): void {
