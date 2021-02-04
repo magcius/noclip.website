@@ -12,6 +12,7 @@ import { Destroyable } from "../SceneBase";
 import { dGlobals } from "./zww_scenes";
 import { cPhs__Status } from "./framework";
 import { cBgD_t } from "./d_bg";
+import { NamedArrayBufferSlice } from "../DataFetcher";
 
 export interface DZSChunkHeader {
     type: string;
@@ -57,7 +58,7 @@ export type ResAssetType<T extends ResType> =
     T extends ResType.Dzb ? cBgD_t :
     T extends ResType.Dzs ? DZS :
     T extends ResType.Bva ? VAF1 :
-    T extends ResType.Raw ? ArrayBufferSlice :
+    T extends ResType.Raw ? NamedArrayBufferSlice :
     never;
 
 export class dRes_control_c {
