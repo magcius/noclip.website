@@ -5,11 +5,11 @@ import { quat, vec3, ReadonlyVec3 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { isNearZero, MathConstants, quatFromEulerRadians, vec3SetAll, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback } from '../../util';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped } from '../ActorUtil';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayerH, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor';
-import { getObjectName, SceneObjHolder } from '../Main';
+import { getObjectName, SceneObj, SceneObjHolder } from '../Main';
 import { DrawBufferType } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate, calcNerveValue } from '../Spine';
@@ -294,6 +294,36 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
         //     return;
 
         tryStartTurnAction(sceneObjHolder, this);
+    }
+
+    public turnToPlayerSpeed(sceneObjHolder: SceneObjHolder, speedDeg: number): boolean {
+        calcVecToPlayer(scratchVec3a, sceneObjHolder, this);
+        quatGetAxisZ(scratchVec3b, this.poseQuat);
+
+        if (isSameDirection(scratchVec3a, scratchVec3b, 0.01)) {
+            return true;
+        } else {
+            return faceToVectorDeg(this.poseQuat, scratchVec3a, speedDeg);
+        }
+    }
+
+    public turnToPlayer(sceneObjHolder: SceneObjHolder, speedDeg: number, verticalSpeedDeg: number, verticalAngleClampDeg: number): boolean {
+        const ret = this.turnToPlayerSpeed(sceneObjHolder, speedDeg);
+
+        if (verticalAngleClampDeg !== 0.0) {
+            quatGetAxisY(scratchVec3a, this.initPoseQuat);
+            calcVecToPlayer(scratchVec3b, sceneObjHolder, this);
+
+            if (isSameDirection(scratchVec3a, scratchVec3b, 0.01))
+                return false;
+
+            makeAxisFrontUp(scratchVec3c, scratchVec3, scratchVec3b, scratchVec3a);
+            clampVecAngleDeg(scratchVec3, scratchVec3a, verticalAngleClampDeg);
+            if (!turnQuatYDirRad(this.poseQuat, this.poseQuat, scratchVec3, verticalSpeedDeg * MathConstants.DEG_TO_RAD))
+                return false;
+        }
+
+        return ret;
     }
 }
 

@@ -7,7 +7,7 @@ import { J3DFrameCtrl__UpdateFlags } from "../Common/JSYSTEM/J3D/J3DGraphAnimato
 import { JKRArchive } from "../Common/JSYSTEM/JKRArchive";
 import { BTI, BTIData } from "../Common/JSYSTEM/JUTTexture";
 import { GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
-import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
+import { computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixT, getMatrixAxis, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, isNearZero, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixAxis, setMatrixTranslation, transformVec3Mat4w0, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from "../MathHelpers";
 import { assertExists } from "../util";
 import { getRes, XanimePlayer } from "./Animation";
 import { AreaObj, isInAreaObj } from "./AreaObj";
@@ -1006,10 +1006,37 @@ export function makeAxisVerticalZX(axisRight: vec3, front: ReadonlyVec3): void {
     vec3.normalize(axisRight, axisRight);
 }
 
-export function makeAxisCrossPlane(axisRight: vec3, axisUp: vec3, front: vec3): void {
+export function makeAxisCrossPlane(axisRight: vec3, axisUp: vec3, front: ReadonlyVec3): void {
     makeAxisVerticalZX(axisRight, front);
     vec3.cross(axisUp, front, axisRight);
     vec3.normalize(axisUp, axisUp);
+}
+
+export function makeAxisUpSide(axisFront: vec3, axisRight: vec3, up: ReadonlyVec3, side: ReadonlyVec3): void {
+    vec3.cross(axisFront, up, side);
+    vec3.normalize(axisFront, axisFront);
+    vec3.cross(axisRight, up, axisFront);
+}
+
+export function makeAxisFrontUp(axisRight: vec3, axisUp: vec3, front: ReadonlyVec3, up: ReadonlyVec3): void {
+    vec3.cross(axisRight, up, front);
+    vec3.normalize(axisRight, axisRight);
+    vec3.cross(axisUp, front, axisRight);
+}
+
+function clampVecAngleRad(dst: vec3, axis: ReadonlyVec3, clampRad: number): void {
+    vec3.cross(scratchVec3a, dst, axis);
+    const theta = Math.atan2(vec3.length(scratchVec3a), vec3.dot(dst, axis));
+    if (theta > clampRad) {
+        vec3.negate(scratchVec3a, scratchVec3a);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+        mat4.fromRotation(scratchMatrix, clampRad, scratchVec3a);
+        transformVec3Mat4w0(dst, scratchMatrix, axis);
+    }
+}
+
+export function clampVecAngleDeg(dst: vec3, axis: ReadonlyVec3, clampDeg: number): void {
+    clampVecAngleRad(dst, axis, clampDeg * MathConstants.DEG_TO_RAD);
 }
 
 export function quatSetRotate(q: quat, v0: ReadonlyVec3, v1: ReadonlyVec3, t: number = 1.0, scratch = scratchVec3): void {
@@ -1131,16 +1158,13 @@ export function blendQuatUpFront(dst: quat, q: ReadonlyQuat, up: ReadonlyVec3, f
     if (vec3.dot(axisZ, axisY) < 0.0 && isSameDirection(axisZ, axisY, 0.01))
         turnRandomVector(axisZ, axisZ, 0.001);
 
-    const v0 = vec3.clone(axisZ);
-    const v1 = vec3.clone(axisY);
     quatSetRotate(scratchQuat, axisZ, axisY, speedFront, scratch);
     quat.mul(dst, scratchQuat, dst);
     quat.normalize(dst, dst);
     quatGetAxisZ(scratch, dst);
-    const ret = vec3.clone(scratch);
 }
 
-export function turnQuat(dst: quat, q: ReadonlyQuat, v0: ReadonlyVec3, v1: ReadonlyVec3, rad: number): void {
+export function turnQuat(dst: quat, q: ReadonlyQuat, v0: ReadonlyVec3, v1: ReadonlyVec3, rad: number): boolean {
     if (vec3.dot(v0, v1) < 0.0 && isSameDirection(v0, v1, 0.01)) {
         turnRandomVector(scratchVec3a, v0, 0.001);
         vec3.normalize(scratchVec3a, scratchVec3a);
@@ -1151,19 +1175,41 @@ export function turnQuat(dst: quat, q: ReadonlyQuat, v0: ReadonlyVec3, v1: Reado
     vec3.normalize(scratchVec3b, v1);
 
     let theta = Math.acos(vec3.dot(scratchVec3a, scratchVec3b));
+    let turn: number;
     if (theta > rad)
-        theta = saturate(theta / rad);
+        turn = saturate(theta / rad);
     else
-        theta = 1.0;
+        turn = 1.0;
 
-    quatSetRotate(scratchQuat, scratchVec3a, scratchVec3b, theta);
+    quatSetRotate(scratchQuat, scratchVec3a, scratchVec3b, turn);
     quat.mul(dst, scratchQuat, q);
     quat.normalize(dst, dst);
+
+    return theta < 0.015;
 }
 
-export function turnQuatYDirRad(dst: quat, q: ReadonlyQuat, v: ReadonlyVec3, rad: number): void {
+export function turnQuatYDirRad(dst: quat, q: ReadonlyQuat, v: ReadonlyVec3, rad: number): boolean {
     quatGetAxisY(scratchVec3, q);
-    turnQuat(dst, q, scratchVec3, v, rad);
+    return turnQuat(dst, q, scratchVec3, v, rad);
+}
+
+function turnQuatZDirRad(dst: quat, q: ReadonlyQuat, v: ReadonlyVec3, rad: number): boolean {
+    quatGetAxisZ(scratchVec3, q);
+    return turnQuat(dst, q, scratchVec3, v, rad);
+}
+
+function faceToVectorRad(dst: quat, v: ReadonlyVec3, rad: number): boolean {
+    quatGetAxisY(scratchVec3, dst);
+    vec3.normalize(scratchVec3, scratchVec3);
+    if (vecKillElement(scratchVec3, v, scratchVec3) <= 0.95) {
+        return turnQuatZDirRad(dst, dst, scratchVec3, rad);
+    } else {
+        return true;
+    }
+}
+
+export function faceToVectorDeg(dst: quat, v: ReadonlyVec3, deg: number): boolean {
+    return faceToVectorRad(dst, v, deg * MathConstants.DEG_TO_RAD);
 }
 
 // Project pos onto the line created by p0...p1.
@@ -1761,6 +1807,11 @@ export function calcVecToTargetPosH(dst: vec3, actor: LiveActor, targetPos: Read
     vec3.sub(dst, targetPos, actor.translation);
     vecKillElement(dst, dst, h);
     vec3.normalize(dst, dst);
+}
+
+export function calcVecToPlayer(dst: vec3, sceneObjHolder: SceneObjHolder, actor: LiveActor): void {
+    getPlayerPos(scratchVec3a, sceneObjHolder);
+    vec3.sub(dst, scratchVec3a, actor.translation);
 }
 
 export function calcVecToPlayerH(dst: vec3, sceneObjHolder: SceneObjHolder, actor: LiveActor, h: ReadonlyVec3 = actor.gravityVector): void {
