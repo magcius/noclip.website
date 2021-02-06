@@ -5,7 +5,7 @@ import { quat, vec3, ReadonlyVec3 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { isNearZero, MathConstants, quatFromEulerRadians, vec3SetAll, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback } from '../../util';
-import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians } from '../ActorUtil';
+import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor';
@@ -15,11 +15,12 @@ import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate, calcNerveValue } from '../Spine';
 import { initShadowFromCSV, initShadowVolumeSphere, onCalcShadowOneTime, onCalcShadow, isExistShadow, initShadowVolumeOval, setShadowDropPositionAtJoint } from '../Shadow';
 import { initLightCtrl } from '../LightData';
-import { HitSensorType, isSensorPlayer, HitSensor, isSensorNpc, sendArbitraryMsg, validateHitSensor, invalidateHitSensor } from '../HitSensor';
+import { HitSensorType, isSensorPlayer, HitSensor, isSensorNpc, sendArbitraryMsg, validateHitSensor, invalidateHitSensor, addHitSensorAtJoint } from '../HitSensor';
 import { drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { tryRegisterDemoCast } from '../Demo';
 import { createPartsModelMapObj, PartsModel } from './PartsModel';
 import { ViewerRenderInput } from '../../viewer';
+import { initFur } from '../Fur';
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -143,6 +144,10 @@ function addHitSensorNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name:
     return actor.hitSensorKeeper!.add(sceneObjHolder, name, HitSensorType.Npc, pairwiseCapacity, radius, actor, offset);
 }
 
+function addHitSensorAtJointNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor, name: string, jointName: string, pairwiseCapacity: number, radius: number, offset: ReadonlyVec3) {
+    return addHitSensorAtJoint(sceneObjHolder, actor, name, jointName, HitSensorType.Npc, pairwiseCapacity, radius, offset);
+}
+
 class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public poseQuat = quat.create();
     public lastRotation = vec3.create();
@@ -192,7 +197,7 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
         if (caps.initHitSensor) {
             this.initHitSensor();
             if (caps.hitSensorJointName !== null)
-                throw "whoops";
+                addHitSensorAtJointNpc(sceneObjHolder, this, 'Body', caps.hitSensorJointName, 8, caps.hitSensorRadius, caps.hitSensorOffset);
             else
                 addHitSensorNpc(sceneObjHolder, this, 'Body', 8, caps.hitSensorRadius, caps.hitSensorOffset);
         }
@@ -1251,5 +1256,117 @@ export class CollectTico extends LiveActor<CollectTicoNrv> {
 
     public static requestArchives(sceneObjHolder: SceneObjHolder): void {
         StrayTico.requestArchives(sceneObjHolder);
+    }
+}
+
+const enum HoneyBeeNrv { Wait, Fly, JumpLecture, FlyLectureA, FlyLectureB, DropLecture }
+export class HoneyBee extends NPCActor<HoneyBeeNrv> {
+    private currentRailPointNo = -1;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
+        super(zoneAndLayer, sceneObjHolder, 'HoneyBee');
+
+        const caps = new NPCActorCaps<HoneyBeeNrv>('HoneyBee');
+        caps.initBinder = false;
+        caps.hitSensorJointName = 'Center';
+        caps.hitSensorRadius = 70.0;
+        caps.hitSensorOffset[1] = -20;
+        caps.waitNerve = HoneyBeeNrv.Wait;
+
+        this.waitActionName = 'Wait';
+
+        const type = fallback(getJMapInfoArg0(infoIter), 0);
+        if (type === 0) {
+            // this.reactAction = true;
+        } else if (type === 1) {
+            caps.waitNerve = HoneyBeeNrv.JumpLecture;
+        } else if (type === 2) {
+            caps.waitNerve = HoneyBeeNrv.Fly;
+        } else if (type === 3) {
+            this.waitActionName = 'SleepWait';
+        } else if (type === 4) {
+            this.waitActionName = 'StickWait';
+        } else if (type === 5) {
+            this.waitActionName = 'GatekeeperWait';
+            // this.reactAction = true;
+        } else if (type === 6) {
+            caps.waitNerve = HoneyBeeNrv.DropLecture;
+        } else if (type === 7) {
+            this.waitActionName = 'Flustered';
+        } else if (type === 8) {
+            // this.talkMtx
+            caps.waitNerve = HoneyBeeNrv.FlyLectureA;
+        } else if (type === 9) {
+            // this.talkMtx
+            caps.waitNerve = HoneyBeeNrv.FlyLectureB;
+        }
+
+        this.initialize(sceneObjHolder, infoIter, caps);
+
+        if (type === 8 || type === 9) {
+            setShadowDropPositionAtJoint(this, null, 'Center', Vec3Zero);
+            onCalcShadow(this);
+        }
+
+        const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('HoneyBee', type);
+        this.equipment(sceneObjHolder, itemGoods);
+
+        initFur(sceneObjHolder, this);
+    }
+
+    protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: HoneyBeeNrv, deltaTimeFrames: number): void {
+        super.updateSpine(sceneObjHolder, currentNerve, deltaTimeFrames);
+
+        if (currentNerve === HoneyBeeNrv.Wait) {
+            // if (tryStartReactionAndPushNerve())
+            //    return;
+
+            tryTalkNearPlayerAndStartMoveTalkAction(sceneObjHolder, this, deltaTimeFrames);
+        } else if (currentNerve === HoneyBeeNrv.Fly) {
+            if (isFirstStep(this))
+                onCalcShadow(this);
+
+            moveCoordAndFollowTrans(this, 5.0);
+
+            const currentRailPointNo = getCurrentRailPointNo(this);
+            if (this.currentRailPointNo !== currentRailPointNo) {
+                this.currentRailPointNo = currentRailPointNo;
+                const anim = fallback(getCurrentRailPointArg0(this), 0);
+                if (anim === 0) {
+                    if (!isBckPlaying(this, 'WalkWait'))
+                        startBck(this, 'Wait');
+                } else if (anim === 1) {
+                    if (!isBckPlaying(this, 'FlyWait'))
+                        startBck(this, 'FlyWait');
+                }
+            }
+        } else if (currentNerve === HoneyBeeNrv.DropLecture || currentNerve === HoneyBeeNrv.JumpLecture) {
+            if (isFirstStep(this))
+                startBck(this, 'Wait');
+
+            if (isBckPlaying(this, 'Wait')) {
+                if (/* this.talkMessageCtrl !== null && !tryTalkNearPlayer(this.talkMessageCtrl) */ false) {
+                    // turnToPlayer
+                }
+
+                if (isGreaterStep(this, 120))
+                    startBck(this, currentNerve === HoneyBeeNrv.DropLecture ? 'HipDropWait' : 'FlyLectureWait');
+            } else if (isBckLooped(this)) {
+                this.setNerve(currentNerve);
+            }
+        } else if (currentNerve === HoneyBeeNrv.FlyLectureA || currentNerve === HoneyBeeNrv.FlyLectureB) {
+            if (isFirstStep(this)) {
+                onCalcShadow(this);
+                startBck(this, currentNerve === HoneyBeeNrv.FlyLectureA ? 'FlyLectureA' : 'FlyLectureB');
+            }
+
+            // tryTalkNearPlayer
+        }
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
+        sceneObjHolder.modelCache.requestObjectData('HoneyBee');
+        const itemGoodsIdx = fallback(getJMapInfoArg0(infoIter), -1);
+        requestArchivesForNPCGoods(sceneObjHolder, 'HoneyBee', itemGoodsIdx);
     }
 }

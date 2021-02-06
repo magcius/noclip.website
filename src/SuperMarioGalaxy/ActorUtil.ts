@@ -206,6 +206,11 @@ export function isBckStopped(actor: LiveActor): boolean {
     return actor.modelManager!.isBckStopped();
 }
 
+export function isBckLooped(actor: LiveActor): boolean {
+    const bckCtrl = actor.modelManager!.getBckCtrl();
+    return !!(bckCtrl.updateFlags & J3DFrameCtrl__UpdateFlags.HasLooped);
+}
+
 export function getBckFrame(actor: LiveActor): number {
     const bckCtrl = actor.modelManager!.getBckCtrl();
     return bckCtrl.currentTimeInFrames;
