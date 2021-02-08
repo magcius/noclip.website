@@ -1177,7 +1177,7 @@ export function turnQuat(dst: quat, q: ReadonlyQuat, v0: ReadonlyVec3, v1: Reado
     let theta = Math.acos(vec3.dot(scratchVec3a, scratchVec3b));
     let turn: number;
     if (theta > rad)
-        turn = saturate(theta / rad);
+        turn = saturate(rad / theta);
     else
         turn = 1.0;
 
@@ -1199,10 +1199,10 @@ function turnQuatZDirRad(dst: quat, q: ReadonlyQuat, v: ReadonlyVec3, rad: numbe
 }
 
 function faceToVectorRad(dst: quat, v: ReadonlyVec3, rad: number): boolean {
-    quatGetAxisY(scratchVec3, dst);
-    vec3.normalize(scratchVec3, scratchVec3);
-    if (vecKillElement(scratchVec3, v, scratchVec3) <= 0.95) {
-        return turnQuatZDirRad(dst, dst, scratchVec3, rad);
+    quatGetAxisY(scratchVec3a, dst);
+    vec3.normalize(scratchVec3b, v);
+    if (vecKillElement(scratchVec3b, scratchVec3b, scratchVec3a) <= 0.95) {
+        return turnQuatZDirRad(dst, dst, scratchVec3b, rad);
     } else {
         return true;
     }

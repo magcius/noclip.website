@@ -3,13 +3,13 @@
 
 import { quat, vec3, ReadonlyVec3 } from 'gl-matrix';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
-import { isNearZero, MathConstants, quatFromEulerRadians, vec3SetAll, Vec3Zero } from '../../MathHelpers';
+import { isNearZero, MathConstants, quatFromEulerRadians, saturate, vec3SetAll, Vec3Zero } from '../../MathHelpers';
 import { assertExists, fallback } from '../../util';
 import { adjustmentRailCoordSpeed, blendQuatUpFront, calcGravity, connectToSceneIndirectNpc, connectToSceneNpc, getNextRailPointNo, getRailCoordSpeed, getRailDirection, getRailPos, getRandomInt, initDefaultPos, isBckExist, isBckStopped, isExistRail, isRailReachedGoal, makeMtxTRFromQuatVec, makeQuatUpFront, moveCoordAndTransToNearestRailPos, moveRailRider, reverseRailDirection, setBckFrameAtRandom, setBrkFrameAndStop, startAction, startBck, startBckNoInterpole, startBrk, startBtk, startBva, tryStartAction, turnQuatYDirRad, useStageSwitchSleep, moveCoordToStartPos, useStageSwitchWriteA, useStageSwitchWriteB, useStageSwitchWriteDead, moveCoordAndTransToRailStartPoint, isRailGoingToEnd, getRailPointPosStart, getRailPointPosEnd, calcDistanceVertical, calcMtxFromGravityAndZAxis, tryStartBck, calcUpVec, rotateVecDegree, getBckFrameMax, moveCoordAndFollowTrans, isBckPlaying, startBckWithInterpole, isBckOneTimeAndStopped, MapObjConnector, useStageSwitchReadAppear, syncStageSwitchAppear, isExistBck, connectToSceneNpcMovement, quatGetAxisZ, isNearPlayer, getPlayerPos, turnDirectionToTargetRadians, getCurrentRailPointNo, getCurrentRailPointArg0, isBckLooped, calcVecToPlayerH, calcVecToPlayer, isSameDirection, faceToVectorDeg, quatGetAxisY, makeAxisFrontUp, clampVecAngleDeg } from '../ActorUtil';
 import { getFirstPolyOnLineToMap, getFirstPolyOnLineToWaterSurface } from '../Collision';
 import { createCsvParser, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg7, iterChildObj, JMapInfoIter } from '../JMapInfo';
 import { isDead, LiveActor, ZoneAndLayer, MessageType } from '../LiveActor';
-import { getObjectName, SceneObj, SceneObjHolder } from '../Main';
+import { getObjectName, SceneObjHolder } from '../Main';
 import { DrawBufferType } from '../NameObj';
 import { isConnectedWithRail } from '../RailRider';
 import { isFirstStep, isGreaterStep, isGreaterEqualStep, isLessStep, calcNerveRate, calcNerveValue } from '../Spine';
@@ -148,6 +148,35 @@ function addHitSensorAtJointNpc(sceneObjHolder: SceneObjHolder, actor: LiveActor
     return addHitSensorAtJoint(sceneObjHolder, actor, name, jointName, HitSensorType.Npc, pairwiseCapacity, radius, offset);
 }
 
+class ActorTalkParam {
+    public turnOnWait: boolean = true;
+    // public turnOnTalk: boolean = false;
+    public turnDistance: number = 2000.0;
+    public turnSpeed: number = 4.0;
+    public turnVerticalSpeed: number = 0.0;
+    public turnVerticalMaxAngle: number = 0.0;
+    public waitActionName: string | null = null;
+    public waitTurnActionName: string | null = null;
+    // public talkActionName: string | null = null;
+    // public talkTurnActionName: string | null = null;
+
+    public setNoTurnAction(actionName: string): void {
+        this.waitActionName = actionName;
+        // this.talkActionName = actionName;
+        this.waitTurnActionName = null;
+        // this.talkTurnActionName = null;
+        this.turnOnWait = false;
+        // this.turnOnTalk = false;
+    }
+
+    public setSingleAction(actionName: string): void {
+        this.waitActionName = actionName;
+        this.waitTurnActionName = actionName;
+        // this.talkActionName = actionName;
+        // this.talkTurnActionName = actionName;
+    }
+}
+
 class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public poseQuat = quat.create();
     public lastRotation = vec3.create();
@@ -159,12 +188,9 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
     public goods0: PartsModel | null = null;
     public goods1: PartsModel | null = null;
 
-    // ActorTalkParam
-    public waitActionName: string | null = null;
+    public talkParam = new ActorTalkParam();
     public walkActionName: string | null = null;
-    // public waitTurnActionName: string | null = null;
-    // public talkActionName: string | null = null;
-    // public talkTurnActionName: string | null = null;
+    public walkTurnActionName: string | null = null;
 
     public desiredRailSpeed: number = 2.0;
     public maxChangeRailSpeed: number = 0.1;
@@ -234,10 +260,10 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
 
     public initAfterPlacement(sceneObjHolder: SceneObjHolder): void {
         calcGravity(sceneObjHolder, this);
-        if (this.waitActionName !== null) {
-            startAction(this, this.waitActionName);
-            if (isExistBck(this, this.waitActionName))
-                startBckNoInterpole(this, this.waitActionName);
+        if (this.talkParam.waitActionName !== null) {
+            startAction(this, this.talkParam.waitActionName);
+            if (isExistBck(this, this.talkParam.waitActionName))
+                startBckNoInterpole(this, this.talkParam.waitActionName);
             setBckFrameAtRandom(this);
             this.calcAnim(sceneObjHolder);
         }
@@ -325,6 +351,20 @@ class NPCActor<TNerve extends number = number> extends LiveActor<TNerve> {
 
         return ret;
     }
+
+    public turnToDefault(speedDeg: number): boolean {
+        quatGetAxisZ(scratchVec3a, this.initPoseQuat);
+        quatGetAxisY(scratchVec3b, this.initPoseQuat);
+        quatGetAxisZ(scratchVec3c, this.poseQuat);
+
+        if (isSameDirection(scratchVec3a, scratchVec3c, 0.01))
+            return true;
+
+        const theta = Math.acos(vec3.dot(scratchVec3a, scratchVec3c));
+        const speed = saturate((speedDeg * MathConstants.DEG_TO_RAD) / theta);
+        blendQuatUpFront(this.poseQuat, this.poseQuat, scratchVec3b, scratchVec3a, speed, speed);
+        return false;
+    }
 }
 
 const enum ButlerNrv { Wait }
@@ -340,7 +380,7 @@ export class Butler extends NPCActor<ButlerNrv> {
         caps.initBinder = false;
         this.initialize(sceneObjHolder, infoIter, caps);
 
-        this.waitActionName = 'Wait';
+        this.talkParam.waitActionName = 'Wait';
 
         this.makeActorAppeared(sceneObjHolder);
     }
@@ -375,7 +415,7 @@ export class Rosetta extends NPCActor {
         startBckNoInterpole(this, 'WaitA');
         this.calcAnim(sceneObjHolder);
 
-        this.waitActionName = 'WaitA';
+        this.talkParam.waitActionName = 'WaitA';
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: RosettaNrv, deltaTimeFrames: number): void {
@@ -386,9 +426,9 @@ export class Rosetta extends NPCActor {
             if (isGreaterEqualStep(this, 300.0)) {
                 const v = getRandomInt(0, 2);
                 if (v === 0)
-                    this.waitActionName = 'WaitA';
+                    this.talkParam.waitActionName = 'WaitA';
                 else if (v === 1)
-                    this.waitActionName = 'WaitB';
+                    this.talkParam.waitActionName = 'WaitB';
 
                 this.setNerve(RosettaNrv.Wait);
             }
@@ -473,18 +513,18 @@ export class Kinopio extends NPCActor<KinopioNrv> {
         const itemGoods = sceneObjHolder.npcDirector.getNPCItemData('Kinopio', itemGoodsIdx);
         this.equipment(sceneObjHolder, itemGoods);
 
-        this.waitActionName = 'Wait';
+        this.talkParam.waitActionName = 'Wait';
         this.walkActionName = 'Walk';
         this.railGrounded = true;
         this.desiredRailSpeed = 0.83;
 
         const mode = fallback(getJMapInfoArg2(infoIter), -1);
         if (mode === 0) {
-            this.waitActionName = `SpinWait1`;
+            this.talkParam.setNoTurnAction(`SpinWait1`);
         } else if (mode === 1) {
-            this.waitActionName = `SpinWait2`;
+            this.talkParam.setNoTurnAction(`SpinWait2`);
         } else if (mode === 2) {
-            this.waitActionName = `SpinWait3`;
+            this.talkParam.setNoTurnAction(`SpinWait3`);
         } else if (mode === 3) {
             // setDistanceToTalk
         } else if (mode === 4) {
@@ -494,32 +534,36 @@ export class Kinopio extends NPCActor<KinopioNrv> {
             this.calcGravityFlag = true;
             this.setNerve(KinopioNrv.Mount);
         } else if (mode === 5) {
-            this.waitActionName = `SwimWait`;
+            this.talkParam.setSingleAction(`SwimWait`);
             this.walkActionName = `SwimWait`;
         } else if (mode === 6) {
-            this.waitActionName = `Pickel`;
+            this.talkParam.setNoTurnAction(`Pickel`);
         } else if (mode === 7) {
-            this.waitActionName = `Sleep`;
+            this.talkParam.setNoTurnAction(`Sleep`);
         } else if (mode === 8) {
             // this.hasTakeOutStar = true;
         } else if (mode === 9) {
-            this.waitActionName = `KinopioGoodsWeapon`;
+            this.talkParam.waitActionName = `KinopioGoodsWeapon`;
             this.walkActionName = `KinopioGoodsWeaponWalk`;
+            this.walkTurnActionName = `KinopioGoodsWeaponWalk`;;
         } else if (mode === 10) {
-            this.waitActionName = `Joy`;
-            this.walkActionName = `Joy`;
+            this.talkParam.setSingleAction(`Joy`);
         } else if (mode === 11) {
-            this.waitActionName = `Rightened`;
+            this.talkParam.setNoTurnAction(`Rightened`);
         } else if (mode === 12) {
-            this.waitActionName = `StarPieceWait`;
+            this.talkParam.setSingleAction(`StarPieceWait`);
             this.walkActionName = `KinopioGoodsStarPieceWalk`;
+            this.walkTurnActionName = `KinopioGoodsStarPieceWalk`;
         } else if (mode === 13) {
             this.walkActionName = `Getaway`;
+            this.walkTurnActionName = `Getaway`;
             this.desiredRailSpeed = 3.32;
         } else if (mode === -1) {
             if (itemGoodsIdx === 2) {
-                this.waitActionName = `WaitPickel`;
+                this.talkParam.waitActionName = `WaitPickel`;
+                this.talkParam.waitTurnActionName = `WaitPickel`;
                 this.walkActionName = `WalkPickel`;
+                this.walkTurnActionName = `WalkPickel`;
             } else {
                 // this.setNerve(KinopioNrv.Far);
             }
@@ -658,9 +702,27 @@ function startMoveAction(sceneObjHolder: SceneObjHolder, actor: NPCActor, deltaT
         reverseRailDirection(actor);
 }
 
-function tryStartTurnAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): void {
-    if (actor.waitActionName !== null)
-        tryStartAction(actor, actor.waitActionName);
+function tryStartTurnAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): boolean {
+    let shouldUseTurnAction = false;
+
+    if (isNearPlayer(sceneObjHolder, actor, actor.talkParam.turnDistance)) {
+        if (actor.talkParam.turnOnWait) {
+            const doneTurning = actor.turnToPlayer(sceneObjHolder, actor.talkParam.turnSpeed, actor.talkParam.turnVerticalSpeed, actor.talkParam.turnVerticalMaxAngle);
+            shouldUseTurnAction = !doneTurning;
+        }
+    } else {
+        if (actor.talkParam.turnOnWait) {
+            const doneTurning = actor.turnToDefault(actor.talkParam.turnSpeed);
+            shouldUseTurnAction = !doneTurning;
+        }
+    }
+
+    const actionName = shouldUseTurnAction ? actor.talkParam.waitTurnActionName : actor.talkParam.waitActionName;
+    if (actionName !== null) {
+        return tryStartAction(actor, actionName);
+    } else {
+        return false;
+    }
 }
 
 function tryStartTalkAction(sceneObjHolder: SceneObjHolder, actor: NPCActor): void {
@@ -759,30 +821,39 @@ export class Penguin extends NPCActor<PenguinNrv> {
         setBrkFrameAndStop(this, fallback(getJMapInfoArg7(infoIter), 0));
 
         if (this.mode === 0) {
-            this.waitActionName = `SitDown`;
+            this.talkParam.waitActionName = `SitDown`;
+            this.talkParam.waitTurnActionName = null;
+            this.talkParam.turnOnWait = false;
         } else if (this.mode === 1) {
-            this.waitActionName = `SwimWait`;
+            this.talkParam.waitActionName = `SwimWait`;
+            this.talkParam.waitTurnActionName = `SwimWait`;
             this.walkActionName = `Swim`;
             this.desiredRailSpeed = 5.0;
         } else if (this.mode === 2) {
-            this.waitActionName = `SwimWaitSurface`;
+            this.talkParam.waitActionName = `SwimWaitSurface`;
+            this.talkParam.waitTurnActionName = `SwimSurfaceTalk`;
             this.walkActionName = `SwimSurface`;
+            this.walkTurnActionName = `SwimSurface`;
             this.desiredRailSpeed = 5.0;
         } else if (this.mode === 3) {
-            this.waitActionName = `SwimWaitSurface`;
+            this.talkParam.setSingleAction(`SwimWaitSurface`);
         } else if (this.mode === 4) {
-            this.waitActionName = `SwimTurtleTalk`;
+            this.talkParam.setSingleAction(`SwimTurtleTalk`);
             this.walkActionName = `SwimTurtle`;
             this.desiredRailSpeed = 10.0;
         } else if (this.mode === 6) {
-            this.waitActionName = `Wait`;
+            this.talkParam.waitActionName = `Wait`;
+            this.talkParam.waitTurnActionName = `Turn`;
             this.walkActionName = `DashA`;
+            this.walkTurnActionName = `DashA`;
             this.desiredRailSpeed = 6.0;
             this.railTurnSpeed = 0.8;
             this.railGrounded = true;
         } else {
-            this.waitActionName = `Wait`;
+            this.talkParam.waitActionName = `Wait`;
+            this.talkParam.waitTurnActionName = `Turn`;
             this.walkActionName = `Walk`;
+            this.walkTurnActionName = `Walk`;
             this.desiredRailSpeed = 1.5;
             this.turnBckRate = 2.0;
             this.railGrounded = true;
@@ -1303,7 +1374,7 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
         caps.hitSensorOffset[1] = -20;
         caps.waitNerve = HoneyBeeNrv.Wait;
 
-        this.waitActionName = 'Wait';
+        this.talkParam.waitActionName = 'Wait';
 
         const type = fallback(getJMapInfoArg0(infoIter), 0);
         if (type === 0) {
@@ -1313,16 +1384,16 @@ export class HoneyBee extends NPCActor<HoneyBeeNrv> {
         } else if (type === 2) {
             caps.waitNerve = HoneyBeeNrv.Fly;
         } else if (type === 3) {
-            this.waitActionName = 'SleepWait';
+            this.talkParam.setNoTurnAction('SleepWait');
         } else if (type === 4) {
-            this.waitActionName = 'StickWait';
+            this.talkParam.setNoTurnAction('StickWait');
         } else if (type === 5) {
-            this.waitActionName = 'GatekeeperWait';
+            this.talkParam.setSingleAction('GatekeeperWait');
             // this.reactAction = true;
         } else if (type === 6) {
             caps.waitNerve = HoneyBeeNrv.DropLecture;
         } else if (type === 7) {
-            this.waitActionName = 'Flustered';
+            this.talkParam.setSingleAction('Flustered');
         } else if (type === 8) {
             // this.talkMtx
             caps.waitNerve = HoneyBeeNrv.FlyLectureA;
