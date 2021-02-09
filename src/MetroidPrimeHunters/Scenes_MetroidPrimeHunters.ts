@@ -8,14 +8,14 @@ import { parseMPH_Model, parseTEX0Texture } from './mph_binModel';
 
 import { DataFetcher } from '../DataFetcher';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxDevice, GfxRenderPass } from '../gfx/platform/GfxPlatform';
-import { MPHRenderer, G3DPass } from './render';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { MPHRenderer } from './render';
 import { assert, assertExists } from '../util';
-import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 
 const pathBase = `MetroidPrimeHunters`;
@@ -66,7 +66,6 @@ class ModelCache {
 }
 
 export class MPHSceneRenderer implements Viewer.SceneGfx {
-    public renderTarget = new BasicRenderTarget();
     private renderHelper: GfxRenderHelper;
 
     public textureHolder: FakeTextureHolder;
@@ -82,9 +81,8 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
-
-        renderInstManager.pushTemplateRenderInst();
         this.stageRenderer.prepareToRender(renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
@@ -93,25 +91,35 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const renderInstManager = this.renderHelper.renderInstManager;
-
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         this.prepareToRender(device, viewerInput);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
-        renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
-        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
 
-        renderInstManager.resetRenderInsts();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        return mainPassRenderer;
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderHelper.renderGraph.execute(device, builder);
+
+        this.renderHelper.renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice) {
         this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
 
         this.stageRenderer.destroy(device);
         for (let i = 0; i < this.objectRenderers.length; i++)

@@ -1,17 +1,18 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPassDescriptor, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPassDescriptor } from '../gfx/platform/GfxPlatform';
 import * as MapShape from './map_shape';
 import * as Tex from './tex';
 import { PaperMario64TextureHolder, PaperMario64ModelTreeRenderer, BackgroundBillboardRenderer } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { makeClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack, Color } from '../Color';
 import * as BYML from '../byml';
 import { ScriptExecutor } from './script';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { CameraController } from '../Camera';
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `pm64`;
 
@@ -23,7 +24,7 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     public bgTextureRenderer: BackgroundBillboardRenderer | null = null;
     public scriptExecutor: ScriptExecutor | null = null;
 
-    public renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     public renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice) {
@@ -49,20 +50,36 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         this.prepareToRender(device, viewerInput);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
-        renderInstManager.resetRenderInsts();
-        return passRenderer;
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearRenderPassDescriptor);
+
+        const builder = this.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderGraph.execute(device, builder);
+
+        this.renderHelper.renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
+        this.renderGraph.destroy(device);
         this.textureHolder.destroy(device);
         if (this.bgTextureRenderer !== null)
             this.bgTextureRenderer.destroy(device);

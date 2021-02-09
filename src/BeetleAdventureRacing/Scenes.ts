@@ -1,8 +1,8 @@
 import { CameraController } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
-import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxDevice, GfxRenderPass, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
-import { executeOnPass } from "../gfx/render/GfxRenderer";
+import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import InputManager from "../InputManager";
 import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
@@ -48,7 +48,7 @@ const bindingLayouts = [{ numUniformBuffers: 3, numSamplers: 2 }];
 
 class BARRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
-    private renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
 
     private uvtrRenderer: UVTRRenderer;
     private uvenRenderer: UVENRenderer | null;
@@ -271,36 +271,41 @@ class BARRenderer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        // Build scene graph and send buffers to host access pass
-        this.prepareToRender(device, viewerInput);
-
         // renderInstManager manages the scene graph
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        // Define width and height of buffer that we'll be rendering to
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        // Build scene graph and send buffers to host access pass
+        this.prepareToRender(device, viewerInput);
 
-        // Now we actually render.
-        // This is the final pass, so set colorResolveTo to the onscreen texture
-        // renderTarget.createRenderPass will set up the pass to use the renderTarget's textures to store color and depth data
-        // (note: an attachment is sort of a reference to a texture)
-        // then once it's rendered to those, the color data will be rendered to colorResolveTo (which basically just amounts to scaling it down to achieve antialiasing)
-        const renderPass = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.renderPassDescriptor, viewerInput.onscreenTexture);
-        executeOnPass(renderInstManager, device, renderPass, 0);
-        device.submitPass(renderPass);
+        const builder = this.renderGraph.newGraphBuilder();
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
 
         //TODO: snow
 
-        // Now that we're done rendering, clean up the scene graph
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
-        if (this.trackDataRenderer !== undefined) {
+        this.renderGraph.destroy(device);
+        if (this.trackDataRenderer !== undefined)
             this.trackDataRenderer.destroy(device);
-        }
     }
 }
 

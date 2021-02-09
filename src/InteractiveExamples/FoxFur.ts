@@ -2,10 +2,10 @@
 import { OrbitCameraController } from '../Camera';
 
 import { SceneDesc, SceneContext, GraphObjBase } from "../SceneBase";
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
+import { GfxDevice, GfxTexture, GfxBuffer, GfxBufferUsage, GfxFormat, GfxVertexBufferFrequency, GfxInputLayout, GfxInputState, GfxBindingLayoutDescriptor, GfxProgram, GfxBlendMode, GfxBlendFactor, GfxCullMode, makeTextureDescriptor2D, GfxColorWriteMask } from "../gfx/platform/GfxPlatform";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { getDataURLForPath } from "../DataFetcher";
-import { BasicRenderTarget, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { TransparentBlack, colorNewCopy, colorLerp, colorNewFromRGBA } from '../Color';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { TextureMapping } from '../TextureHolder';
@@ -21,6 +21,7 @@ import { downloadBuffer } from '../DownloadUtils';
 import { makeZipFile } from '../ZipFile';
 import { GridPlane } from './GridPlane';
 import { dfRange, dfShow } from '../DebugFloaters';
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `FoxFur`;
 
@@ -397,7 +398,7 @@ class FurObj {
 
 const clearPass = makeClearRenderPassDescriptor(TransparentBlack);
 export class SceneRenderer implements SceneGfx {
-    private renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private renderHelper: GfxRenderHelper;
     public fur: FurObj;
     public obj: GraphObjBase[] = [];
@@ -420,17 +421,31 @@ export class SceneRenderer implements SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
-        const renderInstManager = this.renderHelper.renderInstManager;
-
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         this.prepareToRender(device, viewerInput);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearPass);
-        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
-        renderInstManager.resetRenderInsts();
-        return mainPassRenderer;
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearPass);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, clearPass);
+
+        const builder = this.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderGraph.execute(device, builder);
+
+        this.renderHelper.renderInstManager.resetRenderInsts();
     }
 
     public async film() {

@@ -422,7 +422,8 @@ export class GfxRenderInst {
                 } else {
                     assert(binding.lateBinding === null);
                     dst.gfxTexture = binding.gfxTexture;
-                    dst.gfxSampler = binding.gfxSampler;
+                    if (binding.gfxSampler !== null)
+                        dst.gfxSampler = binding.gfxSampler;
                 }
 
                 dst.lateBinding = null;

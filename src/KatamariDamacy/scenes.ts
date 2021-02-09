@@ -5,9 +5,9 @@ import { Camera, CameraController } from '../Camera';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
 import { DataFetcher } from "../DataFetcher";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { Vec3Zero, MathConstants, setMatrixTranslation } from '../MathHelpers';
@@ -21,6 +21,7 @@ import { GallerySceneRenderer } from './Gallery';
 import { ObjectRenderer, CameraGameState, updateCameraGameState, KDLayer } from './objects';
 import { BINModelInstance, BINModelSectorData, KatamariDamacyProgram } from './render';
 import { parseAnimationList, ObjectAnimationList } from './animation';
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, GfxrTemporalTexture, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -170,8 +171,8 @@ function mod(a: number, b: number) {
 const tutorialScratch = vec3.create();
 class KatamariDamacyRenderer implements Viewer.SceneGfx {
     private currentAreaNo: number = 0;
-    private sceneTexture = new ColorTexture();
-    public renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
+    private sceneTexture = new GfxrTemporalTexture();
     public renderHelper: GfxRenderHelper;
     public modelSectorData: BINModelSectorData[] = [];
     public framebufferTextureMapping = new TextureMapping();
@@ -218,19 +219,40 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         }
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         this.prepareToRender(device, viewerInput);
 
-        this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const builder = this.renderGraph.newGraphBuilder();
 
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        this.framebufferTextureMapping.gfxTexture = this.sceneTexture!.gfxTexture;
-        renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
+                renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.resetRenderInsts();
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
+        // Maybe have copyTextureToTexture as a native device method?
+        builder.pushPass((pass) => {
+            pass.setDebugName('Copy to Temporal Texture');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
+
+        this.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
 
         if (this.motionCache !== null && this.drawPaths) {
@@ -240,8 +262,6 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
                 this.drawPath(viewerInput, v.pathPoints);
             }
         }
-
-        return passRenderer;
     }
 
     public serializeSaveState(dst: ArrayBuffer, offs: number): number {
@@ -320,8 +340,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.sceneTexture.destroy(device);
-        this.renderTarget.destroy(device);
+        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
 
         for (let i = 0; i < this.modelSectorData.length; i++)

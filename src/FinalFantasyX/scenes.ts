@@ -1,8 +1,8 @@
 import * as BIN from "./bin";
 import * as Viewer from '../viewer';
-import { BasicRenderTarget, makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxRenderPass, GfxTexture } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxTexture } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { SceneContext } from '../SceneBase';
 import { FakeTextureHolder } from '../TextureHolder';
@@ -12,14 +12,15 @@ import { CameraController } from "../Camera";
 import { mat4 } from "gl-matrix";
 import AnimationController from "../AnimationController";
 import { NamedArrayBufferSlice } from "../DataFetcher";
-import { activateEffect, EventScript, LevelObjectHolder as LevelObjectHolder } from "./script";
+import { activateEffect, EventScript, LevelObjectHolder } from "./script";
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 
 const pathBase = `ffx`;
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 1 }];
 
 class FFXRenderer implements Viewer.SceneGfx {
-    public renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     public renderHelper: GfxRenderHelper;
     public textureHolder = new FakeTextureHolder([]);
 
@@ -42,19 +43,29 @@ class FFXRenderer implements Viewer.SceneGfx {
         c.setSceneMoveSpeedMult(.003);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
-        const renderInstManager = this.renderHelper.renderInstManager;
-
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         this.prepareToRender(device, viewerInput);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearPass);
+        const builder = this.renderGraph.newGraphBuilder();
 
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearPass);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearPass);
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
         renderInstManager.resetRenderInsts();
-
-        return passRenderer;
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
@@ -108,7 +119,7 @@ class FFXRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderTarget.destroy(device);
+        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
 
         for (let i = 0; i < this.modelData.length; i++)

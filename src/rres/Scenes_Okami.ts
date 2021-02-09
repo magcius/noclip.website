@@ -1,5 +1,5 @@
 
-import { GfxDevice, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import * as Viewer from '../viewer';
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
@@ -14,8 +14,9 @@ import AnimationController from "../AnimationController";
 import { GXMaterialHacks } from "../gx/gx_material";
 import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelpers";
 import { CameraController, Camera } from "../Camera";
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { SceneContext } from "../SceneBase";
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 
 function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     mat4.identity(out);
@@ -266,7 +267,7 @@ class ModelCache {
 }
 
 export class OkamiRenderer implements Viewer.SceneGfx {
-    public renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
 
     public mapPartInstances: MapPartInstance[] = [];
     public objectInstances: ObjectInstance[] = [];
@@ -298,19 +299,35 @@ export class OkamiRenderer implements Viewer.SceneGfx {
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         this.prepareToRender(device, viewerInput);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
-        renderInstManager.resetRenderInsts();
-        return passRenderer;
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const builder = this.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderGraph.execute(device, builder);
+
+        this.renderHelper.renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderTarget.destroy(device);
+        this.renderGraph.destroy(device);
         this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.models.length; i++)

@@ -1,7 +1,7 @@
 
 import * as Viewer from '../viewer';
-import { GfxDevice, GfxRenderPassDescriptor, GfxRenderPass, GfxCullMode } from '../gfx/platform/GfxPlatform';
-import { makeClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxDevice, GfxRenderPassDescriptor, GfxCullMode } from '../gfx/platform/GfxPlatform';
+import { makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { OpaqueBlack } from '../Color';
 import { SceneContext } from '../SceneBase';
@@ -10,6 +10,7 @@ import { RootMeshRenderer, MeshData, Mesh } from './render';
 import { RSPState, RSPOutput } from './f3dzex';
 import { CameraController } from '../Camera';
 import * as UI from '../ui';
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `zelview`;
 
@@ -19,7 +20,7 @@ class ZelviewRenderer implements Viewer.SceneGfx {
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
 
-    private renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     public renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, private zelview: ZELVIEW0) {
@@ -56,20 +57,36 @@ class ZelviewRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         this.prepareToRender(device, viewerInput);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
-        renderInstManager.resetRenderInsts();
-        return passRenderer;
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearRenderPassDescriptor);
+
+        const builder = this.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderGraph.execute(device, builder);
+
+        this.renderHelper.renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
+        this.renderGraph.destroy(device);
         for (let i = 0; i < this.meshDatas.length; i++)
             this.meshDatas[i].destroy(device);
         for (let i = 0; i < this.meshRenderers.length; i++)

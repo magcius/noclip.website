@@ -2,12 +2,12 @@
 import { mat4, vec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController, OrbitCameraController } from '../Camera';
-import { colorFromHSL, colorNewCopy, White, colorToCSS } from '../Color';
+import { colorFromHSL, colorNewCopy, White } from '../Color';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
-import { BasicRenderTarget, ColorTexture, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
@@ -21,6 +21,7 @@ import { ObjectRenderer } from './objects';
 import { BINModelSectorData, KatamariDamacyProgram } from './render';
 import { fillSceneParamsData } from './scenes';
 import { setMatrixTranslation } from '../MathHelpers';
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, GfxrTemporalTexture, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -114,8 +115,8 @@ interface GalleryObject {
 
 const scratchVec = vec3.create();
 export class GallerySceneRenderer implements SceneGfx {
-    private sceneTexture = new ColorTexture();
-    public renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
+    private sceneTexture = new GfxrTemporalTexture();
     public renderHelper: GfxRenderHelper;
     public modelSectorData: BINModelSectorData[] = [];
     public objectRenderers: ObjectRenderer[] = [];
@@ -252,7 +253,7 @@ export class GallerySceneRenderer implements SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
         if (this.context.inputManager.isKeyDownEventTriggered('Space'))
@@ -260,22 +261,41 @@ export class GallerySceneRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const builder = this.renderGraph.newGraphBuilder();
 
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        this.framebufferTextureMapping.gfxTexture = this.sceneTexture!.gfxTexture;
-        renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
-        renderInstManager.drawOnPassRenderer(device, passRenderer);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
+                renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderInstManager.resetRenderInsts();
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
+        // Maybe have copyTextureToTexture as a native device method?
+        builder.pushPass((pass) => {
+            pass.setDebugName('Copy to Temporal Texture');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
+
+        this.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
-
-        return passRenderer;
     }
 
     public destroy(device: GfxDevice): void {
         this.sceneTexture.destroy(device);
-        this.renderTarget.destroy(device);
+        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
         this.circle.destroy(device);
 

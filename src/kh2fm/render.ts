@@ -8,13 +8,14 @@ import { DeviceProgram } from "../Program";
 import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMode, GfxBlendFactor, GfxCompareMode, GfxTexture, GfxSampler, GfxBuffer, GfxBufferUsage, GfxInputLayout, GfxInputState, GfxRenderPass, GfxTextureDimension, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxBindingLayoutDescriptor, GfxColorWriteMask, GfxVertexBufferDescriptor, GfxInputLayoutBufferDescriptor, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
-import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { nArray, assertExists, assert } from '../util';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -626,15 +627,16 @@ class SceneRenderer {
     }
 }
 
+
 export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
-    private renderTarget = new BasicRenderTarget;
     private renderHelper: GfxRenderHelper;
     private sceneRenderers: SceneRenderer[] = [];
+
     private mapData: MapData;
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, map: MAP.KingdomHeartsIIMap) {
-        this.mapData = new MapData(device, map);
         this.renderHelper = new GfxRenderHelper(device);
+        this.mapData = new MapData(device, map);
         this.sceneRenderers.push(new SceneRenderer(device, this.mapData, this.mapData.drawCalls));
     }
 
@@ -656,38 +658,50 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
             });
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
-        return [renderHacksPanel, new UI.LayerPanel(this.mapData.layers)];
+
+        const layersPanel = new UI.LayerPanel(this.mapData.layers);
+
+        return [renderHacksPanel, layersPanel];
     }
 
-    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
+        const renderInstManager = this.renderHelper.renderInstManager;
         for (let i = 0; i < this.sceneRenderers.length; i++)
             this.sceneRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
         renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.prepareToRender(device);
-
-        for (const textureAnim of this.mapData.textureAnimations)
-            textureAnim.advanceTime(viewerInput.deltaTime);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        this.prepareToRender(device, viewerInput);
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
 
-        // Create main render pass.
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
-        executeOnPass(renderInstManager, device, passRenderer, RenderPass.MAIN);
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                executeOnPass(renderInstManager, device, passRenderer, RenderPass.MAIN);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.prepareToRender(device, viewerInput);
+
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
-        return passRenderer;
     }
 
-    public destroy(device: GfxDevice) {
+    public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
         this.textureHolder.destroy(device);
         this.mapData.destroy(device);
     }

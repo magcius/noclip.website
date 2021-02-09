@@ -20,7 +20,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, SceneDesc } from '../SceneBase';
 import { assert } from '../util';
 import { VertexAttributeInput } from '../gx/gx_displaylist';
-import { standardFullClearRenderPassDescriptor, BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { createModelInstance } from '../j3d/scenes';
 import { computeModelMatrixS } from '../MathHelpers';
 import { AABB } from '../Geometry';
@@ -28,6 +28,7 @@ import * as GX from '../gx/gx_enum';
 import { colorNewCopy, White } from '../Color';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { dfUsePercent } from '../DebugFloaters';
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 class PlaneShape {
     private vtxBuffer: GfxBuffer;
@@ -259,7 +260,7 @@ class FakeWaterModelInstance {
 }
 
 class SlimySpringWaterRenderer implements SceneGfx {
-    private renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     public renderHelper: GXRenderHelperGfx;
 
     public skybox: J3DModelInstanceSimple;
@@ -301,19 +302,36 @@ class SlimySpringWaterRenderer implements SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         this.prepareToRender(device, viewerInput);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        this.renderHelper.renderInstManager.drawOnPassRenderer(device, passRenderer);
+        const renderInstManager = this.renderHelper.renderInstManager;
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const builder = this.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderGraph.execute(device, builder);
+
         this.renderHelper.renderInstManager.resetRenderInsts();
-        return passRenderer;
     }
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
+        this.renderGraph.destroy(device);
         this.skybox.destroy(device);
         this.flowerBox.destroy(device);
         this.waterModel.destroy(device);

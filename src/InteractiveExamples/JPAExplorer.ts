@@ -1,7 +1,7 @@
 
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { BasicRenderTarget, makeClearRenderPassDescriptor, ColorTexture, noClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxDevice, GfxRenderPass, GfxTexture } from "../gfx/platform/GfxPlatform";
+import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
@@ -21,9 +21,10 @@ import { TextureMapping } from "../TextureHolder";
 import { EFB_WIDTH, EFB_HEIGHT, GX_Program } from "../gx/gx_material";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { FloatingPanel } from "../DebugFloaters";
+import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, GfxrTemporalTexture, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 
-function setTextureMappingIndirect(m: TextureMapping, sceneTexture: GfxTexture): void {
-    m.gfxTexture = sceneTexture;
+function setLateTextureMapping(m: TextureMapping, lateBinding: string): void {
+    m.lateBinding = lateBinding;
     m.width = EFB_WIDTH;
     m.height = EFB_HEIGHT;
     m.flipY = true;
@@ -44,6 +45,12 @@ class BasicEffectSystem {
     constructor(device: GfxDevice, private jpac: JPA.JPAC) {
         this.emitterManager = new JPA.JPAEmitterManager(device, 6000, 300);
         this.jpacData = new JPA.JPACData(this.jpac);
+
+        for (let i = 0; i < this.fbTextureNames.length; i++) {
+            const m = this.jpacData.getTextureMappingReference(this.fbTextureNames[i]);
+            if (m !== null)
+                setLateTextureMapping(m, 'opaque-scene-texture');
+        }
     }
 
     private findResourceData(userIndex: number): [JPA.JPACData, JPA.JPAResourceRaw] | null {
@@ -52,14 +59,6 @@ class BasicEffectSystem {
             return [this.jpacData, r];
 
         return null;
-    }
-
-    public setOpaqueSceneTexture(opaqueSceneTexture: GfxTexture): void {
-        for (let i = 0; i < this.fbTextureNames.length; i++) {
-            const m = this.jpacData.getTextureMappingReference(this.fbTextureNames[i]);
-            if (m !== null)
-                setTextureMappingIndirect(m, opaqueSceneTexture);
-        }
     }
 
     public resourceDataUsesFB(resourceData: JPA.JPAResourceData): boolean {
@@ -203,7 +202,7 @@ const clearPass = makeClearRenderPassDescriptor(colorNewFromRGBA(0.2, 0.2, 0.2, 
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class Explorer implements SceneGfx {
-    private renderTarget = new BasicRenderTarget();
+    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private renderHelper: GfxRenderHelper;
     private effectSystem: BasicEffectSystem;
     private uiContainer: HTMLElement;
@@ -213,7 +212,6 @@ export class Explorer implements SceneGfx {
     private wiggleEmitters: boolean = false;
     private loopEmitters: boolean = true;
     private forceCentered: boolean = false;
-    private opaqueSceneTexture = new ColorTexture();
 
     // UI
     private currentEffectIndexEntry: SimpleTextEntry;
@@ -439,7 +437,6 @@ export class Explorer implements SceneGfx {
         }
 
         this.effectSystem.calc(viewerInput);
-        this.effectSystem.setOpaqueSceneTexture(this.opaqueSceneTexture.gfxTexture!);
 
         const efTemplate = renderInstManager.pushTemplateRenderInst();
         efTemplate.setBindingLayouts(gxBindingLayouts);
@@ -466,23 +463,46 @@ export class Explorer implements SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
-        const renderInstManager = this.renderHelper.renderInstManager;
-
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         this.prepareToRender(device, viewerInput);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.opaqueSceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, clearPass, this.opaqueSceneTexture.gfxTexture);
-        executeOnPass(renderInstManager, device, mainPassRenderer, Pass.MAIN);
-        device.submitPass(mainPassRenderer);
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearPass);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, clearPass);
 
-        const indirectPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor);
-        executeOnPass(renderInstManager, device, indirectPassRenderer, Pass.INDIRECT);
+        const builder = this.renderGraph.newGraphBuilder();
 
-        renderInstManager.resetRenderInsts();
-        return indirectPassRenderer;
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                executeOnPass(renderInstManager, device, passRenderer, Pass.MAIN);
+            });
+        });
+
+        builder.pushPass((pass) => {
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+            const opaqueSceneTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            pass.attachResolveTexture(opaqueSceneTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                const opaqueSceneTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
+                renderInstManager.setVisibleByFilterKeyExact(Pass.INDIRECT);
+                renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('opaque-scene-texture', { gfxTexture: opaqueSceneTexture, gfxSampler: null, lateBinding: null });
+                executeOnPass(renderInstManager, device, passRenderer, Pass.INDIRECT);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderGraph.execute(device, builder);
+
+        this.renderHelper.renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice) {
