@@ -65,7 +65,6 @@ class ModelCache {
 }
 
 export class MKDSRenderer implements Viewer.SceneGfx {
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private renderHelper: GfxRenderHelper;
 
     public textureHolder: FakeTextureHolder;
@@ -101,7 +100,7 @@ export class MKDSRenderer implements Viewer.SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         builder.pushPass((pass) => {
@@ -126,12 +125,11 @@ export class MKDSRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice) {
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
 
         this.courseRenderer.destroy(device);

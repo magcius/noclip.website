@@ -182,7 +182,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 export class Scene implements Viewer.SceneGfx {
     private inputLayout: GfxInputLayout;
     private program: GfxProgram;
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private ivRenderers: IVRenderer[] = [];
     private renderHelper: GfxRenderHelper;
 
@@ -235,7 +234,7 @@ export class Scene implements Viewer.SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -251,9 +250,8 @@ export class Scene implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.renderGraph.execute(device, builder);
-
-        this.renderHelper.renderInstManager.resetRenderInsts();
+        this.renderHelper.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
@@ -261,7 +259,6 @@ export class Scene implements Viewer.SceneGfx {
         device.destroyProgram(this.program);
         this.ivRenderers.forEach((r) => r.destroy(device));
         this.renderHelper.destroy(device);
-        this.renderGraph.destroy(device);
     }
 
     public createPanels(): UI.Panel[] {

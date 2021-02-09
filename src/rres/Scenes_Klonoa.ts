@@ -30,8 +30,6 @@ const enum KlonoaPass {
 }
 
 class KlonoaRenderer implements Viewer.SceneGfx {
-    public renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
-
     public modelInstances: MDL0ModelInstance[] = [];
     public modelData: MDL0Model[] = [];
 
@@ -59,10 +57,10 @@ class KlonoaRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
         this.prepareToRender(device, viewerInput);
 
-
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -106,13 +104,11 @@ class KlonoaRenderer implements Viewer.SceneGfx {
         }
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.renderGraph.execute(device, builder);
-
-        this.renderHelper.renderInstManager.resetRenderInsts();
+        this.renderHelper.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderGraph.destroy(device);
         this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
 

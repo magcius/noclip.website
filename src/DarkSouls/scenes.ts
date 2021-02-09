@@ -54,7 +54,6 @@ class ResourceSystem {
 class DKSRenderer implements Viewer.SceneGfx {
     public msbRenderers: MSBRenderer[] = [];
     private renderHelper: GfxRenderHelper;
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private renderContext = new RenderContext();
 
     constructor(device: GfxDevice, public textureHolder: DDSTextureHolder) {
@@ -88,7 +87,7 @@ class DKSRenderer implements Viewer.SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -104,12 +103,11 @@ class DKSRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.msbRenderers.length; i++)
             this.msbRenderers[i].destroy(device);

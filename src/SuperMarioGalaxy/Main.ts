@@ -140,7 +140,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
     public isInteractive = true;
 
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private mainColorTemporalTexture = new GfxrTemporalTexture();
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -330,7 +329,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.sceneObjHolder.specialTextureBinder.registerTextureMapping(indDummy, SpecialTextureType.OpaqueSceneTexture);
         }
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
         this.sceneObjHolder.graphBuilder = builder;
 
         // Prepare all of our NameObjs.
@@ -613,7 +612,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.prepareToRender(device);
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
 
         renderInstManager.resetRenderInsts();
     }
@@ -632,7 +631,6 @@ export class SMGRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderGraph.destroy(device);
         this.mainColorTemporalTexture.destroy(device);
     }
 }

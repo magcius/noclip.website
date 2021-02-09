@@ -32,7 +32,6 @@ class BKRenderer implements Viewer.SceneGfx {
     public sceneEmitters: SceneEmitterHolder;
     public rails: Actors.Rail[] = [];
 
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     public renderHelper: GfxRenderHelper;
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, public objectData: ObjectData) {
@@ -114,7 +113,7 @@ class BKRenderer implements Viewer.SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         builder.pushPass((pass) => {
@@ -139,12 +138,11 @@ class BKRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.geoDatas.length; i++)
             this.geoDatas[i].destroy(device);

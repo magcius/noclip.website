@@ -2829,7 +2829,6 @@ class Pilotwings64Renderer implements SceneGfx {
     public taskLabels: TaskLabel[] = [];
     public strIndexToTask: number[] = [];
 
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     public renderPassDescriptor = standardFullClearRenderPassDescriptor;
 
     private currentTaskIndex: number = -1;
@@ -2890,7 +2889,7 @@ class Pilotwings64Renderer implements SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         builder.pushPass((pass) => {
@@ -2916,7 +2915,7 @@ class Pilotwings64Renderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
@@ -2955,7 +2954,6 @@ class Pilotwings64Renderer implements SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.renderGraph.destroy(device);
         if (this.snowRenderer !== null)
             this.snowRenderer.destroy(device);
     }

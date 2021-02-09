@@ -630,7 +630,6 @@ export class GXRenderHelperGfx extends GfxRenderHelper {
 }
 
 export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
-    public renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     public renderHelper: GXRenderHelperGfx;
     public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
 
@@ -650,7 +649,7 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -666,13 +665,11 @@ export abstract class BasicGXRendererHelper implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.renderGraph.execute(device, builder);
-
-        this.renderHelper.renderInstManager.resetRenderInsts();
+        this.renderHelper.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
     }
 }

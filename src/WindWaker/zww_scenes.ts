@@ -517,7 +517,6 @@ const enum EffectDrawGroup {
 
 const scratchMatrix = mat4.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private opaqueSceneTextureMapping = new TextureMapping();
@@ -727,7 +726,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
         this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
 
@@ -781,13 +780,12 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         });
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
 
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
         this.extraTextures.destroy(device);
         this.globals.destroy(device);

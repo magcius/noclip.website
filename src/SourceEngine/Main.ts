@@ -847,8 +847,6 @@ export class SourceRenderer implements SceneGfx {
     public bspRenderers: BSPRenderer[] = [];
     public renderContext: SourceRenderContext;
 
-    private renderGraph = new GfxrRenderGraphImpl();
-
     // Scratch
     public mainView = new SourceEngineView();
     public skyboxView = new SourceEngineView();
@@ -963,7 +961,7 @@ export class SourceRenderer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
         mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
@@ -1043,13 +1041,12 @@ export class SourceRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
 
         this.renderHelper.renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
         this.renderContext.destroy(device);
         if (this.skyboxRenderer !== null)

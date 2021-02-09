@@ -5,16 +5,14 @@ import { FakeTextureHolder } from "../TextureHolder";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { assertExists } from "../util";
 import { parseNSBMD } from "./NNS_G3D";
 import { NITRO_Program } from "../SuperMario64DS/render";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 
 class BasicNSBMDRenderer implements SceneGfx {
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private renderHelper: GfxRenderHelper;
 
     public mdl0Renderers: MDL0Renderer[] = [];
@@ -45,7 +43,7 @@ class BasicNSBMDRenderer implements SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -61,13 +59,11 @@ class BasicNSBMDRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.renderGraph.execute(device, builder);
-
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice) {
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
 
         for (let i = 0; i < this.mdl0Renderers.length; i++)

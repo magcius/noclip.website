@@ -58,8 +58,6 @@ enum SonicColorsPass {
 }
 
 class SonicColorsRenderer implements Viewer.SceneGfx {
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
-
     public renderHelper: GXRenderHelperGfx;
     public textureHolder = new RRESTextureHolder();
     public animationController = new AnimationController();
@@ -88,7 +86,7 @@ class SonicColorsRenderer implements Viewer.SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         builder.pushPass((pass) => {
@@ -113,13 +111,12 @@ class SonicColorsRenderer implements Viewer.SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
 
         for (let i = 0; i < this.modelInstances.length; i++)
