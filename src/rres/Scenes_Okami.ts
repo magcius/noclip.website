@@ -16,7 +16,7 @@ import { computeModelMatrixSRT, computeMatrixWithoutRotation } from "../MathHelp
 import { CameraController, Camera } from "../Camera";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { SceneContext } from "../SceneBase";
-import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 
 function computeModelMatrixYBillboard(out: mat4, camera: Camera): void {
     mat4.identity(out);
@@ -267,8 +267,6 @@ class ModelCache {
 }
 
 export class OkamiRenderer implements Viewer.SceneGfx {
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
-
     public mapPartInstances: MapPartInstance[] = [];
     public objectInstances: ObjectInstance[] = [];
     public models: MDL0Model[] = [];
@@ -307,7 +305,7 @@ export class OkamiRenderer implements Viewer.SceneGfx {
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -321,13 +319,11 @@ export class OkamiRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.renderGraph.execute(device, builder);
-
-        this.renderHelper.renderInstManager.resetRenderInsts();
+        this.renderHelper.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderGraph.destroy(device);
         this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
         for (let i = 0; i < this.models.length; i++)

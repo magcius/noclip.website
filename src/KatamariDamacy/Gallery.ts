@@ -21,7 +21,7 @@ import { ObjectRenderer } from './objects';
 import { BINModelSectorData, KatamariDamacyProgram } from './render';
 import { fillSceneParamsData } from './scenes';
 import { setMatrixTranslation } from '../MathHelpers';
-import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, GfxrTemporalTexture, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrTemporalTexture, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `katamari_damacy`;
 const katamariWorldSpaceToNoclipSpace = mat4.create();
@@ -101,10 +101,6 @@ class GalleryCircleRenderer {
 
         renderInstManager.submitRenderInst(renderInst);
     }
-
-    public destroy(device: GfxDevice): void {
-        device.destroyProgram(this.gfxProgram);
-    }
 }
 
 interface GalleryObject {
@@ -115,7 +111,6 @@ interface GalleryObject {
 
 const scratchVec = vec3.create();
 export class GallerySceneRenderer implements SceneGfx {
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     private sceneTexture = new GfxrTemporalTexture();
     public renderHelper: GfxRenderHelper;
     public modelSectorData: BINModelSectorData[] = [];
@@ -261,10 +256,12 @@ export class GallerySceneRenderer implements SceneGfx {
 
         this.prepareToRender(device, viewerInput);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        this.sceneTexture.setDescription(device, mainColorDesc);
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -276,7 +273,6 @@ export class GallerySceneRenderer implements SceneGfx {
                 this.framebufferTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
                 renderInstManager.simpleRenderInstList!.resolveLateSamplerBinding('framebuffer', this.framebufferTextureMapping);
                 renderInstManager.drawOnPassRenderer(device, passRenderer);
-                renderInstManager.resetRenderInsts();
             });
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
@@ -289,15 +285,13 @@ export class GallerySceneRenderer implements SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
 
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.sceneTexture.destroy(device);
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
-        this.circle.destroy(device);
 
         for (let i = 0; i < this.modelSectorData.length; i++)
             this.modelSectorData[i].destroy(device);

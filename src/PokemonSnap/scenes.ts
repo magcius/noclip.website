@@ -15,7 +15,7 @@ import { hexzero } from '../util';
 import { CameraController } from '../Camera';
 import { createActor, LevelGlobals, sceneActorInit } from './actor';
 import { ParticleManager } from './particles';
-import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `PokemonSnap`;
 

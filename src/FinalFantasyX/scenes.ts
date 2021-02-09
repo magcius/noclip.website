@@ -13,14 +13,13 @@ import { mat4 } from "gl-matrix";
 import AnimationController from "../AnimationController";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { activateEffect, EventScript, LevelObjectHolder } from "./script";
-import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 
 const pathBase = `ffx`;
 
 const bindingLayouts: GfxBindingLayoutDescriptor[] = [{ numUniformBuffers: 2, numSamplers: 1 }];
 
 class FFXRenderer implements Viewer.SceneGfx {
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
     public renderHelper: GfxRenderHelper;
     public textureHolder = new FakeTextureHolder([]);
 
@@ -48,7 +47,7 @@ class FFXRenderer implements Viewer.SceneGfx {
 
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearPass);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearPass);
@@ -65,6 +64,7 @@ class FFXRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
@@ -119,7 +119,6 @@ class FFXRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderGraph.destroy(device);
         this.renderHelper.destroy(device);
 
         for (let i = 0; i < this.modelData.length; i++)

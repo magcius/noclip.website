@@ -251,7 +251,7 @@ export class Scene implements Viewer.SceneGfx {
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.renderHelper.renderGraph.execute(device, builder);
-        this.renderHelper.renderInstManager.resetRenderInsts();
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {

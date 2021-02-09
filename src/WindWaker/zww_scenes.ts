@@ -45,7 +45,7 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { TSDraw } from '../SuperMarioGalaxy/DDraw';
 import { d_a_sea } from './d_a_sea';
 import { dPa_control_c } from './d_particle';
-import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from '../gfx/render/GfxRenderGraph';
 
 type SymbolData = { Filename: string, SymbolName: string, Data: ArrayBufferSlice };
 type SymbolMapData = { SymbolData: SymbolData[] };
@@ -778,10 +778,9 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
                 this.executeList(device, renderInstManager, passRenderer, dlst.effect[EffectDrawGroup.Indirect]);
             });
         });
-
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-        this.renderHelper.renderGraph.execute(device, builder);
 
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 

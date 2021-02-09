@@ -46,7 +46,7 @@ import { NPCDirector } from './Actors/NPC';
 import { ShadowControllerHolder } from './Shadow';
 import { StarPieceDirector, WaterPressureBulletHolder } from './Actors/MapObj';
 import { DemoDirector } from './Demo';
-import { GfxrRenderTargetDescription, GfxrRenderGraph, GfxrAttachmentSlot, GfxrRenderGraphImpl, GfxrTemporalTexture, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
+import { GfxrRenderTargetDescription, GfxrAttachmentSlot, GfxrTemporalTexture, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 import { TransparentBlack } from '../Color';
 import { GameSystemFontHolder, LayoutHolder } from './Layout';
 import { GalaxyMapController } from './Actors/GalaxyMap';
@@ -612,8 +612,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.prepareToRender(device);
-        this.renderHelper.renderGraph.execute(device, builder);
 
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 

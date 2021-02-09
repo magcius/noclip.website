@@ -675,6 +675,7 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        this.prepareToRender(device, viewerInput);
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
@@ -693,8 +694,6 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
             });
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-
-        this.prepareToRender(device, viewerInput);
 
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();

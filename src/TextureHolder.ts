@@ -3,11 +3,12 @@ import * as Viewer from './viewer';
 import { GfxSampler, GfxTexture, GfxDevice } from './gfx/platform/GfxPlatform';
 
 export interface TextureOverride {
-    gfxTexture: GfxTexture;
+    gfxTexture: GfxTexture | null;
     gfxSampler?: GfxSampler;
     width: number;
     height: number;
     flipY: boolean;
+    lateBinding?: string;
 }
 
 export interface TextureBase {
@@ -46,6 +47,8 @@ export class TextureMapping {
         this.width = textureOverride.width;
         this.height = textureOverride.height;
         this.flipY = textureOverride.flipY;
+        if (textureOverride.lateBinding)
+            this.lateBinding = textureOverride.lateBinding;
         return true;
     }
 

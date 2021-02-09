@@ -27,7 +27,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import Pako from 'pako';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
-import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 
 const pathBase = `DonkeyKong64`;
 
@@ -440,7 +440,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 
 class DK64Renderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
 
     public meshDatas: MeshData[] = [];
     public meshRenderers: RootMeshRenderer[] = [];
@@ -470,7 +469,7 @@ class DK64Renderer implements Viewer.SceneGfx {
         this.prepareToRender(device, viewerInput);
 
         const renderInstManager = this.renderHelper.renderInstManager;
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -487,12 +486,12 @@ class DK64Renderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.renderGraph.destroy(device);
         for (let i = 0; i < this.meshRenderers.length; i++)
             this.meshRenderers[i].destroy(device);
         for (let i = 0; i < this.meshDatas.length; i++)

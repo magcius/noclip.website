@@ -8,13 +8,14 @@ import { Entity } from "./Entity";
 import { mat4 } from "gl-matrix";
 import { DeviceProgram } from "../Program";
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { fillMatrix4x4, fillVec4v } from "../gfx/helpers/UniformBufferHelpers";
 import { TextureMapping } from "../TextureHolder";
 import { nArray } from "../util";
 import { TheWitnessGlobals } from "./Globals";
 import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 
 const pathBase = `TheWitness`;
 
@@ -203,7 +204,6 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
 ];
 
 class TheWitnessRenderer implements SceneGfx {
-    public renderTarget = new BasicRenderTarget();
     public renderHelper: GfxRenderHelper;
 
     public mesh_instance_array: Mesh_Instance[] = [];
@@ -227,15 +227,29 @@ class TheWitnessRenderer implements SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    public render(device: GfxDevice, viewerInput: ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         this.prepareToRender(device, viewerInput);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
 
         /*
@@ -246,12 +260,9 @@ class TheWitnessRenderer implements SceneGfx {
             drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, this.entities[i].position, this.entities[i].debug_color);
         }
         */
-
-        return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
     }
 }

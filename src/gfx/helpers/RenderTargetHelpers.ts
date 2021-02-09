@@ -1,6 +1,6 @@
 
 import { GfxDevice, GfxRenderTarget, GfxRenderPassDescriptor, GfxFormat, GfxTexture, GfxRenderPass, GfxColor, GfxNormalizedViewportCoords, GfxTextureDimension } from "../platform/GfxPlatform";
-import { colorNewFromRGBA, TransparentBlack, OpaqueBlack } from "../../Color";
+import { colorNewFromRGBA, OpaqueBlack } from "../../Color";
 import { reverseDepthForClearValue } from "./ReversedDepthHelpers";
 
 export const DEFAULT_NUM_SAMPLES = 4;
@@ -139,8 +139,6 @@ export function makeClearRenderPassDescriptor(clearColor: Readonly<GfxColor> | '
 
 export const standardFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(colorNewFromRGBA(0.88, 0.88, 0.88, 1.0));
 export const opaqueBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
-export const transparentBlackFullClearRenderPassDescriptor = makeClearRenderPassDescriptor(TransparentBlack);
-export const depthClearRenderPassDescriptor = makeClearRenderPassDescriptor('load');
 export const noClearRenderPassDescriptor: GfxRenderPassDescriptor = {
     colorAttachment: null,
     colorResolveTo: null,

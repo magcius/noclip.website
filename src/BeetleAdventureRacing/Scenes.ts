@@ -2,7 +2,7 @@ import { CameraController } from "../Camera";
 import { colorNewFromRGBA } from "../Color";
 import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxDevice, GfxRenderPassDescriptor } from "../gfx/platform/GfxPlatform";
-import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import InputManager from "../InputManager";
 import { Destroyable, SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
@@ -48,7 +48,6 @@ const bindingLayouts = [{ numUniformBuffers: 3, numSamplers: 2 }];
 
 class BARRenderer implements SceneGfx {
     public renderHelper: GfxRenderHelper;
-    private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
 
     private uvtrRenderer: UVTRRenderer;
     private uvenRenderer: UVENRenderer | null;
@@ -277,7 +276,7 @@ class BARRenderer implements SceneGfx {
         // Build scene graph and send buffers to host access pass
         this.prepareToRender(device, viewerInput);
 
-        const builder = this.renderGraph.newGraphBuilder();
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
@@ -297,13 +296,12 @@ class BARRenderer implements SceneGfx {
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.renderGraph.execute(device, builder);
+        this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.renderGraph.destroy(device);
         if (this.trackDataRenderer !== undefined)
             this.trackDataRenderer.destroy(device);
     }
