@@ -12,14 +12,13 @@ import { assert, assertExists } from '../util';
 import { mat4 } from 'gl-matrix';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
 import { parseNSBMD, BTX0, parseNSBTX, fx32, TEX0, MDL0Model } from './NNS_G3D';
 import { CameraController } from '../Camera';
 import { AABB } from '../Geometry';
 import { NITRO_Program } from '../SuperMario64DS/render';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 
 const pathBase = `PokemonPlatinum`;
 class ModelCache {
@@ -63,13 +62,12 @@ class ModelCache {
 }
 
 export class PlatinumMapRenderer implements Viewer.SceneGfx {
+    private renderHelper: GfxRenderHelper;
     public renderTarget = new BasicRenderTarget();
-    public renderInstManager = new GfxRenderInstManager();
-    public uniformBuffer: GfxRenderDynamicUniformBuffer;
     public textureHolder: FakeTextureHolder;
 
     constructor(device: GfxDevice, public objectRenderers: MDL0Renderer[]) {
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+        this.renderHelper = new GfxRenderHelper(device);
 
         const viewerTextures: Viewer.Texture[] = [];
         for (let i = 0; i < this.objectRenderers.length; i++) {
@@ -85,8 +83,8 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
+        const template = this.renderHelper.pushTemplateRenderInst();
+        const renderInstManager = this.renderHelper.renderInstManager;
 
         template.setBindingLayouts(nnsG3dBindingLayouts);
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
@@ -94,36 +92,36 @@ export class PlatinumMapRenderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(this.renderInstManager, viewerInput);
-        this.renderInstManager.popTemplateRenderInst();
+            this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
 
-        this.uniformBuffer.prepareToRender(device);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
         this.prepareToRender(device, viewerInput);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
-        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
-        this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
+        renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
+        renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
-        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
-        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
+        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
 
-        this.renderInstManager.resetRenderInsts();
+        renderInstManager.resetRenderInsts();
 
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderInstManager.destroy(device);
         this.renderTarget.destroy(device);
-        this.uniformBuffer.destroy(device);
+        this.renderHelper.destroy(device);
 
         this.renderTarget.destroy(device);
 

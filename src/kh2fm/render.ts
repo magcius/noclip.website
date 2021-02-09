@@ -9,13 +9,12 @@ import { GfxProgram, GfxMegaStateDescriptor, GfxDevice, GfxCullMode, GfxBlendMod
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
 import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { nArray, assertExists, assert } from '../util';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
-import { TransparentBlack } from '../Color';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 
 export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -628,15 +627,14 @@ class SceneRenderer {
 }
 
 export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
-    private renderInstManager = new GfxRenderInstManager;
     private renderTarget = new BasicRenderTarget;
-    private uniformBuffer: GfxRenderDynamicUniformBuffer;
+    private renderHelper: GfxRenderHelper;
     private sceneRenderers: SceneRenderer[] = [];
     private mapData: MapData;
 
     constructor(device: GfxDevice, public textureHolder: TextureHolder<any>, map: MAP.KingdomHeartsIIMap) {
         this.mapData = new MapData(device, map);
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+        this.renderHelper = new GfxRenderHelper(device);
         this.sceneRenderers.push(new SceneRenderer(device, this.mapData, this.mapData.drawCalls));
     }
 
@@ -662,33 +660,33 @@ export class KingdomHeartsIIRenderer implements Viewer.SceneGfx {
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
-        for (let i = 0; i < this.sceneRenderers.length; i++) {
-            this.sceneRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
-        }
-        this.renderInstManager.popTemplateRenderInst();
-        this.uniformBuffer.prepareToRender(device);
+        const renderInstManager = this.renderHelper.renderInstManager;
+        this.renderHelper.pushTemplateRenderInst();
+        for (let i = 0; i < this.sceneRenderers.length; i++)
+            this.sceneRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
 
-        for (const textureAnim of this.mapData.textureAnimations) {
+        this.renderHelper.prepareToRender(device);
+
+        for (const textureAnim of this.mapData.textureAnimations)
             textureAnim.advanceTime(viewerInput.deltaTime);
-        }
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
         this.prepareToRender(device, viewerInput);
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // Create main render pass.
         const passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
-        executeOnPass(this.renderInstManager, device, passRenderer, RenderPass.MAIN);
-        this.renderInstManager.resetRenderInsts();
+        executeOnPass(renderInstManager, device, passRenderer, RenderPass.MAIN);
+        renderInstManager.resetRenderInsts();
         return passRenderer;
     }
 
     public destroy(device: GfxDevice) {
-        this.renderInstManager.destroy(device);
-        this.uniformBuffer.destroy(device);
+        this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
         this.textureHolder.destroy(device);
         this.mapData.destroy(device);

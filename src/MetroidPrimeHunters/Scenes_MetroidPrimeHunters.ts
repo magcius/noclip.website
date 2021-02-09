@@ -14,9 +14,9 @@ import { assert, assertExists } from '../util';
 import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 
 const pathBase = `MetroidPrimeHunters`;
 
@@ -67,14 +67,13 @@ class ModelCache {
 
 export class MPHSceneRenderer implements Viewer.SceneGfx {
     public renderTarget = new BasicRenderTarget();
-    public renderInstManager = new GfxRenderInstManager();
-    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+    private renderHelper: GfxRenderHelper;
 
     public textureHolder: FakeTextureHolder;
     public objectRenderers: MPHRenderer[] = [];
 
     constructor(device: GfxDevice, public stageRenderer: MPHRenderer) {
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+        this.renderHelper = new GfxRenderHelper(device);
         this.textureHolder = new FakeTextureHolder(this.stageRenderer.viewerTextures);
     }
 
@@ -83,34 +82,36 @@ export class MPHSceneRenderer implements Viewer.SceneGfx {
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
-        this.stageRenderer.prepareToRender(this.renderInstManager, viewerInput);
-        for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(this.renderInstManager, viewerInput);
-        this.renderInstManager.popTemplateRenderInst();
+        const renderInstManager = this.renderHelper.renderInstManager;
 
-        this.uniformBuffer.prepareToRender(device);
+        renderInstManager.pushTemplateRenderInst();
+        this.stageRenderer.prepareToRender(renderInstManager, viewerInput);
+        for (let i = 0; i < this.objectRenderers.length; i++)
+            this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
+
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
         this.prepareToRender(device, viewerInput);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
-        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
-        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
+        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
 
-        this.renderInstManager.resetRenderInsts();
+        renderInstManager.resetRenderInsts();
 
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice) {
-        this.renderInstManager.destroy(device);
+        this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
-        this.uniformBuffer.destroy(device);
 
         this.stageRenderer.destroy(device);
         for (let i = 0; i < this.objectRenderers.length; i++)

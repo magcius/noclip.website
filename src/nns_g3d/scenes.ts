@@ -1,32 +1,31 @@
 
 import { MDL0Renderer, nnsG3dBindingLayouts } from "./render";
-import { GfxDevice, GfxRenderPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { FakeTextureHolder } from "../TextureHolder";
 import { ViewerRenderInput, SceneGfx } from "../viewer";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
-import { GfxRenderDynamicUniformBuffer } from "../gfx/render/GfxRenderDynamicUniformBuffer";
 import { assertExists } from "../util";
 import { parseNSBMD } from "./NNS_G3D";
 import { NITRO_Program } from "../SuperMario64DS/render";
 import { fillMatrix4x4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxrAttachmentSlot, GfxrRenderGraph, GfxrRenderGraphImpl, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 
 class BasicNSBMDRenderer implements SceneGfx {
     private renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
-    public renderInstManager = new GfxRenderInstManager();
-    public uniformBuffer: GfxRenderDynamicUniformBuffer;
+    private renderHelper: GfxRenderHelper;
 
     public mdl0Renderers: MDL0Renderer[] = [];
 
     constructor(device: GfxDevice, public textureHolder: FakeTextureHolder) {
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+        this.renderHelper = new GfxRenderHelper(device);
     }
 
     private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
+        const template = this.renderHelper.pushTemplateRenderInst();
+        const renderInstManager = this.renderHelper.renderInstManager;
 
         template.setBindingLayouts(nnsG3dBindingLayouts);
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
@@ -34,14 +33,14 @@ class BasicNSBMDRenderer implements SceneGfx {
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.mdl0Renderers.length; i++)
-            this.mdl0Renderers[i].prepareToRender(this.renderInstManager, viewerInput);
-        this.renderInstManager.popTemplateRenderInst();
+            this.mdl0Renderers[i].prepareToRender(renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
 
-        this.uniformBuffer.prepareToRender(device);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        const renderInstManager = this.renderInstManager;
+        const renderInstManager = this.renderHelper.renderInstManager;
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -64,13 +63,13 @@ class BasicNSBMDRenderer implements SceneGfx {
 
         this.renderGraph.execute(device, builder);
 
-        this.renderInstManager.resetRenderInsts();
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice) {
-        this.renderInstManager.destroy(device);
         this.renderGraph.destroy(device);
-        this.uniformBuffer.destroy(device);
+        this.renderHelper.destroy(device);
+
         for (let i = 0; i < this.mdl0Renderers.length; i++)
             this.mdl0Renderers[i].destroy(device);
     }

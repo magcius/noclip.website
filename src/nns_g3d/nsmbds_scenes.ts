@@ -12,21 +12,20 @@ import { mat4, vec3 } from 'gl-matrix';
 import { BasicRenderTarget, depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { FakeTextureHolder } from '../TextureHolder';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { SceneContext } from '../SceneBase';
 import { BMD0, parseNSBMD, BTX0, parseNSBTX, BTP0, BTA0, parseNSBTP, parseNSBTA } from './NNS_G3D';
 import { CameraController } from '../Camera';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { NITRO_Program } from '../SuperMario64DS/render';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 
 export class WorldMapRenderer implements Viewer.SceneGfx {
+    private renderHelper: GfxRenderHelper;
     public renderTarget = new BasicRenderTarget();
-    public renderInstManager = new GfxRenderInstManager();
-    public uniformBuffer: GfxRenderDynamicUniformBuffer;
     public textureHolder: FakeTextureHolder;
 
     constructor(device: GfxDevice, public objectRenderers: MDL0Renderer[]) {
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+        this.renderHelper = new GfxRenderHelper(device);
 
         const viewerTextures: Viewer.Texture[] = [];
         for (let i = 0; i < this.objectRenderers.length; i++) {
@@ -42,47 +41,45 @@ export class WorldMapRenderer implements Viewer.SceneGfx {
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
+        const renderInstManager = this.renderHelper.renderInstManager;
 
+        const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(nnsG3dBindingLayouts);
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(this.renderInstManager, viewerInput);
-        this.renderInstManager.popTemplateRenderInst();
+            this.objectRenderers[i].prepareToRender(renderInstManager, viewerInput);
+        renderInstManager.popTemplateRenderInst();
 
-        this.uniformBuffer.prepareToRender(device);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const renderInstManager = this.renderHelper.renderInstManager;
         this.prepareToRender(device, viewerInput);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
-        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
-        this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
+        renderInstManager.setVisibleByFilterKeyExact(G3DPass.SKYBOX);
+        renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
-        this.renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
-        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        renderInstManager.setVisibleByFilterKeyExact(G3DPass.MAIN);
+        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
 
-        this.renderInstManager.resetRenderInsts();
+        renderInstManager.resetRenderInsts();
 
         return mainPassRenderer;
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderInstManager.destroy(device);
         this.renderTarget.destroy(device);
-        this.uniformBuffer.destroy(device);
-
-        this.renderTarget.destroy(device);
+        this.renderHelper.destroy(device);
 
         for (let i = 0; i < this.objectRenderers.length; i++)
             this.objectRenderers[i].destroy(device);

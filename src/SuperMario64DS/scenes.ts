@@ -15,13 +15,13 @@ import { BasicRenderTarget, opaqueBlackFullClearRenderPassDescriptor, depthClear
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util';
 import AnimationController from '../AnimationController';
-import { GfxRenderDynamicUniformBuffer } from '../gfx/render/GfxRenderDynamicUniformBuffer';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';
 import { MathConstants, clamp, scaleMatrix } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
+import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 
 // https://github.com/Arisotura/SM64DSe/blob/master/obj_list.txt
 enum ObjectId {
@@ -468,58 +468,61 @@ const bindingLayouts: GfxBindingLayoutDescriptor[] = [
     { numUniformBuffers: 3, numSamplers: 1 },
 ];
 class SM64DSRenderer implements Viewer.SceneGfx {
+    private renderHelper: GfxRenderHelper;
+
     public renderTarget = new BasicRenderTarget();
     public objectRenderers: ObjectRenderer[] = [];
     public bmdRenderers: BMDModelInstance[] = [];
     public animationController = new AnimationController();
-    public renderInstManager = new GfxRenderInstManager();
 
-    private uniformBuffer: GfxRenderDynamicUniformBuffer;
     private currentScenarioIndex: number = -1;
 
     private scenarioSelect: UI.SingleSelect;
     public onstatechanged!: () => void;
 
     constructor(device: GfxDevice, public modelCache: ModelCache, public crg1Level: CRG1Level) {
-        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
+        this.renderHelper = new GfxRenderHelper(device);
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
         this.animationController.setTimeFromViewerInput(viewerInput);
 
-        const template = this.renderInstManager.pushTemplateRenderInst();
-        template.setUniformBuffer(this.uniformBuffer);
+        const template = this.renderHelper.pushTemplateRenderInst();
         template.setBindingLayouts(bindingLayouts);
         let offs = template.allocateUniformBuffer(NITRO_Program.ub_SceneParams, 16);
         const sceneParamsMapped = template.mapUniformBufferF32(NITRO_Program.ub_SceneParams);
         offs += fillMatrix4x4(sceneParamsMapped, offs, viewerInput.camera.projectionMatrix);
 
         for (let i = 0; i < this.bmdRenderers.length; i++)
-            this.bmdRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+            this.bmdRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
         for (let i = 0; i < this.objectRenderers.length; i++)
-            this.objectRenderers[i].prepareToRender(device, this.renderInstManager, viewerInput);
+            this.objectRenderers[i].prepareToRender(device, renderInstManager, viewerInput);
 
-        this.renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplateRenderInst();
 
-        this.uniformBuffer.prepareToRender(device);
+        this.renderHelper.prepareToRender(device);
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
         this.prepareToRender(device, viewerInput);
 
         this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         // First, render the skybox.
         const skyboxPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, opaqueBlackFullClearRenderPassDescriptor);
-        this.renderInstManager.setVisibleByFilterKeyExact(SM64DSPass.SKYBOX);
-        this.renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
+        renderInstManager.setVisibleByFilterKeyExact(SM64DSPass.SKYBOX);
+        renderInstManager.drawOnPassRenderer(device, skyboxPassRenderer);
         device.submitPass(skyboxPassRenderer);
         // Now do main pass.
         const mainPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor);
-        this.renderInstManager.setVisibleByFilterKeyExact(SM64DSPass.MAIN);
-        this.renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
+        renderInstManager.setVisibleByFilterKeyExact(SM64DSPass.MAIN);
+        renderInstManager.drawOnPassRenderer(device, mainPassRenderer);
 
-        this.renderInstManager.resetRenderInsts();
+        renderInstManager.resetRenderInsts();
 
         return mainPassRenderer;
     }
@@ -596,8 +599,7 @@ class SM64DSRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderInstManager.destroy(device);
-        this.uniformBuffer.destroy(device);
+        this.renderHelper.destroy(device);
         this.renderTarget.destroy(device);
     }
 }
