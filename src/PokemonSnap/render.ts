@@ -17,7 +17,6 @@ import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY } from '../M
 import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { LevelGlobals } from './actor';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
-import { translateCullMode } from '../gx/gx_render';
 
 export const enum SnapPass {
     MAIN = 0x01,

@@ -74,7 +74,21 @@ class SnapRenderer implements Viewer.SceneGfx {
         };
         renderHacksPanel.contents.appendChild(enableAlphaVisualizer.elem);
 
-        return [renderHacksPanel];
+        const controlsPanel = new UI.Panel();
+        controlsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+        controlsPanel.setTitle(UI.TIME_OF_DAY_ICON, 'Interactions');
+        const throwBalls = new UI.Checkbox('Throw Balls', true);
+        throwBalls.onchanged = () => {
+            this.globals.throwBalls = throwBalls.checked;
+        };
+        controlsPanel.contents.appendChild(throwBalls.elem);
+        const playFlute = new UI.Checkbox('Play Flute', false);
+        playFlute.onchanged = () => {
+            this.globals.playFlute = playFlute.checked;
+        };
+        controlsPanel.contents.appendChild(playFlute.elem);
+
+        return [renderHacksPanel, controlsPanel];
     }
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
