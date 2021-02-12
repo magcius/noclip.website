@@ -10,11 +10,11 @@ import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
 import { convertToTriangleIndexBuffer, filterDegenerateTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
 import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformBufferHelpers";
-import { mat4, quat, vec3, vec2, vec4 } from "gl-matrix";
+import { mat4, quat, vec3, vec2 } from "gl-matrix";
 import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { assert } from "../util";
-import { BasicRenderTarget, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { ItemInstance, ObjectDefinition } from "./item";
 import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color";
@@ -23,6 +23,7 @@ import { AABB } from "../Geometry";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GraphObjBase } from "../SceneBase";
+import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 
 const TIME_FACTOR = 2500; // one day cycle per minute
 const DRAW_DISTANCE_FACTOR = 2.5;
@@ -611,7 +612,6 @@ export class GTA3Renderer implements Viewer.SceneGfx {
     public renderers: GraphObjBase[] = [];
     public onstatechanged!: () => void;
 
-    private renderTarget = new BasicRenderTarget();
     private clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
     private currentColors = emptyColorSet();
     public renderHelper: GfxRenderHelper;
@@ -665,16 +665,30 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device);
     }
 
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): GfxRenderPass {
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
         this.prepareToRender(device, viewerInput);
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        const finalPassRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, this.clearRenderPassDescriptor);
-        this.renderHelper.renderInstManager.drawOnPassRenderer(device, finalPassRenderer);
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.renderHelper.renderInstManager.resetRenderInsts();
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearRenderPassDescriptor);
 
-        return finalPassRenderer;
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.renderHelper.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public createPanels(): UI.Panel[] {
@@ -702,7 +716,6 @@ export class GTA3Renderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.renderTarget.destroy(device);
         for (let i = 0; i < this.renderers.length; i++)
             this.renderers[i].destroy(device);
     }
