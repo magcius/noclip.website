@@ -84,8 +84,8 @@ export class dRes_control_c {
         return this.getResByName(resType, arcName, resName, this.resStg);
     }
 
-    public getObjectRes<T extends ResType>(resType: T, arcName: string, resID: number): ResAssetType<T> {
-        return this.getResByID(resType, arcName, resID, this.resObj);
+    public getObjectRes<T extends ResType>(resType: T, arcName: string, resIndex: number): ResAssetType<T> {
+        return this.getResByIndex(resType, arcName, resIndex, this.resObj);
     }
 
     public getResByName<T extends ResType>(resType: T, arcName: string, resName: string, resList: dRes_info_c[]): ResAssetType<T> | null {
@@ -93,9 +93,9 @@ export class dRes_control_c {
         return resInfo.getResByName(resType, resName);
     }
 
-    public getResByID<T extends ResType>(resType: T, arcName: string, resID: number, resList: dRes_info_c[]): ResAssetType<T> {
+    public getResByIndex<T extends ResType>(resType: T, arcName: string, resIndex: number, resList: dRes_info_c[]): ResAssetType<T> {
         const resInfo = assertExists(this.findResInfo(arcName, resList));
-        return resInfo.getResByIndex(resType, resID);
+        return resInfo.getResByIndex(resType, resIndex);
     }
 
     public mountRes(device: GfxDevice, cache: GfxRenderCache, arcName: string, archive: JKRArchive, resList: dRes_info_c[]): void {
