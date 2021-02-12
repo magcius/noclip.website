@@ -1224,7 +1224,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     else if (actorName === 'Oq') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/oq.bmd`).bindANK1(parseBCK(rarc, `bck/nom_wait.bck`)));
     else if (actorName === 'Oqw') fetchArchive(`Oq`).then((rarc) => buildModel(rarc, `bmdm/red_oq.bmd`).bindANK1(parseBCK(rarc, `bck/umi_new_wait.bck`)));
     else if (actorName === 'Daiocta') fetchArchive(`Daiocta`).then((rarc) => buildModel(rarc, `bdlm/do_main1.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
-    else if (actorName === 'Fmastr1' || name == 'Fmastr2') fetchArchive(`fm`).then((rarc) => { 
+    else if (actorName === 'Fmastr1' || actorName === 'Fmastr2') fetchArchive(`fm`).then((rarc) => { 
         buildModel(rarc, `bdl/fm.bdl`).bindANK1(parseBCK(rarc, `bcks/wait.bck`));
         const holeModel = buildModel(rarc, `bdlm/ypit00.bdl`);
         holeModel.bindTTK1(parseBTK(rarc, `btk/ypit00.btk`));
@@ -1233,7 +1233,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
     });
     else if (actorName === 'magtail') fetchArchive(`Mt`).then((rarc) => buildModel(rarc, `bdlm/mg_head.bdl`).bindANK1(parseBCK(rarc, `bck/wait1.bck`)));
     // Red and Blue Bubbles
-    else if (name === 'bable') fetchArchive(`Bl`).then((rarc) => {
+    else if (actorName === 'bable') fetchArchive(`Bl`).then((rarc) => {
         const m = buildModel(rarc, `bdlm/bl.bdl`);
 
         const bubbleType = (actor.parameters & 0x000000FF);
@@ -1366,7 +1366,7 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         // TODO(jstpierre): animation?
     });
     // ChuChus
-    else if (actorName === 'c_green' || actorName === 'c_red' || actorName === 'c_blue' || name == 'c_black' || name == 'c_kiiro') fetchArchive(`Cc`).then((rarc) => {
+    else if (actorName === 'c_green' || actorName === 'c_red' || actorName === 'c_blue' || actorName === 'c_black' || actorName === 'c_kiiro') fetchArchive(`Cc`).then((rarc) => {
         const cc = buildModel(rarc, `bmdm/cc.bmd`);
         cc.bindANK1(parseBCK(rarc, `bck/tachi_walk.bck`));
 
