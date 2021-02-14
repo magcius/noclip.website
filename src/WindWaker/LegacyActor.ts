@@ -17,7 +17,7 @@ import { LightType, dKy_tevstr_init, dKy_tevstr_c, settingTevStruct, setLightTev
 import { JPABaseEmitter } from '../Common/JSYSTEM/JPA';
 import { fpc__ProcessName, fopAcM_prm_class, fopAc_ac_c, cPhs__Status, fGlobals, fpcPf__RegisterFallback } from './framework';
 import { ScreenSpaceProjection, computeScreenSpaceProjectionFromWorldSpaceAABB } from '../Camera';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxCullMode, GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
 import { cBgS_GndChk } from './d_bg';
 
@@ -1769,6 +1769,24 @@ function spawnLegacyActor(globals: dGlobals, legacy: d_a_noclip_legacy, actor: f
         // Misc. gameplay data
     } else if (actorName === 'Akabe') {
         // Collision
+    } else if (actorName === 'Link') {
+        (async() => {
+            const rarc = await fetchArchive(`Link`);
+            const anm = await fetchArchive(`LkAnm`);
+
+            const model = getResData(ResType.Model, rarc, `bdl/cl.bdl`);
+            const modelInstance = new J3DModelInstanceSimple(model);
+            // aup(modelInstance);
+            renderer.extraTextures.fillExtraTextures(modelInstance);
+            const cl = new d_a_py_lk(renderer.globals, modelInstance);
+            dKy_tevstr_init(cl.tevstr, actor.roomNo);
+            setModelMatrix(cl.modelMatrix);
+            setToNearestFloor(cl.modelMatrix, cl.modelMatrix);
+            legacy.objectRenderers.push(cl);
+            cl.layer = actor.layer;
+        
+            (window as any).cl = cl;
+        })();
     } else {
         const dbgName = globals.objNameGetDbgName(objName);
         console.warn(`Unknown obj: ${actorName} / ${dbgName} / Room ${actor.roomNo} Layer ${actor.layer}`);
@@ -1867,4 +1885,77 @@ export class BMDObjectRenderer {
 
 export function LegacyActor__RegisterFallbackConstructor(globals: fGlobals): void {
     fpcPf__RegisterFallback(globals, d_a_noclip_legacy);
+}
+
+
+class d_a_py_lk extends BMDObjectRenderer {
+    private damNames = ['eyeL', 'eyeR', 'mayuL', 'mayuR'];
+
+    constructor(private globals: dGlobals, modelInstance: J3DModelInstanceSimple) {
+        super(modelInstance);
+
+        this.modelInstance.setSortKeyLayer(GfxRendererLayer.OPAQUE + 5, false);
+
+        this.modelInstance.bindANK1(globals.resCtrl.getResByName(ResType.Bck, 'LkAnm', 'wait.bck', globals.resCtrl.resObj));
+
+        this.setupDam();
+    }
+
+    private faceAnimController = new AnimationController(30);
+    private anime(btp: number, btk: number): void {
+        // const arc = this.globals.resCtrl.findResInfo('LkAnm', this.globals.resCtrl.resObj)!;
+        // console.log(`Btp: ${arc.getResEntryByIndex(ResType.Btp, btp).file.name}  Btk: ${arc.getResEntryByIndex(ResType.Btk, btk).file.name}`);
+        this.modelInstance.bindTPT1(this.globals.resCtrl.getObjectRes(ResType.Btp, 'LkAnm', btp), this.faceAnimController);
+        this.modelInstance.bindTTK1(this.globals.resCtrl.getObjectRes(ResType.Btk, 'LkAnm', btk), this.faceAnimController);
+
+        this.setupDamTexNo();
+        this.faceAnimController.setPhaseToCurrent();
+    }
+
+    public prepareToRender(globals: dGlobals, device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        this.faceAnimController.setTimeFromViewerInput(viewerInput);
+
+        const hatMaterial = this.modelInstance.materialInstances[18];
+        hatMaterial.visible = false;
+
+        super.prepareToRender(globals, device, renderInstManager, viewerInput);
+
+        renderInstManager.setCurrentRenderInstList(globals.dlst.hat);
+        hatMaterial.visible = true;
+        hatMaterial.materialHelper.megaStateFlags.cullMode = GfxCullMode.NONE;
+        hatMaterial.setAlphaWriteEnabled(true);
+        hatMaterial.prepareToRenderShapes(device, renderInstManager, 0, viewerInput.camera, viewerInput.viewport, this.modelInstance.modelData, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState);
+    }
+
+    private setupDamTexNo(): void {
+        for (const pref of this.damNames) {
+            const mat = this.modelInstance.materialInstances.find((m) => m.name === pref)!;
+            const damA = this.modelInstance.materialInstances.find((m) => m.name === `${pref}damA`)!;
+            const damB = this.modelInstance.materialInstances.find((m) => m.name === `${pref}damB`)!;
+
+            for (let i = 0; i < mat.texNoCalc.length; i++) {
+                damA.texNoCalc[i] = mat.texNoCalc[i];
+                damB.texNoCalc[i] = mat.texNoCalc[i];
+            }
+        }
+    }
+
+    private setupDam(): void {
+        for (const pref of this.damNames) {
+            const mat = this.modelInstance.materialInstances.find((m) => m.name === pref)!;
+
+            const damA = this.modelInstance.materialInstances.find((m) => m.name === `${pref}damA`)!;
+            const damB = this.modelInstance.materialInstances.find((m) => m.name === `${pref}damB`)!;
+            // Needs to render before Link.
+            damA.setSortKeyLayer(GfxRendererLayer.OPAQUE + 4, false);
+            damA.setColorWriteEnabled(false);
+            damA.setAlphaWriteEnabled(true);
+
+            mat.setSortKeyLayer(GfxRendererLayer.OPAQUE + 6, false);
+
+            damB.setSortKeyLayer(GfxRendererLayer.OPAQUE + 7, false);
+            damB.setColorWriteEnabled(false);
+            damB.setAlphaWriteEnabled(true);
+        }
+    }
 }

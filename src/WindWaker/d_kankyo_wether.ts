@@ -28,7 +28,6 @@ import { PeekZResult, PeekZManager } from "./d_dlst_peekZ";
 import { compareDepthValues } from "../gfx/helpers/ReversedDepthHelpers";
 import { dfRange, dfShow } from "../DebugFloaters";
 import { _T } from "../gfx/platform/GfxPlatformImpl";
-import { dPa__StopEmitter } from "./d_particle";
 
 export function dKyr__sun_arrival_check(envLight: dScnKy_env_light_c): boolean {
     return envLight.curTime > 97.5 && envLight.curTime < 292.5;
@@ -1712,7 +1711,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                 eff.stateTimer = cLib_addCalc(eff.stateTimer, 0.0, speed, maxVel * (0.1 + 0.01 * (i / 30)), 0.01);
                 if (eff.stateTimer <= 0.0) {
                     emitter.deleteAllParticle();
-                    dPa__StopEmitter(emitter);
+                    emitter.becomeInvalidEmitter();
                     eff.emitter = null;
                     eff.state = 0;
                 }

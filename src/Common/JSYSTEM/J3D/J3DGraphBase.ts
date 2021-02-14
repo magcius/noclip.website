@@ -410,8 +410,12 @@ export class MaterialInstance {
         setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.COLOR, v);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
-        if (this.materialData.material.translucent)
+    public setAlphaWriteEnabled(v: boolean): void {
+        setChanWriteEnabled(this.materialHelper, GfxColorWriteMask.ALPHA, v);
+    }
+
+    public setSortKeyLayer(layer: GfxRendererLayer, transparent: boolean = this.materialData.material.translucent): void {
+        if (transparent)
             layer |= GfxRendererLayer.TRANSLUCENT;
         this.sortKey = setSortKeyLayer(this.sortKey, layer);
     }
@@ -1044,9 +1048,9 @@ export class J3DModelInstance {
             this.materialInstances[i].setMaterialHacks(materialHacks);
     }
 
-    public setSortKeyLayer(layer: GfxRendererLayer): void {
+    public setSortKeyLayer(layer: GfxRendererLayer, transparent?: boolean): void {
         for (let i = 0; i < this.materialInstances.length; i++)
-            this.materialInstances[i].setSortKeyLayer(layer);
+            this.materialInstances[i].setSortKeyLayer(layer, transparent);
     }
 
     /**

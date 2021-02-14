@@ -3,7 +3,7 @@
 
 import { mat4, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
 import { Color, colorCopy } from "../Color";
-import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw, BaseEmitterFlags, JPAEmitterWorkData } from "../Common/JSYSTEM/JPA";
+import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw } from "../Common/JSYSTEM/JPA";
 import { Frustum } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
@@ -72,7 +72,13 @@ export class dPa_control_c {
         getMatrixTranslation(scratchVec3a, viewerInput.camera.worldMatrix);
         for (let i = 0; i < this.emitterManager.aliveEmitters.length; i++) {
             const emitter = this.emitterManager.aliveEmitters[i];
-            emitter.flags = setBitFlagEnabled(emitter.flags, BaseEmitterFlags.STOP_CALC_EMITTER | BaseEmitterFlags.STOP_DRAW_PARTICLE, vec3.distance(emitter.globalTranslation, scratchVec3a) > 5000);
+            if (vec3.distance(emitter.globalTranslation, scratchVec3a) > 5000) {
+                emitter.stopCalcEmitter();
+                emitter.stopDrawParticle();
+            } else {
+                emitter.playCalcEmitter();
+                emitter.playDrawParticle();
+            }
         }
 
         this.emitterManager.calc(inc);
@@ -136,7 +142,7 @@ export class dPa_control_c {
             computeModelMatrixR(baseEmitter.globalRotation, cM__Short2Rad(rot[0]), cM__Short2Rad(rot[1]), cM__Short2Rad(rot[2]));
         if (scale !== null) {
             vec3.copy(baseEmitter.globalScale, scale);
-            vec2.set(baseEmitter.globalScale2D, scale[0], scale[1]);
+            vec2.set(baseEmitter.globalParticleScale, scale[0], scale[1]);
         }
 
         if (colorPrm !== null)
@@ -153,7 +159,7 @@ export class dPa_control_c {
         }
 
         if (publicScale2D !== null)
-            vec2.set(baseEmitter.globalScale2D, publicScale2D[0], publicScale2D[1]);
+            vec2.set(baseEmitter.globalParticleScale, publicScale2D[0], publicScale2D[1]);
 
         return baseEmitter;
     }
@@ -204,17 +210,17 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
             vec3.copy(emitter.globalTranslation, this.pos);
             const scale = Math.min(this.scaleTimer / this.maxScaleTimer, 1.0);
             vec3.set(emitter.globalScale, scale, scale, scale);
-            vec2.set(emitter.globalScale2D, scale, scale);
-            emitter.initialVelDir = 15.0 * scale;
+            vec2.set(emitter.globalParticleScale, scale, scale);
+            emitter.directionalSpeed = 15.0 * scale;
             computeModelMatrixR(emitter.globalRotation, 0.0, cM__Short2Rad(this.rot[1]), 0.0);
         } else {
-            const scale = emitter.globalScale2D[0] - (0.2 * deltaTimeFrames);
+            const scale = emitter.globalParticleScale[0] - (0.2 * deltaTimeFrames);
             if (scale <= 0.0) {
                 this.remove();
             } else {
                 vec3.set(emitter.globalScale, scale, scale, scale);
-                vec2.set(emitter.globalScale2D, scale, scale);
-                emitter.initialVelDir = 15.0 * scale;
+                vec2.set(emitter.globalParticleScale, scale, scale);
+                emitter.directionalSpeed = 15.0 * scale;
             }
         }
     }
@@ -224,7 +230,7 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        dPa__StopEmitter(this.emitter);
+        this.emitter.becomeInvalidEmitter();
         this.emitter = null;
     }
 }
@@ -316,10 +322,10 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
             let velTarget = vel * this.velFade1 * this.velFade2;
 
             this.vel = cLib_addCalc2(this.vel, velTarget, 1.0, this.velSpeed);
-            emitter.initialVelDir = this.vel;
+            emitter.directionalSpeed = this.vel;
             vec3.copy(emitter.globalTranslation, this.pos);
         } else {
-            emitter.initialVelDir = 0.0;
+            emitter.directionalSpeed = 0.0;
             if (this.fadeTimer < 1)
                 this.remove();
             else
@@ -332,7 +338,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        dPa__StopEmitter(this.emitter);
+        this.emitter.becomeInvalidEmitter();
         this.emitter = null;
         this.ddraw.destroy(this.globals.modelCache.device);
     }
@@ -408,7 +414,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
 
         const indTexMtx = workData.materialParams.u_TexMtx[1];
         indTexMtx[5] = this.indScaleY;
-        indTexMtx[13] = this.indTransY * emitter.tick;
+        indTexMtx[13] = this.indTransY * emitter.age;
 
         const renderInst = ddraw.endDraw(device, renderInstManager);
         renderInst.sortKey = workData.particleSortKey;
@@ -448,7 +454,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
 
         for (let i = 0; i < emitter.aliveParticlesBase.length; i++) {
             const particle = emitter.aliveParticlesBase[i];
-            this.getMaxWaterY(particle.globalPosition);
+            this.getMaxWaterY(particle.offsetPosition);
         }
     }
 
@@ -457,13 +463,8 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        dPa__StopEmitter(this.emitter);
+        this.emitter.becomeInvalidEmitter();
         this.emitter = null;
         this.ddraw.destroy(this.globals.modelCache.device);
     }
-}
-
-export function dPa__StopEmitter(emitter: JPABaseEmitter): void {
-    emitter.maxFrame = -1;
-    emitter.flags |= BaseEmitterFlags.STOP_EMIT_PARTICLES;
 }

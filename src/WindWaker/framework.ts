@@ -18,6 +18,7 @@ export const enum fpc__ProcessName {
     d_a_obj_ikada       = 0x0046,
     d_a_obj_lpalm       = 0x004B,
     d_a_obj_Ygush00     = 0x0099,
+    d_a_py_lk           = 0x00A9,
     d_a_majuu_flag      = 0x00AF,
     d_a_tori_flag       = 0x00B0,
     d_a_sie_flag        = 0x00B1,

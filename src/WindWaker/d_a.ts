@@ -27,7 +27,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GlobalSaveManager } from "../SaveManager";
 import { TevDefaultSwapTables } from "../gx/gx_material";
 import { Endianness } from "../endian";
-import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack, dPa__StopEmitter } from "./d_particle";
+import { dPa_splashEcallBack, dPa_trackEcallBack, dPa_waveEcallBack } from "./d_particle";
 import { JPABaseEmitter, JPASetRMtxSTVecFromMtx } from "../Common/JSYSTEM/JPA";
 
 // Framework'd actors
@@ -3569,13 +3569,13 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
         if (this.waveL !== null && this.waveL.emitter === null) {
             const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveL);
             if (emitter !== null)
-                vec3.set(emitter.emitterDir, 0.5, 1.0, -0.3);
+                vec3.set(emitter.localDirection, 0.5, 1.0, -0.3);
         }
 
         if (this.waveR !== null && this.waveR.emitter === null) {
             const emitter = globals.particleCtrl.set(globals, 0, 0x0037, this.wavePos, this.waveRot, null, 1.0, this.waveR);
             if (emitter !== null)
-                vec3.set(emitter.emitterDir, -0.5, 1.0, -0.3);
+                vec3.set(emitter.localDirection, -0.5, 1.0, -0.3);
         }
 
         if (this.splash !== null && this.splash.emitter === null)
@@ -3585,7 +3585,7 @@ class d_a_obj_ikada extends fopAc_ac_c implements ModeFuncExec<d_a_obj_ikada_mod
             const emitter = globals.particleCtrl.set(globals, 5, 0x0036, this.trackPos, this.rot, null, 0.0, this.track);
             if (emitter !== null) {
                 vec3.set(emitter.globalScale, 1.0, 1.0, 1.0);
-                vec2.set(emitter.globalScale2D, 1.0, 1.0);
+                vec2.set(emitter.globalParticleScale, 1.0, 1.0);
             }
         }
     }
@@ -3942,17 +3942,17 @@ export class d_a_obj_flame extends fopAc_ac_c {
         }
 
         if (this.em0State === d_a_obj_em_state.TurnOff && this.em0 !== null) {
-            dPa__StopEmitter(this.em0);
+            this.em0.becomeInvalidEmitter();
             this.em0 = null;
         }
 
         if (this.em1State === d_a_obj_em_state.TurnOff && this.em1 !== null) {
-            dPa__StopEmitter(this.em1);
+            this.em1.becomeInvalidEmitter();
             this.em1 = null;
         }
 
         if (this.em2State === d_a_obj_em_state.TurnOff && this.em2 !== null) {
-            dPa__StopEmitter(this.em2);
+            this.em2.becomeInvalidEmitter();
             this.em2 = null;
         }
     }

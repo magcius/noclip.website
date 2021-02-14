@@ -384,7 +384,7 @@ export class Explorer implements SceneGfx {
         for (let i = 0; i < this.emitters.length; i++) {
             const emitter = this.emitters[i];
             // Emitter might have died of natural causes.
-            if (!!(emitter.flags & JPA.BaseEmitterFlags.TERMINATE))
+            if (!!(emitter.status & JPA.JPAEmitterStatus.TERMINATE))
                 continue;
             this.effectSystem.forceDeleteEmitter(this.emitters[i]);
         }
@@ -409,7 +409,7 @@ export class Explorer implements SceneGfx {
 
         if (this.loopEmitters) {
             for (let i = this.emitters.length - 1; i >= 0; i--) {
-                if (!!(this.emitters[i].flags & JPA.BaseEmitterFlags.TERMINATE)) {
+                if (!!(this.emitters[i].status & JPA.JPAEmitterStatus.TERMINATE)) {
                     this.emitters.splice(i, 1);
                     this.createEmitter();
                 }
@@ -429,7 +429,7 @@ export class Explorer implements SceneGfx {
             vec3.copy(this.emitters[i].globalTranslation, scratchVec3);
 
             if (this.forceCentered)
-                vec3.set(this.emitters[i].emitterTranslation, 0, 0, 0);
+                vec3.set(this.emitters[i].localTranslation, 0, 0, 0);
 
             const ctx = getDebugOverlayCanvas2D();
             drawWorldSpacePoint(ctx, viewerInput.camera.clipFromWorldMatrix, this.emitters[i].globalTranslation);
