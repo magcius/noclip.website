@@ -400,9 +400,9 @@ float ApplyThreshold(float t_Value) {
 
 void main() {
     vec3 t_TexSample = texture(SAMPLER_2D(u_Texture), v_TexCoord).rgb;
-    float t_Value = ApplyMaskFilter(t_TexSample);
-    t_Value = ApplyThreshold(t_Value);
-    gl_FragColor = vec4(t_Value, 0.0, 0.0, 0.0);
+    float t_MaskedValue = ApplyMaskFilter(t_TexSample);
+    vec3 t_Color = t_MaskedValue >= u_Threshold ? t_TexSample : vec3(0.0);
+    gl_FragColor = vec4(t_Color, 0.0);
 }
 `;
 }
@@ -443,7 +443,7 @@ export class BloomEffectSimple extends ImageEffectBase {
 
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
 
-    private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_R_NORM);
+    private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'BloomEffectSimple');
