@@ -275,7 +275,7 @@ class ObjectData {
     constructor(private objectSetupData: ObjectSetupData) {
     }
 
-    public ensureGeoData(device: GfxDevice, geoFileID: number): GeometryData | FlipbookData | null {
+    public ensureGeoData(device: GfxDevice, geoFileID: number, objectID = -1): GeometryData | FlipbookData | null {
         if (this.geoData[geoFileID] === undefined) {
             if (geoFileID === 50 || geoFileID === 51 || geoFileID === 52) {
                 // there are three models (objects 480, 411, 693) that look for a texture in a segment we don't have
@@ -298,7 +298,7 @@ class ObjectData {
                 // but most objects support switching beteween opaque and translucent,
                 // so setting translucent by default seems safe
                 const geo = Geo.parseBK(geoData, Geo.RenderZMode.OPA, false);
-                this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo);
+                this.geoData[geoFileID] = new GeometryData(device, this.gfxCache, geo, objectID);
             } else {
                 return this.ensureFlipbookData(device, geoFileID);
             }
@@ -345,7 +345,7 @@ class ObjectData {
     }
 
     private baseSpawnObject(device: GfxDevice, emitters: SceneEmitterHolder, objectID: number, fileID: number, pos: vec3, yaw = 0, roll = 0, scale = 1): GeometryRenderer | FlipbookRenderer | null {
-        const geoData = this.ensureGeoData(device, fileID);
+        const geoData = this.ensureGeoData(device, fileID, objectID);
         if (geoData === null) {
             console.warn(`Unsupported geo data for file ID ${hexzero(fileID, 4)}`);
             return null;
