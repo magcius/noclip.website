@@ -551,6 +551,8 @@ export class StudioCameraController extends FPSCameraController {
             }
         }
 
+        this.animationManager.drawPreviewLine(this.camera.clipFromWorldMatrix);
+
         return result;
     }
 

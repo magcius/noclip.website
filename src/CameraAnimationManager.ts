@@ -3,6 +3,7 @@ import { Viewer } from './viewer';
 import { StudioCameraController } from './Camera';
 import { getPointHermite, getPointBezier } from './Spline';
 import { getMatrixAxisZ, computeEulerAngleRotationFromSRTMatrix, Vec3UnitY, Vec3Zero, lerp } from './MathHelpers';
+import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from './DebugJunk';
 
 const MILLISECONDS_IN_SECOND = 1000.0;
 
@@ -64,6 +65,7 @@ export class CameraAnimation {
      * of the keyframe at index 0 is the camera's starting position for the animation.
      */
     public keyframes: Keyframe[] = [];
+    public interpSteps: InterpolationStep[] = [];
 
     /**
      * A counter used for default keyframe names. Because keyframes can be deleted and
@@ -133,7 +135,7 @@ export class CameraAnimationManager {
 
     constructor(private uiKeyframeList: HTMLElement, private uiStudioControls: HTMLElement) {
         this.studioCameraController = new StudioCameraController(this);
-        this.animation = new CameraAnimation();
+        this.newAnimation();
     }
 
     public enableStudioController(viewer: Viewer): void {
@@ -149,7 +151,7 @@ export class CameraAnimationManager {
         else
             loadedKeyframes = loadObj.keyframes;
 
-        this.animation = new CameraAnimation();
+        this.newAnimation();
         this.animation.keyframes = loadedKeyframes;
         this.uiKeyframeList.dispatchEvent(new Event('startPositionSet'));
         for (let i = 1; i < this.animation.keyframes.length; i++) {
@@ -257,6 +259,7 @@ export class CameraAnimationManager {
         this.loopAnimation = loop;
         this.calculateAllTangents();
         this.setKeyframeVars();
+        this.setSegmentInterpSteps();
     }
 
     /**
@@ -430,6 +433,44 @@ export class CameraAnimationManager {
             }
         }
         return length;
+    }
+
+    /**
+     * Sets interpolation steps between two keyframes.
+     *
+     * @param fromKeyframe the keyframe describing the start position
+     * @param toKeyframe the keyframe describing the end position
+     */
+    private setSegmentInterpSteps() {
+        this.animation.interpSteps = [];
+        for (let i=0; i < this.animation.keyframes.length - 1; i++) {
+            const fromKeyframe = this.animation.keyframes[i];
+            const toKeyframe = this.animation.keyframes[i+1];
+            vec3.set(this.prevPos, fromKeyframe.targetPositionX.value, fromKeyframe.targetPositionY.value, fromKeyframe.targetPositionZ.value);
+            vec3.set(this.nextPos, toKeyframe.targetPositionX.value, toKeyframe.targetPositionY.value, toKeyframe.targetPositionZ.value);
+            vec3.set(this.targetPosToTangentIn, toKeyframe.targetPositionX.tangentIn, toKeyframe.targetPositionY.tangentIn, toKeyframe.targetPositionZ.tangentIn);
+            vec3.set(this.targetPosToTangentOut, toKeyframe.targetPositionX.tangentOut, toKeyframe.targetPositionY.tangentOut, toKeyframe.targetPositionZ.tangentOut);
+            if (!vec3.exactEquals(this.prevPos, this.nextPos)) {
+                vec3.copy(this.scratchVec1, this.prevPos);
+                const numSteps = 100;
+                for (let j = 1; j <= numSteps; j++) {
+                    for (let k = 0; k < 3; k++) {
+                        this.scratchVec2[k] = getPointHermite(this.prevPos[k], this.nextPos[k], this.targetPosToTangentIn[k], this.targetPosToTangentOut[k], j / numSteps);
+                    }
+                    const step = new InterpolationStep();
+                    vec3.copy(step.pos, this.scratchVec2);
+                    this.animation.interpSteps.push(step);
+                }
+            }
+        }
+    }
+
+    public drawPreviewLine(clipFromWorldMat: mat4) {
+        if (this.animation.keyframes.length > 1) {
+            for (let i = 0; i < this.animation.interpSteps.length - 1; i++) {
+                drawWorldSpaceLine(getDebugOverlayCanvas2D(), clipFromWorldMat, this.animation.interpSteps[i].pos, this.animation.interpSteps[i+1].pos);
+            }
+        }
     }
 
     public isAnimation(a: Object): boolean {
