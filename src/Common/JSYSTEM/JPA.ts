@@ -1654,7 +1654,7 @@ export class JPABaseEmitter {
                     this.emitCount = 1;
             }
 
-            if (!!(this.status & JPAEmitterStatus.IMMORTAL))
+            if (!!(this.status & JPAEmitterStatus.STOP_CREATE_PARTICLE))
                 this.emitCount = 0;
 
             while (this.emitCount >= 1) {
