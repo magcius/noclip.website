@@ -8,7 +8,7 @@ import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import * as GX from '../gx/gx_enum';
 import { ViewerRenderInput } from "../viewer";
-import { PacketParams, GXMaterialHelperGfx, MaterialParams } from '../gx/gx_render';
+import { PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
 import * as GX_Material from '../gx/gx_material';
@@ -29,6 +29,7 @@ import { colorNewFromRGBA, Color, colorCopy } from '../Color';
 import { getCamPos } from './util';
 import { computeViewMatrix } from '../Camera';
 import { noClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -358,8 +359,9 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
-        // Render opaques
+    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
 
         this.world.envfxMan.getAmbientColor(scratchColor0, 0); // Always use ambience #0 when rendering map
         const modelCtx: ModelRenderContext = {
@@ -369,7 +371,7 @@ class WorldRenderer extends SFARenderer {
             setupLights: this.setupLights.bind(this),
         }
 
-        this.beginPass(sceneCtx.viewerInput);
+        // this.beginPass(sceneCtx.viewerInput);
         if (this.world.mapInstance !== null)
             this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx);
 
@@ -391,24 +393,43 @@ class WorldRenderer extends SFARenderer {
             }
         }
 
-        // Custom version of this.endPass(device)
-        this.renderInstManager.popTemplateRenderInst();
+        renderInstManager.popTemplateRenderInst();
 
-        this.renderHelper.prepareToRender(device);
+        // this.renderHelper.prepareToRender(device);
         
+        // const renderIntoPass = (keys: number[]) => {
+        //     this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
+        //     for (let i = 0; i < keys.length; i++) {
+        //         this.renderInstManager.setVisibleByFilterKeyExact(keys[i]);
+        //         this.renderInstManager.drawOnPassRenderer(device, this.renderPass);
+        //     }
+        //     device.submitPass(this.renderPass);
+        // };
+
+        // renderIntoPass([0, DrawStep.Furs]);
+        // renderIntoPass([DrawStep.Waters, 1, 2]);
+
+        // this.renderInstManager.resetRenderInsts();
+    }
+
+    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
         const renderIntoPass = (keys: number[]) => {
-            this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, noClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
-            for (let i = 0; i < keys.length; i++) {
-                this.renderInstManager.setVisibleByFilterKeyExact(keys[i]);
-                this.renderInstManager.drawOnPassRenderer(device, this.renderPass);
-            }
-            device.submitPass(this.renderPass);
+            builder.pushPass((pass) => {
+                pass.setDebugName('World');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+                pass.exec((passRenderer, scope) => {
+                    for (let i = 0; i < keys.length; i++) {
+                        renderInstManager.setVisibleByFilterKeyExact(keys[i]);
+                        renderInstManager.drawOnPassRenderer(device, passRenderer);
+                    }
+                });
+            });
+            builder.resolveRenderTargetToExternalTexture(mainColorTargetID, sceneCtx.getSceneTexture().gfxTexture!);
         };
 
         renderIntoPass([0, DrawStep.Furs]);
         renderIntoPass([DrawStep.Waters, 1, 2]);
-
-        this.renderInstManager.resetRenderInsts();
     }
 }
 
