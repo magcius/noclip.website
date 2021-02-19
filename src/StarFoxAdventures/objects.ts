@@ -1032,7 +1032,7 @@ export class ObjectInstance {
         }
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, objectCtx: ObjectRenderContext) {
+    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, layer: number, objectCtx: ObjectRenderContext) {
         // TODO: don't update in render function?
         this.update();
 
@@ -1046,7 +1046,7 @@ export class ObjectInstance {
             this.modelInst.prepareToRender(device, renderInstManager, {
                 ...objectCtx,
                 outdoorAmbientColor: scratchColor0,
-            }, mtx, -viewPos[2]);
+            }, layer, mtx, -viewPos[2]);
 
             // Draw bones
             const drawBones = false;

@@ -180,12 +180,15 @@ const scratchMtx2 = mat4.create();
 const scratchMtx3 = mat4.create();
 const scratchVec0 = vec3.create();
 
-export enum DrawStep {
-    Waters = -2,
-    Furs = -1,
-    Solids = 0,
-    Translucents1 = 1,
-    Translucents2 = 2,
+export enum SFAFilter {
+    Sky = 0,
+    World = 1,
+    Waters = 2,
+    Furs = 3,
+}
+
+export function makeFilterKey(filter: SFAFilter, step: number = 0 /* in [0..2] */) {
+    return (filter << 2) + step;
 }
 
 export class ModelInstance {
@@ -240,13 +243,13 @@ export class ModelInstance {
         this.skinningDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, sortDepth?: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, filter: SFAFilter, matrix: mat4, sortDepth?: number) {
         this.updateSkinning();
 
         if (this.modelShapes.shapes.length !== 0) {
             for (let i = 0; i < 3; i++) {
                 const template = renderInstManager.pushTemplateRenderInst();
-                template.filterKey = i;
+                template.filterKey = makeFilterKey(filter, i);
                 if (this.model.isMapBlock) {
                     template.sortKey = makeSortKey(i !== 0 ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
                 } else {
@@ -262,10 +265,8 @@ export class ModelInstance {
 
         if (this.modelShapes.waters.length !== 0) {
             const template = renderInstManager.pushTemplateRenderInst();
-            template.filterKey = DrawStep.Waters;
-            // XXX: in the game, waters do not seem to be sorted by depth.
-            // Thus, in Krazoa Palace, the circular pool surrounding the Krazoa head
-            // always appears in front of the water-wall.
+            template.filterKey = makeFilterKey(SFAFilter.Waters);
+            // XXX: Waters do not appear to be depth-sorted in-game.
             // template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
             renderInstManager.popTemplateRenderInst();
@@ -273,7 +274,7 @@ export class ModelInstance {
 
         if (this.modelShapes.furs.length !== 0) {
             const template = renderInstManager.pushTemplateRenderInst();
-            template.filterKey = DrawStep.Furs;
+            template.filterKey = makeFilterKey(SFAFilter.Furs);
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
             renderInstManager.popTemplateRenderInst();

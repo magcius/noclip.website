@@ -13,7 +13,7 @@ import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
-import { ModelRenderContext, ModelInstance } from './models';
+import { ModelRenderContext, ModelInstance, SFAFilter } from './models';
 import { White } from '../Color';
 
 export interface BlockInfo {
@@ -148,7 +148,7 @@ export class MapInstance {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(scratchMtx0, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(scratchMtx0, this.matrix, scratchMtx0);
-            b.block.prepareToRender(device, renderInstManager, modelCtx, scratchMtx0);
+            b.block.prepareToRender(device, renderInstManager, modelCtx, SFAFilter.World, scratchMtx0);
         }
     }
 

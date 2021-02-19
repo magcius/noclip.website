@@ -13,7 +13,7 @@ import { GXMaterial } from '../gx/gx_material';
 import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
 import { nArray } from '../util';
 import { MaterialRenderContext, SFAMaterial } from './materials';
-import { DrawStep, ModelRenderContext } from './models';
+import { ModelRenderContext } from './models';
 import { arrayBufferSliceFromDataView, computeModelView } from './util';
 
 

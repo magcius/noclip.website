@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderTargetDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
@@ -21,7 +21,7 @@ import { SFARenderer, SceneRenderContext } from './render';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
-import { ModelInstance, ModelRenderContext, DrawStep } from './models';
+import { ModelInstance, ModelRenderContext, SFAFilter, makeFilterKey } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
@@ -143,6 +143,11 @@ const scratchMtx0 = mat4.create();
 const scratchVec0 = vec3.create();
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 
+enum SFAFilterKey {
+    SKY = 0,
+    WORLD = 1,
+}
+
 class WorldRenderer extends SFARenderer {
     private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
@@ -244,18 +249,17 @@ class WorldRenderer extends SFARenderer {
         super.update(viewerInput);
         this.world.materialFactory.update(this.animController);
         this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
-        if (!this.enableAmbient) {
+        if (!this.enableAmbient)
             this.world.envfxMan.setOverrideOutdoorAmbientColor(colorNewFromRGBA(1.0, 1.0, 1.0, 1.0));
-        } else {
+        else
             this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
-        }
     }
 
-    protected renderSky(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+    protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Draw atmosphere
         const tex = this.world.envfxMan.getAtmosphereTexture();
         if (tex !== null && tex !== undefined) {
-            this.beginPass(sceneCtx.viewerInput, true);
+            // this.beginPass(sceneCtx.viewerInput, true);
             materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
             materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
             materialParams.m_TextureMapping[0].width = tex.width;
@@ -296,11 +300,11 @@ class WorldRenderer extends SFARenderer {
 
             this.ddraw.endAndUpload(device, renderInstManager);
             
-            this.endPass(device);
+            // this.endPass(device);
         }
         
         // Draw skyscape
-        this.beginPass(sceneCtx.viewerInput);
+        // this.beginPass(sceneCtx.viewerInput);
 
         const objectCtx: ObjectRenderContext = {
             sceneCtx,
@@ -313,10 +317,32 @@ class WorldRenderer extends SFARenderer {
         for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
             const obj = this.world.envfxMan.skyscape.objects[i];
             obj.setPosition(eyePos);
-            obj.render(device, renderInstManager, objectCtx);
+            obj.render(device, renderInstManager, SFAFilterKey.SKY, objectCtx);
         }
 
-        this.endPass(device);
+        // this.endPass(device);
+    }
+
+    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+        const renderIntoPass = (name: string, keys: number[]) => {
+            builder.pushPass((pass) => {
+                pass.setDebugName(name);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                const skyDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Sky Depth');
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);
+                pass.exec((passRenderer) => {
+                    for (let i = 0; i < keys.length; i++) {
+                        renderInstManager.setVisibleByFilterKeyExact(keys[i]);
+                        renderInstManager.drawOnPassRenderer(device, passRenderer);
+                    }
+                });
+            });
+            builder.resolveRenderTargetToExternalTexture(mainColorTargetID, sceneCtx.getSceneTexture().gfxTexture!);
+        };
+
+        renderIntoPass('Sky Objects', [
+            makeFilterKey(SFAFilter.Sky)
+        ]);
     }
 
     private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
@@ -384,7 +410,7 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    obj.render(device, renderInstManager, modelCtx);
+                    obj.render(device, renderInstManager, SFAFilterKey.WORLD, modelCtx);
         
                     const drawLabels = false;
                     if (drawLabels)
@@ -413,12 +439,12 @@ class WorldRenderer extends SFARenderer {
     }
 
     protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
-        const renderIntoPass = (keys: number[]) => {
+        const renderIntoPass = (name: string, keys: number[]) => {
             builder.pushPass((pass) => {
-                pass.setDebugName('World');
+                pass.setDebugName(name);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-                pass.exec((passRenderer, scope) => {
+                pass.exec((passRenderer) => {
                     for (let i = 0; i < keys.length; i++) {
                         renderInstManager.setVisibleByFilterKeyExact(keys[i]);
                         renderInstManager.drawOnPassRenderer(device, passRenderer);
@@ -428,8 +454,15 @@ class WorldRenderer extends SFARenderer {
             builder.resolveRenderTargetToExternalTexture(mainColorTargetID, sceneCtx.getSceneTexture().gfxTexture!);
         };
 
-        renderIntoPass([0, DrawStep.Furs]);
-        renderIntoPass([DrawStep.Waters, 1, 2]);
+        renderIntoPass('World Opaques', [
+            makeFilterKey(SFAFilter.World, 0),
+            makeFilterKey(SFAFilter.Furs),
+        ]);
+        renderIntoPass('World Translucents', [
+            makeFilterKey(SFAFilter.Waters),
+            makeFilterKey(SFAFilter.World, 1),
+            makeFilterKey(SFAFilter.World, 2),
+        ]);
     }
 }
 

@@ -52,7 +52,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     // private mainColorTemporalTexture = new GfxrTemporalTexture();
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
-    private mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
+    protected mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
     private renderHelper: GXRenderHelperGfx;
 
     constructor(device: GfxDevice, protected animController: SFAAnimationController) {
@@ -68,6 +68,7 @@ export class SFARenderer implements Viewer.SceneGfx {
     }
 
     protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
+    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
 
     protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
     protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
@@ -137,26 +138,6 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        const sceneCtx: SceneRenderContext = {
-            getSceneTexture: () => this.sceneTexture,
-            getSceneTextureSampler: () => this.getSceneTextureSampler(device),
-            getPreviousFrameTexture: () => this.previousFrameTexture,
-            getPreviousFrameTextureSampler: () => this.getPreviousFrameTextureSampler(device),
-            viewerInput,
-            animController: this.animController,
-        };
-
-        // this.renderSky(device, renderInstManager, sceneCtx);
-
-        this.addWorldRenderInsts(device, renderInstManager, sceneCtx);
-
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
-
-        // this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        // this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        // this.viewport = viewerInput.viewport;
-        // this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, standardFullClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
-
         if (this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight)) {
             if (this.sceneTextureSampler !== null)
                 device.destroySampler(this.sceneTextureSampler);
@@ -168,6 +149,27 @@ export class SFARenderer implements Viewer.SceneGfx {
                 device.destroySampler(this.previousFrameTextureSampler);
             this.previousFrameTextureSampler = null;
         }
+
+        const sceneCtx: SceneRenderContext = {
+            getSceneTexture: () => this.sceneTexture,
+            getSceneTextureSampler: () => this.getSceneTextureSampler(device),
+            getPreviousFrameTexture: () => this.previousFrameTexture,
+            getPreviousFrameTextureSampler: () => this.getPreviousFrameTextureSampler(device),
+            viewerInput,
+            animController: this.animController,
+        };
+
+        // this.renderSky(device, renderInstManager, sceneCtx);
+
+        this.addSkyRenderInsts(device, renderInstManager, sceneCtx);
+        this.addWorldRenderInsts(device, renderInstManager, sceneCtx);
+
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        // this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        // this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        // this.viewport = viewerInput.viewport;
+        // this.renderPass = this.renderTarget.createRenderPass(device, this.viewport, standardFullClearRenderPassDescriptor, this.sceneTexture.gfxTexture);
 
         this.mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
         this.mainColorDesc.colorClearColor = TransparentBlack;
@@ -191,6 +193,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         //     });
         // });
 
+        this.addSkyRenderPasses(device, builder, renderInstManager, mainColorTargetID, mainDepthTargetID, sceneCtx);
         this.addWorldRenderPasses(device, builder, renderInstManager, mainColorTargetID, mainDepthTargetID, sceneCtx);
 
         // builder.pushPass((pass) => {
