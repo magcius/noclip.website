@@ -1042,7 +1042,7 @@ export class JPAEmitterManager {
             const emitter = this.aliveEmitters[i];
             const alive = emitter.calc(this.workData);
 
-            if (!alive && (emitter.status & JPAEmitterStatus.TERMINATE_FLAGGED) === 0) {
+            if (!alive && !(emitter.status & JPAEmitterStatus.TERMINATE_FLAGGED)) {
                 emitter.deleteAllParticle();
                 emitter.status |= JPAEmitterStatus.TERMINATE | JPAEmitterStatus.TERMINATE_FLAGGED;
                 this.aliveEmitters.splice(i, 1);
@@ -1338,7 +1338,7 @@ export class JPABaseEmitter {
 
     public becomeInvalidEmitter(): void {
         this.stopCreateParticle();
-        this.maxFrame = 1;
+        this.maxFrame = -1;
     }
 
     public becomeImmortalEmitter(): void {

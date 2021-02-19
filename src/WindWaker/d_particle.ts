@@ -11,7 +11,7 @@ import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material";
 import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
 import { TextureMapping } from "../TextureHolder";
-import { nArray, setBitFlagEnabled } from "../util";
+import { nArray } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { dKy_get_seacolor } from "./d_kankyo";
 import { cLib_addCalc2, cM__Short2Rad } from "./SComponent";
