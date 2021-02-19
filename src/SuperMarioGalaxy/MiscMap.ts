@@ -277,6 +277,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.OR, GX.CompareType.GREATER, 0);
         mb.setZMode(false, GX.CompareType.ALWAYS, false);
         mb.setCullMode(GX.CullMode.NONE);
+        mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 

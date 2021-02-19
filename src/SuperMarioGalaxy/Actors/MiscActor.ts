@@ -4439,6 +4439,7 @@ export class Creeper extends LiveActor {
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.GREATER,0);
         mb.setZMode(true, GX.CompareType.LEQUAL, true);
         mb.setCullMode(GX.CullMode.BACK);
+        mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
 
         this.stalk = loadBTIData(sceneObjHolder, sceneObjHolder.modelCache.getObjectData('Creeper'), 'Stalk.bti');
@@ -7683,6 +7684,7 @@ class AstroDomeOrbit extends LiveActor {
         mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.OR, 0, GX.AlphaOp.OR);
         mb.setZMode(true, GX.CompareType.LEQUAL, true);
         mb.setCullMode(GX.CullMode.BACK);
+        mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
