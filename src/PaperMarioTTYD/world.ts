@@ -999,13 +999,13 @@ export function parse(buffer: ArrayBufferSlice): TTYDWorld {
                     const totalIndexCount = indexBuffer.length;
                     const indexData = indexBuffer.buffer;
                     const totalVertexCount = vertexCount;
-                    const packet: LoadedVertexDraw = {
+                    const draw: LoadedVertexDraw = {
                         indexOffset: 0, indexCount: totalIndexCount,
                         posMatrixTable: Array(10).fill(0xFFFF),
                         texMatrixTable: Array(10).fill(0xFFFF),
                     };
                     const vertexBuffers: ArrayBuffer[] = [vertexData];
-                    loadedDatas.push({ indexData, draws: [packet], totalIndexCount, totalVertexCount, vertexBuffers, vertexId, drawCalls: null, dlView: null });
+                    loadedDatas.push({ indexData, draws: [draw], totalIndexCount, totalVertexCount, vertexBuffers, vertexId, drawCalls: null, dlView: null });
                     displayListTableIdx += 0x04;
                 }
 
