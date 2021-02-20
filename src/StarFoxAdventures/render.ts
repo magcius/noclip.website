@@ -9,10 +9,9 @@ import { colorNewFromRGBA8 } from '../Color';
 
 import { SFAAnimationController } from './animation';
 import { nArray } from '../util';
+import { TextureMapping } from '../TextureHolder';
 
 export interface SceneRenderContext {
-    getSceneTexture: () => ColorTexture;
-    getSceneTextureSampler: () => GfxSampler;
     getPreviousFrameTexture: () => ColorTexture;
     getPreviousFrameTextureSampler: () => GfxSampler;
     viewerInput: Viewer.ViewerRenderInput;
@@ -33,10 +32,9 @@ export class SFARenderer implements Viewer.SceneGfx {
     protected renderHelper: GXRenderHelperGfx;
     protected renderLists: SFARenderLists;
     
-    protected sceneTexture = new ColorTexture();
-    private sceneTextureSampler: GfxSampler | null = null;
+    private sceneTextureSampler: GfxSampler;
+    private opaqueSceneTextureMapping = new TextureMapping();
     protected previousFrameTexture = new ColorTexture();
-    private previousFrameTextureSampler: GfxSampler | null = null;
     // private mainColorTemporalTexture = new GfxrTemporalTexture();
 
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
@@ -53,6 +51,19 @@ export class SFARenderer implements Viewer.SceneGfx {
             waters: new GfxRenderInstList(),
             furs: new GfxRenderInstList(),
         };
+
+        const cache = this.renderHelper.getCache();
+        this.sceneTextureSampler = cache.createSampler(device, {
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+
+        this.opaqueSceneTextureMapping.gfxSampler = this.sceneTextureSampler;
     }
 
     public adjustCameraController(c: CameraController) {
@@ -67,38 +78,38 @@ export class SFARenderer implements Viewer.SceneGfx {
     protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
 
     protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
-    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
 
-    private getSceneTextureSampler(device: GfxDevice) {
-        if (this.sceneTextureSampler === null) {
-            this.sceneTextureSampler = device.createSampler({
-                wrapS: GfxWrapMode.CLAMP,
-                wrapT: GfxWrapMode.CLAMP,
-                minFilter: GfxTexFilterMode.BILINEAR,
-                magFilter: GfxTexFilterMode.BILINEAR,
-                mipFilter: GfxMipFilterMode.NO_MIP,
-                minLOD: 0,
-                maxLOD: 100,
+    private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+        builder.pushPass((pass) => {
+            pass.setDebugName('World Opaque');
+            pass.setViewport(sceneCtx.viewerInput.viewport);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderLists.world[0].drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderLists.furs.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
             });
-        }
+        });
 
-        return this.sceneTextureSampler;
-    }
+        // TODO: Downscale to 1/8th scale and apply filtering (?)
+        const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
 
-    private getPreviousFrameTextureSampler(device: GfxDevice) {
-        if (this.previousFrameTextureSampler === null) {
-            this.previousFrameTextureSampler = device.createSampler({
-                wrapS: GfxWrapMode.CLAMP,
-                wrapT: GfxWrapMode.CLAMP,
-                minFilter: GfxTexFilterMode.BILINEAR,
-                magFilter: GfxTexFilterMode.BILINEAR,
-                mipFilter: GfxMipFilterMode.NO_MIP,
-                minLOD: 0,
-                maxLOD: 100,
+        builder.pushPass((pass) => {
+            pass.setDebugName('World Transparents');
+            pass.setViewport(sceneCtx.viewerInput.viewport);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.attachResolveTexture(mainColorResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                renderLists.waters.resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
+
+                renderLists.waters.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderLists.world[1].drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderLists.world[2].drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
             });
-        }
-
-        return this.previousFrameTextureSampler;
+        });
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
@@ -107,25 +118,12 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        // TODO: use late-bound texture instead?
-        if (this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight)) {
-            if (this.sceneTextureSampler !== null)
-                device.destroySampler(this.sceneTextureSampler);
-            this.sceneTextureSampler = null;
-        }
-
         // TODO: use GfxrTemporalTexture instead
-        if (this.previousFrameTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight)) {
-            if (this.previousFrameTextureSampler !== null)
-                device.destroySampler(this.previousFrameTextureSampler);
-            this.previousFrameTextureSampler = null;
-        }
+        this.previousFrameTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
 
         const sceneCtx: SceneRenderContext = {
-            getSceneTexture: () => this.sceneTexture,
-            getSceneTextureSampler: () => this.getSceneTextureSampler(device),
             getPreviousFrameTexture: () => this.previousFrameTexture,
-            getPreviousFrameTextureSampler: () => this.getPreviousFrameTextureSampler(device),
+            getPreviousFrameTextureSampler: () => this.sceneTextureSampler,
             viewerInput,
             animController: this.animController,
         };
