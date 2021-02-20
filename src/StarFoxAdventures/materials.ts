@@ -210,13 +210,9 @@ function makePreviousFrameMaterialTexture(): MaterialTexture {
     return {
         setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
             mapping.reset();
-            // TODO: Downscale to 1/8th scale and apply filtering (?)
-            const sceneTex = matCtx.sceneCtx.getPreviousFrameTexture();
-            mapping.gfxTexture = sceneTex.gfxTexture;
-            mapping.gfxSampler = matCtx.sceneCtx.getPreviousFrameTextureSampler();
-            mapping.width = sceneTex.width;
-            mapping.height = sceneTex.height;
-            mapping.lodBias = 0.0;
+            mapping.lateBinding = 'previous-frame-texture';
+            mapping.width = matCtx.sceneCtx.viewerInput.backbufferWidth;
+            mapping.height = matCtx.sceneCtx.viewerInput.backbufferHeight;
         }
     };
 }
@@ -961,6 +957,7 @@ export class StandardMaterial extends MaterialBase {
     }
 
     private addTevStagesForReflectiveFloor() {
+        // TODO: Proper planar reflections?
         const texMap0 = this.genTexMap(makePreviousFrameMaterialTexture());
         const texCoord = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
 
