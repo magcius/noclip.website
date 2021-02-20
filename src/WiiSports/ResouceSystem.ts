@@ -3,7 +3,7 @@ import * as BRRES from "../rres/brres";
 import * as U8 from "../rres/u8";
 import * as Yaz0 from "../Common/Compression/Yaz0";
 import ArrayBufferSlice from "../ArrayBufferSlice";
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { MDL0Model, RRESTextureHolder } from "../rres/render";
 import { assertExists } from "../util";
 import { DataFetcher } from "../DataFetcher";

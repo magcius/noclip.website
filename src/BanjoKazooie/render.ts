@@ -882,7 +882,7 @@ export class GeometryData {
     public dynamic: boolean;
 
     // forget any game specific data in the geometry, for now
-    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry<GeoNode>, private id = 0) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, public geo: Geometry<GeoNode>, private id = -1) {
         this.renderData = new RenderData(device, cache, geo.sharedOutput);
         this.dynamic = geo.vertexEffects.length > 0 || geo.vertexBoneTable !== null || (geo.softwareLighting !== undefined && geo.softwareLighting.length > 0) || !!geo.morphs;
     }
@@ -1436,11 +1436,9 @@ export class GeometryRenderer {
                 }
             }
         }
-        if (this.geometryData.dynamic) {
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
-            device.submitPass(hostAccessPass);
-        }
+
+        if (this.geometryData.dynamic)
+            device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexBufferData.buffer));
 
         // reset sort state
         xluSortScratch.key = 0;

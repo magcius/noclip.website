@@ -16,6 +16,7 @@ import { MathConstants, invlerp, lerp, clamp, Vec3Zero } from "../MathHelpers";
 import { colorNewCopy, White, Color, colorCopy, colorScaleAndAdd, TransparentWhite, colorFromRGBA, colorNewFromRGBA } from "../Color";
 import { AABB } from "../Geometry";
 import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../DebugJunk";
+import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 //#region Base Classes
 const scratchVec4 = vec4.create();
@@ -56,9 +57,7 @@ layout(std140) uniform ub_SceneParams {
 };
 
 // Utilities.
-float Saturate(float v) {
-    return clamp(v, 0.0, 1.0);
-}
+${GfxShaderLibrary.saturate}
 
 vec2 CalcScaleBias(in vec2 t_Pos, in vec4 t_SB) {
     return t_Pos.xy * t_SB.xy + t_SB.zw;
@@ -759,7 +758,7 @@ float WorldLightCalcAttenuation(in WorldLight t_WorldLight, in vec3 t_PositionWo
 
             // invlerp
             float t_AngleAttenuation = max((t_CosAngle - t_Stopdot2) / (t_Stopdot - t_Stopdot2), 0.01);
-            t_AngleAttenuation = Saturate(pow(t_AngleAttenuation, t_Exponent));
+            t_AngleAttenuation = saturate(pow(t_AngleAttenuation, t_Exponent));
 
             t_Attenuation *= t_AngleAttenuation;
         }
@@ -2206,9 +2205,8 @@ class LightmapPage {
         }
 
         if (anyDirty) {
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(this.gfxTexture, 0, [data]);
-            device.submitPass(hostAccessPass);
+
+            device.uploadTextureData(this.gfxTexture, 0, [data]);
         }
     }
 

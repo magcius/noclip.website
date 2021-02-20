@@ -218,9 +218,8 @@ class MaterialData {
         if (texture !== null) {
             this.gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, 1));
             device.setResourceName(this.gfxTexture, texture.name);
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(this.gfxTexture, 0, [texture.pixels]);
-            device.submitPass(hostAccessPass);
+
+            device.uploadTextureData(this.gfxTexture, 0, [texture.pixels]);
 
             this.gfxSampler = cache.createSampler(device, {
                 minFilter: GfxTexFilterMode.POINT,

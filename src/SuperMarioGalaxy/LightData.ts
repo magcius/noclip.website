@@ -405,7 +405,7 @@ export class LightAreaHolder extends AreaObjMgr<LightArea> {
     private sort(): void {
         // Sort by highest priority.
         this.areaObj.sort((a, b) => {
-            return b.priority - a.priority;
+            return a.priority - b.priority;
         });
     }
 
@@ -452,11 +452,11 @@ export class LightArea extends AreaObj {
 }
 
 export function createLightCtrlCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function createLightCtrlCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+    return new LightArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCylinder);
 }
 
 export function initLightCtrl(sceneObjHolder: SceneObjHolder, actor: LiveActor): void {

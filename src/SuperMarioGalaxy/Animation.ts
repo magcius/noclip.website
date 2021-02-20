@@ -9,8 +9,8 @@ import { AnimationBase, VAF1, TRK1, TTK1, TPT1, ANK1, LoopMode, Joint, JointTran
 import { J3DFrameCtrl, VAF1_getVisibility, entryTevRegAnimator, removeTevRegAnimator, entryTexMtxAnimator, removeTexMtxAnimator, entryTexNoAnimator, removeTexNoAnimator, J3DFrameCtrl__UpdateFlags, calcANK1JointAnimationTransform, calcJointMatrixFromTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 
 import { JMapInfoIter, createCsvParser } from "./JMapInfo";
-import { ResTable } from "./Main";
 import { getEaseInOutValue } from "./ActorUtil";
+import { ResTable } from "./LiveActor";
 
 export class BckCtrlData {
     public Name: string = '';
@@ -112,7 +112,7 @@ function reflectBckCtrlData(bckCtrlData: BckCtrlData, xanimePlayer: XanimePlayer
 }
 
 export function getRes<T>(table: ResTable<T>, name: string): T | null {
-    return nullify(table.get(name.toLowerCase()));
+    return nullify<T>(table.get(name.toLowerCase()));
 }
 
 export abstract class AnmPlayerBase<T extends AnimationBase> {

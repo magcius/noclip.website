@@ -1,5 +1,5 @@
 import * as Viewer from "../viewer";
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import * as BRRES from "../rres/brres";
 import { assertExists } from "../util";
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
@@ -46,7 +46,7 @@ class WS2_Renderer extends BasicGXRendererHelper {
         return instance;
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         this.scn0Animator.calcCameraClipPlanes(viewerInput.camera, 0);
@@ -56,7 +56,7 @@ class WS2_Renderer extends BasicGXRendererHelper {
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
 
         if (this.debugObjects) {
             const ctx = getDebugOverlayCanvas2D();

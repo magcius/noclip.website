@@ -1,19 +1,19 @@
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
-import ArrayBufferSlice from '../ArrayBufferSlice';
-import { Camera, computeViewMatrix, computeViewSpaceDepthFromWorldSpaceAABB, computeViewSpaceDepthFromWorldSpacePointAndViewMatrix } from '../Camera';
+import { Camera, computeViewMatrix } from '../Camera';
 import { colorCopy, colorNewFromRGBA, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { GfxBuffer, GfxBufferFrequencyHint, GfxBufferUsage, GfxDevice, GfxIndexBufferDescriptor, GfxInputLayout, GfxInputState, GfxVertexBufferDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeDepthKey, makeSortKeyTranslucent, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { getSortKeyLayer, GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { compilePartialVtxLoader, compileVtxLoaderMultiVat, GX_Array, GX_VtxAttrFmt, GX_VtxDesc, LoadedVertexData, LoadedVertexDraw, LoadedVertexLayout, VertexAttributeInput, VtxLoader } from '../gx/gx_displaylist';
 import { GXMaterial } from '../gx/gx_material';
 import { ColorKind, createInputLayout, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../gx/gx_render';
 import { nArray } from '../util';
+
 import { MaterialRenderContext, SFAMaterial } from './materials';
-import { DrawStep, ModelRenderContext } from './models';
+import { ModelRenderContext } from './models';
 import { arrayBufferSliceFromDataView, computeModelView } from './util';
 
 
@@ -70,17 +70,15 @@ class MyShapeHelper {
     }
 
     public uploadData(device: GfxDevice, uploadVertices: boolean, uploadIndices: boolean) {
-        const hostAccessPass = device.createHostAccessPass();
+
 
         if (uploadVertices) {
             for (let i = 0; i < this.loadedVertexData.vertexBuffers.length; i++)
-                hostAccessPass.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
+                device.uploadBufferData(this.vertexBuffers[i], 0, new Uint8Array(this.loadedVertexData.vertexBuffers[i]));
         }
 
         if (uploadIndices)
-            hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
-
-        device.submitPass(hostAccessPass);
+            device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.loadedVertexData.indexData));
     }
 
     public setOnRenderInst(renderInst: GfxRenderInst, packet: LoadedVertexDraw | null = null): void {

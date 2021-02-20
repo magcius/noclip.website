@@ -1,20 +1,21 @@
 import * as Viewer from '../viewer';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { DataFetcher } from '../DataFetcher';
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
+import { White } from '../Color';
+import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 
-import { SFARenderer, SceneRenderContext } from './render';
+import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
 import { BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
-import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
 import { ModelRenderContext, ModelInstance } from './models';
-import { White } from '../Color';
 
 export interface BlockInfo {
     mod: number;
@@ -144,11 +145,11 @@ export class MapInstance {
         return block;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, modelCtx: ModelRenderContext) {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(scratchMtx0, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(scratchMtx0, this.matrix, scratchMtx0);
-            b.block.prepareToRender(device, renderInstManager, modelCtx, scratchMtx0);
+            b.block.prepareToRender(device, renderInstManager, modelCtx, renderLists, scratchMtx0);
         }
     }
 
@@ -221,8 +222,11 @@ class MapSceneRenderer extends SFARenderer {
         super.update(viewerInput);
         this.materialFactory.update(this.animController);
     }
-    
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+
+    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
+
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: false,
@@ -230,9 +234,37 @@ class MapSceneRenderer extends SFARenderer {
             setupLights: () => {},
         };
 
-        this.beginPass(sceneCtx.viewerInput);
-        this.map.prepareToRender(device, renderInstManager, modelCtx);
-        this.endPass(device);    
+        this.map.prepareToRender(device, renderInstManager, renderLists, modelCtx);
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+        const renderIntoPass = (name: string, lists: GfxRenderInstList[]) => {
+            // TODO: eliminate redundant passes and resolves
+            builder.pushPass((pass) => {
+                pass.setDebugName(name);
+                pass.setViewport(sceneCtx.viewerInput.viewport);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+                pass.exec((passRenderer) => {
+                    for (let list of lists) {
+                        list.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
+                    }
+                });
+            });
+            builder.resolveRenderTargetToExternalTexture(mainColorTargetID, sceneCtx.getSceneTexture().gfxTexture!);
+        };
+
+        renderIntoPass('World Opaques', [
+            renderLists.world[0],
+            renderLists.furs
+        ]);
+        renderIntoPass('World Translucents', [
+            renderLists.waters,
+            renderLists.world[1],
+            renderLists.world[2],
+        ]);
     }
 }
 
@@ -311,7 +343,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
 
         const animController = new SFAAnimationController();
         const materialFactory = new MaterialFactory(device);
-        const mapsJsonString = new TextDecoder('utf-8').decode(mapsJsonBuffer.arrayBuffer);
+        const mapsJsonString = new TextDecoder('utf-8').decode(mapsJsonBuffer.arrayBuffer as ArrayBuffer);
         const mapsJson = JSON.parse(mapsJsonString);
         const map = mapsJson[this.mapKey];
 

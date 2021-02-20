@@ -9,12 +9,13 @@ import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { BasicRenderTarget, ColorTexture, depthClearRenderPassDescriptor, noClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { fillColor, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxHostAccessPass, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
+import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
-import { GfxRenderHelper } from "../gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
+import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { clamp, getMatrixTranslation } from "../MathHelpers";
 import { DeviceProgram } from "../Program";
 import { SceneContext } from "../SceneBase";
@@ -839,13 +840,8 @@ void main() {
 const scratchVec3 = vec3.create();
 const scratchMatrix = mat4.create();
 export class SourceRenderer implements SceneGfx {
-    private renderTarget = new BasicRenderTarget(GfxFormat.U8_RGBA_RT_SRGB);
-    private framebufferTexture = new ColorTexture(GfxFormat.U8_RGBA_RT_SRGB);
-    private resolvedSRGB = new ColorTexture(GfxFormat.U8_RGBA_RT_SRGB);
-    private renderTargetUNorm = new BasicRenderTarget(GfxFormat.U8_RGBA_RT);
-    private framebufferTextureMapping = new TextureMapping();
+    private framebufferTextureMapping = nArray(1, () => new TextureMapping());
     private gammaCorrectProgram = new FullscreenGammaCorrectProgram();
-    private gammaCorrectTextureMapping = nArray(1, () => new TextureMapping());
     public renderHelper: GfxRenderHelper;
     public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
@@ -861,7 +857,7 @@ export class SourceRenderer implements SceneGfx {
         this.renderHelper = new GfxRenderHelper(device);
         this.renderContext = new SourceRenderContext(device, this.renderHelper.getCache(), filesystem);
 
-        this.framebufferTextureMapping.gfxSampler = this.renderContext.cache.createSampler(device, {
+        this.framebufferTextureMapping[0].gfxSampler = this.renderContext.cache.createSampler(device, {
             magFilter: GfxTexFilterMode.BILINEAR,
             minFilter: GfxTexFilterMode.BILINEAR,
             mipFilter: GfxMipFilterMode.NO_MIP,
@@ -891,7 +887,7 @@ export class SourceRenderer implements SceneGfx {
         return false;
     }
 
-    private prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    private prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         // globalTime is in seconds.
         this.renderContext.globalTime = viewerInput.time / 1000.0;
         this.renderContext.globalDeltaTime = viewerInput.deltaTime / 1000.0;
@@ -952,7 +948,7 @@ export class SourceRenderer implements SceneGfx {
         // Update our lightmaps right before rendering.
         this.renderContext.lightmapManager.prepareToRender(device);
 
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 
     private executeOnPass(passRenderer: GfxRenderPass, filterKey: FilterKey): void {
@@ -960,60 +956,97 @@ export class SourceRenderer implements SceneGfx {
         const r = this.renderHelper.renderInstManager;
 
         r.setVisibleByFilterKeyExact(filterKey);
-        r.simpleRenderInstList!.resolveLateSamplerBinding(LateBindingTexture.FramebufferTexture, this.framebufferTextureMapping);
+        r.simpleRenderInstList!.resolveLateSamplerBinding(LateBindingTexture.FramebufferTexture, this.framebufferTextureMapping[0]);
         r.drawOnPassRenderer(device, passRenderer);
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        const hostAccessPass = device.createHostAccessPass();
-        this.prepareToRender(device, hostAccessPass, viewerInput);
-        device.submitPass(hostAccessPass);
+        const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.renderTarget.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.renderTargetUNorm.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight, 1);
-        this.framebufferTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
-        this.resolvedSRGB.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight);
+        const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
+        mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
+        mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
 
-        this.framebufferTextureMapping.gfxTexture = this.framebufferTexture.gfxTexture!;
+        const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
+        mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
+        mainDepthDesc.copyDimensions(mainColorDesc);
 
-        let passRenderer: GfxRenderPass;
-        passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor);
-        this.executeOnPass(passRenderer, FilterKey.Skybox);
-        device.submitPass(passRenderer);
-        passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, depthClearRenderPassDescriptor, this.framebufferTexture.gfxTexture!);
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color (sRGB)');
 
-        this.executeOnPass(passRenderer, FilterKey.Main);
-        device.submitPass(passRenderer);
+        builder.pushPass((pass) => {
+            pass.setDebugName('Skybox');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
 
-        passRenderer = this.renderTarget.createRenderPass(device, viewerInput.viewport, noClearRenderPassDescriptor, this.resolvedSRGB.gfxTexture!);
-        this.executeOnPass(passRenderer, FilterKey.Translucent);
-        device.submitPass(passRenderer);
+            pass.exec((passRenderer) => {
+                this.executeOnPass(passRenderer, FilterKey.Skybox);
+            });
+        });
 
-        // Now do a fullscreen gamma-correct pass to output to our UNORM backbuffer.
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+            pass.exec((passRenderer) => {
+                this.executeOnPass(passRenderer, FilterKey.Main);
+            });
+        });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Indirect');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+
+            const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            pass.attachResolveTexture(mainColorResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                this.framebufferTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                this.executeOnPass(passRenderer, FilterKey.Translucent);
+            });
+        });
+
+        const mainColorGammaDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+        mainColorGammaDesc.copyDimensions(mainColorDesc);
+        const mainColorGammaTargetID = builder.createRenderTargetID(mainColorGammaDesc, 'Main Color (Gamma)');
+
         const cache = this.renderContext.cache;
-        passRenderer = this.renderTargetUNorm.createRenderPass(device, viewerInput.viewport, standardFullClearRenderPassDescriptor, viewerInput.onscreenTexture);
-        const gammaCorrectRenderInst = this.renderHelper.renderInstManager.newRenderInst();
-        gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsGammaCorrect);
-        gammaCorrectRenderInst.setInputLayoutAndState(null, null);
-        const gammaCorrectProgram = cache.createProgram(device, this.gammaCorrectProgram);
-        this.gammaCorrectTextureMapping[0].gfxTexture = this.resolvedSRGB.gfxTexture!;
-        gammaCorrectRenderInst.setGfxProgram(gammaCorrectProgram);
-        gammaCorrectRenderInst.setSamplerBindingsFromTextureMappings(this.gammaCorrectTextureMapping);
-        gammaCorrectRenderInst.setMegaStateFlags(fullscreenMegaState);
-        gammaCorrectRenderInst.drawPrimitives(3);
-        gammaCorrectRenderInst.drawOnPass(device, cache, passRenderer);
-        device.submitPass(passRenderer);
 
-        this.renderHelper.renderInstManager.resetRenderInsts();
+        builder.pushPass((pass) => {
+            // Now do a fullscreen gamma-correct pass to output to our UNORM backbuffer.
+            pass.setDebugName('Gamma Correct');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorGammaTargetID);
 
-        return null;
+            const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
+            pass.attachResolveTexture(mainColorResolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                const gammaCorrectRenderInst = this.renderHelper.renderInstManager.newRenderInst();
+                gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsGammaCorrect);
+                gammaCorrectRenderInst.setInputLayoutAndState(null, null);
+                const gammaCorrectProgram = cache.createProgram(device, this.gammaCorrectProgram);
+                this.framebufferTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                gammaCorrectRenderInst.setGfxProgram(gammaCorrectProgram);
+                gammaCorrectRenderInst.setSamplerBindingsFromTextureMappings(this.framebufferTextureMapping);
+                gammaCorrectRenderInst.setMegaStateFlags(fullscreenMegaState);
+                gammaCorrectRenderInst.drawPrimitives(3);
+                gammaCorrectRenderInst.drawOnPass(device, cache, passRenderer);
+            });
+        });
+        builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
+
+        this.prepareToRender(device, viewerInput);
+
+        this.renderHelper.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
     }
 
     public destroy(device: GfxDevice): void {
-        this.renderTarget.destroy(device);
-        this.framebufferTexture.destroy(device);
-        this.resolvedSRGB.destroy(device);
-        this.renderTargetUNorm.destroy(device);
         this.renderHelper.destroy(device);
         this.renderContext.destroy(device);
         if (this.skyboxRenderer !== null)

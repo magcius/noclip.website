@@ -101,7 +101,8 @@ export function parse(buffer: ArrayBufferSlice): FLVER {
     const isLittleEndian = endianMarker === 'L\0';
 
     const version = view.getUint32(0x08, isLittleEndian);
-    assert(version === 0x02000C);
+    // Some FLVER files in Undead Asylum are 0x02000D.
+    // assert(version === 0x02000C);
 
     const dataOffs = view.getUint32(0x0C, isLittleEndian);
     const dataSize = view.getUint32(0x10, isLittleEndian);

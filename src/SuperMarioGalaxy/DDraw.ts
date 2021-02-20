@@ -243,7 +243,7 @@ export class TDDraw extends TDDrawVtxSpec {
 
         if ((this.recreateVertexBuffer || this.recreateIndexBuffer) && this.startIndex > 0) {
             console.warn(`DDraw: Recreating buffers when render insts already made. This will cause illegal warnings. Use allocatePrimitives() to prevent this.`);
-            debugger;
+            // debugger;
         }
 
         if (this.recreateVertexBuffer) {
@@ -279,6 +279,10 @@ export class TDDraw extends TDDrawVtxSpec {
         }
     }
 
+    public canMakeRenderInst(): boolean {
+        return this.currentIndex > this.startIndex;
+    }
+
     public makeRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager): GfxRenderInst {
         this.flushDeviceObjects(device, renderInstManager.gfxRenderCache);
         const renderInst = renderInstManager.newRenderInst();
@@ -290,10 +294,8 @@ export class TDDraw extends TDDrawVtxSpec {
 
     private endAndUploadCache(device: GfxDevice, cache: GfxRenderCache): void {
         this.flushDeviceObjects(device, cache);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
-        hostAccessPass.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
-        device.submitPass(hostAccessPass);
+        device.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
+        device.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
     }
 
     public endAndUpload(device: GfxDevice, renderInstManager: GfxRenderInstManager): void {
@@ -494,10 +496,8 @@ export class TSDraw extends TDDrawVtxSpec {
 
     public endDraw(device: GfxDevice, cache: GfxRenderCache): void {
         this.flushDeviceObjects(device, cache);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
-        hostAccessPass.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
-        device.submitPass(hostAccessPass);
+        device.uploadBufferData(this.vertexBuffer!, 0, new Uint8Array(this.vertexData.buffer));
+        device.uploadBufferData(this.indexBuffer!, 0, new Uint8Array(this.indexData.buffer));
     }
 
     public destroy(device: GfxDevice): void {

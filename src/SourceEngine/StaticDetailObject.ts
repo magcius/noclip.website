@@ -310,10 +310,8 @@ export class DetailPropLeafRenderer {
         }
 
         const device = renderContext.device;
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer));
-        hostAccessPass.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.indexData.buffer));
-        device.submitPass(hostAccessPass);
+        device.uploadBufferData(this.vertexBuffer, 0, new Uint8Array(this.vertexData.buffer));
+        device.uploadBufferData(this.indexBuffer, 0, new Uint8Array(this.indexData.buffer));
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setInputLayoutAndState(this.inputLayout, this.inputState);

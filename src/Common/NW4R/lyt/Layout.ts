@@ -1,25 +1,26 @@
 
 import ArrayBufferSlice from "../../../ArrayBufferSlice";
-import { Color, colorCopy, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../../../Color";
-import { assert, assertExists, readString } from "../../../util";
+import { Color, colorCopy, colorMultAlpha, colorNewCopy, colorNewFromRGBA, colorNewFromRGBA8, White } from "../../../Color";
+import { assert, assertExists, nArray, readString } from "../../../util";
 import * as GX from '../../../gx/gx_enum';
-import { mat4, ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, vec2, vec3 } from "gl-matrix";
+import { mat4, ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec3, vec4 } from "gl-matrix";
 import { computeModelMatrixSRT, MathConstants, saturate } from "../../../MathHelpers";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
-import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID } from "../../../gx/gx_material";
-import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
+import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID, GX_Program } from "../../../gx/gx_material";
+import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
 import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../../../TextureHolder";
 import { TDDraw } from "../../../SuperMarioGalaxy/DDraw";
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../../../gx/gx_render";
 import { TEX1_SamplerSub, translateSampler } from "../../JSYSTEM/JUTTexture";
-import { drawWorldSpacePoint, getDebugOverlayCanvas2D } from "../../../DebugJunk";
 import { getPointHermite } from "../../../Spline";
 import { arrayCopy } from "../../../gfx/platform/GfxPlatformUtil";
 import { LoopMode } from "../../../rres/brres";
 import { TPLTextureHolder } from "../../../PaperMarioTTYD/render";
 import { TPL } from "../../../PaperMarioTTYD/tpl";
+import { CharWriter, ResFont } from "./Font";
+import { fillMatrix4x3 } from "../../../gfx/helpers/UniformBufferHelpers";
 
 //#region BRLYT
 interface RLYTSampler extends TEX1_SamplerSub {
@@ -95,7 +96,7 @@ interface RLYTPaneBase {
 
 interface RLYTWindowContent {
     materialIndex: number;
-    colors: Color[];
+    vertexColors: Color[];
     texCoords: ReadonlyVec2[][];
 }
 
@@ -116,8 +117,8 @@ interface RLYTTextbox extends RLYTPaneBase {
     colorB: Color;
     fontWidth: number;
     fontHeight: number;
-    charWidth: number;
-    charHeight: number;
+    charSpacing: number;
+    lineHeight: number;
     str: string;
 }
 
@@ -149,6 +150,9 @@ interface RLYTGroup {
 }
 
 export interface RLYT {
+    originType: number;
+    width: number;
+    height: number;
     txl1: RLYTTextureBinding[];
     fnl1: RLYTTextureBinding[];
     mat1: RLYTMaterial[];
@@ -165,11 +169,11 @@ function calcTextureMatrix(dst: mat4, scaleS: number, scaleT: number, rotation: 
 
     dst[0]  = scaleS *  cosR;
     dst[4]  = scaleT * -sinR;
-    dst[12] = translationS + 0.5 - (scaleS * cosR * 0.5) + (scaleS * sinR * 0.5);
+    dst[12] = translationS + 0.5 - (scaleS * cosR * 0.5) + (scaleT * sinR * 0.5);
 
     dst[1]  = scaleS *  sinR;
     dst[5]  = scaleT *  cosR;
-    dst[13] = translationT + 0.5 - (scaleS * sinR * 0.5) - (scaleS * cosR * 0.5);
+    dst[13] = translationT + 0.5 - (scaleS * sinR * 0.5) - (scaleT * cosR * 0.5);
 }
 
 function parseBRLYT_PaneBase(dst: RLYTPaneBase, buffer: ArrayBufferSlice, offs: number): number {
@@ -204,7 +208,7 @@ function parseBRLYT_WindowContent(dst: RLYTWindowContent, buffer: ArrayBufferSli
     const colorTR = colorNewFromRGBA8(view.getUint32(offs + 0x04));
     const colorBL = colorNewFromRGBA8(view.getUint32(offs + 0x08));
     const colorBR = colorNewFromRGBA8(view.getUint32(offs + 0x0C));
-    dst.colors = [colorTL, colorTR, colorBL, colorBR];
+    dst.vertexColors = [colorTL, colorTR, colorBL, colorBR];
 
     dst.materialIndex = view.getUint16(offs + 0x10);
     const texCoordCount = view.getUint8(offs + 0x12);
@@ -252,8 +256,9 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
     const rootSectionOffs = view.getUint16(0x0C);
     const numSections = view.getUint16(0x0E);
 
-    let tableIdx = rootSectionOffs + 0x00;
-
+    let originType: number = 0;
+    let width: number = 0;
+    let height: number = 0;
     const txl1: RLYTTextureBinding[] = [];
     const fnl1: RLYTTextureBinding[] = [];
     const mat1: RLYTMaterial[] = [];
@@ -261,6 +266,8 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
     const groupStack: RLYTGroup[] = [];
     let rootPaneTemp: RLYTPaneBase | null = null;
     let rootGroupTemp: RLYTGroup | null = null;
+
+    let tableIdx = rootSectionOffs + 0x00;
 
     for (let i = 0; i < numSections; i++) {
         // blockSize includes the header.
@@ -271,6 +278,10 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
 
         if (fourcc === 'lyt1') {
             // No need to do anything.
+            originType = view.getUint8(blockContentsOffs + 0x00);
+            assert(originType === 1);
+            width = view.getFloat32(blockContentsOffs + 0x04);
+            height = view.getFloat32(blockContentsOffs + 0x08);
         } else if (fourcc === 'txl1') {
             // Textures list.
             const count = view.getUint16(blockContentsOffs + 0x00);
@@ -338,10 +349,10 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                 for (let i = 0; i < samplerCount; i++, materialIdx += 0x04) {
                     const textureIndex = view.getUint16(materialIdx + 0x00);
                     const flags = view.getUint16(materialIdx + 0x02);
-                    const wrapS: GX.WrapMode = (flags >>> 0) & 0x03;
-                    const wrapT: GX.WrapMode = (flags >>> 8) & 0x03;
-                    const minFilter: GX.TexFilter = ((flags >>>  2) & 0x03) + 1;
-                    const magFilter: GX.TexFilter = ((flags >>> 10) & 0x03) + 1;
+                    const wrapS: GX.WrapMode = (flags >>> 8) & 0x03;
+                    const wrapT: GX.WrapMode = (flags >>> 0) & 0x03;
+                    const minFilter: GX.TexFilter = ((flags >>> 10) & 0x03) + 1;
+                    const magFilter: GX.TexFilter = ((flags >>>  2) & 0x03) + 1;
                     const minLOD = 0;
                     const maxLOD = 100;
                     samplers.push({ textureIndex, wrapS, wrapT, minFilter, magFilter, minLOD, maxLOD });
@@ -365,7 +376,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                     mb.setTexCoordGen(i, type, source, matrix);
                 }
 
-                let vertexColorEnabled = false;
+                let vertexColorEnabled: boolean;
                 if (hasChanCtrl) {
                     const matSrcColor: GX.ColorSrc = view.getUint8(materialIdx + 0x00);
                     const matSrcAlpha: GX.ColorSrc = view.getUint8(materialIdx + 0x01);
@@ -375,6 +386,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                     materialIdx += 0x04;
                 } else {
                     mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+                    vertexColorEnabled = true;
                 }
 
                 let colorMatReg: Color;
@@ -405,7 +417,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                 for (let i = 0; i < indirectTextureMatrixCount; i++) {
                     const textureMatrix = {} as RLYTTextureMatrix;
                     materialIdx += parseBRLYT_TextureMatrix(textureMatrix, buffer, materialIdx);
-                    textureMatrices.push(textureMatrix);
+                    indirectTextureMatrices.push(textureMatrix);
                 }
 
                 for (let i = 0; i < indirectTextureStageCount; i++) {
@@ -475,7 +487,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                     const indTexStage: GX.IndTexStageID = indB0;
                     const indFormat: GX.IndTexFormat = (indB3 >>> 0) & 0x03;
                     const indBiasSel: GX.IndTexBiasSel = (indB1 >>> 0) & 0x07;
-                    const indMtxID: GX.IndTexMtxID = (indB1 >>> 0) & 0x03;
+                    const indMtxID: GX.IndTexMtxID = (indB1 >>> 3) & 0x0F;
                     const indWrapS: GX.IndTexWrap = (indB2 >>> 0) & 0x07;
                     const indWrapT: GX.IndTexWrap = (indB2 >>> 3) & 0x07;
                     const indAddPrev = !!((indB3 >>> 2) & 0x01);
@@ -599,8 +611,8 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
                 textbox.colorB = colorNewFromRGBA8(view.getUint32(paneOffs + 0x14));
                 textbox.fontWidth = view.getFloat32(paneOffs + 0x18);
                 textbox.fontHeight = view.getFloat32(paneOffs + 0x1C);
-                textbox.charWidth = view.getFloat32(paneOffs + 0x20);
-                textbox.charHeight = view.getFloat32(paneOffs + 0x24);
+                textbox.charSpacing = view.getFloat32(paneOffs + 0x20);
+                textbox.lineHeight = view.getFloat32(paneOffs + 0x24);
                 textbox.str = readString(buffer, strOffs, strLength, false, 'utf-16be');
             }
 
@@ -642,7 +654,7 @@ export function parseBRLYT(buffer: ArrayBufferSlice): RLYT {
 
     const rootPane = assertExists(rootPaneTemp);
     const rootGroup = assertExists(rootGroupTemp);
-    return { txl1, fnl1, mat1, rootPane, rootGroup };
+    return { originType, width, height, txl1, fnl1, mat1, rootPane, rootGroup };
 }
 //#endregion
 
@@ -752,14 +764,14 @@ interface RLANAnimationTrack {
 }
 
 interface RLANAnimation {
-    duration: number;
-    loopMode: LoopMode;
     targetName: string;
     type: RLANAnimationType;
     tracks: RLANAnimationTrack[];
 }
 
-interface RLAN {
+export interface RLAN {
+    duration: number;
+    loopMode: LoopMode;
     animations: RLANAnimation[];
     textureNames: string[];
 }
@@ -793,6 +805,9 @@ export function parseBRLAN(buffer: ArrayBufferSlice): RLAN {
     const animations: RLANAnimation[] = [];
     const textureNames: string[] = [];
 
+    let duration = 0;
+    let loopMode = LoopMode.ONCE;
+
     for (let i = 0; i < numSections; i++) {
         // blockSize includes the header.
         const blockOffs = tableIdx;
@@ -803,9 +818,10 @@ export function parseBRLAN(buffer: ArrayBufferSlice): RLAN {
         if (fourcc === 'pai1') {
             // Animation block.
 
-            const duration = view.getUint16(blockContentsOffs + 0x00);
+            duration = view.getUint16(blockContentsOffs + 0x00);
             const loopFlag = view.getUint8(blockContentsOffs + 0x02);
-            const loopMode = (!!loopFlag) ? LoopMode.REPEAT : LoopMode.ONCE;
+            loopMode = (!!loopFlag) ? LoopMode.REPEAT : LoopMode.ONCE;
+
             const textureTableCount = view.getUint16(blockContentsOffs + 0x04);
             const animTableCount = view.getUint16(blockContentsOffs + 0x06);
 
@@ -867,7 +883,7 @@ export function parseBRLAN(buffer: ArrayBufferSlice): RLAN {
                     }
                 }
 
-                animations.push({ duration, loopMode, targetName, type, tracks });
+                animations.push({ targetName, type, tracks });
             }
 
             const textureTableOffs = blockContentsOffs + 0x0C;
@@ -878,9 +894,11 @@ export function parseBRLAN(buffer: ArrayBufferSlice): RLAN {
                 textureNames.push(name);
             }
         }
+
+        tableIdx += blockSize;
     }
 
-    return { animations, textureNames };
+    return { duration, loopMode, animations, textureNames };
 }
 
 function hermiteInterpolate(k0: RLANKeyframe, k1: RLANKeyframe, frame: number): number {
@@ -930,18 +948,26 @@ function sampleAnimationDataStep(frames: RLANKeyframe[], time: number): number {
 export class LayoutDrawInfo {
     public viewMatrix = mat4.create();
     public alpha: number = 1.0;
+
+    public aspectAdjust: boolean = false;
+    public aspectAdjustScaleX: number = 1.0;
+    public aspectAdjustScaleY: number = 1.0;
 }
 
-interface LayoutFont {
-    // TODO(jstpierre): Figure out our font system.
+interface LayoutResourceCollection {
+    fillTextureByName(dst: TextureMapping, name: string): void;
+    getFontByName(name: string): ResFont;
 }
 
-export class LayoutResourceCollection {
+export class LayoutResourceCollectionBasic {
     public textureHolder = new TPLTextureHolder();
-    public fonts: LayoutFont[] = [];
 
     public fillTextureByName(dst: TextureMapping, name: string): void {
         this.textureHolder.fillTextureMapping(dst, name);
+    }
+
+    public getFontByName(name: string): ResFont {
+        return null!;
     }
 
     public addTPL(device: GfxDevice, tpl: TPL): void {
@@ -954,7 +980,6 @@ export class LayoutResourceCollection {
 }
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
 
 const scratchMatrix = mat4.create();
 export class LayoutPane {
@@ -964,6 +989,7 @@ export class LayoutPane {
     public userData: string;
     public alpha = 1.0;
     public propagateAlpha = false;
+    public aspectAdjust = false;
     public basePosition: RLYTBasePosition;
     public translation = vec3.create();
     public rotation = vec3.create();
@@ -972,34 +998,35 @@ export class LayoutPane {
     public height: number;
     public worldFromLocalMatrix = mat4.create();
 
-    public static parse(rlyt: RLYTPaneBase): LayoutPane {
+    public static parse(rlyt: RLYTPaneBase, layout: Layout): LayoutPane {
         if (rlyt.kind === RLYTPaneKind.Pane || rlyt.kind === RLYTPaneKind.Bounding) {
             const pane = new LayoutPane();
-            pane.parse(rlyt);
+            pane.parse(rlyt, layout);
             return pane;
         } else if (rlyt.kind === RLYTPaneKind.Picture) {
             const picture = new LayoutPicture();
-            picture.parse(rlyt as RLYTPicture);
+            picture.parse(rlyt as RLYTPicture, layout);
             return picture;
         } else if (rlyt.kind === RLYTPaneKind.Textbox) {
             const textbox = new LayoutTextbox();
-            textbox.parse(rlyt as RLYTTextbox);
+            textbox.parse(rlyt as RLYTTextbox, layout);
             return textbox;
         } else if (rlyt.kind === RLYTPaneKind.Window) {
             const window = new LayoutWindow();
-            window.parse(rlyt as RLYTWindow);
+            window.parse(rlyt as RLYTWindow, layout);
             return window;
         } else {
             throw "whoops";
         }
     }
 
-    public parse(rlyt: RLYTPaneBase): void {
+    public parse(rlyt: RLYTPaneBase, layout: Layout): void {
         this.visible = !!(rlyt.flags & RLYTPaneFlags.Visible);
         this.name = rlyt.name;
         this.userData = rlyt.userData;
         this.alpha = rlyt.alpha;
         this.propagateAlpha = !!(rlyt.flags & RLYTPaneFlags.PropagateAlpha);
+        this.aspectAdjust = !!(rlyt.flags & RLYTPaneFlags.AspectAdjust);
         this.basePosition = rlyt.basePosition;
         vec3.copy(this.translation, rlyt.translation);
         vec3.copy(this.rotation, rlyt.rotation);
@@ -1008,7 +1035,7 @@ export class LayoutPane {
         this.height = rlyt.height;
 
         for (let i = 0; i < rlyt.children.length; i++)
-            this.children.push(LayoutPane.parse(rlyt.children[i]));
+            this.children.push(LayoutPane.parse(rlyt.children[i], layout));
     }
 
     public findPaneByName(name: string): LayoutPane | null {
@@ -1063,18 +1090,55 @@ export class LayoutPane {
             this.calcAnimationTrack(animation.tracks[i], time);
     }
 
-    public calcMatrix(parentMatrix: ReadonlyMat4): void {
+    public calcMatrix(drawInfo: Readonly<LayoutDrawInfo>, parentMatrix: ReadonlyMat4): void {
         if (!this.visible)
             return;
 
+        let scaleX = this.scale[0];
+        let scaleY = this.scale[1];
+        if (this.aspectAdjust && drawInfo.aspectAdjust) {
+            scaleX *= drawInfo.aspectAdjustScaleX;
+            scaleY *= drawInfo.aspectAdjustScaleY;
+        }
+
         computeModelMatrixSRT(scratchMatrix,
-            this.scale[0], this.scale[1], 1.0,
+            scaleX, scaleY, 1.0,
             this.rotation[0] * MathConstants.DEG_TO_RAD, this.rotation[1] * MathConstants.DEG_TO_RAD, this.rotation[2] * MathConstants.DEG_TO_RAD,
             this.translation[0], this.translation[1], this.translation[2]);
         mat4.mul(this.worldFromLocalMatrix, parentMatrix, scratchMatrix);
 
         for (let i = 0; i < this.children.length; i++)
-            this.children[i].calcMatrix(this.worldFromLocalMatrix);
+            this.children[i].calcMatrix(drawInfo, this.worldFromLocalMatrix);
+    }
+
+    public getBasePositionX(): number {
+        const basePositionX = this.basePosition % 3;
+        if (basePositionX === 0) // left
+            return 0;
+        else if (basePositionX === 1) // center
+            return -this.width / 2;
+        else if (basePositionX === 2) // right
+            return -this.width;
+        else
+            throw "whoops";
+    }
+
+    public getBasePositionY(): number {
+        const basePositionY = (this.basePosition / 3) | 0;
+        if (basePositionY === 0) // top
+            return 0;
+        else if (basePositionY === 1) // middle
+            return this.height / 2;
+        else if (basePositionY === 2) // bottom
+            return this.height;
+        else
+            throw "whoops";
+    }
+
+    protected setOnRenderInst(renderInst: GfxRenderInst): void {
+        let offs = renderInst.allocateUniformBuffer(GX_Program.ub_DrawParams, 16);
+        const d = renderInst.mapUniformBufferF32(GX_Program.ub_DrawParams);
+        offs += fillMatrix4x3(d, offs, this.worldFromLocalMatrix);
     }
 
     protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
@@ -1084,15 +1148,22 @@ export class LayoutPane {
         if (!this.visible)
             return;
 
+        if (this.scale[0] <= 0.0 || this.scale[1] <= 0.0)
+            return;
+
         let thisAlpha = parentAlpha * this.alpha;
-        this.drawSelf(device, renderInstManager, layout, ddraw, thisAlpha);
+        if (thisAlpha > 0.0)
+            this.drawSelf(device, renderInstManager, layout, ddraw, thisAlpha);
 
         const childAlpha = this.propagateAlpha ? thisAlpha : parentAlpha;
-        for (let i = 0; i < this.children.length; i++)
-            this.children[i].draw(device, renderInstManager, layout, ddraw, childAlpha);
+        if (childAlpha > 0.0) {
+            for (let i = 0; i < this.children.length; i++)
+                this.children[i].draw(device, renderInstManager, layout, ddraw, childAlpha);
+        }
     }
 }
 
+const scratchColor = colorNewCopy(White);
 function drawQuad(ddraw: TDDraw, x: number, y: number, z: number, w: number, h: number, vertexColors: Color[] | null, alpha: number, texCoords: ReadonlyVec2[][]): void {
     for (let idx = 0; idx < 4; idx++) {
         // All of our arrays are in order: TL, TR, BL, BR
@@ -1120,45 +1191,39 @@ function drawQuad(ddraw: TDDraw, x: number, y: number, z: number, w: number, h: 
     }
 }
 
+function drawGetMaterial(layout: Layout, content: { materialIndex: number }): LayoutMaterial | null {
+    const material = layout.materials[content.materialIndex];
+    if (!material.visible)
+        return null;
+    return material;
+}
+
+function drawSubmitRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, material: LayoutMaterial, alpha: number): void {
+    material.fillMaterialParams(materialParams, alpha);
+    material.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+    renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+
+    material.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+    renderInstManager.submitRenderInst(renderInst);
+}
+
 const MaxTexCoordChan = 2;
 
-const scratchColor = colorNewCopy(White);
+function parseWindowContent(dst: RLYTWindowContent, src: Readonly<RLYTWindowContent>): void {
+    dst.vertexColors = src.vertexColors;
+    dst.texCoords = src.texCoords;
+    assert(dst.texCoords.length <= MaxTexCoordChan);
+    dst.materialIndex = src.materialIndex;
+}
+
 export class LayoutPicture extends LayoutPane {
-    private vertexColors: Color[];
-    private texCoords: ReadonlyVec2[][];
-    private materialIndex: number;
-    private debug = false;
+    public materialIndex: number;
+    public vertexColors: Color[];
+    public texCoords: ReadonlyVec2[][];
 
-    public parse(rlyt: RLYTPicture): void {
-        super.parse(rlyt);
-        this.vertexColors = rlyt.colors;
-        this.texCoords = rlyt.texCoords;
-        assert(this.texCoords.length <= MaxTexCoordChan);
-        this.materialIndex = rlyt.materialIndex;
-    }
-
-    private getBasePositionX(): number {
-        const basePositionX = this.basePosition % 3;
-        if (basePositionX === 0) // left
-            return 0;
-        else if (basePositionX === 1) // center
-            return -this.width / 2;
-        else if (basePositionX === 2) // right
-            return -this.width;
-        else
-            throw "whoops";
-    }
-
-    private getBasePositionY(): number {
-        const basePositionY = (this.basePosition / 3) | 0;
-        if (basePositionY === 0) // top
-            return 0;
-        else if (basePositionY === 1) // middle
-            return this.height / 2;
-        else if (basePositionY === 2) // bottom
-            return this.height;
-        else
-            throw "whoops";
+    public parse(rlyt: RLYTPicture, layout: Layout): void {
+        super.parse(rlyt, layout);
+        parseWindowContent(this, rlyt);
     }
 
     protected setAnimationValueFloat(type: RLANAnimationTrackType, value: number): void {
@@ -1199,8 +1264,224 @@ export class LayoutPicture extends LayoutPane {
     }
 
     protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
-        const material = layout.materials[this.materialIndex];
-        if (!material.visible)
+        const material = drawGetMaterial(layout, this);
+        if (material === null)
+            return;
+
+        const baseX = this.getBasePositionX();
+        const baseY = this.getBasePositionY();
+        const baseZ = 0.0;
+    
+        const vertexColors = material.material.vertexColorEnabled ? this.vertexColors : null;
+        ddraw.begin(GX.Command.DRAW_QUADS, 1);
+        drawQuad(ddraw, baseX, baseY, baseZ, this.width, -this.height, vertexColors, alpha, this.texCoords);
+        ddraw.end();
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        this.setOnRenderInst(template);
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
+        renderInstManager.popTemplateRenderInst();
+    }
+}
+
+export class LayoutTextbox extends LayoutPane {
+    public maxLength: number;
+    public materialIndex: number;
+    public fontIndex: number;
+    public textPosition: number;
+    public textAlignment: RLYTTextAlignment;
+    public colorT: Color;
+    public colorB: Color;
+    public fontWidth: number;
+    public fontHeight: number;
+    public charSpacing: number;
+    public lineHeight: number;
+    public str: string;
+
+    private font: ResFont;
+
+    public parse(rlyt: RLYTTextbox, layout: Layout): void {
+        super.parse(rlyt, layout);
+        this.maxLength = rlyt.maxLength;
+        this.materialIndex = rlyt.materialIndex;
+        this.fontIndex = rlyt.fontIndex;
+        this.textPosition = rlyt.textPosition;
+        this.textAlignment = rlyt.textAlignment;
+        this.colorT = rlyt.colorT;
+        this.colorB = rlyt.colorB;
+        this.fontWidth = rlyt.fontWidth;
+        this.fontHeight = rlyt.fontHeight;
+        this.charSpacing = rlyt.charSpacing;
+        this.lineHeight = rlyt.lineHeight;
+        this.str = rlyt.str;
+
+        const fontName = layout.fontNames[this.fontIndex];
+        this.font = layout.resourceCollection.getFontByName(fontName);
+    }
+
+    private getTextPositionX(): number {
+        const textPositionX = this.textPosition % 3;
+        if (textPositionX === 0) // left
+            return 0.0;
+        else if (textPositionX === 1) // center
+            return 0.5;
+        else if (textPositionX === 2) // right
+            return 1.0;
+        else
+            throw "whoops";
+    }
+
+    private getTextPositionY(): number {
+        const textPositionY = (this.textPosition / 3) | 0;
+        if (textPositionY === 0) // top
+            return 0.0;
+        else if (textPositionY === 1) // middle
+            return 0.5;
+        else if (textPositionY === 2) // bottom
+            return 1.0;
+        else
+            throw "whoops";
+    }
+
+    public getTextAlignment(): number {
+        if (this.textAlignment === RLYTTextAlignment.Justify)
+            return this.getTextPositionX();
+        else if (this.textAlignment === RLYTTextAlignment.Left)
+            return 0.0;
+        else if (this.textAlignment === RLYTTextAlignment.Center)
+            return 0.5;
+        else if (this.textAlignment === RLYTTextAlignment.Right)
+            return 1.0;
+        else
+            throw "whoops";
+    }
+
+    private setCharWriterFont(charWriter: CharWriter): void {
+        charWriter.setFont(this.font, this.charSpacing, this.lineHeight, this.fontWidth, this.fontHeight);
+    }
+
+    public getTextDrawRect(dst: vec4, layout: Layout): void {
+        const charWriter = layout.charWriter;
+        this.setCharWriterFont(charWriter);
+        charWriter.calcRect(dst, this.str);
+    }
+
+    protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+        const material = drawGetMaterial(layout, this);
+        if (material === null)
+            return;
+
+        if (this.str.length === 0)
+            return;
+
+        const template = renderInstManager.pushTemplateRenderInst();
+        this.setOnRenderInst(template);
+
+        const charWriter = layout.charWriter;
+        this.setCharWriterFont(charWriter);
+        charWriter.calcRect(scratchVec4, this.str);
+
+        colorMultAlpha(charWriter.colorT, this.colorT, alpha);
+        colorMultAlpha(charWriter.colorB, this.colorB, alpha);
+        colorCopy(charWriter.color0, material.colorRegisters[0]);
+        colorCopy(charWriter.color1, material.colorRegisters[1]);
+        const rx0 = scratchVec4[0], ry0 = scratchVec4[1], rx1 = scratchVec4[2], ry1 = scratchVec4[3];
+        const w = rx1 - rx0, h = ry1 - ry0;
+
+        const x0 = this.getBasePositionX() + (this.width  - w) * this.getTextPositionX();
+        const y0 = this.getBasePositionY() - (this.height - h) * this.getTextPositionY();
+
+        vec3.set(charWriter.cursor, x0, y0, 0);
+        charWriter.drawString(device, renderInstManager, ddraw, this.str);
+
+        renderInstManager.popTemplateRenderInst();
+    }
+}
+
+const scratchVec4 = vec4.create();
+const scratchTexCoord = [nArray(4, () => vec2.create())];
+export class LayoutWindow extends LayoutPane {
+    public vertexColors: Color[];
+    public texCoords: ReadonlyVec2[][];
+    public materialIndex: number;
+
+    private frames: RLYTWindowFrame[];
+    private paddingL: number;
+    private paddingR: number;
+    private paddingT: number;
+    private paddingB: number;
+
+    public parse(rlyt: RLYTWindow, layout: Layout): void {
+        super.parse(rlyt, layout);
+        parseWindowContent(this, rlyt);
+
+        this.frames = rlyt.frames;
+        this.paddingL = rlyt.paddingL;
+        this.paddingR = rlyt.paddingR;
+        this.paddingT = rlyt.paddingT;
+        this.paddingB = rlyt.paddingB;
+    }
+
+    private drawFrameApplyFlipSwap(dst: vec2[], flip: RLYTTextureFlip): void {
+        if (flip === RLYTTextureFlip.Rotate90 || flip === RLYTTextureFlip.Rotate270) {
+            for (let i = 0; i < dst.length; i++) {
+                const x = dst[i][0], y = dst[i][1];
+                dst[i][0] = y; dst[i][1] = x;
+            }
+        }
+    }
+
+    private drawFrameSetTexCoord(dst: vec2[], v: ReadonlyVec4): void {
+        const s0 = v[0], t0 = v[1], s1 = v[2], t1 = v[3];
+        vec2.set(dst[0], s0, t0); // TL
+        vec2.set(dst[1], s1, t0); // TR
+        vec2.set(dst[2], s0, t1); // BL
+        vec2.set(dst[3], s1, t1); // BR
+    }
+
+    private drawFrameGetTexCoordFlipBase(dst: vec4, flip: RLYTTextureFlip): void {
+        if (flip === RLYTTextureFlip.None)
+            vec4.set(dst, 0, 0, 1, 1);
+        else if (flip === RLYTTextureFlip.FlipH)
+            vec4.set(dst, 1, 0, 0, 1);
+        else if (flip === RLYTTextureFlip.FlipV)
+            vec4.set(dst, 0, 1, 1, 0);
+        else if (flip === RLYTTextureFlip.Rotate180)
+            vec4.set(dst, 1, 1, 0, 0);
+        else if (flip === RLYTTextureFlip.Rotate90 || flip === RLYTTextureFlip.Rotate270)
+            throw "whoops";
+    }
+
+    private drawFrameGetTexCoord(position: RLYTBasePosition, dst: vec2[], frameW: number, frameH: number, texW: number, texH: number, flip: RLYTTextureFlip): void {
+        this.drawFrameGetTexCoordFlipBase(scratchVec4, flip);
+
+        // Apply texture positioning
+
+        if (position === RLYTBasePosition.TopLeft || position === RLYTBasePosition.BottomLeft) {
+            // Left has s0 anchored. Adjust s1.
+            scratchVec4[2] = frameW / ((scratchVec4[2] - scratchVec4[0]) * texW) + scratchVec4[0];
+        } else if (position === RLYTBasePosition.TopRight || position === RLYTBasePosition.BottomRight) {
+            // Right has s1 anchored. Adjust s0.
+            scratchVec4[0] = frameW / ((scratchVec4[0] - scratchVec4[2]) * texW) + scratchVec4[2];
+        }
+
+        if (position === RLYTBasePosition.TopLeft || position === RLYTBasePosition.TopRight) {
+            // Top has t0 anchored. Adjust t1.
+            scratchVec4[3] = frameH / ((scratchVec4[3] - scratchVec4[1]) * texH) + scratchVec4[1];
+        } else if (position === RLYTBasePosition.BottomLeft || position === RLYTBasePosition.BottomRight) {
+            // Bottom has t1 anchord. Adjust t0.
+            scratchVec4[1] = frameH / ((scratchVec4[1] - scratchVec4[3]) * texH) + scratchVec4[3];
+        }
+
+        this.drawFrameSetTexCoord(dst, scratchVec4);
+
+        this.drawFrameApplyFlipSwap(dst, flip);
+    }
+
+    private drawFrame1(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+        const material = this.getFrameMaterial(layout, RLYTBasePosition.TopLeft);
+        if (material.textureNames.length < 1)
             return;
 
         const baseX = this.getBasePositionX();
@@ -1208,34 +1489,99 @@ export class LayoutPicture extends LayoutPane {
         const baseZ = 0.0;
 
         const vertexColors = material.material.vertexColorEnabled ? this.vertexColors : null;
+
+        let x: number, y: number, w: number, h: number;
+
+        const texW = material.getTextureWidth();
+        const texH = material.getTextureHeight();
+
         ddraw.begin(GX.Command.DRAW_QUADS, 4);
-        drawQuad(ddraw, baseX, baseY, baseZ, this.width, -this.height, vertexColors, alpha, this.texCoords);
+
+        x = baseX; y = baseY; w = this.width - texW; h = texH;
+        this.drawFrameGetTexCoord(RLYTBasePosition.TopLeft,     scratchTexCoord[0], w, h, texW, texH, RLYTTextureFlip.None);
+        drawQuad(ddraw, x, y, baseZ, w, -h, vertexColors, alpha, scratchTexCoord);
+
+        x = baseX + this.width - texW; y = baseY; w = texW; h = this.height - texH;
+        this.drawFrameGetTexCoord(RLYTBasePosition.TopRight,    scratchTexCoord[0], w, h, texW, texH, RLYTTextureFlip.FlipH);
+        drawQuad(ddraw, x, y, baseZ, w, -h, vertexColors, alpha, scratchTexCoord);
+
+        x = baseX; y = baseY - texH; w = texW; h = this.height - texH;
+        this.drawFrameGetTexCoord(RLYTBasePosition.BottomLeft,  scratchTexCoord[0], w, h, texW, texH, RLYTTextureFlip.FlipV);
+        drawQuad(ddraw, x, y, baseZ, w, -h, vertexColors, alpha, scratchTexCoord);
+
+        x = baseX + texW; y = baseY - this.height + texH; w = this.width - texW; h = texH;
+        this.drawFrameGetTexCoord(RLYTBasePosition.BottomRight, scratchTexCoord[0], w, h, texW, texH, RLYTTextureFlip.Rotate180);
+        drawQuad(ddraw, x, y, baseZ, w, -h, vertexColors, alpha, scratchTexCoord);
+
         ddraw.end();
 
-        if (this.debug) {
-            mat4.mul(scratchMatrix, window.main.viewer.camera.projectionMatrix, this.worldFromLocalMatrix);
-            drawWorldSpacePoint(getDebugOverlayCanvas2D(), scratchMatrix, vec3.fromValues(baseX, baseY, baseZ));
-        }
+        const renderInst = ddraw.makeRenderInst(device, renderInstManager);
+        drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
+    }
+
+    private getFrameMaterial_FrameFromPosition(position: RLYTBasePosition): RLYTWindowFrame {
+        if (position === RLYTBasePosition.TopLeft || this.frames.length === 1)
+            return this.frames[0];
+        else if (position === RLYTBasePosition.TopRight)
+            return this.frames[1];
+        else if (position === RLYTBasePosition.BottomLeft)
+            return this.frames[2];
+        else if (position === RLYTBasePosition.BottomRight)
+            return this.frames[3];
+        else
+            throw "whoops";
+    }
+
+    private getFrameMaterial(layout: Layout, position: RLYTBasePosition): LayoutMaterial {
+        return layout.materials[this.getFrameMaterial_FrameFromPosition(position).materialIndex];
+    }
+
+    private drawContent(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+        const material = drawGetMaterial(layout, this);
+        if (material === null)
+            return;
+
+        // Adjust for frames.
+        const frameTL = this.getFrameMaterial(layout, RLYTBasePosition.TopLeft);
+        const frameBR = this.getFrameMaterial(layout, RLYTBasePosition.BottomRight);
+
+        const borderL = frameTL.getTextureWidth() - this.paddingL;
+        const borderR = frameBR.getTextureWidth() - this.paddingR;
+        const borderT = frameTL.getTextureHeight() - this.paddingT;
+        const borderB = frameBR.getTextureHeight() - this.paddingB;
+
+        const baseX = this.getBasePositionX() + borderL;
+        const baseY = this.getBasePositionY() + borderT;
+        const baseZ = 0.0;
+
+        const width = this.width - borderL - borderR;
+        const height = this.height - borderT - borderB;
+
+        const vertexColors = material.material.vertexColorEnabled ? this.vertexColors : null;
+        ddraw.begin(GX.Command.DRAW_QUADS, 1);
+        drawQuad(ddraw, baseX, baseY, baseZ, width, height, vertexColors, alpha, this.texCoords);
+        ddraw.end();
 
         const renderInst = ddraw.makeRenderInst(device, renderInstManager);
-        material.fillMaterialParams(materialParams);
-        material.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-        mat4.copy(packetParams.u_PosMtx[0], this.worldFromLocalMatrix);
-
-        material.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-        material.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
-        renderInstManager.submitRenderInst(renderInst);
+        drawSubmitRenderInst(device, renderInstManager, renderInst, material, alpha);
     }
-}
 
-export class LayoutTextbox extends LayoutPane {
-    // TODO(jstpierre): Font drawing?
-}
+    protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+        const template = renderInstManager.pushTemplateRenderInst();
+        this.setOnRenderInst(template);
 
-export class LayoutWindow extends LayoutPane {
-    // TODO(jstpierre)
+        this.drawContent(device, renderInstManager, layout, ddraw, alpha);
+
+        if (this.frames.length === 1) {
+            this.drawFrame1(device, renderInstManager, layout, ddraw, alpha);
+        } else if (this.frames.length === 4) {
+        } else if (this.frames.length === 8) {
+        } else {
+            throw "whoops";
+        }
+
+        renderInstManager.popTemplateRenderInst();
+    }
 }
 
 class LayoutMaterial {
@@ -1371,7 +1717,7 @@ class LayoutMaterial {
         calcTextureMatrix(dst, textureMatrix.scaleS, textureMatrix.scaleT, textureMatrix.rotation, textureMatrix.translationS, textureMatrix.translationT);
     }
 
-    public fillMaterialParams(dst: MaterialParams): void {
+    public fillMaterialParams(dst: MaterialParams, alpha: number): void {
         colorCopy(dst.u_Color[ColorKind.C0], this.colorRegisters[0]);
         colorCopy(dst.u_Color[ColorKind.C1], this.colorRegisters[1]);
         colorCopy(dst.u_Color[ColorKind.C2], this.colorRegisters[2]);
@@ -1379,7 +1725,7 @@ class LayoutMaterial {
         colorCopy(dst.u_Color[ColorKind.K1], this.colorConstants[1]);
         colorCopy(dst.u_Color[ColorKind.K2], this.colorConstants[2]);
         colorCopy(dst.u_Color[ColorKind.K3], this.colorConstants[3]);
-        colorCopy(dst.u_Color[ColorKind.MAT0], this.colorMatReg);
+        colorMultAlpha(dst.u_Color[ColorKind.MAT0], this.colorMatReg, alpha);
 
         for (let i = 0; i < this.material.textureMatrices.length; i++)
             this.calcTextureMatrix(dst.u_TexMtx[i], this.textureMatrices[i]);
@@ -1390,16 +1736,33 @@ class LayoutMaterial {
             dst.m_TextureMapping[i].gfxSampler = this.textureSamplers[i];
         }
     }
+
+    public getTextureWidth(i: number = 0): number {
+        if (this.textureNames[i] === undefined)
+            return 0;
+        this.resourceCollection.fillTextureByName(materialParams.m_TextureMapping[0], this.textureNames[i]);
+        return materialParams.m_TextureMapping[0].width;
+    }
+
+    public getTextureHeight(i: number = 0): number {
+        if (this.textureNames[i] === undefined)
+            return 0;
+        this.resourceCollection.fillTextureByName(materialParams.m_TextureMapping[0], this.textureNames[i]);
+        return materialParams.m_TextureMapping[0].height;
+    }
 }
 
 export class Layout {
     private ddraw = new TDDraw();
+    public fontNames: string[];
     public materials: LayoutMaterial[];
     public rootPane: LayoutPane;
+    public charWriter = new CharWriter();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private rlyt: RLYT, private resourceCollection: LayoutResourceCollection) {
-        this.materials = this.rlyt.mat1.map((material) => new LayoutMaterial(device, cache, material, this.rlyt.txl1, resourceCollection));
-        this.rootPane = LayoutPane.parse(this.rlyt.rootPane);
+    constructor(device: GfxDevice, cache: GfxRenderCache, rlyt: RLYT, public resourceCollection: LayoutResourceCollection) {
+        this.materials = rlyt.mat1.map((material) => new LayoutMaterial(device, cache, material, rlyt.txl1, resourceCollection));
+        this.fontNames = rlyt.fnl1.map((font) => font.filename);
+        this.rootPane = LayoutPane.parse(rlyt.rootPane, this);
 
         const ddraw = this.ddraw;
         ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
@@ -1426,7 +1789,7 @@ export class Layout {
     }
 
     public draw(device: GfxDevice, renderInstManager: GfxRenderInstManager, drawInfo: Readonly<LayoutDrawInfo>): void {
-        this.rootPane.calcMatrix(drawInfo.viewMatrix);
+        this.rootPane.calcMatrix(drawInfo, drawInfo.viewMatrix);
 
         this.ddraw.beginDraw();
         this.rootPane.draw(device, renderInstManager, this, this.ddraw, drawInfo.alpha);
@@ -1438,7 +1801,7 @@ export class Layout {
     }
 }
 
-function getAnimFrame(anim: RLANAnimation, frame: number): number {
+function getAnimFrame(anim: RLAN, frame: number): number {
     // Be careful of floating point precision.
     const lastFrame = anim.duration;
     if (anim.loopMode === LoopMode.ONCE) {
@@ -1455,11 +1818,11 @@ function getAnimFrame(anim: RLANAnimation, frame: number): number {
 }
 
 class LayoutAnimationEntry {
-    constructor(public node: LayoutPane | LayoutMaterial, public animation: RLANAnimation) {
+    constructor(public node: LayoutPane | LayoutMaterial, private animResource: RLAN, public animation: RLANAnimation) {
     }
 
     public calcAnimation(time: number, textureNames: string[]): void {
-        const animFrame = getAnimFrame(this.animation, time);
+        const animFrame = getAnimFrame(this.animResource, time);
         this.node.calcAnimation(this.animation, animFrame, textureNames);
     }
 }
@@ -1468,25 +1831,18 @@ export class LayoutAnimation {
     private entry: LayoutAnimationEntry[] = [];
     public currentFrame: number = 0;
     public duration: number = -1;
+    public loopMode = LoopMode.ONCE;
 
     constructor(private layout: Layout, private animResource: RLAN) {
-        let duration = 0;
-
         for (let i = 0; i < animResource.animations.length; i++) {
             const animation = animResource.animations[i];
 
             const node = assertExists(this.findNodeForAnimation(layout, animation));
-            this.entry.push(new LayoutAnimationEntry(node, animation));
-
-            if (duration >= 0) {
-                if (animation.loopMode === LoopMode.REPEAT)
-                    duration = -1;
-                else if (animation.duration > duration)
-                    duration = animation.duration;
-            }
+            this.entry.push(new LayoutAnimationEntry(node, this.animResource, animation));
         }
 
-        this.duration = duration;
+        this.duration = this.animResource.duration;
+        this.loopMode = this.animResource.loopMode;
     }
 
     private findNodeForAnimation(layout: Layout, animation: RLANAnimation): LayoutPane | LayoutMaterial | null {

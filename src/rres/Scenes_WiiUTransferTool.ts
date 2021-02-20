@@ -2,7 +2,7 @@
 import { SceneDesc, SceneContext, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
 import { BasicGXRendererHelper, ub_SceneParamsBufferSize, fillSceneParamsDataOnTemplate } from "../gx/gx_render";
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import * as BRRES from "./brres";
 import AnimationController from "../AnimationController";
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
@@ -112,7 +112,7 @@ class WiiUTransferToolRenderer extends BasicGXRendererHelper implements SceneGfx
         pushBgStage(modelWiiU, 'WiiUBgGoal', 'WiiUBgGoal_03');
     }
 
-    public prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: ViewerRenderInput): void {
+    public prepareToRender(device: GfxDevice, viewerInput: ViewerRenderInput): void {
         this.renderHelper.pushTemplateRenderInst();
 
         const isFinished = this.stages[this.currentStage].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
@@ -122,7 +122,7 @@ class WiiUTransferToolRenderer extends BasicGXRendererHelper implements SceneGfx
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
     }
 }
 

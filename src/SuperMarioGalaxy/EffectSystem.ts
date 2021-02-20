@@ -130,7 +130,7 @@ class ParticleEmitter {
     public init(baseEmitter: JPA.JPABaseEmitter): void {
         assert(this.baseEmitter === null);
         this.baseEmitter = baseEmitter;
-        this.baseEmitter.flags |= JPA.BaseEmitterFlags.DO_NOT_TERMINATE;
+        this.baseEmitter.becomeImmortalEmitter();
         this.didInit = false;
     }
 
@@ -520,8 +520,8 @@ export class MultiEmitter {
             if (!emitter.isValid() || emitter.isOneTime())
                 continue;
             const baseEmitter = emitter.particleEmitter!.baseEmitter!;
-            baseEmitter.flags &= ~JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
-            baseEmitter.flags &= ~JPA.BaseEmitterFlags.STOP_DRAW_PARTICLE;
+            baseEmitter.playCalcEmitter();
+            baseEmitter.playDrawParticle();
         }
     }
 
@@ -531,8 +531,8 @@ export class MultiEmitter {
             if (!emitter.isValid() || emitter.isOneTime())
                 continue;
             const baseEmitter = emitter.particleEmitter!.baseEmitter!;
-            baseEmitter.flags |= JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
-            baseEmitter.flags |= JPA.BaseEmitterFlags.STOP_DRAW_PARTICLE;
+            baseEmitter.stopCalcEmitter();
+            baseEmitter.stopDrawParticle();
         }
     }
 
@@ -561,12 +561,12 @@ export class MultiEmitter {
             for (let i = 0; i < this.singleEmitters.length; i++) {
                 const emitter = this.singleEmitters[i];
                 if (emitter.isValid())
-                    emitter.particleEmitter!.baseEmitter!.flags &= ~JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
+                    emitter.particleEmitter!.baseEmitter!.playCalcEmitter();
             }
         } else {
             const emitter = this.singleEmitters[emitterIndex];
             if (emitter.isValid())
-                emitter.particleEmitter!.baseEmitter!.flags &= ~JPA.BaseEmitterFlags.STOP_CALC_EMITTER;
+                emitter.particleEmitter!.baseEmitter!.playCalcEmitter();
         }
     }
 
@@ -973,8 +973,7 @@ export class ParticleEmitterHolder {
             if (baseEmitter === null)
                 continue;
 
-            if (!!(baseEmitter.flags & JPA.BaseEmitterFlags.TERMINATED) &&
-                baseEmitter.aliveParticlesBase.length === 0 && baseEmitter.aliveParticlesChild.length === 0) {
+            if (baseEmitter.isEnableDeleteEmitter()) {
                 this.effectSystem.forceDeleteEmitter(emitter);
             } else {
                 if (!emitter.didInit) {
@@ -1096,8 +1095,7 @@ export class EffectSystem extends NameObj {
 
 function deleteParticleEmitter(emitter: ParticleEmitter): void {
     const baseEmitter = assertExists(emitter.baseEmitter);
-    baseEmitter.flags |= JPA.BaseEmitterFlags.STOP_EMIT_PARTICLES;
-    baseEmitter.maxFrame = 1;
+    baseEmitter.becomeInvalidEmitter();
 }
 
 export function setEffectHostMtx(actor: LiveActor, effectName: string, hostMtx: mat4): void {

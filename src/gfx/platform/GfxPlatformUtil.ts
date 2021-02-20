@@ -54,8 +54,10 @@ export function gfxRenderPipelineDescriptorCopy(a: Readonly<GfxRenderPipelineDes
     const program = a.program;
     const topology = a.topology;
     const megaStateDescriptor = copyMegaState(a.megaStateDescriptor);
+    const colorAttachmentFormats = a.colorAttachmentFormats.slice();
+    const depthStencilAttachmentFormat = a.depthStencilAttachmentFormat;
     const sampleCount = a.sampleCount;
-    return { bindingLayouts, inputLayout, megaStateDescriptor, program, topology, sampleCount };
+    return { bindingLayouts, inputLayout, megaStateDescriptor, program, topology, colorAttachmentFormats, depthStencilAttachmentFormat, sampleCount };
 }
 
 export function gfxVertexAttributeDescriptorCopy(a: Readonly<GfxVertexAttributeDescriptor>): GfxVertexAttributeDescriptor {

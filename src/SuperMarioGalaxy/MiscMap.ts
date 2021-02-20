@@ -10,7 +10,7 @@ import { OceanRing, isEqualStageName, HeatHazeDirector, WhirlPoolAccelerator } f
 import { JMapInfoIter, getJMapInfoBool, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2 } from "./JMapInfo";
 import { ZoneAndLayer, LiveActor, dynamicSpawnZoneAndLayer } from "./LiveActor";
 import { createNormalBloom } from "./ImageEffect";
-import { fallback } from "../util";
+import { assert, fallback } from "../util";
 import { OceanSphere } from "./Actors/OceanSphere";
 import { colorNewFromRGBA8, colorCopy, colorLerp } from "../Color";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
@@ -64,7 +64,7 @@ export class WaterAreaHolder extends NameObj {
     public oceanRing: OceanRing[] = [];
     public oceanSphere: OceanSphere[] = [];
     private useBloom: boolean = false;
-    private cameraFilter: WaterCameraFilter;
+    private waterCameraFilter: WaterCameraFilter;
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'WaterAreaHolder');
@@ -76,7 +76,11 @@ export class WaterAreaHolder extends NameObj {
 
         connectToSceneScreenEffectMovement(sceneObjHolder, this);
 
-        this.cameraFilter = new WaterCameraFilter(dynamicSpawnZoneAndLayer, sceneObjHolder);
+        this.waterCameraFilter = new WaterCameraFilter(dynamicSpawnZoneAndLayer, sceneObjHolder);
+    }
+
+    public isOnWaterCameraFilter(): boolean {
+        return this.waterCameraFilter.isOnWaterCameraFilter();
     }
 
     public entryOceanBowl(oceanBowl: OceanBowl): void {
@@ -200,11 +204,11 @@ export function isCameraInWater(sceneObjHolder: SceneObjHolder): boolean {
 }
 
 export function createWaterAreaCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function createWaterAreaCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
-    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+    return new WaterArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCylinder);
 }
 
 export function createWaterAreaSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): NameObj {
@@ -247,7 +251,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         const arc = sceneObjHolder.modelCache.getObjectData('WaterCameraFilter');
         this.filterTexture = loadBTIData(sceneObjHolder, arc, 'WaterCameraFilter.bti');
         this.filterTexture.fillTextureMapping(this.materialParams.m_TextureMapping[0]);
-        sceneObjHolder.specialTextureBinder.registerTextureMapping(this.materialParams.m_TextureMapping[1], SpecialTextureType.ImageEffectTexture1);
+        sceneObjHolder.specialTextureBinder.registerTextureMapping(this.materialParams.m_TextureMapping[1], SpecialTextureType.OpaqueSceneTexture);
 
         this.makeActorAppeared(sceneObjHolder);
 
@@ -273,6 +277,7 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.OR, GX.CompareType.GREATER, 0);
         mb.setZMode(false, GX.CompareType.ALWAYS, false);
         mb.setCullMode(GX.CullMode.NONE);
+        mb.setUsePnMtxIdx(false);
         this.materialHelper = new GXMaterialHelperGfx(mb.finish());
     }
 
@@ -317,10 +322,14 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
         }
     }
 
+    public isOnWaterCameraFilter(): boolean {
+        return this.getCurrentNerve() !== WaterCameraFilterNrv.Air;
+    }
+
     public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {
         super.draw(sceneObjHolder, renderInstManager, viewerInput);
 
-        if (this.getCurrentNerve() === WaterCameraFilterNrv.Air)
+        if (!this.isOnWaterCameraFilter())
             return;
 
         // Captured already.
@@ -434,7 +443,7 @@ export class SwitchArea extends AreaObj {
 }
 
 export function createSwitchCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SwitchArea {
-    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function createSwitchSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SwitchArea {
@@ -442,7 +451,7 @@ export function createSwitchSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: S
 }
 
 export function createSwitchCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): SwitchArea {
-    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+    return new SwitchArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCylinder);
 }
 //#endregion
 
@@ -464,7 +473,7 @@ export class HazeCube extends AreaObj {
 }
 
 export function createHazeCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): HazeCube {
-    return new HazeCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new HazeCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function requestArchivesHazeCube(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
@@ -485,7 +494,7 @@ export class MercatorTransformCube extends AreaObj {
 }
 
 export function createMercatorCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): MercatorTransformCube {
-    return new MercatorTransformCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new MercatorTransformCube(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 //#endregion
 
@@ -506,7 +515,7 @@ export class DeathArea extends AreaObj {
 }
 
 export function createDeathCube(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.OriginCube);
+    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCube);
 }
 
 export function createDeathSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
@@ -514,6 +523,6 @@ export function createDeathSphere(zoneAndLayer: ZoneAndLayer, sceneObjHolder: Sc
 }
 
 export function createDeathCylinder(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter) {
-    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.Cylinder);
+    return new DeathArea(zoneAndLayer, sceneObjHolder, infoIter, AreaFormType.BaseOriginCylinder);
 }
 //#endregion

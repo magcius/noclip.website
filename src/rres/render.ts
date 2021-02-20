@@ -91,12 +91,12 @@ class ShapeInstance {
 
         packetParams.clear();
         for (let p = 0; p < this.shape.loadedVertexData.draws.length; p++) {
-            const packet = this.shape.loadedVertexData.draws[p];
+            const draw = this.shape.loadedVertexData.draws[p];
 
             let instVisible = false;
             if (usesSkinning) {
-                for (let j = 0; j < packet.posMatrixTable.length; j++) {
-                    const posNrmMatrixIdx = packet.posMatrixTable[j];
+                for (let j = 0; j < draw.posMatrixTable.length; j++) {
+                    const posNrmMatrixIdx = draw.posMatrixTable[j];
 
                     // Leave existing matrix.
                     if (posNrmMatrixIdx === 0xFFFF)
@@ -116,11 +116,11 @@ class ShapeInstance {
                 continue;
 
             const renderInst = renderInstManager.newRenderInst();
-            this.shapeData.setOnRenderInst(renderInst, packet);
+            this.shapeData.setOnRenderInst(renderInst, draw);
             materialInstance.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
             if (usesSkinning)
-                materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, packet, camera, viewport);
+                materialInstance.fillMaterialParams(renderInst, textureHolder, instanceStateData, this.shape.mtxIdx, draw, camera, viewport);
 
             renderInstManager.submitRenderInst(renderInst);
         }
@@ -325,7 +325,7 @@ class MaterialInstance {
         }
     }
 
-    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, draw: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
         const material = this.materialData.material;
 
         for (let i = 0; i < 8; i++) {
@@ -343,8 +343,8 @@ class MaterialInstance {
         // Fill in our environment mapped texture matrices.
         for (let i = 0; i < 10; i++) {
             let texMtxIdx: number;
-            if (packet !== null) {
-                texMtxIdx = packet.texMatrixTable[i];
+            if (draw !== null) {
+                texMtxIdx = draw.texMatrixTable[i];
 
                 // Don't bother computing a normal matrix if the matrix is unused.
                 if (texMtxIdx === 0xFFFF)
@@ -406,8 +406,8 @@ class MaterialInstance {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, packet, camera, viewport);
+    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, draw: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, draw, camera, viewport);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }

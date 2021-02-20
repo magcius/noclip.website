@@ -4,16 +4,17 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { ColorAttachment, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { makeClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
 import { IS_DEVELOPMENT } from './BuildVersion';
+import { GlobalSaveManager } from './SaveManager';
 
 export interface ViewerUpdateInfo {
     time: number;
@@ -35,6 +36,7 @@ export interface ViewerRenderInput {
     backbufferHeight: number;
     viewport: Readonly<GfxNormalizedViewportCoords>;
     onscreenTexture: GfxTexture;
+    sampleCount: number;
 }
 
 export interface SceneGfx {
@@ -46,7 +48,7 @@ export interface SceneGfx {
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
-    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass | null;
+    render(device: GfxDevice, renderInput: ViewerRenderInput): void;
     destroy(device: GfxDevice): void;
 }
 
@@ -65,29 +67,7 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
     canvas.height = height * devicePixelRatio;
 }
 
-// TODO(jstpierre): Find a more elegant way to write this that doesn't take as many resources.
-class ClearScene {
-    public colorAttachment = new ColorAttachment();
-    private renderPassDescriptor = makeClearRenderPassDescriptor(true, OpaqueBlack);
-
-    public minimize(device: GfxDevice): void {
-        this.colorAttachment.setParameters(device, 1, 1, 1);
-        device.setResourceLeakCheck(this.colorAttachment.gfxAttachment!, false);
-    }
-
-    public render(device: GfxDevice, viewerRenderInput: ViewerRenderInput): GfxRenderPass | null {
-        this.colorAttachment.setParameters(device, viewerRenderInput.backbufferWidth, viewerRenderInput.backbufferHeight);
-        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
-        this.renderPassDescriptor.colorResolveTo = viewerRenderInput.onscreenTexture;
-        const renderPass = device.createRenderPass(this.renderPassDescriptor);
-        device.submitPass(renderPass);
-        return null;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.colorAttachment.destroy(device);
-    }
-}
+const DEFAULT_NUM_SAMPLES = 4;
 
 export class Viewer {
     public inputManager: InputManager;
@@ -116,8 +96,7 @@ export class Viewer {
 
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
-    private clearScene: ClearScene = new ClearScene();
-    private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
+    private clearDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
 
     constructor(public gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -133,7 +112,13 @@ export class Viewer {
             backbufferHeight: 0,
             viewport: this.viewport,
             onscreenTexture: null!,
+            sampleCount: DEFAULT_NUM_SAMPLES,
         };
+
+        GlobalSaveManager.addSettingListener('Antialiasing', (saveManager, key) => {
+            const antialiasing = saveManager.loadSetting<boolean>(key, true);
+            this.viewerRenderInput.sampleCount = antialiasing ? DEFAULT_NUM_SAMPLES : 1;
+        });
     }
 
     private onKeyMoveSpeed(): void {
@@ -153,26 +138,15 @@ export class Viewer {
     }
 
     private renderViewport(): void {
-        let renderPass: GfxRenderPass | null = null;
         if (this.scene !== null) {
-            renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
-            this.clearScene.minimize(this.gfxDevice);
+            this.scene.render(this.gfxDevice, this.viewerRenderInput);
         } else {
-            this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
-        }
+            // Clear to black.
+            this.clearDescriptor.colorAttachment = null;
+            this.clearDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
 
-        if (renderPass !== null) {
-            // Legacy API: needs resolve.
-            const descriptor = this.gfxDevice.queryRenderPass(renderPass);
-
-            this.gfxDevice.submitPass(renderPass);
-
-            // Resolve.
-            this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
-            this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
-            this.resolveRenderPassDescriptor.depthStencilAttachment = descriptor.depthStencilAttachment;
-            const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
-            this.gfxDevice.submitPass(resolvePass);
+            const emptyRenderPass = this.gfxDevice.createRenderPass(this.clearDescriptor);
+            this.gfxDevice.submitPass(emptyRenderPass);
         }
     }
 

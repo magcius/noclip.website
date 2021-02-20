@@ -55,8 +55,8 @@ function sampleANF1AnimationData(frames: number[], animFrame: number): number {
 }
 
 export const enum J3DFrameCtrl__UpdateFlags {
-    HasStopped  = 0b0001,
-    HasRepeated = 0b0010,
+    HasStopped = 0b0001,
+    HasLooped  = 0b0010,
 }
 
 export class J3DFrameCtrl {
@@ -128,7 +128,7 @@ export class J3DFrameCtrl {
             }
         } else if (this.loopMode === LoopMode.REPEAT) {
             while (this.currentTimeInFrames >= this.endFrame) {
-                this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasRepeated;
+                this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasLooped;
                 this.currentTimeInFrames -= (this.endFrame - this.repeatStartFrame);
             }
         } else if (this.loopMode === LoopMode.MIRRORED_ONCE) {
@@ -151,7 +151,7 @@ export class J3DFrameCtrl {
             if (this.currentTimeInFrames < this.startFrame) {
                 this.speedInFrames *= -1;
                 this.currentTimeInFrames = this.startFrame - (this.currentTimeInFrames - this.startFrame);
-                this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasRepeated;
+                this.updateFlags |= J3DFrameCtrl__UpdateFlags.HasLooped;
             }
         }
     }
@@ -167,7 +167,7 @@ export class J3DFrameCtrl {
     }
 
     public hasStopped(): boolean {
-        return this.currentTimeInFrames === 0 || !!(this.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped);
+        return this.speedInFrames === 0 || !!(this.updateFlags & J3DFrameCtrl__UpdateFlags.HasStopped);
     }
 }
 

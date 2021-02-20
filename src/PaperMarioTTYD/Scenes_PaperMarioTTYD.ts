@@ -50,9 +50,8 @@ class TTYDSceneDesc implements Viewer.SceneDesc {
             // Replace dummy texture with a pure green.
             // TODO(jstpierre): This leaks.
             const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, 1, 1, 1));
-            const hostAccessPass = device.createHostAccessPass();
-            hostAccessPass.uploadTextureData(gfxTexture, 0, [new Uint8Array([0x00, 0xFF, 0x00, 0xFF])]);
-            device.submitPass(hostAccessPass);
+
+            device.uploadTextureData(gfxTexture, 0, [new Uint8Array([0x00, 0xFF, 0x00, 0xFF])]);
             textureHolder.setTextureOverride('tou_k_dummy', { width: 1, height: 1, flipY: false, gfxTexture });
         }
 

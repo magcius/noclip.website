@@ -34,7 +34,7 @@ class PaperMario64Program extends DeviceProgram {
     public both = PaperMario64Program.program;
 }
 
-function makeVertexBufferData(v: Vertex[]): ArrayBuffer {
+function makeVertexBufferData(v: Vertex[]): ArrayBufferLike {
     const buf = new Float32Array(10 * v.length);
     let j = 0;
     for (let i = 0; i < v.length; i++) {
@@ -126,9 +126,8 @@ export class PaperMario64TextureHolder extends TextureHolder<Tex.Image> {
     public loadTexture(device: GfxDevice, texture: Tex.Image): LoadedTexture {
         const gfxTexture = device.createTexture(makeTextureDescriptor2D(GfxFormat.U8_RGBA_NORM, texture.width, texture.height, texture.levels.length));
         device.setResourceName(gfxTexture, texture.name);
-        const hostAccessPass = device.createHostAccessPass();
-        hostAccessPass.uploadTextureData(gfxTexture, 0, texture.levels);
-        device.submitPass(hostAccessPass);
+
+        device.uploadTextureData(gfxTexture, 0, texture.levels);
 
         const viewerTexture: Viewer.Texture = textureToCanvas(texture);
         return { gfxTexture, viewerTexture };

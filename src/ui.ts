@@ -1442,6 +1442,7 @@ class ViewerSettings extends Panel {
     private cameraControllerOrtho: HTMLElement;
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
+    private antialiasingCheckbox: Checkbox;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
@@ -1510,6 +1511,11 @@ class ViewerSettings extends Panel {
             }
         };
 
+        this.antialiasingCheckbox = new Checkbox('Antialiasing?');
+        this.antialiasingCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`Antialiasing`, this.antialiasingCheckbox.checked); };
+        this.contents.appendChild(this.antialiasingCheckbox.elem);
+        GlobalSaveManager.addSettingListener('Antialiasing', this.antialiasingChanged.bind(this));
+
         this.invertYCheckbox = new Checkbox('Invert Y Axis?');
         this.invertYCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertY`, this.invertYCheckbox.checked); };
         this.contents.appendChild(this.invertYCheckbox.elem);
@@ -1573,6 +1579,11 @@ class ViewerSettings extends Panel {
     private invertXChanged(saveManager: SaveManager, key: string): void {
         const invertX = saveManager.loadSetting<boolean>(key, false);
         this.invertXCheckbox.setChecked(invertX);
+    }
+
+    private antialiasingChanged(saveManager: SaveManager, key: string): void {
+        const antialias = saveManager.loadSetting<boolean>(key, true);
+        this.antialiasingCheckbox.setChecked(antialias);
     }
 }
 
