@@ -121,12 +121,6 @@ export interface GfxrPass {
      * seldomly used.
      */
     post(func: PassPostFunc): void;
-
-    /**
-     * Set the pass's post frame callback. This will be called after all passes are submitted,
-     * allowing you do any cleanup work that you might need to.
-     */
-    postFrame(func: PassPostFrameFunc): void;
 }
 
 class PassImpl implements GfxrPass {
@@ -200,11 +194,6 @@ class PassImpl implements GfxrPass {
     public post(func: PassPostFunc): void {
         assert(this.postFunc === null);
         this.postFunc = func;
-    }
-
-    public postFrame(func: PassPostFrameFunc): void {
-        assert(this.postFrameFunc === null);
-        this.postFrameFunc = func;
     }
 }
 
@@ -501,7 +490,7 @@ export class GfxrRenderGraphImpl {
         return this.currentGraph!.resolveTextureRenderTargetIDs.push(renderTargetID) - 1;
     }
 
-    private findLastPassForRenderTarget(renderTargetID: number): PassImpl | null {
+    private findMostRecentPassThatAttachedRenderTarget(renderTargetID: number): PassImpl | null {
         for (let i = this.currentGraph!.passes.length - 1; i >= 0; i--) {
             const pass = this.currentGraph!.passes[i];
             if (pass.renderTargetIDs.includes(renderTargetID))
@@ -511,26 +500,36 @@ export class GfxrRenderGraphImpl {
         return null;
     }
 
-    public resolveRenderTarget(renderTargetID: number): number {
-        const resolveTextureID = this.createResolveTextureID(renderTargetID);
-
+    private findPassForResolveRenderTarget(renderTargetID: number): PassImpl {
         // Find the last pass that rendered to this render target, and resolve it now.
 
         // If you wanted a previous snapshot copy of it, you should have created a separate,
-        // intermediate pass to copy that out. Perhaps we should have a helper for this?
+        // intermediate pass to copy that out. Perhaps we should have a helper for that use case?
 
         // If there was no pass that wrote to this RT, well there's no point in resolving it, is there?
-        const renderPass = assertExists(this.findLastPassForRenderTarget(renderTargetID));
+        const renderPass = assertExists(this.findMostRecentPassThatAttachedRenderTarget(renderTargetID));
 
+        // Check which attachment we're in. This could possibly be explicit from the user, but it's
+        // easy enough to find...
+        const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
+
+        // Check that the pass isn't resolving its attachment to another texture. Can't do both!
+        assert(renderPass.resolveTextureOutputIDs[attachmentSlot] === undefined);
+        assert(renderPass.resolveTextureOutputExternalTextures[attachmentSlot] === undefined);
+
+        return renderPass;
+    }
+
+    public resolveRenderTarget(renderTargetID: number): number {
+        const resolveTextureID = this.createResolveTextureID(renderTargetID);
+        const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
         renderPass.resolveTextureOutputIDs[attachmentSlot] = resolveTextureID;
-
         return resolveTextureID;
     }
 
     public resolveRenderTargetToExternalTexture(renderTargetID: number, texture: GfxTexture): void {
-        const renderPass = assertExists(this.findLastPassForRenderTarget(renderTargetID));
-
+        const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
         renderPass.resolveTextureOutputExternalTextures[attachmentSlot] = texture;
     }
