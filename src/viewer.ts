@@ -9,7 +9,7 @@ import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config 
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { DEFAULT_NUM_SAMPLES, makeClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { makeClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
@@ -66,6 +66,8 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
     canvas.width = width * devicePixelRatio;
     canvas.height = height * devicePixelRatio;
 }
+
+const DEFAULT_NUM_SAMPLES = 4;
 
 export class Viewer {
     public inputManager: InputManager;

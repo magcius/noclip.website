@@ -1,6 +1,5 @@
 
 import { Color } from "../../Color";
-import { IdentityViewportCoords } from "../helpers/RenderTargetHelpers";
 import { GfxRenderTarget, GfxDevice, GfxFormat, GfxNormalizedViewportCoords, GfxRenderPass, GfxRenderPassDescriptor, GfxTexture, GfxTextureDimension } from "../platform/GfxPlatform";
 import { assert, assertExists } from "../../util";
 
@@ -90,6 +89,8 @@ export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: 
 export const enum GfxrAttachmentSlot {
     Color0, DepthStencil,
 }
+
+export const IdentityViewportCoords: Readonly<GfxNormalizedViewportCoords> = { x: 0, y: 0, w: 1, h: 1 };
 
 type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
 type PassPostFunc = (scope: GfxrPassScope) => void;

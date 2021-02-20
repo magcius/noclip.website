@@ -1,7 +1,6 @@
 
 import { GfxDevice, GfxFormat, GfxSamplerBinding, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxReadback, GfxProgram, GfxSampler, GfxTexture } from "../gfx/platform/GfxPlatformImpl";
-import { makeEmptyRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
 import { preprocessProgram_GLSL } from "../gfx/shaderc/GfxShaderCompiler";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { assert, assertExists } from "../util";
@@ -40,7 +39,6 @@ export class PeekZManager {
     private currentFrame: PeekZFrame | null = null;
     private resultBuffer: Uint32Array;
 
-    private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
     private depthSampler: GfxSampler | null = null;
     private fullscreenCopyProgram: GfxProgram | null = null;
 
@@ -48,9 +46,6 @@ export class PeekZManager {
 
     constructor(public maxCount: number = 50) {
         this.resultBuffer = new Uint32Array(this.maxCount);
-
-        this.resolveRenderPassDescriptor.depthClearValue = 'load';
-        this.resolveRenderPassDescriptor.stencilClearValue = 'load';
     }
 
     private returnFrame(frame: PeekZFrame): void {
