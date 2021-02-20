@@ -4,16 +4,16 @@ import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
 import { MaterialParams, ColorKind } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
+import { TextureMapping } from '../TextureHolder';
+import { texProjCameraSceneTex } from '../Camera';
 
 import { SFATexture, TextureFetcher } from './textures';
 import { dataSubarray, mat4SetRow, mat4FromRowMajor, mat4SetValue, mat4SetRowMajor } from './util';
 import { mat4 } from 'gl-matrix';
-import { texProjCameraSceneTex } from '../Camera';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy } from '../Color';
 import { EnvfxManager } from './envfx';
-import { TextureMapping } from '../TextureHolder';
 import { SceneRenderContext } from './render';
 
 interface ShaderLayer {

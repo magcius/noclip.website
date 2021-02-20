@@ -4,16 +4,16 @@ import * as Viewer from "../viewer";
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { SceneContext } from '../SceneBase';
+import { White } from '../Color';
+import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 
 import { GameInfo, SFA_GAME_INFO } from './scenes';
 import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, applyKeyframeToModel } from './animation';
 import { SFARenderer, SceneRenderContext } from './render';
-import { ModelFetcher, ModelInstance, ModelRenderContext } from './models';
+import { makeFilterKey, ModelFetcher, ModelInstance, ModelRenderContext, SFAFilter } from './models';
 import { MaterialFactory } from './materials';
-import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';
 import { dataSubarray, createDownloadLink, readUint16 } from './util';
 import { TextureFetcher, SFATextureFetcher } from './textures';
-import { White } from '../Color';
 import { ModelVersion } from './modelloader';
 
 class ModelExhibitRenderer extends SFARenderer {
@@ -229,14 +229,14 @@ class ModelExhibitRenderer extends SFARenderer {
 
         // Render opaques
 
-        this.beginPass(sceneCtx.viewerInput);
+        // this.beginPass(sceneCtx.viewerInput);
 
         if (this.modelInst !== null) {
             const mtx = mat4.create();
             this.renderModel(device, renderInstManager, sceneCtx, mtx, this.modelInst);
         }
 
-        this.endPass(device);
+        // this.endPass(device);
         // TODO: render furs and translucents
     }
 
@@ -248,7 +248,7 @@ class ModelExhibitRenderer extends SFARenderer {
             setupLights: () => {},
         };
 
-        modelInst.prepareToRender(device, renderInstManager, modelCtx, matrix);
+        modelInst.prepareToRender(device, renderInstManager, modelCtx, makeFilterKey(SFAFilter.World), matrix);
 
         if (this.displayBones) {
             // TODO: display bones as cones instead of lines
