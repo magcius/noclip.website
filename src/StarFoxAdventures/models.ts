@@ -260,13 +260,9 @@ export class ModelInstance {
             if (renderLists !== null)
                 renderInstManager.setCurrentRenderInstList(renderLists.waters);
 
-            const template = renderInstManager.pushTemplateRenderInst();
-            
             // XXX: Waters do not appear to be depth-sorted in-game.
             // template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
-
-            renderInstManager.popTemplateRenderInst();
         }
 
         if (this.modelShapes.furs.length !== 0) {

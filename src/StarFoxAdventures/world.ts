@@ -29,6 +29,8 @@ import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
 import { colorNewFromRGBA, Color, colorCopy } from '../Color';
 import { getCamPos } from './util';
+import { nArray } from '../util';
+import { TextureMapping } from '../TextureHolder';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -352,8 +354,6 @@ class WorldRenderer extends SFARenderer {
                 renderLists.skyscape.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
             });
         });
-
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, sceneCtx.getSceneTexture().gfxTexture!);
     }
 
     private setupLights(lights: GX_Material.Light[], modelCtx: ModelRenderContext) {
@@ -407,7 +407,7 @@ class WorldRenderer extends SFARenderer {
             showDevGeometry: this.showDevGeometry,
             outdoorAmbientColor: scratchColor0,
             setupLights: this.setupLights.bind(this),
-        }
+        };
 
         if (this.world.mapInstance !== null)
             this.world.mapInstance.prepareToRender(device, renderInstManager, renderLists, modelCtx);
@@ -431,34 +431,6 @@ class WorldRenderer extends SFARenderer {
         }
 
         renderInstManager.popTemplateRenderInst();
-    }
-
-    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
-        const renderIntoPass = (name: string, lists: GfxRenderInstList[]) => {
-            // TODO: eliminate redundant passes and resolves
-            builder.pushPass((pass) => {
-                pass.setDebugName(name);
-                pass.setViewport(sceneCtx.viewerInput.viewport);
-                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-                pass.exec((passRenderer) => {
-                    for (let list of lists) {
-                        list.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
-                    }
-                });
-            });
-            builder.resolveRenderTargetToExternalTexture(mainColorTargetID, sceneCtx.getSceneTexture().gfxTexture!);
-        };
-
-        renderIntoPass('World Opaques', [
-            renderLists.world[0],
-            renderLists.furs
-        ]);
-        renderIntoPass('World Translucents', [
-            renderLists.waters,
-            renderLists.world[1],
-            renderLists.world[2],
-        ]);
     }
 }
 

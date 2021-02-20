@@ -238,34 +238,6 @@ class MapSceneRenderer extends SFARenderer {
 
         renderInstManager.popTemplateRenderInst();
     }
-
-    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
-        const renderIntoPass = (name: string, lists: GfxRenderInstList[]) => {
-            // TODO: eliminate redundant passes and resolves
-            builder.pushPass((pass) => {
-                pass.setDebugName(name);
-                pass.setViewport(sceneCtx.viewerInput.viewport);
-                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-                pass.exec((passRenderer) => {
-                    for (let list of lists) {
-                        list.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
-                    }
-                });
-            });
-            builder.resolveRenderTargetToExternalTexture(mainColorTargetID, sceneCtx.getSceneTexture().gfxTexture!);
-        };
-
-        renderIntoPass('World Opaques', [
-            renderLists.world[0],
-            renderLists.furs
-        ]);
-        renderIntoPass('World Translucents', [
-            renderLists.waters,
-            renderLists.world[1],
-            renderLists.world[2],
-        ]);
-    }
 }
 
 export class SFAMapSceneDesc implements Viewer.SceneDesc {

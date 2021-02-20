@@ -199,13 +199,9 @@ function makeSceneMaterialTexture(): MaterialTexture {
     return {
         setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
             mapping.reset();
-            // TODO: Downscale to 1/8th scale and apply filtering (?)
-            const sceneTex = matCtx.sceneCtx.getSceneTexture();
-            mapping.gfxTexture = sceneTex.gfxTexture;
-            mapping.gfxSampler = matCtx.sceneCtx.getSceneTextureSampler();
-            mapping.width = sceneTex.width;
-            mapping.height = sceneTex.height;
-            mapping.lodBias = 0.0;
+            mapping.lateBinding = 'opaque-scene-texture';
+            mapping.width = matCtx.sceneCtx.viewerInput.backbufferWidth;
+            mapping.height = matCtx.sceneCtx.viewerInput.backbufferHeight;
         }
     };
 }
@@ -214,13 +210,9 @@ function makePreviousFrameMaterialTexture(): MaterialTexture {
     return {
         setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
             mapping.reset();
-            // TODO: Downscale to 1/8th scale and apply filtering (?)
-            const sceneTex = matCtx.sceneCtx.getPreviousFrameTexture();
-            mapping.gfxTexture = sceneTex.gfxTexture;
-            mapping.gfxSampler = matCtx.sceneCtx.getPreviousFrameTextureSampler();
-            mapping.width = sceneTex.width;
-            mapping.height = sceneTex.height;
-            mapping.lodBias = 0.0;
+            mapping.lateBinding = 'previous-frame-texture';
+            mapping.width = matCtx.sceneCtx.viewerInput.backbufferWidth;
+            mapping.height = matCtx.sceneCtx.viewerInput.backbufferHeight;
         }
     };
 }
@@ -458,30 +450,35 @@ abstract class MaterialBase implements SFAMaterial {
     
     public setupMaterialParams(params: MaterialParams, matCtx: MaterialRenderContext) {
         for (let i = 0; i < this.texMtx.length; i++) {
-            if (this.texMtx[i] !== undefined)
-                this.texMtx[i]!(params.u_TexMtx[i], matCtx);
+            const func = this.texMtx[i];
+            if (func !== undefined)
+                func(params.u_TexMtx[i], matCtx);
         }
-        
+
         for (let i = 0; i < this.indTexMtxs.length; i++) {
-            if (this.indTexMtxs[i] !== undefined)
-                this.indTexMtxs[i]!(params.u_IndTexMtx[i], matCtx);
+            const func = this.indTexMtxs[i];
+            if (func !== undefined)
+                func(params.u_IndTexMtx[i], matCtx);
         }
 
         for (let i = 0; i < this.postTexMtxs.length; i++) {
-            if (this.postTexMtxs[i] !== undefined)
-                this.postTexMtxs[i]!(params.u_PostTexMtx[i], matCtx);
+            const func = this.postTexMtxs[i];
+            if (func !== undefined)
+                func!(params.u_PostTexMtx[i], matCtx);
         }
 
         for (let i = 0; i < 2; i++) {
-            if (this.ambColors[i] !== undefined)
-                this.ambColors[i]!(params.u_Color[ColorKind.AMB0 + i], matCtx);
+            const func = this.ambColors[i];
+            if (func !== undefined)
+                func(params.u_Color[ColorKind.AMB0 + i], matCtx);
             else
                 colorFromRGBA(params.u_Color[ColorKind.AMB0 + i], 1.0, 1.0, 1.0, 1.0);
         }
 
         for (let i = 0; i < 4; i++) {
-            if (this.konstColors[i] !== undefined)
-                this.konstColors[i]!(params.u_Color[ColorKind.K0 + i], matCtx);
+            const func = this.konstColors[i];
+            if (func !== undefined)
+                func(params.u_Color[ColorKind.K0 + i], matCtx);
             else
                 colorFromRGBA(params.u_Color[ColorKind.K0 + i], 1.0, 1.0, 1.0, 1.0);
         }
@@ -960,6 +957,7 @@ export class StandardMaterial extends MaterialBase {
     }
 
     private addTevStagesForReflectiveFloor() {
+        // TODO: Proper planar reflections?
         const texMap0 = this.genTexMap(makePreviousFrameMaterialTexture());
         const texCoord = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
 
