@@ -1,21 +1,21 @@
 import * as Viewer from '../viewer';
+import { DataFetcher } from '../DataFetcher';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { mat4, vec3 } from 'gl-matrix';
+import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
+import { White } from '../Color';
+import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 
 import { SFARenderer, SceneRenderContext } from './render';
 import { BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
 import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
-import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
 import { ModelRenderContext, ModelInstance, SFAFilter, makeFilterKey } from './models';
-import { White } from '../Color';
-import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 
 export interface BlockInfo {
     mod: number;

@@ -5,6 +5,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DataFetcher } from '../DataFetcher';
 import * as GX_Material from '../gx/gx_material';
+import { Color } from '../Color';
 
 import { GameInfo } from './scenes';
 import { SFAMaterial } from './materials';
@@ -16,7 +17,6 @@ import { TextureFetcher } from './textures';
 import { Shape } from './shapes';
 import { SceneRenderContext } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
-import { Color } from '../Color';
 import { loadModel, ModelVersion } from './modelloader';
 
 interface Joint {

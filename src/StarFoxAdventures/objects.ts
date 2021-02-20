@@ -5,17 +5,17 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import * as GX_Material from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
+import { colorNewFromRGBA } from '../Color';
+import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
+import { computeViewMatrix } from '../Camera';
+import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 
 import { StandardMaterial } from './materials';
 import { ModelInstance, ModelRenderContext } from './models';
 import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUint16 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
-import { getRandomInt } from '../SuperMarioGalaxy/ActorUtil';
 import { SceneRenderContext } from './render';
-import { colorNewFromRGBA } from '../Color';
-import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
-import { computeViewMatrix } from '../Camera';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.

@@ -1,14 +1,13 @@
 import * as Viewer from '../viewer';
-import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { GfxDevice, GfxFormat, GfxRenderPass, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
+import { GXRenderHelperGfx } from '../gx/gx_render';
+import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { CameraController } from '../Camera';
 import { standardFullClearRenderPassDescriptor, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
-import { mat4 } from 'gl-matrix';
+import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
+import { colorNewFromRGBA8 } from '../Color';
 
 import { SFAAnimationController } from './animation';
-import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
-import { TransparentBlack } from '../Color';
 
 export interface SceneRenderContext {
     getSceneTexture: () => ColorTexture;
@@ -18,6 +17,8 @@ export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
     animController: SFAAnimationController;
 }
+
+const BACKGROUND_COLOR = colorNewFromRGBA8(0xCCCCCCFF);
 
 export class SFARenderer implements Viewer.SceneGfx {
     protected renderHelper: GXRenderHelperGfx;
@@ -116,7 +117,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         this.mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
-        this.mainColorDesc.colorClearColor = TransparentBlack;
+        this.mainColorDesc.colorClearColor = BACKGROUND_COLOR;
 
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
         this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
