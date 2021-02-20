@@ -145,6 +145,26 @@ const sceneDescs = [
     new FZEROGXSceneDesc("49", "com", "Interview"),
     new FZEROGXSceneDesc("50", "com", "Victory Lap"),
     new FZEROGXSceneDesc("00", "", "st00"),
+
+    
+    new FZEROGXSceneDesc("age_noclip/common", "", "Unused Model(Official GMA)"),
+    new FZEROGXSceneDesc("_smb/st001", "", "st001"),
+    new FZEROGXSceneDesc("_smb/st002", "", "st002"),
+    new FZEROGXSceneDesc("_smb/st131", "", "st131"),
+    new FZEROGXSceneDesc("_smb/st132", "", "st132"),
+    new FZEROGXSceneDesc("_smb/st133", "", "st133"),
+    new FZEROGXSceneDesc("_smb/st134", "", "st134"),
+    new FZEROGXSceneDesc("_smb/st135", "", "st135"),
+    new FZEROGXSceneDesc("_smb/st136", "", "st136"),
+
+    new FZEROGXSceneDesc("age_noclip/bg_mut", "", "MuteCity BackGround"),
+
+    new FZEROGXSceneDesc("age_noclip/C01_ROAD01", "", "C01_ROAD01 (2 Displaylist)"),
+    new FZEROGXSceneDesc("age_noclip/C01_MAP", "", "C01 MAP"),
+    new FZEROGXSceneDesc("age_noclip/triangle_2dlist", "", "Triangle(Unofficial GMA)"),
+    new FZEROGXSceneDesc("age_noclip/Arc_Cube", "", "ARC Cube(Unofficial GMA)"),
+
+    new FZEROGXSceneDesc("age_noclip/st01_snesmc1", "", "Mute City - First Circuit (hack)"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
