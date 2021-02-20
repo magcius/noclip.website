@@ -23,7 +23,7 @@ import { EnvfxManager } from './envfx';
 import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
-import { ModelRenderContext, SFAFilter, makeFilterKey } from './models';
+import { ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
@@ -188,20 +188,20 @@ class WorldRenderer extends SFARenderer {
         this.timeSelect.setValue(4);
         timePanel.contents.append(this.timeSelect.elem);
 
-        const enableAmbient = new UI.Checkbox("Enable ambient lighting", true);
-        enableAmbient.onchanged = () => {
-            this.enableAmbient = enableAmbient.checked;
+        const disableAmbient = new UI.Checkbox("Disable ambient lighting", false);
+        disableAmbient.onchanged = () => {
+            this.enableAmbient = !disableAmbient.checked;
         };
-        timePanel.contents.append(enableAmbient.elem);
+        timePanel.contents.append(disableAmbient.elem);
 
         const layerPanel = new UI.Panel();
         layerPanel.setTitle(UI.LAYER_ICON, 'Layers');
 
-        const showObjects = new UI.Checkbox("Show objects", true);
-        showObjects.onchanged = () => {
-            this.showObjects = showObjects.checked;
+        const hideObjects = new UI.Checkbox("Hide objects", false);
+        hideObjects.onchanged = () => {
+            this.showObjects = !hideObjects.checked;
         };
-        layerPanel.contents.append(showObjects.elem);
+        layerPanel.contents.append(hideObjects.elem);
 
         this.layerSelect = new UI.Slider();
         this.layerSelect.setLabel('Layer');
@@ -215,17 +215,17 @@ class WorldRenderer extends SFARenderer {
         };
         layerPanel.contents.append(showDevObjects.elem);
 
-        const showDevGeometry = new UI.Checkbox("Show developer map geometry", false);
+        const showDevGeometry = new UI.Checkbox("Show developer map shapes", false);
         showDevGeometry.onchanged = () => {
             this.showDevGeometry = showDevGeometry.checked;
         };
         layerPanel.contents.append(showDevGeometry.elem);
 
-        const enableLights = new UI.Checkbox("Enable lights", true);
-        enableLights.onchanged = () => {
-            this.enableLights = enableLights.checked;
+        const disableLights = new UI.Checkbox("Disable lights", false);
+        disableLights.onchanged = () => {
+            this.enableLights = !disableLights.checked;
         }
-        layerPanel.contents.append(enableLights.elem);
+        layerPanel.contents.append(disableLights.elem);
 
         return [timePanel, layerPanel];
     }
@@ -279,7 +279,7 @@ class WorldRenderer extends SFARenderer {
             const camPitch = vecPitch(cameraFwd);
             const camRoll = Math.PI / 2;
 
-            // FIXME: We should probably use a different technique since this is poorly suited to VR.
+            // FIXME: We should probably use a different technique since this one is poorly suited to VR.
             // TODO: Implement precise time of day. The game blends textures on the CPU to produce
             // an atmosphere texture for a given time of day.
             const fovRollFactor = 3.0 * (tex.height * 0.5 * sceneCtx.viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
