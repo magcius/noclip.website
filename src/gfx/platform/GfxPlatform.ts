@@ -3,7 +3,7 @@
 // by Metal, WebGPU and friends. The goal here is to be a good API to write to
 // while also allowing me to port to other backends (like WebGPU) in the future.
 
-import { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
+import { GfxUniformBuffer, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings, GfxResource, GfxReadback } from "./GfxPlatformImpl";
 import { GfxFormat } from "./GfxPlatformFormat";
 
 export enum GfxCompareMode {
@@ -57,7 +57,6 @@ export const enum GfxPrimitiveTopology { TRIANGLES }
 export const enum GfxBufferUsage {
     INDEX   = 0x01,
     VERTEX  = 0x02,
-    UNIFORM = 0x03,
 }
 
 export const enum GfxBufferFrequencyHint {
@@ -125,8 +124,8 @@ export interface GfxRenderTargetDescriptor {
     sampleCount: number;
 }
 
-export interface GfxBufferBinding {
-    buffer: GfxBuffer;
+export interface GfxUniformBufferBinding {
+    buffer: GfxUniformBuffer;
     wordCount: number;
 }
 
@@ -143,7 +142,7 @@ export interface GfxBindingLayoutDescriptor {
 
 export interface GfxBindingsDescriptor {
     bindingLayout: GfxBindingLayoutDescriptor;
-    uniformBufferBindings: GfxBufferBinding[];
+    uniformBufferBindings: GfxUniformBufferBinding[];
     samplerBindings: GfxSamplerBinding[];
 }
 
@@ -313,13 +312,15 @@ export type GfxPass = GfxRenderPass;
  * implementation details or underlying fields of the resources, and most objects cannot have their
  * creation parameters modified after they are created. So, while buffers and textures can have their
  * contents changed through data upload passes, they cannot be resized after creation. Create a new object
- * and destroy the old one if you wish to "resize" it.
- * 
- * To upload data to the GPU, call either {@see uploadBufferData} or {@see uploadTextureData}. Note that
- * this happens on the GPU timeline. Where possible, do try to upload data at the beginning of the frame.
- * There might be additional support for more passes in the future.
+ * and destroy the old one if you wish to "resize" it. The exception to this are uniform buffers, which are
+ * provided as a special "stretchy" buffer for efficiency.
+ *
+ * To upload data to the GPU, call either {@see uploadBufferData} or {@see uploadTextureData}. Overlapping
+ * multiple draws between multiple resources is unsupported; please try to only write to a resource once.
+ * For best results, upload data at the beginning of the frame, before any rendering is done.
  */
 export interface GfxDevice {
+    createUniformBuffer(): GfxUniformBuffer;
     createBuffer(wordCount: number, usage: GfxBufferUsage, hint: GfxBufferFrequencyHint): GfxBuffer;
     createTexture(descriptor: GfxTextureDescriptor): GfxTexture;
     createSampler(descriptor: GfxSamplerDescriptor): GfxSampler;
@@ -338,6 +339,7 @@ export interface GfxDevice {
      * to ensure that you are not leaking any resources. (In the noclip codebase, this happens automatically if you
      * set loadSceneDelta to 0 and switch scenes).
      */
+    destroyUniformBuffer(o: GfxUniformBuffer): void;
     destroyBuffer(o: GfxBuffer): void;
     destroyTexture(o: GfxTexture): void;
     destroySampler(o: GfxSampler): void;
@@ -355,7 +357,8 @@ export interface GfxDevice {
     submitPass(o: GfxPass): void;
 
     // Data submission
-    uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, data: Uint8Array, srcByteOffset?: number, byteCount?: number): void;
+    uploadUniformBufferData(buffer: GfxUniformBuffer, srcData: Uint8Array, srcByteCount: number): void;
+    uploadBufferData(buffer: GfxBuffer, dstByteOffset: number, srcData: Uint8Array, srcByteOffset?: number, srcByteCount?: number): void;
     uploadTextureData(texture: GfxTexture, firstMipLevel: number, levelDatas: ArrayBufferView[]): void;
 
     // Readback system.
@@ -381,5 +384,5 @@ export interface GfxDevice {
     popDebugGroup(): void;
 }
 
-export { GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
+export { GfxUniformBuffer, GfxBuffer, GfxTexture, GfxRenderTarget, GfxSampler, GfxProgram, GfxInputLayout, GfxInputState, GfxRenderPipeline, GfxBindings };
 export { GfxFormat };
