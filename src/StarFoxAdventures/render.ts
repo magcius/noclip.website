@@ -1,13 +1,14 @@
 import * as Viewer from '../viewer';
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxFormat, GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
 import { CameraController } from '../Camera';
 import { standardFullClearRenderPassDescriptor, ColorTexture } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { colorNewFromRGBA8 } from '../Color';
 
 import { SFAAnimationController } from './animation';
+import { nArray } from '../util';
 
 export interface SceneRenderContext {
     getSceneTexture: () => ColorTexture;
@@ -20,8 +21,17 @@ export interface SceneRenderContext {
 
 const BACKGROUND_COLOR = colorNewFromRGBA8(0xCCCCCCFF);
 
+export interface SFARenderLists {
+    atmosphere: GfxRenderInstList;
+    skyscape: GfxRenderInstList;
+    world: GfxRenderInstList[/* 3 */];
+    waters: GfxRenderInstList;
+    furs: GfxRenderInstList;
+}
+
 export class SFARenderer implements Viewer.SceneGfx {
     protected renderHelper: GXRenderHelperGfx;
+    protected renderLists: SFARenderLists;
     
     protected sceneTexture = new ColorTexture();
     private sceneTextureSampler: GfxSampler | null = null;
@@ -34,6 +44,15 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     constructor(device: GfxDevice, protected animController: SFAAnimationController) {
         this.renderHelper = new GXRenderHelperGfx(device);
+        this.renderHelper.renderInstManager.disableSimpleMode();
+
+        this.renderLists = {
+            atmosphere: new GfxRenderInstList(),
+            skyscape: new GfxRenderInstList(),
+            world: nArray(3, () => new GfxRenderInstList()),
+            waters: new GfxRenderInstList(),
+            furs: new GfxRenderInstList(),
+        };
     }
 
     public adjustCameraController(c: CameraController) {
@@ -44,11 +63,11 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.animController.update(viewerInput);
     }
 
-    protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
-    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
+    protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
+    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
 
-    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {}
-    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
+    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
+    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
 
     private getSceneTextureSampler(device: GfxDevice) {
         if (this.sceneTextureSampler === null) {
@@ -111,8 +130,8 @@ export class SFARenderer implements Viewer.SceneGfx {
             animController: this.animController,
         };
 
-        this.addSkyRenderInsts(device, renderInstManager, sceneCtx);
-        this.addWorldRenderInsts(device, renderInstManager, sceneCtx);
+        this.addSkyRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);
+        this.addWorldRenderInsts(device, renderInstManager, this.renderLists, sceneCtx);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
@@ -127,8 +146,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
-        this.addSkyRenderPasses(device, builder, renderInstManager, mainColorTargetID, mainDepthTargetID, sceneCtx);
-        this.addWorldRenderPasses(device, builder, renderInstManager, mainColorTargetID, mainDepthTargetID, sceneCtx);
+        this.addSkyRenderPasses(device, builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
+        this.addWorldRenderPasses(device, builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 

@@ -15,7 +15,7 @@ import { ModelInstance, ModelRenderContext } from './models';
 import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUint16 } from './util';
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
-import { SceneRenderContext } from './render';
+import { SceneRenderContext, SFARenderLists } from './render';
 
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
@@ -1032,7 +1032,7 @@ export class ObjectInstance {
         }
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, filter: number, objectCtx: ObjectRenderContext) {
+    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists | null, objectCtx: ObjectRenderContext) {
         // Update animations
         // TODO: Call update elsewhere?
         this.update();
@@ -1047,7 +1047,7 @@ export class ObjectInstance {
             this.modelInst.prepareToRender(device, renderInstManager, {
                 ...objectCtx,
                 outdoorAmbientColor: scratchColor0,
-            }, filter, mtx, -viewPos[2]);
+            }, renderLists, mtx, -viewPos[2]);
 
             // Draw bones
             const drawBones = false;

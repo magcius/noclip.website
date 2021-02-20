@@ -3,7 +3,7 @@ import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst, GfxRenderInstList } from "../gfx/render/GfxRenderer";
 import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
@@ -20,7 +20,7 @@ import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
 import { ObjectManager, ObjectInstance, ObjectRenderContext } from './objects';
 import { EnvfxManager } from './envfx';
-import { SFARenderer, SceneRenderContext } from './render';
+import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
 import { ModelRenderContext, SFAFilter, makeFilterKey } from './models';
@@ -249,14 +249,15 @@ class WorldRenderer extends SFARenderer {
             this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
     }
 
-    protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+    protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
         // Draw atmosphere
         const tex = this.world.envfxMan.getAtmosphereTexture();
         if (tex !== null && tex !== undefined) {
+            renderInstManager.setCurrentRenderInstList(renderLists.atmosphere);
+
             // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
             // to obtain a local SceneParams buffer
             const template = this.renderHelper.pushTemplateRenderInst();
-            template.filterKey = makeFilterKey(SFAFilter.Atmosphere);
 
             // Setup to draw in clip space
             fillSceneParams(scratchSceneParams, mat4.create(), sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
@@ -308,9 +309,10 @@ class WorldRenderer extends SFARenderer {
         
         // Draw skyscape
         if (this.world.envfxMan.skyscape.objects.length !== 0) {
+            renderInstManager.setCurrentRenderInstList(renderLists.skyscape);
+
             const template = renderInstManager.pushTemplateRenderInst();
             fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
-            template.filterKey = makeFilterKey(SFAFilter.Skyscape);
 
             const objectCtx: ObjectRenderContext = {
                 sceneCtx,
@@ -323,21 +325,20 @@ class WorldRenderer extends SFARenderer {
             for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
                 const obj = this.world.envfxMan.skyscape.objects[i];
                 obj.setPosition(eyePos);
-                obj.render(device, renderInstManager, SFAFilter.Skyscape, objectCtx);
+                obj.render(device, renderInstManager, null, objectCtx);
             }
 
             renderInstManager.popTemplateRenderInst();
         }
     }
 
-    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
         builder.pushPass((pass) => {
             pass.setDebugName('Atmosphere');
             pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.setVisibleByFilterKeyExact(makeFilterKey(SFAFilter.Atmosphere));
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderLists.atmosphere.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -348,8 +349,7 @@ class WorldRenderer extends SFARenderer {
             const skyDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Skyscape Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);
             pass.exec((passRenderer) => {
-                renderInstManager.setVisibleByFilterKeyExact(makeFilterKey(SFAFilter.Skyscape));
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
+                renderLists.skyscape.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
@@ -395,7 +395,9 @@ class WorldRenderer extends SFARenderer {
             lights[i].reset();
     }
 
-    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
+        renderInstManager.setCurrentRenderInstList(renderLists.world[0]);
+
         const template = renderInstManager.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
 
@@ -408,7 +410,7 @@ class WorldRenderer extends SFARenderer {
         }
 
         if (this.world.mapInstance !== null)
-            this.world.mapInstance.prepareToRender(device, renderInstManager, modelCtx);
+            this.world.mapInstance.prepareToRender(device, renderInstManager, renderLists, modelCtx);
 
         if (this.showObjects) {
             const ctx = getDebugOverlayCanvas2D();
@@ -419,7 +421,7 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    obj.render(device, renderInstManager, SFAFilter.World, modelCtx);
+                    obj.render(device, renderInstManager, renderLists, modelCtx);
         
                     const drawLabels = false;
                     if (drawLabels)
@@ -431,8 +433,8 @@ class WorldRenderer extends SFARenderer {
         renderInstManager.popTemplateRenderInst();
     }
 
-    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
-        const renderIntoPass = (name: string, keys: number[]) => {
+    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+        const renderIntoPass = (name: string, lists: GfxRenderInstList[]) => {
             // TODO: eliminate redundant passes and resolves
             builder.pushPass((pass) => {
                 pass.setDebugName(name);
@@ -440,9 +442,8 @@ class WorldRenderer extends SFARenderer {
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
                 pass.exec((passRenderer) => {
-                    for (let i = 0; i < keys.length; i++) {
-                        renderInstManager.setVisibleByFilterKeyExact(keys[i]);
-                        renderInstManager.drawOnPassRenderer(device, passRenderer);
+                    for (let list of lists) {
+                        list.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
                     }
                 });
             });
@@ -450,13 +451,13 @@ class WorldRenderer extends SFARenderer {
         };
 
         renderIntoPass('World Opaques', [
-            makeFilterKey(SFAFilter.World, 0),
-            makeFilterKey(SFAFilter.Furs),
+            renderLists.world[0],
+            renderLists.furs
         ]);
         renderIntoPass('World Translucents', [
-            makeFilterKey(SFAFilter.Waters),
-            makeFilterKey(SFAFilter.World, 1),
-            makeFilterKey(SFAFilter.World, 2),
+            renderLists.waters,
+            renderLists.world[1],
+            renderLists.world[2],
         ]);
     }
 }

@@ -15,7 +15,7 @@ import { dataSubarray, readUint32, mat4SetRowMajor, mat4SetCol, setInt8Clamped, 
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape } from './shapes';
-import { SceneRenderContext } from './render';
+import { SceneRenderContext, SFARenderLists } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { loadModel, ModelVersion } from './modelloader';
 
@@ -244,13 +244,15 @@ export class ModelInstance {
         this.skinningDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, filter: SFAFilter, matrix: mat4, sortDepth?: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, renderLists: SFARenderLists | null, matrix: mat4, sortDepth?: number) {
         this.updateSkinning();
 
         if (this.modelShapes.shapes.length !== 0) {
             for (let i = 0; i < 3; i++) {
+                if (renderLists !== null)
+                    renderInstManager.setCurrentRenderInstList(renderLists.world[i]);
+
                 const template = renderInstManager.pushTemplateRenderInst();
-                template.filterKey = makeFilterKey(filter, i);
                 if (this.model.isMapBlock) {
                     template.sortKey = makeSortKey(i !== 0 ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
                 } else {
@@ -259,25 +261,35 @@ export class ModelInstance {
                 }
                 if (sortDepth !== undefined)
                     template.sortKey = setSortKeyDepth(template.sortKey, sortDepth);
+
                 this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i);
+
                 renderInstManager.popTemplateRenderInst();
             }
         }
 
         if (this.modelShapes.waters.length !== 0) {
+            if (renderLists !== null)
+                renderInstManager.setCurrentRenderInstList(renderLists.waters);
+
             const template = renderInstManager.pushTemplateRenderInst();
-            template.filterKey = makeFilterKey(SFAFilter.Waters);
+            
             // XXX: Waters do not appear to be depth-sorted in-game.
             // template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+
             renderInstManager.popTemplateRenderInst();
         }
 
         if (this.modelShapes.furs.length !== 0) {
+            if (renderLists !== null)
+                renderInstManager.setCurrentRenderInstList(renderLists.furs);
+
             const template = renderInstManager.pushTemplateRenderInst();
-            template.filterKey = makeFilterKey(SFAFilter.Furs);
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+
             this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+
             renderInstManager.popTemplateRenderInst();
         }
     }

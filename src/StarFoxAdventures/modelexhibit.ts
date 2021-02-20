@@ -248,7 +248,7 @@ class ModelExhibitRenderer extends SFARenderer {
             setupLights: () => {},
         };
 
-        modelInst.prepareToRender(device, renderInstManager, modelCtx, makeFilterKey(SFAFilter.World), matrix);
+        modelInst.prepareToRender(device, renderInstManager, modelCtx, null, matrix);
 
         if (this.displayBones) {
             // TODO: display bones as cones instead of lines
