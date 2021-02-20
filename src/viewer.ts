@@ -48,7 +48,7 @@ export interface SceneGfx {
     serializeSaveState?(dst: ArrayBuffer, offs: number): number;
     deserializeSaveState?(src: ArrayBuffer, offs: number, byteLength: number): number;
     onstatechanged?: () => void;
-    render(device: GfxDevice, renderInput: ViewerRenderInput): GfxRenderPass | void;
+    render(device: GfxDevice, renderInput: ViewerRenderInput): void;
     destroy(device: GfxDevice): void;
 }
 
@@ -119,7 +119,6 @@ export class Viewer {
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
     private clearScene: ClearScene = new ClearScene();
-    private resolveRenderPassDescriptor = makeEmptyRenderPassDescriptor();
 
     constructor(public gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -161,26 +160,11 @@ export class Viewer {
     }
 
     private renderViewport(): void {
-        let renderPass: GfxRenderPass | null | void = null;
         if (this.scene !== null) {
-            renderPass = this.scene.render(this.gfxDevice, this.viewerRenderInput);
+            this.scene.render(this.gfxDevice, this.viewerRenderInput);
             this.clearScene.minimize(this.gfxDevice);
         } else {
             this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
-        }
-
-        if (renderPass) {
-            // Legacy API: needs resolve.
-            const descriptor = this.gfxDevice.queryRenderPass(renderPass);
-
-            this.gfxDevice.submitPass(renderPass);
-
-            // Resolve.
-            this.resolveRenderPassDescriptor.colorAttachment = descriptor.colorAttachment;
-            this.resolveRenderPassDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
-            this.resolveRenderPassDescriptor.depthStencilAttachment = descriptor.depthStencilAttachment;
-            const resolvePass = this.gfxDevice.createRenderPass(this.resolveRenderPassDescriptor);
-            this.gfxDevice.submitPass(resolvePass);
         }
     }
 
