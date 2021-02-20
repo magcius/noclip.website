@@ -20,17 +20,16 @@ export interface SceneRenderContext {
 }
 
 export class SFARenderer implements Viewer.SceneGfx {
-    // protected renderPass: GfxRenderPass;
-    // protected viewport: any;
+    protected renderHelper: GXRenderHelperGfx;
+    
     protected sceneTexture = new ColorTexture();
     private sceneTextureSampler: GfxSampler | null = null;
     protected previousFrameTexture = new ColorTexture();
     private previousFrameTextureSampler: GfxSampler | null = null;
-
     // private mainColorTemporalTexture = new GfxrTemporalTexture();
+
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     protected mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
-    private renderHelper: GXRenderHelperGfx;
 
     constructor(device: GfxDevice, protected animController: SFAAnimationController) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -88,7 +87,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        // TODO: use late-bound scene texture instead?
+        // TODO: use late-bound texture instead?
         if (this.sceneTexture.setParameters(device, viewerInput.backbufferWidth, viewerInput.backbufferHeight)) {
             if (this.sceneTextureSampler !== null)
                 device.destroySampler(this.sceneTextureSampler);

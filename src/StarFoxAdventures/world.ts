@@ -252,10 +252,11 @@ class WorldRenderer extends SFARenderer {
 
     protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
         // Draw atmosphere
-        // FIXME: why doesn't the atmosphere get drawn?
         const tex = this.world.envfxMan.getAtmosphereTexture();
         if (tex !== null && tex !== undefined) {
-            const template = renderInstManager.pushTemplateRenderInst();
+            // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
+            // to obtain a local SceneParams buffer
+            const template = this.renderHelper.pushTemplateRenderInst();
             template.filterKey = makeFilterKey(SFAFilter.Atmosphere);
 
             // Setup to draw in clip space

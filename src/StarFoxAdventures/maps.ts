@@ -13,8 +13,9 @@ import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { SFATextureFetcher } from './textures';
-import { ModelRenderContext, ModelInstance, SFAFilter } from './models';
+import { ModelRenderContext, ModelInstance, SFAFilter, makeFilterKey } from './models';
 import { White } from '../Color';
+import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 
 export interface BlockInfo {
     mod: number;
@@ -221,8 +222,11 @@ class MapSceneRenderer extends SFARenderer {
         super.update(viewerInput);
         this.materialFactory.update(this.animController);
     }
-    
-    protected renderWorld(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+
+    protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, sceneCtx: SceneRenderContext) {
+        const template = renderInstManager.pushTemplateRenderInst();
+        fillSceneParamsDataOnTemplate(template, sceneCtx.viewerInput);
+
         const modelCtx: ModelRenderContext = {
             sceneCtx,
             showDevGeometry: false,
@@ -230,9 +234,38 @@ class MapSceneRenderer extends SFARenderer {
             setupLights: () => {},
         };
 
-        this.beginPass(sceneCtx.viewerInput);
         this.map.prepareToRender(device, renderInstManager, modelCtx);
-        this.endPass(device);    
+
+        renderInstManager.popTemplateRenderInst();
+    }
+
+    protected addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+        const renderIntoPass = (name: string, keys: number[]) => {
+            // TODO: eliminate redundant passes and resolves
+            builder.pushPass((pass) => {
+                pass.setDebugName(name);
+                pass.setViewport(sceneCtx.viewerInput.viewport);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+                pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+                pass.exec((passRenderer) => {
+                    for (let i = 0; i < keys.length; i++) {
+                        renderInstManager.setVisibleByFilterKeyExact(keys[i]);
+                        renderInstManager.drawOnPassRenderer(device, passRenderer);
+                    }
+                });
+            });
+            builder.resolveRenderTargetToExternalTexture(mainColorTargetID, sceneCtx.getSceneTexture().gfxTexture!);
+        };
+
+        renderIntoPass('World Opaques', [
+            makeFilterKey(SFAFilter.World, 0),
+            makeFilterKey(SFAFilter.Furs),
+        ]);
+        renderIntoPass('World Translucents', [
+            makeFilterKey(SFAFilter.Waters),
+            makeFilterKey(SFAFilter.World, 1),
+            makeFilterKey(SFAFilter.World, 2),
+        ]);
     }
 }
 
