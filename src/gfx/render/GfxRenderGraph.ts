@@ -10,17 +10,10 @@ import { assert, assertExists } from "../../util";
 // save on resources in common cases. It is a replacement for the classes in RenderTargetHelpers.
 //
 // TODO(jstpierre):
-//   - Port over remaining games
-//
 //   - Clean up the algorithm? I think resolveTextureUseCount can be simplified.
 //     - Add graph pass "culling" a la Frostbite frame graphs?
 //     - Turn resolves into pseudo-passes?
 //     - MoveResource?
-//
-//   - Design an API for "temporal" cases -- any time a resource wants to "outlive" the frame.
-//     There is currently the resolveToExternalTexture API which works well enough for now, but
-//     the user has to manage the GfxTexture / GfxAttachment themselves.
-//     - Frostbite just has the user do external textures that get imported into the FrameGraph.
 //
 //   - Unify render target / resolve texture ID spaces?
 //     - Add more resource types?
@@ -46,10 +39,6 @@ export class GfxrRenderTargetDescription {
         this.sampleCount = sampleCount;
     }
 
-    public setDimensionsFromRenderInput(renderInput: RenderInput): void {
-        this.setDimensions(renderInput.backbufferWidth, renderInput.backbufferHeight, renderInput.sampleCount);
-    }
-
     public copyDimensions(desc: Readonly<GfxrRenderTargetDescription>): void {
         this.width = desc.width;
         this.height = desc.height;
@@ -72,10 +61,10 @@ function selectFormatSimple(slot: GfxrAttachmentSlot): GfxFormat {
         throw "whoops";
 }
 
-export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: RenderInput, clearDescriptor: GfxRenderPassDescriptor | null = null): GfxrRenderTargetDescription {
+export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: RenderInput, clearDescriptor: GfxRenderPassDescriptor): GfxrRenderTargetDescription {
     const pixelFormat = selectFormatSimple(slot);
     const desc = new GfxrRenderTargetDescription(pixelFormat);
-    desc.setDimensionsFromRenderInput(renderInput);
+    desc.setDimensions(renderInput.backbufferWidth, renderInput.backbufferHeight, renderInput.sampleCount);
 
     if (clearDescriptor !== null) {
         desc.colorClearColor = clearDescriptor.colorClearColor;

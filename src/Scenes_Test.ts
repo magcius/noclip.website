@@ -9,7 +9,7 @@ import { CtrTextureHolder } from "./oot3d/render";
 import * as NARC from "./nns_g3d/narc";
 import { standardFullClearRenderPassDescriptor } from "./gfx/helpers/RenderTargetHelpers";
 import { GfxRenderHelper } from "./gfx/render/GfxRenderHelper";
-import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "./gfx/render/GfxRenderGraph";
+import { GfxrAttachmentSlot, GfxrRenderTargetDescription, makeBackbufferDescSimple } from "./gfx/render/GfxRenderGraph";
 
 const id = 'test';
 const name = "Test Scenes";
@@ -30,9 +30,7 @@ class EmptyClearScene implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const desc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
-        desc.setDimensionsFromRenderInput(viewerInput);
-        desc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
+        const desc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
         const mainColorID = builder.createRenderTargetID(desc, "Main Color");
