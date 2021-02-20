@@ -160,7 +160,6 @@ class PassImpl implements GfxrPass {
     // Execution callback from user.
     public execFunc: PassExecFunc | null = null;
     public postFunc: PassPostFunc | null = null;
-    public postFrameFunc: PassPostFrameFunc | null = null;
 
     // Misc. state.
     public debugName: string;
@@ -805,12 +804,6 @@ export class GfxrRenderGraphImpl {
 
         // Clear our transient scope state.
         this.singleSampledTextureForResolveTextureID.length = 0;
-
-        for (let i = 0; i < graph.passes.length; i++) {
-            const pass = graph.passes[i];
-            if (pass.postFrameFunc !== null)
-                pass.postFrameFunc();
-        }
     }
 
     public execute(device: GfxDevice, builder: GfxrGraphBuilder): void {
