@@ -4,12 +4,12 @@ import * as UI from './ui';
 import InputManager from './InputManager';
 import { SceneDesc, SceneGroup } from "./SceneBase";
 import { CameraController, Camera, XRCameraController, CameraUpdateResult } from './Camera';
-import { GfxDevice, GfxSwapChain, GfxRenderPass, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords, GfxFormat } from './gfx/platform/GfxPlatform';
+import { GfxDevice, GfxSwapChain, GfxDebugGroup, GfxTexture, GfxNormalizedViewportCoords } from './gfx/platform/GfxPlatform';
 import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config } from './gfx/platform/GfxPlatformWebGL2';
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { Attachment, DEFAULT_NUM_SAMPLES, makeClearRenderPassDescriptor, makeEmptyRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { DEFAULT_NUM_SAMPLES, makeClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
@@ -67,30 +67,6 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
     canvas.height = height * devicePixelRatio;
 }
 
-// TODO(jstpierre): Find a more elegant way to write this that doesn't take as many resources.
-class ClearScene {
-    public colorAttachment = new Attachment(GfxFormat.U8_RGBA_RT);
-    private renderPassDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
-
-    public minimize(device: GfxDevice): void {
-        this.colorAttachment.setParameters(device, 1, 1, 1);
-        device.setResourceLeakCheck(this.colorAttachment.gfxAttachment!, false);
-    }
-
-    public render(device: GfxDevice, viewerRenderInput: ViewerRenderInput): GfxRenderPass | null {
-        this.colorAttachment.setParameters(device, viewerRenderInput.backbufferWidth, viewerRenderInput.backbufferHeight);
-        this.renderPassDescriptor.colorAttachment = this.colorAttachment.gfxAttachment;
-        this.renderPassDescriptor.colorResolveTo = viewerRenderInput.onscreenTexture;
-        const renderPass = device.createRenderPass(this.renderPassDescriptor);
-        device.submitPass(renderPass);
-        return null;
-    }
-
-    public destroy(device: GfxDevice): void {
-        this.colorAttachment.destroy(device);
-    }
-}
-
 export class Viewer {
     public inputManager: InputManager;
     public cameraController: CameraController | null = null;
@@ -118,7 +94,7 @@ export class Viewer {
 
     private keyMoveSpeedListeners: Listener[] = [];
     private debugGroup: GfxDebugGroup = { name: 'Scene Rendering', drawCallCount: 0, bufferUploadCount: 0, textureBindCount: 0, triangleCount: 0 };
-    private clearScene: ClearScene = new ClearScene();
+    private clearDescriptor = makeClearRenderPassDescriptor(OpaqueBlack);
 
     constructor(public gfxSwapChain: GfxSwapChain, public canvas: HTMLCanvasElement) {
         this.inputManager = new InputManager(this.canvas);
@@ -162,9 +138,13 @@ export class Viewer {
     private renderViewport(): void {
         if (this.scene !== null) {
             this.scene.render(this.gfxDevice, this.viewerRenderInput);
-            this.clearScene.minimize(this.gfxDevice);
         } else {
-            this.clearScene.render(this.gfxDevice, this.viewerRenderInput);
+            // Clear to black.
+            this.clearDescriptor.colorAttachment = null;
+            this.clearDescriptor.colorResolveTo = this.viewerRenderInput.onscreenTexture;
+
+            const emptyRenderPass = this.gfxDevice.createRenderPass(this.clearDescriptor);
+            this.gfxDevice.submitPass(emptyRenderPass);
         }
     }
 
