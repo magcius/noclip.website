@@ -30,9 +30,8 @@ export function gfxSamplerBindingCopy(a: Readonly<GfxSamplerBinding>): GfxSample
 
 export function gfxBufferBindingCopy(a: Readonly<GfxBufferBinding>): GfxBufferBinding {
     const buffer = a.buffer;
-    const wordOffset = a.wordOffset;
     const wordCount = a.wordCount;
-    return { buffer, wordOffset, wordCount };
+    return { buffer, wordCount };
 }
 
 export function gfxBindingsDescriptorCopy(a: Readonly<GfxBindingsDescriptor>): GfxBindingsDescriptor {
@@ -86,7 +85,7 @@ export function gfxInputLayoutDescriptorCopy(a: Readonly<GfxInputLayoutDescripto
 }
 
 function gfxBufferBindingEquals(a: Readonly<GfxBufferBinding>, b: Readonly<GfxBufferBinding>): boolean {
-    return a.buffer === b.buffer && a.wordCount === b.wordCount && a.wordOffset === b.wordOffset;
+    return a.buffer === b.buffer && a.wordCount === b.wordCount;
 }
 
 function gfxSamplerBindingEquals(a: Readonly<GfxSamplerBinding | null>, b: Readonly<GfxSamplerBinding | null>): boolean {

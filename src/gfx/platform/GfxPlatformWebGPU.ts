@@ -742,7 +742,7 @@ class GfxImplP_WebGPU implements GfxSwapChain, GfxDevice {
             const gfxBinding = bindingsDescriptor.uniformBufferBindings[i];
             const gpuBufferBinding: GPUBufferBinding = {
                 buffer: getPlatformBuffer(gfxBinding.buffer),
-                offset: gfxBinding.wordOffset << 2,
+                offset: 0,
                 size: gfxBinding.wordCount << 2,
             };
             gpuBindGroupEntries.push({ binding: numBindings++, resource: gpuBufferBinding });

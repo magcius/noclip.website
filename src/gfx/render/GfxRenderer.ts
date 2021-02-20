@@ -273,12 +273,12 @@ export class GfxRenderInst {
         this._bindingDescriptors[0].bindingLayout = bindingLayout;
 
         for (let i = this._bindingDescriptors[0].uniformBufferBindings.length; i < bindingLayout.numUniformBuffers; i++)
-            this._bindingDescriptors[0].uniformBufferBindings.push({ buffer: null!, wordCount: 0, wordOffset: 0 });
+            this._bindingDescriptors[0].uniformBufferBindings.push({ buffer: null!, wordCount: 0 });
         for (let i = this._bindingDescriptors[0].samplerBindings.length; i < bindingLayout.numSamplers; i++)
             this._bindingDescriptors[0].samplerBindings.push({ gfxSampler: null, gfxTexture: null, lateBinding: null });
     }
 
-     /**
+    /**
      * Sets the {@see GfxBindingLayoutDescriptor}s that this render inst will render with.
      */
     public setBindingLayouts(bindingLayouts: GfxBindingLayoutDescriptor[]): void {
@@ -323,10 +323,8 @@ export class GfxRenderInst {
         this._dynamicUniformBufferByteOffsets[bufferIndex] = this._uniformBuffer.allocateChunk(wordCount) << 2;
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
-        dst.wordOffset = 0;
         dst.wordCount = wordCount;
-        const wordOffset = this._dynamicUniformBufferByteOffsets[bufferIndex] >>> 2;
-        return wordOffset;
+        return this.getUniformBufferOffset(bufferIndex);
     }
 
     /**
@@ -347,7 +345,6 @@ export class GfxRenderInst {
         this._dynamicUniformBufferByteOffsets[bufferIndex] = wordOffset << 2;
 
         const dst = this._bindingDescriptors[0].uniformBufferBindings[bufferIndex];
-        dst.wordOffset = 0;
         dst.wordCount = wordCount;
     }
 
@@ -602,7 +599,7 @@ export class GfxRenderInstList {
 //#region GfxRenderInstManager
 
 // Basic linear pool allocator.
-class GfxRenderInstPool {
+class RenderInstPool {
     // The pool contains all render insts that we've ever created.
     public pool: GfxRenderInst[] = [];
     // The number of render insts currently allocated out to the user.
@@ -634,10 +631,9 @@ class GfxRenderInstPool {
 }
 
 export class GfxRenderInstManager {
-    // TODO(jstpierre): Share these caches between scenes.
     public gfxRenderCache = new GfxRenderCache();
-    public instPool = new GfxRenderInstPool();
-    public templatePool = new GfxRenderInstPool();
+    public instPool = new RenderInstPool();
+    public templatePool = new RenderInstPool();
     public simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
     private currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
 

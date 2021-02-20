@@ -127,7 +127,6 @@ export interface GfxRenderTargetDescriptor {
 
 export interface GfxBufferBinding {
     buffer: GfxBuffer;
-    wordOffset: number;
     wordCount: number;
 }
 
