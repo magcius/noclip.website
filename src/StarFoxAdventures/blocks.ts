@@ -5,14 +5,14 @@ import { TextureFetcher, FakeTextureFetcher } from './textures';
 import { getSubdir, loadRes } from './resource';
 import { GameInfo } from './scenes';
 import { MaterialFactory } from './materials';
-import { Model, ModelInstance } from './models';
+import { ModelInstance } from './models';
 import { loadModel, ModelVersion } from './modelloader';
 import { SFAAnimationController } from './animation';
 import { DataFetcher } from '../DataFetcher';
 import { readUint32 } from './util';
 
 export abstract class BlockFetcher {
-    public abstract async fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<ModelInstance | null>;
+    public abstract fetchBlock(mod: number, sub: number, dataFetcher: DataFetcher): Promise<ModelInstance | null>;
 }
 
 export class BlockCollection {

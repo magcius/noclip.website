@@ -2,15 +2,15 @@ import * as pako from 'pako';
 import { hexzero } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { decompress as lzoDecompress } from '../Common/Compression/LZO';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
+import { DataFetcher } from '../DataFetcher';
 
 import { GameInfo } from './scenes';
-import { DataFetcher } from '../DataFetcher';
 import { AnimCollection, AmapCollection, SFAAnimationController, ModanimCollection } from './animation';
 import { ModelFetcher } from './models';
 import { ModelVersion } from './modelloader';
 import { TextureFetcher, SFATextureFetcher } from './textures';
 import { MaterialFactory } from './materials';
-import { GfxDevice } from '../gfx/platform/GfxPlatform';
 
 class ZLBHeader {
     public static readonly SIZE = 16;

@@ -5,6 +5,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
 import { DataFetcher } from '../DataFetcher';
 import * as GX_Material from '../gx/gx_material';
+import { Color } from '../Color';
 
 import { GameInfo } from './scenes';
 import { SFAMaterial } from './materials';
@@ -14,9 +15,8 @@ import { dataSubarray, readUint32, mat4SetRowMajor, mat4SetCol, setInt8Clamped, 
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape } from './shapes';
-import { SceneRenderContext } from './render';
+import { SceneRenderContext, SFARenderLists } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
-import { Color } from '../Color';
 import { loadModel, ModelVersion } from './modelloader';
 
 interface Joint {
@@ -180,12 +180,16 @@ const scratchMtx2 = mat4.create();
 const scratchMtx3 = mat4.create();
 const scratchVec0 = vec3.create();
 
-export enum DrawStep {
-    Waters = -2,
-    Furs = -1,
-    Solids = 0,
-    Translucents1 = 1,
-    Translucents2 = 2,
+export enum SFAFilter {
+    Atmosphere = 1,
+    Skyscape   = 2,
+    World      = 3,
+    Waters     = 4,
+    Furs       = 5,
+}
+
+export function makeFilterKey(filter: SFAFilter, step: number = 0 /* in [0..2] */): number {
+    return (filter << 2) + step;
 }
 
 export class ModelInstance {
@@ -240,13 +244,15 @@ export class ModelInstance {
         this.skinningDirty = true;
     }
     
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, matrix: mat4, sortDepth?: number) {
+    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, modelCtx: ModelRenderContext, renderLists: SFARenderLists | null, matrix: mat4, sortDepth?: number) {
         this.updateSkinning();
 
         if (this.modelShapes.shapes.length !== 0) {
             for (let i = 0; i < 3; i++) {
+                if (renderLists !== null)
+                    renderInstManager.setCurrentRenderInstList(renderLists.world[i]);
+
                 const template = renderInstManager.pushTemplateRenderInst();
-                template.filterKey = i;
                 if (this.model.isMapBlock) {
                     template.sortKey = makeSortKey(i !== 0 ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE);
                 } else {
@@ -255,27 +261,35 @@ export class ModelInstance {
                 }
                 if (sortDepth !== undefined)
                     template.sortKey = setSortKeyDepth(template.sortKey, sortDepth);
+
                 this.modelShapes.prepareToRender(device, renderInstManager, modelCtx, matrix, this.matrixPalette, i);
+
                 renderInstManager.popTemplateRenderInst();
             }
         }
 
         if (this.modelShapes.waters.length !== 0) {
+            if (renderLists !== null)
+                renderInstManager.setCurrentRenderInstList(renderLists.waters);
+
             const template = renderInstManager.pushTemplateRenderInst();
-            template.filterKey = DrawStep.Waters;
-            // XXX: in the game, waters do not seem to be sorted by depth.
-            // Thus, in Krazoa Palace, the circular pool surrounding the Krazoa head
-            // always appears in front of the water-wall.
+            
+            // XXX: Waters do not appear to be depth-sorted in-game.
             // template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
             this.modelShapes.prepareToRenderWaters(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+
             renderInstManager.popTemplateRenderInst();
         }
 
         if (this.modelShapes.furs.length !== 0) {
+            if (renderLists !== null)
+                renderInstManager.setCurrentRenderInstList(renderLists.furs);
+
             const template = renderInstManager.pushTemplateRenderInst();
-            template.filterKey = DrawStep.Furs;
             template.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT);
+
             this.modelShapes.prepareToRenderFurs(device, renderInstManager, modelCtx, matrix, this.matrixPalette);
+
             renderInstManager.popTemplateRenderInst();
         }
     }
