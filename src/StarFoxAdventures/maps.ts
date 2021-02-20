@@ -15,7 +15,7 @@ import { SFA_GAME_INFO, SFADEMO_GAME_INFO, GameInfo } from './scenes';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFATextureFetcher } from './textures';
-import { ModelRenderContext, ModelInstance, SFAFilter, makeFilterKey } from './models';
+import { ModelRenderContext, ModelInstance } from './models';
 
 export interface BlockInfo {
     mod: number;

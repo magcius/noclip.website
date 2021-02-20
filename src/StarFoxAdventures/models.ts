@@ -180,18 +180,6 @@ const scratchMtx2 = mat4.create();
 const scratchMtx3 = mat4.create();
 const scratchVec0 = vec3.create();
 
-export enum SFAFilter {
-    Atmosphere = 1,
-    Skyscape   = 2,
-    World      = 3,
-    Waters     = 4,
-    Furs       = 5,
-}
-
-export function makeFilterKey(filter: SFAFilter, step: number = 0 /* in [0..2] */): number {
-    return (filter << 2) + step;
-}
-
 export class ModelInstance {
     private modelShapes: ModelShapes;
 

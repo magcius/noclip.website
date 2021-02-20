@@ -10,7 +10,7 @@ import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from
 import { GameInfo, SFA_GAME_INFO } from './scenes';
 import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpolateKeyframes, ModanimCollection, applyKeyframeToModel } from './animation';
 import { SFARenderer, SceneRenderContext } from './render';
-import { makeFilterKey, ModelFetcher, ModelInstance, ModelRenderContext, SFAFilter } from './models';
+import { ModelFetcher, ModelInstance, ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { dataSubarray, createDownloadLink, readUint16 } from './util';
 import { TextureFetcher, SFATextureFetcher } from './textures';
