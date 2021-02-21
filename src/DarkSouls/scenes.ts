@@ -18,7 +18,7 @@ import { FLVERData, MSBRenderer, RenderContext } from "./render";
 import { Panel, LayerPanel } from "../ui";
 import { SceneContext } from "../SceneBase";
 import * as MTD from "./mtd";
-import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
@@ -80,7 +80,6 @@ class DKSRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        this.prepareToRender(device, viewerInput);
         const renderInstManager = this.renderHelper.renderInstManager;
 
         this.renderContext.prepareToRender(viewerInput);
@@ -100,8 +99,10 @@ class DKSRenderer implements Viewer.SceneGfx {
                 renderInstManager.drawOnPassRenderer(device, passRenderer);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

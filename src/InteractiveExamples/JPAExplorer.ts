@@ -1,6 +1,6 @@
 
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
@@ -463,8 +463,6 @@ export class Explorer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        this.prepareToRender(device, viewerInput);
-
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearPass);
@@ -497,8 +495,10 @@ export class Explorer implements SceneGfx {
                 executeOnPass(renderInstManager, device, passRenderer, Pass.INDIRECT);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

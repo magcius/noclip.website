@@ -9,7 +9,6 @@ export class GfxRenderDynamicUniformBuffer {
     private uniformBufferWordAlignment: number;
     private uniformBufferMaxPageWordSize: number;
 
-    private currentBufferWordSize: number = -1;
     private currentWordOffset: number = 0;
     public gfxUniformBuffer: GfxUniformBuffer;
 

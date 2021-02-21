@@ -9,6 +9,7 @@ import { fillVec4 } from "../helpers/UniformBufferHelpers";
 import { GfxDevice } from "../platform/GfxPlatform";
 import { GfxRenderInstManager } from "../render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder } from "../render/GfxRenderGraph";
+import { GfxRenderHelper } from "../render/GfxRenderHelper";
 
 class FXAAProgram extends DeviceProgram {
     public both = `
@@ -86,10 +87,13 @@ void main() {
 `;
 }
 
-const textureMapping = nArray(1, () => new TextureMapping());
-export function pushFXAAPass(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, viewerInput: ViewerRenderInput): void {
-    assert(viewerInput.sampleCount === 1);
+interface RenderInput {
+    backbufferWidth: number;
+    backbufferHeight: number;
+}
 
+const textureMapping = nArray(1, () => new TextureMapping());
+export function pushFXAAPass(builder: GfxrGraphBuilder, renderHelper: GfxRenderHelper, renderInput: RenderInput, mainColorTargetID: number): void {
     builder.pushPass((pass) => {
         pass.setDebugName('FXAA');
         pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
@@ -97,26 +101,27 @@ export function pushFXAAPass(builder: GfxrGraphBuilder, renderInstManager: GfxRe
         const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
         pass.attachResolveTexture(mainColorResolveTextureID);
 
-        const renderInst = renderInstManager.newRenderInst();
+        const renderInst = renderHelper.renderInstManager.newRenderInst();
+        renderInst.setUniformBuffer(renderHelper.uniformBuffer);
         renderInst.setAllowSkippingIfPipelineNotReady(false);
-
-        let offs = renderInst.allocateUniformBuffer(0, 4);
-        const d = renderInst.mapUniformBufferF32(0);
-        fillVec4(d, offs, 1.0 / viewerInput.backbufferWidth, 1.0 / viewerInput.backbufferHeight);
 
         renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 2 }]);
         renderInst.drawPrimitives(3);
 
+        let offs = renderInst.allocateUniformBuffer(0, 4);
+        const d = renderInst.mapUniformBufferF32(0);
+        fillVec4(d, offs, 1.0 / renderInput.backbufferWidth, 1.0 / renderInput.backbufferHeight);
+
         const fxaaProgram = new FXAAProgram();
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(renderInstManager.device, fxaaProgram);
+        const gfxProgram = renderHelper.renderCache.createProgram(renderHelper.device, fxaaProgram);
 
         renderInst.setGfxProgram(gfxProgram);
 
         pass.exec((passRenderer, scope) => {
             textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
             renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
-            renderInst.drawOnPass(renderInstManager.device, renderInstManager.gfxRenderCache, passRenderer);
+            renderInst.drawOnPass(renderHelper.device, renderHelper.renderCache, passRenderer);
         });
     });
 }

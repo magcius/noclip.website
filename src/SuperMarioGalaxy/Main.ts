@@ -13,7 +13,7 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
@@ -349,7 +349,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
         renderInstManager.popTemplateRenderInst();
 
-        this.mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
+        setBackbufferDescSimple(this.mainColorDesc, viewerInput);
         this.mainColorDesc.colorClearColor = TransparentBlack;
 
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
@@ -599,8 +599,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
             });
         });
 
-        if (viewerInput.sampleCount === 1)
-            pushFXAAPass(builder, renderInstManager, mainColorTargetID, viewerInput);
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 

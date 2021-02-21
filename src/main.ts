@@ -79,7 +79,7 @@ import { mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
 import { Color } from './Color';
-import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderGraphHelpers';
 
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';

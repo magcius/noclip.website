@@ -7,7 +7,7 @@ import { createBasicRRESRendererFromBRRES } from "./rres/scenes";
 import * as H3D from "./Common/CTR_H3D/H3D";
 import { CtrTextureHolder } from "./oot3d/render";
 import * as NARC from "./nns_g3d/narc";
-import { standardFullClearRenderPassDescriptor } from "./gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor } from "./gfx/helpers/RenderGraphHelpers";
 import { GfxRenderHelper } from "./gfx/render/GfxRenderHelper";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, makeBackbufferDescSimple } from "./gfx/render/GfxRenderGraph";
 

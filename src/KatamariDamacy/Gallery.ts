@@ -4,7 +4,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController, OrbitCameraController } from '../Camera';
 import { colorFromHSL, colorNewCopy, White } from '../Color';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers';
 import { fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform";
@@ -254,8 +254,6 @@ export class GallerySceneRenderer implements SceneGfx {
         if (this.context.inputManager.isKeyDownEventTriggered('Space'))
             this.setObjectRandom();
 
-        this.prepareToRender(device, viewerInput);
-
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
@@ -275,6 +273,7 @@ export class GallerySceneRenderer implements SceneGfx {
                 renderInstManager.drawOnPassRenderer(device, passRenderer);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
@@ -285,6 +284,7 @@ export class GallerySceneRenderer implements SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

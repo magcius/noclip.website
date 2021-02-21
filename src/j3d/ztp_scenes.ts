@@ -15,7 +15,7 @@ import { TextureMapping } from '../TextureHolder';
 import { readString, leftPad, assertExists } from '../util';
 import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { computeModelMatrixS } from '../MathHelpers';
@@ -165,12 +165,10 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        this.setIndirectTextureOverride();
-
         const renderInstManager = this.renderHelper.renderInstManager;
-        this.prepareToRender(device, viewerInput);
-
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        this.setIndirectTextureOverride();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
@@ -222,8 +220,10 @@ class TwilightPrincessRenderer implements Viewer.SceneGfx {
                 executeOnPass(renderInstManager, device, passRenderer, ZTPPass.TRANSPARENT);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

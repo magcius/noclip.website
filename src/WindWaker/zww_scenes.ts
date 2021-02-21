@@ -19,7 +19,7 @@ import { DisplayListRegisters, displayListRegistersRun, displayListRegistersInit
 import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxRenderPass, GfxFormat, GfxTexture, makeTextureDescriptor2D, GfxColorWriteMask, GfxProgram, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstManager, GfxRenderInstList, gfxRenderInstCompareNone, GfxRenderInstExecutionOrder, gfxRenderInstCompareSortKey } from '../gfx/render/GfxRenderInstManager';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext } from '../SceneBase';
 import { range, getMatrixAxisZ, computeProjectionMatrixFromCuboid } from '../MathHelpers';
@@ -519,19 +519,6 @@ const enum EffectDrawGroup {
     Indirect = 1,
 }
 
-function fillUnprojectParams(d: Float32Array, offs: number, projectionMatrix: ReadonlyMat4): number {
-    // 0 4 8  12
-    // 1 5 9  13
-    // 2 6 10 14
-    // 3 7 11 15
-    // We want lower-right quadrant for unprojection.
-    const projMtx_ZZ = projectionMatrix[10];
-    const projMtx_ZW = projectionMatrix[14];
-    const projMtx_WZ = projectionMatrix[11];
-    const projMtx_WW = projectionMatrix[15];
-    return fillVec4(d, offs, projMtx_ZZ, projMtx_ZW, projMtx_WZ, projMtx_WW);
-}
-
 const scratchMatrix = mat4.create();
 export class WindWakerRenderer implements Viewer.SceneGfx {
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
@@ -549,61 +536,15 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
 
     public onstatechanged!: () => void;
 
-    public fullscreenDepthProgram: GfxProgram;
     public fullscreenBlitProgram: GfxProgram;
 
     constructor(public device: GfxDevice, public globals: dGlobals) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderHelper.renderInstManager.disableSimpleMode();
 
-        // window.main.ui.debugFloaterHolder.bindSliders(this);
-
         this.renderCache = this.renderHelper.renderInstManager.gfxRenderCache;
 
         this.fullscreenBlitProgram = this.renderCache.createProgramSimple(device, preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS));
-
-        this.fullscreenDepthProgram = this.renderCache.createProgramSimple(device, preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, `
-uniform sampler2D u_Texture;
-in vec2 v_TexCoord;
-
-${GfxShaderLibrary.invlerp}
-${GfxShaderLibrary.lerp}
-
-out vec4 o_Output;
-
-layout(std140) uniform ub_Params {
-    vec4 u_UnprojectParams;
-    vec4 u_ScaleBias;
-};
-
-float UnprojectViewSpaceDepth(float t_DepthSample) {
-    // NDC.Z = (ProjMtx.Z * View.Z) / (ProjMtx.W * View.Z)
-    //   expand out ProjMtx mul, assuming View.W = 1.0 and ProjMtx.X = 0.0 and ProjMtx.Y = 0.0
-    // NDC.Z = (ProjMtx.ZZ*View.Z + ProjMtx.ZW) / (ProjMtx.WZ*View.Z + ProjMtx.WW)
-    //   solve for View.Z
-    // View.Z = (NDC.Z/ProjMtx.ZZ - ProjMtx.ZW) / (NDC.Z/ProjMtx.WZ - ProjMtx.WW)
-    //        = (NDC.Z*ProjMtx.WZ - ProjMtx.WW) / (NDC.Z*ProjMtx.ZZ - ProjMtx.ZW)
-    float ProjMtx_ZZ = u_UnprojectParams[0];
-    float ProjMtx_ZW = u_UnprojectParams[1];
-    float ProjMtx_WZ = u_UnprojectParams[2];
-    float ProjMtx_WW = u_UnprojectParams[3];
-    float NDC_Z = t_DepthSample;
-    return (NDC_Z*ProjMtx_WZ - ProjMtx_WW) / (NDC_Z*ProjMtx_ZZ - ProjMtx_ZW);
-}
-
-float ApplyScaleBias(float t_Value) {
-    float t = invlerp(t_Value, u_ScaleBias.x, u_ScaleBias.y);
-    return lerp(t, u_ScaleBias.z, u_ScaleBias.w);
-}
-
-void main() {
-    vec4 color = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    float t_DepthSample = color.r;
-    float t_ViewSpaceDepth = UnprojectViewSpaceDepth(t_DepthSample);
-    float t_Biased = ApplyScaleBias(t_ViewSpaceDepth);
-    o_Output.rgba = vec4(vec3(t_Biased), 1.0);
-}
-`));
     }
 
     private setVisibleLayerMask(m: number): void {
@@ -778,26 +719,18 @@ void main() {
         this.executeList(passRenderer, listSet[1]);
     }
 
-    @dfShow()
-    @dfRange(0, 0.1, 0.0001)
-    private depthSettings = vec4.fromValues(0, 0.07, 0, 1);
-
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const dlst = this.globals.dlst;
-
         dlst.peekZ.beginFrame(device);
 
-        this.prepareToRender(device, viewerInput);
-
         const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
+        setBackbufferDescSimple(this.mainColorDesc, viewerInput);
         this.mainColorDesc.colorClearColor = TransparentBlack;
 
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
         this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue!;
-
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
 
@@ -849,8 +782,10 @@ void main() {
                 this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Indirect]);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

@@ -3,7 +3,7 @@ import { GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxFormat, GfxWrapMode, GfxTexFilterMode, GfxMipFilterMode } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { CameraController } from '../Camera';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
 import { colorNewFromRGBA8 } from '../Color';
 
@@ -126,7 +126,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        this.mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
+        setBackbufferDescSimple(this.mainColorDesc, viewerInput);
         this.mainColorDesc.colorClearColor = BACKGROUND_COLOR;
 
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
@@ -140,6 +140,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.addSkyRenderPasses(builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
         this.addWorldRenderPasses(builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
 
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
@@ -153,7 +154,6 @@ export class SFARenderer implements Viewer.SceneGfx {
         renderInstManager.popTemplateRenderInst();
 
         this.renderHelper.prepareToRender(device);
-
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

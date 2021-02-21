@@ -20,7 +20,7 @@ import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from '../Ca
 import { fillColor, fillMatrix4x4, fillMatrix4x3, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { TextureMapping } from '../TextureHolder';
 import { RWAtomicStruct, RWChunk, parseRWAtomic, RWAtomicFlags, quatFromYPR, DataCacheIDName } from './util';
 import { EventID } from './enums';
@@ -1074,15 +1074,11 @@ export class BFBBRenderer implements Viewer.SceneGfx {
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
-
-        this.prepareToRender(device, viewerInput);
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const clearColorPassDescriptor = makeClearRenderPassDescriptor(this.clearColor);
-
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearColorPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, clearColorPassDescriptor);
-
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         builder.pushPass((pass) => {
@@ -1103,8 +1099,10 @@ export class BFBBRenderer implements Viewer.SceneGfx {
                 executeOnPass(renderInstManager, device, passRenderer, BFBBPass.MAIN);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

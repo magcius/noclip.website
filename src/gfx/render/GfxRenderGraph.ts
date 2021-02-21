@@ -46,35 +46,6 @@ export class GfxrRenderTargetDescription {
     }
 }
 
-interface RenderInput {
-    backbufferWidth: number;
-    backbufferHeight: number;
-    sampleCount: number;
-}
-
-function selectFormatSimple(slot: GfxrAttachmentSlot): GfxFormat {
-    if (slot === GfxrAttachmentSlot.Color0)
-        return GfxFormat.U8_RGBA_RT;
-    else if (slot === GfxrAttachmentSlot.DepthStencil)
-        return GfxFormat.D32F;
-    else
-        throw "whoops";
-}
-
-export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: RenderInput, clearDescriptor: GfxRenderPassDescriptor): GfxrRenderTargetDescription {
-    const pixelFormat = selectFormatSimple(slot);
-    const desc = new GfxrRenderTargetDescription(pixelFormat);
-    desc.setDimensions(renderInput.backbufferWidth, renderInput.backbufferHeight, renderInput.sampleCount);
-
-    if (clearDescriptor !== null) {
-        desc.colorClearColor = clearDescriptor.colorClearColor;
-        desc.depthClearValue = clearDescriptor.depthClearValue;
-        desc.stencilClearValue = clearDescriptor.stencilClearValue;
-    }
-
-    return desc;
-}
-
 export const enum GfxrAttachmentSlot {
     Color0, DepthStencil,
 }
@@ -854,3 +825,7 @@ export class GfxrRenderGraphImpl {
             this.singleSampledTextureDeadPool[i].destroy(device);
     }
 }
+
+// Backcompat
+import { makeBackbufferDescSimple } from '../helpers/RenderGraphHelpers';
+export { makeBackbufferDescSimple };

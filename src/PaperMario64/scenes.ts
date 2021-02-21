@@ -5,7 +5,7 @@ import * as MapShape from './map_shape';
 import * as Tex from './tex';
 import { PaperMario64TextureHolder, PaperMario64ModelTreeRenderer, BackgroundBillboardRenderer } from './render';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { makeClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { OpaqueBlack, Color } from '../Color';
 import * as BYML from '../byml';
 import { ScriptExecutor } from './script';
@@ -50,14 +50,11 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        this.prepareToRender(device, viewerInput);
-
         const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.clearRenderPassDescriptor);
-
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -69,8 +66,10 @@ class PaperMario64Renderer implements Viewer.SceneGfx {
                 renderInstManager.drawOnPassRenderer(device, passRenderer);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

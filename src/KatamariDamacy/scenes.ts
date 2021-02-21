@@ -5,7 +5,7 @@ import { Camera, CameraController } from '../Camera';
 import { gsMemoryMapNew } from '../Common/PS2/GS';
 import { DataFetcher } from "../DataFetcher";
 import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
@@ -221,8 +221,6 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
 
-        this.prepareToRender(device, viewerInput);
-
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
@@ -242,6 +240,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
                 renderInstManager.drawOnPassRenderer(device, passRenderer);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
@@ -252,6 +251,7 @@ class KatamariDamacyRenderer implements Viewer.SceneGfx {
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
 

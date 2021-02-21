@@ -16,7 +16,7 @@ import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, g
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { standardFullClearRenderPassDescriptor, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { CameraController } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers";
 import { TextureState, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
@@ -2885,11 +2885,10 @@ class Pilotwings64Renderer implements SceneGfx {
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
-
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         builder.pushPass((pass) => {
@@ -2911,10 +2910,10 @@ class Pilotwings64Renderer implements SceneGfx {
                 executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

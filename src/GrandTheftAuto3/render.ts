@@ -14,7 +14,7 @@ import { mat4, quat, vec3, vec2 } from "gl-matrix";
 import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { assert } from "../util";
-import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { ItemInstance, ObjectDefinition } from "./item";
 import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color";
@@ -667,9 +667,6 @@ export class GTA3Renderer implements Viewer.SceneGfx {
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
-
-        this.prepareToRender(device, viewerInput);
-
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
@@ -685,8 +682,10 @@ export class GTA3Renderer implements Viewer.SceneGfx {
                 renderInstManager.drawOnPassRenderer(device, passRenderer);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

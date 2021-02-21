@@ -13,7 +13,7 @@ import ArrayBufferSlice from "../ArrayBufferSlice";
 import { DataFetcher } from "../DataFetcher";
 import { Melee_map_headData_Load } from "./Melee_map_head";
 import { CameraController } from "../Camera";
-import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 
 class ModelCache {
     public data: HSD_JObjRoot_Data[] = [];

@@ -9,7 +9,7 @@ import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { fillColor, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -965,7 +965,7 @@ export class SourceRenderer implements SceneGfx {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
-        mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
+        setBackbufferDescSimple(mainColorDesc, viewerInput);
         mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
 
         const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -1038,10 +1038,12 @@ export class SourceRenderer implements SceneGfx {
                 gammaCorrectRenderInst.drawOnPass(device, cache, passRenderer);
             });
         });
+
+        // TODO(jstpierre): Merge FXAA and Gamma Correct?
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
