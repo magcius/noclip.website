@@ -6,7 +6,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { SceneContext } from '../SceneBase';
-import { executeOnPass } from '../gfx/render/GfxRenderer';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 import { SnapPass, ModelRenderer, buildTransform } from './render';
 import { LevelArchive, parseLevel, isActor, eggInputSetup } from './room';
 import { RenderData, textureToCanvas } from '../BanjoKazooie/render';

@@ -9,7 +9,7 @@ import { reverseDepthForDepthOffset } from '../gfx/helpers/ReversedDepthHelpers'
 import { fillColor, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque } from '../gfx/render/GfxRenderer';
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKeyOpaque } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { DeviceProgram } from '../Program';
 import { SceneContext } from '../SceneBase';

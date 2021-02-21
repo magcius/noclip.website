@@ -22,7 +22,7 @@ import { computeModelMatrixS } from '../MathHelpers';
 import { mat4 } from 'gl-matrix';
 import { CameraController } from '../Camera';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer';
+import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
 
 class ZTPExtraTextures {
     public extraTextures: BTIData[] = [];

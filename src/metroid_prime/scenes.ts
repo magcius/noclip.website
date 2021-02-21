@@ -18,7 +18,7 @@ import BitMap, { bitMapSerialize, bitMapDeserialize, bitMapGetSerializedByteLeng
 import { CMDL } from './cmdl';
 import { colorNewCopy, OpaqueBlack } from '../Color';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass } from '../gfx/render/GfxRenderer';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 
 function layerVisibilitySyncToBitMap(layers: UI.Layer[], b: BitMap): void {
     for (let i = 0; i < layers.length; i++)

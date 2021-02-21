@@ -7,7 +7,7 @@ import * as BRRES from "./brres";
 import AnimationController from "../AnimationController";
 import { MDL0ModelInstance, MDL0Model, RRESTextureHolder } from "./render";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import { GX_Program } from "../gx/gx_material";
 

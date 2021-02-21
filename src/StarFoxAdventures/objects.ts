@@ -1,7 +1,7 @@
 import { mat4, vec3, quat } from 'gl-matrix';
 import { DataFetcher } from '../DataFetcher';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import * as GX_Material from '../gx/gx_material';
 import * as GX from '../gx/gx_enum';
 import { getDebugOverlayCanvas2D, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";

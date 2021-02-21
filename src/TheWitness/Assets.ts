@@ -15,7 +15,7 @@ import { vec3, vec2, vec4 } from "gl-matrix";
 import { makeStaticDataBufferFromSlice } from "../gfx/helpers/BufferHelpers";
 import { getFormatByteSize } from "../gfx/platform/GfxPlatformFormat";
 import { Destroyable } from "../SceneBase";
-import { GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../TextureHolder";
 
 export const enum Asset_Type {

@@ -10,7 +10,7 @@ import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
 import { TDDraw } from "../../../SuperMarioGalaxy/DDraw";
 import { colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color";
 import { vec3, vec4 } from "gl-matrix";
-import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../../../TextureHolder";
 
 const enum RFNTGlyphType {

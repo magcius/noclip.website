@@ -13,7 +13,7 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { mat4, vec2, vec4 } from 'gl-matrix';
 import { TextureHolder, TextureMapping } from '../TextureHolder';
 import { nArray, assertExists } from '../util';
-import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, executeOnPass } from '../gfx/render/GfxRenderInstManager';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';

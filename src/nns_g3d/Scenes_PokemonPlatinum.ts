@@ -20,7 +20,7 @@ import { NITRO_Program } from '../SuperMario64DS/render';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { executeOnPass } from '../gfx/render/GfxRenderer';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 
 const pathBase = `PokemonPlatinum`;
 class ModelCache {

@@ -18,7 +18,7 @@ import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { NITRO_Program } from '../SuperMario64DS/render';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass } from '../gfx/render/GfxRenderer';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 
 export class WorldMapRenderer implements Viewer.SceneGfx {
     private renderHelper: GfxRenderHelper;

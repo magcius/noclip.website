@@ -12,7 +12,7 @@ import { assert, assertExists } from "../util";
 import { BTIData } from "../Common/JSYSTEM/JUTTexture";
 import * as TPL from "../PaperMarioTTYD/tpl";
 import { TextureMapping } from "../TextureHolder";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { LoopMode as J3DLoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { LoopMode as NW4RLoopMode } from "../rres/brres";

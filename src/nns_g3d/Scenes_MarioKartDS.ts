@@ -15,7 +15,7 @@ import { FakeTextureHolder } from '../TextureHolder';
 import { mat4 } from 'gl-matrix';
 import AnimationController from '../AnimationController';
 import { computeModelMatrixSRT, MathConstants } from '../MathHelpers';
-import { executeOnPass } from '../gfx/render/GfxRenderer';
+import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 import { SceneContext } from '../SceneBase';
 import { fx32, parseNSBMD, SRT0, parseNSBTA, parseNSBTP, PAT0, parseNSBTX } from './NNS_G3D';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';

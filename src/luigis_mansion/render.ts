@@ -12,7 +12,7 @@ import { GfxTexture, GfxDevice, GfxSampler, GfxTexFilterMode, GfxMipFilterMode }
 import { GfxBufferCoalescerCombo, GfxCoalescedBuffersCombo } from "../gfx/helpers/BufferHelpers";
 import { Camera, computeViewMatrix, CameraController } from "../Camera";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 
 class Command_Material {
     public materialHelper: GXMaterialHelperGfx;

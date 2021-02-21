@@ -15,7 +15,7 @@ import { opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderT
 import { vec3, mat4, mat2d } from 'gl-matrix';
 import { assertExists, assert, leftPad } from '../util';
 import AnimationController from '../AnimationController';
-import { executeOnPass, GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { executeOnPass, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { SceneContext } from '../SceneBase';
 import { DataFetcher } from '../DataFetcher';

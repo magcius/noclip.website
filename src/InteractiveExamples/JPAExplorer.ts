@@ -8,7 +8,7 @@ import { colorNewFromRGBA } from "../Color";
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
-import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderInstManager";
 import { assertExists, hexzero, assert } from "../util";
 import { SceneContext } from "../SceneBase";
 import { LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";

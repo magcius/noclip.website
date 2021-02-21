@@ -11,7 +11,7 @@ import { GeometryRenderer, layerFromFlags, BTLayer, LowObjectFlags } from './ren
 import { opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { SceneContext } from '../SceneBase';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { executeOnPass, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController } from '../Camera';

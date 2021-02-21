@@ -2,10 +2,8 @@
 import { GfxDevice } from "../platform/GfxPlatform";
 import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
-import { GfxRenderInst, GfxRenderInstManager } from "./GfxRenderer";
+import { GfxRenderInst, GfxRenderInstManager } from "./GfxRenderInstManager";
 import { GfxrRenderGraph, GfxrRenderGraphImpl } from "./GfxRenderGraph";
-
-// Experiments in building a common-esque scene graph.
 
 export class GfxRenderHelper {
     public uniformBuffer: GfxRenderDynamicUniformBuffer;

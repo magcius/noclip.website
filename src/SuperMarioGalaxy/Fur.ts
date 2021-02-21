@@ -18,7 +18,7 @@ import { TextureMapping } from "../TextureHolder";
 import { Shape } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { GXShapeHelperGfx, GXMaterialHelperGfx, MaterialParams, PacketParams, ColorKind } from "../gx/gx_render";
 import { coalesceBuffer } from "../gfx/helpers/BufferHelpers";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { ViewerRenderInput } from "../viewer";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";

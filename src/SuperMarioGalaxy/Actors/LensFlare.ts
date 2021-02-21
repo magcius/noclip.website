@@ -15,7 +15,7 @@ import { PeekZManager, PeekZResult } from "../../WindWaker/d_dlst_peekZ";
 import { GfxDevice, GfxCompareMode } from "../../gfx/platform/GfxPlatform";
 import { compareDepthValues } from "../../gfx/helpers/ReversedDepthHelpers";
 import { GfxrGraphBuilder } from "../../gfx/render/GfxRenderGraph";
-import { GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 
 function calcRotateY(x: number, y: number): number {
     return (MathConstants.TAU / 4) + Math.atan2(-y, x);

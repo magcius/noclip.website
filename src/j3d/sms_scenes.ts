@@ -20,7 +20,7 @@ import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { SceneContext, Destroyable } from '../SceneBase';
 import { createModelInstance } from './scenes';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
-import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer';
+import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
 
 const sjisDecoder = new TextDecoder('sjis')!;
 

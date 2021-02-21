@@ -6,7 +6,7 @@ import { Color, colorCopy } from "../Color";
 import { JPABaseEmitter, JPAEmitterManager, JPAResourceData, JPAEmitterCallBack, JPADrawInfo, JPACData, JPAC, JPAResourceRaw } from "../Common/JSYSTEM/JPA";
 import { Frustum } from "../Geometry";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { EFB_HEIGHT, EFB_WIDTH } from "../gx/gx_material";
 import { computeModelMatrixR, getMatrixTranslation, saturate, transformVec3Mat4w0 } from "../MathHelpers";
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";

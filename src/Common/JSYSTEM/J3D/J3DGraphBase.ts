@@ -14,7 +14,7 @@ import { AABB } from '../../../Geometry';
 import { GfxDevice, GfxSampler, GfxTexture, GfxColorWriteMask, GfxFormat, GfxNormalizedViewportCoords } from '../../../gfx/platform/GfxPlatform';
 import { GfxCoalescedBuffersCombo, GfxBufferCoalescerCombo } from '../../../gfx/helpers/BufferHelpers';
 import { Texture } from '../../../viewer';
-import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderer';
+import { GfxRenderInst, GfxRenderInstManager, setSortKeyDepth, GfxRendererLayer, setSortKeyBias, setSortKeyLayer } from '../../../gfx/render/GfxRenderInstManager';
 import { colorCopy, Color, colorClamp, colorClampLDR } from '../../../Color';
 import { computeNormalMatrix, texEnvMtx, computeModelMatrixS } from '../../../MathHelpers';
 import { calcMipChain } from '../../../gx/gx_texture';

@@ -370,9 +370,9 @@ export class GfxRenderInst {
      * Sets the {@param GfxSamplerBinding}s in use by this render instance.
      *
      * Note that {@see GfxRenderInst} has a method of doing late binding, intended to solve cases where live render
-     * targets are used, which can have difficult control flow consequences for users of GfxRenderer. Pass a string
-     * instead of a GfxSamplerBinding to record that it can be resolved later, and use
-     * {@see GfxRenderInst.resolveLateSamplerBinding} or equivalent to fill it in later.
+     * targets are used, which can have difficult control flow consequences for users. Pass a string instead of a
+     * GfxSamplerBinding to record that it can be resolved later, and use {@see GfxRenderInst.resolveLateSamplerBinding}
+     * or equivalent to fill it in later.
      */
     public setSamplerBindingsFromTextureMappings(m: (GfxSamplerBinding | null)[]): void {
         for (let i = 0; i < this._bindingDescriptors[0].samplerBindings.length; i++) {
@@ -431,8 +431,8 @@ export class GfxRenderInst {
     /**
      * Tests whether the underlying pipeline for this {@see GfxRenderInst} is ready.
      *
-     * By default, {@see GfxRenderer} will skip any insts with non-ready pipelines.
-     * If you wish to override this and force the render inst to draw, please use {@see setAllowSkippingIfPipelineNotReady}
+     * By default, {@see GfxRenderInstManager} will skip any insts with non-ready pipelines. If you wish
+     * to override this and force the render inst to draw, please use {@see setAllowSkippingIfPipelineNotReady}.
      */
     public queryPipelineReady(device: GfxDevice, cache: GfxRenderCache): boolean {
         const gfxPipeline = cache.createRenderPipeline(device, this._renderPipelineDescriptor);

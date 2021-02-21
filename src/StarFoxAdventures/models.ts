@@ -2,7 +2,7 @@ import { nArray } from '../util';
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { DataFetcher } from '../DataFetcher';
 import * as GX_Material from '../gx/gx_material';
 import { Color } from '../Color';

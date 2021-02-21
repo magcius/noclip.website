@@ -7,7 +7,7 @@ import { fullscreenMegaState } from "../helpers/GfxMegaStateDescriptorHelpers";
 import { GfxShaderLibrary } from "../helpers/ShaderHelpers";
 import { fillVec4 } from "../helpers/UniformBufferHelpers";
 import { GfxDevice } from "../platform/GfxPlatform";
-import { GfxRenderInstManager } from "../render/GfxRenderer";
+import { GfxRenderInstManager } from "../render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder } from "../render/GfxRenderGraph";
 
 class FXAAProgram extends DeviceProgram {

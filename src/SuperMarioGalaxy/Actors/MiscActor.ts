@@ -11,7 +11,7 @@ import { drawWorldSpaceBasis, drawWorldSpacePoint, getDebugOverlayCanvas2D } fro
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from '../../gfx/render/GfxRenderer';
+import { GfxRenderInstManager } from '../../gfx/render/GfxRenderInstManager';
 import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';

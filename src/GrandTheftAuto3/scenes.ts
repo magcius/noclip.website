@@ -14,7 +14,7 @@ import { parseTimeCycle, ColorSet } from './time';
 import { parseWaterPro, waterMeshFragData, waterDefinition, parseWater } from './water';
 import { mat4 } from 'gl-matrix';
 import { AABB } from '../Geometry';
-import { GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { colorNewCopy, OpaqueBlack } from '../Color';
 import { MathConstants } from '../MathHelpers';

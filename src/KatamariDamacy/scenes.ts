@@ -8,7 +8,7 @@ import { drawWorldSpaceLine, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
 import { fillMatrix4x4, fillVec3v } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxBindingLayoutDescriptor, GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { Vec3Zero, MathConstants, setMatrixTranslation } from '../MathHelpers';
 import { SceneContext } from '../SceneBase';

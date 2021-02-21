@@ -13,7 +13,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextureMapping, FakeTextureHolder } from '../TextureHolder';
 import { DrawCall, RSPState, runDL_F3DEX2, RSPOutput } from './f3dex2';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { computeViewMatrixSkybox, computeViewMatrix, CameraController } from '../Camera';
 import { fillMatrix4x3, fillMatrix4x2, fillVec4, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
 import { translateCM, Texture, OtherModeH_Layout, OtherModeH_CycleType } from '../Common/N64/RDP';

@@ -1,6 +1,6 @@
 
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { GfxRenderInstManager } from '../gfx/render/GfxRenderer';
+import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { computeModelMatrixSRT, getMatrixTranslation, MathConstants, transformVec3Mat4w1 } from '../MathHelpers';
 import { assert, assertExists, fallbackUndefined } from '../util';
 import { computeAmbientCubeFromLeaf, newAmbientCube } from './BSPFile';

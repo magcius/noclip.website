@@ -7,7 +7,7 @@ import { mat4, ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec
 import { computeModelMatrixSRT, MathConstants, saturate } from "../../../MathHelpers";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID, GX_Program } from "../../../gx/gx_material";
-import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
 import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../../../TextureHolder";
