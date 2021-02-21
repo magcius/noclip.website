@@ -1,15 +1,23 @@
 import * as UI from '../ui';
 import * as Viewer from '../viewer';
 
-import { GfxDevice, GfxHostAccessPass } from "../gfx/platform/GfxPlatform";
+import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render';
-import { BasicRenderTarget } from '../gfx/helpers/RenderTargetHelpers';
 import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance } from './render';
 import AnimationController from '../AnimationController';
+import { CameraController } from '../Camera';
+
+export class ModelChache{
+    public gcmfData = new Map<string, GcmfModel>();
+
+    public destroy(device: GfxDevice): void {
+        for (const [, v] of this.gcmfData.entries())
+            v.destroy(device);
+    }
+}
 
 export class AmusementVisionSceneRenderer extends BasicGXRendererHelper {
     public renderHelper: GXRenderHelperGfx;
-    public renderTarget = new BasicRenderTarget();
 
     public textureHolder = new AmusementVisionTextureHolder();
     public animationController = new AnimationController();
@@ -41,20 +49,19 @@ export class AmusementVisionSceneRenderer extends BasicGXRendererHelper {
         return [renderHacksPanel];
     }
 
-    protected prepareToRender(device: GfxDevice, hostAccessPass: GfxHostAccessPass, viewerInput: Viewer.ViewerRenderInput): void {
+    protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         // this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
         for (let i = 0; i < this.modelInstances.length; i++)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
-        this.renderHelper.prepareToRender(device, hostAccessPass);
+        this.renderHelper.prepareToRender(device);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
-        this.renderTarget.destroy(device);
         this.renderHelper.destroy(device);
 
         for (let i = 0; i < this.modelInstances.length; i++)

@@ -160,9 +160,6 @@ class MaterialInstance {
         };
     
         const lightChannels: GX_Material.LightChannelControl[] = [lightChannel0, lightChannel0];
-
-        // this.materialHelper = new GXMaterialHelperGfx(gxMaterial, materialData.materialHacks);
-
         let unk0x02 = this.materialData.material.unk0x02;
         let unk0x03 = this.materialData.material.unk0x03;
 
@@ -171,16 +168,15 @@ class MaterialInstance {
         mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.VTX, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
         mb.setCullMode( (unk0x03 & (1 << 1)) !== 0 ? GX.CullMode.NONE : GX.CullMode.FRONT );
-
         mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.RASC, GX.CC.ZERO, GX.CC.TEXC);
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.ZERO, GX.CA.TEXA);
         mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
-
         mb.setTexCoordGen(0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
+
         mb.setZMode(true, GX.CompareType.LESS, true);
         mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
-        mb.setBlendMode( (this.materialData.material.unk0x03 & 0x60) !== 0 ?  GX.BlendMode.BLEND : GX.BlendMode.NONE, GX.BlendFactor.DSTALPHA, GX.BlendFactor.ONE );
+        mb.setBlendMode( (unk0x03 & (1 << 6)) !== 0 ?  GX.BlendMode.BLEND : GX.BlendMode.NONE, GX.BlendFactor.DSTALPHA, GX.BlendFactor.ONE );
         this.materialHelper = new GXMaterialHelperGfx(mb.finish(), materialData.materialHacks);
 
         const layer = this.materialData.material.transparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
