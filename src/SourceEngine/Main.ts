@@ -29,6 +29,7 @@ import { BaseMaterial, LateBindingTexture, LightmapManager, MaterialCache, Mater
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
+import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
     if (entry.compressionMethod === ZipCompressionMethod.None) {
@@ -812,18 +813,7 @@ const bindingLayoutsGammaCorrect: GfxBindingLayoutDescriptor[] = [
 ];
 
 class FullscreenGammaCorrectProgram extends DeviceProgram {
-    public vert: string = `
-out vec2 v_TexCoord;
-
-void main() {
-    vec2 p;
-    p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    p.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = p * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(-1, 1);
-    v_TexCoord = p;
-}
-`;
+    public vert: string = GfxShaderLibrary.fullscreenVS;
 
     public frag: string = `
 uniform sampler2D u_Texture;
@@ -1025,16 +1015,17 @@ export class SourceRenderer implements SceneGfx {
             const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
+            const gammaCorrectRenderInst = this.renderHelper.renderInstManager.newRenderInst();
+            gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsGammaCorrect);
+            gammaCorrectRenderInst.setInputLayoutAndState(null, null);
+            const gammaCorrectProgram = cache.createProgram(device, this.gammaCorrectProgram);
+            gammaCorrectRenderInst.setGfxProgram(gammaCorrectProgram);
+            gammaCorrectRenderInst.setMegaStateFlags(fullscreenMegaState);
+            gammaCorrectRenderInst.drawPrimitives(3);
+
             pass.exec((passRenderer, scope) => {
-                const gammaCorrectRenderInst = this.renderHelper.renderInstManager.newRenderInst();
-                gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsGammaCorrect);
-                gammaCorrectRenderInst.setInputLayoutAndState(null, null);
-                const gammaCorrectProgram = cache.createProgram(device, this.gammaCorrectProgram);
                 this.framebufferTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                gammaCorrectRenderInst.setGfxProgram(gammaCorrectProgram);
                 gammaCorrectRenderInst.setSamplerBindingsFromTextureMappings(this.framebufferTextureMapping);
-                gammaCorrectRenderInst.setMegaStateFlags(fullscreenMegaState);
-                gammaCorrectRenderInst.drawPrimitives(3);
                 gammaCorrectRenderInst.drawOnPass(device, cache, passRenderer);
             });
         });
