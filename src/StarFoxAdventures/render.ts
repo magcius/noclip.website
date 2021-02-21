@@ -70,11 +70,11 @@ export class SFARenderer implements Viewer.SceneGfx {
     }
 
     protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
-    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
+    protected addSkyRenderPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {}
 
     protected addWorldRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {}
 
-    private addWorldRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+    private addWorldRenderPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
         builder.pushPass((pass) => {
             pass.setDebugName('World Opaque');
             pass.setViewport(sceneCtx.viewerInput.viewport);
@@ -84,8 +84,8 @@ export class SFARenderer implements Viewer.SceneGfx {
                 this.opaqueSceneTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
                 renderLists.world[0].resolveLateSamplerBinding('previous-frame-texture', this.opaqueSceneTextureMapping);
 
-                renderLists.world[0].drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
-                renderLists.furs.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInstManager.drawListOnPassRenderer(renderLists.world[0], passRenderer);
+                renderInstManager.drawListOnPassRenderer(renderLists.furs, passRenderer);
             });
         });
 
@@ -103,9 +103,9 @@ export class SFARenderer implements Viewer.SceneGfx {
                 this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
                 renderLists.waters.resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
 
-                renderLists.waters.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
-                renderLists.world[1].drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
-                renderLists.world[2].drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInstManager.drawListOnPassRenderer(renderLists.waters, passRenderer);
+                renderInstManager.drawListOnPassRenderer(renderLists.world[1], passRenderer);
+                renderInstManager.drawListOnPassRenderer(renderLists.world[2], passRenderer);
             });
         });
     }
@@ -137,8 +137,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
 
-        this.addSkyRenderPasses(device, builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
-        this.addWorldRenderPasses(device, builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
+        this.addSkyRenderPasses(builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
+        this.addWorldRenderPasses(builder, renderInstManager, this.renderLists, mainColorTargetID, mainDepthTargetID, sceneCtx);
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 

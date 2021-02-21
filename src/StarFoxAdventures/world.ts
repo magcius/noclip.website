@@ -334,13 +334,13 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
-    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
+    protected addSkyRenderPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
         builder.pushPass((pass) => {
             pass.setDebugName('Atmosphere');
             pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.exec((passRenderer) => {
-                renderLists.atmosphere.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInstManager.drawListOnPassRenderer(renderLists.atmosphere, passRenderer);
             });
         });
 
@@ -351,7 +351,7 @@ class WorldRenderer extends SFARenderer {
             const skyDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Skyscape Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyDepthTargetID);
             pass.exec((passRenderer) => {
-                renderLists.skyscape.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInstManager.drawListOnPassRenderer(renderLists.skyscape, passRenderer);
             });
         });
     }

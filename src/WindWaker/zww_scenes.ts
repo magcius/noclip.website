@@ -769,13 +769,13 @@ void main() {
         this.globals.renderHacks.renderHacksChanged = false;
     }
 
-    private executeList(device: GfxDevice, renderInstManager: GfxRenderInstManager, pass: GfxRenderPass, list: GfxRenderInstList): void {
-        list.drawOnPassRenderer(device, renderInstManager.gfxRenderCache, pass);
+    private executeList(passRenderer: GfxRenderPass, list: GfxRenderInstList): void {
+        this.renderHelper.renderInstManager.drawListOnPassRenderer(list, passRenderer);
     }
 
-    private executeListSet(device: GfxDevice, renderInstManager: GfxRenderInstManager, pass: GfxRenderPass, listSet: dDlst_list_Set): void {
-        this.executeList(device, renderInstManager, pass, listSet[0]);
-        this.executeList(device, renderInstManager, pass, listSet[1]);
+    private executeListSet(passRenderer: GfxRenderPass, listSet: dDlst_list_Set): void {
+        this.executeList(passRenderer, listSet[0]);
+        this.executeList(passRenderer, listSet[1]);
     }
 
     @dfShow()
@@ -808,7 +808,7 @@ void main() {
             const skyboxDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Skybox Depth');
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
             pass.exec((passRenderer) => {
-                this.executeListSet(device, renderInstManager, passRenderer, dlst.sky);
+                this.executeListSet(passRenderer, dlst.sky);
             });
         });
 
@@ -820,15 +820,15 @@ void main() {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                this.executeList(device, renderInstManager, passRenderer, dlst.sea);
-                this.executeListSet(device, renderInstManager, passRenderer, dlst.main);
+                this.executeList(passRenderer, dlst.sea);
+                this.executeListSet(passRenderer, dlst.main);
 
                 // Execute our alpha model stuff.
-                this.executeList(device, renderInstManager, passRenderer, dlst.alphaModel);
+                this.executeList(passRenderer, dlst.alphaModel);
         
-                this.executeList(device, renderInstManager, passRenderer, dlst.effect[EffectDrawGroup.Main]);
-                this.executeList(device, renderInstManager, passRenderer, dlst.wetherEffect);
-                this.executeListSet(device, renderInstManager, passRenderer, dlst.ui);
+                this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Main]);
+                this.executeList(passRenderer, dlst.wetherEffect);
+                this.executeListSet(passRenderer, dlst.ui);
             });
         });
 
@@ -846,110 +846,7 @@ void main() {
             pass.exec((passRenderer, scope) => {
                 this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(opaqueSceneTextureID);
                 dlst.effect[EffectDrawGroup.Indirect].resolveLateSamplerBinding('OpaqueSceneTexture', this.opaqueSceneTextureMapping);
-                this.executeList(device, renderInstManager, passRenderer, dlst.effect[EffectDrawGroup.Indirect]);
-            });
-        });
-
-        /*
-        const hatColorDesc = new GfxrRenderTargetDescription(this.mainColorDesc.pixelFormat);
-        hatColorDesc.copyDimensions(this.mainColorDesc);
-        hatColorDesc.colorClearColor = TransparentBlack;
-
-        const hatDepthDesc = new GfxrRenderTargetDescription(this.mainDepthDesc.pixelFormat);
-        hatDepthDesc.copyDimensions(this.mainColorDesc);
-        hatDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
-
-        const hatColorTargetID = builder.createRenderTargetID(hatColorDesc, 'Hat Color');
-        const hatDepthTargetID = builder.createRenderTargetID(hatDepthDesc, 'Hat Depth');
-
-        // Hat
-        builder.pushPass((pass) => {
-            pass.setDebugName('Hat');
-
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, hatColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, hatDepthTargetID);
-
-            pass.exec((passRenderer, scope) => {
-                this.executeList(device, renderInstManager, passRenderer, dlst.hat);
-            });
-        });
-
-        // Hat Combine
-        builder.pushPass((pass) => {
-            pass.setDebugName('Hat Combine');
-
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-
-            const hatTextureID = builder.resolveRenderTarget(hatColorTargetID);
-            pass.attachResolveTexture(hatTextureID);
-
-            pass.exec((passRenderer, scope) => {
-                const renderInst = renderInstManager.newRenderInst();
-                renderInst.setBindingLayouts([{ numUniformBuffers: 0, numSamplers: 1 }]);
-                renderInst.setGfxProgram(this.fullscreenBlitProgram);
-                renderInst.setMegaStateFlags(makeMegaState(setAttachmentStateSimple({}, {
-                    blendMode: GfxBlendMode.ADD,
-                    blendSrcFactor: GfxBlendFactor.SRC_ALPHA,
-                    blendDstFactor: GfxBlendFactor.ONE_MINUS_SRC_ALPHA,
-                }), fullscreenMegaState));
-                const m = new TextureMapping();
-                m.gfxTexture = scope.getResolveTextureForID(hatTextureID);
-                m.gfxSampler = this.renderCache.createSampler(device, {
-                    wrapS: GfxWrapMode.CLAMP,
-                    wrapT: GfxWrapMode.CLAMP,
-                    minFilter: GfxTexFilterMode.POINT,
-                    magFilter: GfxTexFilterMode.POINT,
-                    mipFilter: GfxMipFilterMode.NO_MIP,
-                    minLOD: 0,
-                    maxLOD: 100,
-                });
-
-                renderInst.setSamplerBindingsFromTextureMappings([m]);
-
-                renderInst.drawPrimitives(3);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
-            });
-        });
-        */
-
-        // Combine.
-        builder.pushPass((pass) => {
-            return;
-
-            pass.setDebugName('Depth');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-
-            const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
-            pass.attachResolveTexture(mainDepthResolveTextureID);
-
-            pass.exec((passRenderer, scope) => {
-                const renderInst = renderInstManager.newRenderInst();
-                renderInst.setBindingLayouts([{ numUniformBuffers: 1, numSamplers: 1 }]);
-                renderInst.setUniformBuffer(this.renderHelper.uniformBuffer);
-                renderInst.setGfxProgram(this.fullscreenDepthProgram);
-                renderInst.setMegaStateFlags(fullscreenMegaState);
-                const m = new TextureMapping();
-                m.gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
-                m.gfxSampler = this.renderCache.createSampler(device, {
-                    wrapS: GfxWrapMode.CLAMP,
-                    wrapT: GfxWrapMode.CLAMP,
-                    minFilter: GfxTexFilterMode.POINT,
-                    magFilter: GfxTexFilterMode.POINT,
-                    mipFilter: GfxMipFilterMode.NO_MIP,
-                    minLOD: 0,
-                    maxLOD: 100,
-                });
-        
-                renderInst.setSamplerBindingsFromTextureMappings([m]);
-
-                let offs = renderInst.allocateUniformBuffer(0, 8);
-                const d = renderInst.mapUniformBufferF32(0);
-                offs += fillUnprojectParams(d, offs, viewerInput.camera.projectionMatrix);
-                offs += fillVec4v(d, offs, this.depthSettings);
-
-                renderInst.drawPrimitives(3);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                this.executeList(passRenderer, dlst.effect[EffectDrawGroup.Indirect]);
             });
         });
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);

@@ -262,7 +262,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         if (list === null)
             return;
         this.sceneObjHolder.specialTextureBinder.resolveLateBindTexture(list);
-        list.drawOnPassRenderer(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager.gfxRenderCache, passRenderer);
+        this.renderHelper.renderInstManager.drawListOnPassRenderer(list, passRenderer);
     }
 
     private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
@@ -600,7 +600,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         });
 
         if (viewerInput.sampleCount === 1)
-            pushFXAAPass(device, builder, renderInstManager, mainColorTargetID, viewerInput);
+            pushFXAAPass(builder, renderInstManager, mainColorTargetID, viewerInput);
 
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 

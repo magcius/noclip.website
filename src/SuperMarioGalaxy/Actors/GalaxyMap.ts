@@ -426,7 +426,7 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
             this.drawForCapture(sceneObjHolder, renderInstManager, layoutTargetDesc);
 
             pass.exec((passRenderer) => {
-                this.renderInstList.drawOnPassRenderer(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInstManager.drawListOnPassRenderer(this.renderInstList, passRenderer);
             });
         });
 

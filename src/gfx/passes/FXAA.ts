@@ -87,7 +87,7 @@ void main() {
 }
 
 const textureMapping = nArray(1, () => new TextureMapping());
-export function pushFXAAPass(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, viewerInput: ViewerRenderInput): void {
+export function pushFXAAPass(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, viewerInput: ViewerRenderInput): void {
     assert(viewerInput.sampleCount === 1);
 
     builder.pushPass((pass) => {
@@ -109,14 +109,14 @@ export function pushFXAAPass(device: GfxDevice, builder: GfxrGraphBuilder, rende
         renderInst.drawPrimitives(3);
 
         const fxaaProgram = new FXAAProgram();
-        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(device, fxaaProgram);
+        const gfxProgram = renderInstManager.gfxRenderCache.createProgram(renderInstManager.device, fxaaProgram);
 
         renderInst.setGfxProgram(gfxProgram);
 
         pass.exec((passRenderer, scope) => {
             textureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
             renderInst.setSamplerBindingsFromTextureMappings(textureMapping);
-            renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            renderInst.drawOnPass(renderInstManager.device, renderInstManager.gfxRenderCache, passRenderer);
         });
     });
 }

@@ -631,11 +631,13 @@ class RenderInstPool {
 }
 
 export class GfxRenderInstManager {
-    public gfxRenderCache = new GfxRenderCache();
     public instPool = new RenderInstPool();
     public templatePool = new RenderInstPool();
     public simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
     private currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
+
+    constructor(public device: GfxDevice, public gfxRenderCache: GfxRenderCache) {
+    }
 
     /**
      * Creates a new {@see GfxRenderInst} object and returns it. If there is a template
@@ -727,6 +729,14 @@ export class GfxRenderInstManager {
         this.simpleRenderInstList = null;
     }
 
+    /**
+     * Execute all scheduled render insts in {@param list} onto the {@param GfxRenderPass},
+     * using {@param device} and {@param cache} to create any device-specific resources
+     * necessary to complete the draws.
+     */
+    public drawListOnPassRenderer(list: GfxRenderInstList, passRenderer: GfxRenderPass): void {
+        list.drawOnPassRenderer(this.device, this.gfxRenderCache, passRenderer);
+    }
     //#region Legacy render inst list management API.
 
     /**
@@ -761,7 +771,7 @@ export class GfxRenderInstManager {
 
     public drawOnPassRenderer(device: GfxDevice, passRenderer: GfxRenderPass): void {
         const list = assertExists(this.simpleRenderInstList);
-        list.drawOnPassRenderer(device, this.gfxRenderCache, passRenderer);
+        list.drawOnPassRenderer(this.device, this.gfxRenderCache, passRenderer);
     }
     //#endregion
 }

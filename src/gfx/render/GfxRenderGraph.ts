@@ -83,7 +83,6 @@ export const IdentityViewportCoords: Readonly<GfxNormalizedViewportCoords> = { x
 
 type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
 type PassPostFunc = (scope: GfxrPassScope) => void;
-type PassPostFrameFunc = () => void;
 
 export interface GfxrPass {
     /**
