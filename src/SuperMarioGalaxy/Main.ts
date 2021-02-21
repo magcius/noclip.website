@@ -618,6 +618,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device);
 
         this.renderHelper.renderGraph.execute(device, builder);
+        this.sceneObjHolder.sceneNameObjListExecutor.drawBufferHolder.reset();
         renderInstManager.resetRenderInsts();
     }
 

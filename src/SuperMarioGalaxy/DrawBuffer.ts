@@ -190,6 +190,11 @@ export class DrawBufferGroup {
                 return true;
         return false;
     }
+
+    public reset(): void {
+        this.renderInstListOpa.reset();
+        this.renderInstListXlu.reset();
+    }
 }
 
 export class DrawBufferHolder {
@@ -246,5 +251,14 @@ export class DrawBufferHolder {
 
     public drawBufferHasVisible(drawBufferType: DrawBufferType): boolean {
         return this.groups[drawBufferType].hasVisible();
+    }
+
+    public reset(): void {
+        for (let i = 0; i < this.groups.length; i++) {
+            const group = this.groups[i];
+            if (group === undefined)
+                continue;
+            group.reset();
+        }
     }
 }
