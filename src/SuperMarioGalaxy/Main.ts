@@ -1,7 +1,7 @@
 
 import { mat4, vec3, ReadonlyVec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, assertExists, fallback, spliceBisectRight } from '../util';
+import { assert, assertExists, fallback, nArray, spliceBisectRight } from '../util';
 import { DataFetcher, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, clamp, computeProjectionMatrixFromCuboid } from '../MathHelpers';
 import { texProjCameraSceneTex } from '../Camera';
@@ -10,7 +10,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
 import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
@@ -50,6 +50,7 @@ import { GfxrRenderTargetDescription, GfxrAttachmentSlot, GfxrTemporalTexture, G
 import { TransparentBlack } from '../Color';
 import { GameSystemFontHolder, LayoutHolder } from './Layout';
 import { GalaxyMapController } from './Actors/GalaxyMap';
+import { pushFXAAPass } from '../gfx/passes/FXAA';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -597,6 +598,10 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
             });
         });
+
+        if (viewerInput.sampleCount === 1)
+            pushFXAAPass(device, builder, renderInstManager, mainColorTargetID, viewerInput);
+
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?

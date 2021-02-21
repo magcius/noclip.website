@@ -493,7 +493,6 @@ export class BloomEffectSimple extends ImageEffectBase {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setAllowSkippingIfPipelineNotReady(false);
-        renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst);
         renderInst.drawPrimitives(3);
