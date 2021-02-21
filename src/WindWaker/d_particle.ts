@@ -230,7 +230,7 @@ export class dPa_splashEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        this.emitter.becomeInvalidEmitter();
+        this.emitter.becomeInvalidEmitterImmediate();
         this.emitter = null;
     }
 }
@@ -338,7 +338,7 @@ export class dPa_waveEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        this.emitter.becomeInvalidEmitter();
+        this.emitter.becomeInvalidEmitterImmediate();
         this.emitter = null;
         this.ddraw.destroy(this.globals.modelCache.device);
     }
@@ -463,7 +463,7 @@ export class dPa_trackEcallBack extends dPa_levelEcallBack {
             return;
 
         this.emitter.emitterCallBack = null;
-        this.emitter.becomeInvalidEmitter();
+        this.emitter.becomeInvalidEmitterImmediate();
         this.emitter = null;
         this.ddraw.destroy(this.globals.modelCache.device);
     }

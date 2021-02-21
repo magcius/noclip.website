@@ -1711,7 +1711,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                 eff.stateTimer = cLib_addCalc(eff.stateTimer, 0.0, speed, maxVel * (0.1 + 0.01 * (i / 30)), 0.01);
                 if (eff.stateTimer <= 0.0) {
                     emitter.deleteAllParticle();
-                    emitter.becomeInvalidEmitter();
+                    emitter.becomeInvalidEmitterImmediate();
                     eff.emitter = null;
                     eff.state = 0;
                 }

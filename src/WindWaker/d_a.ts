@@ -3942,17 +3942,17 @@ export class d_a_obj_flame extends fopAc_ac_c {
         }
 
         if (this.em0State === d_a_obj_em_state.TurnOff && this.em0 !== null) {
-            this.em0.becomeInvalidEmitter();
+            this.em0.becomeInvalidEmitterImmediate();
             this.em0 = null;
         }
 
         if (this.em1State === d_a_obj_em_state.TurnOff && this.em1 !== null) {
-            this.em1.becomeInvalidEmitter();
+            this.em1.becomeInvalidEmitterImmediate();
             this.em1 = null;
         }
 
         if (this.em2State === d_a_obj_em_state.TurnOff && this.em2 !== null) {
-            this.em2.becomeInvalidEmitter();
+            this.em2.becomeInvalidEmitterImmediate();
             this.em2 = null;
         }
     }

@@ -1338,6 +1338,11 @@ export class JPABaseEmitter {
 
     public becomeInvalidEmitter(): void {
         this.stopCreateParticle();
+        this.maxFrame = 1;
+    }
+
+    public becomeInvalidEmitterImmediate(): void {
+        this.stopCreateParticle();
         this.maxFrame = -1;
     }
 
