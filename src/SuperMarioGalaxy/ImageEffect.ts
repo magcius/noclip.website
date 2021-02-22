@@ -2,7 +2,7 @@
 import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
 import { NameObj, CalcAnimType, MovementType } from "./NameObj";
 import { getMatrixTranslation } from "../MathHelpers";
-import { ReadonlyMat4, vec3 } from "gl-matrix";
+import { vec3 } from "gl-matrix";
 import { AreaObj, AreaObjMgr, AreaFormType } from "./AreaObj";
 import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3 } from "./JMapInfo";
 import { ZoneAndLayer } from "./LiveActor";
@@ -12,7 +12,7 @@ import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform";
+import { GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -41,12 +41,10 @@ vec3 ${functionName}(in vec2 t_TexCoord) {
     vec3 c = vec3(0.0);
 `;
 
-    const aspect = 16/9;
-    const invAspect = 1/aspect;
-
+    const aspect = 4/3;
     for (let i = 0; i < tapCount; i++) {
         const theta = angleOffset + (MathConstants.TAU * (i / tapCount));
-        const x = invAspect * Math.cos(theta), y = -Math.sin(theta);
+        const x = Math.cos(theta), y = aspect * -Math.sin(theta);
 
         S += `
     c += (texture(SAMPLER_2D(${samplerName}), t_TexCoord + vec2(${glslGenerateFloat(x)} * ${radiusStr}, ${glslGenerateFloat(y)} * ${radiusStr})).rgb * ${intensityStr});`;
@@ -565,7 +563,19 @@ void main() {
     float t_DepthSample = texture(SAMPLER_2D(u_TextureDepth), v_TexCoord).r;
     if (u_IsDepthReversed != 0.0)
         t_DepthSample = 1.0 - t_DepthSample;
-    float t_BlurAmount = saturate(invlerp(t_DepthSample, u_BlurMinDist, u_BlurMaxDist));
+
+    // Clamp to 8-bit
+    t_DepthSample = saturate(t_DepthSample * (256.0/255.0));
+
+    // Game processes indirect depth texture with -128 bias, meaning that 255 (1.0) maps to 127. Emulate this.
+    float t_TexCoord128 = (t_DepthSample * 255.0) - 128.0;
+
+    // We now have a value between 0 and 127. Index into our 128-sized texture. The + 0.5 is to emulate sampling at
+    // the "pixel center" within our lerp.
+    float t_TexCoord = saturate((t_TexCoord128 + 0.5) / 128.0);
+
+    // Do the "indirect texture lookup"
+    float t_BlurAmount = saturate(invlerp(t_TexCoord, u_BlurMinDist, u_BlurMaxDist));
 
     vec3 t_BlurredSample = Blur(v_TexCoord);
     gl_FragColor = vec4(t_BlurredSample, t_BlurAmount * u_Intensity);
