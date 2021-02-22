@@ -372,10 +372,11 @@ function colorGammaToLinear(c: Color, src: Color): void {
 }
 
 export abstract class BaseMaterial {
-    public visible = true;
+    private visible = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
     public isTranslucent = false;
+    public isToolMaterial = false;
     public param: ParameterMap = {};
     public entityParams: EntityMaterialParameters | null = null;
 
@@ -398,6 +399,19 @@ export abstract class BaseMaterial {
 
     public isMaterialLoaded(): boolean {
         return this.loaded;
+    }
+
+    public isMaterialVisible(renderContext: SourceRenderContext): boolean {
+        if (!this.visible)
+            return false;
+
+        if (!this.isMaterialLoaded())
+            return false;
+
+        if (this.isToolMaterial && !renderContext.showToolMaterials)
+            return false;
+
+        return true;
     }
 
     public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
@@ -1494,14 +1508,6 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         renderInst.sortKey = this.sortKeyBase;
     }
 }
-
-// Hide Tool materials by default. I don't think we need to do this now that we use the BSP, but just in case...
-class HiddenMaterial extends Material_Generic {
-    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
-        super.initStatic(device, cache);
-        this.visible = false;
-    }
-}
 //#endregion
 
 //#region Water
@@ -1929,11 +1935,6 @@ export class MaterialCache {
     }
 
     private createMaterialInstanceInternal(vmt: VMT): BaseMaterial {
-        // Hacks for now. I believe these are normally hidden by not actually being in the BSP tree.
-        if (vmt['%compilesky'] || vmt['%compiletrigger']) {
-            return new HiddenMaterial(vmt);
-        }
-
         // Dispatch based on shader type.
         const shaderType = vmt._Root.toLowerCase();
         if (shaderType === 'water')
@@ -1950,6 +1951,10 @@ export class MaterialCache {
         const vmt = await this.fetchMaterialData(path);
         const materialInstance = this.createMaterialInstanceInternal(vmt);
         materialInstance.entityParams = entityParams;
+
+        if (vmt['%compilesky'] || vmt['%compiletrigger'])
+            materialInstance.isToolMaterial = true;
+
         await materialInstance.init(renderContext);
         return materialInstance;
     }

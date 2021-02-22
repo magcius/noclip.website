@@ -1126,7 +1126,7 @@ class StudioModelMeshInstance {
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, modelMatrix: ReadonlyMat4, boneMatrix: ReadonlyMat4[]) {
-        if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
+        if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
 
         const template = renderInstManager.pushTemplateRenderInst();

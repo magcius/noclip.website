@@ -242,7 +242,7 @@ export class SkyboxRenderer {
         offs += fillVec3v(d, offs, view.cameraPos);
 
         for (let i = 0; i < 6; i++) {
-            if (!this.materialInstances[i].visible)
+            if (!this.materialInstances[i].isMaterialVisible(renderContext))
                 continue;
             const renderInst = renderInstManager.newRenderInst();
             this.materialInstances[i].setOnRenderInst(renderContext, renderInst, this.modelMatrix);
@@ -290,7 +290,7 @@ class BSPSurfaceRenderer {
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4, pvs: BitMap | null = null) {
-        if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
+        if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
 
         if (pvs !== null) {
@@ -789,6 +789,7 @@ export class SourceRenderContext {
     public cheapWaterStartDistance = 0.0;
     public cheapWaterEndDistance = 0.1;
     public currentView: SourceEngineView;
+    public showToolMaterials = false;
 
     constructor(public device: GfxDevice, public cache: GfxRenderCache, public filesystem: SourceFileSystem) {
         this.lightmapManager = new LightmapManager(device, cache);
@@ -836,11 +837,16 @@ export class SourceRenderer implements SceneGfx {
     public bspRenderers: BSPRenderer[] = [];
     public renderContext: SourceRenderContext;
 
+    // Debug & Settings
+    public drawSkybox2D = true;
+    public drawSkybox3D = true;
+    public drawWorld = true;
+    public pvsEnabled = true;
+
     // Scratch
     public mainView = new SourceEngineView();
     public skyboxView = new SourceEngineView();
     public pvsScratch = new BitMap(65536);
-    public pvsEnabled = true;
 
     constructor(context: SceneContext, filesystem: SourceFileSystem) {
         const device = context.device;
@@ -905,35 +911,39 @@ export class SourceRenderer implements SceneGfx {
         template.setBindingLayouts(bindingLayouts);
 
         template.filterKey = FilterKey.Skybox;
-        if (this.skyboxRenderer !== null)
+        if (this.skyboxRenderer !== null && this.drawSkybox2D)
             this.skyboxRenderer.prepareToRender(this.renderContext, renderInstManager, this.skyboxView);
 
-        for (let i = 0; i < this.bspRenderers.length; i++) {
-            const bspRenderer = this.bspRenderers[i];
+        if (this.drawSkybox3D) {
+            for (let i = 0; i < this.bspRenderers.length; i++) {
+                const bspRenderer = this.bspRenderers[i];
 
-            // Draw the skybox by positioning us inside the skybox area.
-            const skyCameraModelMatrix = bspRenderer.getSkyCameraModelMatrix();
-            if (skyCameraModelMatrix === null)
-                continue;
-            this.skyboxView.setupFromCamera(viewerInput.camera, skyCameraModelMatrix);
+                // Draw the skybox by positioning us inside the skybox area.
+                const skyCameraModelMatrix = bspRenderer.getSkyCameraModelMatrix();
+                if (skyCameraModelMatrix === null)
+                    continue;
+                this.skyboxView.setupFromCamera(viewerInput.camera, skyCameraModelMatrix);
 
-            // If our skybox is not in a useful spot, then don't render it.
-            if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.skyboxView))
-                continue;
+                // If our skybox is not in a useful spot, then don't render it.
+                if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.skyboxView))
+                    continue;
 
-            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.skyboxView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps);
+                bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.skyboxView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps);
+            }
         }
 
         template.filterKey = FilterKey.Main;
-        for (let i = 0; i < this.bspRenderers.length; i++) {
-            const bspRenderer = this.bspRenderers[i];
+        if (this.drawWorld) {
+            for (let i = 0; i < this.bspRenderers.length; i++) {
+                const bspRenderer = this.bspRenderers[i];
 
-            if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.mainView)) {
-                // No valid PVS, mark everything visible.
-                this.pvsScratch.fill(true);
+                if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.mainView)) {
+                    // No valid PVS, mark everything visible.
+                    this.pvsScratch.fill(true);
+                }
+
+                bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
             }
-
-            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
         }
 
         renderInstManager.popTemplateRenderInst();
