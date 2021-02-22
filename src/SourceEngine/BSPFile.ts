@@ -73,7 +73,7 @@ export interface Overlay {
 }
 
 export interface Surface {
-    texinfo: number;
+    texName: string;
     onNode: boolean;
     startIndex: number;
     indexCount: number;
@@ -107,7 +107,7 @@ const enum TexinfoFlags {
     BUMPLIGHT = 0x0800,
 }
 
-export interface Texinfo {
+interface Texinfo {
     textureMapping: TexinfoMapping;
     lightmapMapping: TexinfoMapping;
     flags: TexinfoFlags;
@@ -509,7 +509,6 @@ export class BSPFile {
     public version: number;
 
     public entities: BSPEntity[] = [];
-    public texinfo: Texinfo[] = [];
     public surfaces: Surface[] = [];
     public models: Model[] = [];
     public pakfile: ZipFile | null = null;
@@ -604,6 +603,8 @@ export class BSPFile {
             return vec4.fromValues(x, y, z, w);
         }
 
+        const texinfoa: Texinfo[] = [];
+
         // Parse out texinfo / texdata.
         const texstrTable = getLumpData(LumpType.TEXDATA_STRING_TABLE).createTypedArray(Uint32Array);
         const texstrData = getLumpData(LumpType.TEXDATA_STRING_DATA);
@@ -631,8 +632,7 @@ export class BSPFile {
             const view_width = texdata.getUint32(texdataOffs + 0x18, true);
             const view_height = texdata.getUint32(texdataOffs + 0x1C, true);
             const texName = readString(texstrData, texstrTable[nameTableStringID]);
-
-            this.texinfo.push({ textureMapping, lightmapMapping, flags, texName, width, height });
+            texinfoa.push({ textureMapping, lightmapMapping, flags, width, height, texName });
         }
 
         // Parse materials.
@@ -713,7 +713,7 @@ export class BSPFile {
             const idx = i * 0x38;
 
             const texinfo = faces.getUint16(idx + 0x0A, true);
-            const tex = this.texinfo[texinfo];
+            const tex = texinfoa[texinfo];
 
             const numedges = faces.getUint16(idx + 0x08, true);
             const dispinfo = faces.getInt16(idx + 0x0C, true);
@@ -777,9 +777,18 @@ export class BSPFile {
             basicSurfaces.push({ index: i, texinfo, lightmapData, vertnormalBase });
         }
 
+        const models = getLumpData(LumpType.MODELS).createDataView();
+        const surfaceToModelIdx: number[] = [];
+        for (let idx = 0x00; idx < models.byteLength; idx += 0x30) {
+            const firstface = models.getUint32(idx + 0x28, true);
+            const numfaces = models.getUint32(idx + 0x2C, true);
+            for (let i = firstface; i < firstface + numfaces; i++)
+                surfaceToModelIdx[i] = idx;
+        }
+
         // Sort surfaces by texinfo, and re-pack into fewer surfaces.
         const surfaceRemapTable = nArray(basicSurfaces.length, () => -1);
-        basicSurfaces.sort((a, b) => a.texinfo - b.texinfo);
+        basicSurfaces.sort((a, b) => texinfoa[a.texinfo].texName.localeCompare(texinfoa[b.texinfo].texName));
 
         // 3 pos, 4 normal, 4 tangent, 4 uv
         const vertexSize = (3+4+4+4);
@@ -805,22 +814,25 @@ export class BSPFile {
         for (let i = 0; i < basicSurfaces.length; i++) {
             const basicSurface = basicSurfaces[i];
 
-            const tex = this.texinfo[basicSurface.texinfo];
+            const tex = texinfoa[basicSurface.texinfo];
+            const texName = tex.texName;
 
-            // Translucent surfaces require a sort, so they can't be merged.
             const isTranslucent = !!(tex.flags & TexinfoFlags.TRANS);
             const center = isTranslucent ? vec3.create() : null;
 
             const lightmapPageIndex = basicSurface.lightmapData.pageIndex;
             // Determine if we can merge with the previous surface for output.
 
+            // Translucent surfaces require a sort, so they can't be merged.
+            const canMergeSurface = !isTranslucent;
+
             // TODO(jstpierre): We need to check that we're inside two different entities.
             // The hope is that texinfo's will differ in this case, but this is not 100% guaranteed.
             let mergeSurface: Surface | null = null;
-            if (!isTranslucent && this.surfaces.length > 0) {
-                const potentialMergeSurface = this.surfaces[this.surfaces.length - 1];
-                if (potentialMergeSurface.texinfo === basicSurface.texinfo && potentialMergeSurface.lightmapPageIndex === lightmapPageIndex)
-                    mergeSurface = potentialMergeSurface;
+            if (i > 0 && canMergeSurface) {
+                const prevBasicSurface = basicSurfaces[i - 1];
+                if (texinfoa[prevBasicSurface.texinfo].texName === texName && prevBasicSurface.lightmapData.pageIndex === lightmapPageIndex && surfaceToModelIdx[prevBasicSurface.index] === surfaceToModelIdx[basicSurface.index])
+                    mergeSurface = this.surfaces[this.surfaces.length - 1];
             }
 
             const idx = basicSurface.index * 0x38;
@@ -950,7 +962,7 @@ export class BSPFile {
                 assert(m === ((disp.sideLength - 1) ** 2) * 6);
 
                 // TODO(jstpierre): Merge disps
-                const surface: Surface = { texinfo, onNode, startIndex: dstOffsIndex, indexCount: m, center, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb, overlays: [] };
+                const surface: Surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: m, center, lightmapData: [], lightmapPageIndex, isDisplacement: true, bbox: builder.aabb, overlays: [] };
                 this.surfaces.push(surface);
 
                 surface.lightmapData.push(lightmapData);
@@ -997,7 +1009,7 @@ export class BSPFile {
                     vertexData[dstOffs++] = scratchVec2[1];
 
                     // Lightmap UV
-                    if (tex.flags & TexinfoFlags.NOLIGHT) {
+                    if (!!(tex.flags & TexinfoFlags.NOLIGHT)) {
                         vec2.set(scratchVec2, 0.5, 0.5);
                     } else {
                         calcTexCoord(scratchVec2, scratchPosition, tex.lightmapMapping);
@@ -1042,7 +1054,7 @@ export class BSPFile {
                 let surface = mergeSurface;
 
                 if (surface === null) {
-                    surface = { texinfo, onNode, startIndex: dstOffsIndex, indexCount: 0, center, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null, overlays: [] };
+                    surface = { texName, onNode, startIndex: dstOffsIndex, indexCount: 0, center, lightmapData: [], lightmapPageIndex, isDisplacement: false, bbox: null, overlays: [] };
                     this.surfaces.push(surface);
                 }
 
@@ -1191,15 +1203,13 @@ export class BSPFile {
             const surfaceset = new Set<number>();
             for (let i = firstleafface; i < firstleafface + numleaffaces; i++) {
                 const surfaceIdx = surfaceRemapTable[leaffacelist[i]];
-                if (surfaceIdx === -1)
-                    continue;
+                assert(surfaceIdx >= 0);
                 surfaceset.add(surfaceIdx);
             }
 
             this.leaflist.push({ bbox, cluster, area, ambientLightSamples, surfaces: [...surfaceset.values()] });
         }
 
-        const models = getLumpData(LumpType.MODELS).createDataView();
         for (let idx = 0x00; idx < models.byteLength; idx += 0x30) {
             const minX = models.getFloat32(idx + 0x00, true);
             const minY = models.getFloat32(idx + 0x04, true);
@@ -1220,8 +1230,7 @@ export class BSPFile {
             const surfaceset = new Set<number>();
             for (let i = firstface; i < firstface + numfaces; i++) {
                 const surfaceIdx = surfaceRemapTable[i];
-                if (surfaceIdx === -1)
-                    continue;
+                assert(surfaceIdx >= 0);
                 surfaceset.add(surfaceIdx);
             }
             this.models.push({ bbox, headnode, surfaces: [...surfaceset.values()] });

@@ -371,23 +371,22 @@ export class BSPModelRenderer {
 
     private async bindMaterials(renderContext: SourceRenderContext) {
         // Gather all materials.
-        const texinfos = new Set<number>();
+        const texNames = new Set<string>();
         for (let i = 0; i < this.surfaces.length; i++) {
             const surface = this.surfaces[i];
-            texinfos.add(surface.surface.texinfo);
+            texNames.add(surface.surface.texName);
         }
 
-        const materialInstances = await Promise.all([...texinfos].map(async (i: number): Promise<[number, BaseMaterial]> => {
-            const texinfo = this.bsp.texinfo[i];
-            const materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, texinfo.texName);
+        const materialInstances = await Promise.all([...texNames].map(async (texName: string): Promise<[string, BaseMaterial]> => {
+            const materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, texName);
             if (this.entity !== null)
                 materialInstance.entityParams = this.entity.materialParams;
-            return [i, materialInstance];
+            return [texName, materialInstance];
         }));
 
         for (let i = 0; i < this.surfaces.length; i++) {
             const surface = this.surfaces[i];
-            const [texinfo, materialInstance] = assertExists(materialInstances.find(([i]) => surface.surface.texinfo === i));
+            const [, materialInstance] = assertExists(materialInstances.find(([texName]) => surface.surface.texName === texName));
             surface.bindMaterial(materialInstance, renderContext.lightmapManager);
         }
     }
