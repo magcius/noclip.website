@@ -600,6 +600,9 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
     if (fields.hasYTranslate)
         model.modelTranslate[1] = data.getInt16(0x8e);
 
+    if (!fields.isMapBlock)
+        model.cullRadius = data.getUint16(0xe0);
+
     const pnMatrixMap: number[] = nArray(10, () => 0);
 
     const getVtxArrays = (posBuffer: DataView, nrmBuffer?: DataView) => {

@@ -139,6 +139,7 @@ export class Model {
     public invBindTranslations: vec3[] = [];
 
     public modelTranslate: vec3 = vec3.create();
+    public cullRadius: number = 10;
 
     public materials: (SFAMaterial | undefined)[] = [];
 
