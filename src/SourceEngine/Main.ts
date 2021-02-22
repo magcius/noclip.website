@@ -841,6 +841,7 @@ export class SourceRenderer implements SceneGfx {
     public mainView = new SourceEngineView();
     public skyboxView = new SourceEngineView();
     public pvsScratch = new BitMap(65536);
+    public pvsEnabled = true;
 
     constructor(context: SceneContext, filesystem: SourceFileSystem) {
         const device = context.device;
@@ -864,6 +865,9 @@ export class SourceRenderer implements SceneGfx {
     }
 
     public calcPVS(bsp: BSPFile, pvs: BitMap, view: SourceEngineView): boolean {
+        if (!this.pvsEnabled)
+            return false;
+
         // Compute PVS from view.
         const leaf = bsp.findLeafForPoint(view.cameraPos);
 
