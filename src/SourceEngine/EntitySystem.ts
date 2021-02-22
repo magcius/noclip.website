@@ -1,5 +1,8 @@
 
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
+import { Green, Magenta, Red } from '../Color';
+import { drawWorldSpaceAABB, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
+import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { computeModelMatrixSRT, getMatrixTranslation, MathConstants, transformVec3Mat4w1 } from '../MathHelpers';
 import { assert, assertExists, fallbackUndefined } from '../util';
@@ -173,16 +176,19 @@ export class BaseEntity {
             this.setParentEntity(entitySystem.findEntityByTargetName(this.entity.parentname));
     }
 
-    protected updateModelMatrix(): mat4 | null {
-        let modelMatrix: mat4;
-
-        if (this.modelBSP !== null) {
-            modelMatrix = this.modelBSP.modelMatrix;
-        } else if (this.modelStudio !== null) {
-            modelMatrix = this.modelStudio.modelMatrix;
-        } else {
+    protected getModelMatrix(): mat4 | null {
+        if (this.modelBSP !== null)
+            return this.modelBSP.modelMatrix;
+        else if (this.modelStudio !== null)
+            return this.modelStudio.modelMatrix;
+        else
             return null;
-        }
+    }
+
+    protected updateModelMatrix(): mat4 | null {
+        const modelMatrix = this.getModelMatrix();
+        if (modelMatrix === null)
+            return null;
 
         computeModelMatrixPosQAngle(modelMatrix, this.origin, this.angles);
 
@@ -273,9 +279,9 @@ abstract class BaseToggle extends BaseEntity {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         vec3.copy(this.moveDir, vmtParseNumbers(fallbackUndefined(this.entity.movedir, "")) as vec3);
-        this.startPosition = fallbackUndefined(Number(this.entity.startposition), 0.0);
-        this.moveDistance = fallbackUndefined(Number(this.entity.movedistance), 0.0);
-        this.speed = fallbackUndefined(Number(this.entity.speed), 0.0);
+        this.startPosition = Number(fallbackUndefined(this.entity.startposition, '0'));
+        this.moveDistance = Number(fallbackUndefined(this.entity.movedistance, '0'));
+        this.speed = Number(fallbackUndefined(this.entity.speed, '0'));
     }
 
     protected moveToTargetPos(entitySystem: EntitySystem, positionTarget: ReadonlyVec3, speedInSeconds: number): void {
@@ -488,6 +494,63 @@ class logic_relay extends BaseEntity {
     }
 }
 
+class trigger_multiple extends BaseEntity {
+    public static classname = `trigger_multiple`;
+
+    private output_onTrigger = new EntityOutput();
+    private output_onEndTouchAll = new EntityOutput();
+
+    private isPlayerTouching = false;
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_onTrigger.parse(this.entity.ontrigger);
+        this.output_onEndTouchAll.parse(this.entity.onendtouchall);
+    }
+
+    private getAABB(): AABB | null {
+        if (this.modelBSP !== null)
+            return this.modelBSP.model.bbox;
+        else if (this.modelStudio !== null)
+            return this.modelStudio.modelData.bbox;
+        else
+            return null;
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        const aabb = this.getAABB();
+        const modelMatrix = this.getModelMatrix();
+        if (aabb !== null && modelMatrix !== null) {
+            // Test if the "player" (camera) is inside N units from our AABB.
+            mat4.invert(scratchMat4a, modelMatrix);
+            transformVec3Mat4w1(scratchVec3a, scratchMat4a, renderContext.currentView.cameraPos);
+
+            const playerSize = 24;
+            const isPlayerTouching = aabb.containsSphere(scratchVec3a, playerSize);
+
+            if (this.isPlayerTouching !== isPlayerTouching) {
+                this.isPlayerTouching = isPlayerTouching;
+
+                if (this.isPlayerTouching)
+                    this.output_onTrigger.fire(entitySystem);
+                else
+                    this.output_onEndTouchAll.fire(entitySystem);
+            }
+
+            if (renderContext.showTriggerDebug) {
+                const color = isPlayerTouching ? Green : Magenta;
+                drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, modelMatrix, color);
+
+                getMatrixTranslation(scratchVec3a, modelMatrix);
+                drawWorldSpaceText(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a, this.entity.targetname, 0, color, { align: 'center' });
+            }
+        }
+    }
+}
+
 class env_texturetoggle extends BaseEntity {
     public static classname = `env_texturetoggle`;
 
@@ -531,6 +594,7 @@ export class EntitySystem {
         this.registerFactory(func_door);
         this.registerFactory(logic_auto);
         this.registerFactory(logic_relay);
+        this.registerFactory(trigger_multiple);
         this.registerFactory(env_texturetoggle);
     }
 

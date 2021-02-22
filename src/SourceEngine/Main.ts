@@ -790,6 +790,7 @@ export class SourceRenderContext {
     public cheapWaterEndDistance = 0.1;
     public currentView: SourceEngineView;
     public showToolMaterials = false;
+    public showTriggerDebug = false;
 
     constructor(public device: GfxDevice, public cache: GfxRenderCache, public filesystem: SourceFileSystem) {
         this.lightmapManager = new LightmapManager(device, cache);

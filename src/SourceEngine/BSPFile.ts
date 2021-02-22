@@ -3,7 +3,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString, assertExists, assert, nArray } from "../util";
-import { vec4, vec3, vec2, ReadonlyVec3, ReadonlyVec4 } from "gl-matrix";
+import { vec4, vec3, vec2, ReadonlyVec3 } from "gl-matrix";
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology, convertToTrianglesRange } from "../gfx/helpers/TopologyHelpers";
 import { parseZipFile, ZipFile } from "../ZipFile";
 import { parseEntitiesLump, BSPEntity } from "./VMT";
