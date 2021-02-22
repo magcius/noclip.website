@@ -1031,7 +1031,7 @@ export class SourceRenderer implements SceneGfx {
         });
 
         // TODO(jstpierre): Merge FXAA and Gamma Correct?
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorGammaTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
