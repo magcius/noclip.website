@@ -1,14 +1,14 @@
 
 import { mat4, ReadonlyVec3, vec3 } from 'gl-matrix';
-import { Green, Magenta, Red } from '../Color';
+import { Cyan, Green, Magenta, Red } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
 import { AABB } from '../Geometry';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
-import { computeModelMatrixSRT, getMatrixTranslation, MathConstants, transformVec3Mat4w1 } from '../MathHelpers';
+import { computeModelMatrixSRT, getMatrixTranslation, invlerp, lerp, MathConstants, transformVec3Mat4w1 } from '../MathHelpers';
 import { assert, assertExists, fallbackUndefined } from '../util';
 import { computeAmbientCubeFromLeaf, newAmbientCube } from './BSPFile';
 import { BSPModelRenderer, SourceRenderContext, BSPRenderer, SourceEngineView } from './Main';
-import { EntityMaterialParameters, LightCache } from './Materials';
+import { BaseMaterial, EntityMaterialParameters, LightCache, ParameterReference, paramSetNum } from './Materials';
 import { computeModelMatrixPosQAngle, StudioModelInstance } from "./Studio";
 import { BSPEntity, vmtParseNumbers } from './VMT';
 
@@ -42,7 +42,7 @@ class EntityOutput {
 
     public fire(entitySystem: EntitySystem, value: string = ''): void {
         for (let i = 0; i < this.actions.length; i++)
-            entitySystem.fireEntityOutputAction(this.actions[i], value);
+            entitySystem.queueEntityOutputAction(this.actions[i], value);
     }
 }
 
@@ -53,7 +53,7 @@ export class BaseEntity {
     public modelBSP: BSPModelRenderer | null = null;
     public modelStudio: StudioModelInstance | null = null;
 
-    public origin = vec3.create();
+    public localOrigin = vec3.create();
     public angles = vec3.create();
     public renderamt: number = 1.0;
     public visible = true;
@@ -62,6 +62,8 @@ export class BaseEntity {
 
     public targetName: string | null = null;
     public parentEntity: BaseEntity | null = null;
+    public alive = true;
+    public enabled = true;
 
     public outputs: EntityOutput[] = [];
     public inputs = new Map<string, EntityInputFunc>();
@@ -82,7 +84,7 @@ export class BaseEntity {
 
         if (entity.origin) {
             const origin = vmtParseNumbers(entity.origin);
-            vec3.set(this.origin, origin[0], origin[1], origin[2]);
+            vec3.set(this.localOrigin, origin[0], origin[1], origin[2]);
         }
 
         if (entity.angles) {
@@ -98,6 +100,24 @@ export class BaseEntity {
 
         if (entity.skin)
             this.skin = Number(entity.skin);
+
+        if (entity.startdisabled)
+            this.enabled = !Number(entity.startdisabled);
+
+        this.registerInput('enable', this.input_enable.bind(this));
+        this.registerInput('disable', this.input_disable.bind(this));
+    }
+
+    private input_enable(): void {
+        this.enabled = true;
+    }
+
+    private input_disable(): void {
+        this.enabled = false;
+    }
+
+    protected remove(): void {
+        this.alive = false;
     }
 
     protected registerInput(inputName: string, func: EntityInputFunc): void {
@@ -107,8 +127,10 @@ export class BaseEntity {
 
     public fireInput(entitySystem: EntitySystem, inputName: string, value: string): void {
         const func = this.inputs.get(inputName);
-        if (!func)
+        if (!func) {
+            console.warn(`Unknown input: ${this.targetName} (${this.entity.classname}) ${inputName}`);
             return;
+        }
 
         func(entitySystem, value);
     }
@@ -147,28 +169,42 @@ export class BaseEntity {
         }
     }
 
+    protected setAbsOrigin(v: ReadonlyVec3): void {
+        if (this.parentEntity !== null) {
+            const parentModelMatrix = this.parentEntity.updateModelMatrix();
+            if (parentModelMatrix !== null) {
+                mat4.invert(scratchMat4a, parentModelMatrix);
+                transformVec3Mat4w1(this.localOrigin, scratchMat4a, v);
+                return;
+            }
+        }
+
+        vec3.copy(this.localOrigin, v);
+    }
+
+    protected getAbsOrigin(dst: vec3): void {
+        if (this.parentEntity !== null) {
+            const parentModelMatrix = this.parentEntity.updateModelMatrix();
+            if (parentModelMatrix !== null) {
+                transformVec3Mat4w1(dst, parentModelMatrix, this.localOrigin);
+                return;
+            }
+        }
+
+        vec3.copy(dst, this.localOrigin);
+    }
+
     public setParentEntity(parentEntity: BaseEntity | null): void {
         if (parentEntity === this.parentEntity)
             return;
 
-        if (this.parentEntity !== null) {
-            const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            if (parentModelMatrix !== null) {
-                // Transform origin into absolute world-space.
-                transformVec3Mat4w1(this.origin, parentModelMatrix, this.origin);
-            }
-        }
+        // Transform origin into absolute world-space.
+        this.getAbsOrigin(this.localOrigin);
 
         this.parentEntity = parentEntity;
 
-        if (this.parentEntity !== null) {
-            const parentModelMatrix = this.parentEntity.updateModelMatrix();
-            if (parentModelMatrix !== null) {
-                // Transform origin from world-space into entity space.
-                mat4.invert(scratchMat4a, parentModelMatrix);
-                transformVec3Mat4w1(this.origin, scratchMat4a, this.origin);
-            }
-        }
+        // Transform origin from world-space into entity space.
+        this.setAbsOrigin(this.localOrigin);
     }
 
     public spawn(entitySystem: EntitySystem): void {
@@ -190,7 +226,7 @@ export class BaseEntity {
         if (modelMatrix === null)
             return null;
 
-        computeModelMatrixPosQAngle(modelMatrix, this.origin, this.angles);
+        computeModelMatrixPosQAngle(modelMatrix, this.localOrigin, this.angles);
 
         if (this.parentEntity !== null) {
             const parentModelMatrix = this.parentEntity.updateModelMatrix();
@@ -226,13 +262,13 @@ export class sky_camera extends BaseEntity {
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
-        const leaf = assertExists(bspRenderer.bsp.findLeafForPoint(this.origin));
+        const leaf = assertExists(bspRenderer.bsp.findLeafForPoint(this.localOrigin));
         this.area = leaf.area;
         this.scale = Number(entity.scale);
         computeModelMatrixSRT(this.modelMatrix, this.scale, this.scale, this.scale, 0, 0, 0,
-            this.scale * -this.origin[0],
-            this.scale * -this.origin[1],
-            this.scale * -this.origin[2]);
+            this.scale * -this.localOrigin[0],
+            this.scale * -this.localOrigin[1],
+            this.scale * -this.localOrigin[2]);
     }
 }
 
@@ -286,7 +322,7 @@ abstract class BaseToggle extends BaseEntity {
 
     protected moveToTargetPos(entitySystem: EntitySystem, positionTarget: ReadonlyVec3, speedInSeconds: number): void {
         vec3.copy(this.positionTarget, positionTarget);
-        vec3.sub(this.velocityPerSecond, this.positionTarget, this.origin);
+        vec3.sub(this.velocityPerSecond, this.positionTarget, this.localOrigin);
         this.timeLeftInSeconds = vec3.length(this.velocityPerSecond) / speedInSeconds;
         if (this.timeLeftInSeconds <= 0.0)
             this.moveDone(entitySystem);
@@ -301,12 +337,12 @@ abstract class BaseToggle extends BaseEntity {
 
         if (this.timeLeftInSeconds > 0.0) {
             // Apply the velocity.
-            vec3.scaleAndAdd(this.origin, this.origin, this.velocityPerSecond, deltaTimeInSeconds);
+            vec3.scaleAndAdd(this.localOrigin, this.localOrigin, this.velocityPerSecond, deltaTimeInSeconds);
             this.timeLeftInSeconds -= deltaTimeInSeconds;
 
             // If we've reached the target position, then we're done.
             if (this.timeLeftInSeconds <= 0.0) {
-                vec3.copy(this.origin, this.positionTarget);
+                vec3.copy(this.localOrigin, this.positionTarget);
                 vec3.zero(this.velocityPerSecond);
                 this.timeLeftInSeconds = 0.0;
                 this.moveDone(entitySystem);
@@ -331,16 +367,20 @@ class func_movelinear extends BaseToggle {
         this.output_onFullyClosed.parse(this.entity.onfullyclosed);
         this.registerInput('open', this.input_open.bind(this));
         this.registerInput('close', this.input_close.bind(this));
+    }
+
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
 
         angleVec(scratchVec3a, this.moveDir);
-        vec3.scaleAndAdd(this.positionOpened, this.origin, scratchVec3a, -this.moveDistance * this.startPosition);
-        vec3.scaleAndAdd(this.positionClosed, this.origin, scratchVec3a,  this.moveDistance);
+        vec3.scaleAndAdd(this.positionOpened, this.localOrigin, scratchVec3a, -this.moveDistance * this.startPosition);
+        vec3.scaleAndAdd(this.positionClosed, this.localOrigin, scratchVec3a,  this.moveDistance);
     }
 
     protected moveDone(entitySystem: EntitySystem): void {
-        if (vec3.distance(this.origin, this.positionClosed) < MathConstants.EPSILON)
+        if (vec3.distance(this.localOrigin, this.positionClosed) < MathConstants.EPSILON)
             this.output_onFullyClosed.fire(entitySystem);
-        if (vec3.distance(this.origin, this.positionOpened) < MathConstants.EPSILON)
+        if (vec3.distance(this.localOrigin, this.positionOpened) < MathConstants.EPSILON)
             this.output_onFullyOpen.fire(entitySystem);
     }
 
@@ -384,9 +424,13 @@ class func_door extends BaseToggle {
             this.toggleState = ToggleState.Top;
         else
             this.toggleState = ToggleState.Bottom;
+    }
 
-        vec3.copy(this.positionOpened, this.origin);
-        vec3.copy(this.positionClosed, this.origin);
+    public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
+        vec3.copy(this.positionOpened, this.localOrigin);
+        vec3.copy(this.positionClosed, this.localOrigin);
 
         this.updateExtents();
     }
@@ -398,7 +442,7 @@ class func_door extends BaseToggle {
             this.modelStudio.modelData.bbox.extents(this.modelExtents);
 
         angleVec(scratchVec3a, this.moveDir);
-        const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents));
+        const moveDistance = Math.abs(vec3.dot(scratchVec3a, this.modelExtents) * 2.0);
         vec3.scaleAndAdd(this.positionOpened, this.positionClosed, scratchVec3a, moveDistance);
     }
 
@@ -473,7 +517,78 @@ class logic_auto extends BaseEntity {
     }
 
     public spawn(entitySystem: EntitySystem): void {
+        super.spawn(entitySystem);
+
         this.output_onMapSpawn.fire(entitySystem);
+    }
+}
+
+class math_counter extends BaseEntity {
+    public static classname = `math_counter`;
+
+    private min = 0;
+    private max = 0;
+    private value = 0;
+
+    private minEdgeState: boolean = false;
+    private maxEdgeState: boolean = false;
+
+    private output_outValue = new EntityOutput();
+    private output_onHitMin = new EntityOutput();
+    private output_onHitMax = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_outValue.parse(this.entity.outvalue);
+        this.output_onHitMin.parse(this.entity.onhitmin);
+        this.output_onHitMax.parse(this.entity.onhitmax);
+        this.registerInput('add', this.input_add.bind(this));
+        this.registerInput('subtract', this.input_subtract.bind(this));
+
+        this.value = Number(fallbackUndefined(this.entity.startvalue, '0'));
+        this.min = Number(fallbackUndefined(this.entity.min, '0'));
+        this.max = Number(fallbackUndefined(this.entity.max, '0'));
+    }
+
+    private input_add(entitySystem: EntitySystem, value: string): void {
+        const num = Number(value);
+        this.updateValue(entitySystem, this.value + num);
+    }
+
+    private input_subtract(entitySystem: EntitySystem, value: string): void {
+        const num = Number(value);
+        this.updateValue(entitySystem, this.value - num);
+    }
+
+    private updateValue(entitySystem: EntitySystem, v: number): void {
+        this.value = v;
+
+        if (this.max !== 0) {
+            if (this.value >= this.max) {
+                this.value = this.max;
+                if (!this.maxEdgeState) {
+                    this.output_onHitMax.fire(entitySystem);
+                    this.maxEdgeState = true;
+                }
+            } else {
+                this.maxEdgeState = false;
+            }
+        }
+
+        if (this.min !== 0) {
+            if (this.value <= this.min) {
+                this.value = this.min;
+                if (!this.minEdgeState) {
+                    this.output_onHitMin.fire(entitySystem);
+                    this.minEdgeState = true;
+                }
+            } else {
+                this.minEdgeState = false;
+            }
+        }
+
+        this.output_outValue.fire(entitySystem);
     }
 }
 
@@ -494,18 +609,54 @@ class logic_relay extends BaseEntity {
     }
 }
 
+class logic_timer extends BaseEntity {
+    public static classname = `logic_timer`;
+
+    private refiretime: number = 0;
+    private nextFireTime: number = 0;
+
+    private output_onTimer = new EntityOutput();
+
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.output_onTimer.parse(this.entity.ontimer);
+        this.refiretime = Number(fallbackUndefined(this.entity.refiretime, '0'));
+    }
+
+    private reset(entitySystem: EntitySystem): void {
+        this.nextFireTime = entitySystem.currentTime + this.refiretime;
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (!this.enabled)
+            return;
+
+        if (entitySystem.currentTime >= this.nextFireTime) {
+            this.output_onTimer.fire(entitySystem);
+            this.reset(entitySystem);
+        }
+    }
+}
+
 class trigger_multiple extends BaseEntity {
     public static classname = `trigger_multiple`;
 
-    private output_onTrigger = new EntityOutput();
-    private output_onEndTouchAll = new EntityOutput();
-
     private isPlayerTouching = false;
+
+    private output_onTrigger = new EntityOutput();
+    private output_onStartTouch = new EntityOutput();
+    private output_onEndTouch = new EntityOutput();
+    private output_onEndTouchAll = new EntityOutput();
 
     constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.output_onTrigger.parse(this.entity.ontrigger);
+        this.output_onStartTouch.parse(this.entity.onstarttouch);
+        this.output_onEndTouch.parse(this.entity.onendtouch);
         this.output_onEndTouchAll.parse(this.entity.onendtouchall);
     }
 
@@ -516,6 +667,16 @@ class trigger_multiple extends BaseEntity {
             return this.modelStudio.modelData.bbox;
         else
             return null;
+    }
+
+    protected onTouch(entitySystem: EntitySystem): void {
+        this.output_onTrigger.fire(entitySystem);
+        this.output_onStartTouch.fire(entitySystem);
+    }
+
+    protected onUnTouch(entitySystem: EntitySystem): void {
+        this.output_onEndTouch.fire(entitySystem);
+        this.output_onEndTouchAll.fire(entitySystem);
     }
 
     public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
@@ -534,20 +695,31 @@ class trigger_multiple extends BaseEntity {
             if (this.isPlayerTouching !== isPlayerTouching) {
                 this.isPlayerTouching = isPlayerTouching;
 
-                if (this.isPlayerTouching)
-                    this.output_onTrigger.fire(entitySystem);
-                else
-                    this.output_onEndTouchAll.fire(entitySystem);
+                if (this.enabled) {
+                    if (this.isPlayerTouching)
+                        this.onTouch(entitySystem);
+                    else
+                        this.onUnTouch(entitySystem);
+                }
             }
 
             if (renderContext.showTriggerDebug) {
-                const color = isPlayerTouching ? Green : Magenta;
+                const color = this.enabled ? (isPlayerTouching ? Green : Magenta) : Cyan;
                 drawWorldSpaceAABB(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, aabb, modelMatrix, color);
 
                 getMatrixTranslation(scratchVec3a, modelMatrix);
                 drawWorldSpaceText(getDebugOverlayCanvas2D(), renderContext.currentView.clipFromWorldMatrix, scratchVec3a, this.entity.targetname, 0, color, { align: 'center' });
             }
         }
+    }
+}
+
+class trigger_once extends trigger_multiple {
+    public static classname = `trigger_once`;
+
+    protected onUnTouch(entitySystem: EntitySystem): void {
+        super.onUnTouch(entitySystem);
+        this.remove();
     }
 }
 
@@ -558,6 +730,7 @@ class env_texturetoggle extends BaseEntity {
         super(entitySystem, renderContext, bspRenderer, entity);
 
         this.registerInput('settextureindex', this.input_settextureindex.bind(this));
+        this.registerInput('incrementtextureindex', this.input_incrementtextureindex.bind(this));
     }
 
     private input_settextureindex(entitySystem: EntitySystem, value: string): void {
@@ -565,12 +738,104 @@ class env_texturetoggle extends BaseEntity {
         if (Number.isNaN(valueNum))
             return;
 
-        const target = entitySystem.findEntityByTargetName(this.entity.target);
+        for (let i = 0; i < entitySystem.entities.length; i++) {
+            const entity = entitySystem.entities[i];
+            if (!entitySystem.entityMatchesTargetName(entity, this.entity.target))
+                continue;
+
+            const materialParams = entity.materialParams;
+            if (materialParams !== null)
+                materialParams.textureFrameIndex = valueNum;
+        }
+    }
+
+    private input_incrementtextureindex(entitySystem: EntitySystem): void {
+        for (let i = 0; i < entitySystem.entities.length; i++) {
+            const entity = entitySystem.entities[i];
+            if (!entitySystem.entityMatchesTargetName(entity, this.entity.target))
+                continue;
+
+            const materialParams = entity.materialParams;
+            if (materialParams !== null)
+                materialParams.textureFrameIndex++;
+        }
+    }
+}
+
+function findMaterialOnEntity(entity: BaseEntity, materialName: string): BaseMaterial | null {
+    if (entity.modelBSP !== null)
+        return entity.modelBSP.findMaterial(materialName);
+    // TODO(jstpierre): modelStudio? Is it possible?
+    return null;
+}
+
+class material_modify_control extends BaseEntity {
+    public static classname = `material_modify_control`;
+
+    private materialname: string;
+    private materialvar: ParameterReference;
+    private value: number | null = null;
+
+    private lerpValid = false;
+    private lerpStartValue = -1;
+    private lerpEndValue = -1;
+    private lerpStartTime = -1;
+    private lerpEndTime = -1;
+    constructor(entitySystem: EntitySystem, renderContext: SourceRenderContext, bspRenderer: BSPRenderer, entity: BSPEntity) {
+        super(entitySystem, renderContext, bspRenderer, entity);
+
+        this.materialname = fallbackUndefined(this.entity.materialname, '').toLowerCase();
+        this.materialvar = new ParameterReference(this.entity.materialvar);
+
+        this.registerInput('setmaterialvar', this.input_setmaterialvar.bind(this));
+        this.registerInput('startfloatlerp', this.input_startfloatlerp.bind(this));
+    }
+
+    private input_setmaterialvar(entitySystem: EntitySystem, value: string): void {
+        this.value = Number(value);
+    }
+
+    private input_startfloatlerp(entitySystem: EntitySystem, value: string): void {
+        const [startValue, endValue, duration, loop] = value.split(' ');
+
+        this.lerpValid = true;
+        this.lerpStartValue = Number(startValue);
+        this.lerpEndValue = Number(endValue);
+        this.lerpStartTime = entitySystem.currentTime;
+        this.lerpEndTime = this.lerpStartTime + Number(duration);
+    }
+
+    private syncValue(): void {
+        if (this.value === null)
+            return;
+
+        const target = this.parentEntity;
         if (target === null)
             return;
 
-        if (target.materialParams !== null)
-            target.materialParams.textureFrameIndex = valueNum;
+        const materialInstance = findMaterialOnEntity(target, this.materialname);
+        if (materialInstance === null)
+            return;
+
+        paramSetNum(materialInstance.param, this.materialvar, this.value);
+        this.value = null;
+    }
+
+    public movement(entitySystem: EntitySystem, renderContext: SourceRenderContext): void {
+        super.movement(entitySystem, renderContext);
+
+        if (this.lerpValid) {
+            let time = invlerp(this.lerpStartTime, this.lerpEndTime, entitySystem.currentTime);
+
+            if (time > 1.0) {
+                time = 1.0;
+                this.lerpValid = false;
+            }
+
+            this.value = lerp(this.lerpStartValue, this.lerpEndValue, time);
+        }
+
+        this.syncValue();
     }
 }
 
@@ -579,9 +844,17 @@ interface EntityFactory {
     classname: string;
 }
 
+interface QueuedOutputEvent {
+    triggerTime: number;
+    action: EntityOutputAction;
+    value: string;
+}
+
 export class EntitySystem {
     public classname = new Map<string, EntityFactory>();
     public entities: BaseEntity[] = [];
+    public currentTime = 0;
+    private outputQueue: QueuedOutputEvent[] = [];
 
     constructor() {
         this.registerDefaultFactories();
@@ -594,27 +867,32 @@ export class EntitySystem {
         this.registerFactory(func_door);
         this.registerFactory(logic_auto);
         this.registerFactory(logic_relay);
+        this.registerFactory(logic_timer);
+        this.registerFactory(math_counter);
         this.registerFactory(trigger_multiple);
+        this.registerFactory(trigger_once);
         this.registerFactory(env_texturetoggle);
+        this.registerFactory(material_modify_control);
     }
 
     public registerFactory(factory: EntityFactory): void {
         this.classname.set(factory.classname, factory);
     }
 
-    public fireEntityOutputAction(action: EntityOutputAction, value: string): void {
+    public entityMatchesTargetName(entity: BaseEntity, targetName: string): boolean {
+        if (entity.targetName === targetName)
+            return true;
+
         // TODO(jstpierre): Support multicast / wildcard target names
-        const target = this.findEntityByTargetName(action.targetName);
-        if (target === null)
-            return;
+        return false;
+    }
 
-        if (action.delay !== 0)
-            return;
-
+    public queueEntityOutputAction(action: EntityOutputAction, value: string): void {
         if (action.parameterOverride !== '')
             value = action.parameterOverride;
 
-        target.fireInput(this, action.inputName, value);
+        const triggerTime = this.currentTime + action.delay;
+        this.outputQueue.push({ action, triggerTime, value });
     }
 
     public findEntityByTargetName(targetName: string): BaseEntity | null {
@@ -624,9 +902,34 @@ export class EntitySystem {
         return null;
     }
 
+    private fireEntityOutputAction(event: QueuedOutputEvent): boolean {
+        if (this.currentTime < event.triggerTime)
+            return false;
+
+        for (let i = 0; i < this.entities.length; i++) {
+            const target = this.entities[i];
+            if (!this.entityMatchesTargetName(target, event.action.targetName))
+                continue;
+            target.fireInput(this, event.action.inputName, event.value);
+        }
+
+        return true;
+    }
+
+    private processOutputQueue(): void {
+        for (let i = 0; i < this.outputQueue.length; i++)
+            if (this.fireEntityOutputAction(this.outputQueue[i]))
+                this.outputQueue.splice(i--, 1);
+    }
+
     public movement(renderContext: SourceRenderContext): void {
+        this.processOutputQueue();
+
         for (let i = 0; i < this.entities.length; i++)
-            this.entities[i].movement(this, renderContext);
+            if (this.entities[i].alive)
+                this.entities[i].movement(this, renderContext);
+
+        this.currentTime += renderContext.globalDeltaTime;
     }
 
     private spawn(): void {

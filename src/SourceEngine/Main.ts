@@ -369,6 +369,16 @@ export class BSPModelRenderer {
                 this.surfaces[i].materialInstance!.entityParams = entity.materialParams;
     }
 
+    public findMaterial(texName: string): BaseMaterial | null {
+        for (let i = 0; i < this.surfaces.length; i++) {
+            const surface = this.surfaces[i];
+            if (surface.surface.texName === texName)
+                return surface.materialInstance;
+        }
+
+        return null;
+    }
+
     private async bindMaterials(renderContext: SourceRenderContext) {
         // Gather all materials.
         const texNames = new Set<string>();

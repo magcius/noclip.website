@@ -97,8 +97,6 @@ function scaleBiasSet(dst: vec4, scale: number, x: number = 0.0, y: number = 0.0
     vec4.set(dst, scale, scale, x, y);
 }
 
-type ParameterMap = { [k: string]: Parameter };
-
 interface Parameter {
     parse(S: string): void;
     index(i: number): Parameter;
@@ -2494,7 +2492,7 @@ export class SurfaceLightmap {
 //#endregion
 
 //#region Material Proxy System
-class ParameterReference {
+export class ParameterReference {
     public name: string | null = null;
     public index: number = -1;
     public value: Parameter | null = null;
@@ -2527,15 +2525,17 @@ function paramLookupOptional<T extends Parameter>(map: ParameterMap, ref: Parame
     }
 }
 
+type ParameterMap = { [k: string]: Parameter };
+
 function paramLookup<T extends Parameter>(map: ParameterMap, ref: ParameterReference): T {
     return assertExists(paramLookupOptional<T>(map, ref));
 }
 
-function paramGetNum(map: ParameterMap, ref: ParameterReference): number {
+export function paramGetNum(map: ParameterMap, ref: ParameterReference): number {
     return paramLookup<ParameterNumber>(map, ref).value;
 }
 
-function paramSetNum(map: ParameterMap, ref: ParameterReference, v: number): void {
+export function paramSetNum(map: ParameterMap, ref: ParameterReference, v: number): void {
     paramLookup<ParameterNumber>(map, ref).value = v;
 }
 

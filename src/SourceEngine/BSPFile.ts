@@ -636,7 +636,7 @@ export class BSPFile {
             const height = texdata.getUint32(texdataOffs + 0x14, true);
             const view_width = texdata.getUint32(texdataOffs + 0x18, true);
             const view_height = texdata.getUint32(texdataOffs + 0x1C, true);
-            const texName = readString(texstrData, texstrTable[nameTableStringID]);
+            const texName = readString(texstrData, texstrTable[nameTableStringID]).toLowerCase();
             texinfoa.push({ textureMapping, lightmapMapping, flags, width, height, texName });
         }
 
