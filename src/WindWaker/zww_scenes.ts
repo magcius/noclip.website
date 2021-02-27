@@ -625,7 +625,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         return -1;
     }
 
-    private prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
+    private executeDrawAll(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const template = this.renderHelper.pushTemplateRenderInst();
         const renderInstManager = this.renderHelper.renderInstManager;
 
@@ -705,8 +705,6 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         }
 
         this.renderHelper.renderInstManager.popTemplateRenderInst();
-        this.renderHelper.prepareToRender(device);
-
         this.globals.renderHacks.renderHacksChanged = false;
     }
 
@@ -722,6 +720,8 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const dlst = this.globals.dlst;
         dlst.peekZ.beginFrame(device);
+
+        this.executeDrawAll(device, viewerInput);
 
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
@@ -785,7 +785,7 @@ export class WindWakerRenderer implements Viewer.SceneGfx {
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
-        this.prepareToRender(device, viewerInput);
+        this.renderHelper.prepareToRender(device);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
