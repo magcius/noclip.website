@@ -763,13 +763,6 @@ class Main {
 
         const sceneDescId = this._getCurrentSceneDescId()!;
 
-        if (typeof gtag !== 'undefined') {
-            gtag("event", "loadScene", {
-                'event_category': "Scenes",
-                'event_label': sceneDescId,
-            });
-        }
-
         Sentry.addBreadcrumb({
             category: 'loadScene',
             message: sceneDescId,
@@ -827,9 +820,6 @@ class Main {
         return this.viewer.scene;
     }
 }
-
-// Google Analytics
-declare var gtag: (command: string, eventName: string, eventParameters: { [key: string]: string }) => void;
 
 // Declare a "main" object for easy access.
 declare global {
