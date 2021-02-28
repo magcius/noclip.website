@@ -1,6 +1,6 @@
 
 import * as rw from 'librw';
-import * as meta from './scenes.json';
+import meta from './scenes.json';
 import { SceneDesc, SceneGroup, SceneGfx } from '../viewer';
 import { initializeBasis, BasisFile, BasisFormat } from '../vendor/basis_universal';
 import { inflate } from 'pako';

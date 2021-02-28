@@ -308,7 +308,7 @@ export class Viewer {
     }
 }
 
-export { SceneDesc, SceneGroup };
+export type { SceneDesc, SceneGroup };
 
 interface ViewerOut {
     viewer: Viewer;

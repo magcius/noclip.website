@@ -21,7 +21,7 @@
         ],
         "sourceMap": true,
         "moduleResolution": "node",
-        "module": "commonjs",
+        "module": "esNext",
         "types": [
             "gl-matrix",
             "pako",
@@ -37,6 +37,7 @@
     "exclude": [
         "**/assembly/*.ts",
         "**/worker/*.ts",
-        "**/tools/*.ts"
+        "**/tools/*.ts",
+        "*.wasm"
     ]
 }
