@@ -27,13 +27,36 @@ fn halfblend(a_: u8, b_: u8) -> u8 {
     return tmp as u8;
 }
 
+fn decode_rgb5a3_to_rgba8(dst: &mut[u8], p: u16) {
+    if (p & 0x8000) != 0 {
+        // RGB5
+        dst[0] = expand_n_to_8(5, ((p >> 10) & 0x1F) as u8);
+        dst[1] = expand_n_to_8(5, ((p >>  5) & 0x1F) as u8);
+        dst[2] = expand_n_to_8(5, ((p >>  0) & 0x1F) as u8);
+        dst[3] = 0xFF;
+    } else {
+        // A3RGB4
+        dst[0] = expand_n_to_8(4, ((p >> 11) & 0x0F) as u8);
+        dst[1] = expand_n_to_8(4, ((p >>  5) & 0x0F) as u8);
+        dst[2] = expand_n_to_8(4, ((p >>  0) & 0x0F) as u8);
+        dst[3] = expand_n_to_8(3, ((p >> 12) & 0x07) as u8);
+    }
+}
+
+fn decode_rgb565_to_rgba8(dst: &mut[u8], p: u16) {
+    dst[0] = expand_n_to_8(5, ((p >> 11) & 0x1F) as u8);
+    dst[1] = expand_n_to_8(6, ((p >>  5) & 0x3F) as u8);
+    dst[2] = expand_n_to_8(5, ((p >>  0) & 0x1F) as u8);
+    dst[3] = 0xFF;
+}
+
 trait TiledDecoder {
-    fn decode_single_pixel(src: &[u8], src_offs: &mut usize, dst: &mut Vec<u8>, dst_offs: usize, write: bool);
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool);
     fn block_width() -> usize;
     fn block_height() -> usize;
 }
 
-fn decode_tiled<T: TiledDecoder>(src: &[u8], w: usize, h: usize) -> Vec<u8> {
+fn decode_tiled<T: TiledDecoder>(t: T, src: &[u8], w: usize, h: usize) -> Vec<u8> {
     let mut src_offs: usize = 0;
     let mut dst = vec![0x00; w*h*4];
 
@@ -46,7 +69,7 @@ fn decode_tiled<T: TiledDecoder>(src: &[u8], w: usize, h: usize) -> Vec<u8> {
                     let dst_px = (yy + y) * w + (xx + x);
                     let dst_offs = dst_px * 4;
                     let write = xx + x < w && yy + y < h;
-                    T::decode_single_pixel(src, &mut src_offs, &mut dst, dst_offs, write);
+                    t.decode_single_pixel(src, &mut src_offs, &mut dst[dst_offs..dst_offs + 4], write);
                 }
             }
         }
@@ -55,17 +78,17 @@ fn decode_tiled<T: TiledDecoder>(src: &[u8], w: usize, h: usize) -> Vec<u8> {
     dst
 }
 
-enum TiledDecoderI4 {}
+struct TiledDecoderI4 {}
 impl TiledDecoder for TiledDecoderI4 {
-    fn decode_single_pixel(src: &[u8], src_offs: &mut usize, dst: &mut Vec<u8>, dst_offs: usize, write: bool) {
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
         if write {
             let ii = src[*src_offs >> 1];
             let i4 = ii >> (if (*src_offs & 1) != 0 { 0 } else { 4 }) & 0x0F;
             let i = expand_n_to_8(4, i4);
-            dst[dst_offs + 0] = i;
-            dst[dst_offs + 1] = i;
-            dst[dst_offs + 2] = i;
-            dst[dst_offs + 3] = i;
+            dst[0] = i;
+            dst[1] = i;
+            dst[2] = i;
+            dst[3] = i;
         }
 
         *src_offs += 1;
@@ -75,15 +98,15 @@ impl TiledDecoder for TiledDecoderI4 {
     fn block_height() -> usize { 8 }
 }
 
-enum TiledDecoderI8 {}
+struct TiledDecoderI8 {}
 impl TiledDecoder for TiledDecoderI8 {
-    fn decode_single_pixel(src: &[u8], src_offs: &mut usize, dst: &mut Vec<u8>, dst_offs: usize, write: bool) {
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
         if write {
             let i = src[*src_offs];
-            dst[dst_offs + 0] = i;
-            dst[dst_offs + 1] = i;
-            dst[dst_offs + 2] = i;
-            dst[dst_offs + 3] = i;
+            dst[0] = i;
+            dst[1] = i;
+            dst[2] = i;
+            dst[3] = i;
         }
 
         *src_offs += 1;
@@ -93,17 +116,17 @@ impl TiledDecoder for TiledDecoderI8 {
     fn block_height() -> usize { 4 }
 }
 
-enum TiledDecoderIA4 {}
+struct TiledDecoderIA4 {}
 impl TiledDecoder for TiledDecoderIA4 {
-    fn decode_single_pixel(src: &[u8], src_offs: &mut usize, dst: &mut Vec<u8>, dst_offs: usize, write: bool) {
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
         if write {
             let ia = src[*src_offs];
             let a = expand_n_to_8(4, ia >> 4);
             let i = expand_n_to_8(4, ia & 0x0F);
-            dst[dst_offs + 0] = i;
-            dst[dst_offs + 1] = i;
-            dst[dst_offs + 2] = i;
-            dst[dst_offs + 3] = a;
+            dst[0] = i;
+            dst[1] = i;
+            dst[2] = i;
+            dst[3] = a;
         }
 
         *src_offs += 1;
@@ -113,16 +136,16 @@ impl TiledDecoder for TiledDecoderIA4 {
     fn block_height() -> usize { 4 }
 }
 
-enum TiledDecoderIA8 {}
+struct TiledDecoderIA8 {}
 impl TiledDecoder for TiledDecoderIA8 {
-    fn decode_single_pixel(src: &[u8], src_offs: &mut usize, dst: &mut Vec<u8>, dst_offs: usize, write: bool) {
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
         if write {
             let a = src[*src_offs + 0];
             let i = src[*src_offs + 1];
-            dst[dst_offs + 0] = i;
-            dst[dst_offs + 1] = i;
-            dst[dst_offs + 2] = i;
-            dst[dst_offs + 3] = a;
+            dst[0] = i;
+            dst[1] = i;
+            dst[2] = i;
+            dst[3] = a;
         }
 
         *src_offs += 2;
@@ -132,15 +155,12 @@ impl TiledDecoder for TiledDecoderIA8 {
     fn block_height() -> usize { 4 }
 }
 
-enum TiledDecoderRGB565 {}
+struct TiledDecoderRGB565 {}
 impl TiledDecoder for TiledDecoderRGB565 {
-    fn decode_single_pixel(src: &[u8], src_offs: &mut usize, dst: &mut Vec<u8>, dst_offs: usize, write: bool) {
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
         if write {
             let p = get_u16_be(src, *src_offs);
-            dst[dst_offs + 0] = expand_n_to_8(5, ((p >> 11) & 0x1F) as u8);
-            dst[dst_offs + 1] = expand_n_to_8(6, ((p >>  5) & 0x3F) as u8);
-            dst[dst_offs + 2] = expand_n_to_8(5, ((p >>  0) & 0x1F) as u8);
-            dst[dst_offs + 3] = 0xFF;
+            decode_rgb565_to_rgba8(dst, p);
         }
 
         *src_offs += 2;
@@ -150,24 +170,12 @@ impl TiledDecoder for TiledDecoderRGB565 {
     fn block_height() -> usize { 4 }
 }
 
-enum TiledDecoderRGB5A3 {}
+struct TiledDecoderRGB5A3 {}
 impl TiledDecoder for TiledDecoderRGB5A3 {
-    fn decode_single_pixel(src: &[u8], src_offs: &mut usize, dst: &mut Vec<u8>, dst_offs: usize, write: bool) {
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
         if write {
             let p = get_u16_be(src, *src_offs);
-            if (p & 0x8000) != 0 {
-                // RGB5
-                dst[dst_offs + 0] = expand_n_to_8(5, ((p >> 10) & 0x1F) as u8);
-                dst[dst_offs + 1] = expand_n_to_8(5, ((p >>  5) & 0x1F) as u8);
-                dst[dst_offs + 2] = expand_n_to_8(5, ((p >>  0) & 0x1F) as u8);
-                dst[dst_offs + 3] = 0xFF;
-            } else {
-                // A3RGB4
-                dst[dst_offs + 0] = expand_n_to_8(4, ((p >> 11) & 0x0F) as u8);
-                dst[dst_offs + 1] = expand_n_to_8(4, ((p >>  5) & 0x0F) as u8);
-                dst[dst_offs + 2] = expand_n_to_8(4, ((p >>  0) & 0x0F) as u8);
-                dst[dst_offs + 3] = expand_n_to_8(3, ((p >> 12) & 0x07) as u8);
-            }
+            decode_rgb5a3_to_rgba8(dst, p);
         }
 
         *src_offs += 2;
@@ -298,6 +306,13 @@ fn decode_cmpr(src: &[u8], w: usize, h: usize) -> Vec<u8> {
 }
 
 #[wasm_bindgen]
+pub enum PaletteFormat {
+    IA8,
+    RGB565,
+    RGB5A3,
+}
+
+#[wasm_bindgen]
 pub enum PixelFormat {
     I4,
     I8,
@@ -307,18 +322,130 @@ pub enum PixelFormat {
     RGB5A3,
     RGBA8,
     CMPR,
+    C4,
+    C8,
+    C14X2,
+}
+
+fn decode_palette(palette_fmt: PaletteFormat, palette_src: &[u8]) -> Vec<u8> {
+    let mut dst = vec![0x00; palette_src.len()];
+
+    match palette_fmt {
+        PaletteFormat::IA8 => {
+            for i in 0..dst.len() {
+                let aa = palette_src[i * 2 + 0];
+                let ii = palette_src[i * 2 + 1];
+                dst[i * 4 + 0] = ii;
+                dst[i * 4 + 1] = ii;
+                dst[i * 4 + 2] = ii;
+                dst[i * 4 + 3] = aa;
+            }
+        },
+
+        PaletteFormat::RGB565 => {
+            for i in 0..dst.len() {
+                let p = get_u16_be(palette_src, i * 2);
+                decode_rgb565_to_rgba8(&mut dst[i*4+0..i*4+4], p);
+            }
+        },
+
+        PaletteFormat::RGB5A3 => {
+            for i in 0..dst.len() {
+                let p = get_u16_be(palette_src, i * 2);
+                decode_rgb5a3_to_rgba8(&mut dst[i*4+0..i*4+4], p);
+            }
+        },
+    }
+
+    dst
+}
+
+struct TiledDecoderC4<'a> {
+    palette: &'a [u8],
+}
+
+impl TiledDecoder for TiledDecoderC4<'_> {
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
+        if write {
+            let ii = src[*src_offs >> 1];
+            let idx = (ii >> (if (*src_offs & 1) != 0 { 0 } else { 4 }) & 0x0F) as usize;
+            dst[0] = self.palette[idx * 4 + 0];
+            dst[1] = self.palette[idx * 4 + 1];
+            dst[2] = self.palette[idx * 4 + 2];
+            dst[3] = self.palette[idx * 4 + 3];
+        }
+
+        *src_offs += 1;
+    }
+
+    fn block_width() -> usize { 8 }
+    fn block_height() -> usize { 8 }
+}
+
+struct TiledDecoderC8<'a> {
+    palette: &'a [u8],
+}
+
+impl TiledDecoder for TiledDecoderC8<'_> {
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
+        if write {
+            let idx = src[*src_offs] as usize;
+            dst[0] = self.palette[idx * 4 + 0];
+            dst[1] = self.palette[idx * 4 + 1];
+            dst[2] = self.palette[idx * 4 + 2];
+            dst[3] = self.palette[idx * 4 + 3];
+        }
+
+        *src_offs += 1;
+    }
+
+    fn block_width() -> usize { 8 }
+    fn block_height() -> usize { 4 }
+}
+
+struct TiledDecoderC14X2<'a> {
+    palette: &'a [u8],
+}
+
+impl TiledDecoder for TiledDecoderC14X2<'_> {
+    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
+        if write {
+            let idx = (get_u16_be(src, *src_offs) as usize) & 0x3FFF;
+            dst[0] = self.palette[idx * 4 + 0];
+            dst[1] = self.palette[idx * 4 + 1];
+            dst[2] = self.palette[idx * 4 + 2];
+            dst[3] = self.palette[idx * 4 + 3];
+        }
+
+        *src_offs += 1;
+    }
+
+    fn block_width() -> usize { 4 }
+    fn block_height() -> usize { 4 }
 }
 
 #[wasm_bindgen]
-pub fn decode_texture(fmt: PixelFormat, src: &[u8], w: usize, h: usize) -> Vec<u8> {
+pub fn decode_texture(fmt: PixelFormat, palette_fmt: Option<PaletteFormat>, src: &[u8], palette_src: Option<Box<[u8]>>, w: usize, h: usize) -> Vec<u8> {
     match fmt {
-        PixelFormat::I4 => decode_tiled::<TiledDecoderI4>(src, w, h),
-        PixelFormat::I8 => decode_tiled::<TiledDecoderI8>(src, w, h),
-        PixelFormat::IA4 => decode_tiled::<TiledDecoderIA4>(src, w, h),
-        PixelFormat::IA8 => decode_tiled::<TiledDecoderIA8>(src, w, h),
-        PixelFormat::RGB565 => decode_tiled::<TiledDecoderRGB565>(src, w, h),
-        PixelFormat::RGB5A3 => decode_tiled::<TiledDecoderRGB5A3>(src, w, h),
+        PixelFormat::I4 => decode_tiled(TiledDecoderI4{}, src, w, h),
+        PixelFormat::I8 => decode_tiled(TiledDecoderI8{}, src, w, h),
+        PixelFormat::IA4 => decode_tiled(TiledDecoderIA4{}, src, w, h),
+        PixelFormat::IA8 => decode_tiled(TiledDecoderIA8{}, src, w, h),
+        PixelFormat::RGB565 => decode_tiled(TiledDecoderRGB565{}, src, w, h),
+        PixelFormat::RGB5A3 => decode_tiled(TiledDecoderRGB5A3{}, src, w, h),
         PixelFormat::RGBA8 => decode_rgba8(src, w, h),
         PixelFormat::CMPR => decode_cmpr(src, w, h),
+        PixelFormat::C4 => {
+            let palette = decode_palette(palette_fmt.unwrap(), &palette_src.unwrap());
+            decode_tiled(TiledDecoderC4{ palette: &palette }, src, w, h)
+        },
+        PixelFormat::C8 => {
+            let palette = decode_palette(palette_fmt.unwrap(), &palette_src.unwrap());
+            decode_tiled(TiledDecoderC8{ palette: &palette }, src, w, h)
+        },
+        PixelFormat::C14X2 => {
+            let palette = decode_palette(palette_fmt.unwrap(), &palette_src.unwrap());
+            decode_tiled(TiledDecoderC14X2{ palette: &palette }, src, w, h)
+        },
     }
 }
