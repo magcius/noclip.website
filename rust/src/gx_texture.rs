@@ -5,7 +5,11 @@ use std::convert::TryInto;
 
 // http://www.mindcontrol.org/~hplus/graphics/expand-bits.html
 fn expand_n_to_8(v: u8, n: u8) -> u8 {
-    (n << (8 - v)) | (n >> (v*2 - 8))
+    match v {
+        3 => (n << (8 - 3)) | (n << (8 - 6)) | (n >> (9 - 8)),
+        v if (v >= 4) => (n << (8 - v)) | (n >> ((v*2) - 8)),
+        _ => unreachable!(),
+    }
 }
 
 fn get_u16_be(src: &[u8], i: usize) -> u16 {
@@ -51,13 +55,13 @@ fn decode_rgb565_to_rgba8(dst: &mut[u8], p: u16) {
 }
 
 trait TiledDecoder {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool);
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]);
     fn block_width() -> usize;
     fn block_height() -> usize;
 }
 
 fn decode_tiled<T: TiledDecoder>(t: T, src: &[u8], w: usize, h: usize) -> Vec<u8> {
-    let mut src_offs: usize = 0;
+    let mut idx: usize = 0;
     let mut dst = vec![0x00; w*h*4];
 
     let bw = T::block_width();
@@ -68,8 +72,10 @@ fn decode_tiled<T: TiledDecoder>(t: T, src: &[u8], w: usize, h: usize) -> Vec<u8
                 for x in 0..bw {
                     let dst_px = (yy + y) * w + (xx + x);
                     let dst_offs = dst_px * 4;
-                    let write = xx + x < w && yy + y < h;
-                    t.decode_single_pixel(src, &mut src_offs, &mut dst[dst_offs..dst_offs + 4], write);
+                    if xx + x < w && yy + y < h {
+                        t.decode_single_pixel(src, idx, &mut dst[dst_offs..dst_offs + 4]);
+                    }
+                    idx += 1;
                 }
             }
         }
@@ -80,18 +86,14 @@ fn decode_tiled<T: TiledDecoder>(t: T, src: &[u8], w: usize, h: usize) -> Vec<u8
 
 struct TiledDecoderI4 {}
 impl TiledDecoder for TiledDecoderI4 {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
-        if write {
-            let ii = src[*src_offs >> 1];
-            let i4 = ii >> (if (*src_offs & 1) != 0 { 0 } else { 4 }) & 0x0F;
-            let i = expand_n_to_8(4, i4);
-            dst[0] = i;
-            dst[1] = i;
-            dst[2] = i;
-            dst[3] = i;
-        }
-
-        *src_offs += 1;
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
+        let ii = src[idx >> 1];
+        let i4 = ii >> (if (idx & 1) != 0 { 0 } else { 4 }) & 0x0F;
+        let i = expand_n_to_8(4, i4);
+        dst[0] = i;
+        dst[1] = i;
+        dst[2] = i;
+        dst[3] = i;
     }
 
     fn block_width() -> usize { 8 }
@@ -100,16 +102,12 @@ impl TiledDecoder for TiledDecoderI4 {
 
 struct TiledDecoderI8 {}
 impl TiledDecoder for TiledDecoderI8 {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
-        if write {
-            let i = src[*src_offs];
-            dst[0] = i;
-            dst[1] = i;
-            dst[2] = i;
-            dst[3] = i;
-        }
-
-        *src_offs += 1;
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
+        let i = src[idx];
+        dst[0] = i;
+        dst[1] = i;
+        dst[2] = i;
+        dst[3] = i;
     }
 
     fn block_width() -> usize { 8 }
@@ -118,18 +116,14 @@ impl TiledDecoder for TiledDecoderI8 {
 
 struct TiledDecoderIA4 {}
 impl TiledDecoder for TiledDecoderIA4 {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
-        if write {
-            let ia = src[*src_offs];
-            let a = expand_n_to_8(4, ia >> 4);
-            let i = expand_n_to_8(4, ia & 0x0F);
-            dst[0] = i;
-            dst[1] = i;
-            dst[2] = i;
-            dst[3] = a;
-        }
-
-        *src_offs += 1;
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
+        let ia = src[idx];
+        let a = expand_n_to_8(4, ia >> 4);
+        let i = expand_n_to_8(4, ia & 0x0F);
+        dst[0] = i;
+        dst[1] = i;
+        dst[2] = i;
+        dst[3] = a;
     }
 
     fn block_width() -> usize { 8 }
@@ -138,17 +132,13 @@ impl TiledDecoder for TiledDecoderIA4 {
 
 struct TiledDecoderIA8 {}
 impl TiledDecoder for TiledDecoderIA8 {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
-        if write {
-            let a = src[*src_offs + 0];
-            let i = src[*src_offs + 1];
-            dst[0] = i;
-            dst[1] = i;
-            dst[2] = i;
-            dst[3] = a;
-        }
-
-        *src_offs += 2;
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
+        let a = src[idx * 2 + 0];
+        let i = src[idx * 2 + 1];
+        dst[0] = i;
+        dst[1] = i;
+        dst[2] = i;
+        dst[3] = a;
     }
 
     fn block_width() -> usize { 4 }
@@ -157,13 +147,9 @@ impl TiledDecoder for TiledDecoderIA8 {
 
 struct TiledDecoderRGB565 {}
 impl TiledDecoder for TiledDecoderRGB565 {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
-        if write {
-            let p = get_u16_be(src, *src_offs);
-            decode_rgb565_to_rgba8(dst, p);
-        }
-
-        *src_offs += 2;
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
+        let p = get_u16_be(src, idx * 2);
+        decode_rgb565_to_rgba8(dst, p);
     }
 
     fn block_width() -> usize { 4 }
@@ -172,13 +158,9 @@ impl TiledDecoder for TiledDecoderRGB565 {
 
 struct TiledDecoderRGB5A3 {}
 impl TiledDecoder for TiledDecoderRGB5A3 {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
-        if write {
-            let p = get_u16_be(src, *src_offs);
-            decode_rgb5a3_to_rgba8(dst, p);
-        }
-
-        *src_offs += 2;
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
+        let p = get_u16_be(src, idx * 2);
+        decode_rgb5a3_to_rgba8(dst, p);
     }
 
     fn block_width() -> usize { 4 }
@@ -365,17 +347,13 @@ struct TiledDecoderC4<'a> {
 }
 
 impl TiledDecoder for TiledDecoderC4<'_> {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
-        if write {
-            let ii = src[*src_offs >> 1];
-            let idx = (ii >> (if (*src_offs & 1) != 0 { 0 } else { 4 }) & 0x0F) as usize;
-            dst[0] = self.palette[idx * 4 + 0];
-            dst[1] = self.palette[idx * 4 + 1];
-            dst[2] = self.palette[idx * 4 + 2];
-            dst[3] = self.palette[idx * 4 + 3];
-        }
-
-        *src_offs += 1;
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
+        let ii = src[idx >> 1];
+        let idx = (ii >> (if (idx & 1) != 0 { 0 } else { 4 }) & 0x0F) as usize;
+        dst[0] = self.palette[idx * 4 + 0];
+        dst[1] = self.palette[idx * 4 + 1];
+        dst[2] = self.palette[idx * 4 + 2];
+        dst[3] = self.palette[idx * 4 + 3];
     }
 
     fn block_width() -> usize { 8 }
@@ -387,16 +365,12 @@ struct TiledDecoderC8<'a> {
 }
 
 impl TiledDecoder for TiledDecoderC8<'_> {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
-        if write {
-            let idx = src[*src_offs] as usize;
-            dst[0] = self.palette[idx * 4 + 0];
-            dst[1] = self.palette[idx * 4 + 1];
-            dst[2] = self.palette[idx * 4 + 2];
-            dst[3] = self.palette[idx * 4 + 3];
-        }
-
-        *src_offs += 1;
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
+        let idx = src[idx] as usize;
+        dst[0] = self.palette[idx * 4 + 0];
+        dst[1] = self.palette[idx * 4 + 1];
+        dst[2] = self.palette[idx * 4 + 2];
+        dst[3] = self.palette[idx * 4 + 3];
     }
 
     fn block_width() -> usize { 8 }
@@ -408,16 +382,12 @@ struct TiledDecoderC14X2<'a> {
 }
 
 impl TiledDecoder for TiledDecoderC14X2<'_> {
-    fn decode_single_pixel(self: &Self, src: &[u8], src_offs: &mut usize, dst: &mut [u8], write: bool) {
-        if write {
-            let idx = (get_u16_be(src, *src_offs) as usize) & 0x3FFF;
-            dst[0] = self.palette[idx * 4 + 0];
-            dst[1] = self.palette[idx * 4 + 1];
-            dst[2] = self.palette[idx * 4 + 2];
-            dst[3] = self.palette[idx * 4 + 3];
-        }
-
-        *src_offs += 1;
+    fn decode_single_pixel(self: &Self, src: &[u8], idx: usize, dst: &mut [u8]) {
+        let idx = (get_u16_be(src, idx * 2) as usize) & 0x3FFF;
+        dst[0] = self.palette[idx * 4 + 0];
+        dst[1] = self.palette[idx * 4 + 1];
+        dst[2] = self.palette[idx * 4 + 2];
+        dst[3] = self.palette[idx * 4 + 3];
     }
 
     fn block_width() -> usize { 4 }

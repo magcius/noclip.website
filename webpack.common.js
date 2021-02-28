@@ -13,7 +13,7 @@ module.exports = {
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: '[name]-[contentHash].js',
+    filename: '[name]-[contenthash].js',
   },
   resolve: {
     extensions: ['.ts', '.js'],

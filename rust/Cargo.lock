@@ -29,6 +29,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "console_error_panic_hook"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8d976903543e0c48546a91908f21588a680a8c8f984df9a5d69feccb2b2a211"
+dependencies = [
+ "cfg-if 0.1.10",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "hexdump"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -75,6 +85,7 @@ checksum = "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
 name = "noclip-support"
 version = "0.0.0"
 dependencies = [
+ "console_error_panic_hook",
  "hexdump",
  "wasm-bindgen",
  "wee_alloc",
