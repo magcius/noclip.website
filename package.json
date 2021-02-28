@@ -42,9 +42,6 @@
     "pako": "^1.0.7",
     "reflect-metadata": "^0.1.13"
   },
-  "resolutions": {
-    "binary-install": "0.1.1"
-  },
   "scripts": {
     "start": "webpack serve --config webpack.dev.js",
     "build": "webpack --config webpack.prod.js",

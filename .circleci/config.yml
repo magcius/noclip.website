@@ -33,6 +33,7 @@ jobs:
           paths:
             - node_modules
             - .cache
+            - .config
           key: v2-dependencies-{{ checksum "package.json" }}
 
       - add_ssh_keys:
