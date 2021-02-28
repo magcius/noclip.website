@@ -7,7 +7,7 @@ jobs:
         - master
 
     docker:
-      - image: circleci/node:10.16.3
+      - image: circleci/node:14.16.0
         auth:
           username: jasperrlz
           password: $DOCKERHUB_PASSWORD
