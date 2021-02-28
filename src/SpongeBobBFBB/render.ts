@@ -1023,7 +1023,6 @@ export class BFBBRenderer implements Viewer.SceneGfx {
 
     public prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         const fogEnabled = this.renderHacks.fog && this.fog;
-        this.clearColor = fogEnabled ? this.fog!.bkgndColor : TransparentBlack;
         const fogColor = fogEnabled ? this.fog!.fogColor : TransparentBlack;
         const fogStart = fogEnabled ? this.fog!.fogStart : 0;
         const fogStop = fogEnabled ? this.fog!.fogStop : 0;
@@ -1075,6 +1074,9 @@ export class BFBBRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        const fogEnabled = this.renderHacks.fog && this.fog;
+        this.clearColor = fogEnabled ? this.fog!.bkgndColor : TransparentBlack;
 
         const clearColorPassDescriptor = makeClearRenderPassDescriptor(this.clearColor);
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearColorPassDescriptor);
