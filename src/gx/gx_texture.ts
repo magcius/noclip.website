@@ -5,6 +5,7 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 
 import * as GX from './gx_enum';
 import { align, assertExists } from '../util';
+import { lerp } from '../MathHelpers';
 
 export interface TextureInputGX {
     name: string;
@@ -42,34 +43,27 @@ export function calcPaletteSize(format: GX.TexFormat, palette: GX.TexPalette) {
     return paletteSize * 2;
 }
 
+const texBlockInfo = {
+    [GX.TexFormat.I4]:     { blockWidth: 8, blockHeight: 8, bytesPerPixelShift: 1, },
+    [GX.TexFormat.I8]:     { blockWidth: 8, blockHeight: 4, bytesPerPixelShift: 0, },
+    [GX.TexFormat.IA4]:    { blockWidth: 8, blockHeight: 4, bytesPerPixelShift: 0, },
+    [GX.TexFormat.IA8]:    { blockWidth: 4, blockHeight: 4, bytesPerPixelShift: -1, },
+    [GX.TexFormat.RGB565]: { blockWidth: 4, blockHeight: 4, bytesPerPixelShift: -1, },
+    [GX.TexFormat.RGB5A3]: { blockWidth: 4, blockHeight: 4, bytesPerPixelShift: -1, },
+    [GX.TexFormat.RGBA8]:  { blockWidth: 4, blockHeight: 4, bytesPerPixelShift: -2, },
+    [GX.TexFormat.C4]:     { blockWidth: 8, blockHeight: 8, bytesPerPixelShift: 1, },
+    [GX.TexFormat.C8]:     { blockWidth: 8, blockHeight: 4, bytesPerPixelShift: 0, },
+    [GX.TexFormat.C14X2]:  { blockWidth: 4, blockHeight: 4, bytesPerPixelShift: -1, },
+    [GX.TexFormat.CMPR]:   { blockWidth: 8, blockHeight: 8, bytesPerPixelShift: 1, },
+};
+
 export function calcTextureSize(format: GX.TexFormat, width: number, height: number) {
-    const numPixels = align(width, 0x08) * align(height, 0x08);
-    switch (format) {
-    case GX.TexFormat.I4:
-        return numPixels / 2;
-    case GX.TexFormat.I8:
-        return numPixels;
-    case GX.TexFormat.IA4:
-        return numPixels;
-    case GX.TexFormat.IA8:
-        return numPixels * 2;
-    case GX.TexFormat.C4:
-        return numPixels / 2;
-    case GX.TexFormat.C8:
-        return numPixels;
-    case GX.TexFormat.C14X2:
-        return numPixels * 2;
-    case GX.TexFormat.RGB565:
-        return numPixels * 2;
-    case GX.TexFormat.RGB5A3:
-        return numPixels * 2;
-    case GX.TexFormat.RGBA8:
-        return numPixels * 4;
-    case GX.TexFormat.CMPR:
-        return numPixels / 2;
-    default:
-        throw new Error("whoops");
-    }
+    const blockInfo = texBlockInfo[format];
+    const numPixels = align(width, blockInfo.blockWidth) * align(height, blockInfo.blockHeight);
+    if (blockInfo.bytesPerPixelShift > 0)
+        return numPixels >>> blockInfo.bytesPerPixelShift;
+    else
+        return numPixels << -blockInfo.bytesPerPixelShift;
 }
 
 export interface MipChain {
@@ -178,7 +172,7 @@ async function decodeRust(texture: TextureInputGX): Promise<DecodedTexture> {
         texture.paletteFormat === GX.TexPalette.RGB565 ? PaletteFormat.RGB565 :
         texture.paletteFormat === GX.TexPalette.RGB5A3 ? PaletteFormat.RGB5A3 :
         undefined;
-    const src = texture.data!.createTypedArray(Uint8Array, 0, Math.min(calcTextureSize(texture.format, texture.width, texture.height), texture.data!.byteLength));
+    const src = texture.data!.createTypedArray(Uint8Array, 0, calcTextureSize(texture.format, texture.width, texture.height));
     const palette_src = texture.paletteData ? texture.paletteData.createTypedArray(Uint8Array) : undefined;
     const pixels = decode_texture(fmt!, palette_fmt, src, palette_src, texture.width, texture.height);
     return { pixels };

@@ -223,10 +223,6 @@ fn decode_cmpr(src: &[u8], w: usize, h: usize) -> Vec<u8> {
                     let src_offs_idx = src_offs;
                     src_offs += 0x08;
 
-                    if xx + xb >= w || yy + yb >= h {
-                        continue;
-                    }
-
                     // CMPR difference: Big-endian color1/2
                     let color1 = get_u16_be(src, src_offs_idx + 0x00);
                     let color2 = get_u16_be(src, src_offs_idx + 0x02);
@@ -271,6 +267,10 @@ fn decode_cmpr(src: &[u8], w: usize, h: usize) -> Vec<u8> {
                     for y in 0..4 {
                         let mut bits = src[src_offs_idx + 0x04 + y];
                         for x in 0..4 {
+                            if xx + xb + x >= w || yy + yb + y >= h {
+                                continue;
+                            }
+
                             let dst_px = (yy + yb + y) * w + (xx + xb + x);
                             let dst_offs = dst_px * 4;
                             let color_idx = ((bits >> 6) & 0x03) as usize;
