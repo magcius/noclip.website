@@ -9,6 +9,9 @@ module.exports = merge(common, {
   devServer: {
     contentBase: './dist',
   },
+  cache: {
+    type: 'filesystem',
+  },
   module: {
     rules: [
       {

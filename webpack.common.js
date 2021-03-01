@@ -79,5 +79,5 @@ module.exports = {
   experiments: {
     syncWebAssembly: true,
   },
-  target: ['web'],
+  target: 'web',
 };
