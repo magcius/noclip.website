@@ -168,13 +168,17 @@ async function decodeRust(texture: TextureInputGX): Promise<DecodedTexture> {
         texture.format === GX.TexFormat.RGB565 ? PixelFormat.RGB565 :
         texture.format === GX.TexFormat.RGB5A3 ? PixelFormat.RGB5A3 :
         texture.format === GX.TexFormat.RGBA8 ? PixelFormat.RGBA8 :
-        texture.format === GX.TexFormat.CMPR ? PixelFormat.CMPR : null;
+        texture.format === GX.TexFormat.CMPR ? PixelFormat.CMPR :
+        texture.format === GX.TexFormat.C4 ? PixelFormat.C4 :
+        texture.format === GX.TexFormat.C8 ? PixelFormat.C8 :
+        texture.format === GX.TexFormat.C14X2 ? PixelFormat.C14X2 :
+        undefined;
     const palette_fmt =
         texture.paletteFormat === GX.TexPalette.IA8 ? PaletteFormat.IA8 :
         texture.paletteFormat === GX.TexPalette.RGB565 ? PaletteFormat.RGB565 :
         texture.paletteFormat === GX.TexPalette.RGB5A3 ? PaletteFormat.RGB5A3 :
         undefined;
-    const src = texture.data!.createTypedArray(Uint8Array, 0, calcTextureSize(texture.format, texture.width, texture.height));
+    const src = texture.data!.createTypedArray(Uint8Array, 0, Math.min(calcTextureSize(texture.format, texture.width, texture.height), texture.data!.byteLength));
     const palette_src = texture.paletteData ? texture.paletteData.createTypedArray(Uint8Array) : undefined;
     const pixels = decode_texture(fmt!, palette_fmt, src, palette_src, texture.width, texture.height);
     return { pixels };

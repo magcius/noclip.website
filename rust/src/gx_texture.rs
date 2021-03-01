@@ -310,11 +310,12 @@ pub enum PixelFormat {
 }
 
 fn decode_palette(palette_fmt: PaletteFormat, palette_src: &[u8]) -> Vec<u8> {
-    let mut dst = vec![0x00; palette_src.len()];
+    let palette_count = palette_src.len() / 2;
+    let mut dst = vec![0x00; palette_count * 4];
 
     match palette_fmt {
         PaletteFormat::IA8 => {
-            for i in 0..dst.len() {
+            for i in 0..palette_count {
                 let aa = palette_src[i * 2 + 0];
                 let ii = palette_src[i * 2 + 1];
                 dst[i * 4 + 0] = ii;
@@ -325,16 +326,16 @@ fn decode_palette(palette_fmt: PaletteFormat, palette_src: &[u8]) -> Vec<u8> {
         },
 
         PaletteFormat::RGB565 => {
-            for i in 0..dst.len() {
+            for i in 0..palette_count {
                 let p = get_u16_be(palette_src, i * 2);
-                decode_rgb565_to_rgba8(&mut dst[i*4+0..i*4+4], p);
+                decode_rgb565_to_rgba8(&mut dst[i*4+0 .. i*4+4], p);
             }
         },
 
         PaletteFormat::RGB5A3 => {
-            for i in 0..dst.len() {
+            for i in 0..palette_count {
                 let p = get_u16_be(palette_src, i * 2);
-                decode_rgb5a3_to_rgba8(&mut dst[i*4+0..i*4+4], p);
+                decode_rgb5a3_to_rgba8(&mut dst[i*4+0 .. i*4+4], p);
             }
         },
     }
