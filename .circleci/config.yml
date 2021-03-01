@@ -27,13 +27,17 @@ jobs:
 
       - run: yarn install
 
+      # wasm-pack is amazingly ridiculous and puts a binary in .config/, which
+      # won't get cached even when node_modules does. Force it to reinstall with
+      # an 'upgrade'.
+      - run: yarn upgrade wasm-pack
+
       - run: yarn run build
 
       - save_cache:
           paths:
             - node_modules
             - .cache
-            - .config
           key: v3-dependencies-{{ checksum "package.json" }}
 
       - add_ssh_keys:
