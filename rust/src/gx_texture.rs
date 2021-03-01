@@ -40,8 +40,8 @@ fn decode_rgb5a3_to_rgba8(dst: &mut[u8], p: u16) {
         dst[3] = 0xFF;
     } else {
         // A3RGB4
-        dst[0] = expand_n_to_8(4, ((p >> 11) & 0x0F) as u8);
-        dst[1] = expand_n_to_8(4, ((p >>  5) & 0x0F) as u8);
+        dst[0] = expand_n_to_8(4, ((p >>  8) & 0x0F) as u8);
+        dst[1] = expand_n_to_8(4, ((p >>  4) & 0x0F) as u8);
         dst[2] = expand_n_to_8(4, ((p >>  0) & 0x0F) as u8);
         dst[3] = expand_n_to_8(3, ((p >> 12) & 0x07) as u8);
     }
