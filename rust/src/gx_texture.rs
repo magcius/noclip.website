@@ -175,7 +175,7 @@ fn decode_rgba8(src: &[u8], w: usize, h: usize) -> Vec<u8> {
     let bh = 4;
     let bw = 4;
     for yy in (0..h).step_by(bh) {
-        for xx in (0..h).step_by(bh) {
+        for xx in (0..w).step_by(bw) {
             for y in 0..bh {
                 for x in 0..bw {
                     let write = xx + x < w && yy + y < h;
