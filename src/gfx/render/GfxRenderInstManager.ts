@@ -485,7 +485,7 @@ export class GfxRenderInst {
 
         if (this._drawInstanceCount > 1) {
             assert(!!(this._flags & GfxRenderInstFlags.Indexed));
-            passRenderer.drawIndexedInstanced(this._drawCount, this._drawCount, this._drawInstanceCount);
+            passRenderer.drawIndexedInstanced(this._drawCount, this._drawStart, this._drawInstanceCount);
         } else if ((this._flags & GfxRenderInstFlags.Indexed)) {
             passRenderer.drawIndexed(this._drawCount, this._drawStart);
         } else {
