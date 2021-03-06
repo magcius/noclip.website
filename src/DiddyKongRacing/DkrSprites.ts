@@ -36,7 +36,7 @@ export const SPRITE_LAYER_SOLID = 0;
 export const SPRITE_LAYER_TRANSPARENT = 1;
 
 export class DkrSprites {
-    private spritesInfo: Array<any>;
+    private spritesInfo: any[];
     private spriteSheetWidth = 0;
     private spriteSheetHeight = 0;
     private spriteIndexOffsets = new Array<number>();
@@ -44,7 +44,7 @@ export class DkrSprites {
     public spriteData: Float32Array;
     private inputLayout: GfxInputLayout;
     private inputState: GfxInputState;
-    private textureMappings: Array<TextureMapping>;
+    private textureMappings: TextureMapping[];
     private gfxProgram: GfxProgram | null = null;
     private program: F3DDKR_Sprite_Program;
 

@@ -1,5 +1,5 @@
 import { vec3, mat4 } from "gl-matrix";
-import { bytesToUShort, updateCameraViewMatrix } from "./DkrUtil";
+import { updateCameraViewMatrix } from "./DkrUtil";
 import { DkrLevelModel } from "./DkrLevelModel";
 import { colorNewFromRGBA, Color } from "../Color";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
@@ -15,6 +15,7 @@ import { DkrAnimationTracks } from "./DkrAnimationTrack";
 import { DkrDrawCall } from "./DkrDrawCall";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { Panel, Slider } from "../ui";
 
 export let CURRENT_LEVEL_ID = -1;
 
@@ -40,7 +41,7 @@ export class DkrLevel {
             CURRENT_LEVEL_ID = -1;
             // Level model data only.
             dataManager.getLevelModel(parseInt(id.substr(6))).then((modelDataBuffer) => {
-                let modelData = new Uint8Array(modelDataBuffer.arrayBuffer);
+                let modelData = modelDataBuffer.createTypedArray(Uint8Array);
                 this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelData);
                 dataManager.signalDoneFlag();
                 callback(this);
@@ -48,12 +49,14 @@ export class DkrLevel {
         } else {
             CURRENT_LEVEL_ID = parseInt(id);
             dataManager.getLevelHeader(CURRENT_LEVEL_ID).then((headerDataBuffer) => {
-                this.headerData = new Uint8Array(headerDataBuffer.arrayBuffer);
+                this.headerData = headerDataBuffer.createTypedArray(Uint8Array);
 
-                let modelId = bytesToUShort(this.headerData, 0x34);
-                let objectMap1Id = bytesToUShort(this.headerData, 0x36);
-                let objectMap2Id = bytesToUShort(this.headerData, 0xBA);
-                let skydomeId = bytesToUShort(this.headerData, 0x38);
+                const dataView = new DataView(this.headerData.buffer);
+
+                let modelId = dataView.getUint16(0x34);
+                let objectMap1Id = dataView.getUint16(0x36);
+                let objectMap2Id = dataView.getUint16(0xBA);
+                let skydomeId = dataView.getUint16(0x38);
 
                 this.clearColor = colorNewFromRGBA(
                     this.headerData[0x9D] / 255,
@@ -68,25 +71,24 @@ export class DkrLevel {
                 ];
 
                 Promise.all(promises).then((out) => {
-                    const modelDataBuffer = out[0];
-                    const objectMap1Buffer = out[1];
-                    const objectMap2Buffer = out[2];
+                    const modelDataBuffer = out[0].createTypedArray(Uint8Array);
+                    const objectMap1Buffer = out[1].createTypedArray(Uint8Array);
+                    const objectMap2Buffer = out[2].createTypedArray(Uint8Array);
                     if(skydomeId !== 0xFFFF) {
                         this.skydome = new DkrObject(skydomeId, device, this, renderHelper, dataManager, objectCache, textureCache);
                         this.skydome.setManualScale(100.0); 
                         // ^ This is a hack that seems to work okay. I'm not sure how the skydomes are scaled/drawn yet.
                     }
-                    let modelData = new Uint8Array(modelDataBuffer.arrayBuffer);
-                    this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelData);
+                    this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelDataBuffer);
 
                     const animNodesCallback = () => { this.animationNodesReady(); }
 
-                    this.objectMap1 = new DkrLevelObjectMap(new Uint8Array(objectMap1Buffer.arrayBuffer), this, 
+                    this.objectMap1 = new DkrLevelObjectMap(objectMap1Buffer, this, 
                     device, renderHelper, dataManager, objectCache, textureCache, sprites, () => {
                         this.animationTracks.addAnimationNodes(this.objectMap1.getObjects(), device, this, renderHelper, 
                             dataManager, objectCache, textureCache, animNodesCallback);
                     });
-                    this.objectMap2 = new DkrLevelObjectMap(new Uint8Array(objectMap2Buffer.arrayBuffer), this, 
+                    this.objectMap2 = new DkrLevelObjectMap(objectMap2Buffer, this, 
                     device, renderHelper, dataManager, objectCache, textureCache, sprites, () => {
                         this.animationTracks.addAnimationNodes(this.objectMap2.getObjects(), device, this, renderHelper, 
                             dataManager, objectCache, textureCache, animNodesCallback);
@@ -119,7 +121,7 @@ export class DkrLevel {
 
     private animationNodesReady(): void {
         if(this.animationTracks.hasChannel(1)) {
-            DkrControlGlobals.PANEL_ANIM_CAMERA.elem.setVisible(true);
+            (DkrControlGlobals.PANEL_ANIM_CAMERA.elem as Panel).setVisible(true);
         } else {
             DkrControlGlobals.ENABLE_ANIM_CAMERA.on = false;
         }
@@ -162,7 +164,7 @@ export class DkrLevel {
             if(channel !== this.previousChannel) {
                 // User has changed the track channel.
                 DkrControlGlobals.ANIM_PROGRESS.max = this.animationTracks.getMaxDuration(channel);
-                DkrControlGlobals.ANIM_PROGRESS.elem.setRange(
+                (DkrControlGlobals.ANIM_PROGRESS.elem as Slider).setRange(
                     DkrControlGlobals.ANIM_PROGRESS.min,
                     DkrControlGlobals.ANIM_PROGRESS.max,
                     DkrControlGlobals.ANIM_PROGRESS.step

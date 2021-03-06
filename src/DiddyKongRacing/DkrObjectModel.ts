@@ -10,16 +10,16 @@ import { DkrObjectAnimation } from "./DkrObjectAnimation";
 import { DkrTexture, SIZE_OF_TEXTURE_INFO } from "./DkrTexture";
 import { DkrTextureCache } from "./DkrTextureCache";
 import { DkrTriangleBatch, DkrVertex, SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch";
-import { bytesToInt, bytesToShort, bytesToUInt, bytesToUShort, getRange } from "./DkrUtil";
+import { getRange } from "./DkrUtil";
 
 const SIZE_OF_BATCH_INFO = 12;
 
 export class DkrObjectModel {
-    private triangleBatches: Array<DkrTriangleBatch>;
+    private triangleBatches: DkrTriangleBatch[];
     private textureIndices = new Array<number>();
 
     private opaqueTextureDrawCalls: any = {};
-    private opaqueTextureDrawCallsKeys: Array<any>;
+    private opaqueTextureDrawCallsKeys: any[];
     private transTexDrawCalls = Array<any>();
 
     private verticesOffset = 0;
@@ -31,24 +31,30 @@ export class DkrObjectModel {
     private numberOfAnimatedVertices = 0;
     private animatedVerticesOffset = 0;
     private animatedVerticesIndices = Array<number>();
-    private objectAnimations: Array<DkrObjectAnimation> | null = null;
+    private objectAnimations: DkrObjectAnimation[] | null = null;
     private currObjAnimIndex = 0;
 
-    constructor(private modelId: number, private modelData: Uint8Array, device: GfxDevice, 
-    renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache) {
-        let texturesOffset = bytesToUInt(modelData, 0x00);
-        let numberOfTextures = bytesToUShort(modelData, 0x22);
-        
-        this.verticesOffset = bytesToInt(modelData, 0x04);
-        let trianglesOffset = bytesToInt(modelData, 0x08);
-        let triangleBatchInfoOffset = bytesToInt(modelData, 0x38);
-        this.numberOfVertices = bytesToShort(modelData, 0x24);
-        this.numberOfTriangles = bytesToShort(modelData, 0x26);
-        this.numberOfTriangleBatches = bytesToShort(modelData, 0x28); 
+    private modelDataView: DataView;
 
-        this.numberOfAnimatedVertices = bytesToShort(modelData, 0x4A);
-        this.animatedVerticesOffset = bytesToInt(modelData, 0x4C);
-        this.readAnimatedVerticesIndices(modelData);
+    constructor(private modelId: number, modelData: Uint8Array, device: GfxDevice, 
+    renderHelper: GfxRenderHelper, dataManager: DataManager, textureCache: DkrTextureCache) {
+        const dataView = new DataView(modelData.buffer);
+
+        this.modelDataView = dataView;
+
+        let texturesOffset = dataView.getUint32(0x00);
+        let numberOfTextures = dataView.getUint16(0x22);
+        
+        this.verticesOffset = dataView.getInt32(0x04);
+        let trianglesOffset = dataView.getInt32(0x08);
+        let triangleBatchInfoOffset = dataView.getInt32(0x38);
+        this.numberOfVertices = dataView.getInt16(0x24);
+        this.numberOfTriangles = dataView.getInt16(0x26);
+        this.numberOfTriangleBatches = dataView.getInt16(0x28);
+
+        this.numberOfAnimatedVertices = dataView.getInt16(0x4A);
+        this.animatedVerticesOffset = dataView.getInt32(0x4C);
+        this.readAnimatedVerticesIndices(dataView);
 
         let animationIds = dataManager.objectAnimationIds[modelId];
 
@@ -63,17 +69,17 @@ export class DkrObjectModel {
                 for(let i = 0; i < animationIds!.length; i++) {
                     this.objectAnimations.push(new DkrObjectAnimation(
                         animationIds![i],
-                        new Uint8Array(out[i].arrayBuffer),
+                        out[i].createTypedArray(Uint8Array),
                         vertices, 
                         this.animatedVerticesIndices, 
                         this.numberOfAnimatedVertices
                     ));
                 }
-                this.loadGeometry(modelData, device, renderHelper, textureCache, numberOfTextures, 
+                this.loadGeometry(dataView, device, renderHelper, textureCache, numberOfTextures, 
                 texturesOffset, triangleBatchInfoOffset, trianglesOffset);
             });
         } else {
-            this.loadGeometry(modelData, device, renderHelper, textureCache, numberOfTextures, 
+            this.loadGeometry(dataView, device, renderHelper, textureCache, numberOfTextures, 
             texturesOffset, triangleBatchInfoOffset, trianglesOffset);
         }
 
@@ -92,12 +98,12 @@ export class DkrObjectModel {
         }
     }
 
-    private loadGeometry(modelData: Uint8Array, device: GfxDevice, renderHelper: GfxRenderHelper, 
+    private loadGeometry(dataView: DataView, device: GfxDevice, renderHelper: GfxRenderHelper, 
     textureCache: DkrTextureCache, numberOfTextures: number, texturesOffset: number, 
     triangleBatchInfoOffset: number, trianglesOffset: number): void {
         
         for (let i = 0; i < numberOfTextures; i++) {
-            this.textureIndices.push(bytesToUInt(modelData, texturesOffset + (i * SIZE_OF_TEXTURE_INFO)));
+            this.textureIndices.push(dataView.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO)));
         }
         textureCache.preload3dTextures(this.textureIndices, () => {
             this.triangleBatches = new Array(this.numberOfTriangleBatches);
@@ -106,11 +112,11 @@ export class DkrObjectModel {
                 let ti = triangleBatchInfoOffset + (i * SIZE_OF_BATCH_INFO); // Triangle batch info index
                 let tiNext = ti + SIZE_OF_BATCH_INFO;
                 
-                let textureIndex = this.textureIndices[modelData[ti]];
+                let textureIndex = this.textureIndices[dataView.getUint8(ti)];
                 
-                if(textureIndex != null && textureIndex != undefined && modelData[ti] != 0xFF) {    
+                if(textureIndex != null && textureIndex != undefined && dataView.getUint8(ti) != 0xFF) {    
                     textureCache.get3dTexture(textureIndex, (texture: DkrTexture) => {
-                        this.parseBatch(device, renderHelper, modelData, i, ti, tiNext, this.verticesOffset, trianglesOffset, texture);
+                        this.parseBatch(device, renderHelper, dataView, i, ti, tiNext, this.verticesOffset, trianglesOffset, texture);
                         const layer = texture.getLayer()
                         if(layer == GfxRendererLayer.OPAQUE || layer == GfxRendererLayer.BACKGROUND) {
                             if(this.opaqueTextureDrawCalls[textureIndex] == undefined) {
@@ -131,7 +137,7 @@ export class DkrObjectModel {
                     if(this.opaqueTextureDrawCalls['noTex'] == undefined) {
                         this.opaqueTextureDrawCalls['noTex'] = new DkrDrawCall(device, null);
                     }
-                    this.parseBatch(device, renderHelper, modelData, i, ti, tiNext, this.verticesOffset, trianglesOffset, null);
+                    this.parseBatch(device, renderHelper, dataView, i, ti, tiNext, this.verticesOffset, trianglesOffset, null);
                     this.opaqueTextureDrawCalls['noTex'].addTriangleBatch(this.triangleBatches[i]);
                 }
             }
@@ -142,33 +148,39 @@ export class DkrObjectModel {
         });
     }
 
-    private parseBatch(device: GfxDevice, renderHelper: GfxRenderHelper, modelData: Uint8Array, 
+    private parseBatch(device: GfxDevice, renderHelper: GfxRenderHelper, dataView: DataView, 
         i: number, ti: number, tiNext: number, verticesOffset: number, trianglesOffset: number, 
         texture: DkrTexture | null) {
-        let curVertexOffset = bytesToShort(modelData, ti + 0x02);
-        let curTrisOffset = bytesToShort(modelData, ti + 0x04);
-        let nextVertexOffset = bytesToShort(modelData, tiNext + 0x02);
-        let nextTrisOffset = bytesToShort(modelData, tiNext + 0x04);
+        let curVertexOffset = dataView.getInt16(ti + 0x02);
+        let curTrisOffset = dataView.getInt16(ti + 0x04);
+        let nextVertexOffset = dataView.getInt16(tiNext + 0x02);
+        let nextTrisOffset = dataView.getInt16(tiNext + 0x04);
         let batchVerticesOffset = verticesOffset + (curVertexOffset * SIZE_OF_VERTEX);
         let batchTrianglesOffset = trianglesOffset + (curTrisOffset * SIZE_OF_TRIANGLE_FACE);
         let numberOfTrianglesInBatch = nextTrisOffset - curTrisOffset;
         let numberOfVerticesInBatch = nextVertexOffset - curVertexOffset;
-        let flags = bytesToUInt(modelData, ti + 0x08);
+        let flags = dataView.getUint32(ti + 0x08);
+
+        const triangleDataStart = batchTrianglesOffset;
+        const triangleDataEnd = triangleDataStart + (numberOfTrianglesInBatch * SIZE_OF_TRIANGLE_FACE);
+        const verticesDataStart = batchVerticesOffset;
+        const verticesDataEnd = verticesDataStart + (numberOfVerticesInBatch * SIZE_OF_VERTEX);
+
         this.triangleBatches[i] = new DkrTriangleBatch(
             device, 
             renderHelper,
-            getRange(modelData, batchTrianglesOffset, numberOfTrianglesInBatch * SIZE_OF_TRIANGLE_FACE), 
-            getRange(modelData, batchVerticesOffset, numberOfVerticesInBatch * SIZE_OF_VERTEX), 
+            new Uint8Array(dataView.buffer).slice(triangleDataStart, triangleDataEnd),
+            new Uint8Array(dataView.buffer).slice(verticesDataStart, verticesDataEnd),
             curVertexOffset,
             flags,
             texture
         );
     }
 
-    private readAnimatedVerticesIndices(modelData: Uint8Array): void {
+    private readAnimatedVerticesIndices(dataView: DataView): void {
         for(let i = 0; i < this.numberOfVertices; i++) {
             const offset = this.animatedVerticesOffset + (i * 2);
-            this.animatedVerticesIndices.push(bytesToShort(modelData, offset));
+            this.animatedVerticesIndices.push(dataView.getInt16(offset));
         }
     }
 
@@ -179,13 +191,13 @@ export class DkrObjectModel {
         for(let i = 0; i < this.numberOfVertices; i++) {
             const voff = this.verticesOffset + (i * SIZE_OF_VERTEX);
             vertices.push({
-                x: bytesToShort(this.modelData, voff + 0),
-                y: bytesToShort(this.modelData, voff + 2),
-                z: bytesToShort(this.modelData, voff + 4),
-                xr: this.modelData[voff + 6],
-                yg: this.modelData[voff + 7],
-                zb: this.modelData[voff + 8],
-                a: this.modelData[voff + 9],
+                x: this.modelDataView.getInt16(voff + 0),
+                y: this.modelDataView.getInt16(voff + 2),
+                z: this.modelDataView.getInt16(voff + 4),
+                xr: this.modelDataView.getUint8(voff + 6),
+                yg: this.modelDataView.getUint8(voff + 7),
+                zb: this.modelDataView.getUint8(voff + 8),
+                a: this.modelDataView.getUint8(voff + 9),
             });
         }
 
@@ -195,14 +207,14 @@ export class DkrObjectModel {
     // Only used with the `midifadepoint` object.
     public getVertex(index: number): vec3 {
         return vec3.fromValues(
-            bytesToShort(this.modelData, this.verticesOffset + (index * SIZE_OF_VERTEX) + 0),
-            bytesToShort(this.modelData, this.verticesOffset + (index * SIZE_OF_VERTEX) + 2),
-            bytesToShort(this.modelData, this.verticesOffset + (index * SIZE_OF_VERTEX) + 4)
+            this.modelDataView.getInt16(this.verticesOffset + (index * SIZE_OF_VERTEX) + 0),
+            this.modelDataView.getInt16(this.verticesOffset + (index * SIZE_OF_VERTEX) + 2),
+            this.modelDataView.getInt16(this.verticesOffset + (index * SIZE_OF_VERTEX) + 4)
         );
     }
 
     public getVertexAlpha(index: number): number {
-        return this.modelData[this.verticesOffset + (index * SIZE_OF_VERTEX) + 9];
+        return this.modelDataView.getUint8(this.verticesOffset + (index * SIZE_OF_VERTEX) + 9);
     }
 
     public setAnimationIndexAndProgress(index: number, progress: number, loopType: number): void {

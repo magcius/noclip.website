@@ -3,6 +3,8 @@ import { Camera } from "../Camera";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { clamp } from "../MathHelpers";
+import { SingleSelect } from "../ui";
 import { assert } from "../util";
 import { ViewerRenderInput } from "../viewer";
 import { DataManager } from "./DataManager";
@@ -32,10 +34,6 @@ const RADIANS_TO_BYTE_ANGLE = 256 / (Math.PI * 2);
 // from: https://stackoverflow.com/a/4467559
 function mod(val: number, n: number): number {
     return ((val % n) + n) % n;
-}
-
-function clamp(val: number, min: number, max: number) {
-    return Math.min(Math.max(val, min), max);
 }
 
 /*
@@ -277,15 +275,14 @@ export class DkrAnimationTrack {
                     this.actor.setUseVertexNormals(); // Hack
                 }
 
-                this.calculatePoints(() => {
-                    this.setObjectToPoint(0.0);
-                    resolve();
-                });
+                this.calculatePoints();
+                this.setObjectToPoint(0.0);
+                resolve();
             });
         });
     }
 
-    private calculatePoints(callback: Function): void {
+    private calculatePoints(): void {
         assert(this.points.length === 0);
 
         const curPos = vec3.create();
@@ -394,10 +391,6 @@ export class DkrAnimationTrack {
 
         this.points[this.points.length - 1].nodeIndex = this.nodes.length - 1;
         this.points[this.points.length - 1].objAnimIndex = this.nodes[this.nodes.length - 1].getProperties().objAnimIndex;
-        
-        //console.log('Finished track for object: ' + this.actorName, '\nDuration:', this.duration, 'seconds.');
-
-        callback();
     }
 
     private fadeCheck(curNodeIndex: number): void {
@@ -849,12 +842,13 @@ export class DkrAnimationTracks {
             }
 
             if(DkrControlGlobals.ANIM_TRACK_SELECT.elem !== null) {
-                DkrControlGlobals.ANIM_TRACK_SELECT.elem.setStrings(trackSelectStrings);
+                const trackSelect = DkrControlGlobals.ANIM_TRACK_SELECT.elem as SingleSelect;
+                trackSelect.setStrings(trackSelectStrings);
 
                 if(hasFlyby > -1) {
-                    DkrControlGlobals.ANIM_TRACK_SELECT.elem.selectItem(hasFlyby);
+                    trackSelect.selectItem(hasFlyby);
                 } else {
-                    DkrControlGlobals.ANIM_TRACK_SELECT.elem.selectItem(0);
+                    trackSelect.selectItem(0);
                 }
             }
         }

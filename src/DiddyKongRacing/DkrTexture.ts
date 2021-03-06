@@ -5,7 +5,6 @@ import { GfxDevice, GfxFormat, GfxMipFilterMode, GfxTexFilterMode, GfxTexture, m
 import { Texture, translateCM } from '../Common/N64/RDP';
 import { TexCM } from '../Common/N64/Image';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { bytesToUShort } from './DkrUtil';
 import { vec2 } from 'gl-matrix';
 import { GfxRendererLayer, GfxRenderInst } from '../gfx/render/GfxRenderInstManager';
 
@@ -27,18 +26,19 @@ export class DkrTexture {
 
     private texCoordOffset = vec2.fromValues(0.0, 0.0);
 
-    private textureMappingsArray: Array<Array<TextureMapping>>;
+    private textureMappingsArray: TextureMapping[][];
 
     private hasBeenDestroyed = false;
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private pixels: Uint8ClampedArray, headerData: Uint8Array) {
-        this.width = headerData[0];
-        this.height = headerData[1];
-        this.format = this.getFormatString(headerData[2] & 0xF);
+        const dataView = new DataView(headerData.buffer);
+        this.width = dataView.getUint8(0);
+        this.height = dataView.getUint8(1);
+        this.format = this.getFormatString(dataView.getUint8(2) & 0xF);
         this.layer = this.getTextureLayer();
 
-        const wrapS = (headerData[7] & 0x40) ? TexCM.CLAMP : TexCM.WRAP;
-        const wrapT = (headerData[7] & 0x80) ? TexCM.CLAMP : TexCM.WRAP;
+        const wrapS = (dataView.getUint8(7) & 0x40) ? TexCM.CLAMP : TexCM.WRAP;
+        const wrapT = (dataView.getUint8(7) & 0x80) ? TexCM.CLAMP : TexCM.WRAP;
 
         const sampler = cache.createSampler(device, {
             wrapS: translateCM(wrapS),
@@ -49,10 +49,10 @@ export class DkrTexture {
             minLOD: 0, maxLOD: 0,
         });
 
-        this.numberOfFrames = headerData[0x12];
+        this.numberOfFrames = dataView.getUint8(0x12);
 
         // How many frames to delay before moving to the next texture.
-        const frameDelayData = bytesToUShort(headerData, 0x14);
+        const frameDelayData = dataView.getUint16(0x14);
         if(frameDelayData > 0) {
             this.frameDelayAmount = Math.floor(Math.max(0x100 / frameDelayData, 1));
             this.currentFrameDelay = this.frameDelayAmount * 2.0;

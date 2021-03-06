@@ -2,7 +2,6 @@ import { vec3 } from "gl-matrix";
 import { assert } from "../util";
 import { DKR_FPS, FPS_SAMPLES_DELTA } from "./DkrAnimationTrack";
 import { DkrVertex } from "./DkrTriangleBatch";
-import { buf2hex, bytesToInt, bytesToSByte, bytesToShort } from "./DkrUtil";
 import { MAX_NUM_OF_OBJ_ANIM_VERTICES } from "./F3DDKR_Program";
 
 // There are 16 interpolated frames per keyframe
@@ -22,7 +21,9 @@ export class DkrObjectAnimation {
     private currentProgressInFrame = 0; // Value within [0, 1)
 
     constructor(private animationId: number, private animationData: Uint8Array, vertices: Array<DkrVertex>, animatedVertIndices: Array<number>, numOfAnimatedVertices: number) {
-        let numberOfKeyframes = bytesToInt(animationData, 0);
+        const dataView = new DataView(animationData.buffer);
+        
+        let numberOfKeyframes = dataView.getInt32(0);
         let numberOfVertices = vertices.length;
 
         let offset = 4;
@@ -57,15 +58,15 @@ export class DkrObjectAnimation {
                 if(i === 0) {
                     // The first keyframe uses signed shorts that offset from the base vertices.
                     const off = offset + (animatedVertIndices[j] * 6);
-                    this.keyFrames[i][j][0] += bytesToShort(animationData, off + 0);
-                    this.keyFrames[i][j][1] += bytesToShort(animationData, off + 2);
-                    this.keyFrames[i][j][2] += bytesToShort(animationData, off + 4);
+                    this.keyFrames[i][j][0] += dataView.getInt16(off + 0);
+                    this.keyFrames[i][j][1] += dataView.getInt16(off + 2);
+                    this.keyFrames[i][j][2] += dataView.getInt16(off + 4);
                 } else {
                     // The following keyframes use signed bytes that offset from the previous keyframe.
                     const off = offset + (animatedVertIndices[j] * 3);
-                    this.keyFrames[i][j][0] += bytesToSByte(animationData, off + 0);
-                    this.keyFrames[i][j][1] += bytesToSByte(animationData, off + 1);
-                    this.keyFrames[i][j][2] += bytesToSByte(animationData, off + 2);
+                    this.keyFrames[i][j][0] += dataView.getInt8(off + 0);
+                    this.keyFrames[i][j][1] += dataView.getInt8(off + 1);
+                    this.keyFrames[i][j][2] += dataView.getInt8(off + 2);
                 }
             }
 

@@ -12,7 +12,7 @@ import { DkrObjectCache } from "./DkrObjectCache";
 import { DkrObjectModel } from "./DkrObjectModel";
 import { DkrSprites } from "./DkrSprites";
 import { DkrTextureCache } from "./DkrTextureCache";
-import { bytesToInt, bytesToShort, bytesToUInt, getRange, isFlagSet } from "./DkrUtil";
+import { getRange} from "./DkrUtil";
 
 export class DkrLevelObjectMap {
     private objects: Array<DkrObject>;
@@ -25,7 +25,9 @@ export class DkrLevelObjectMap {
         let objectIds = new Set<number>(); // Set ensures each item is unqiue
         let objectEntries: Array<any> = [];
 
-        let totalLength = bytesToUInt(objectMap, 0);
+        const dataView = new DataView(objectMap.buffer);
+
+        let totalLength = dataView.getUint32(0);
 
         // Are bytes 0x04-0x0F used for anything?
 

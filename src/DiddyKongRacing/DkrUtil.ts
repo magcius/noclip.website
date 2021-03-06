@@ -15,47 +15,6 @@ export function buf2hex(buffer: ArrayBuffer) {
     return Array.prototype.map.call(new Uint8Array(buffer), (x:any) => ('00' + x.toString(16)).slice(-2)).join('');
 }
 
-export function bytesToUInt(arr: Uint8Array, offset: number) {
-    return (arr[offset] << 24) | (arr[offset + 1] << 16) | (arr[offset + 2] << 8) | arr[offset + 3];
-}
-
-export function bytesToInt(arr: Uint8Array, offset: number) {
-    let value = bytesToUInt(arr, offset);
-    if (value > 2147483647){
-        value -= 4294967296;
-    }
-    return value;
-}
-
-export function bytesToUShort(arr: Uint8Array, offset: number) {
-    return (arr[offset] << 8) | arr[offset + 1];
-}
-
-export function bytesToShort(arr: Uint8Array, offset: number) {
-    let value = bytesToUShort(arr, offset);
-    if (value > 32767){
-        value -= 65536;
-    }
-    return value;
-}
-
-export function bytesToSByte(arr: Uint8Array, offset: number) {
-    let value = arr[offset];
-    if(value > 127) {
-        value -= 256;
-    }
-    return value;
-}
-
-export function bytesToFloat(arr: Uint8Array, offset: number) {
-    let view = new DataView(new ArrayBuffer(4));
-    view.setUint8(0, arr[offset]);
-    view.setUint8(1, arr[offset + 1]);
-    view.setUint8(2, arr[offset + 2]);
-    view.setUint8(3, arr[offset + 3]);
-    return view.getFloat32(0);
-}
-
 export function getRange(arr: Uint8Array, offset: number, length: number) {
     return arr.slice(offset, offset+length);
 }
@@ -68,6 +27,17 @@ export function writeShortInBytes(arr: Uint8Array, offset: number, val: number):
     val = Math.floor(val);
     arr[offset] = (val >> 8) & 0xFF;
     arr[offset + 1] = val & 0xFF;
+}
+
+// from: https://stackoverflow.com/a/9458996
+export function arrayBufferToBase64(buffer: Uint8Array) {
+    var binary = '';
+    var bytes = new Uint8Array(buffer);
+    var len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
 }
 
 export function createVertexData(vertices: any): Uint8Array {

@@ -2,7 +2,6 @@ import { mat4, vec3, quat, vec4, ReadonlyVec3 } from 'gl-matrix';
 import { DkrObjectModel } from './DkrObjectModel';
 import { DkrObjectCache } from './DkrObjectCache';
 import { DataManager } from './DataManager';
-import { buf2hex, bytesToFloat, bytesToInt, bytesToSByte, bytesToShort, bytesToUInt, bytesToUShort, getRange } from './DkrUtil';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { ViewerRenderInput } from '../viewer';
 import { DkrTextureCache } from './DkrTextureCache';
@@ -52,6 +51,7 @@ export class DkrObject {
     private modelScale: number = 1;
     private modelType: number;
     private headerData: Uint8Array;
+    private headerDataView: DataView;
     private name: string;
     private propertiesIndex: number;
     private properties: any = {};
@@ -71,8 +71,9 @@ export class DkrObject {
         objectCache.getObjectHeader(objectId, (outHeaderData: Uint8Array) => {
             mat4.identity(this.modelMatrix);
             this.headerData = outHeaderData;
+            this.headerDataView = new DataView(this.headerData.buffer);
 
-            this.modelScale = bytesToFloat(this.headerData, 0x0C);
+            this.modelScale = this.headerDataView.getFloat32(0x0C);
 
             this.name = textDecoder.decode(this.headerData.slice(0x60, 0x70));
             this.name = this.name.substring(0, this.name.indexOf('\0'));
@@ -86,7 +87,7 @@ export class DkrObject {
             this.propertiesIndex = this.headerData[0x54];
 
             let numberOfModels = this.headerData[0x55];
-            let modelIdsOffset = bytesToInt(this.headerData, 0x10);
+            let modelIdsOffset = this.headerDataView.getInt32(0x10);
 
             if(this.modelType == MODEL_TYPE_3D_MODEL) {
                 this.models = new Array<DkrObjectModel>(numberOfModels);
@@ -96,7 +97,7 @@ export class DkrObject {
             }
 
             for(let i = 0; i < numberOfModels; i++) {
-                let modelId = bytesToInt(this.headerData, modelIdsOffset + (i*4));
+                let modelId = this.headerDataView.getInt32(modelIdsOffset + (i*4));
                 if(this.modelType == MODEL_TYPE_3D_MODEL) {
                     this.modelIds[i] = modelId;
                     objectCache.getObjectModel(modelId, (modelData: Uint8Array) => {
@@ -360,9 +361,11 @@ export class DkrObject {
     }
 
     public parseObjectProperties(inputData: Uint8Array) {
-        this.position[0] = bytesToShort(inputData, 0x02);
-        this.position[1] = bytesToShort(inputData, 0x04);
-        this.position[2] = bytesToShort(inputData, 0x06);
+        const dataView = new DataView(inputData.buffer);
+
+        this.position[0] = dataView.getInt16(0x02); //bytesToShort(inputData, 0x02);
+        this.position[1] = dataView.getInt16(0x04); //bytesToShort(inputData, 0x04);
+        this.position[2] = dataView.getInt16(0x06); //bytesToShort(inputData, 0x06);
 
         switch(this.propertiesIndex) {
             case 0: 
@@ -397,9 +400,9 @@ export class DkrObject {
             case 4: // animator
                 this.level.addScrollerFromAnimator(
                     this.position, 
-                    bytesToSByte(inputData, 0x08), 
-                    bytesToSByte(inputData, 0x0A), 
-                    bytesToSByte(inputData, 0x0B), 
+                    dataView.getInt8(0x08),
+                    dataView.getInt8(0x0A), 
+                    dataView.getInt8(0x0B)
                 );
                 this.isDeveloperObject = true;
                 break;
@@ -410,7 +413,7 @@ export class DkrObject {
             case 7: // exit
                 this.properties.mapID = inputData[0x08];
                 this.modelScale *= inputData[0x10] / 128.0;
-                this.rotation[1] = (bytesToSByte(inputData, 0x11) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x11) / 64.0) * 360.0;
                 this.isDeveloperObject = true;
                 break;
             case 8: // audio
@@ -423,7 +426,7 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 11: // setuppoint
-                this.rotation[1] = (bytesToSByte(inputData, 0x0A) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
                 this.isDeveloperObject = true;
                 break;
             case 12: // Dinosaur1, Dinosaur2, Dinosaur3, Whale, Dinoisle
@@ -433,12 +436,12 @@ export class DkrObject {
                 break;
             case 13: // checkpoint
                 this.modelScale *= inputData[0x08] / 64.0;
-                this.rotation[1] = (bytesToSByte(inputData, 0x0A) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
                 this.isDeveloperObject = true;
                 break;
             case 14: // LevelDoor, KeithPigDoor, ChalDoor, BossDoor, bigbossdoor, WorldGate
-                this.properties.closedRotation = (bytesToSByte(inputData, 0x08) / 64.0) * 360.0;
-                this.properties.openRotation = (bytesToSByte(inputData, 0x09) / 64.0) * 360.0;
+                this.properties.closedRotation = (dataView.getInt8(0x08) / 64.0) * 360.0;
+                this.properties.openRotation = (dataView.getInt8(0x09) / 64.0) * 360.0;
                 this.rotation[1] = this.properties.closedRotation;
                 this.modelIndex = inputData[0xA];
                 this.properties.distanceToOpen = inputData[0xB];
@@ -507,15 +510,14 @@ export class DkrObject {
                 break;
             case 29: // texscroll
                 this.level.addScrollerFromTexScroll(
-                    bytesToShort(inputData, 0x08),
-                    bytesToSByte(inputData, 0x0A),
-                    bytesToSByte(inputData, 0x0B)
+                    dataView.getInt16(0x08),
+                    dataView.getInt8(0x0A),
+                    dataView.getInt8(0x0B)
                 );
                 this.isDeveloperObject = true;
                 break;
             case 30: // modechange
-                //console.log(this.name, buf2hex(inputData.slice(8).buffer));
-                this.rotation[1] = (bytesToSByte(inputData, 0x09) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x09) / 64.0) * 360.0;
                 this.modelScale *= inputData[0x8] / 128.0;
                 this.isDeveloperObject = true;
                 break;
@@ -536,7 +538,7 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 38: // bridge, NoentryDoor, RampWhale
-                this.rotation[1] = (bytesToSByte(inputData, 0x09) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x09) / 64.0) * 360.0;
                 if(this.name === 'RampWhale') {
                     this.dontAnimateObjectTextures = true; // hack to stop eyes from blinking.
                 }
@@ -568,35 +570,35 @@ export class DkrObject {
             case 48:
                 break;
             case 49: // Animation
-                this.rotation[2] = (bytesToSByte(inputData, 0x08) / 256.0) * 360.0;
-                this.rotation[0] = (bytesToSByte(inputData, 0x09) / 256.0) * 360.0;
-                this.rotation[1] = (bytesToSByte(inputData, 0x0A) / 256.0) * 360.0;
+                this.rotation[2] = (dataView.getInt8(0x08) / 256.0) * 360.0;
+                this.rotation[0] = (dataView.getInt8(0x09) / 256.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x0A) / 256.0) * 360.0;
                 this.modelScale *= inputData[0x0B] / 64.0;
 
                 this.properties = {
                     // Note: these names are just my best guesses atm. They might not
                     // reflect what they actualy do.
                     rotation: {
-                        pitch: bytesToSByte(inputData, 0x08),
-                        roll: bytesToSByte(inputData, 0x09),
-                        yaw: bytesToSByte(inputData, 0x0A)
+                        pitch: dataView.getInt8(0x08),
+                        roll: dataView.getInt8(0x09),
+                        yaw: dataView.getInt8(0x0A)
                     },
                     scale: inputData[0x0B] / 64.0,
-                    objectToSpawn: bytesToShort(inputData, 0x0C),
-                    animStartDelay: bytesToShort(inputData, 0x0E),
+                    objectToSpawn: dataView.getInt16(0x0C),
+                    animStartDelay: dataView.getInt16(0x0E),
                     actorIndex: inputData[0x10],
                     order: inputData[0x11],
-                    objAnimIndex: bytesToSByte(inputData, 0x12), // Which obj animation to play (If not 0xFF)
-                    nodeSpeed: bytesToSByte(inputData, 0x14),
+                    objAnimIndex: dataView.getInt8(0x12), // Which obj animation to play (If not 0xFF)
+                    nodeSpeed: dataView.getInt8(0x14),
                     objAnimSpeed: inputData[0x17],
                     objAnimLoopType: inputData[0x18], // 0 = Loop, 1 = Reverse loop, 2 = Play once, 3 = reverse once then stop.
                     rotateType: inputData[0x19],
-                    yawSpinSpeed: bytesToSByte(inputData, 0x1A),
-                    rollSpinSpeed: bytesToSByte(inputData, 0x1B),
-                    pitchSpinSpeed: bytesToSByte(inputData, 0x1C),
+                    yawSpinSpeed: dataView.getInt8(0x1A),
+                    rollSpinSpeed: dataView.getInt8(0x1B),
+                    pitchSpinSpeed: dataView.getInt8(0x1C),
                     gotoNode: inputData[0x1D],
                     channel: inputData[0x21],
-                    pauseFrameCount: bytesToShort(inputData, 0x24),
+                    pauseFrameCount: dataView.getInt8(0x24),
                     specialHide: inputData[0x26] != 0, // Needs a better name.
                     messageId: inputData[0x27],
                     fadeAlpha: inputData[0x2B],
@@ -633,7 +635,7 @@ export class DkrObject {
                 ChickSelect, MouseSelect, stopwatchselect */
                 break;
             case 55: // trigger
-                this.rotation[1] = (bytesToSByte(inputData, 0x0A) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
                 this.modelScale *= inputData[0x8] / 128.0;
                 this.isDeveloperObject = true;
                 break;
@@ -643,7 +645,7 @@ export class DkrObject {
                 break;
             case 57: // AirZippers
                 this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (bytesToSByte(inputData, 0x0A) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
                 // The transparency for Air Zippers is hard-coded in-game.
                 this.overrideAlpha = 0.5;
                 this.renderBeforeLevelMap = false;
@@ -687,7 +689,7 @@ export class DkrObject {
             case 71: // midifade
                 //console.log(buf2hex(inputData.slice(8).buffer));
                 this.modelScale *= inputData[0x08] / 8.0;
-                this.rotation[1] = (bytesToSByte(inputData, 0x09) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x09) / 64.0) * 360.0;
                 this.isDeveloperObject = true;
                 break;
             case 72:
@@ -698,7 +700,7 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 74: // trophycab
-                this.rotation[1] = (bytesToSByte(inputData, 0x08) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x08)/ 64.0) * 360.0;
                 break;
             case 75: // bubbler
                 // Hacks to make the renderer look better. Not representative to in-game.
@@ -724,7 +726,7 @@ export class DkrObject {
                 break;
             case 82: // GroundZipper
                 this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (bytesToSByte(inputData, 0x0A) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
                 // Technically, GroundZippers are particles and this object just spawns one.
                 this.textureCache.get2dTexture(16, (zipperTexture: DkrTexture) => {
                     const zipperParticle = new DkrParticle(this.device, this.renderHelper, zipperTexture);
@@ -758,7 +760,7 @@ export class DkrObject {
                 break;
             case 93: // WaterZippers
                 this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (bytesToSByte(inputData, 0x0A) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
                 break;
             case 94:
                 break;
@@ -773,11 +775,11 @@ export class DkrObject {
                 break;
             case 99: // lighthouse1
                 this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (bytesToSByte(inputData, 0x0A) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
                 break;
             case 100: // rocketsignpost
                 this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (bytesToSByte(inputData, 0x0A) / 64.0) * 360.0;
+                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
                 this.usesNormals = true;
                 break;
             case 101:
@@ -804,8 +806,8 @@ export class DkrObject {
             case 110: // GoldCoin
                 break;
             case 111: // TTDoor
-                this.properties.closedRotation = (bytesToSByte(inputData, 0x08) / 64.0) * 360.0;
-                this.properties.openRotation = (bytesToSByte(inputData, 0x09) / 64.0) * 360.0;
+                this.properties.closedRotation = (dataView.getInt8(0x08) / 64.0) * 360.0;
+                this.properties.openRotation = (dataView.getInt8(0x09) / 64.0) * 360.0;
                 this.rotation[1] = this.properties.closedRotation;
                 this.properties.distanceToOpen = inputData[0xA];
                 this.properties.numberToOpen = inputData[0xB];
@@ -825,7 +827,7 @@ export class DkrObject {
                             (secondVertex[1]*secondVertex[1]) +
                             (secondVertex[2]*secondVertex[2])
                         );
-                        this.modelScale = bytesToShort(inputData, 0xA) / denom;
+                        this.modelScale = dataView.getInt16(0x0A) / denom;
                         this.updateModelMatrix();
                     } else {
                         // Wait some more until the model loads.

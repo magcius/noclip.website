@@ -1,7 +1,7 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { DkrTextureCache } from "./DkrTextureCache";
-import { bytesToInt, bytesToShort, bytesToUInt, getRange, IDENTITY_MATRIX, isFlagSet } from "./DkrUtil";
+import { getRange, IDENTITY_MATRIX } from "./DkrUtil";
 import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX, DkrTriangleBatch } from "./DkrTriangleBatch";
 import { DkrTexture } from "./DkrTexture";
 import { DkrDrawCall } from "./DkrDrawCall";
@@ -30,16 +30,15 @@ export class DkrLevelSegment {
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, levelData: Uint8Array, offset: number, 
         textureCache: DkrTextureCache, textureIndices: Array<number>, opaqueTextureDrawCalls: any) {
-        let verticesOffset = bytesToInt(levelData, offset + 0x00);
-        let numberOfVertices = bytesToShort(levelData, offset + 0x1C);
-        let trianglesOffset = bytesToInt(levelData, offset + 0x04);
-        let numberOfTriangles = bytesToShort(levelData, offset + 0x1E);
-        let triangleBatchInfoOffset = bytesToInt(levelData, offset + 0x0C);
-        let numberOfTriangleBatches = bytesToShort(levelData, offset + 0x20);
 
-        //let vertices = getRange(levelData, verticesOffset, numberOfVertices * SIZE_OF_VERTEX);
-        //let triangles = getRange(levelData, trianglesOffset, numberOfTriangles * SIZE_OF_TRIANGLE_FACE);
-        //let triBatches = getRange(levelData, triangleBatchInfoOffset, numberOfTriangleBatches * SIZE_OF_BATCH_INFO);
+        const dataView = new DataView(levelData.buffer);
+
+        let verticesOffset = dataView.getInt32(offset + 0x00);
+        let numberOfVertices = dataView.getInt16(offset + 0x1C);
+        let trianglesOffset = dataView.getInt32(offset + 0x04);
+        let numberOfTriangles = dataView.getInt16(offset + 0x1E);
+        let triangleBatchInfoOffset = dataView.getInt32(offset + 0x0C);
+        let numberOfTriangleBatches = dataView.getInt16(offset + 0x20);
         
         this.triangleBatches = new Array(numberOfTriangleBatches);
         
@@ -50,7 +49,7 @@ export class DkrLevelSegment {
             if(levelData[ti] != 0xFF) {    
                 let textureIndex = textureIndices[levelData[ti]];
                 textureCache.get3dTexture(textureIndex, (texture: DkrTexture) => {
-                    this.parseBatch(device, renderHelper, levelData, i, ti, tiNext, verticesOffset, trianglesOffset, texture, textureIndex);
+                    this.parseBatch(device, renderHelper, dataView, i, ti, tiNext, verticesOffset, trianglesOffset, texture, textureIndex);
                     const layer = texture.getLayer()
                     if(layer == GfxRendererLayer.OPAQUE || layer == GfxRendererLayer.BACKGROUND) {
                         if(opaqueTextureDrawCalls[textureIndex] == undefined) {
@@ -76,7 +75,7 @@ export class DkrLevelSegment {
                 if(opaqueTextureDrawCalls['noTex'] == undefined) {
                     opaqueTextureDrawCalls['noTex'] = new DkrDrawCall(device, null);
                 }
-                this.parseBatch(device, renderHelper, levelData, i, ti, tiNext, verticesOffset, trianglesOffset, null, 0);
+                this.parseBatch(device, renderHelper, dataView, i, ti, tiNext, verticesOffset, trianglesOffset, null, 0);
                 if(!!this.triangleBatches[i]) {
                     opaqueTextureDrawCalls['noTex'].addTriangleBatch(this.triangleBatches[i]);
                 }
@@ -85,24 +84,29 @@ export class DkrLevelSegment {
         }
     }
 
-    private parseBatch(device: GfxDevice, renderHelper: GfxRenderHelper, levelData: Uint8Array, 
+    private parseBatch(device: GfxDevice, renderHelper: GfxRenderHelper, dataView: DataView, 
         i: number, ti: number, tiNext: number, verticesOffset: number, trianglesOffset: number, 
         texture: DkrTexture | null, textureIndex: number) {
-        let curVertexOffset = bytesToShort(levelData, ti + 0x02);
-        let curTrisOffset = bytesToShort(levelData, ti + 0x04);
-        let nextVertexOffset = bytesToShort(levelData, tiNext + 0x02);
-        let nextTrisOffset = bytesToShort(levelData, tiNext + 0x04);
+        let curVertexOffset = dataView.getInt16(ti + 0x02);
+        let curTrisOffset = dataView.getInt16(ti + 0x04);
+        let nextVertexOffset = dataView.getInt16(tiNext + 0x02);
+        let nextTrisOffset = dataView.getInt16(tiNext + 0x04);
         let batchVerticesOffset = verticesOffset + (curVertexOffset * SIZE_OF_VERTEX);
         let batchTrianglesOffset = trianglesOffset + (curTrisOffset * SIZE_OF_TRIANGLE_FACE);
         let numberOfTrianglesInBatch = nextTrisOffset - curTrisOffset;
         let numberOfVerticesInBatch = nextVertexOffset - curVertexOffset;
-        let flags = bytesToUInt(levelData, ti + 0x08);
+        let flags = dataView.getUint32(ti + 0x08);
+
+        const triangleDataStart = batchTrianglesOffset;
+        const triangleDataEnd = triangleDataStart + (numberOfTrianglesInBatch * SIZE_OF_TRIANGLE_FACE);
+        const verticesDataStart = batchVerticesOffset;
+        const verticesDataEnd = verticesDataStart + (numberOfVerticesInBatch * SIZE_OF_VERTEX);
 
         this.triangleBatches[i] = new DkrTriangleBatch(
             device, 
             renderHelper,
-            getRange(levelData, batchTrianglesOffset, numberOfTrianglesInBatch * SIZE_OF_TRIANGLE_FACE), 
-            getRange(levelData, batchVerticesOffset, numberOfVerticesInBatch * SIZE_OF_VERTEX), 
+            new Uint8Array(dataView.buffer).slice(triangleDataStart, triangleDataEnd),
+            new Uint8Array(dataView.buffer).slice(verticesDataStart, verticesDataEnd),
             0,
             flags,
             texture

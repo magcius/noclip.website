@@ -68,7 +68,7 @@ class DKRRenderer implements Viewer.SceneGfx {
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
         if(!this.hasStarted) {
             // Disable mirroring manually, since mirroring the rotation is annoying to deal with.
-            DkrControlGlobals.ADV2_MIRROR.elem.setChecked(false);
+            (DkrControlGlobals.ADV2_MIRROR.elem as Checkbox).setChecked(false);
             DkrControlGlobals.ADV2_MIRROR.on = false;
             viewerInput.camera.worldMatrix = mat4.fromValues(
                 this.camStart[0], this.camStart[1], this.camStart[2], this.camStart[3],

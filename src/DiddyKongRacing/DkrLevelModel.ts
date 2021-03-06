@@ -1,7 +1,7 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { DkrTexture, SIZE_OF_TEXTURE_INFO } from "./DkrTexture";
 import { DkrLevelSegment } from "./DkrLevelSegment";
-import { bytesToShort, bytesToUInt, bytesToUShort, getRange, IDENTITY_MATRIX } from "./DkrUtil";
+import { getRange, IDENTITY_MATRIX } from "./DkrUtil";
 import { ViewerRenderInput } from "../viewer";
 import { DkrTextureCache } from "./DkrTextureCache";
 import { assert } from "../util";
@@ -42,23 +42,26 @@ export class DkrLevelModel {
     private opaqueTextureDrawCallsKeys: Array<any>;
 
     private rootBspNode: BSPNode;
-    private segmentOrder: Array<number>;
+    private segmentOrder: number[];
 
     private textureFrame = 0;
     private textureFrameAdvanceDelay = 30;
     
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, private textureCache: DkrTextureCache, levelData: Uint8Array) {
-        let texturesOffset = bytesToUInt(levelData, 0x00);
-        let segmentsOffset = bytesToUInt(levelData, 0x04);
-        let segmentsBBOffset = bytesToUInt(levelData, 0x08); // Bounding boxes for segments
-        let segmentsBitfieldsOffset = bytesToUInt(levelData, 0x10);
-        let segmentsBspTreeOffset = bytesToUInt(levelData, 0x14);
-        let bspSplitOffset = bytesToUInt(levelData, 0x14);
-        let numberOfTextures = bytesToUShort(levelData, 0x18);
-        let numberOfSegments = bytesToUShort(levelData, 0x1A);
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, private textureCache: DkrTextureCache, 
+    levelData: Uint8Array) {
+        const dataView = new DataView(levelData.buffer);
+
+        let texturesOffset = dataView.getUint32(0x00);
+        let segmentsOffset = dataView.getUint32(0x04);
+        let segmentsBBOffset = dataView.getUint32(0x08);// Bounding boxes for segments
+        let segmentsBitfieldsOffset = dataView.getUint32(0x10);
+        let segmentsBspTreeOffset = dataView.getUint32(0x14);
+        let bspSplitOffset = dataView.getUint32(0x14);
+        let numberOfTextures = dataView.getUint16(0x18);
+        let numberOfSegments = dataView.getUint16(0x1A);
         
         for (let i = 0; i < numberOfTextures; i++) {
-            const texIndex = bytesToUInt(levelData, texturesOffset + (i * SIZE_OF_TEXTURE_INFO));
+            const texIndex = dataView.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO));
             this.textureIndices.push(texIndex);
         }
         
@@ -72,7 +75,7 @@ export class DkrLevelModel {
                 ));
             }
             if(this.segments.length > 1) {
-                this.parseBSPTree(levelData, segmentsBspTreeOffset);
+                this.parseBSPTree(dataView, segmentsBspTreeOffset);
             }
             this.opaqueTextureDrawCallsKeys = Object.keys(this.opaqueTextureDrawCalls);
             for(const key of this.opaqueTextureDrawCallsKeys) {
@@ -186,27 +189,28 @@ export class DkrLevelModel {
         this.segmentOrder.push(arg1);
     }
 
-    private parseBSPTree(levelData: Uint8Array, segmentsBspTreeOffset: number) {
-        this.rootBspNode = this.parseBSPNode(levelData, segmentsBspTreeOffset, 0);
+    private parseBSPTree(dataView: DataView, segmentsBspTreeOffset: number) {
+        this.rootBspNode = this.parseBSPNode(dataView, segmentsBspTreeOffset, 0);
     }
 
-    private parseBSPNode(levelData: Uint8Array, segmentsBspTreeOffset: number, index: number): BSPNode {
+    private parseBSPNode(dataView: DataView, segmentsBspTreeOffset: number, index: number): BSPNode {
         const offset = segmentsBspTreeOffset + (index * SIZE_OF_BSP_NODE);
 
-        const leftIndex = bytesToShort(levelData, offset);
-        const rightIndex = bytesToShort(levelData, offset + 2);
+        const leftIndex = dataView.getInt16(offset); //bytesToShort(levelData, offset);
+        const rightIndex = dataView.getInt16(offset + 2); //bytesToShort(levelData, offset + 2);
         let splitType = '';
-        switch(levelData[offset + 4]) {
+        
+        switch(dataView.getUint8(offset + 4)) {
             case 0: splitType = 'X'; break;
             case 1: splitType = 'Y'; break;
             case 2: splitType = 'Z'; break;
         }
-        const segment = levelData[offset + 5];
-        const splitValue = bytesToShort(levelData, offset + 6);
+        const segment = dataView.getUint8(offset + 5);
+        const splitValue = dataView.getInt16(offset + 6);
 
         return new BSPNode(
-            (leftIndex != -1) ? this.parseBSPNode(levelData, segmentsBspTreeOffset, leftIndex) : null,
-            (rightIndex != -1) ? this.parseBSPNode(levelData, segmentsBspTreeOffset, rightIndex) : null,
+            (leftIndex != -1) ? this.parseBSPNode(dataView, segmentsBspTreeOffset, leftIndex) : null,
+            (rightIndex != -1) ? this.parseBSPNode(dataView, segmentsBspTreeOffset, rightIndex) : null,
             splitType,
             segment,
             splitValue

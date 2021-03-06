@@ -1,7 +1,7 @@
 import { GfxBuffer, GfxDevice, GfxInputLayout, GfxInputState } from "../gfx/platform/GfxPlatform";
 import { DkrTexture } from "./DkrTexture";
 import { assert } from "../util";
-import { bytesToShort, isFlagSet } from "./DkrUtil"
+import { isFlagSet } from "./DkrUtil"
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 
 export const SIZE_OF_VERTEX = 10;
@@ -58,19 +58,23 @@ export class DkrTriangleBatch {
             vScale = 1.0 / (this.texture.getHeight() * 32.0);
         }
 
+        const vertexDataView = new DataView(vertexData.buffer);
+
         // Read vertices. Similar to Fast3D, but without the UV coordinates.
         for(let i = 0; i < numberOfVertices; i++) {
             let vi = i * SIZE_OF_VERTEX; // vertex index
             this.vertices.push({
-                x: bytesToShort(vertexData, vi+0), // X position
-                y: bytesToShort(vertexData, vi+2), // Y position
-                z: bytesToShort(vertexData, vi+4), // Z position
-                xr: vertexData[vi+6] / 255.0,        // X unit vector or red color
-                yg: vertexData[vi+7] / 255.0,        // Y unit vector or green color
-                zb: vertexData[vi+8] / 255.0,        // Z unit vector or blue color
-                a: vertexData[vi+9] / 255.0          // Alpha (Transparency)
+                x: vertexDataView.getInt16(vi + 0), // X position
+                y: vertexDataView.getInt16(vi + 2), // Y position
+                z: vertexDataView.getInt16(vi + 4), // Z position
+                xr: vertexDataView.getUint8(vi + 6) / 255.0, // X unit vector or red color
+                yg: vertexDataView.getUint8(vi + 7) / 255.0, // Y unit vector or green color
+                zb: vertexDataView.getUint8(vi + 8) / 255.0, // Z unit vector or blue color
+                a: vertexDataView.getUint8(vi + 9) / 255.0   // Alpha (Transparency)
             });
         }
+
+        const triangleDataView = new DataView(triangleData.buffer);
 
         // Read triangles. More than just indices, also includes UV coordinates and a backface flag.
         for(let i = 0; i < numberOfTriangles; i++) {
@@ -83,16 +87,16 @@ export class DkrTriangleBatch {
             let v1 = triangleData[fi + 0x02];
             let v2 = triangleData[fi + 0x03];
             let uv0 = [
-                bytesToShort(triangleData, fi + 0x04) * uScale,
-                bytesToShort(triangleData, fi + 0x06) * vScale
+                triangleDataView.getInt16(fi + 0x04) * uScale,
+                triangleDataView.getInt16(fi + 0x06) * vScale
             ];
             let uv1 = [
-                bytesToShort(triangleData, fi + 0x08) * uScale,
-                bytesToShort(triangleData, fi + 0x0A) * vScale
+                triangleDataView.getInt16(fi + 0x08) * uScale,
+                triangleDataView.getInt16(fi + 0x0A) * vScale
             ];
             let uv2 = [
-                bytesToShort(triangleData, fi + 0x0C) * uScale,
-                bytesToShort(triangleData, fi + 0x0E) * vScale
+                triangleDataView.getInt16(fi + 0x0C) * uScale,
+                triangleDataView.getInt16(fi + 0x0E) * vScale
             ];
 
             this.setFinalVertex(verticesStart + v0, this.vertices[v0], uv0);

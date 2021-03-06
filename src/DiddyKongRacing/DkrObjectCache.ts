@@ -1,6 +1,4 @@
 import { DataManager } from "./DataManager";
-import { DkrObjectModel } from "./DkrObjectModel";
-import { bytesToInt } from "./DkrUtil";
 
 export class DkrObjectCache {
     private objectHeaders: any = {};
@@ -22,7 +20,7 @@ export class DkrObjectCache {
                     // Header has already been loaded, so just return it.
                     callback(this.objectHeaders[index]);
                 } else {
-                    this.objectHeaders[index] = new Uint8Array(headerDataBuffer.arrayBuffer);
+                    this.objectHeaders[index] = headerDataBuffer.createTypedArray(Uint8Array);
                     callback(this.objectHeaders[index]);
                 }
             });
@@ -40,7 +38,7 @@ export class DkrObjectCache {
                     // Model has already been loaded, so just return it.
                     callback(this.objectModels[index]);
                 } else {
-                    this.objectModels[index] = new Uint8Array(modelDataBuffer.arrayBuffer);
+                    this.objectModels[index] = modelDataBuffer.createTypedArray(Uint8Array);;
                     callback(this.objectModels[index]);
                 }
             });
@@ -58,14 +56,15 @@ export class DkrObjectCache {
             let modelIds = new Set<number>();
             for (let index = 0; index < out.length; index++) {
                 if(!this.objectHeaders[indices[index]]) {
-                    let objectData = new Uint8Array(out[index].arrayBuffer);
-                    let modelType = objectData[0x53];
-                    let numberOfModels = objectData[0x55];
-                    let modelIdsOffset = bytesToInt(objectData, 0x10);
+                    let objectData = out[index].createTypedArray(Uint8Array);;
+                    const dataView = new DataView(objectData.buffer);
+                    let modelType = dataView.getUint8(0x53);
+                    let numberOfModels = dataView.getUint8(0x55);
+                    let modelIdsOffset = dataView.getInt32(0x10);
                     switch(modelType) {
                         case 0: // 3D Model
                             for(let i = 0; i < numberOfModels; i++) {
-                                modelIds.add(bytesToInt(objectData, modelIdsOffset + (i*4)));
+                                modelIds.add(dataView.getInt32(modelIdsOffset + (i*4)));
                             }
                             break;
                         case 1: // Billboarded sprite
@@ -83,7 +82,7 @@ export class DkrObjectCache {
             Promise.all(modelPromises).then((outModels) => {
                 for (let index = 0; index < outModels.length; index++) {
                     if(!this.objectModels[indices[index]]) {
-                        this.objectModels[indices[index]] = new Uint8Array(outModels[index].arrayBuffer);
+                        this.objectModels[indices[index]] = outModels[index];
                     }
                 }
                 callback();

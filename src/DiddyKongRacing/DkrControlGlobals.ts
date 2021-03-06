@@ -15,63 +15,63 @@ export class DkrControlGlobals {
         type: 'checkbox',
         label: 'Enable Vertex Colors',
         on: true, // Default value
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     };
 
     static ENABLE_TEXTURES = {
         type: 'checkbox',
         label: 'Enable Textures',
         on: true,
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     };
 
     static SHOW_ALL_OBJECTS = {
         type: 'checkbox',
         label: 'Show Objects',
         on: true,
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     };
 
     static SHOW_DEV_OBJECTS = {
         type: 'checkbox',
         label: 'Show Developer Objects',
         on: false,
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     };
 
     static SHOW_INVISIBLE_GEOMETRY = {
         type: 'checkbox',
         label: 'Show Invisible Geometry',
         on: false,
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     };
 
     static DARKEN_ADV2_COINS = {
         type: 'checkbox',
         label: 'Darken Adventure 2 Silver Coins',
         on: false,
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     };
 
     static ADV2_MIRROR = {
         type: 'checkbox',
         label: 'Mirror (Adventure 2)',
         on: false,
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     }
 
     static ENABLE_ANIM_CAMERA = {
         type: 'checkbox',
         label: 'Play',
         on: false,
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     };
 
     static ANIM_PAUSED = {
         type: 'checkbox',
         label: 'Paused',
         on: false,
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     };
 
     static ANIM_PROGRESS = {
@@ -83,13 +83,13 @@ export class DkrControlGlobals {
         decimalPlaces: 2,
         defaultValue: 0,
         value: 0,
-        elem: <Slider> <unknown> null,
+        elem: null!,
         newValueCallback: (newValue: number) => {
-            const elem = DkrControlGlobals.ANIM_PROGRESS, slider = elem.elem;
+            const elem = DkrControlGlobals.ANIM_PROGRESS, slider = elem.elem as Slider;
             elem.setValue(slider.getValue());
         },
         setValue: (newValue: number) => {
-            const elem = DkrControlGlobals.ANIM_PROGRESS, slider = elem.elem;
+            const elem = DkrControlGlobals.ANIM_PROGRESS, slider = elem.elem as Slider;
             elem.value = newValue;
             slider.setValue(elem.value);
             slider.setLabel(elem.label + ' (' + ((newValue / elem.max) * 100).toFixed(elem.decimalPlaces) + '%)');
@@ -105,9 +105,9 @@ export class DkrControlGlobals {
         decimalPlaces: 2,
         defaultValue: 50,
         value: 1,
-        elem: <Slider> <unknown> null,
+        elem: null!,
         newValueCallback: () => {
-            const elem = DkrControlGlobals.ANIM_SPEED, slider = elem.elem;
+            const elem = DkrControlGlobals.ANIM_SPEED, slider = elem.elem as Slider;
             const value = slider.getValue();
             if(value > 52) {
                 elem.value = 1.0 + ((value - 52) / 48) * 4.0;
@@ -126,19 +126,18 @@ export class DkrControlGlobals {
         type: 'checkbox',
         label: 'Detach From Animation Camera',
         on: false,
-        elem: <Checkbox> <unknown> null,
+        elem: null!,
     };
 
     static ANIM_TRACK_SELECT = {
         type: 'singleSelect',
         selectedIndex: -1,
-        elem: <SingleSelect> <unknown> null,
+        elem: null!,
         selectedIndexUpdated: () => {
             if(DkrControlGlobals.ANIM_TRACK_SELECT.selectedIndex === -1) {
                 DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel = -1;
                 return;
             }
-            DkrControlGlobals.ANIM_TRACK_SELECT.elem.itemFocused
             DkrControlGlobals.ANIM_TRACK_SELECT.currentChannel = 
                 DkrControlGlobals.ANIM_TRACK_SELECT.selectableChannels![
                     DkrControlGlobals.ANIM_TRACK_SELECT.selectedIndex
@@ -166,7 +165,7 @@ export class DkrControlGlobals {
             DkrControlGlobals.DARKEN_ADV2_COINS,
             DkrControlGlobals.ADV2_MIRROR,
         ],
-        elem: <Panel> <unknown> null,
+        elem: null!,
         hidden: false,
     };
     
@@ -185,7 +184,7 @@ export class DkrControlGlobals {
             DkrControlGlobals.ANIM_TRACK_SELECT,
             */
         ],
-        elem: <Panel> <unknown> null,
+        elem: null!,
         hidden: true,
     };
 }

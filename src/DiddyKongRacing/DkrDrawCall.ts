@@ -34,7 +34,7 @@ const mirrorMatrix = mat4.fromValues(
 );
 
 export interface DkrDrawCallParams {
-    modelMatrices: Array<mat4>,
+    modelMatrices: mat4[],
     overrideAlpha: number | null,
     usesNormals: boolean,
     isSkydome: boolean,

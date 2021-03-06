@@ -26,10 +26,9 @@ export class DkrTextureCache {
         Promise.all(promises).then((out) => {
             for (let index = 0; index < out.length/2; index++) {
                 if(!this.textures3d[indices[index]]) {
-                    let headerData = out[index*2+0].arrayBuffer;
+                    let headerData = out[index*2+0].createTypedArray(Uint8Array);;
                     let tex = out[index*2+1];
-                   // console.log(indices);
-                    this.textures3d[indices[index]] = new DkrTexture(this.device, this.cache, tex.data, new Uint8Array(headerData));
+                    this.textures3d[indices[index]] = new DkrTexture(this.device, this.cache, tex.data, headerData);
                 }
             }
             callback();
@@ -50,9 +49,9 @@ export class DkrTextureCache {
                     // Texture has already been loaded, so just return it.
                     callback(this.textures3d[index]);
                 } else {
-                    let headerData = values[0].arrayBuffer;
+                    let headerData = values[0].createTypedArray(Uint8Array);;
                     let tex = values[1];
-                    this.textures3d[index] = new DkrTexture(this.device, this.cache, tex.data, new Uint8Array(headerData));
+                    this.textures3d[index] = new DkrTexture(this.device, this.cache, tex.data, headerData);
                     callback(this.textures3d[index]);
                 }
             });
@@ -74,9 +73,9 @@ export class DkrTextureCache {
                     // Texture has already been loaded, so just return it.
                     callback(this.textures2d[index]);
                 } else {
-                    let headerData = values[0].arrayBuffer;
+                    let headerData = values[0].createTypedArray(Uint8Array);;
                     let tex = values[1];
-                    this.textures2d[index] = new DkrTexture(this.device, this.cache, tex.data, new Uint8Array(headerData));
+                    this.textures2d[index] = new DkrTexture(this.device, this.cache, tex.data, headerData);
                     callback(this.textures2d[index]);
                 }
             });
