@@ -60,3 +60,15 @@ export function getDerivativeBspline(p0: number, p1: number, p2: number, p3: num
     getCoeffBspline(scratchVec4, p0, p1, p2, p3);
     return getDerivativeCubic(scratchVec4, t);
 }
+
+function getCoeffCatmullRom(dst: vec4, p0: number, p1: number, s0: number, s1: number, s: number = 1/2): void {
+    dst[0] = (p0 * -1*s) + (p1 * (2-s)) + (s0 * (s-2))   +  (s1 *  s);
+    dst[1] = (p0 *  2*s) + (p1 * (s-3)) + (s0 * (3-2*s)) +  (s1 * -s);
+    dst[2] = (p0 *  -s)  + (p1 * 0)     + (s0 * s)       +  (s1 *  0);
+    dst[3] = (p0 *   0)  + (p1 * 1)     + (s0 * 0)       +  (s1 *  0);
+}
+
+export function getPointCatmullRom(p0: number, p1: number, s0: number, s1: number, t: number, s: number = 1/2): number {
+    getCoeffCatmullRom(scratchVec4, p0, p1, s0, s1, s);
+    return getPointCubic(scratchVec4, t);
+}
