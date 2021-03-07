@@ -442,7 +442,7 @@ function SetMdlViewMtxSR(dst: mat4, scaleX: number, scaleY: number, scaleZ: numb
 }
 
 const scratchVec3 = nArray(3, () => vec3.create());
-export function Calc_BILLBOARD_STD(m: mat4, nodeMatrix: ReadonlyMat4, vy: vec3 = scratchVec3[0]): void {
+function Calc_BILLBOARD_STD(m: mat4, nodeMatrix: ReadonlyMat4, vy: vec3 = scratchVec3[0]): void {
     vec3.set(vy, m[4], m[5], 0);
     vec3.normalize(vy, vy);
 
@@ -456,7 +456,7 @@ export function Calc_BILLBOARD_STD(m: mat4, nodeMatrix: ReadonlyMat4, vy: vec3 =
         0, 0, 1);
 }
 
-export function Calc_BILLBOARD_PERSP_STD(m: mat4, nodeMatrix: ReadonlyMat4, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
+function Calc_BILLBOARD_PERSP_STD(m: mat4, nodeMatrix: ReadonlyMat4, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
     vec3.set(vy, m[4], m[5], m[6]);
     vec3.set(vz, -m[12], -m[13], -m[14]);
     vec3.normalize(vz, vz);
@@ -516,7 +516,7 @@ function Calc_BILLBOARD_PERSP_ROT(m: mat4, nodeMatrix: ReadonlyMat4, parentNodeM
         vz[0], vz[1], vz[2]);
 }
 
-export function Calc_BILLBOARD_Y(m: mat4, nodeMatrix: ReadonlyMat4, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
+function Calc_BILLBOARD_Y(m: mat4, nodeMatrix: ReadonlyMat4, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
     vec3.set(vy, m[4], m[5], m[6]);
     vec3.set(vx, vy[1], -vy[0], 0);
     vec3.normalize(vy, vy);
