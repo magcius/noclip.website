@@ -2,7 +2,7 @@
 import { SceneObjHolder, SceneObj, getDeltaTimeFrames } from "./Main";
 import { NameObj, CalcAnimType, MovementType } from "./NameObj";
 import { getMatrixTranslation } from "../MathHelpers";
-import { ReadonlyMat4, vec3 } from "gl-matrix";
+import { vec3 } from "gl-matrix";
 import { AreaObj, AreaObjMgr, AreaFormType } from "./AreaObj";
 import { JMapInfoIter, getJMapInfoArg7, getJMapInfoArg0, getJMapInfoArg1, getJMapInfoArg2, getJMapInfoArg3 } from "./JMapInfo";
 import { ZoneAndLayer } from "./LiveActor";
@@ -12,9 +12,9 @@ import { connectToScene, getAreaObj } from "./ActorUtil";
 import { DeviceProgram } from "../Program";
 import { TextureMapping } from "../TextureHolder";
 import { nArray, assert } from "../util";
-import { GfxSampler, GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform";
+import { GfxWrapMode, GfxTexFilterMode, GfxBindingLayoutDescriptor, GfxMipFilterMode, GfxBlendMode, GfxBlendFactor, GfxMegaStateDescriptor, GfxFormat, GfxProgram } from "../gfx/platform/GfxPlatform";
 import { fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
-import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fullscreenMegaState, makeMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MathConstants } from "../MathHelpers";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
@@ -25,31 +25,25 @@ const scratchVec3 = vec3.create();
 
 const ImageEffectShaderLib = `
 ${GfxShaderLibrary.saturate}
+${GfxShaderLibrary.monochromeNTSC}
 
 float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
 vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b)); }
-
-float Monochrome(vec3 t_Color) {
-    // NTSC primaries.
-    return dot(t_Color.rgb, vec3(0.299, 0.587, 0.114));
-}
 `;
 
-function generateBlurFunction(functionName: string, samplerName: string, tapCount: number, radiusStr: string, intensityStr: string, angleOffset: number = 0.0): string {
+function generateBlurFunction(functionName: string, tapCount: number, radiusStr: string, intensityStr: string, angleOffset: number = 0.0): string {
     let S = `
-vec3 ${functionName}(in vec2 t_TexCoord) {
+vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord) {
     vec3 c = vec3(0.0);
 `;
 
-    const aspect = 16/9;
-    const invAspect = 1/aspect;
-
+    const aspect = 4/3;
     for (let i = 0; i < tapCount; i++) {
         const theta = angleOffset + (MathConstants.TAU * (i / tapCount));
-        const x = invAspect * Math.cos(theta), y = -Math.sin(theta);
+        const x = Math.cos(theta), y = aspect * -Math.sin(theta);
 
         S += `
-    c += (texture(SAMPLER_2D(${samplerName}), t_TexCoord + vec2(${glslGenerateFloat(x)} * ${radiusStr}, ${glslGenerateFloat(y)} * ${radiusStr})).rgb * ${intensityStr});`;
+    c += (texture(PU_SAMPLER_2D(t_Texture), t_TexCoord + vec2(${glslGenerateFloat(x)} * ${radiusStr}, ${glslGenerateFloat(y)} * ${radiusStr})).rgb * ${intensityStr});`;
     }
 
     S += `
@@ -149,7 +143,7 @@ in vec2 v_TexCoord;
 
 void main() {
     vec4 c = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor = (Monochrome(c.rgb) > u_Threshold) ? c : vec4(0.0);
+    gl_FragColor = (MonochromeNTSC(c.rgb) > u_Threshold) ? c : vec4(0.0);
 }
 `;
 }
@@ -163,15 +157,14 @@ abstract class BloomPassBlurProgram extends BloomPassBaseProgram {
         let funcs = ``;
         let main = ``;
 
-        const samplerName = `u_Texture`;
         for (let i = 0; i < radiusL.length; i++) {
             const funcName = `BlurPass${i}`;
             const radius = radiusL[i];
             const radiusStr = radius.toFixed(5);
             const angleOffset = ofsL[i];
-            funcs += generateBlurFunction(funcName, samplerName, tapCount, radiusStr, intensityVar, angleOffset);
+            funcs += generateBlurFunction(funcName, tapCount, radiusStr, intensityVar, angleOffset);
             main += `
-    f += TevOverflow(${funcName}(v_TexCoord));`;
+    f += TevOverflow(${funcName}(PP_SAMPLER_2D(u_Texture), v_TexCoord));`;
         }
 
         this.frag = `
@@ -391,7 +384,7 @@ float ApplyMaskFilter(vec3 t_TexSample) {
     else if (u_MaskFilter == 3.0)
         return t_TexSample.b;
     else
-        return Monochrome(t_TexSample.rgb);
+        return MonochromeNTSC(t_TexSample.rgb);
 }
 
 float ApplyThreshold(float t_Value) {
@@ -416,10 +409,10 @@ class BloomSimpleBlurProgram extends DeviceProgram {
         this.frag = `
 ${BloomSimplePSCommon}
 
-${generateBlurFunction(`Blur`, `u_Texture`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap))}
+${generateBlurFunction(`Blur`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap))}
 
 void main() {
-    float t_BlurredValue = saturate(Blur(v_TexCoord).r);
+    float t_BlurredValue = saturate(Blur(PP_SAMPLER_2D(u_Texture), v_TexCoord).r);
     float t_Value = t_BlurredValue * u_Intensity;
     gl_FragColor = vec4(t_Value, t_Value, t_Value, 0.0);
 }
@@ -493,7 +486,6 @@ export class BloomEffectSimple extends ImageEffectBase {
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setAllowSkippingIfPipelineNotReady(false);
-        renderInst.setMegaStateFlags(fullscreenMegaState);
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst);
         renderInst.drawPrimitives(3);
@@ -560,15 +552,27 @@ ${GfxShaderLibrary.invlerp}
 
 in vec2 v_TexCoord;
 
-${generateBlurFunction(`Blur`, `u_TextureColor`, 4, `u_Intensity * 0.005`, glslGenerateFloat(1/4))}
+${generateBlurFunction(`Blur`, 4, `u_Intensity * 0.005`, glslGenerateFloat(1/4))}
 
 void main() {
     float t_DepthSample = texture(SAMPLER_2D(u_TextureDepth), v_TexCoord).r;
     if (u_IsDepthReversed != 0.0)
         t_DepthSample = 1.0 - t_DepthSample;
-    float t_BlurAmount = saturate(invlerp(t_DepthSample, u_BlurMinDist, u_BlurMaxDist));
 
-    vec3 t_BlurredSample = Blur(v_TexCoord);
+    // Clamp to 8-bit
+    t_DepthSample = saturate(t_DepthSample * (256.0/255.0));
+
+    // Game processes indirect depth texture with -128 bias, meaning that 255 (1.0) maps to 127. Emulate this.
+    float t_TexCoord128 = (t_DepthSample * 255.0) - 128.0;
+
+    // We now have a value between 0 and 127. Index into our 128-sized texture. The + 0.5 is to emulate sampling at
+    // the "pixel center" within our lerp.
+    float t_TexCoord = saturate((t_TexCoord128 + 0.5) / 128.0);
+
+    // Do the "indirect texture lookup"
+    float t_BlurAmount = saturate(invlerp(t_TexCoord, u_BlurMinDist, u_BlurMaxDist));
+
+    vec3 t_BlurredSample = Blur(PP_SAMPLER_2D(u_TextureColor), v_TexCoord);
     gl_FragColor = vec4(t_BlurredSample, t_BlurAmount * u_Intensity);
 }
 `;

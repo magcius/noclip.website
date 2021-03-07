@@ -3,7 +3,7 @@ import { DeviceProgram } from "../Program";
 import { GfxBindingLayoutDescriptor, GfxProgram, GfxBuffer, GfxInputLayout, GfxInputState, GfxDevice, GfxBufferUsage, GfxVertexAttributeDescriptor, GfxFormat, GfxVertexBufferFrequency, GfxVertexBufferDescriptor, GfxBlendMode, GfxBlendFactor, GfxCullMode, GfxInputLayoutBufferDescriptor } from "../gfx/platform/GfxPlatform";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { makeTriangleIndexBuffer, GfxTopology } from "../gfx/helpers/TopologyHelpers";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
 import { fillMatrix4x4, fillMatrix4x3, fillColor, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { White, colorNewCopy } from "../Color";

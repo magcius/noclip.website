@@ -4,7 +4,7 @@ import { SceneObjHolder } from "./Main";
 import { ViewerRenderInput } from "../viewer";
 import { GfxDevice, GfxNormalizedViewportCoords } from "../gfx/platform/GfxPlatform";
 import { Camera } from "../Camera";
-import { gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { gfxRenderInstCompareSortKey, GfxRenderInstExecutionOrder, GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { LiveActor } from "./LiveActor";
 import { JMapInfoIter } from "./JMapInfo";
 import { mat4 } from "gl-matrix";

@@ -3,7 +3,7 @@ import { mat4, vec2 } from "gl-matrix";
 import { TransparentBlack } from "../../Color";
 import { LayoutDrawInfo } from "../../Common/NW4R/lyt/Layout";
 import { GfxFormat } from "../../gfx/platform/GfxPlatform";
-import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderer";
+import { GfxRenderInstList, GfxRenderInstManager } from "../../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../../gfx/render/GfxRenderGraph";
 import { GX_Program } from "../../gx/gx_material";
 import { fillSceneParams, fillSceneParamsData, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
@@ -426,7 +426,7 @@ export class GalaxyMapController extends LayoutActor<GalaxyMapControllerNrv> {
             this.drawForCapture(sceneObjHolder, renderInstManager, layoutTargetDesc);
 
             pass.exec((passRenderer) => {
-                this.renderInstList.drawOnPassRenderer(sceneObjHolder.modelCache.device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInstManager.drawListOnPassRenderer(this.renderInstList, passRenderer);
             });
         });
 

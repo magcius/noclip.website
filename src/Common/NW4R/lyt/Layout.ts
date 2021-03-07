@@ -7,7 +7,7 @@ import { mat4, ReadonlyMat4, ReadonlyVec2, ReadonlyVec3, ReadonlyVec4, vec2, vec
 import { computeModelMatrixSRT, MathConstants, saturate } from "../../../MathHelpers";
 import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable, TevDefaultSwapTables, getRasColorChannelID, GX_Program } from "../../../gx/gx_material";
-import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
+import { GfxRenderInst, GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
 import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../../../TextureHolder";
@@ -956,7 +956,7 @@ export class LayoutDrawInfo {
 
 interface LayoutResourceCollection {
     fillTextureByName(dst: TextureMapping, name: string): void;
-    getFontByName(name: string): ResFont;
+    getFontByName(name: string): ResFont | null;
 }
 
 export class LayoutResourceCollectionBasic {
@@ -966,8 +966,8 @@ export class LayoutResourceCollectionBasic {
         this.textureHolder.fillTextureMapping(dst, name);
     }
 
-    public getFontByName(name: string): ResFont {
-        return null!;
+    public getFontByName(name: string): ResFont | null {
+        return null;
     }
 
     public addTPL(device: GfxDevice, tpl: TPL): void {
@@ -1299,7 +1299,7 @@ export class LayoutTextbox extends LayoutPane {
     public lineHeight: number;
     public str: string;
 
-    private font: ResFont;
+    private font: ResFont | null = null;
 
     public parse(rlyt: RLYTTextbox, layout: Layout): void {
         super.parse(rlyt, layout);
@@ -1358,16 +1358,22 @@ export class LayoutTextbox extends LayoutPane {
     }
 
     private setCharWriterFont(charWriter: CharWriter): void {
-        charWriter.setFont(this.font, this.charSpacing, this.lineHeight, this.fontWidth, this.fontHeight);
+        charWriter.setFont(this.font!, this.charSpacing, this.lineHeight, this.fontWidth, this.fontHeight);
     }
 
     public getTextDrawRect(dst: vec4, layout: Layout): void {
+        if (this.font === null)
+            return;
+
         const charWriter = layout.charWriter;
         this.setCharWriterFont(charWriter);
         charWriter.calcRect(dst, this.str);
     }
 
     protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {
+        if (this.font === null)
+            return;
+
         const material = drawGetMaterial(layout, this);
         if (material === null)
             return;

@@ -13,9 +13,9 @@ import { fillMatrix4x3, fillMatrix4x4, fillColor } from "../gfx/helpers/UniformB
 import { mat4, quat, vec3, vec2 } from "gl-matrix";
 import { computeViewSpaceDepthFromWorldSpaceAABB, CameraController } from "../Camera";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { assert } from "../util";
-import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
-import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { assert, mod } from "../util";
+import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
+import { GfxRenderInstManager, GfxRendererLayer, makeSortKey, setSortKeyDepth, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { ItemInstance, ObjectDefinition } from "./item";
 import { colorNewFromRGBA, White, colorNewCopy, Color, colorCopy } from "../Color";
 import { ColorSet, emptyColorSet, lerpColorSet } from "./time";
@@ -75,10 +75,6 @@ export function rwTexture(texture: rw.Texture, txdName: string, useDXT = true): 
     const transparent = image.hasAlpha();
     image.delete();
     return { name, width, height, levels, pixelFormat, transparent };
-}
-
-function mod(a: number, b: number) {
-    return (a % b + b) % b;
 }
 
 function halve(pixels: Uint8Array, width: number, height: number, bpp: number): Uint8Array {
@@ -667,9 +663,6 @@ export class GTA3Renderer implements Viewer.SceneGfx {
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
-
-        this.prepareToRender(device, viewerInput);
-
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.clearRenderPassDescriptor);
@@ -685,8 +678,10 @@ export class GTA3Renderer implements Viewer.SceneGfx {
                 renderInstManager.drawOnPassRenderer(device, passRenderer);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

@@ -2,7 +2,7 @@
 import { J3DFrameCtrl, J3DFrameCtrl__UpdateFlags, entryTexMtxAnimator, entryTevRegAnimator, entryTexNoAnimator, VAF1_getVisibility, entryJointAnimator, calcJointMatrixFromTransform, calcANK1JointAnimationTransform } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { TTK1, LoopMode, TRK1, AnimationBase, TPT1, VAF1, ANK1, BCK, JointTransformInfo } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { J3DModelInstance, J3DModelData, JointMatrixCalc, ShapeInstanceState } from "../Common/JSYSTEM/J3D/J3DGraphBase";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
 import { dGlobals, dDlst_list_Set } from "./zww_scenes";
 import { mat4, quat, ReadonlyVec3, vec3 } from "gl-matrix";

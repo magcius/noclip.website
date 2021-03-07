@@ -9,7 +9,7 @@ import { createSwapChainForWebGL2, gfxDeviceGetImpl_GL, GfxPlatformWebGL2Config 
 import { createSwapChainForWebGPU } from './gfx/platform/GfxPlatformWebGPU';
 import { downloadFrontBufferToCanvas } from './Screenshot';
 import { RenderStatistics, RenderStatisticsTracker } from './RenderStatistics';
-import { makeClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { AntialiasingMode, makeClearRenderPassDescriptor } from './gfx/helpers/RenderGraphHelpers';
 import { OpaqueBlack } from './Color';
 import { WebXRContext } from './WebXR';
 import { MathConstants } from './MathHelpers';
@@ -36,7 +36,7 @@ export interface ViewerRenderInput {
     backbufferHeight: number;
     viewport: Readonly<GfxNormalizedViewportCoords>;
     onscreenTexture: GfxTexture;
-    sampleCount: number;
+    antialiasingMode: AntialiasingMode;
 }
 
 export interface SceneGfx {
@@ -112,12 +112,12 @@ export class Viewer {
             backbufferHeight: 0,
             viewport: this.viewport,
             onscreenTexture: null!,
-            sampleCount: DEFAULT_NUM_SAMPLES,
+            antialiasingMode: AntialiasingMode.None,
         };
 
-        GlobalSaveManager.addSettingListener('Antialiasing', (saveManager, key) => {
-            const antialiasing = saveManager.loadSetting<boolean>(key, true);
-            this.viewerRenderInput.sampleCount = antialiasing ? DEFAULT_NUM_SAMPLES : 1;
+        GlobalSaveManager.addSettingListener('AntialiasingMode', (saveManager, key) => {
+            const antialiasingMode = saveManager.loadSetting<AntialiasingMode>(key, AntialiasingMode.FXAA);
+            this.viewerRenderInput.antialiasingMode = antialiasingMode;
         });
     }
 
@@ -308,7 +308,7 @@ export class Viewer {
     }
 }
 
-export { SceneDesc, SceneGroup };
+export type { SceneDesc, SceneGroup };
 
 interface ViewerOut {
     viewer: Viewer;

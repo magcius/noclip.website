@@ -1,6 +1,6 @@
 import * as Viewer from '../viewer';
 import { DataFetcher } from '../DataFetcher';
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';

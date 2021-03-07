@@ -46,35 +46,6 @@ export class GfxrRenderTargetDescription {
     }
 }
 
-interface RenderInput {
-    backbufferWidth: number;
-    backbufferHeight: number;
-    sampleCount: number;
-}
-
-function selectFormatSimple(slot: GfxrAttachmentSlot): GfxFormat {
-    if (slot === GfxrAttachmentSlot.Color0)
-        return GfxFormat.U8_RGBA_RT;
-    else if (slot === GfxrAttachmentSlot.DepthStencil)
-        return GfxFormat.D32F;
-    else
-        throw "whoops";
-}
-
-export function makeBackbufferDescSimple(slot: GfxrAttachmentSlot, renderInput: RenderInput, clearDescriptor: GfxRenderPassDescriptor): GfxrRenderTargetDescription {
-    const pixelFormat = selectFormatSimple(slot);
-    const desc = new GfxrRenderTargetDescription(pixelFormat);
-    desc.setDimensions(renderInput.backbufferWidth, renderInput.backbufferHeight, renderInput.sampleCount);
-
-    if (clearDescriptor !== null) {
-        desc.colorClearColor = clearDescriptor.colorClearColor;
-        desc.depthClearValue = clearDescriptor.depthClearValue;
-        desc.stencilClearValue = clearDescriptor.stencilClearValue;
-    }
-
-    return desc;
-}
-
 export const enum GfxrAttachmentSlot {
     Color0, DepthStencil,
 }
@@ -83,7 +54,6 @@ export const IdentityViewportCoords: Readonly<GfxNormalizedViewportCoords> = { x
 
 type PassExecFunc = (passRenderer: GfxRenderPass, scope: GfxrPassScope) => void;
 type PassPostFunc = (scope: GfxrPassScope) => void;
-type PassPostFrameFunc = () => void;
 
 export interface GfxrPass {
     /**
@@ -121,12 +91,6 @@ export interface GfxrPass {
      * seldomly used.
      */
     post(func: PassPostFunc): void;
-
-    /**
-     * Set the pass's post frame callback. This will be called after all passes are submitted,
-     * allowing you do any cleanup work that you might need to.
-     */
-    postFrame(func: PassPostFrameFunc): void;
 }
 
 class PassImpl implements GfxrPass {
@@ -166,7 +130,6 @@ class PassImpl implements GfxrPass {
     // Execution callback from user.
     public execFunc: PassExecFunc | null = null;
     public postFunc: PassPostFunc | null = null;
-    public postFrameFunc: PassPostFrameFunc | null = null;
 
     // Misc. state.
     public debugName: string;
@@ -200,11 +163,6 @@ class PassImpl implements GfxrPass {
     public post(func: PassPostFunc): void {
         assert(this.postFunc === null);
         this.postFunc = func;
-    }
-
-    public postFrame(func: PassPostFrameFunc): void {
-        assert(this.postFrameFunc === null);
-        this.postFrameFunc = func;
     }
 }
 
@@ -501,7 +459,7 @@ export class GfxrRenderGraphImpl {
         return this.currentGraph!.resolveTextureRenderTargetIDs.push(renderTargetID) - 1;
     }
 
-    private findLastPassForRenderTarget(renderTargetID: number): PassImpl | null {
+    private findMostRecentPassThatAttachedRenderTarget(renderTargetID: number): PassImpl | null {
         for (let i = this.currentGraph!.passes.length - 1; i >= 0; i--) {
             const pass = this.currentGraph!.passes[i];
             if (pass.renderTargetIDs.includes(renderTargetID))
@@ -511,26 +469,36 @@ export class GfxrRenderGraphImpl {
         return null;
     }
 
-    public resolveRenderTarget(renderTargetID: number): number {
-        const resolveTextureID = this.createResolveTextureID(renderTargetID);
-
+    private findPassForResolveRenderTarget(renderTargetID: number): PassImpl {
         // Find the last pass that rendered to this render target, and resolve it now.
 
         // If you wanted a previous snapshot copy of it, you should have created a separate,
-        // intermediate pass to copy that out. Perhaps we should have a helper for this?
+        // intermediate pass to copy that out. Perhaps we should have a helper for that use case?
 
         // If there was no pass that wrote to this RT, well there's no point in resolving it, is there?
-        const renderPass = assertExists(this.findLastPassForRenderTarget(renderTargetID));
+        const renderPass = assertExists(this.findMostRecentPassThatAttachedRenderTarget(renderTargetID));
 
+        // Check which attachment we're in. This could possibly be explicit from the user, but it's
+        // easy enough to find...
+        const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
+
+        // Check that the pass isn't resolving its attachment to another texture. Can't do both!
+        assert(renderPass.resolveTextureOutputIDs[attachmentSlot] === undefined);
+        assert(renderPass.resolveTextureOutputExternalTextures[attachmentSlot] === undefined);
+
+        return renderPass;
+    }
+
+    public resolveRenderTarget(renderTargetID: number): number {
+        const resolveTextureID = this.createResolveTextureID(renderTargetID);
+        const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
         renderPass.resolveTextureOutputIDs[attachmentSlot] = resolveTextureID;
-
         return resolveTextureID;
     }
 
     public resolveRenderTargetToExternalTexture(renderTargetID: number, texture: GfxTexture): void {
-        const renderPass = assertExists(this.findLastPassForRenderTarget(renderTargetID));
-
+        const renderPass = this.findPassForResolveRenderTarget(renderTargetID);
         const attachmentSlot: GfxrAttachmentSlot = renderPass.renderTargetIDs.indexOf(renderTargetID);
         renderPass.resolveTextureOutputExternalTextures[attachmentSlot] = texture;
     }
@@ -806,12 +774,6 @@ export class GfxrRenderGraphImpl {
 
         // Clear our transient scope state.
         this.singleSampledTextureForResolveTextureID.length = 0;
-
-        for (let i = 0; i < graph.passes.length; i++) {
-            const pass = graph.passes[i];
-            if (pass.postFrameFunc !== null)
-                pass.postFrameFunc();
-        }
     }
 
     public execute(device: GfxDevice, builder: GfxrGraphBuilder): void {
@@ -863,3 +825,7 @@ export class GfxrRenderGraphImpl {
             this.singleSampledTextureDeadPool[i].destroy(device);
     }
 }
+
+// Backcompat
+import { makeBackbufferDescSimple } from '../helpers/RenderGraphHelpers';
+export { makeBackbufferDescSimple };

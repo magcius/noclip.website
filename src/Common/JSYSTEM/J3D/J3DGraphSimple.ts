@@ -5,7 +5,7 @@ import { assert } from "../../../util";
 import { Camera } from "../../../Camera";
 import { TTK1, TRK1, TPT1, ANK1, ANF1, BCA, JointTransformInfo, TRK1AnimationEntry, TTK1AnimationEntry, TPT1AnimationEntry, calcTexMtx_Maya, calcTexMtx_Basic, LoopMode, AnimationBase } from "./J3DLoader";
 import { GfxDevice } from "../../../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../../../viewer";
 import { mat4, vec3 } from "gl-matrix";
 import { calcANF1JointAnimationTransform, calcANK1JointAnimationTransform, calcJointMatrixFromTransform, sampleAnimationData } from "./J3DGraphAnimator";

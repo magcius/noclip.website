@@ -1,7 +1,7 @@
 
 import { mat4, vec3, ReadonlyVec3 } from 'gl-matrix';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { assert, assertExists, fallback, spliceBisectRight } from '../util';
+import { assert, assertExists, fallback, nArray, spliceBisectRight } from '../util';
 import { DataFetcher, AbortedCallback } from '../DataFetcher';
 import { MathConstants, computeModelMatrixSRT, clamp, computeProjectionMatrixFromCuboid } from '../MathHelpers';
 import { texProjCameraSceneTex } from '../Camera';
@@ -10,10 +10,10 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { TextureMapping } from '../TextureHolder';
-import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstList } from '../gfx/render/GfxRenderer';
+import { GfxDevice, GfxRenderPass, GfxTexture, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxNormalizedViewportCoords, GfxBindingLayoutDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxRenderInstList } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 
 import * as Yaz0 from '../Common/Compression/Yaz0';
 import * as RARC from '../Common/JSYSTEM/JKRArchive';
@@ -50,6 +50,7 @@ import { GfxrRenderTargetDescription, GfxrAttachmentSlot, GfxrTemporalTexture, G
 import { TransparentBlack } from '../Color';
 import { GameSystemFontHolder, LayoutHolder } from './Layout';
 import { GalaxyMapController } from './Actors/GalaxyMap';
+import { pushFXAAPass } from '../gfx/passes/FXAA';
 
 // Galaxy ticks at 60fps.
 export const FPS = 60;
@@ -261,7 +262,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         if (list === null)
             return;
         this.sceneObjHolder.specialTextureBinder.resolveLateBindTexture(list);
-        list.drawOnPassRenderer(this.sceneObjHolder.modelCache.device, this.renderHelper.renderInstManager.gfxRenderCache, passRenderer);
+        this.renderHelper.renderInstManager.drawListOnPassRenderer(list, passRenderer);
     }
 
     private drawOpa(passRenderer: GfxRenderPass, drawBufferType: DrawBufferType): void {
@@ -348,7 +349,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         executor.drawAllBuffers(this.sceneObjHolder.modelCache.device, renderInstManager, camera, viewerInput.viewport, DrawCameraType.DrawCameraType_2D);
         renderInstManager.popTemplateRenderInst();
 
-        this.mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
+        setBackbufferDescSimple(this.mainColorDesc, viewerInput);
         this.mainColorDesc.colorClearColor = TransparentBlack;
 
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
@@ -597,6 +598,9 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
             });
         });
+
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         // TODO(jstpierre): Make it so that we don't need an extra pass for this blit in the future?
@@ -614,6 +618,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
         this.renderHelper.prepareToRender(device);
 
         this.renderHelper.renderGraph.execute(device, builder);
+        this.sceneObjHolder.sceneNameObjListExecutor.drawBufferHolder.reset();
         renderInstManager.resetRenderInsts();
     }
 

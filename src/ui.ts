@@ -16,6 +16,7 @@ import { DraggingMode } from './InputManager';
 
 // @ts-ignore
 import logoURL from './assets/logo.png';
+import { AntialiasingMode } from './gfx/helpers/RenderGraphHelpers';
 
 export const HIGHLIGHT_COLOR = 'rgb(210, 30, 30)';
 export const COOL_BLUE_COLOR = 'rgb(20, 105, 215)';
@@ -1434,87 +1435,108 @@ export class Slider implements Widget {
     }
 }
 
+class RadioButtons implements Widget {
+    public elem: HTMLElement;
+    public selectedIndex: number = -1;
+    public onselectedchange: ((() => void) | null) = null;
+    private options: HTMLElement[] = [];
+
+    constructor(title: string, optionNames: string[]) {
+        this.elem = document.createElement('div');
+
+        this.elem.style.display = 'grid';
+
+        const fr = `${optionNames.length}fr ${optionNames.map(() => '1fr').join(' ')}`;
+        this.elem.style.gridTemplateColumns = fr;
+        this.elem.style.alignItems = 'center';
+
+        const header = document.createElement('div');
+        header.style.fontWeight = 'bold';
+        header.textContent = title;
+
+        this.elem.appendChild(header);
+
+        optionNames.forEach((optionName, i) => {
+            const option = document.createElement('div');
+            option.style.fontWeight = `bold`;
+            option.style.textAlign = `center`;
+            option.style.lineHeight = `24px`;
+            option.style.cursor = `pointer`;
+            option.textContent = optionName;
+            option.onclick = () => {
+                this.setSelectedIndex(i);
+            };
+
+            this.elem.appendChild(option);
+            this.options.push(option);
+        });
+    }
+
+    private sync(): void {
+        this.options.forEach((option, i) => {
+            setElementHighlighted(option, i === this.selectedIndex);
+        });
+    }
+
+    public setSelectedIndex(i: number): void {
+        if (this.selectedIndex === i)
+            return;
+
+        this.selectedIndex = i;
+        this.sync();
+
+        if (this.onselectedchange !== null)
+            this.onselectedchange();
+    }
+}
+
 class ViewerSettings extends Panel {
     private fovSlider: Slider;
+    private camControllerClasses: CameraControllerClass[] = [FPSCameraController, OrbitCameraController, OrthoCameraController];
+    private camRadioButtons: RadioButtons;
     private camSpeedSlider: Slider;
-    private cameraControllerWASD: HTMLElement;
-    private cameraControllerOrbit: HTMLElement;
-    private cameraControllerOrtho: HTMLElement;
     private invertYCheckbox: Checkbox;
     private invertXCheckbox: Checkbox;
-    private antialiasingCheckbox: Checkbox;
+    private antialiasingRadioButtons: RadioButtons;
 
     constructor(private ui: UI, private viewer: Viewer.Viewer) {
         super();
 
         this.setTitle(FRUSTUM_ICON, 'Viewer Settings');
 
-        // TODO(jstpierre): make css not leak
-        this.contents.innerHTML = `
-<style>
-.SettingsHeader, .SettingsButton {
-    font-weight: bold;
-}
-.SettingsButton {
-    background: #444;
-    text-align: center;
-    line-height: 24px;
-    cursor: pointer;
-}
-</style>
-
-<div style="display: grid; grid-template-columns: 3fr 1fr 1fr 1fr; align-items: center;">
-<div class="SettingsHeader">Camera Controller</div>
-<div class="SettingsButton CameraControllerWASD">WASD</div><div class="SettingsButton CameraControllerOrbit">Orbit</div><div class="SettingsButton CameraControllerOrtho">Ortho</div>
-</div>
-
-<div class="SliderContainer">
-</div>
-`;
         this.contents.style.lineHeight = '36px';
 
-        const sliderContainer = this.contents.querySelector('.SliderContainer')!;
+        this.camRadioButtons = new RadioButtons('Camera Controls', ['WASD', 'Orbit', 'Ortho']);
+        this.camRadioButtons.onselectedchange = () => {
+            if (ui.studioModeEnabled)
+                return;
+
+            const index = this.camRadioButtons.selectedIndex;
+            const cameraControllerClass = this.camControllerClasses[index];
+            this.setCameraControllerClass(cameraControllerClass);
+        };
+        this.contents.appendChild(this.camRadioButtons.elem);
+
         this.fovSlider = new Slider();
         this.fovSlider.setLabel("Field of View");
         this.fovSlider.setRange(1, 100);
         this.fovSlider.setValue(Viewer.Viewer.FOV_Y_DEFAULT / Math.PI * 100);
         this.fovSlider.onvalue = this.onFovSliderChange.bind(this);
-        sliderContainer.appendChild(this.fovSlider.elem);
+        this.contents.appendChild(this.fovSlider.elem);
 
         this.camSpeedSlider = new Slider();
         this.camSpeedSlider.setLabel("Camera Speed");
         this.camSpeedSlider.setRange(0, 200);
         this.camSpeedSlider.onvalue = this.updateCameraSpeedFromSlider.bind(this);
-        sliderContainer.appendChild(this.camSpeedSlider.elem);
+        this.contents.appendChild(this.camSpeedSlider.elem);
 
         this.viewer.addKeyMoveSpeedListener(this.onKeyMoveSpeedChanged.bind(this));
         this.viewer.inputManager.addScrollListener(this.onScrollWheel.bind(this));
 
-        this.cameraControllerWASD = this.contents.querySelector('.CameraControllerWASD') as HTMLInputElement;
-        this.cameraControllerWASD.onclick = () => {
-            if (!ui.studioModeEnabled) {
-                this.setCameraControllerClass(FPSCameraController);
-            }
-        };
-
-        this.cameraControllerOrbit = this.contents.querySelector('.CameraControllerOrbit') as HTMLInputElement;
-        this.cameraControllerOrbit.onclick = () => {
-            if (!ui.studioModeEnabled) {
-                this.setCameraControllerClass(OrbitCameraController);
-            }
-        };
-
-        this.cameraControllerOrtho = this.contents.querySelector('.CameraControllerOrtho') as HTMLInputElement;
-        this.cameraControllerOrtho.onclick = () => {
-            if (!ui.studioModeEnabled) {
-                this.setCameraControllerClass(OrthoCameraController);
-            }
-        };
-
-        this.antialiasingCheckbox = new Checkbox('Antialiasing?');
-        this.antialiasingCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`Antialiasing`, this.antialiasingCheckbox.checked); };
-        this.contents.appendChild(this.antialiasingCheckbox.elem);
-        GlobalSaveManager.addSettingListener('Antialiasing', this.antialiasingChanged.bind(this));
+        this.antialiasingRadioButtons = new RadioButtons('Antialiasing', ['None', 'FXAA', '4x MSAA']);
+        this.antialiasingRadioButtons.onselectedchange = () => { GlobalSaveManager.saveSetting(`AntialiasingMode`, this.antialiasingRadioButtons.selectedIndex); };
+        this.contents.appendChild(this.antialiasingRadioButtons.elem);
+        GlobalSaveManager.addSettingListener('AntialiasingMode', this.antialiasingChanged.bind(this));
 
         this.invertYCheckbox = new Checkbox('Invert Y Axis?');
         this.invertYCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertY`, this.invertYCheckbox.checked); };
@@ -1564,10 +1586,7 @@ class ViewerSettings extends Panel {
     }
 
     public cameraControllerSelected(cameraControllerClass: CameraControllerClass) {
-        setElementHighlighted(this.cameraControllerWASD, cameraControllerClass === FPSCameraController);
-        setElementHighlighted(this.cameraControllerOrbit, cameraControllerClass === OrbitCameraController);
-        setElementHighlighted(this.cameraControllerOrtho, cameraControllerClass === OrthoCameraController);
-
+        this.camRadioButtons.setSelectedIndex(this.camControllerClasses.indexOf(cameraControllerClass));
         setElementVisible(this.fovSlider.elem, cameraControllerClass !== OrthoCameraController);
     }
 
@@ -1582,8 +1601,8 @@ class ViewerSettings extends Panel {
     }
 
     private antialiasingChanged(saveManager: SaveManager, key: string): void {
-        const antialias = saveManager.loadSetting<boolean>(key, true);
-        this.antialiasingCheckbox.setChecked(antialias);
+        const antialiasingMode = saveManager.loadSetting<AntialiasingMode>(key, AntialiasingMode.FXAA);
+        this.antialiasingRadioButtons.setSelectedIndex(antialiasingMode);
     }
 }
 

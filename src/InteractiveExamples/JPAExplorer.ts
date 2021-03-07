@@ -1,6 +1,6 @@
 
 import { SceneGfx, ViewerRenderInput } from "../viewer";
-import { makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { OrbitCameraController, texProjCameraSceneTex } from "../Camera";
@@ -8,8 +8,8 @@ import { colorNewFromRGBA } from "../Color";
 import * as JPA from '../Common/JSYSTEM/JPA';
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec3 } from "gl-matrix";
-import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderer";
-import { assertExists, hexzero, assert } from "../util";
+import { GfxRenderInstManager, executeOnPass } from "../gfx/render/GfxRenderInstManager";
+import { assertExists, hexzero, assert, mod } from "../util";
 import { SceneContext } from "../SceneBase";
 import { LAYER_ICON, HIGHLIGHT_COLOR, Checkbox, TextField } from "../ui";
 import { GridPlane } from "./GridPlane";
@@ -113,10 +113,6 @@ class BasicEffectSystem {
         this.jpacData.destroy(device);
         this.emitterManager.destroy(device);
     }
-}
-
-function mod(a: number, b: number): number {
-    return (a + b) % b;
 }
 
 function arrayNextIdx<T>(L: T[], n: number, incr: number): number {
@@ -463,8 +459,6 @@ export class Explorer implements SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
-        this.prepareToRender(device, viewerInput);
-
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, clearPass);
@@ -497,8 +491,10 @@ export class Explorer implements SceneGfx {
                 executeOnPass(renderInstManager, device, passRenderer, Pass.INDIRECT);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

@@ -10,7 +10,7 @@ import { GXMaterialBuilder } from "../../../gx/GXMaterialBuilder";
 import { TDDraw } from "../../../SuperMarioGalaxy/DDraw";
 import { colorCopy, colorNewCopy, TransparentBlack, White } from "../../../Color";
 import { vec3, vec4 } from "gl-matrix";
-import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../../../gfx/render/GfxRenderInstManager";
 import { TextureMapping } from "../../../TextureHolder";
 
 const enum RFNTGlyphType {
@@ -46,7 +46,6 @@ interface RFNTFINF {
     height: number;
     ascent: number;
     defaultGlyphIndex: number;
-    defaultCWDH: RFNTCWDHEntry;
 }
 
 interface RFNTTGLP {
@@ -78,6 +77,7 @@ export function parseBRFNT(buffer: NamedArrayBufferSlice): RFNT {
 
     let finf: RFNTFINF | null = null;
     let tglp: RFNTTGLP | null = null;
+    let defaultCWDH: RFNTCWDHEntry | null = null;
     const cmap = new Uint16Array(0x10000).fill(0xFFFF);
 
     const glyphInfo: GlyphInfo[] = [];
@@ -99,7 +99,7 @@ export function parseBRFNT(buffer: NamedArrayBufferSlice): RFNT {
             const defaultLeftSideBearing = view.getInt8(blockContentsOffs + 0x04);
             const defaultWidth = view.getUint8(blockContentsOffs + 0x05);
             const defaultAdvanceWidth = view.getInt8(blockContentsOffs + 0x06);
-            const defaultCWDH: RFNTCWDHEntry = {
+            defaultCWDH = {
                 leftSideBearing: defaultLeftSideBearing,
                 width: defaultWidth,
                 advanceWidth: defaultAdvanceWidth,
@@ -116,7 +116,7 @@ export function parseBRFNT(buffer: NamedArrayBufferSlice): RFNT {
             const width = view.getUint8(blockContentsOffs + 0x15);
             const ascent = view.getUint8(blockContentsOffs + 0x16);
 
-            finf = { advanceHeight, encoding, width, height, ascent, defaultGlyphIndex, defaultCWDH };
+            finf = { advanceHeight, encoding, width, height, ascent, defaultGlyphIndex };
         } else if (fourcc === 'TGLP') {
             const glyphCellW = view.getUint8(blockContentsOffs + 0x00);
             const glyphCellH = view.getUint8(blockContentsOffs + 0x01);
@@ -152,7 +152,7 @@ export function parseBRFNT(buffer: NamedArrayBufferSlice): RFNT {
                         const s1b = x * (glyphCellW + 1);
                         const s1m = 1 / texW;
 
-                        glyphInfo[glyphIndex++] = { textureIndex, s0, t0, s1b, s1m, t1, cwdh: finf!.defaultCWDH, };
+                        glyphInfo[glyphIndex++] = { textureIndex, s0, t0, s1b, s1m, t1, cwdh: defaultCWDH!, };
                     }
                 }
             }

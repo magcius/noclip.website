@@ -2,7 +2,7 @@
 import { DeviceProgram } from "../Program";
 import { VMT, parseVMT, VKFPair, vmtParseVector } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
-import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderer";
+import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderInstManager";
 import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -96,8 +96,6 @@ void OutputLinearColor(in vec4 t_Color) {
 function scaleBiasSet(dst: vec4, scale: number, x: number = 0.0, y: number = 0.0): void {
     vec4.set(dst, scale, scale, x, y);
 }
-
-type ParameterMap = { [k: string]: Parameter };
 
 interface Parameter {
     parse(S: string): void;
@@ -372,10 +370,11 @@ function colorGammaToLinear(c: Color, src: Color): void {
 }
 
 export abstract class BaseMaterial {
-    public visible = true;
+    private visible = true;
     public wantsLightmap = false;
     public wantsBumpmappedLightmap = false;
     public isTranslucent = false;
+    public isToolMaterial = false;
     public param: ParameterMap = {};
     public entityParams: EntityMaterialParameters | null = null;
 
@@ -398,6 +397,19 @@ export abstract class BaseMaterial {
 
     public isMaterialLoaded(): boolean {
         return this.loaded;
+    }
+
+    public isMaterialVisible(renderContext: SourceRenderContext): boolean {
+        if (!this.visible)
+            return false;
+
+        if (!this.isMaterialLoaded())
+            return false;
+
+        if (this.isToolMaterial && !renderContext.showToolMaterials)
+            return false;
+
+        return true;
     }
 
     public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
@@ -1494,14 +1506,6 @@ class Material_UnlitTwoTexture extends BaseMaterial {
         renderInst.sortKey = this.sortKeyBase;
     }
 }
-
-// Hide Tool materials by default. I don't think we need to do this now that we use the BSP, but just in case...
-class HiddenMaterial extends Material_Generic {
-    protected initStatic(device: GfxDevice, cache: GfxRenderCache) {
-        super.initStatic(device, cache);
-        this.visible = false;
-    }
-}
 //#endregion
 
 //#region Water
@@ -1929,11 +1933,6 @@ export class MaterialCache {
     }
 
     private createMaterialInstanceInternal(vmt: VMT): BaseMaterial {
-        // Hacks for now. I believe these are normally hidden by not actually being in the BSP tree.
-        if (vmt['%compilesky'] || vmt['%compiletrigger']) {
-            return new HiddenMaterial(vmt);
-        }
-
         // Dispatch based on shader type.
         const shaderType = vmt._Root.toLowerCase();
         if (shaderType === 'water')
@@ -1950,6 +1949,10 @@ export class MaterialCache {
         const vmt = await this.fetchMaterialData(path);
         const materialInstance = this.createMaterialInstanceInternal(vmt);
         materialInstance.entityParams = entityParams;
+
+        if (vmt['%compilesky'] || vmt['%compiletrigger'])
+            materialInstance.isToolMaterial = true;
+
         await materialInstance.init(renderContext);
         return materialInstance;
     }
@@ -2489,7 +2492,7 @@ export class SurfaceLightmap {
 //#endregion
 
 //#region Material Proxy System
-class ParameterReference {
+export class ParameterReference {
     public name: string | null = null;
     public index: number = -1;
     public value: Parameter | null = null;
@@ -2522,15 +2525,17 @@ function paramLookupOptional<T extends Parameter>(map: ParameterMap, ref: Parame
     }
 }
 
+type ParameterMap = { [k: string]: Parameter };
+
 function paramLookup<T extends Parameter>(map: ParameterMap, ref: ParameterReference): T {
     return assertExists(paramLookupOptional<T>(map, ref));
 }
 
-function paramGetNum(map: ParameterMap, ref: ParameterReference): number {
+export function paramGetNum(map: ParameterMap, ref: ParameterReference): number {
     return paramLookup<ParameterNumber>(map, ref).value;
 }
 
-function paramSetNum(map: ParameterMap, ref: ParameterReference, v: number): void {
+export function paramSetNum(map: ParameterMap, ref: ParameterReference, v: number): void {
     paramLookup<ParameterNumber>(map, ref).value = v;
 }
 

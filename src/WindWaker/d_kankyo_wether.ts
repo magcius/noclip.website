@@ -10,7 +10,7 @@ import { J3DModelInstance } from "../Common/JSYSTEM/J3D/J3DGraphBase";
 import { mDoExt_btkAnm, mDoExt_brkAnm, mDoExt_modelUpdateDL } from "./m_do_ext";
 import { ResType } from "./d_resorce";
 import { LoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
-import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
 import { MtxTrans, mDoMtx_ZrotM, mDoMtx_XrotM, calc_mtx } from "./d_a";
 import { BTIData, BTI_Texture } from "../Common/JSYSTEM/JUTTexture";
@@ -1711,7 +1711,7 @@ function dKyr_windline_move(globals: dGlobals, deltaTimeInFrames: number): void 
                 eff.stateTimer = cLib_addCalc(eff.stateTimer, 0.0, speed, maxVel * (0.1 + 0.01 * (i / 30)), 0.01);
                 if (eff.stateTimer <= 0.0) {
                     emitter.deleteAllParticle();
-                    emitter.becomeInvalidEmitter();
+                    emitter.becomeInvalidEmitterImmediate();
                     eff.emitter = null;
                     eff.state = 0;
                 }

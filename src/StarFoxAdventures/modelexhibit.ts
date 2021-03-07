@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import * as UI from '../ui';
 import * as Viewer from "../viewer";
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { SceneContext } from '../SceneBase';
 import { White } from '../Color';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine, drawWorldSpacePoint } from '../DebugJunk';

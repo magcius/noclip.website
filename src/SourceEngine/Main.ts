@@ -9,11 +9,11 @@ import { drawWorldSpaceAABB, getDebugOverlayCanvas2D } from "../DebugJunk";
 import { AABB, Frustum } from "../Geometry";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { fullscreenMegaState } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
-import { standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { fillColor, fillMatrix4x4, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { GfxBindingLayoutDescriptor, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxRenderPass, GfxTexFilterMode, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency, GfxWrapMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderer";
+import { GfxRendererLayer, GfxRenderInstManager, makeSortKey, setSortKeyDepth } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription } from "../gfx/render/GfxRenderGraph";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { clamp, getMatrixTranslation } from "../MathHelpers";
@@ -29,6 +29,7 @@ import { BaseMaterial, LateBindingTexture, LightmapManager, MaterialCache, Mater
 import { DetailPropLeafRenderer, StaticPropRenderer } from "./StaticDetailObject";
 import { StudioModelCache } from "./Studio";
 import { createVPKMount, VPKMount } from "./VPK";
+import { GfxShaderLibrary } from "../gfx/helpers/ShaderHelpers";
 
 function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
     if (entry.compressionMethod === ZipCompressionMethod.None) {
@@ -241,7 +242,7 @@ export class SkyboxRenderer {
         offs += fillVec3v(d, offs, view.cameraPos);
 
         for (let i = 0; i < 6; i++) {
-            if (!this.materialInstances[i].visible)
+            if (!this.materialInstances[i].isMaterialVisible(renderContext))
                 continue;
             const renderInst = renderInstManager.newRenderInst();
             this.materialInstances[i].setOnRenderInst(renderContext, renderInst, this.modelMatrix);
@@ -289,7 +290,7 @@ class BSPSurfaceRenderer {
     }
 
     public prepareToRender(renderContext: SourceRenderContext, renderInstManager: GfxRenderInstManager, view: SourceEngineView, modelMatrix: ReadonlyMat4, pvs: BitMap | null = null) {
-        if (!this.visible || this.materialInstance === null || !this.materialInstance.visible || !this.materialInstance.isMaterialLoaded())
+        if (!this.visible || this.materialInstance === null || !this.materialInstance.isMaterialVisible(renderContext))
             return;
 
         if (pvs !== null) {
@@ -368,25 +369,34 @@ export class BSPModelRenderer {
                 this.surfaces[i].materialInstance!.entityParams = entity.materialParams;
     }
 
-    private async bindMaterials(renderContext: SourceRenderContext) {
-        // Gather all materials.
-        const texinfos = new Set<number>();
+    public findMaterial(texName: string): BaseMaterial | null {
         for (let i = 0; i < this.surfaces.length; i++) {
             const surface = this.surfaces[i];
-            texinfos.add(surface.surface.texinfo);
+            if (surface.surface.texName === texName)
+                return surface.materialInstance;
         }
 
-        const materialInstances = await Promise.all([...texinfos].map(async (i: number): Promise<[number, BaseMaterial]> => {
-            const texinfo = this.bsp.texinfo[i];
-            const materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, texinfo.texName);
+        return null;
+    }
+
+    private async bindMaterials(renderContext: SourceRenderContext) {
+        // Gather all materials.
+        const texNames = new Set<string>();
+        for (let i = 0; i < this.surfaces.length; i++) {
+            const surface = this.surfaces[i];
+            texNames.add(surface.surface.texName);
+        }
+
+        const materialInstances = await Promise.all([...texNames].map(async (texName: string): Promise<[string, BaseMaterial]> => {
+            const materialInstance = await renderContext.materialCache.createMaterialInstance(renderContext, texName);
             if (this.entity !== null)
                 materialInstance.entityParams = this.entity.materialParams;
-            return [i, materialInstance];
+            return [texName, materialInstance];
         }));
 
         for (let i = 0; i < this.surfaces.length; i++) {
             const surface = this.surfaces[i];
-            const [texinfo, materialInstance] = assertExists(materialInstances.find(([i]) => surface.surface.texinfo === i));
+            const [, materialInstance] = assertExists(materialInstances.find(([texName]) => surface.surface.texName === texName));
             surface.bindMaterial(materialInstance, renderContext.lightmapManager);
         }
     }
@@ -789,6 +799,8 @@ export class SourceRenderContext {
     public cheapWaterStartDistance = 0.0;
     public cheapWaterEndDistance = 0.1;
     public currentView: SourceEngineView;
+    public showToolMaterials = false;
+    public showTriggerDebug = false;
 
     constructor(public device: GfxDevice, public cache: GfxRenderCache, public filesystem: SourceFileSystem) {
         this.lightmapManager = new LightmapManager(device, cache);
@@ -812,18 +824,7 @@ const bindingLayoutsGammaCorrect: GfxBindingLayoutDescriptor[] = [
 ];
 
 class FullscreenGammaCorrectProgram extends DeviceProgram {
-    public vert: string = `
-out vec2 v_TexCoord;
-
-void main() {
-    vec2 p;
-    p.x = (gl_VertexID == 1) ? 2.0 : 0.0;
-    p.y = (gl_VertexID == 2) ? 2.0 : 0.0;
-    gl_Position.xy = p * vec2(2) - vec2(1);
-    gl_Position.zw = vec2(-1, 1);
-    v_TexCoord = p;
-}
-`;
+    public vert: string = GfxShaderLibrary.fullscreenVS;
 
     public frag: string = `
 uniform sampler2D u_Texture;
@@ -846,6 +847,12 @@ export class SourceRenderer implements SceneGfx {
     public skyboxRenderer: SkyboxRenderer | null = null;
     public bspRenderers: BSPRenderer[] = [];
     public renderContext: SourceRenderContext;
+
+    // Debug & Settings
+    public drawSkybox2D = true;
+    public drawSkybox3D = true;
+    public drawWorld = true;
+    public pvsEnabled = true;
 
     // Scratch
     public mainView = new SourceEngineView();
@@ -874,6 +881,9 @@ export class SourceRenderer implements SceneGfx {
     }
 
     public calcPVS(bsp: BSPFile, pvs: BitMap, view: SourceEngineView): boolean {
+        if (!this.pvsEnabled)
+            return false;
+
         // Compute PVS from view.
         const leaf = bsp.findLeafForPoint(view.cameraPos);
 
@@ -912,35 +922,39 @@ export class SourceRenderer implements SceneGfx {
         template.setBindingLayouts(bindingLayouts);
 
         template.filterKey = FilterKey.Skybox;
-        if (this.skyboxRenderer !== null)
+        if (this.skyboxRenderer !== null && this.drawSkybox2D)
             this.skyboxRenderer.prepareToRender(this.renderContext, renderInstManager, this.skyboxView);
 
-        for (let i = 0; i < this.bspRenderers.length; i++) {
-            const bspRenderer = this.bspRenderers[i];
+        if (this.drawSkybox3D) {
+            for (let i = 0; i < this.bspRenderers.length; i++) {
+                const bspRenderer = this.bspRenderers[i];
 
-            // Draw the skybox by positioning us inside the skybox area.
-            const skyCameraModelMatrix = bspRenderer.getSkyCameraModelMatrix();
-            if (skyCameraModelMatrix === null)
-                continue;
-            this.skyboxView.setupFromCamera(viewerInput.camera, skyCameraModelMatrix);
+                // Draw the skybox by positioning us inside the skybox area.
+                const skyCameraModelMatrix = bspRenderer.getSkyCameraModelMatrix();
+                if (skyCameraModelMatrix === null)
+                    continue;
+                this.skyboxView.setupFromCamera(viewerInput.camera, skyCameraModelMatrix);
 
-            // If our skybox is not in a useful spot, then don't render it.
-            if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.skyboxView))
-                continue;
+                // If our skybox is not in a useful spot, then don't render it.
+                if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.skyboxView))
+                    continue;
 
-            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.skyboxView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps);
+                bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.skyboxView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.StaticProps);
+            }
         }
 
         template.filterKey = FilterKey.Main;
-        for (let i = 0; i < this.bspRenderers.length; i++) {
-            const bspRenderer = this.bspRenderers[i];
+        if (this.drawWorld) {
+            for (let i = 0; i < this.bspRenderers.length; i++) {
+                const bspRenderer = this.bspRenderers[i];
 
-            if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.mainView)) {
-                // No valid PVS, mark everything visible.
-                this.pvsScratch.fill(true);
+                if (!this.calcPVS(bspRenderer.bsp, this.pvsScratch, this.mainView)) {
+                    // No valid PVS, mark everything visible.
+                    this.pvsScratch.fill(true);
+                }
+
+                bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
             }
-
-            bspRenderer.prepareToRenderView(this.renderContext, renderInstManager, this.mainView, this.pvsScratch, RenderObjectKind.WorldSpawn | RenderObjectKind.Entities | RenderObjectKind.StaticProps | RenderObjectKind.DetailProps | RenderObjectKind.DebugCube);
         }
 
         renderInstManager.popTemplateRenderInst();
@@ -965,7 +979,7 @@ export class SourceRenderer implements SceneGfx {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT_SRGB);
-        mainColorDesc.setDimensions(viewerInput.backbufferWidth, viewerInput.backbufferHeight, viewerInput.sampleCount);
+        setBackbufferDescSimple(mainColorDesc, viewerInput);
         mainColorDesc.colorClearColor = standardFullClearRenderPassDescriptor.colorClearColor;
 
         const mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -1025,23 +1039,26 @@ export class SourceRenderer implements SceneGfx {
             const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
             pass.attachResolveTexture(mainColorResolveTextureID);
 
+            const gammaCorrectRenderInst = this.renderHelper.renderInstManager.newRenderInst();
+            gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsGammaCorrect);
+            gammaCorrectRenderInst.setInputLayoutAndState(null, null);
+            const gammaCorrectProgram = cache.createProgram(device, this.gammaCorrectProgram);
+            gammaCorrectRenderInst.setGfxProgram(gammaCorrectProgram);
+            gammaCorrectRenderInst.setMegaStateFlags(fullscreenMegaState);
+            gammaCorrectRenderInst.drawPrimitives(3);
+
             pass.exec((passRenderer, scope) => {
-                const gammaCorrectRenderInst = this.renderHelper.renderInstManager.newRenderInst();
-                gammaCorrectRenderInst.setBindingLayouts(bindingLayoutsGammaCorrect);
-                gammaCorrectRenderInst.setInputLayoutAndState(null, null);
-                const gammaCorrectProgram = cache.createProgram(device, this.gammaCorrectProgram);
                 this.framebufferTextureMapping[0].gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                gammaCorrectRenderInst.setGfxProgram(gammaCorrectProgram);
                 gammaCorrectRenderInst.setSamplerBindingsFromTextureMappings(this.framebufferTextureMapping);
-                gammaCorrectRenderInst.setMegaStateFlags(fullscreenMegaState);
-                gammaCorrectRenderInst.drawPrimitives(3);
                 gammaCorrectRenderInst.drawOnPass(device, cache, passRenderer);
             });
         });
+
+        // TODO(jstpierre): Merge FXAA and Gamma Correct?
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorGammaTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorGammaTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

@@ -12,11 +12,11 @@ import { readString, assert, hexzero, nArray } from "../util";
 import { decompress } from "../Common/Compression/MIO0";
 import { makeStaticDataBuffer } from "../gfx/helpers/BufferHelpers";
 import { DeviceProgram } from "../Program";
-import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth, getSortKeyLayer, executeOnPass } from "../gfx/render/GfxRenderInstManager";
 import { fillMatrix4x3, fillMatrix4x4, fillMatrix4x2, fillVec4v, fillVec3v } from "../gfx/helpers/UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
-import { standardFullClearRenderPassDescriptor, makeClearRenderPassDescriptor } from "../gfx/helpers/RenderTargetHelpers";
+import { standardFullClearRenderPassDescriptor, makeClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from "../gfx/helpers/RenderGraphHelpers";
 import { CameraController } from "../Camera";
 import { MathConstants, clamp, computeMatrixWithoutTranslation, scaleMatrix } from "../MathHelpers";
 import { TextureState, RSP_Geometry, translateBlendMode } from "../BanjoKazooie/f3dex";
@@ -25,7 +25,7 @@ import { TextureMapping } from "../TextureHolder";
 import { Endianness } from "../endian";
 import { DataFetcher } from "../DataFetcher";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
-import { getPointCubic, getPointHermite } from "../Spline";
+import { getCoeffHermite, getDerivativeCubic, getPointCubic, getPointHermite } from "../Spline";
 import { SingleSelect, Panel, TIME_OF_DAY_ICON, COOL_BLUE_COLOR } from "../ui";
 import { fullscreenMegaState, setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { F3DEX_Program } from "../BanjoKazooie/render";
@@ -846,18 +846,12 @@ function parseSPTH(file: Pilotwings64FSFile): SPTH {
     return { xTrack, yTrack, zTrack, hTrack, pTrack, rTrack};
 }
 
+const scratchVec4 = vec4.create();
 function getTwoDerivativeHermite(dst: AnimationTrackSample, p0: number, p1: number, s0: number, s1: number, t: number): void {
-    const cf0 = (p0 * 2) + (p1 * -2) + (s0 * 1) + (s1 * 1);
-    const cf1 = (p0 * -3) + (p1 * 3) + (s0 * -2) + (s1 * -1);
-    const cf2 = (p0 * 0) + (p1 * 0) + (s0 * 1) + (s1 * 0);
-    const cf3 = (p0 * 1) + (p1 * 0) + (s0 * 0) + (s1 * 0);
-    dst.pos = getPointCubic(cf0, cf1, cf2, cf3, t);
-    dst.vel = getDerivativeCubic(cf0, cf1, cf2, t);
-    dst.acc = 6 * cf0 * t + 2 * cf1;
-}
-
-function getDerivativeCubic(cf0: number, cf1: number, cf2: number, t: number): number {
-    return (3 * cf0 * t + 2 * cf1) * t + cf2;
+    getCoeffHermite(scratchVec4, p0, p1, s0, s1);
+    dst.pos = getPointCubic(scratchVec4, t);
+    dst.vel = getDerivativeCubic(scratchVec4, t);
+    dst.acc = 6 * scratchVec4[0] * t + 2 * scratchVec4[1];
 }
 
 function hermiteInterpolate(dst: AnimationTrackSample, k0: AnimationKeyframe, k1: AnimationKeyframe, t0: AnimationKeyframe, t1: AnimationKeyframe, time: number): void {
@@ -2885,11 +2879,10 @@ class Pilotwings64Renderer implements SceneGfx {
 
     public render(device: GfxDevice, viewerInput: ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, this.renderPassDescriptor);
         const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, this.renderPassDescriptor);
-
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         builder.pushPass((pass) => {
@@ -2911,10 +2904,10 @@ class Pilotwings64Renderer implements SceneGfx {
                 executeOnPass(renderInstManager, device, passRenderer, PW64Pass.SNOW);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
         this.prepareToRender(device, viewerInput);
-
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

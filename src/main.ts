@@ -67,6 +67,7 @@ import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
 import * as Scenes_TheWitness from './TheWitness/Scenes_TheWitness';
 import * as Scenes_FFX from './FinalFantasyX/scenes';
 import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
+import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
 
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
@@ -79,7 +80,7 @@ import { mat4 } from 'gl-matrix';
 import { GlobalSaveManager, SaveStateLocation } from './SaveManager';
 import { RenderStatistics } from './RenderStatistics';
 import { Color } from './Color';
-import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderTargetHelpers';
+import { standardFullClearRenderPassDescriptor } from './gfx/helpers/RenderGraphHelpers';
 
 import * as Sentry from '@sentry/browser';
 import { GIT_REVISION, IS_DEVELOPMENT } from './BuildVersion';
@@ -130,6 +131,7 @@ const sceneGroups = [
     Scenes_BanjoKazooie.sceneGroup,
     Scenes_BanjoTooie.sceneGroup,
     Scenes_BeetleAdventureRacing.sceneGroup,
+    Scenes_DiddyKongRacing.sceneGroup,
     Scenes_PaperMario64.sceneGroup,
     Scenes_Pilotwings64.sceneGroup,
     Scenes_PokemonSnap.sceneGroup,
@@ -763,13 +765,6 @@ class Main {
 
         const sceneDescId = this._getCurrentSceneDescId()!;
 
-        if (typeof gtag !== 'undefined') {
-            gtag("event", "loadScene", {
-                'event_category': "Scenes",
-                'event_label': sceneDescId,
-            });
-        }
-
         Sentry.addBreadcrumb({
             category: 'loadScene',
             message: sceneDescId,
@@ -827,9 +822,6 @@ class Main {
         return this.viewer.scene;
     }
 }
-
-// Google Analytics
-declare var gtag: (command: string, eventName: string, eventParameters: { [key: string]: string }) => void;
 
 // Declare a "main" object for easy access.
 declare global {

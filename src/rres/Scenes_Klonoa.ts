@@ -7,13 +7,13 @@ import * as BRRES from './brres';
 import * as U8 from './u8';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { RRESTextureHolder, MDL0ModelInstance, MDL0Model } from './render';
-import { standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GXRenderHelperGfx, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import AnimationController from '../AnimationController';
 import { assert } from '../util';
 import { TextureOverride } from '../TextureHolder';
 import { EFB_WIDTH, EFB_HEIGHT } from '../gx/gx_material';
-import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderer';
+import { executeOnPass, hasAnyVisible } from '../gfx/render/GfxRenderInstManager';
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
@@ -58,8 +58,6 @@ class KlonoaRenderer implements Viewer.SceneGfx {
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
         const renderInstManager = this.renderHelper.renderInstManager;
-        this.prepareToRender(device, viewerInput);
-
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
@@ -103,8 +101,10 @@ class KlonoaRenderer implements Viewer.SceneGfx {
                 });
             });
         }
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }

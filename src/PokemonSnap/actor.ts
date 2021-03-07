@@ -10,7 +10,7 @@ import { getPathPoint, getPathTangent } from "./animation";
 import { ObjectDef } from "./room";
 import { randomRange } from "../BanjoKazooie/particles";
 import { ParticleManager } from "./particles";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 
 const throwScratch = nArray(2, () => vec3.create());

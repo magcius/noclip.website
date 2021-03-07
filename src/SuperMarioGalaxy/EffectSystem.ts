@@ -6,7 +6,7 @@ import { createCsvParser, JMapInfoIter } from "./JMapInfo";
 import { SceneObjHolder } from "./Main";
 import { leftPad, assert, assertExists, fallback, fallbackUndefined } from "../util";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { GfxRenderInstManager } from "../gfx/render/GfxRenderer";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { vec3, mat4 } from "gl-matrix";
 import { colorNewCopy, White, colorCopy, Color } from "../Color";
 import { computeModelMatrixR, vec3SetAll } from "../MathHelpers";
