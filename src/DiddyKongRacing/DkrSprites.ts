@@ -1,13 +1,11 @@
-import { mat4, vec3, quat } from 'gl-matrix';
+
+import { mat4, vec3 } from 'gl-matrix';
 import { Camera, computeViewMatrix } from '../Camera';
-import { colorScale } from '../Color';
-import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { translateCM } from '../Common/N64/RDP';
-import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
+import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from '../gfx/helpers/UniformBufferHelpers';
-import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxCullMode, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, 
+import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
+import { GfxBlendFactor, GfxBlendMode, GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxMipFilterMode, GfxProgram, GfxTexFilterMode, 
     GfxVertexAttributeDescriptor, 
     GfxVertexBufferFrequency, 
     GfxWrapMode, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
@@ -18,13 +16,12 @@ import { assert } from '../util';
 import { ViewerRenderInput } from '../viewer';
 import { DataManager } from './DataManager';
 import { DkrControlGlobals } from './DkrControlGlobals';
-import { DkrObject, MODEL_TYPE_2D_BILLBOARD, MODEL_TYPE_3D_MODEL } from './DkrObject';
+import { DkrObject, MODEL_TYPE_2D_BILLBOARD } from './DkrObject';
 import { F3DDKR_Sprite_Program, MAX_NUM_OF_SPRITE_FRAMES, MAX_NUM_OF_SPRITE_INSTANCES } from './F3DDKR_Sprite_Program';
 
 const viewMatrixScratch = mat4.create();
 const viewMatrixCalcScratch = mat4.create();
 const viewMatrixCalc2Scratch = mat4.create();
-const texMatrixScratch = mat4.create();
 const mirrorMatrix = mat4.fromValues(
     -1, 0, 0, 0,
      0, 1, 0, 0,
@@ -238,17 +235,6 @@ export class DkrSprites {
             d2[offs2] = this.currentFrame;
             offs2 += 4;
     
-            calcTextureMatrixFromRSPState(
-                texMatrixScratch, 
-                0, //this.drawCall.SP_TextureState.s, 
-                0, //this.drawCall.SP_TextureState.t, 
-                this.spriteSheetWidth, // width
-                this.spriteSheetHeight, // height
-                Math.floor(Math.log2(this.spriteSheetWidth)), // shifts
-                Math.floor(Math.log2(this.spriteSheetHeight)), // shiftt
-            );
-            offs2 += fillMatrix4x4(d2, offs2, texMatrixScratch);
-
             // Use the texture.
             this.bind(renderInst);
             renderInst.sortKey = setSortKeyDepth(renderInst.sortKey, 0);

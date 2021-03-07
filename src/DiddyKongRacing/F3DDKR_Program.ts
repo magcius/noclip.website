@@ -30,7 +30,6 @@ layout(std140) uniform ub_DrawParams {
     float u_AnimProgress; // Interpolation between animations.
     vec4 u_Color;
     vec4 u_TexCoordOffset;
-    Mat4x4 u_TexMatrix;
     Mat4x3 u_ViewMatrix[${MAX_NUM_OF_INSTANCES}];
 };
 

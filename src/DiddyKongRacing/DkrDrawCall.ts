@@ -1,6 +1,6 @@
-import { mat4, vec3, vec4 } from 'gl-matrix';
+
+import { mat4 } from 'gl-matrix';
 import { computeViewMatrix } from '../Camera';
-import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { fillMatrix4x3, fillMatrix4x4 } from '../gfx/helpers/UniformBufferHelpers';
@@ -25,7 +25,6 @@ const FLAG_IS_TEXTURE_ANIMATED   = 0x00010000;
 
 const viewMatrixScratch = mat4.create();
 const viewMatrixCalcScratch = mat4.create();
-const texMatrixScratch = mat4.create();
 const mirrorMatrix = mat4.fromValues(
     -1, 0, 0, 0,
      0, 1, 0, 0,
@@ -306,17 +305,6 @@ export class DkrDrawCall {
             offs2 += 4;
     
             if(!!this.texture) {
-                calcTextureMatrixFromRSPState(
-                    texMatrixScratch, 
-                    0, //this.drawCall.SP_TextureState.s, 
-                    0, //this.drawCall.SP_TextureState.t, 
-                    !!this.texture ? this.texture.getWidth() : 0, // width
-                    !!this.texture ? this.texture.getHeight() : 0, // height
-                    !!this.texture ? Math.floor(Math.log2(this.texture.getWidth())) : 0, // shifts
-                    !!this.texture ? Math.floor(Math.log2(this.texture.getHeight())) : 0, // shiftt
-                );
-                offs2 += fillMatrix4x4(d2, offs2, texMatrixScratch);
-    
                 // Use the texture.
                 this.texture!.bind(renderInst, params.textureFrame);
                 

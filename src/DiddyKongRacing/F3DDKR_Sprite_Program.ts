@@ -26,7 +26,6 @@ struct SpriteInstance {
 
 layout(std140) uniform ub_DrawParams {
     vec4 u_SpritesInfo; // x = Current frame.
-    Mat4x4 u_TexMatrix;
     SpriteInstance u_Instances[${MAX_NUM_OF_SPRITE_INSTANCES}];
 };
 
