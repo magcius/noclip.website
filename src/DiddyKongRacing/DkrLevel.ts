@@ -72,8 +72,8 @@ export class DkrLevel {
 
                 Promise.all(promises).then((out) => {
                     const modelDataBuffer = out[0].createTypedArray(Uint8Array);
-                    const objectMap1Buffer = out[1].createTypedArray(Uint8Array);
-                    const objectMap2Buffer = out[2].createTypedArray(Uint8Array);
+                    const objectMap1Buffer = out[1];
+                    const objectMap2Buffer = out[2];
                     if(skydomeId !== 0xFFFF) {
                         this.skydome = new DkrObject(skydomeId, device, this, renderHelper, dataManager, objectCache, textureCache);
                         this.skydome.setManualScale(100.0); 

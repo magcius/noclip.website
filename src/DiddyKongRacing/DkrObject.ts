@@ -13,6 +13,7 @@ import { DkrParticle } from './DkrParticle';
 import { DkrTexture } from './DkrTexture';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export const MODEL_TYPE_3D_MODEL = 0;
 export const MODEL_TYPE_2D_BILLBOARD = 1;
@@ -351,12 +352,12 @@ export class DkrObject {
         );
     }
 
-    public parseObjectProperties(inputData: Uint8Array) {
-        const dataView = new DataView(inputData.buffer);
+    public parseObjectProperties(buffer: ArrayBufferSlice) {
+        const view = buffer.createDataView();
 
-        this.position[0] = dataView.getInt16(0x02); //bytesToShort(inputData, 0x02);
-        this.position[1] = dataView.getInt16(0x04); //bytesToShort(inputData, 0x04);
-        this.position[2] = dataView.getInt16(0x06); //bytesToShort(inputData, 0x06);
+        this.position[0] = view.getInt16(0x02);
+        this.position[1] = view.getInt16(0x04);
+        this.position[2] = view.getInt16(0x06);
 
         switch(this.propertiesIndex) {
             case 0: 
@@ -382,8 +383,8 @@ export class DkrObject {
                     this.spriteLayer = SPRITE_LAYER_TRANSPARENT;
                     this.spriteAlphaTest = 0.05;
                 }
-                this.modelIndex = inputData[0x08];
-                this.modelScale *= inputData[0x09] / 64.0;
+                this.modelIndex = view.getUint8(0x08);
+                this.modelScale *= view.getUint8(0x09) / 64.0;
 
                 break;
             case 3: // fish
@@ -391,9 +392,9 @@ export class DkrObject {
             case 4: // animator
                 this.level.addScrollerFromAnimator(
                     this.position, 
-                    dataView.getInt8(0x08),
-                    dataView.getInt8(0x0A), 
-                    dataView.getInt8(0x0B)
+                    view.getInt8(0x08),
+                    view.getInt8(0x0A), 
+                    view.getInt8(0x0B)
                 );
                 this.isDeveloperObject = true;
                 break;
@@ -402,9 +403,9 @@ export class DkrObject {
             case 6: // smoke
                 break;
             case 7: // exit
-                this.properties.mapID = inputData[0x08];
-                this.modelScale *= inputData[0x10] / 128.0;
-                this.rotation[1] = (dataView.getInt8(0x11) / 64.0) * 360.0;
+                this.properties.mapID = view.getUint8(0x08);
+                this.modelScale *= view.getUint8(0x10) / 128.0;
+                this.rotation[1] = (view.getInt8(0x11) / 64.0) * 360.0;
                 this.isDeveloperObject = true;
                 break;
             case 8: // audio
@@ -417,7 +418,7 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 11: // setuppoint
-                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
+                this.rotation[1] = (view.getInt8(0x0A) / 64.0) * 360.0;
                 this.isDeveloperObject = true;
                 break;
             case 12: // Dinosaur1, Dinosaur2, Dinosaur3, Whale, Dinoisle
@@ -426,19 +427,19 @@ export class DkrObject {
                 }
                 break;
             case 13: // checkpoint
-                this.modelScale *= inputData[0x08] / 64.0;
-                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
+                this.modelScale *= view.getUint8(0x08) / 64.0;
+                this.rotation[1] = (view.getInt8(0x0A) / 64.0) * 360.0;
                 this.isDeveloperObject = true;
                 break;
             case 14: // LevelDoor, KeithPigDoor, ChalDoor, BossDoor, bigbossdoor, WorldGate
-                this.properties.closedRotation = (dataView.getInt8(0x08) / 64.0) * 360.0;
-                this.properties.openRotation = (dataView.getInt8(0x09) / 64.0) * 360.0;
+                this.properties.closedRotation = (view.getInt8(0x08) / 64.0) * 360.0;
+                this.properties.openRotation = (view.getInt8(0x09) / 64.0) * 360.0;
                 this.rotation[1] = this.properties.closedRotation;
-                this.modelIndex = inputData[0xA];
-                this.properties.distanceToOpen = inputData[0xB];
-                const numberBalloonsToOpen = inputData[0xD];
+                this.modelIndex = view.getUint8(0xA);
+                this.properties.distanceToOpen = view.getUint8(0xB);
+                const numberBalloonsToOpen = view.getUint8(0xD);
                 this.properties.numberToOpen = numberBalloonsToOpen;
-                this.modelScale *= inputData[0x12] / 64.0;
+                this.modelScale *= view.getUint8(0x12) / 64.0;
                 this.allowInstances = false;
                 if(this.name == 'LevelDoor' || this.name == 'WorldGate') {
                     this.texFrameOverride = {
@@ -454,7 +455,7 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 17: // WeaponBalloon
-                this.modelIndex = inputData[0x09];
+                this.modelIndex = view.getUint8(0x09);
                 break;
             case 18: // Missile, Homing
                 break;
@@ -489,27 +490,27 @@ export class DkrObject {
                     this.spriteIsCentered = true;
                     this.spriteAlphaTest = 0.05;
                 }
-                let scale = inputData[0x9];
+                let scale = view.getUint8(0x9);
                 if(scale < 10.0) { // Check in the game code.
                     scale = 10.0;
                 }
                 this.modelScale *= scale / 64.0;
                 this.properties = {
-                    animationSpeed: inputData[0x8] // Stored at ObjectStruct->unk78
+                    animationSpeed: view.getUint8(0x8) // Stored at ObjectStruct->unk78
                 }
                 }
                 break;
             case 29: // texscroll
                 this.level.addScrollerFromTexScroll(
-                    dataView.getInt16(0x08),
-                    dataView.getInt8(0x0A),
-                    dataView.getInt8(0x0B)
+                    view.getInt16(0x08),
+                    view.getInt8(0x0A),
+                    view.getInt8(0x0B)
                 );
                 this.isDeveloperObject = true;
                 break;
             case 30: // modechange
-                this.rotation[1] = (dataView.getInt8(0x09) / 64.0) * 360.0;
-                this.modelScale *= inputData[0x8] / 128.0;
+                this.rotation[1] = (view.getInt8(0x09) / 64.0) * 360.0;
+                this.modelScale *= view.getUint8(0x8) / 128.0;
                 this.isDeveloperObject = true;
                 break;
             case 31: // Stopwatch-man
@@ -529,7 +530,7 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 38: // bridge, NoentryDoor, RampWhale
-                this.rotation[1] = (dataView.getInt8(0x09) / 64.0) * 360.0;
+                this.rotation[1] = (view.getInt8(0x09) / 64.0) * 360.0;
                 if(this.name === 'RampWhale') {
                     this.dontAnimateObjectTextures = true; // hack to stop eyes from blinking.
                 }
@@ -561,44 +562,43 @@ export class DkrObject {
             case 48:
                 break;
             case 49: // Animation
-                this.rotation[2] = (dataView.getInt8(0x08) / 256.0) * 360.0;
-                this.rotation[0] = (dataView.getInt8(0x09) / 256.0) * 360.0;
-                this.rotation[1] = (dataView.getInt8(0x0A) / 256.0) * 360.0;
-                this.modelScale *= inputData[0x0B] / 64.0;
+                this.rotation[2] = (view.getInt8(0x08) / 256.0) * 360.0;
+                this.rotation[0] = (view.getInt8(0x09) / 256.0) * 360.0;
+                this.rotation[1] = (view.getInt8(0x0A) / 256.0) * 360.0;
+                this.modelScale *= view.getUint8(0x0B) / 64.0;
 
                 this.properties = {
                     // Note: these names are just my best guesses atm. They might not
                     // reflect what they actualy do.
                     rotation: {
-                        pitch: dataView.getInt8(0x08),
-                        roll: dataView.getInt8(0x09),
-                        yaw: dataView.getInt8(0x0A)
+                        pitch: view.getInt8(0x08),
+                        roll: view.getInt8(0x09),
+                        yaw: view.getInt8(0x0A)
                     },
-                    scale: inputData[0x0B] / 64.0,
-                    objectToSpawn: dataView.getInt16(0x0C),
-                    animStartDelay: dataView.getInt16(0x0E),
-                    actorIndex: inputData[0x10],
-                    order: inputData[0x11],
-                    objAnimIndex: dataView.getInt8(0x12), // Which obj animation to play (If not 0xFF)
-                    nodeSpeed: dataView.getInt8(0x14),
-                    objAnimSpeed: inputData[0x17],
-                    objAnimLoopType: inputData[0x18], // 0 = Loop, 1 = Reverse loop, 2 = Play once, 3 = reverse once then stop.
-                    rotateType: inputData[0x19],
-                    yawSpinSpeed: dataView.getInt8(0x1A),
-                    rollSpinSpeed: dataView.getInt8(0x1B),
-                    pitchSpinSpeed: dataView.getInt8(0x1C),
-                    gotoNode: inputData[0x1D],
-                    channel: inputData[0x21],
-                    pauseFrameCount: dataView.getInt8(0x24),
-                    specialHide: inputData[0x26] != 0, // Needs a better name.
-                    messageId: inputData[0x27],
-                    fadeAlpha: inputData[0x2B],
-                    nextAnim: inputData[0x2C],
-                    soundEffect: inputData[0x2E],
+                    scale: view.getUint8(0x0B) / 64.0,
+                    objectToSpawn: view.getInt16(0x0C),
+                    animStartDelay: view.getInt16(0x0E),
+                    actorIndex: view.getUint8(0x10),
+                    order: view.getUint8(0x11),
+                    objAnimIndex: view.getInt8(0x12), // Which obj animation to play (If not 0xFF)
+                    nodeSpeed: view.getInt8(0x14),
+                    objAnimSpeed: view.getUint8(0x17),
+                    objAnimLoopType: view.getUint8(0x18), // 0 = Loop, 1 = Reverse loop, 2 = Play once, 3 = reverse once then stop.
+                    rotateType: view.getUint8(0x19),
+                    yawSpinSpeed: view.getInt8(0x1A),
+                    rollSpinSpeed: view.getInt8(0x1B),
+                    pitchSpinSpeed: view.getInt8(0x1C),
+                    gotoNode: view.getUint8(0x1D),
+                    channel: view.getUint8(0x21),
+                    pauseFrameCount: view.getInt8(0x24),
+                    specialHide: view.getUint8(0x26) != 0, // Needs a better name.
+                    messageId: view.getUint8(0x27),
+                    fadeAlpha: view.getUint8(0x2B),
+                    nextAnim: view.getUint8(0x2C),
+                    soundEffect: view.getUint8(0x2E),
                     // fadeOptions is technically just 2 flags, but I choose to represent it as a switch.
                     // 1 = Start fading from fadeAlpha, 2 = make visible, 3 = make invisible.
-                    fadeOptions: inputData[0x2F], 
-                    _data: inputData,
+                    fadeOptions: view.getUint8(0x2F), 
                 };
 
                 this.isDeveloperObject = true;
@@ -626,8 +626,8 @@ export class DkrObject {
                 ChickSelect, MouseSelect, stopwatchselect */
                 break;
             case 55: // trigger
-                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
-                this.modelScale *= inputData[0x8] / 128.0;
+                this.rotation[1] = (view.getInt8(0x0A) / 64.0) * 360.0;
+                this.modelScale *= view.getUint8(0x8) / 128.0;
                 this.isDeveloperObject = true;
                 break;
             case 56:
@@ -635,8 +635,8 @@ export class DkrObject {
                 MouseHoverAnim, AnimBanjoPlane */
                 break;
             case 57: // AirZippers
-                this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
+                this.modelScale *= view.getUint8(0x09) / 64.0;
+                this.rotation[1] = (view.getInt8(0x0A) / 64.0) * 360.0;
                 // The transparency for Air Zippers is hard-coded in-game.
                 this.overrideAlpha = 0.5;
                 this.renderBeforeLevelMap = false;
@@ -679,8 +679,8 @@ export class DkrObject {
                 break;
             case 71: // midifade
                 //console.log(buf2hex(inputData.slice(8).buffer));
-                this.modelScale *= inputData[0x08] / 8.0;
-                this.rotation[1] = (dataView.getInt8(0x09) / 64.0) * 360.0;
+                this.modelScale *= view.getUint8(0x08) / 8.0;
+                this.rotation[1] = (view.getInt8(0x09) / 64.0) * 360.0;
                 this.isDeveloperObject = true;
                 break;
             case 72:
@@ -691,7 +691,7 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 74: // trophycab
-                this.rotation[1] = (dataView.getInt8(0x08)/ 64.0) * 360.0;
+                this.rotation[1] = (view.getInt8(0x08)/ 64.0) * 360.0;
                 break;
             case 75: // bubbler
                 // Hacks to make the renderer look better. Not representative to in-game.
@@ -707,7 +707,7 @@ export class DkrObject {
                 break;
             case 79: // lasergun
                 // TODO: Spawn moving laserbolts.
-                this.rotation[1] = (inputData[8] / 256.0) * 360.0;
+                this.rotation[1] = (view.getUint8(8) / 256.0) * 360.0;
                 this.isDeveloperObject = true;
                 break;
             case 80: // GBParkwarden
@@ -716,8 +716,8 @@ export class DkrObject {
             case 81: // SpaceShip1, SpaceShip2
                 break;
             case 82: // GroundZipper
-                this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
+                this.modelScale *= view.getUint8(0x09) / 64.0;
+                this.rotation[1] = (view.getInt8(0x0A) / 64.0) * 360.0;
                 // Technically, GroundZippers are particles and this object just spawns one.
                 this.textureCache.get2dTexture(16, (zipperTexture: DkrTexture) => {
                     const zipperParticle = new DkrParticle(this.device, this.renderHelper, zipperTexture);
@@ -750,8 +750,8 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 93: // WaterZippers
-                this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
+                this.modelScale *= view.getUint8(0x09) / 64.0;
+                this.rotation[1] = (view.getInt8(0x0A) / 64.0) * 360.0;
                 break;
             case 94:
                 break;
@@ -765,12 +765,12 @@ export class DkrObject {
                 this.isDeveloperObject = true;
                 break;
             case 99: // lighthouse1
-                this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
+                this.modelScale *= view.getUint8(0x09) / 64.0;
+                this.rotation[1] = (view.getInt8(0x0A) / 64.0) * 360.0;
                 break;
             case 100: // rocketsignpost
-                this.modelScale *= inputData[0x09] / 64.0;
-                this.rotation[1] = (dataView.getInt8(0x0A) / 64.0) * 360.0;
+                this.modelScale *= view.getUint8(0x09) / 64.0;
+                this.rotation[1] = (view.getInt8(0x0A) / 64.0) * 360.0;
                 this.usesNormals = true;
                 break;
             case 101:
@@ -797,13 +797,13 @@ export class DkrObject {
             case 110: // GoldCoin
                 break;
             case 111: // TTDoor
-                this.properties.closedRotation = (dataView.getInt8(0x08) / 64.0) * 360.0;
-                this.properties.openRotation = (dataView.getInt8(0x09) / 64.0) * 360.0;
+                this.properties.closedRotation = (view.getInt8(0x08) / 64.0) * 360.0;
+                this.properties.openRotation = (view.getInt8(0x09) / 64.0) * 360.0;
                 this.rotation[1] = this.properties.closedRotation;
-                this.properties.distanceToOpen = inputData[0xA];
-                this.properties.numberToOpen = inputData[0xB];
-                this.modelScale *= inputData[0xC] / 64.0;
-                this.modelIndex = inputData[0xE];
+                this.properties.distanceToOpen = view.getUint8(0xA);
+                this.properties.numberToOpen = view.getUint8(0xB);
+                this.modelScale *= view.getUint8(0xC) / 64.0;
+                this.modelIndex = view.getUint8(0xE);
                 break;
             case 112: // midifadepoint
                 //console.log(this.name, this.modelIds[this.modelIndex], buf2hex(inputData.slice(8).buffer));
@@ -818,7 +818,7 @@ export class DkrObject {
                             (secondVertex[1]*secondVertex[1]) +
                             (secondVertex[2]*secondVertex[2])
                         );
-                        this.modelScale = dataView.getInt16(0x0A) / denom;
+                        this.modelScale = view.getInt16(0x0A) / denom;
                         this.updateModelMatrix();
                     } else {
                         // Wait some more until the model loads.

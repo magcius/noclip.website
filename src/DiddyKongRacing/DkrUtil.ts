@@ -1,6 +1,5 @@
 import { mat4, quat, vec3 } from "gl-matrix";
 import { Camera } from "../Camera";
-import { assert } from "../util";
 import { DkrTexture } from "./DkrTexture";
 import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch";
 
@@ -13,10 +12,6 @@ export const IDENTITY_MATRIX: mat4 = [
 
 export function buf2hex(buffer: ArrayBuffer) {
     return Array.prototype.map.call(new Uint8Array(buffer), (x:any) => ('00' + x.toString(16)).slice(-2)).join('');
-}
-
-export function getRange(arr: Uint8Array, offset: number, length: number) {
-    return arr.slice(offset, offset+length);
 }
 
 export function isFlagSet(flags: number, flag: number) {

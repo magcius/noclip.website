@@ -1,5 +1,5 @@
-import { mat4, vec3 } from "gl-matrix";
-import { Camera } from "../Camera";
+
+import ArrayBufferSlice from "../ArrayBufferSlice";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
@@ -9,10 +9,8 @@ import { DkrControlGlobals } from "./DkrControlGlobals";
 import { DkrLevel } from "./DkrLevel";
 import { DkrObject, MODEL_TYPE_3D_MODEL } from "./DkrObject";
 import { DkrObjectCache } from "./DkrObjectCache";
-import { DkrObjectModel } from "./DkrObjectModel";
 import { DkrSprites } from "./DkrSprites";
 import { DkrTextureCache } from "./DkrTextureCache";
-import { getRange} from "./DkrUtil";
 
 export class DkrLevelObjectMap {
     private objects: Array<DkrObject>;
@@ -20,12 +18,12 @@ export class DkrLevelObjectMap {
     private instances: any = {};
     private instanceKeys: Array<any>;
 
-    constructor(objectMap: Uint8Array, level: DkrLevel, device: GfxDevice, renderHelper: GfxRenderHelper, dataManager: DataManager, 
+    constructor(objectMap: ArrayBufferSlice, level: DkrLevel, device: GfxDevice, renderHelper: GfxRenderHelper, dataManager: DataManager, 
         objectCache: DkrObjectCache, textureCache: DkrTextureCache, sprites: DkrSprites, objectsLoadedCallback: Function) {
         let objectIds = new Set<number>(); // Set ensures each item is unqiue
         let objectEntries: Array<any> = [];
 
-        const dataView = new DataView(objectMap.buffer);
+        const dataView = objectMap.createDataView();
 
         let totalLength = dataView.getUint32(0);
 
@@ -34,14 +32,15 @@ export class DkrLevelObjectMap {
         let currentOffset = 0x10; // Objects start at offset 0x10
 
         while(currentOffset - 0x10 < totalLength) {
-            let length = objectMap[currentOffset + 1] & 0x7F;
-            let tableEntry = ((objectMap[currentOffset + 1] & 0x80) << 1) | objectMap[currentOffset];
-            let objectId = dataManager.levelObjectTranslateTable[tableEntry];
+            const b0 = dataView.getUint8(currentOffset + 0x00), b1 = dataView.getUint8(currentOffset + 0x01);
+            const length = b1 & 0x7F;
+            const tableEntry = ((b1 & 0x80) << 1) | b0;
+            const objectId = dataManager.levelObjectTranslateTable[tableEntry];
 
             objectIds.add(objectId);
             objectEntries.push({
                 objectId: objectId,
-                data: getRange(objectMap, currentOffset, length)
+                data: objectMap.subarray(currentOffset, length),
             });
 
             currentOffset += length;
