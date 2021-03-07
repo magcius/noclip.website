@@ -11,9 +11,6 @@ import { SPRITE_LAYER_SOLID, SPRITE_LAYER_TRANSPARENT } from './DkrSprites';
 import { DkrControlGlobals } from './DkrControlGlobals';
 import { DkrParticle } from './DkrParticle';
 import { DkrTexture } from './DkrTexture';
-import { J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
-import { DkrObjectAnimation } from './DkrObjectAnimation';
-import { DKR_FPS } from './DkrAnimationTrack';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 
@@ -23,13 +20,7 @@ export const MODEL_TYPE_VEHICLE_PART = 2;
 
 const textDecoder = new TextDecoder();
 
-const vec3Up = vec3.fromValues(0, 1, 0);
 const vec4DontShowObject = vec4.fromValues(0.0, 0.0, 0.0, 0.0);
-
-const scratch_adjustCamPosition = vec3.create();
-const scratch_out = mat4.create();
-const scratch_temp = mat4.create();
-
 const objectsWithNormals = ['Rarelogo'];
   
 export class DkrObject {

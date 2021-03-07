@@ -11,7 +11,7 @@ import { DkrControlGlobals } from './DkrControlGlobals';
 import { DkrTexture } from './DkrTexture';
 import { DkrFinalVertex, DkrTriangleBatch } from './DkrTriangleBatch';
 import { isFlagSet } from './DkrUtil';
-import { F3DDKR_Program, MAX_NUM_OF_INSTANCES, MAX_NUM_OF_OBJ_ANIM_VERTICES } from './F3DDKR_Program';
+import { F3DDKR_Program, MAX_NUM_OF_INSTANCES } from './F3DDKR_Program';
 import { DkrObjectAnimation } from './DkrObjectAnimation';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
@@ -54,10 +54,7 @@ export class DkrDrawCall {
     private program: F3DDKR_Program;
     private isBuilt = false;
     private flags: number;
-    private numberOfAnimations: number = -1;
     private hasBeenDestroyed = false;
-
-    private levelBatchNumber = -1; // Hack for animated waterfalls in Crescent Island.
 
     private vertexAttributeDescriptors: GfxVertexAttributeDescriptor[];
     private vertexBufferDescriptors: GfxInputLayoutBufferDescriptor[];
@@ -106,7 +103,6 @@ export class DkrDrawCall {
         this.createDefaultInputStateAndLayout();
 
         if(!!animations) {
-            this.numberOfAnimations = animations.length;
             for(const animation of animations) {
                 this.createObjAnimInputStateAndLayout(animation);
             }
@@ -332,7 +328,7 @@ export class DkrDrawCall {
             } else {
                 renderInst.setInputLayoutAndState(this.defaultInputLayout, this.defaultInputState);
             }
-            
+
             renderInst.setGfxProgram(this.gfxProgram);
             renderInst.drawIndexesInstanced(this.indices.length, params.modelMatrices.length);
             renderInst.setMegaStateFlags({
@@ -350,5 +346,4 @@ export class DkrDrawCall {
         this.scrollU += (u / 1024) * (dt * (60/1000));
         this.scrollV += (v / 1024) * (dt * (60/1000));
     }
-
 }
