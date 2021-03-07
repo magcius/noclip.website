@@ -3,10 +3,8 @@ import { DataManager } from "./DataManager";
 export class DkrObjectCache {
     private objectHeaders: any = {};
     private objectModels: any = {};
-    
 
     constructor(private dataManager: DataManager) {
-        
     }
 
     public getObjectHeader(index: number, callback: Function): void {
@@ -82,7 +80,7 @@ export class DkrObjectCache {
             Promise.all(modelPromises).then((outModels) => {
                 for (let index = 0; index < outModels.length; index++) {
                     if(!this.objectModels[indices[index]]) {
-                        this.objectModels[indices[index]] = outModels[index];
+                        this.objectModels[indices[index]] = outModels[index].createTypedArray(Uint8Array);
                     }
                 }
                 callback();
