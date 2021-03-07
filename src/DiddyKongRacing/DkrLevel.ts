@@ -1,4 +1,5 @@
-import { vec3, mat4 } from "gl-matrix";
+
+import { vec3 } from "gl-matrix";
 import { updateCameraViewMatrix } from "./DkrUtil";
 import { DkrLevelModel } from "./DkrLevelModel";
 import { colorNewFromRGBA, Color } from "../Color";

@@ -1,4 +1,5 @@
-import { mat4, quat, vec3 } from "gl-matrix";
+
+import { mat4, quat } from "gl-matrix";
 import { Camera } from "../Camera";
 import { DkrTexture } from "./DkrTexture";
 import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch";
@@ -22,17 +23,6 @@ export function writeShortInBytes(arr: Uint8Array, offset: number, val: number):
     val = Math.floor(val);
     arr[offset] = (val >> 8) & 0xFF;
     arr[offset + 1] = val & 0xFF;
-}
-
-// from: https://stackoverflow.com/a/9458996
-export function arrayBufferToBase64(buffer: Uint8Array) {
-    var binary = '';
-    var bytes = new Uint8Array(buffer);
-    var len = bytes.byteLength;
-    for (var i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
 }
 
 export function createVertexData(vertices: any): Uint8Array {

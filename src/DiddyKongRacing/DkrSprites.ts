@@ -47,7 +47,6 @@ export class DkrSprites {
 
     private currentFrame = 0;
     private spriteInstances = [new Array<DkrObject>(), new Array<DkrObject>()];
-    private objectMapCount = 0;
 
     private indexBuffer: GfxBuffer;
     private vertexBuffer: GfxBuffer;
@@ -56,7 +55,7 @@ export class DkrSprites {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, dataManager: DataManager) {
         this.program = new F3DDKR_Sprite_Program();
-        dataManager.getSpriteSheet((spritesInfo: Array<any>, spriteSheetImageData: ImageData) => {
+        dataManager.getSpriteSheet().then(([spritesInfo, spriteSheetImageData]) => {
             this.spritesInfo = spritesInfo;
             this.spriteSheetWidth = spriteSheetImageData.width;
             this.spriteSheetHeight = spriteSheetImageData.height;
@@ -165,7 +164,6 @@ export class DkrSprites {
             const layer = instances[i].getSpriteLayer();
             this.spriteInstances[layer].push(instances[i]);
         }
-        this.objectMapCount++;
     }
 
     private lastCameraPosition = vec3.create();

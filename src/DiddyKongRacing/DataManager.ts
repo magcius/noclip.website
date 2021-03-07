@@ -6,11 +6,8 @@ import * as Pako from "pako";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { SceneContext } from "../SceneBase";
-import { assert, assertExists, decodeString } from "../util";
-import { parseZipFile, ZipFile, ZipFileEntry } from "../ZipFile";
-import { arrayBufferToBase64 } from "./DkrUtil";
-
-const inflator = new Pako.Inflate();
+import { assert, assertExists, decodeString, fallbackUndefined } from "../util";
+import { parseZipFile, ZipFile, ZipFileEntry, ZipCompressionMethod } from "../ZipFile";
 
 export class DataManager {
     private path: string;
@@ -92,28 +89,22 @@ export class DataManager {
     }
 
     private getZipEntry(filename: string): ZipFileEntry | null {
-        for(let i = 0; i < this.zipFile.length; i++) {
-            if(this.zipFile[i].filename === filename) {
-                return this.zipFile[i];
-            }
-        }
-        return null;
+        return fallbackUndefined(this.zipFile.find((entry) => entry.filename === filename), null);
     }
 
-    private getFileFromZip(filename: string): Promise<ArrayBufferSlice> {
-        return new Promise((resolve, reject) => {
-            const zipEntry = this.getZipEntry(filename);
-            if(zipEntry !== null) {
-                try {
-                    const data = Pako.inflateRaw(zipEntry.data.createTypedArray(Uint8Array));
-                    resolve(new ArrayBufferSlice(data.buffer, data.byteOffset, data.byteLength));
-                } catch (err) {
-                    resolve(zipEntry.data);
-                }
-            } else {
-                throw 'Could not find zip entry for filename: ' + filename;
-            }
-        });
+    private async getFileFromZip(filename: string): Promise<ArrayBufferSlice> {
+        const zipEntry = this.getZipEntry(filename);
+        if (zipEntry === null)
+            throw new Error(`Could not find zip entry for filename: ${filename}`);
+
+        if (zipEntry.compressionMethod === ZipCompressionMethod.None) {
+            return zipEntry.data;
+        } else if (zipEntry.compressionMethod === ZipCompressionMethod.DEFLATE) {
+            const decompressed = Pako.inflateRaw(zipEntry.data.createTypedArray(Uint8Array));
+            return new ArrayBufferSlice(decompressed.buffer);
+        } else {
+            throw new Error("unknown compression method");
+        }
     }
     
     public signalDoneFlag(): void {
@@ -131,29 +122,32 @@ export class DataManager {
 
     /************** Methods for getting assets **************/
 
-    private getImageData(img: HTMLImageElement): ImageData {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0);
-        return ctx.getImageData(0, 0, img.width, img.height);
-    }
-
-    private async getTexture(filename: string): Promise<ImageData> {
+    private async loadPNGData(pngBinary: ArrayBufferSlice): Promise<ImageData> {
         const img = document.createElement('img');
         img.crossOrigin = 'anonymous';
-        const pngBinary = await this.getFileFromZip(filename);
-        img.src = 'data:image/png;base64,' + arrayBufferToBase64(pngBinary.createTypedArray(Uint8Array));
+        const url = window.URL.createObjectURL(new Blob([pngBinary.createTypedArray(Uint8Array)], {type: 'image/png'}));
+        img.src = url;
 
         return new Promise<ImageData>((resolve, reject) => {
             img.onload = () => {
-                resolve(this.getImageData(img));
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d')!;
+                ctx.drawImage(img, 0, 0);
+                resolve(ctx.getImageData(0, 0, img.width, img.height));
+                window.URL.revokeObjectURL(url);
             };
             img.onerror = (err) => {
                 reject(err);
-            }
+                window.URL.revokeObjectURL(url);
+            };
         });
+    }
+
+    private async loadTextureFromZip(filename: string): Promise<ImageData> {
+        const pngBinary = await this.getFileFromZip(filename);
+        return this.loadPNGData(pngBinary);
     }
 
     private getFilename(assetType: number, index: number): string {
@@ -167,7 +161,7 @@ export class DataManager {
         assert(this.assets.assets[2].type === 'Textures');
         assert(this.assets.assets[2].folder === 'textures/3d');
         assert(!!this.assets.assets[2].filenames[index]);
-        return this.getTexture(this.getFilename(2, index));
+        return this.loadTextureFromZip(this.getFilename(2, index));
     }
 
     // 2D texture = texture used mainly in sprites & particles.
@@ -175,7 +169,7 @@ export class DataManager {
         assert(this.assets.assets[4].type === 'Textures');
         assert(this.assets.assets[4].folder === 'textures/2d');
         assert(!!this.assets.assets[4].filenames[index]);
-        return this.getTexture(this.getFilename(4, index));
+        return this.loadTextureFromZip(this.getFilename(4, index));
     }
 
     public get3dTextureHeader(index: number): Promise<ArrayBufferSlice> {
@@ -234,27 +228,14 @@ export class DataManager {
         return this.getFileFromZip(this.getFilename(34, index));
     }
 
-    public getSpriteSheet(callback: Function): void {
-        this.getFileFromZip('dkr_sprites.json').then((spritesJsonBinary) => {
-            this.getFileFromZip('dkr_sprites.png').then((spritesPngBinary) => {
-                let spritesData = JSON.parse(decodeString(spritesJsonBinary));
+    public async getSpriteSheet(): Promise<[any, ImageData]> {
+        const [spritesJsonBinary, spritesPngBinary] = await Promise.all([
+            this.getFileFromZip('dkr_sprites.json'),
+            this.getFileFromZip('dkr_sprites.png'),
+        ]);
 
-                const img = document.createElement('img');
-                img.crossOrigin = 'anonymous';
-                img.src = 'data:image/png;base64,' + arrayBufferToBase64(spritesPngBinary.createTypedArray(Uint8Array));
-                
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    const ctx = canvas.getContext('2d')!;
-                    ctx.drawImage(img, 0, 0);
-                    callback(spritesData.sprites, ctx.getImageData(0, 0, img.width, img.height));
-                };
-                img.onerror = (err) => {
-                    throw err;
-                }
-            });
-        });
+        const spritesData = JSON.parse(decodeString(spritesJsonBinary));
+        const imageData = await this.loadPNGData(spritesPngBinary);
+        return [spritesData.sprites, imageData];
     }
 }
