@@ -4,12 +4,6 @@ This is a collection of different things I need to fix/add to the DKR renderer t
 
 Last updated March 5th 2021
 
-## Fix sprite roll rotation
-
-Currently, the sprite billboards do not follow the camera's roll rotation. This makes all the sprites look skewed when the camera rolls in the flybys.
-
-![](https://i.imgur.com/F4ALyW4.png)
-
 ## Figure out and implement dynamic lighting
 
 I'm not sure how lighting is currently done in DKR. It seems to be used more rarely compared to other N64 games.
