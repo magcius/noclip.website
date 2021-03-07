@@ -6,7 +6,7 @@ import * as Pako from "pako";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { NamedArrayBufferSlice } from "../DataFetcher";
 import { SceneContext } from "../SceneBase";
-import { assert, decodeString } from "../util";
+import { assert, assertExists, decodeString } from "../util";
 import { parseZipFile, ZipFile, ZipFileEntry } from "../ZipFile";
 import { arrayBufferToBase64 } from "./DkrUtil";
 
@@ -140,26 +140,34 @@ export class DataManager {
         return ctx.getImageData(0, 0, img.width, img.height);
     }
 
+    private async getTexture(filename: string): Promise<ImageData> {
+        const img = document.createElement('img');
+        img.crossOrigin = 'anonymous';
+        const pngBinary = await this.getFileFromZip(filename);
+        img.src = 'data:image/png;base64,' + arrayBufferToBase64(pngBinary.createTypedArray(Uint8Array));
+
+        return new Promise<ImageData>((resolve, reject) => {
+            img.onload = () => {
+                resolve(this.getImageData(img));
+            };
+            img.onerror = (err) => {
+                reject(err);
+            }
+        });
+    }
+
+    private getFilename(assetType: number, index: number): string {
+        const asset = this.assets.assets[assetType];
+        const filename = assertExists(asset.filenames[index]);
+        return `${asset.folder}/${filename}`;
+    }
+
     // 3D texture = texture used mainly in 3d geometry.
     public get3dTexture(index: number): Promise<ImageData> {
         assert(this.assets.assets[2].type === 'Textures');
         assert(this.assets.assets[2].folder === 'textures/3d');
         assert(!!this.assets.assets[2].filenames[index]);
-
-        return new Promise<ImageData>((resolve) => {
-            const img = document.createElement('img');
-            img.crossOrigin = 'anonymous';
-            const filename = 'textures/3d/' + this.assets.assets[2].filenames[index];
-            this.getFileFromZip(filename).then((pngBinary) => {
-                img.src = 'data:image/png;base64,' + arrayBufferToBase64(pngBinary.createTypedArray(Uint8Array));
-                img.onload = () => {
-                    resolve(this.getImageData(img));
-                };
-                img.onerror = (err) => {
-                    throw err;
-                }
-            });
-        });
+        return this.getTexture(this.getFilename(2, index));
     }
 
     // 2D texture = texture used mainly in sprites & particles.
@@ -167,77 +175,63 @@ export class DataManager {
         assert(this.assets.assets[4].type === 'Textures');
         assert(this.assets.assets[4].folder === 'textures/2d');
         assert(!!this.assets.assets[4].filenames[index]);
-
-        return new Promise<ImageData>((resolve) => {
-            const img = document.createElement('img');
-            img.crossOrigin = 'anonymous';
-            const filename = 'textures/2d/' + this.assets.assets[4].filenames[index];
-            this.getFileFromZip(filename).then((pngBinary) => {
-                img.src = 'data:image/png;base64,' + arrayBufferToBase64(pngBinary.createTypedArray(Uint8Array));
-                img.onload = () => {
-                    resolve(this.getImageData(img));
-                };
-                img.onerror = (err) => {
-                    throw err;
-                }
-            });
-        });
+        return this.getTexture(this.getFilename(4, index));
     }
 
     public get3dTextureHeader(index: number): Promise<ArrayBufferSlice> {
         assert(this.assets.assets[2].type === 'Textures');
         assert(this.assets.assets[2].folder === 'textures/3d');
         assert(!!this.assets.assets[2].filenames[index]);
-        return this.getFileFromZip('textures/3d/' + this.assets.assets[2].filenames[index] + '.header');
+        return this.getFileFromZip(this.getFilename(2, index) + '.header');
     }
 
     public get2dTextureHeader(index: number): Promise<ArrayBufferSlice> {
         assert(this.assets.assets[4].type === 'Textures');
         assert(this.assets.assets[4].folder === 'textures/2d');
         assert(!!this.assets.assets[4].filenames[index]);
-        return this.getFileFromZip('textures/2d/' + this.assets.assets[4].filenames[index] + '.header');
+        return this.getFileFromZip(this.getFilename(4, index) + '.header');
     }
 
     public getLevelObjectMap(index: number): Promise<ArrayBufferSlice> {
         assert(this.assets.assets[21].type === 'LevelObjectMap');
         assert(this.assets.assets[21].folder === 'levels/objectMaps');
         assert(!!this.assets.assets[21].filenames[index]);
-        return this.getFileFromZip('levels/objectMaps/' + this.assets.assets[21].filenames[index]);
+        return this.getFileFromZip(this.getFilename(21, index));
     }
 
     public getLevelHeader(index: number): Promise<ArrayBufferSlice> {
         assert(this.assets.assets[23].type === 'LevelHeaders');
         assert(this.assets.assets[23].folder === 'levels/headers');
         assert(!!this.assets.assets[23].filenames[index]);
-        return this.getFileFromZip('levels/headers/' + this.assets.assets[23].filenames[index]);
+        return this.getFileFromZip(this.getFilename(23, index));
     }
 
     public getLevelModel(index: number): Promise<ArrayBufferSlice> {
         assert(this.assets.assets[27].type === 'LevelModels');
         assert(this.assets.assets[27].folder === 'levels/models');
         assert(!!this.assets.assets[27].filenames[index]);
-        return this.getFileFromZip('levels/models/' + this.assets.assets[27].filenames[index]);
+        return this.getFileFromZip(this.getFilename(27, index));
     }
 
     public getObjectModel(index: number): Promise<ArrayBufferSlice> {
         assert(this.assets.assets[29].type === 'ObjectModels');
         assert(this.assets.assets[29].folder === 'objects/models');
         assert(!!this.assets.assets[29].filenames[index]);
-        return this.getFileFromZip('objects/models/' + this.assets.assets[29].filenames[index]);
+        return this.getFileFromZip(this.getFilename(29, index));
     }
 
     public getObjectAnimation(index: number): Promise<ArrayBufferSlice> {
         assert(this.assets.assets[32].type === 'ObjectAnimations');
         assert(this.assets.assets[32].folder === 'objects/animations');
         assert(!!this.assets.assets[32].filenames[index]);
-        return this.getFileFromZip('objects/animations/' + this.assets.assets[32].filenames[index]);
+        return this.getFileFromZip(this.getFilename(32, index));
     }
 
     public getObjectHeader(index: number): Promise<ArrayBufferSlice> {
         assert(this.assets.assets[34].type === 'ObjectHeaders');
         assert(this.assets.assets[34].folder === 'objects/headers');
         assert(!!this.assets.assets[34].filenames[index]);
-        return this.getFileFromZip('objects/headers/' + this.assets.assets[34].filenames[index]);
+        return this.getFileFromZip(this.getFilename(34, index));
     }
 
     public getSpriteSheet(callback: Function): void {
