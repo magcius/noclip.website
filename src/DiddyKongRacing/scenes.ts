@@ -101,7 +101,7 @@ class DKRRenderer implements Viewer.SceneGfx {
     }
 
     public destroy(device: GfxDevice): void {
-        //this.renderHelper.destroy(device);
+        this.renderHelper.destroy(device);
         if(!!this.level) {
             this.level.destroy(device);
         }

@@ -1,16 +1,15 @@
-import { mat4, vec3 } from "gl-matrix";
+
+import { vec3 } from "gl-matrix";
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { ViewerRenderInput } from "../viewer";
 import { DataManager } from "./DataManager";
 import { DkrDrawCall, DkrDrawCallParams } from "./DkrDrawCall";
-import { DkrObject } from "./DkrObject";
 import { DkrObjectAnimation } from "./DkrObjectAnimation";
 import { DkrTexture, SIZE_OF_TEXTURE_INFO } from "./DkrTexture";
 import { DkrTextureCache } from "./DkrTextureCache";
 import { DkrTriangleBatch, DkrVertex, SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX } from "./DkrTriangleBatch";
-import { getRange } from "./DkrUtil";
 
 const SIZE_OF_BATCH_INFO = 12;
 
@@ -98,13 +97,11 @@ export class DkrObjectModel {
         }
     }
 
-    private loadGeometry(dataView: DataView, device: GfxDevice, renderHelper: GfxRenderHelper, 
-    textureCache: DkrTextureCache, numberOfTextures: number, texturesOffset: number, 
-    triangleBatchInfoOffset: number, trianglesOffset: number): void {
-        
+    private loadGeometry(dataView: DataView, device: GfxDevice, renderHelper: GfxRenderHelper,  textureCache: DkrTextureCache, numberOfTextures: number, texturesOffset: number, triangleBatchInfoOffset: number, trianglesOffset: number): void {
         for (let i = 0; i < numberOfTextures; i++) {
             this.textureIndices.push(dataView.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO)));
         }
+        const cache = renderHelper.getCache();
         textureCache.preload3dTextures(this.textureIndices, () => {
             this.triangleBatches = new Array(this.numberOfTriangleBatches);
             
@@ -120,11 +117,11 @@ export class DkrObjectModel {
                         const layer = texture.getLayer()
                         if(layer == GfxRendererLayer.OPAQUE || layer == GfxRendererLayer.BACKGROUND) {
                             if(this.opaqueTextureDrawCalls[textureIndex] == undefined) {
-                                this.opaqueTextureDrawCalls[textureIndex] = new DkrDrawCall(device, texture);
+                                this.opaqueTextureDrawCalls[textureIndex] = new DkrDrawCall(device, cache, texture);
                             }
                             this.opaqueTextureDrawCalls[textureIndex].addTriangleBatch(this.triangleBatches[i]);
                         } else {
-                            let drawCall = new DkrDrawCall(device, texture);
+                            let drawCall = new DkrDrawCall(device, cache, texture);
                             drawCall.addTriangleBatch(this.triangleBatches[i]);
                             drawCall.build(this.objectAnimations);
                             this.transTexDrawCalls.push({
@@ -135,7 +132,7 @@ export class DkrObjectModel {
                     });
                 } else {
                     if(this.opaqueTextureDrawCalls['noTex'] == undefined) {
-                        this.opaqueTextureDrawCalls['noTex'] = new DkrDrawCall(device, null);
+                        this.opaqueTextureDrawCalls['noTex'] = new DkrDrawCall(device, cache, null);
                     }
                     this.parseBatch(device, renderHelper, dataView, i, ti, tiNext, this.verticesOffset, trianglesOffset, null);
                     this.opaqueTextureDrawCalls['noTex'].addTriangleBatch(this.triangleBatches[i]);

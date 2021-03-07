@@ -1,12 +1,10 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { ViewerRenderInput } from "../viewer";
 import { DkrTextureCache } from "./DkrTextureCache";
-import { getRange, IDENTITY_MATRIX } from "./DkrUtil";
+import { IDENTITY_MATRIX } from "./DkrUtil";
 import { SIZE_OF_TRIANGLE_FACE, SIZE_OF_VERTEX, DkrTriangleBatch } from "./DkrTriangleBatch";
 import { DkrTexture } from "./DkrTexture";
 import { DkrDrawCall } from "./DkrDrawCall";
-import { mat4, vec3, vec4 } from "gl-matrix";
-import { textureAnimationToCanvas } from "../kh2fm/render";
 import { CURRENT_LEVEL_ID, DkrLevel } from "./DkrLevel";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
@@ -28,9 +26,7 @@ export class DkrLevelSegment {
     private triangleBatches: Array<DkrTriangleBatch>;
     private transTexDrawCalls = Array<DkrDrawCall>();
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, levelData: Uint8Array, offset: number, 
-        textureCache: DkrTextureCache, textureIndices: Array<number>, opaqueTextureDrawCalls: any) {
-
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, levelData: Uint8Array, offset: number, textureCache: DkrTextureCache, textureIndices: Array<number>, opaqueTextureDrawCalls: any) {
         const dataView = new DataView(levelData.buffer);
 
         let verticesOffset = dataView.getInt32(offset + 0x00);
@@ -41,25 +37,26 @@ export class DkrLevelSegment {
         let numberOfTriangleBatches = dataView.getInt16(offset + 0x20);
         
         this.triangleBatches = new Array(numberOfTriangleBatches);
-        
+
+        const cache = renderHelper.getCache();
         for (let i = 0; i < numberOfTriangleBatches; i++) {
             let ti = triangleBatchInfoOffset + (i * SIZE_OF_BATCH_INFO); // Triangle batch info index
             let tiNext = ti + SIZE_OF_BATCH_INFO;
-            
+
             if(levelData[ti] != 0xFF) {    
                 let textureIndex = textureIndices[levelData[ti]];
                 textureCache.get3dTexture(textureIndex, (texture: DkrTexture) => {
                     this.parseBatch(device, renderHelper, dataView, i, ti, tiNext, verticesOffset, trianglesOffset, texture, textureIndex);
-                    const layer = texture.getLayer()
+                    const layer = texture.getLayer();
                     if(layer == GfxRendererLayer.OPAQUE || layer == GfxRendererLayer.BACKGROUND) {
                         if(opaqueTextureDrawCalls[textureIndex] == undefined) {
-                            opaqueTextureDrawCalls[textureIndex] = new DkrDrawCall(device, texture);
+                            opaqueTextureDrawCalls[textureIndex] = new DkrDrawCall(device, cache, texture);
                         }
                         if(!!this.triangleBatches[i]) {
                             opaqueTextureDrawCalls[textureIndex].addTriangleBatch(this.triangleBatches[i]);
                         }
                     } else {
-                        let drawCall = new DkrDrawCall(device, texture);
+                        const drawCall = new DkrDrawCall(device, cache, texture);
                         if(!!this.triangleBatches[i]) {
                             drawCall.addTriangleBatch(this.triangleBatches[i]);
                             drawCall.build();
@@ -73,7 +70,7 @@ export class DkrLevelSegment {
                 });
             } else {
                 if(opaqueTextureDrawCalls['noTex'] == undefined) {
-                    opaqueTextureDrawCalls['noTex'] = new DkrDrawCall(device, null);
+                    opaqueTextureDrawCalls['noTex'] = new DkrDrawCall(device, cache, null);
                 }
                 this.parseBatch(device, renderHelper, dataView, i, ti, tiNext, verticesOffset, trianglesOffset, null, 0);
                 if(!!this.triangleBatches[i]) {
@@ -133,7 +130,4 @@ export class DkrLevelSegment {
             this.transTexDrawCalls[i].prepareToRender(device, renderInstManager, viewerInput, params);
         }
     }
-
-
-    
 }

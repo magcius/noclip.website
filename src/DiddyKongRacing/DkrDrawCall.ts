@@ -14,6 +14,7 @@ import { isFlagSet } from './DkrUtil';
 import { F3DDKR_Program, MAX_NUM_OF_INSTANCES, MAX_NUM_OF_OBJ_ANIM_VERTICES } from './F3DDKR_Program';
 import { DkrObjectAnimation } from './DkrObjectAnimation';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer, setSortKeyDepth } from '../gfx/render/GfxRenderInstManager';
+import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 
 const VERTEX_BYTE_STRIDE = 12;
 
@@ -65,7 +66,7 @@ export class DkrDrawCall {
     private scrollU = 0;
     private scrollV = 0;
 
-    constructor(private device: GfxDevice, private texture?: DkrTexture | null) {
+    constructor(private device: GfxDevice, private cache: GfxRenderCache, private texture?: DkrTexture | null) {
         this.program = new F3DDKR_Program();
     }
 
@@ -96,13 +97,13 @@ export class DkrDrawCall {
         this.vertexBufferDescriptors = [
             { byteStride: VERTEX_BYTE_STRIDE * 0x04, frequency: GfxVertexBufferFrequency.PER_VERTEX, },
         ];
-        this.defaultInputLayout = this.device.createInputLayout({
+        this.defaultInputLayout = this.cache.createInputLayout(this.device, {
             indexBufferFormat: GfxFormat.U16_R,
             vertexAttributeDescriptors: this.vertexAttributeDescriptors,
             vertexBufferDescriptors: this.vertexBufferDescriptors,
         });
 
-        this.createDefaultInputStateAndLayout(numberOfTriangles);
+        this.createDefaultInputStateAndLayout();
 
         if(!!animations) {
             this.numberOfAnimations = animations.length;
@@ -117,7 +118,7 @@ export class DkrDrawCall {
     private defaultVertexBuffer: GfxBuffer;
     private defaultIndexBuffer: GfxBuffer;
 
-    private createDefaultInputStateAndLayout(numberOfTriangles: number): void {
+    private createDefaultInputStateAndLayout(): void {
         // Create the array buffers.
         const indicesAB = new Uint16Array(this.indices);
         const verticesAB = new Float32Array(this.vertices.length * VERTEX_BYTE_STRIDE);
@@ -200,7 +201,6 @@ export class DkrDrawCall {
         if(!this.hasBeenDestroyed) {
             device.destroyBuffer(this.defaultIndexBuffer);
             device.destroyBuffer(this.defaultVertexBuffer);
-            device.destroyInputLayout(this.defaultInputLayout);
             device.destroyInputState(this.defaultInputState);
             for(const inputStateFrame of this.objAnimInputStates) {
                 for(const inputState of inputStateFrame) {

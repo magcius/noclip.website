@@ -1,13 +1,11 @@
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
-import { DkrTexture, SIZE_OF_TEXTURE_INFO } from "./DkrTexture";
+import { SIZE_OF_TEXTURE_INFO } from "./DkrTexture";
 import { DkrLevelSegment } from "./DkrLevelSegment";
-import { getRange, IDENTITY_MATRIX } from "./DkrUtil";
+import { IDENTITY_MATRIX } from "./DkrUtil";
 import { ViewerRenderInput } from "../viewer";
 import { DkrTextureCache } from "./DkrTextureCache";
 import { assert } from "../util";
 import { Camera } from "../Camera";
-import { DkrDrawCall } from "./DkrDrawCall";
-import { mat4 } from "gl-matrix";
 import { DkrLevel } from "./DkrLevel";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
@@ -47,8 +45,7 @@ export class DkrLevelModel {
     private textureFrame = 0;
     private textureFrameAdvanceDelay = 30;
     
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, private textureCache: DkrTextureCache, 
-    levelData: Uint8Array) {
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, private textureCache: DkrTextureCache, levelData: Uint8Array) {
         const dataView = new DataView(levelData.buffer);
 
         let texturesOffset = dataView.getUint32(0x00);
@@ -90,6 +87,9 @@ export class DkrLevelModel {
                 this.opaqueTextureDrawCalls[key].destroy(device);
             }
         }
+
+        for (let i = 0; i < this.segments.length; i++)
+            this.segments[i].destroy(device);
     }
 
     public getTextureIndices(): Array<number> {

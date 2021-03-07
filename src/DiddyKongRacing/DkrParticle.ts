@@ -16,7 +16,7 @@ export class DkrParticle {
     private instances = new Array<mat4>();
 
     constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private texture: DkrTexture) {
-        this.drawCall = new DkrDrawCall(device, texture);
+        this.drawCall = new DkrDrawCall(device, renderHelper.getCache(), texture);
         const halfsize = 50.0;
         const vertexData = createVertexData([
             { x: -halfsize*1.3, y: 5.0, z: -halfsize, r: 255, g: 255, b: 255, a: 255 },
