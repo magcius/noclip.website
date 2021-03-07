@@ -1506,14 +1506,13 @@ class ViewerSettings extends Panel {
 
         this.contents.style.lineHeight = '36px';
 
+         // Don't change the order
         this.camRadioButtons = new RadioButtons('Camera Controls', ['WASD', 'Orbit', 'Ortho']);
         this.camRadioButtons.onselectedchange = () => {
             if (ui.studioModeEnabled)
                 return;
 
-            const index = this.camRadioButtons.selectedIndex;
-            const cameraControllerClass = this.camControllerClasses[index];
-            this.setCameraControllerClass(cameraControllerClass);
+            this.setCameraControllerIndex(this.camRadioButtons.selectedIndex);
         };
         this.contents.appendChild(this.camRadioButtons.elem);
 
@@ -1547,6 +1546,12 @@ class ViewerSettings extends Panel {
         this.invertXCheckbox.onchanged = () => { GlobalSaveManager.saveSetting(`InvertX`, this.invertXCheckbox.checked); };
         this.contents.appendChild(this.invertXCheckbox.elem);
         GlobalSaveManager.addSettingListener('InvertX', this.invertXChanged.bind(this));
+    }
+
+    public setCameraControllerIndex(idx: number) {
+        const index = this.camRadioButtons.selectedIndex;
+        const cameraControllerClass = this.camControllerClasses[index];
+        this.setCameraControllerClass(cameraControllerClass);
     }
 
     private onFovSliderChange(e: UIEvent): void {
@@ -1863,8 +1868,8 @@ class StudioPanel extends FloatingPanel {
 
         this.enableStudioBtn.onclick = () => {
             if (!ui.studioModeEnabled) {
-                // Switch to the FPS Camera Controller ().
-                (ui.viewerSettings.elem.querySelector('.CameraControllerWASD') as HTMLElement).click();
+                // Switch to the FPS Camera Controller.
+                ui.viewerSettings.setCameraControllerIndex(0);
                 ui.studioModeEnabled = true;
                 // Disable switching of camera controllers in studio mode.
                 ui.viewerSettings.contents.querySelectorAll('.SettingsButton').forEach(el => {
