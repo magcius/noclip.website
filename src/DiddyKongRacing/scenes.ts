@@ -1,6 +1,6 @@
 import * as Viewer from '../viewer';
 
-import { GfxDevice, GfxRenderPass, GfxBindingLayoutDescriptor, GfxRenderPassDescriptor } from '../gfx/platform/GfxPlatform';
+import { GfxDevice, GfxBindingLayoutDescriptor, GfxRenderPassDescriptor } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { colorNewFromRGBA } from "../Color";
 import { CameraController } from '../Camera';
@@ -14,12 +14,10 @@ import { Checkbox, COOL_BLUE_COLOR, Panel, SingleSelect, Slider } from '../ui';
 import { DkrControlGlobals } from './DkrControlGlobals';
 import { IMG_LOADING_ASSETS } from './DkrLoadingMessage'
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
-import { makeClearRenderPassDescriptor, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { makeClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { executeOnPass } from '../gfx/render/GfxRenderInstManager';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 import { trackParams } from './scenes_TrackParams';
-import { mat4 } from 'gl-matrix';
-import { updateCameraViewMatrix } from './DkrUtil';
 
 const pathBase = `DiddyKongRacing`;
 const dkrVersion = 'us_1.0';
@@ -33,7 +31,7 @@ class DKRRenderer implements Viewer.SceneGfx {
     public renderHelper: GfxRenderHelper;
     public isInteractive = true;
     private hasStarted = false;
-    
+
     public renderPassDescriptor: GfxRenderPassDescriptor;
 
     private level: DkrLevel | null = null;
@@ -70,13 +68,6 @@ class DKRRenderer implements Viewer.SceneGfx {
             // Disable mirroring manually, since mirroring the rotation is annoying to deal with.
             (DkrControlGlobals.ADV2_MIRROR.elem as Checkbox).setChecked(false);
             DkrControlGlobals.ADV2_MIRROR.on = false;
-            viewerInput.camera.worldMatrix = mat4.fromValues(
-                this.camStart[0], this.camStart[1], this.camStart[2], this.camStart[3],
-                this.camStart[4], this.camStart[5], this.camStart[6], this.camStart[7],
-                this.camStart[8], this.camStart[9], this.camStart[10], this.camStart[11],
-                this.camStart[12], this.camStart[13], this.camStart[14], this.camStart[15]
-            );
-            updateCameraViewMatrix(viewerInput.camera);
             this.hasStarted = true;
         }
 
