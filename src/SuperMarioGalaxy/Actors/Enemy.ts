@@ -944,8 +944,6 @@ export class Unizo extends LiveActor<UnizoNrv> {
         turnMtxToYDir(this.baseMtx, scratchVec3a, 1.0 * MathConstants.DEG_TO_RAD);
         setMatrixTranslation(this.baseMtx, this.translation);
         this.updateSurfaceEffect(sceneObjHolder);
-
-        drawWorldSpacePoint(getDebugOverlayCanvas2D(), viewerInput.camera.clipFromWorldMatrix, this.translation);
     }
 
     protected updateSpine(sceneObjHolder: SceneObjHolder, currentNerve: UnizoNrv, deltaTimeFrames: number): void {
