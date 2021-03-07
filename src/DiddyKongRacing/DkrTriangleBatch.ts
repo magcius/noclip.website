@@ -3,6 +3,7 @@ import { DkrTexture } from "./DkrTexture";
 import { assert } from "../util";
 import { isFlagSet } from "./DkrUtil"
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export const SIZE_OF_VERTEX = 10;
 export const SIZE_OF_TRIANGLE_FACE = 16;
@@ -38,12 +39,10 @@ export class DkrTriangleBatch {
     
     private vertices = Array<DkrVertex>();
     private finalVertices = Array<DkrFinalVertex>();
-    private numberOfIndices = 0;
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, triangleData: Uint8Array, vertexData: Uint8Array, 
-    verticesStart: number, private flags: number, private texture?: DkrTexture | null) {
-        let numberOfVertices = vertexData.length / SIZE_OF_VERTEX;
-        let numberOfTriangles = triangleData.length / SIZE_OF_TRIANGLE_FACE;
+    constructor(triangleData: ArrayBufferSlice, vertexData: ArrayBufferSlice, verticesStart: number, private flags: number, private texture: DkrTexture | null) {
+        const numberOfVertices = vertexData.byteLength / SIZE_OF_VERTEX;
+        const numberOfTriangles = triangleData.byteLength / SIZE_OF_TRIANGLE_FACE;
 
         // If the sizes are not integers, then something went wrong with the input data.
         assert(Number.isInteger(numberOfVertices));
@@ -53,12 +52,12 @@ export class DkrTriangleBatch {
 
         let uScale = 0, vScale = 0;
 
-        if(!!this.texture) {
+        if (this.texture !== null) {
             uScale = 1.0 / (this.texture.getWidth() * 32.0);
             vScale = 1.0 / (this.texture.getHeight() * 32.0);
         }
 
-        const vertexDataView = new DataView(vertexData.buffer);
+        const vertexDataView = vertexData.createDataView();
 
         // Read vertices. Similar to Fast3D, but without the UV coordinates.
         for(let i = 0; i < numberOfVertices; i++) {
@@ -74,41 +73,40 @@ export class DkrTriangleBatch {
             });
         }
 
-        const triangleDataView = new DataView(triangleData.buffer);
+        const triangleDataView = triangleData.createDataView();
 
         // Read triangles. More than just indices, also includes UV coordinates and a backface flag.
         for(let i = 0; i < numberOfTriangles; i++) {
-            let fi = i * SIZE_OF_TRIANGLE_FACE; // triangle face index
+            const fi = i * SIZE_OF_TRIANGLE_FACE; // triangle face index
 
             // If the first byte is 0x40, then the backface should be drawn.
-            let isBackfaceVisible = isFlagSet(triangleData[fi + 0x00], 0x40);
+            const isBackfaceVisible = isFlagSet(triangleDataView.getUint8(fi + 0x00), 0x40);
 
-            let v0 = triangleData[fi + 0x01];
-            let v1 = triangleData[fi + 0x02];
-            let v2 = triangleData[fi + 0x03];
-            let uv0 = [
+            const v0 = triangleDataView.getUint8(fi + 0x01);
+            const v1 = triangleDataView.getUint8(fi + 0x02);
+            const v2 = triangleDataView.getUint8(fi + 0x03);
+            const uv0 = [
                 triangleDataView.getInt16(fi + 0x04) * uScale,
-                triangleDataView.getInt16(fi + 0x06) * vScale
-            ];
-            let uv1 = [
+                triangleDataView.getInt16(fi + 0x06) * vScale,
+            ] as const;
+            const uv1 = [
                 triangleDataView.getInt16(fi + 0x08) * uScale,
-                triangleDataView.getInt16(fi + 0x0A) * vScale
-            ];
-            let uv2 = [
+                triangleDataView.getInt16(fi + 0x0A) * vScale,
+            ] as const;
+            const uv2 = [
                 triangleDataView.getInt16(fi + 0x0C) * uScale,
-                triangleDataView.getInt16(fi + 0x0E) * vScale
-            ];
+                triangleDataView.getInt16(fi + 0x0E) * vScale,
+            ] as const;
 
             this.setFinalVertex(verticesStart + v0, this.vertices[v0], uv0);
             this.setFinalVertex(verticesStart + v1, this.vertices[v1], uv1);
             this.setFinalVertex(verticesStart + v2, this.vertices[v2], uv2);
-            
-            if(isBackfaceVisible) {
+
+            if (isBackfaceVisible) {
                 this.setFinalVertex(verticesStart + v0, this.vertices[v0], uv0);
                 this.setFinalVertex(verticesStart + v2, this.vertices[v2], uv2);
                 this.setFinalVertex(verticesStart + v1, this.vertices[v1], uv1);
             }
-            
         }
     }
 
@@ -127,7 +125,7 @@ export class DkrTriangleBatch {
         return this.flags;
     }
 
-    private setFinalVertex(vertexIndex: number, vertex: DkrVertex, uv: any): void {
+    private setFinalVertex(vertexIndex: number, vertex: DkrVertex, uv: Readonly<[number, number]>): void {
         this.finalVertices.push({
             x: vertex.x, y: vertex.y, z: vertex.z,
             xr: vertex.xr, yg: vertex.yg, zb: vertex.zb, a: vertex.a,

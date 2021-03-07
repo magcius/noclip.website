@@ -92,9 +92,9 @@ export class DkrObject {
                 let modelId = this.headerDataView.getInt32(modelIdsOffset + (i*4));
                 if(this.modelType == MODEL_TYPE_3D_MODEL) {
                     this.modelIds[i] = modelId;
-                    objectCache.getObjectModel(modelId, (modelData: Uint8Array) => {
+                    objectCache.getObjectModel(modelId, (modelData: ArrayBufferSlice) => {
                         this.models[i] = new DkrObjectModel(modelId, modelData, device, renderHelper, dataManager, textureCache);
-                    })
+                    });
                 } else {
                     this.spriteIds[i] = modelId;
                 }

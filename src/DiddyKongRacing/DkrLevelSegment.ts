@@ -8,6 +8,7 @@ import { DkrDrawCall } from "./DkrDrawCall";
 import { CURRENT_LEVEL_ID, DkrLevel } from "./DkrLevel";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRendererLayer, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 class TriangleBatchFlags {
     constructor(
@@ -26,27 +27,28 @@ export class DkrLevelSegment {
     private triangleBatches: Array<DkrTriangleBatch>;
     private transTexDrawCalls = Array<DkrDrawCall>();
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, levelData: Uint8Array, offset: number, textureCache: DkrTextureCache, textureIndices: Array<number>, opaqueTextureDrawCalls: any) {
-        const dataView = new DataView(levelData.buffer);
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, levelData: ArrayBufferSlice, offset: number, textureCache: DkrTextureCache, textureIndices: Array<number>, opaqueTextureDrawCalls: any) {
+        const view = levelData.createDataView();
 
-        let verticesOffset = dataView.getInt32(offset + 0x00);
-        let numberOfVertices = dataView.getInt16(offset + 0x1C);
-        let trianglesOffset = dataView.getInt32(offset + 0x04);
-        let numberOfTriangles = dataView.getInt16(offset + 0x1E);
-        let triangleBatchInfoOffset = dataView.getInt32(offset + 0x0C);
-        let numberOfTriangleBatches = dataView.getInt16(offset + 0x20);
+        let verticesOffset = view.getInt32(offset + 0x00);
+        let numberOfVertices = view.getInt16(offset + 0x1C);
+        let trianglesOffset = view.getInt32(offset + 0x04);
+        let numberOfTriangles = view.getInt16(offset + 0x1E);
+        let triangleBatchInfoOffset = view.getInt32(offset + 0x0C);
+        let numberOfTriangleBatches = view.getInt16(offset + 0x20);
         
         this.triangleBatches = new Array(numberOfTriangleBatches);
 
         const cache = renderHelper.getCache();
         for (let i = 0; i < numberOfTriangleBatches; i++) {
-            let ti = triangleBatchInfoOffset + (i * SIZE_OF_BATCH_INFO); // Triangle batch info index
-            let tiNext = ti + SIZE_OF_BATCH_INFO;
+            const ti = triangleBatchInfoOffset + (i * SIZE_OF_BATCH_INFO); // Triangle batch info index
+            const tiNext = ti + SIZE_OF_BATCH_INFO;
+            const tii = view.getUint8(ti);
 
-            if(levelData[ti] != 0xFF) {    
-                let textureIndex = textureIndices[levelData[ti]];
+            if (tii !== 0xFF) {
+                let textureIndex = textureIndices[tii];
                 textureCache.get3dTexture(textureIndex, (texture: DkrTexture) => {
-                    this.parseBatch(device, renderHelper, dataView, i, ti, tiNext, verticesOffset, trianglesOffset, texture, textureIndex);
+                    this.parseBatch(levelData, i, ti, tiNext, verticesOffset, trianglesOffset, texture);
                     const layer = texture.getLayer();
                     if(layer == GfxRendererLayer.OPAQUE || layer == GfxRendererLayer.BACKGROUND) {
                         if(opaqueTextureDrawCalls[textureIndex] == undefined) {
@@ -69,30 +71,29 @@ export class DkrLevelSegment {
                     }
                 });
             } else {
-                if(opaqueTextureDrawCalls['noTex'] == undefined) {
+                if (opaqueTextureDrawCalls['noTex'] == undefined) {
                     opaqueTextureDrawCalls['noTex'] = new DkrDrawCall(device, cache, null);
                 }
-                this.parseBatch(device, renderHelper, dataView, i, ti, tiNext, verticesOffset, trianglesOffset, null, 0);
-                if(!!this.triangleBatches[i]) {
+                this.parseBatch(levelData, i, ti, tiNext, verticesOffset, trianglesOffset, null);
+                if (!!this.triangleBatches[i]) {
                     opaqueTextureDrawCalls['noTex'].addTriangleBatch(this.triangleBatches[i]);
                 }
             }
-            
         }
     }
 
-    private parseBatch(device: GfxDevice, renderHelper: GfxRenderHelper, dataView: DataView, 
-        i: number, ti: number, tiNext: number, verticesOffset: number, trianglesOffset: number, 
-        texture: DkrTexture | null, textureIndex: number) {
-        let curVertexOffset = dataView.getInt16(ti + 0x02);
-        let curTrisOffset = dataView.getInt16(ti + 0x04);
-        let nextVertexOffset = dataView.getInt16(tiNext + 0x02);
-        let nextTrisOffset = dataView.getInt16(tiNext + 0x04);
+    private parseBatch(levelData: ArrayBufferSlice, i: number, ti: number, tiNext: number, verticesOffset: number, trianglesOffset: number, texture: DkrTexture | null) {
+        const view = levelData.createDataView();
+
+        let curVertexOffset = view.getInt16(ti + 0x02);
+        let curTrisOffset = view.getInt16(ti + 0x04);
+        let nextVertexOffset = view.getInt16(tiNext + 0x02);
+        let nextTrisOffset = view.getInt16(tiNext + 0x04);
         let batchVerticesOffset = verticesOffset + (curVertexOffset * SIZE_OF_VERTEX);
         let batchTrianglesOffset = trianglesOffset + (curTrisOffset * SIZE_OF_TRIANGLE_FACE);
         let numberOfTrianglesInBatch = nextTrisOffset - curTrisOffset;
         let numberOfVerticesInBatch = nextVertexOffset - curVertexOffset;
-        let flags = dataView.getUint32(ti + 0x08);
+        let flags = view.getUint32(ti + 0x08);
 
         const triangleDataStart = batchTrianglesOffset;
         const triangleDataEnd = triangleDataStart + (numberOfTrianglesInBatch * SIZE_OF_TRIANGLE_FACE);
@@ -100,10 +101,8 @@ export class DkrLevelSegment {
         const verticesDataEnd = verticesDataStart + (numberOfVerticesInBatch * SIZE_OF_VERTEX);
 
         this.triangleBatches[i] = new DkrTriangleBatch(
-            device, 
-            renderHelper,
-            new Uint8Array(dataView.buffer).slice(triangleDataStart, triangleDataEnd),
-            new Uint8Array(dataView.buffer).slice(verticesDataStart, verticesDataEnd),
+            levelData.slice(triangleDataStart, triangleDataEnd),
+            levelData.slice(verticesDataStart, verticesDataEnd),
             0,
             flags,
             texture

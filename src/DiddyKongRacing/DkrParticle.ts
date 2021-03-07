@@ -36,7 +36,7 @@ export class DkrParticle {
                 uv0: [1.0, 0.0], uv1: [0.0, 1.0], uv2: [1.0, 1.0]
             },
         ], texture);
-        let triangleBatch = new DkrTriangleBatch(device, renderHelper, triangleData, vertexData, 0, 2, texture);
+        let triangleBatch = new DkrTriangleBatch(triangleData, vertexData, 0, 2, texture);
         this.drawCall.addTriangleBatch(triangleBatch);
         this.drawCall.build();
     }

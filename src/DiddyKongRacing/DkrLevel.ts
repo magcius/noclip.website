@@ -36,14 +36,12 @@ export class DkrLevel {
     // Remove when the Animator object is properly implemented.
     private hackCresIslandTexScrollers = new Array<any>();
 
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private textureCache: DkrTextureCache, objectCache: DkrObjectCache, 
-        id: string, private dataManager: DataManager, private sprites: DkrSprites, callback: Function) {
-        if(id.startsWith('model:')) {
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, private textureCache: DkrTextureCache, objectCache: DkrObjectCache, id: string, private dataManager: DataManager, private sprites: DkrSprites, callback: Function) {
+        if (id.startsWith('model:')) {
             CURRENT_LEVEL_ID = -1;
             // Level model data only.
             dataManager.getLevelModel(parseInt(id.substr(6))).then((modelDataBuffer) => {
-                let modelData = modelDataBuffer.createTypedArray(Uint8Array);
-                this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelData);
+                this.model = new DkrLevelModel(device, renderHelper, this, textureCache, modelDataBuffer);
                 dataManager.signalDoneFlag();
                 callback(this);
             })
@@ -72,7 +70,7 @@ export class DkrLevel {
                 ];
 
                 Promise.all(promises).then((out) => {
-                    const modelDataBuffer = out[0].createTypedArray(Uint8Array);
+                    const modelDataBuffer = out[0];
                     const objectMap1Buffer = out[1];
                     const objectMap2Buffer = out[2];
                     if(skydomeId !== 0xFFFF) {

@@ -9,6 +9,7 @@ import { Camera } from "../Camera";
 import { DkrLevel } from "./DkrLevel";
 import { GfxRenderHelper } from "../gfx/render/GfxRenderHelper";
 import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 const SIZE_OF_BSP_NODE = 0x08;
 const SIZE_OF_LEVEL_SEGMENT_HEADER = 0x44;
@@ -31,8 +32,6 @@ class BSPNode {
 };
 
 export class DkrLevelModel {
-    private renderingInvisibleGeometry = true;
-
     private textureIndices = new Array<number>();
     private segments = new Array<DkrLevelSegment>();
 
@@ -42,23 +41,20 @@ export class DkrLevelModel {
     private rootBspNode: BSPNode;
     private segmentOrder: number[];
 
-    private textureFrame = 0;
-    private textureFrameAdvanceDelay = 30;
-    
-    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, private textureCache: DkrTextureCache, levelData: Uint8Array) {
-        const dataView = new DataView(levelData.buffer);
+    constructor(device: GfxDevice, renderHelper: GfxRenderHelper, level: DkrLevel, private textureCache: DkrTextureCache, levelData: ArrayBufferSlice) {
+        const view = levelData.createDataView();
 
-        let texturesOffset = dataView.getUint32(0x00);
-        let segmentsOffset = dataView.getUint32(0x04);
-        let segmentsBBOffset = dataView.getUint32(0x08);// Bounding boxes for segments
-        let segmentsBitfieldsOffset = dataView.getUint32(0x10);
-        let segmentsBspTreeOffset = dataView.getUint32(0x14);
-        let bspSplitOffset = dataView.getUint32(0x14);
-        let numberOfTextures = dataView.getUint16(0x18);
-        let numberOfSegments = dataView.getUint16(0x1A);
+        let texturesOffset = view.getUint32(0x00);
+        let segmentsOffset = view.getUint32(0x04);
+        let segmentsBBOffset = view.getUint32(0x08);// Bounding boxes for segments
+        let segmentsBitfieldsOffset = view.getUint32(0x10);
+        let segmentsBspTreeOffset = view.getUint32(0x14);
+        let bspSplitOffset = view.getUint32(0x14);
+        let numberOfTextures = view.getUint16(0x18);
+        let numberOfSegments = view.getUint16(0x1A);
         
         for (let i = 0; i < numberOfTextures; i++) {
-            const texIndex = dataView.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO));
+            const texIndex = view.getUint32(texturesOffset + (i * SIZE_OF_TEXTURE_INFO));
             this.textureIndices.push(texIndex);
         }
         
@@ -72,7 +68,7 @@ export class DkrLevelModel {
                 ));
             }
             if(this.segments.length > 1) {
-                this.parseBSPTree(dataView, segmentsBspTreeOffset);
+                this.parseBSPTree(view, segmentsBspTreeOffset);
             }
             this.opaqueTextureDrawCallsKeys = Object.keys(this.opaqueTextureDrawCalls);
             for(const key of this.opaqueTextureDrawCallsKeys) {
@@ -94,10 +90,6 @@ export class DkrLevelModel {
 
     public getTextureIndices(): Array<number> {
         return this.textureIndices;
-    }
-
-    public setRenderingInvisibleGeometry(doRender: boolean) {
-        this.renderingInvisibleGeometry = doRender;
     }
 
     public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, viewerInput: ViewerRenderInput): void {

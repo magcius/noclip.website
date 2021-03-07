@@ -36,7 +36,7 @@ export class DkrObjectCache {
                     // Model has already been loaded, so just return it.
                     callback(this.objectModels[index]);
                 } else {
-                    this.objectModels[index] = modelDataBuffer.createTypedArray(Uint8Array);;
+                    this.objectModels[index] = modelDataBuffer;
                     callback(this.objectModels[index]);
                 }
             });
@@ -80,7 +80,7 @@ export class DkrObjectCache {
             Promise.all(modelPromises).then((outModels) => {
                 for (let index = 0; index < outModels.length; index++) {
                     if(!this.objectModels[indices[index]]) {
-                        this.objectModels[indices[index]] = outModels[index].createTypedArray(Uint8Array);
+                        this.objectModels[indices[index]] = outModels[index];
                     }
                 }
                 callback();
