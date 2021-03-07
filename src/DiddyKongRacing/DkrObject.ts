@@ -57,9 +57,7 @@ export class DkrObject {
     // Most objects can be instanced, but some like doors/world gates can't because of textures.
     private allowInstances = true;
 
-    constructor(private objectId: number, private device: GfxDevice, private level: DkrLevel, 
-        private renderHelper: GfxRenderHelper, private dataManager: DataManager, 
-        private objectCache: DkrObjectCache, private textureCache: DkrTextureCache, objectLoadedCallback: Function | null = null) {
+    constructor(objectId: number, private device: GfxDevice, private level: DkrLevel, private renderHelper: GfxRenderHelper, dataManager: DataManager, objectCache: DkrObjectCache, private textureCache: DkrTextureCache, objectLoadedCallback: Function | null = null) {
         objectCache.getObjectHeader(objectId, (outHeaderData: Uint8Array) => {
             mat4.identity(this.modelMatrix);
             this.headerData = outHeaderData;

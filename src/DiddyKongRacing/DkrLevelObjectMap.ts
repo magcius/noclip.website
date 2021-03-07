@@ -46,7 +46,7 @@ export class DkrLevelObjectMap {
             currentOffset += length;
         }
 
-        objectCache.preloadObjects(Array.from(objectIds), () => {
+        objectCache.preloadObjects(Array.from(objectIds)).then(() => {
             this.objects = new Array<DkrObject>(objectEntries.length);
             for(let i = 0; i < objectEntries.length; i++) {
                 const objId = objectEntries[i].objectId;
