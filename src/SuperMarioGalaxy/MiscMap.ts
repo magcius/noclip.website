@@ -370,10 +370,9 @@ export class WaterCameraFilter extends LiveActor<WaterCameraFilterNrv> {
 
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
         renderInst.setUniformBufferOffset(GX_Program.ub_SceneParams, sceneObjHolder.renderParams.sceneParamsOffs2D, ub_SceneParamsBufferSize);
+        mat4.identity(materialParams.u_PosMtx[0]);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(this.materialParams.m_TextureMapping);
-        mat4.identity(packetParams.u_PosMtx[0]);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }

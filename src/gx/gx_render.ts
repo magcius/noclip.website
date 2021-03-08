@@ -40,9 +40,10 @@ export class SceneParams {
 }
 
 export class MaterialParams {
+    public u_TexMtx: mat4[] = nArray(10, () => mat4.create()); // mat4x3
+    public u_PosMtx: mat4[] = nArray(10, () => mat4.create()); // mat4x3
     public m_TextureMapping: TextureMapping[] = nArray(8, () => new TextureMapping());
     public u_Color: Color[] = nArray(ColorKind.COUNT, () => colorNewCopy(TransparentBlack));
-    public u_TexMtx: mat4[] = nArray(10, () => mat4.create());     // mat4x3
     public u_PostTexMtx: mat4[] = nArray(20, () => mat4.create()); // mat4x3
     public u_IndTexMtx: mat4[] = nArray(3, () => mat4.create()); // mat4x2
     public u_Lights: GX_Material.Light[] = nArray(8, () => new GX_Material.Light());
@@ -110,10 +111,12 @@ export function fillTextureBias(d: Float32Array, offs: number, m: TextureMapping
 function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, materialParams: Readonly<MaterialParams>): void {
     let offs = bOffs;
 
-    for (let i = 0; i < 12; i++)
-        offs += fillColor(d, offs, materialParams.u_Color[i]);
+    for (let i = 0; i < GX_Material.materialGetPnMtxCount(material); i++)
+        offs += fillMatrix4x3(d, offs, materialParams.u_PosMtx[i]);
     for (let i = 0; i < 10; i++)
         offs += fillMatrix4x3(d, offs, materialParams.u_TexMtx[i]);
+    for (let i = 0; i < 12; i++)
+        offs += fillColor(d, offs, materialParams.u_Color[i]);
     for (let i = 0; i < 8; i++)
         offs += fillTextureSize(d, offs, materialParams.m_TextureMapping[i]);
     for (let i = 0; i < 8; i++)
@@ -130,18 +133,6 @@ function fillMaterialParamsDataWithOptimizations(material: GX_Material.GXMateria
         offs += fillFogBlock(d, offs, materialParams.u_FogBlock);
     if (GX_Material.materialHasDynamicAlphaTest(material))
         offs += fillVec4(d, offs, materialParams.u_DynamicAlphaRefA, materialParams.u_DynamicAlphaRefB);
-
-    assert(d.length >= offs);
-}
-
-function fillDrawParamsDataWithOptimizations(material: GX_Material.GXMaterial, d: Float32Array, bOffs: number, packetParams: PacketParams): void {
-    let offs = bOffs;
-
-    if (GX_Material.materialUsePnMtxIdx(material))
-        for (let i = 0; i < 10; i++)
-            offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[i]);
-    else
-        offs += fillMatrix4x3(d, offs, packetParams.u_PosMtx[0]);
 
     assert(d.length >= offs);
 }
@@ -449,7 +440,6 @@ export class GXMaterialHelperGfx {
     public programKey: number;
     public megaStateFlags: Partial<GfxMegaStateDescriptor>;
     public materialParamsBufferSize: number;
-    public drawParamsBufferSize: number;
     private materialHacks: GX_Material.GXMaterialHacks = {};
     private program!: GX_Material.GX_Program;
     private gfxProgram: GfxProgram | null = null;
@@ -468,7 +458,6 @@ export class GXMaterialHelperGfx {
 
     public materialInvalidated(): void {
         this.materialParamsBufferSize = GX_Material.getMaterialParamsBlockSize(this.material);
-        this.drawParamsBufferSize = GX_Material.getDrawParamsBlockSize(this.material);
         this.createProgram();
 
         this.megaStateFlags = translateGfxMegaState(this.material);
@@ -506,12 +495,6 @@ export class GXMaterialHelperGfx {
         const offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_MaterialParams, this.materialParamsBufferSize);
         const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_MaterialParams);
         fillMaterialParamsDataWithOptimizations(this.material, d, offs, materialParams);
-    }
-
-    public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, drawParams: PacketParams): void {
-        const offs = renderInst.allocateUniformBuffer(GX_Material.GX_Program.ub_DrawParams, this.drawParamsBufferSize);
-        const d = renderInst.mapUniformBufferF32(GX_Material.GX_Program.ub_DrawParams);
-        fillDrawParamsDataWithOptimizations(this.material, d, offs, drawParams);
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {

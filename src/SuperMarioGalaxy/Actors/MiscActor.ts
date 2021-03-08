@@ -16,8 +16,8 @@ import { GXMaterialBuilder } from '../../gx/GXMaterialBuilder';
 import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';
 import { getVertexInputLocation } from '../../gx/gx_material';
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../../gx/gx_render';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
+import { ColorKind, GXMaterialHelperGfx, MaterialParams } from '../../gx/gx_render';
+import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util';
 import * as Viewer from '../../viewer';
@@ -45,7 +45,6 @@ import { createModelObjBloomModel, createModelObjMapObj, createModelObjMapObjStr
 import { createPartsModelMapObj, PartsModel } from './PartsModel';
 
 const materialParams = new MaterialParams();
-const packetParams = new PacketParams();
 
 // Scratchpad
 const scratchVec3 = vec3.create();
@@ -3285,12 +3284,10 @@ class WarpPodPathDrawer {
         colorCopy(materialParams.u_Color[ColorKind.C0], this.color);
 
         const template = renderInstManager.pushTemplateRenderInst();
+        mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
 
         this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
         template.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
 
@@ -3683,10 +3680,9 @@ export class WaterPlant extends LiveActor {
 
         waterPlantDrawInit.loadTex(materialParams.m_TextureMapping[0], this.plantType);
         const materialHelper = waterPlantDrawInit.materialHelper;
+        mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -4103,10 +4099,9 @@ export class SwingRope extends LiveActor {
         const swingRopeGroup = sceneObjHolder.swingRopeGroup!;
         swingRopeGroup.swingRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = swingRopeGroup.materialHelper;
+        mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -4340,10 +4335,9 @@ export class Trapeze extends LiveActor {
         const trapezeRopeDrawInit = sceneObjHolder.trapezeRopeDrawInit!;
         trapezeRopeDrawInit.trapezeRope.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = trapezeRopeDrawInit.materialHelper;
+        mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -4528,10 +4522,9 @@ export class Creeper extends LiveActor {
 
         this.stalk.fillTextureMapping(materialParams.m_TextureMapping[0]);
         const materialHelper = this.materialHelper;
+        mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -4731,10 +4724,9 @@ class OceanRingDrawer {
         colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x76D7FFFF);
 
         const materialHelper = this.materialHelper;
+        mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -4827,10 +4819,9 @@ class OceanRingPipeOutside extends LiveActor {
         alpha2.Direction[1] = -1.0;
 
         const materialHelper = this.materialHelper;
+        mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -5506,10 +5497,9 @@ export class Flag extends LiveActor {
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0xFFFFFFFF);
 
         const materialHelper = this.materialHelper;
+        mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -5688,11 +5678,10 @@ export class ElectricRailHolder extends NameObj {
             const template = renderInstManager.pushTemplateRenderInst();
 
             const modelInstance = modelObj.modelInstance!;
-            mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+            mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
 
             const materialInstance = modelInstance.materialInstances[0];
             materialInstance.setOnRenderInst(device, cache, template);
-            materialInstance.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
             for (let j = 0; j < this.rails.length; j++) {
                 const rail = this.rails[j]!;
@@ -5702,7 +5691,7 @@ export class ElectricRailHolder extends NameObj {
                 if (!rail.visibleScenario || !rail.visibleAlive)
                     continue;
 
-                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, viewerInput.viewport, packetParams);
+                materialInstance.fillOnMaterialParams(materialParams, modelInstance.materialInstanceState, viewerInput.camera, modelInstance.modelMatrix, viewerInput.viewport);
 
                 // TODO(jstpierre): Do this in one TDDraw?
                 const railTemplate = renderInstManager.pushTemplateRenderInst();
@@ -7696,10 +7685,9 @@ class AstroDomeOrbit extends LiveActor {
         colorFromRGBA8(materialParams.u_Color[ColorKind.MAT0], color);
 
         const materialHelper = this.materialHelper;
+        computeModelMatrixR(materialParams.u_PosMtx[0], this.rotation[0], this.rotation[1], this.rotation[2]);
+        mat4.mul(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix, materialParams.u_PosMtx[0]);
         materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
-        computeModelMatrixR(packetParams.u_PosMtx[0], this.rotation[0], this.rotation[1], this.rotation[2]);
-        mat4.mul(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix, packetParams.u_PosMtx[0]);
-        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
         materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
 
         renderInstManager.submitRenderInst(renderInst);
@@ -8602,11 +8590,10 @@ export class WhirlPoolAccelerator extends LiveActor {
         colorFromRGBA8(materialParams.u_Color[ColorKind.C0], 0x003452FF);
         colorFromRGBA8(materialParams.u_Color[ColorKind.C1], 0x7CA9BDFF);
 
+        mat4.copy(materialParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
         renderInstManager.submitRenderInst(renderInst);

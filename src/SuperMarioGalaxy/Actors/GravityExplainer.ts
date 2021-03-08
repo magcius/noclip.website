@@ -225,10 +225,8 @@ export class GravityExplainer extends LiveActor {
 
         const device = sceneObjHolder.modelCache.device;
         this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
+        mat4.identity(materialParams.u_PosMtx[0]);
         this.materialHelper.allocateMaterialParamsDataOnInst(template, materialParams);
-
-        mat4.identity(packetParams.u_PosMtx[0]);
-        this.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
         this.ddraw.beginDraw();
         for (let i = 0; i < this.arrows.length; i++)

@@ -391,12 +391,10 @@ export class OceanBowl extends LiveActor {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelper.programKey);
 
+        mat4.copy(materialParams.u_PosMtx[0], camera.viewMatrix);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-        mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }
@@ -424,12 +422,10 @@ export class OceanBowl extends LiveActor {
         this.materialHelperBloom.setOnRenderInst(device, cache, renderInst);
         renderInst.sortKey = makeSortKey(GfxRendererLayer.TRANSLUCENT, this.materialHelperBloom.programKey);
 
+        mat4.copy(materialParams.u_PosMtx[0], camera.viewMatrix);
         this.materialHelperBloom.allocateMaterialParamsDataOnInst(renderInst, materialParams);
 
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
-
-        mat4.copy(packetParams.u_PosMtx[0], camera.viewMatrix);
-        this.materialHelperBloom.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
         renderInstManager.submitRenderInst(renderInst);
     }

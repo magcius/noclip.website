@@ -252,7 +252,7 @@ function patchBMD(bmd: BMD): void {
 }
 
 // This is roughly ShapePacketUserData::callDL().
-function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
+function fillMaterialParamsCallback(materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
     const material = materialInstance.materialData.material;
     let hasAnyEnvMap = false;
 
@@ -280,7 +280,7 @@ function fillMaterialParamsCallback(materialParams: MaterialParams, materialInst
         // Fill texture memory with normal matrices.
         for (let i = 0; i < 10; i++) {
             const m = materialParams.u_TexMtx[i];
-            computeNormalMatrix(m, packetParams.u_PosMtx[i], true);
+            computeNormalMatrix(m, materialParams.u_PosMtx[i], true);
         }
     }
 }

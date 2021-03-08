@@ -242,12 +242,12 @@ class FakeWaterModelInstance {
         const template = renderInstManager.pushTemplateRenderInst();
 
         // Calc our packet params.
-        mat4.copy(packetParams.u_PosMtx[0], this.modelInstance.shapeInstanceState.drawViewMatrixArray[0]);
-        this.materialInstance.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
+        // mat4.copy(packetParams.u_PosMtx[0], this.modelInstance.shapeInstanceState.drawViewMatrixArray[0]);
+        // this.materialInstance.materialHelper.allocatePacketParamsDataOnInst(template, packetParams);
 
         // Push our material instance.
         this.materialInstance.setOnRenderInst(device, renderInstManager.gfxRenderCache, template);
-        this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, viewerInput.viewport, packetParams);
+        this.materialInstance.fillMaterialParams(template, this.modelInstance.materialInstanceState, this.modelInstance.shapeInstanceState.worldToViewMatrix, this.modelInstance.modelMatrix, viewerInput.camera, viewerInput.viewport);
         this.plane.prepareToRender(renderInstManager);
 
         renderInstManager.popTemplateRenderInst();

@@ -1136,9 +1136,11 @@ export class LayoutPane {
     }
 
     protected setOnRenderInst(renderInst: GfxRenderInst): void {
+        /*
         let offs = renderInst.allocateUniformBuffer(GX_Program.ub_DrawParams, 16);
         const d = renderInst.mapUniformBufferF32(GX_Program.ub_DrawParams);
         offs += fillMatrix4x3(d, offs, this.worldFromLocalMatrix);
+        */
     }
 
     protected drawSelf(device: GfxDevice, renderInstManager: GfxRenderInstManager, layout: Layout, ddraw: TDDraw, alpha: number): void {

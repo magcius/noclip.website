@@ -475,22 +475,18 @@ class FurCtrl {
         for (let i = 0; i < this.furDrawer.numLayers; i++) {
             const shapeHelper = this.shapeHelpers[i];
 
-            const template = renderInstManager.pushTemplateRenderInst();
             this.furDrawer.setupLayerMaterial(materialParams, i);
-            this.furDrawer.setOnRenderInst(device, cache, template, materialParams);
 
             for (let j = 0; j < shape.mtxGroups.length; j++) {
-                if (!prepareShapeMtxGroup(packetParams, shapeInstanceState, shape, shape.mtxGroups[j]))
+                if (!prepareShapeMtxGroup(materialParams, shapeInstanceState, shape, shape.mtxGroups[j]))
                     continue;
 
                 const renderInst = renderInstManager.newRenderInst();
+                this.furDrawer.setOnRenderInst(device, cache, renderInst, materialParams);
                 shapeHelper.setOnRenderInst(renderInst, this.shapeData.draws[j]);
-                this.furDrawer.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
 
                 renderInstManager.submitRenderInst(renderInst);
             }
-
-            renderInstManager.popTemplateRenderInst();
         }
     }
 

@@ -283,6 +283,10 @@ export function materialUsePnMtxIdx(material: { usePnMtxIdx?: boolean }): boolea
     return material.usePnMtxIdx !== undefined ? material.usePnMtxIdx : true;
 }
 
+export function materialGetPnMtxCount(material: { usePnMtxIdx?: boolean }): number {
+    return materialUsePnMtxIdx(material) ? 10 : 1;
+}
+
 export function materialHasDynamicAlphaTest(material: { hasDynamicAlphaTest?: boolean }): boolean {
     return material.hasDynamicAlphaTest !== undefined ? material.hasDynamicAlphaTest : false;
 }
@@ -316,11 +320,12 @@ struct FogBlock {
 
 // Expected to change with each material.
 layout(std140) uniform ub_MaterialParams {
+    Mat4x3 u_PosMtx[${materialGetPnMtxCount(material)}];
+    Mat4x3 u_TexMtx[10];
     vec4 u_ColorMatReg[2];
     vec4 u_ColorAmbReg[2];
     vec4 u_KonstColor[4];
     vec4 u_Color[4];
-    Mat4x3 u_TexMtx[10];
     vec4 u_TextureSizes[4];
     vec4 u_TextureBiases[2];
     Mat4x2 u_IndTexMtx[3];
@@ -340,22 +345,15 @@ ${materialHasDynamicAlphaTest(material) ? `
 ` : ``}
 };
 
-// Expected to change with each shape draw.
-// TODO(jstpierre): Rename from ub_DrawParams.
-layout(std140) uniform ub_DrawParams {
-${materialUsePnMtxIdx(material) ? `
-    Mat4x3 u_PosMtx[10];
-` : `
-    Mat4x3 u_PosMtx[1];
-`}
-};
-
 uniform sampler2D u_Texture[8];
 `;
 }
 
 export function getMaterialParamsBlockSize(material: GXMaterial): number {
-    let size = 4*2 + 4*2 + 4*4 + 4*4 + 4*3*10 + 4*4 + 4*2 + 4*2*3;
+    let size = 0;
+    size += 4*3 * materialGetPnMtxCount(material);
+    size += 4*3 * 10;
+    size += 4*2 + 4*2 + 4*4 + 4*4 + 4*4 + 4*2 + 4*2*3;
     if (materialHasPostTexMtxBlock(material))
         size += 4*3*20;
     if (materialHasLightsBlock(material))
@@ -368,21 +366,9 @@ export function getMaterialParamsBlockSize(material: GXMaterial): number {
     return size;
 }
 
-export function getDrawParamsBlockSize(material: GXMaterial): number {
-    let size = 0;
-
-    if (materialUsePnMtxIdx(material))
-        size += 4*3 * 10;
-    else
-        size += 4*3 * 1;
-
-    return size;
-}
-
 export class GX_Program extends DeviceProgram {
     public static ub_SceneParams = 0;
     public static ub_MaterialParams = 1;
-    public static ub_DrawParams = 2;
 
     public name: string;
 
@@ -525,11 +511,9 @@ ${this.generateLightAttnFn(chan, lightName)}
         } else if (pnt >= GX.TexGenMatrix.TEXMTX0) {
             const texMtxIdx = (pnt - GX.TexGenMatrix.TEXMTX0) / 3;
             return `${funcName}(u_TexMtx[${texMtxIdx}], ${src})`;
-        } else if (pnt >= GX.TexGenMatrix.PNMTX0) {
+        } else {
             const pnMtxIdx = (pnt - GX.TexGenMatrix.PNMTX0) / 3;
             return `${funcName}(u_PosMtx[${pnMtxIdx}], ${src})`;
-        } else {
-            throw "whoops";
         }
     }
 
