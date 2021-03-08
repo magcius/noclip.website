@@ -28,6 +28,10 @@ const scratchMtx1 = mat4.create();
 // An SFAClass holds common data and logic for one or more ObjectTypes.
 // An ObjectType serves as a template to spawn ObjectInstances.
 
+export interface ObjectUpdateContext {
+    viewerInput: ViewerRenderInput;
+}
+
 interface SFAClass {
     // Called when loading objects
     setup: (obj: ObjectInstance, data: DataView) => void;
@@ -36,7 +40,7 @@ interface SFAClass {
     // Called when removing objects from wprld
     unmount?: (obj: ObjectInstance, world: World) => void;
     // Called on each frame
-    update?: (obj: ObjectInstance, objectCtx: ObjectRenderContext) => void;
+    update?: (obj: ObjectInstance, updateCtx: ObjectUpdateContext) => void;
 }
 
 function commonSetup(obj: ObjectInstance, data: DataView, yawOffs?: number, pitchOffs?: number, rollOffs?: number, animSpeed?: number) {
@@ -140,6 +144,15 @@ namespace TriggerClass {
         radius: number; // Note: Actually, the trigger is square-shaped.
     }
 
+    function performActions(obj: ObjectInstance, leaving: boolean) {
+        const userData = obj.userData as UserData;
+        
+        for (let action of userData.actions) {
+            if (!!(action.flags & 0x2) === leaving)
+                console.log(`Action: flags ${!!(action.flags & 0x2) ? 'OnLeave' : 'OnEnter'} 0x${action.flags.toString(16)} type ${ACTION_TYPES[action.type] ?? `0x${action.type.toString(16)}`} param 0x${action.param.toString(16)}`);
+        }
+    }
+
     function setup(obj: ObjectInstance, data: DataView) {
         commonSetup(obj, data, 0x3d, 0x3e);
 
@@ -169,14 +182,14 @@ namespace TriggerClass {
         }
     };
 
-    function update(obj: ObjectInstance, objectCtx: ObjectRenderContext) {
+    function update(obj: ObjectInstance, updateCtx: ObjectUpdateContext) {
         if (obj.commonObjectParams.objType === OBJTYPE_TrigPln) {
             const userData = obj.userData as UserData;
             const triggerData = userData.triggerData as TrigPlnData;
 
             const curPoint = scratchVec0;
             // FIXME: The current point is not always the camera. It can also be the player character.
-            getCamPos(curPoint, objectCtx.sceneCtx.viewerInput.camera);
+            getCamPos(curPoint, updateCtx.viewerInput.camera);
 
             if (userData.lastPoint === undefined) {
                 userData.lastPoint = vec3.clone(curPoint);
@@ -196,7 +209,7 @@ namespace TriggerClass {
                         else
                             console.log(`Exited plane 0x${obj.commonObjectParams.id.toString(16)}`);
 
-                        // TODO: perform actions (i.e. heat shimmer / mist)
+                        performActions(obj, !curPointInPlane);
                     }
                 }
 
@@ -1151,27 +1164,10 @@ export class ObjectInstance {
 
     private curKeyframe: Keyframe | undefined = undefined;
 
-    public update(objectCtx: ObjectRenderContext) {
+    public update(updateCtx: ObjectUpdateContext) {
         const objClass = SFA_CLASSES[this.objType.objClass];
         if (objClass !== undefined && objClass.update !== undefined)
-            objClass.update(this, objectCtx);
-
-        if (this.modelInst !== null && this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
-            // TODO: use time values from animation data?
-            const amap = this.modelInst.getAmap(this.modelAnimNum!);
-            const kfTime = (this.world.animController.animController.getTimeInFrames() * this.animSpeed) % this.anim.keyframes.length;
-
-            const kf0Num = Math.floor(kfTime);
-            let kf1Num = kf0Num + 1;
-            if (kf1Num >= this.anim.keyframes.length)
-                kf1Num = 0;
-
-            const kf0 = this.anim.keyframes[kf0Num];
-            const kf1 = this.anim.keyframes[kf1Num];
-            const ratio = kfTime - kf0Num;
-            this.curKeyframe = interpolateKeyframes(kf0, kf1, ratio, this.curKeyframe);
-            applyKeyframeToModel(this.curKeyframe, this.modelInst, amap);
-        }
+            objClass.update(this, updateCtx);
     }
 
     private isFrustumCulled(viewerInput: ViewerRenderInput): boolean {
@@ -1179,11 +1175,25 @@ export class ObjectInstance {
     }
 
     public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists | null, objectCtx: ObjectRenderContext) {
-        // Update animations
-        // TODO: Call update elsewhere?
-        this.update(objectCtx);
-
         if (this.modelInst !== null && this.modelInst !== undefined && !this.isFrustumCulled(objectCtx.sceneCtx.viewerInput)) {
+            // Update animation
+            if (this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
+                // TODO: use time values from animation data?
+                const amap = this.modelInst.getAmap(this.modelAnimNum!);
+                const kfTime = (this.world.animController.animController.getTimeInFrames() * this.animSpeed) % this.anim.keyframes.length;
+
+                const kf0Num = Math.floor(kfTime);
+                let kf1Num = kf0Num + 1;
+                if (kf1Num >= this.anim.keyframes.length)
+                    kf1Num = 0;
+
+                const kf0 = this.anim.keyframes[kf0Num];
+                const kf1 = this.anim.keyframes[kf1Num];
+                const ratio = kfTime - kf0Num;
+                this.curKeyframe = interpolateKeyframes(kf0, kf1, ratio, this.curKeyframe);
+                applyKeyframeToModel(this.curKeyframe, this.modelInst, amap);
+            }
+
             const mtx = this.getWorldSRT();
             const viewMtx = scratchMtx0;
             computeViewMatrix(viewMtx, objectCtx.sceneCtx.viewerInput.camera);

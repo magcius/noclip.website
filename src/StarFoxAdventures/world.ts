@@ -19,7 +19,7 @@ import { computeViewMatrix } from '../Camera';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
-import { ObjectManager, ObjectInstance, ObjectRenderContext } from './objects';
+import { ObjectManager, ObjectInstance, ObjectRenderContext, ObjectUpdateContext } from './objects';
 import { EnvfxManager } from './envfx';
 import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
 import { MapInstance, loadMap } from './maps';
@@ -241,12 +241,26 @@ class WorldRenderer extends SFARenderer {
 
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
+
         this.world.materialFactory.update(this.animController);
+
         this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
         if (!this.enableAmbient)
             this.world.envfxMan.setOverrideOutdoorAmbientColor(colorNewFromRGBA(1.0, 1.0, 1.0, 1.0));
         else
             this.world.envfxMan.setOverrideOutdoorAmbientColor(null);
+            
+        const updateCtx: ObjectUpdateContext = {
+            viewerInput,
+        };
+
+        for (let i = 0; i < this.world.objectInstances.length; i++) {
+            const obj = this.world.objectInstances[i];
+
+            // FIXME: Is it really true that objects are updated regardless of layer?
+            // This is required for TrigPlns to work.
+            obj.update(updateCtx);
+        }
     }
 
     protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
@@ -411,7 +425,6 @@ class WorldRenderer extends SFARenderer {
             this.world.mapInstance.prepareToRender(device, renderInstManager, renderLists, modelCtx);
 
         if (this.showObjects) {
-            const ctx = getDebugOverlayCanvas2D();
             for (let i = 0; i < this.world.objectInstances.length; i++) {
                 const obj = this.world.objectInstances[i];
     
@@ -423,7 +436,7 @@ class WorldRenderer extends SFARenderer {
         
                     const drawLabels = false;
                     if (drawLabels)
-                        drawWorldSpaceText(ctx, sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
+                        drawWorldSpaceText(getDebugOverlayCanvas2D(), sceneCtx.viewerInput.camera.clipFromWorldMatrix, obj.getPosition(), obj.getName(), undefined, undefined, {outline: 2});
                 }
             }
         }
