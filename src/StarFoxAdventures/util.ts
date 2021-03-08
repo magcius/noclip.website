@@ -3,8 +3,8 @@ import { mat4, vec3, quat, ReadonlyMat4 } from 'gl-matrix';
 import { Camera, computeViewMatrix } from '../Camera';
 import { getMatrixTranslation } from '../MathHelpers';
 
-export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
-    return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
+export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number, index: number = 0, stride: number = byteLength ?? 0): DataView {
+    return new DataView(data.buffer, data.byteOffset + byteOffset + index * stride, byteLength);
 }
 
 export function dataCopy(data: DataView, byteOffset: number = 0, byteLength?: number): DataView {
@@ -224,9 +224,8 @@ export function createDownloadLink(data: DataView, filename: string, text?: stri
     const aEl = document.createElement('a');
     aEl.href = URL.createObjectURL(new Blob([data], {type: 'application/octet-stream'}));
     aEl.download = filename;
-    if (text !== undefined) {
+    if (text !== undefined)
         aEl.append(text);
-    }
     return aEl;
 }
 

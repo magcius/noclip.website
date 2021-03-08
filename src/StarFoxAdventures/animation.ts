@@ -230,10 +230,10 @@ export class AnimFile {
 
             speed = data.getFloat32(timesOffs);
             timesOffs += 0x4;
-            console.log(`speed: ${speed}`);
+            // console.log(`speed: ${speed}`);
             const numTimes = data.getUint16(timesOffs);
             timesOffs += 0x2;
-            console.log(`num times: ${numTimes}`);
+            // console.log(`num times: ${numTimes}`);
         }
 
         const anim = { keyframes, speed, times: [] };

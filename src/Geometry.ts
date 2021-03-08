@@ -36,6 +36,17 @@ export class Plane {
         this.z = scratch[0][2];
         this.d = -vec3.dot(scratch[0], p0);
     }
+
+    // Compute point where line segment intersects plane
+    public intersectLineSegment(dst: vec3, p0: ReadonlyVec3, p1: ReadonlyVec3) {
+        const p0_p1 = Plane.scratchVec3[0];
+        const n = Plane.scratchVec3[1];
+        vec3.sub(p0_p1, p1, p0);
+        vec3.set(n, this.x, this.y, this.z);
+        const t = -(vec3.dot(n, p0) + this.d) / vec3.dot(n, p0_p1);
+        vec3.copy(dst, p0);
+        vec3.scaleAndAdd(dst, dst, p0_p1, t);
+    }
 }
 
 const scratchVec3a = vec3.create();

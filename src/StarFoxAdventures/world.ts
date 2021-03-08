@@ -14,6 +14,7 @@ import { ViewerRenderInput } from "../viewer";
 import { PacketParams, GXMaterialHelperGfx, MaterialParams, fillSceneParamsDataOnTemplate, SceneParams, fillSceneParams, fillSceneParamsData } from '../gx/gx_render';
 import { getDebugOverlayCanvas2D, drawWorldSpaceText, drawWorldSpacePoint, drawWorldSpaceLine } from "../DebugJunk";
 import { getMatrixAxisZ } from '../MathHelpers';
+import { colorNewFromRGBA, Color, colorCopy } from '../Color';
 import { computeViewMatrix } from '../Camera';
 
 import { SFA_GAME_INFO, GameInfo } from './scenes';
@@ -27,10 +28,7 @@ import { ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
-import { colorNewFromRGBA, Color, colorCopy } from '../Color';
 import { getCamPos } from './util';
-import { nArray } from '../util';
-import { TextureMapping } from '../TextureHolder';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
@@ -131,7 +129,7 @@ export class World {
             const objParams = dataSubarray(romlist, offs, entrySize);
 
             const obj = this.spawnObject(objParams, parent, mapObjectOrigin);
-            console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} class ${obj.getType().objClass})`);
+            console.log(`Object #${i}: ${obj.getName()} (type ${obj.getType().typeNum} romlist-type 0x${obj.commonObjectParams.objType.toString(16)} class ${obj.getType().objClass} id 0x${obj.commonObjectParams.id.toString(16)})`);
 
             offs += entrySize;
             i++;
@@ -475,9 +473,6 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
             world.setMapInstance(mapInstance);
         }
-
-        // Set default atmosphere: "InstallShield Blue"
-        // world.envfxMan.loadEnvfx(0x3c);
 
         const romlistNames: string[] = Array.isArray(this.id_) ? this.id_ : [this.id_];
         let parentObj: ObjectInstance | null = null;
