@@ -1,18 +1,13 @@
 ﻿import * as Viewer from '../viewer';
-import * as  GMA from './gma';
-import * as AVtpl from './AVtpl';
-import * as LZSS from "../Common/Compression/LZSS"
 
-import { GcmfModel, GcmfModelInstance } from './render';
-import { GfxDevice, GfxRenderPass } from '../gfx/platform/GfxPlatform';
+import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { depthClearRenderPassDescriptor, opaqueBlackFullClearRenderPassDescriptor } from '../gfx/helpers/RenderTargetHelpers';
+import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
-import { executeOnPass } from '../gfx/render/GfxRenderer';
 import { CameraController } from '../Camera';
-import { AmusementVisionSceneRenderer } from './AVscene';
+import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer } from './AVscene';
 import { makeBackbufferDescSimple, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
-import { RetroPass } from '../metroid_prime/render';
+import { AVLZ_Type } from './AVLZ';
 
 enum FZEROGXPass {
     SKYBOX = 0x01,
@@ -25,7 +20,6 @@ export class FZEROGXSceneRenderer extends AmusementVisionSceneRenderer {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        this.prepareToRender(device, viewerInput);
         const renderInstManager = this.renderHelper.renderInstManager;
 
         const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
@@ -34,35 +28,26 @@ export class FZEROGXSceneRenderer extends AmusementVisionSceneRenderer {
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
-        builder.pushPass((pass) => {
-            pass.setDebugName('Skybox');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            const skyboxDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Skybox Depth');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, skyboxDepthTargetID);
-            pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, RetroPass.SKYBOX);
-            });
-        });
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
         builder.pushPass((pass) => {
             pass.setDebugName('Main');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                executeOnPass(renderInstManager, device, passRenderer, RetroPass.MAIN);
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
             });
         });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
 
+        this.prepareToRender(device, viewerInput);
         this.renderHelper.renderGraph.execute(device, builder);
         renderInstManager.resetRenderInsts();
     }
 }
 
 const pathBase = `FZEROGX`;
-class FZEROGXSceneDesc implements Viewer.SceneDesc {
-    constructor(public id: string, public backGroundName: string, public name: string) {
-    }
+class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
 
     // COLI Scene
     public static createSceneFromCOLIScene(device: GfxDevice, lzss: ArrayBufferSlice): FZEROGXSceneRenderer {
@@ -75,39 +60,26 @@ class FZEROGXSceneDesc implements Viewer.SceneDesc {
         return sceneRenderer;
     }
 
-    public createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
-        // decompress F-ZERO GX's LZSS
-        function decompressLZSS(buffer:ArrayBufferSlice){
-            const srcView = buffer.createDataView();
-            const uncompressedSize = srcView.getUint32(0x04, true);
-            return LZSS.decompress(buffer.slice(8).createDataView(), uncompressedSize);
-        }
-
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {   
+        const sceneRender = new FZEROGXSceneRenderer(device);
+        const cache = sceneRender.renderHelper.renderInstManager.gfxRenderCache;
+        
         const dataFetcher = context.dataFetcher;
-        const stageId = `st${this.id}`;
-        const gmaPath = `${pathBase}/stage/${stageId}.gma.lz`;
-        const tplPath = `${pathBase}/stage/${stageId}.tpl.lz`;
-        return Promise.all([dataFetcher.fetchData(gmaPath), dataFetcher.fetchData(tplPath)]).then(([gmaData, tplData]) => {
-            const sceneRender = new FZEROGXSceneRenderer(device);
-            context.destroyablePool.push(sceneRender);
-            const cache = sceneRender.renderHelper.renderInstManager.gfxRenderCache;
 
-            // tpl
-            const tpl = AVtpl.parseAvTpl(decompressLZSS(tplData));  
-            sceneRender.textureHolder.addAVtplTextures(device, tpl);
-            // gma
-            const gma = GMA.parse(decompressLZSS(gmaData));
-            for(let i = 0; i < gma.gcmfEntrys.length; i++){
-                const modelData = new GcmfModel(device, cache, gma.gcmfEntrys[i]);
-                const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, modelData);
-                modelInstance.passMask = FZEROGXPass.MAIN;
-
-                sceneRender.modelData.push(modelData);
-                sceneRender.modelInstances.push(modelInstance);
-            }
-
-            return sceneRender;
-        });
+        //load common Model
+        if (this.backGroundName != ``){
+            await super.loadGMA(device, context, dataFetcher, `${pathBase}/init/common`, sceneRender);
+        }
+        
+        //load stage Model
+        await super.loadGMA(device, context, dataFetcher, `${pathBase}/stage/st${this.id}`, sceneRender, true, AVLZ_Type.FZGX);
+        
+        //load stage BackGround Model
+        if (this.backGroundName != ``){
+            const path = this.backGroundName.substring(this.backGroundName.length-2, 2) === `jp` ? `${pathBase}/jp/bg/bg_${this.backGroundName}` : `${pathBase}/bg/bg_${this.backGroundName}`;
+            await super.loadGMA(device, context, dataFetcher, path, sceneRender, true, AVLZ_Type.FZGX);
+        }
+        return sceneRender;
     }
 }
 
@@ -165,7 +137,7 @@ const sceneDescs = [
     new FZEROGXSceneDesc("50", "com", "Victory Lap"),
     new FZEROGXSceneDesc("00", "", "st00"),
 
-    
+    // no plans to push those
     new FZEROGXSceneDesc("age_noclip/common", "", "Unused Model(Official GMA)"),
     new FZEROGXSceneDesc("_smb/st001", "", "st001"),
     new FZEROGXSceneDesc("_smb/st002", "", "st002"),

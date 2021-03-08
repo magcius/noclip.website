@@ -3,7 +3,6 @@
 // https://gitlab.com/RaphaelTetreault/fzgx_documentation/-/blob/master/asset/GMA%20Structure.md
 
 import * as GX from "../gx/gx_enum";
-import * as GX_Material from '../gx/gx_material';
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { mat4, vec3 } from "gl-matrix";
@@ -80,7 +79,7 @@ interface GcmfDisplaylistHeader{
     submesh_end_offs: number
 }
 
-// GCMF GcmfSampler
+// GCMF Sampler
 export interface GcmfSampler{
     mipmapAV: number,
     wrapS: GX.WrapMode,
@@ -88,6 +87,11 @@ export interface GcmfSampler{
     texIdx: number, // index of tpl
     anisotropy: number,
     idx: number // index of GcmfTexture
+}
+
+interface GcmfEntryOffset{
+    gcmfOffs: number,
+    nameOffs: number
 }
 
 interface Gcmf{
@@ -101,11 +105,6 @@ interface Gcmf{
     matrixs: mat4[],
     samplers: GcmfSampler[],
     shapes: GcmfShape[]
-}
-
-interface GcmfEntryOffset{
-    gcmfOffs: number,
-    nameOffs: number
 }
 
 export interface GcmfEntry{

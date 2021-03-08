@@ -69,6 +69,7 @@ import * as Scenes_FFX from './FinalFantasyX/scenes';
 import * as Scenes_WiiBanner from './Common/NW4R/lyt/Scenes_WiiBanner';
 import * as Scenes_DiddyKongRacing from './DiddyKongRacing/scenes';
 
+import * as Scenes_FZEROGX from './SuperMonkeyBall/Scenes_FZEROGX';
 import { DroppedFileSceneDesc, traverseFileSystemDataTransfer } from './Scenes_FileDrops';
 
 import { UI, Panel } from './ui';
@@ -157,6 +158,7 @@ const sceneGroups = [
     Scenes_Elebits.sceneGroup,
     Scenes_GTA.sceneGroup.vc,
     Scenes_GTA.sceneGroup.sa,
+    Scenes_FZEROGX.sceneGroup,
     Scenes_MarioAndSonicAtThe2012OlympicGames.sceneGroup,
     Scenes_MetroidPrime.sceneGroupMP3,
     Scenes_Psychonauts.sceneGroup,

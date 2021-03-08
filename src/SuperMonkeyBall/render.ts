@@ -11,12 +11,12 @@ import { ColorKind, GXMaterialHelperGfx, GXShapeHelperGfx, GXTextureHolder, load
 import { mat4 } from 'gl-matrix';
 import { Camera, computeViewMatrix, computeViewMatrixSkybox } from '../Camera';
 import { Color, colorCopy } from '../Color';
-import { GfxRendererLayer, GfxRenderInst, GfxRenderInstManager, makeSortKey, setSortKeyBias, setSortKeyDepth } from '../gfx/render/GfxRenderer';
 import { nArray } from '../util';
 import { AABB, IntersectionState } from '../Geometry';
 import { ViewerRenderInput } from '../viewer';
 import { TextureMapping } from '../TextureHolder';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
+import { GfxRenderInstManager, setSortKeyDepth, setSortKeyBias, GfxRendererLayer, makeSortKey, GfxRenderInst } from '../gfx/render/GfxRenderInstManager';
 
 
 export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
