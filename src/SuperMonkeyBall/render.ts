@@ -19,6 +19,11 @@ import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { GfxRenderInstManager, setSortKeyDepth, setSortKeyBias, GfxRendererLayer, makeSortKey, GfxRenderInst } from '../gfx/render/GfxRenderInstManager';
 
 
+export class GMAData {
+    public gma: GMA.GMA;
+    public tpl: AVTpl;
+}
+
 export class AmusementVisionTextureHolder extends GXTextureHolder<AVTexture> {
     public addAVtplTextures(device: GfxDevice, avtpl: AVTpl): void {
         this.addTextures(device, avtpl.textures);

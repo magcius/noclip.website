@@ -5,14 +5,9 @@ import { SceneContext } from '../SceneBase';
 import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { CameraController } from '../Camera';
-import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer } from './AVscene';
+import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer } from './scenes_AmusementVision';
 import { makeBackbufferDescSimple, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { AVLZ_Type } from './AVLZ';
-
-enum FZEROGXPass {
-    SKYBOX = 0x01,
-    MAIN = 0x02,
-}
 
 export class FZEROGXSceneRenderer extends AmusementVisionSceneRenderer {
     public adjustCameraController(c: CameraController) {
@@ -50,35 +45,37 @@ const pathBase = `FZEROGX`;
 class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
 
     // COLI Scene
-    public static createSceneFromCOLIScene(device: GfxDevice, lzss: ArrayBufferSlice): FZEROGXSceneRenderer {
-        const sceneRenderer = new FZEROGXSceneRenderer(device);
-
-
-
-
-
-        return sceneRenderer;
+    public static createSceneFromCOLIScene(sceneRender: FZEROGXSceneRenderer, lzss: ArrayBufferSlice) {
+        console.log(`going to prepare models from COLISCNE file`);
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {   
         const sceneRender = new FZEROGXSceneRenderer(device);
-        const cache = sceneRender.renderHelper.renderInstManager.gfxRenderCache;
         
         const dataFetcher = context.dataFetcher;
 
         //load common Model
         if (this.backGroundName != ``){
-            await super.loadGMA(device, context, dataFetcher, `${pathBase}/init/common`, sceneRender);
+            const commonModel = await super.loadGMA(dataFetcher, `${pathBase}/init/common`);
+            sceneRender.modelCache.registGcmf(device, sceneRender, commonModel);
         }
         
         //load stage Model
-        await super.loadGMA(device, context, dataFetcher, `${pathBase}/stage/st${this.id}`, sceneRender, true, AVLZ_Type.FZGX);
-        
+        const stageModel = await super.loadGMA(dataFetcher, `${pathBase}/stage/st${this.id}`, true, AVLZ_Type.FZGX);
+        sceneRender.modelCache.registGcmf(device, sceneRender, stageModel);
+
         //load stage BackGround Model
         if (this.backGroundName != ``){
             const path = this.backGroundName.substring(this.backGroundName.length-2, 2) === `jp` ? `${pathBase}/jp/bg/bg_${this.backGroundName}` : `${pathBase}/bg/bg_${this.backGroundName}`;
-            await super.loadGMA(device, context, dataFetcher, path, sceneRender, true, AVLZ_Type.FZGX);
+            const backGroundModel = await super.loadGMA(dataFetcher, path, true, AVLZ_Type.FZGX);
+            sceneRender.modelCache.registGcmf(device, sceneRender, backGroundModel);
         }
+
+        if (this.backGroundName != ``){
+            // Test for modelchace (apper course map)
+            super.instanceModel(sceneRender, `C${this.id}_MAP`);
+        }
+
         return sceneRender;
     }
 }

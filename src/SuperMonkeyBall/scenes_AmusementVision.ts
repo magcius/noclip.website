@@ -5,11 +5,11 @@ import * as AVtpl from './AVtpl';
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render';
-import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance } from './render';
+import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, GMAData } from './render';
 import AnimationController from '../AnimationController';
-import { SceneContext } from '../SceneBase';
 import { AVLZ_Type, decompressLZSS } from './AVLZ';
 import { DataFetcher } from '../DataFetcher';
+import { assertExists } from '../util';
 
 enum Pass {
     SKYBOX = 0x01,
@@ -17,25 +17,19 @@ enum Pass {
 }
 
 export class ModelChache{
-    public gmaData = new Map<string, GMA.GMA>();
-    public gcmfData = new Map<string, GcmfModel>();
+    public gcmfChace = new Map<string, GcmfModel>();
 
-    public ensureGMA(device: GfxDevice, renderer: AmusementVisionSceneRenderer, gma: GMA.GMA, tpl: AVtpl.AVTpl, path: string, name: string): GcmfModel {
-        if (!this.gmaData.has(path)){
-            renderer.textureHolder.addAVtplTextures(device, tpl);
-            this.gmaData.set(path, gma);
-            const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
-            for (let i = 0; i < gma.gcmfEntrys.length; i++) {
-                const gcmf = new GcmfModel(device, cache, gma.gcmfEntrys[i]);
-                this.gcmfData.set(gcmf.gcmfEntry.name, gcmf);
-            }
+    public registGcmf(device: GfxDevice, renderer: AmusementVisionSceneRenderer, gmaData: GMAData) {
+        renderer.textureHolder.addAVtplTextures(device, gmaData.tpl);
+        const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
+        for (let i = 0; i < gmaData.gma.gcmfEntrys.length; i++) {
+            const gcmf = new GcmfModel(device, cache, gmaData.gma.gcmfEntrys[i]);
+            this.gcmfChace.set(gcmf.gcmfEntry.name, gcmf);
         }
-
-        return this.gcmfData.get(name)!;
     }
 
     public destroy(device: GfxDevice): void {
-        for (const [, v] of this.gcmfData.entries())
+        for (const [, v] of this.gcmfChace.entries())
             v.destroy(device);
     }
 }
@@ -102,37 +96,35 @@ export class AmusementVisionSceneDesc {
     constructor(public id: string, public backGroundName: string, public name: string) {
     }
 
-    public async loadGMA(device: GfxDevice, context: SceneContext, dataFetcher:DataFetcher, path: string, sceneRender: AmusementVisionSceneRenderer, compress: boolean = false, type: AVLZ_Type = AVLZ_Type.NONE){
-        context.destroyablePool.push(sceneRender);
-
+    public async loadGMA(dataFetcher: DataFetcher, path: string, compress: boolean = false, type: AVLZ_Type = AVLZ_Type.NONE): Promise<GMAData>{
         let gmaPath = `${path}.gma`;
         let tplPath = `${path}.tpl`;
-
         if(compress === true){
             tplPath += `.lz`;
             gmaPath += `.lz`;
         }
-
         const tplData = await dataFetcher.fetchData(tplPath);
         const gmaData = await dataFetcher.fetchData(gmaPath);
-
         let rawTpl = tplData.slice(0x00);
         let rawGma = gmaData.slice(0x00);
         if (compress === true){
             rawTpl = decompressLZSS(tplData, type);
             rawGma = decompressLZSS(gmaData, type);
         }
-        const tpl = AVtpl.parseAvTpl(rawTpl);  
-        sceneRender.textureHolder.addAVtplTextures(device, tpl);
-        
+        const tpl = AVtpl.parseAvTpl(rawTpl);
         const gma = GMA.parse(rawGma);
-        for(let i = 0; i < gma.gcmfEntrys.length; i++){
-            const gcmfModel = sceneRender.modelCache.ensureGMA(device, sceneRender, gma, tpl, path, gma.gcmfEntrys[i].name);
-            const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, gcmfModel);
-            modelInstance.passMask = Pass.MAIN;
 
-            sceneRender.modelData.push(gcmfModel);
-            sceneRender.modelInstances.push(modelInstance);
-        }
+        return { gma, tpl }
+    }
+
+    public instanceModel(sceneRender: AmusementVisionSceneRenderer, objectName: string) {
+        const cache = sceneRender.renderHelper.renderInstManager.gfxRenderCache;
+        const modelChace =  sceneRender.modelCache;
+        const gcmfModel = assertExists(modelChace.gcmfChace.get(objectName));
+        const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, gcmfModel);
+        modelInstance.passMask = Pass.MAIN;
+
+        sceneRender.modelData.push(gcmfModel);
+        sceneRender.modelInstances.push(modelInstance);
     }
 }
