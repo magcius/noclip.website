@@ -117,8 +117,7 @@ export class AmusementVisionSceneDesc {
         return { gma, tpl }
     }
 
-    public instanceModel(sceneRender: AmusementVisionSceneRenderer, objectName: string) {
-        const cache = sceneRender.renderHelper.renderInstManager.gfxRenderCache;
+    public instanceModel(sceneRender: AmusementVisionSceneRenderer, objectName: string): GcmfModelInstance {
         const modelChace =  sceneRender.modelCache;
         const gcmfModel = assertExists(modelChace.gcmfChace.get(objectName));
         const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, gcmfModel);
@@ -126,5 +125,6 @@ export class AmusementVisionSceneDesc {
 
         sceneRender.modelData.push(gcmfModel);
         sceneRender.modelInstances.push(modelInstance);
+        return modelInstance;
     }
 }
