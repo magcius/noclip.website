@@ -511,6 +511,7 @@ export class GfxrRenderGraphImpl {
     //#region Scheduling
     private renderTargetUseCount: number[] = [];
     private resolveTextureUseCount: number[] = [];
+    private resolveTextureConflict: boolean[] = [];
 
     private renderTargetAliveForID: RenderTarget[] = [];
     private singleSampledTextureForResolveTextureID: SingleSampledTexture[] = [];
@@ -533,6 +534,8 @@ export class GfxrRenderGraphImpl {
 
             const renderTargetID = graph.resolveTextureRenderTargetIDs[resolveTextureID];
             this.renderTargetUseCount[renderTargetID]++;
+
+            this.resolveTextureConflict[resolveTextureID] = pass.renderTargetIDs.includes(renderTargetID);
         }
     }
 
@@ -616,7 +619,7 @@ export class GfxrRenderGraphImpl {
             const renderTarget = assertExists(this.renderTargetAliveForID[renderTargetID]);
 
             // No need to resolve -- we're already rendering into a texture-backed RT.
-            if (renderTarget.texture !== null && pass.renderTargets[slot] !== renderTarget)
+            if (renderTarget.texture !== null && !this.resolveTextureConflict[resolveTextureOutputID])
                 return null;
 
             if (!this.singleSampledTextureForResolveTextureID[resolveTextureOutputID]) {
@@ -705,6 +708,7 @@ export class GfxrRenderGraphImpl {
         // Initialize our accumulators.
         fillArray(this.renderTargetUseCount, graph.renderTargetDescriptions.length, 0);
         fillArray(this.resolveTextureUseCount, graph.resolveTextureRenderTargetIDs.length, 0);
+        fillArray(this.resolveTextureConflict, graph.resolveTextureRenderTargetIDs.length, false);
 
         // Count.
         for (let i = 0; i < graph.passes.length; i++)
