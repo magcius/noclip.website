@@ -47,7 +47,7 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
     // Coli Scene
     public createSceneFromColiScene(sceneRender: FZEROGXSceneRenderer, coliscene: COLI.ColiScene, id: string) {
         //Apper "Course Map"
-        super.instanceModel(sceneRender, `C${this.id}_MAP`);
+        // super.instanceModel(sceneRender, `C${this.id}_MAP`);
         
         //Apper "Course Objects"
         const modelChace = sceneRender.modelCache;
@@ -140,6 +140,7 @@ const sceneDescs = [
     new FZEROGXSceneDesc("34", "lig", "Lightning - Thunder Road"),
     new FZEROGXSceneDesc("35", "for", "Green Plant - Spiral"), //
     new FZEROGXSceneDesc("36", "com", "Mute City - Sonic Oval"),
+    new FZEROGXSceneDesc("36", "com_jp", "[JP] Mute City - Sonic Oval"),
     "Story Mode",
     new FZEROGXSceneDesc("37", "com_s", "Chapter 1"),
     new FZEROGXSceneDesc("38", "san_s", "Chapter 2"), // NBT
@@ -155,24 +156,7 @@ const sceneDescs = [
     new FZEROGXSceneDesc("49", "com", "Interview"),
     new FZEROGXSceneDesc("50", "com", "Victory Lap"),
     new FZEROGXSceneDesc("00", "", "st00"),
-
-    // no plans to push those
-    new FZEROGXSceneDesc("age_noclip/common", "", "Unused Model(Official GMA)"),
-    new FZEROGXSceneDesc("_smb/st001", "", "st001"),
-    new FZEROGXSceneDesc("_smb/st002", "", "st002"),
-    new FZEROGXSceneDesc("_smb/st131", "", "st131"),
-    new FZEROGXSceneDesc("_smb/st132", "", "st132"),
-    new FZEROGXSceneDesc("_smb/st133", "", "st133"),
-    new FZEROGXSceneDesc("_smb/st134", "", "st134"),
-    new FZEROGXSceneDesc("_smb/st135", "", "st135"),
-    new FZEROGXSceneDesc("_smb/st136", "", "st136"),
-
-    new FZEROGXSceneDesc("age_noclip/C01_ROAD01", "", "C01_ROAD01 (2 Displaylist)"),
-    new FZEROGXSceneDesc("age_noclip/C01_MAP", "", "C01 MAP"),
-    new FZEROGXSceneDesc("age_noclip/triangle_2dlist", "", "Triangle(Unofficial GMA)"),
-    new FZEROGXSceneDesc("age_noclip/Arc_Cube", "", "ARC Cube(Unofficial GMA)"),
-
-    new FZEROGXSceneDesc("age_noclip/st01_snesmc1", "", "Mute City - First Circuit (hack)"),
+    new FZEROGXSceneDesc("50", "com_jp", "[JP] Victory Lap"),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
