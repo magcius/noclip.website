@@ -6,7 +6,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { CameraController } from '../Camera';
-import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer } from './scenes_AmusementVision';
+import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer, ModelChache } from './scenes_AmusementVision';
 import { makeBackbufferDescSimple, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 
 export class FZEROGXSceneRenderer extends AmusementVisionSceneRenderer {
@@ -68,27 +68,34 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
         const sceneRender = new FZEROGXSceneRenderer(device);
         
         const dataFetcher = context.dataFetcher;
-        
+
         //load stage Model
-        const stageModel = await super.loadGMA(dataFetcher, `${pathBase}/stage/st${this.id}`, true, AVLZ.AVLZ_Type.FZGX);
-        sceneRender.modelCache.registGcmf(device, sceneRender, stageModel);
+        let modelID = 0;
+        const stageModel = await super.loadGMA(dataFetcher, `${pathBase}/stage/st${this.id}`, modelID, true, AVLZ.AVLZ_Type.FZGX);
+        sceneRender.modelCache.registGcmf(device, sceneRender, stageModel, modelID++);
         
         if (this.backGroundName != ``){
-            //load common Model
-            const commonModel = await super.loadGMA(dataFetcher, `${pathBase}/init/common`);
-            sceneRender.modelCache.registGcmf(device, sceneRender, commonModel);
-            
             //load stage BackGround Model
             const checkJP = this.backGroundName.substring(this.backGroundName.length-3);
             const path = checkJP === `_jp` ? `${pathBase}/jp/bg/bg_${this.backGroundName.substring(0, this.backGroundName.length-3)}` : `${pathBase}/bg/bg_${this.backGroundName}`;
-            const backGroundModel = await super.loadGMA(dataFetcher, path, true, AVLZ.AVLZ_Type.FZGX);
-            sceneRender.modelCache.registGcmf(device, sceneRender, backGroundModel);
-
+            const backGroundModel = await super.loadGMA(dataFetcher, path, modelID, true, AVLZ.AVLZ_Type.FZGX);
+            sceneRender.modelCache.registGcmf(device, sceneRender, backGroundModel, modelID++);
+            
+            //load race Model
+            const commonModel = await super.loadGMA(dataFetcher, `${pathBase}/init/race`, modelID);
+            sceneRender.modelCache.registGcmf(device, sceneRender, commonModel, modelID++);
+            
             //load COLI_COURSE (named "ColiScene")
             const coliSceneData = await dataFetcher.fetchData(`${pathBase}/stage/COLI_COURSE${this.id}.lz`);
             const colisSceneRawData = AVLZ.decompressLZSS(coliSceneData, AVLZ.AVLZ_Type.FZGX);
             const coliScene = COLI.parse(colisSceneRawData.slice(0x00));
             this.createSceneFromColiScene(sceneRender, coliScene, this.id);
+        } else {
+            // only show gma
+            stageModel.gma.gcmfEntrys.forEach(gcmfEntry => {
+                const name = gcmfEntry.name;
+                super.instanceModel(sceneRender, name);
+            });
         }
 
         return sceneRender;
@@ -136,14 +143,14 @@ const sceneDescs = [
     "Story Mode",
     new FZEROGXSceneDesc("37", "com_s", "Chapter 1"),
     new FZEROGXSceneDesc("38", "san_s", "Chapter 2"), // NBT
-    new FZEROGXSceneDesc("39", "cas_s", "Chapter 3"),
+    new FZEROGXSceneDesc("39", "cas", "Chapter 3"),
     new FZEROGXSceneDesc("40", "big_s", "Chapter 4"),
-    new FZEROGXSceneDesc("41", "por_s", "Chapter 5"),
-    new FZEROGXSceneDesc("42", "lig_s", "Chapter 6"),
-    new FZEROGXSceneDesc("43", "mut_s", "Chapter 7"), // NBT
+    new FZEROGXSceneDesc("41", "lig", "Chapter 5"),
+    new FZEROGXSceneDesc("42", "por_s", "Chapter 6"),
+    new FZEROGXSceneDesc("43", "mut", "Chapter 7"), // NBT
     new FZEROGXSceneDesc("44", "fir_s", "Chapter 8"),
-    new FZEROGXSceneDesc("45", "rai_s", "Chapter 9"),
-    new FZEROGXSceneDesc("43", "com_s_jp", "[JP] Chapter 7"),
+    new FZEROGXSceneDesc("45", "rai", "Chapter 9"),
+    new FZEROGXSceneDesc("43", "mut_jp", "[JP] Chapter 7"),
     "MISC",
     new FZEROGXSceneDesc("49", "com", "Interview"),
     new FZEROGXSceneDesc("50", "com", "Victory Lap"),
@@ -159,8 +166,6 @@ const sceneDescs = [
     new FZEROGXSceneDesc("_smb/st134", "", "st134"),
     new FZEROGXSceneDesc("_smb/st135", "", "st135"),
     new FZEROGXSceneDesc("_smb/st136", "", "st136"),
-
-    new FZEROGXSceneDesc("age_noclip/bg_mut", "", "MuteCity BackGround"),
 
     new FZEROGXSceneDesc("age_noclip/C01_ROAD01", "", "C01_ROAD01 (2 Displaylist)"),
     new FZEROGXSceneDesc("age_noclip/C01_MAP", "", "C01 MAP"),

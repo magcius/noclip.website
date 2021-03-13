@@ -18,13 +18,15 @@ enum Pass {
 
 export class ModelChache{
     public gcmfChace = new Map<string, GcmfModel>();
+    public modelIDChace = new Map<string, number>();
 
-    public registGcmf(device: GfxDevice, renderer: AmusementVisionSceneRenderer, gmaData: GMAData) {
+    public registGcmf(device: GfxDevice, renderer: AmusementVisionSceneRenderer, gmaData: GMAData, modelID: number) {
         renderer.textureHolder.addAVtplTextures(device, gmaData.tpl);
         const cache = renderer.renderHelper.renderInstManager.gfxRenderCache;
         for (let i = 0; i < gmaData.gma.gcmfEntrys.length; i++) {
             const gcmf = new GcmfModel(device, cache, gmaData.gma.gcmfEntrys[i]);
             this.gcmfChace.set(gcmf.gcmfEntry.name, gcmf);
+            this.modelIDChace.set(gcmf.gcmfEntry.name, modelID);
         }
     }
 
@@ -96,7 +98,7 @@ export class AmusementVisionSceneDesc {
     constructor(public id: string, public backGroundName: string, public name: string) {
     }
 
-    public async loadGMA(dataFetcher: DataFetcher, path: string, compress: boolean = false, type: AVLZ_Type = AVLZ_Type.NONE): Promise<GMAData>{
+    public async loadGMA(dataFetcher: DataFetcher, path: string, modelID: number, compress: boolean = false, type: AVLZ_Type = AVLZ_Type.NONE): Promise<GMAData>{
         let gmaPath = `${path}.gma`;
         let tplPath = `${path}.tpl`;
         if(compress === true){
@@ -111,16 +113,17 @@ export class AmusementVisionSceneDesc {
             rawTpl = decompressLZSS(tplData, type);
             rawGma = decompressLZSS(gmaData, type);
         }
-        const tpl = AVtpl.parseAvTpl(rawTpl);
+        const tpl = AVtpl.parseAvTpl(rawTpl, modelID);
         const gma = GMA.parse(rawGma);
 
         return { gma, tpl }
     }
 
-    public instanceModel(sceneRender: AmusementVisionSceneRenderer, objectName: string): GcmfModelInstance {
+    public instanceModel(sceneRender: AmusementVisionSceneRenderer, name: string): GcmfModelInstance {
         const modelChace =  sceneRender.modelCache;
-        const gcmfModel = assertExists(modelChace.gcmfChace.get(objectName));
-        const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, gcmfModel);
+        const gcmfModel = assertExists(modelChace.gcmfChace.get(name));
+        const modelID = assertExists(modelChace.modelIDChace.get(name));
+        const modelInstance = new GcmfModelInstance(sceneRender.textureHolder, gcmfModel, modelID);
         modelInstance.passMask = Pass.MAIN;
 
         sceneRender.modelData.push(gcmfModel);

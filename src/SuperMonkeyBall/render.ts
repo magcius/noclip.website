@@ -158,7 +158,7 @@ class MaterialInstance {
     public sortKey: number = 0;
     public visible = true;
 
-    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public samplers: GMA.GcmfSampler[]) {
+    constructor(private modelInstance: GcmfModelInstance, public materialData: MaterialData, public samplers: GMA.GcmfSampler[], public modelID: number) {
         const lightChannel0: GX_Material.LightChannelControl = {
             alphaChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
             colorChannel: { lightingEnabled: false, ambColorSource: GX.ColorSrc.VTX, matColorSource: GX.ColorSrc.VTX, litMask: 0, diffuseFunction: GX.DiffuseFunction.NONE, attenuationFunction: GX.AttenuationFunction.NONE },
@@ -241,7 +241,7 @@ class MaterialInstance {
         }
         let texIdx = 0;
         texIdx = this.samplers[samplerIdx].texIdx;
-        const name: string = `texture_${texIdx}`;
+        const name: string = `texture_${this.modelID}_${texIdx}`;
         textureHolder.fillTextureMapping(dst, name);
         dst.gfxSampler = this.materialData.gfxSamplers[i];
     }
@@ -277,13 +277,13 @@ export class GcmfModelInstance {
     public passMask: number = 1;
     public templateRenderInst: GfxRenderInst;
 
-    constructor(public textureHolder: GXTextureHolder, public gcmfModel: GcmfModel, public namePrefix: string = '') {
+    constructor(public textureHolder: GXTextureHolder, public gcmfModel: GcmfModel, modelID: number, public namePrefix: string = '') {
         this.name = `${namePrefix}/${gcmfModel.gcmfEntry.name}`;
 
         this.instanceStateData.jointToWorldMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.mtxCount, () => mat4.create());
         this.instanceStateData.drawViewMatrixArray = nArray(1, () => mat4.create());
         for (let i = 0; i < this.gcmfModel.materialData.length; i++){
-            this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.samplers);
+            this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.samplers, modelID);
         }
 
         const gcmf = this.gcmfModel.gcmfEntry.gcmf;
