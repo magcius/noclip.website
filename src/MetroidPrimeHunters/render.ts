@@ -14,7 +14,7 @@ import { nArray, assertExists } from "../util";
 import { TEX0Texture, SRT0TexMtxAnimator, PAT0TexAnimator, TEX0, MDL0Model, MDL0Material, MDL0Node, MDL0Shape } from "../nns_g3d/NNS_G3D";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { MPHbin } from "./mph_binModel";
-import { calcBBoardMtx, calcYBBoardMtx } from "../nns_g3d/render";
+import { CalcBillboardFlags, calcBillboardMatrix } from "../MathHelpers";
 
 function textureToCanvas(bmdTex: TEX0Texture, pixels: Uint8Array, name: string): Viewer.Texture {
     const canvas = document.createElement("canvas");
@@ -196,9 +196,9 @@ class ShapeInstance {
         mat4.mul(dst, dst, this.node.modelMatrix);
 
         if (this.node.billboardMode === BillboardMode.BB)
-            calcBBoardMtx(dst, dst);
+            calcBillboardMatrix(dst, dst, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         else if (this.node.billboardMode === BillboardMode.BBY)
-            calcYBBoardMtx(dst, dst);
+            calcBillboardMatrix(dst, dst, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
     }
 
     public prepareToRender(renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
