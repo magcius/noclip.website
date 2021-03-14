@@ -180,7 +180,7 @@ export function scaleMatrix(dst: mat4, m: ReadonlyMat4, scaleX: number, scaleY: 
  * To determine whether the model matrix is uniformly scaled, the helper function
  * {@function matrixHasUniformScale} is provided.
  */
-export function computeNormalMatrix(dst: mat4, m: mat4, isUniformScale?: boolean): void {
+export function computeNormalMatrix(dst: mat4, m: ReadonlyMat4, isUniformScale?: boolean): void {
     if (isUniformScale === undefined)
         isUniformScale = matrixHasUniformScale(m);
 
@@ -236,7 +236,7 @@ function compareEpsilon(a: number, b: number) {
 /**
  * Returns whether matrix {@param m} has a uniform scale.
  */
-export function matrixHasUniformScale(m: mat4, v: vec3 = scratchVec3a): boolean {
+export function matrixHasUniformScale(m: ReadonlyMat4): boolean {
     const sx = Math.hypot(m[0], m[4], m[8]);
     const sy = Math.hypot(m[1], m[5], m[9]);
     const sz = Math.hypot(m[2], m[6], m[10]);

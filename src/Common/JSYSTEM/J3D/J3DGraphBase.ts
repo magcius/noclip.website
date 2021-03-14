@@ -83,7 +83,7 @@ export class ShapeData {
 }
 
 export class MaterialData {
-    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams) => void) | null = null;
+    public fillMaterialParamsCallback: ((materialParams: MaterialParams, materialInstance: MaterialInstance, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams) => void) | null = null;
 
     constructor(public material: MaterialEntry) {
     }
@@ -230,7 +230,7 @@ function mat43Concat(dst: mat4, a: ReadonlyMat4, b: ReadonlyMat4): void {
     dst[14] = a20*b03 + a21*b13 + a22*b23 + a23;
 }
 
-function J3DGetTextureMtx(dst: mat4, srt: mat4): void {
+function J3DGetTextureMtx(dst: mat4, srt: ReadonlyMat4): void {
     mat4.copy(dst, srt);
 
     // Move translation to third column.
@@ -243,7 +243,7 @@ function J3DGetTextureMtx(dst: mat4, srt: mat4): void {
     dst[14] = 0;
 }
 
-function J3DGetTextureMtxOld(dst: mat4, srt: mat4): void {
+function J3DGetTextureMtxOld(dst: mat4, srt: ReadonlyMat4): void {
     mat4.copy(dst, srt);
 }
 
@@ -380,7 +380,7 @@ export class MaterialInstance {
         }
     }
 
-    private calcTexMtxInput(dst: mat4, texMtx: TexMtx, modelViewMatrix: mat4, modelMatrix: mat4): void {
+    private calcTexMtxInput(dst: mat4, texMtx: TexMtx, modelViewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4): void {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calc()
@@ -414,7 +414,7 @@ export class MaterialInstance {
         }
     }
 
-    public calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: mat4): void {
+    public calcPostTexMtxInput(dst: mat4, texMtx: TexMtx, viewMatrix: ReadonlyMat4): void {
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
 
         // ref. J3DTexGenBlockPatched::calcPostTexMtx()
@@ -459,7 +459,7 @@ export class MaterialInstance {
         }
     }
 
-    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipY: boolean): void {
+    public calcTexMtx(dst: mat4, texMtx: TexMtx, texSRT: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipY: boolean): void {
         // The input matrix is passed in in dst.
 
         const matrixMode: TexMtxMapMode = texMtx.info & 0x3F;
@@ -619,7 +619,7 @@ export class MaterialInstance {
         }
     }
 
-    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: mat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix = camera.viewMatrix): void {
+    public fillOnMaterialParams(materialParams: MaterialParams, materialInstanceState: MaterialInstanceState, camera: Camera, modelMatrix: ReadonlyMat4, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams, viewMatrix: ReadonlyMat4 = camera.viewMatrix): void {
         const material = this.materialData.material;
 
         this.calcColor(materialParams.u_Color[ColorKind.MAT0],  ColorKind.MAT0,  material.colorMatRegs[0],   ColorRegType.S10);
@@ -685,7 +685,7 @@ export class MaterialInstance {
             this.materialData.fillMaterialParamsCallback(materialParams, this, viewMatrix, modelMatrix, camera, viewport, packetParams);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: mat4, modelMatrix: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
+    public fillMaterialParams(renderInst: GfxRenderInst, materialInstanceState: MaterialInstanceState, viewMatrix: ReadonlyMat4, modelMatrix: ReadonlyMat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, packetParams: PacketParams): void {
         this.fillOnMaterialParams(materialParams, materialInstanceState, camera, modelMatrix, viewport, packetParams, viewMatrix);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
