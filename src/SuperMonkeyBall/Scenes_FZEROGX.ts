@@ -133,7 +133,7 @@ const sceneDescs = [
     "MISC",
     new FZEROGXSceneDesc("49", "com", "Interview"),
     new FZEROGXSceneDesc("50", "com", "Victory Lap"),
-    new AmusementVisionSceneDesc("50", "com_jp", "[JP] Victory Lap"),
+    new FZEROGXSceneDesc("50", "com_jp", "[JP] Victory Lap"),
     new AmusementVisionSceneDesc("00", "", "st00"),
     new AmusementVisionSceneDesc("init/common", "", "Unused Model(Official GMA)", `${pathBase}`),
 ];
