@@ -4,40 +4,12 @@ import * as COLI from  './FZEROGX/coliScene';
 
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
-import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
 import { CameraController } from '../Camera';
-import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer, ModelChache } from './scenes_AmusementVision';
-import { makeBackbufferDescSimple, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer } from './scenes_AmusementVision';
 
 export class FZEROGXSceneRenderer extends AmusementVisionSceneRenderer {
     public adjustCameraController(c: CameraController) {
         c.setSceneMoveSpeedMult(8/60);
-    }
-
-    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        const renderInstManager = this.renderHelper.renderInstManager;
-
-        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
-
-        const builder = this.renderHelper.renderGraph.newGraphBuilder();
-
-        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
-        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
-        builder.pushPass((pass) => {
-            pass.setDebugName('Main');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
-            pass.exec((passRenderer) => {
-                renderInstManager.drawOnPassRenderer(device, passRenderer);
-            });
-        });
-        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
-
-        this.prepareToRender(device, viewerInput);
-        this.renderHelper.renderGraph.execute(device, builder);
-        renderInstManager.resetRenderInsts();
     }
 }
 
@@ -46,11 +18,16 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
 
     // Coli Scene
     public createSceneFromColiScene(sceneRender: FZEROGXSceneRenderer, coliscene: COLI.ColiScene, id: string) {
+        const modelChace = sceneRender.modelCache;
+
         //Apper "Course Map"
-        // super.instanceModel(sceneRender, `C${this.id}_MAP`);
+        const mapName = `C${this.id}_MAP`;
+        if (modelChace.gcmfChace.has(mapName) == true){
+            // Apper
+            super.instanceModel(sceneRender, mapName);
+        }
         
         //Apper "Course Objects"
-        const modelChace = sceneRender.modelCache;
         const gameObjects = coliscene.gameObjects
         for (let i = 0; i < gameObjects.length; i++){
             gameObjects[i].collisionBinding.referenceBindings.forEach(collisionBinding => {
@@ -64,21 +41,21 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
         }        
     }
     
-    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {   
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
         const sceneRender = new FZEROGXSceneRenderer(device);
         
         const dataFetcher = context.dataFetcher;
 
         //load stage Model
         let modelID = 0;
-        const stageModel = await super.loadGMA(dataFetcher, `${pathBase}/stage/st${this.id}`, modelID, true, AVLZ.AVLZ_Type.FZGX);
+        const stageModel = await super.loadGMA(dataFetcher, `${pathBase}/stage/st${this.id}`, modelID, AVLZ.AVLZ_Type.FZGX);
         sceneRender.modelCache.registGcmf(device, sceneRender, stageModel, modelID++);
         
         if (this.backGroundName != ``){
             //load stage BackGround Model
             const checkJP = this.backGroundName.substring(this.backGroundName.length-3);
             const path = checkJP === `_jp` ? `${pathBase}/jp/bg/bg_${this.backGroundName.substring(0, this.backGroundName.length-3)}` : `${pathBase}/bg/bg_${this.backGroundName}`;
-            const backGroundModel = await super.loadGMA(dataFetcher, path, modelID, true, AVLZ.AVLZ_Type.FZGX);
+            const backGroundModel = await super.loadGMA(dataFetcher, path, modelID, AVLZ.AVLZ_Type.FZGX);
             sceneRender.modelCache.registGcmf(device, sceneRender, backGroundModel, modelID++);
             
             //load race Model
@@ -151,12 +128,14 @@ const sceneDescs = [
     new FZEROGXSceneDesc("43", "mut", "Chapter 7"), // NBT
     new FZEROGXSceneDesc("44", "fir_s", "Chapter 8"),
     new FZEROGXSceneDesc("45", "rai", "Chapter 9"),
+    new FZEROGXSceneDesc("37", "com_s_jp", "[JP] Chapter 1"),
     new FZEROGXSceneDesc("43", "mut_jp", "[JP] Chapter 7"),
     "MISC",
     new FZEROGXSceneDesc("49", "com", "Interview"),
     new FZEROGXSceneDesc("50", "com", "Victory Lap"),
-    new FZEROGXSceneDesc("00", "", "st00"),
-    new FZEROGXSceneDesc("50", "com_jp", "[JP] Victory Lap"),
+    new AmusementVisionSceneDesc("50", "com_jp", "[JP] Victory Lap"),
+    new AmusementVisionSceneDesc("00", "", "st00"),
+    new AmusementVisionSceneDesc("init/common", "", "Unused Model(Official GMA)", `${pathBase}`),
 ];
 
 export const sceneGroup: Viewer.SceneGroup = { id, name, sceneDescs };
