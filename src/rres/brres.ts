@@ -881,18 +881,21 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
     const billboardMode: BillboardMode = view.getUint32(0x18);
     const billboardRefNodeId = view.getUint32(0x1C);
 
-    const scaleX = view.getFloat32(0x20);
-    const scaleY = view.getFloat32(0x24);
-    const scaleZ = view.getFloat32(0x28);
-    const rotationX = view.getFloat32(0x2C) * MathConstants.DEG_TO_RAD;
-    const rotationY = view.getFloat32(0x30) * MathConstants.DEG_TO_RAD;
-    const rotationZ = view.getFloat32(0x34) * MathConstants.DEG_TO_RAD;
-    const translationX = view.getFloat32(0x38);
-    const translationY = view.getFloat32(0x3C);
-    const translationZ = view.getFloat32(0x40);
-
     const modelMatrix = mat4.create();
-    computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+
+    if (!(flags & NodeFlags.SRT_IDENTITY)) {
+        const scaleX = view.getFloat32(0x20);
+        const scaleY = view.getFloat32(0x24);
+        const scaleZ = view.getFloat32(0x28);
+        const rotationX = view.getFloat32(0x2C) * MathConstants.DEG_TO_RAD;
+        const rotationY = view.getFloat32(0x30) * MathConstants.DEG_TO_RAD;
+        const rotationZ = view.getFloat32(0x34) * MathConstants.DEG_TO_RAD;
+        const translationX = view.getFloat32(0x38);
+        const translationY = view.getFloat32(0x3C);
+        const translationZ = view.getFloat32(0x40);
+
+        computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
+    }
 
     // TODO(jstpierre): NW4R doesn't appear to use this anymore?
     const bboxMinX = view.getFloat32(0x44);
