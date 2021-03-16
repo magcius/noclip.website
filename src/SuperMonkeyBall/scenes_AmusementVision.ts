@@ -4,6 +4,9 @@ import * as GMA from './gma';
 import * as AVtpl from './AVtpl';
 
 import { GfxDevice } from "../gfx/platform/GfxPlatform";
+import { SceneContext } from '../SceneBase';
+import { opaqueBlackFullClearRenderPassDescriptor, pushAntialiasingPostProcessPass } from '../gfx/helpers/RenderGraphHelpers';
+import { makeBackbufferDescSimple, GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render';
 import { AmusementVisionTextureHolder, GcmfModel, GcmfModelInstance, GMAData } from './render';
 import AnimationController from '../AnimationController';
@@ -82,6 +85,33 @@ export class AmusementVisionSceneRenderer extends BasicGXRendererHelper {
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
+
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, opaqueBlackFullClearRenderPassDescriptor);
+
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
+    }
+
     public destroy(device: GfxDevice): void {
         this.textureHolder.destroy(device);
         this.renderHelper.destroy(device);
@@ -95,12 +125,32 @@ export class AmusementVisionSceneRenderer extends BasicGXRendererHelper {
 }
 
 export class AmusementVisionSceneDesc {
-    constructor(public id: string, public backGroundName: string, public name: string) {
+    constructor(public id: string, public backGroundName: string, public name: string, public pathBase: string=``) {
     }
 
-    public async loadGMA(dataFetcher: DataFetcher, path: string, modelID: number, compress: boolean = false, type: AVLZ_Type = AVLZ_Type.NONE): Promise<GMAData>{
+    public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
+        const sceneRender = new AmusementVisionSceneRenderer(device);
+        
+        const dataFetcher = context.dataFetcher;
+
+        //load Model
+        let modelID = 0;
+        const model = await this.loadGMA(dataFetcher, `${this.pathBase}/${this.id}`, modelID);
+        sceneRender.modelCache.registGcmf(device, sceneRender, model, modelID++);
+        
+        // only show gma
+        model.gma.gcmfEntrys.forEach(gcmfEntry => {
+            const name = gcmfEntry.name;
+            this.instanceModel(sceneRender, name);
+        });
+
+        return sceneRender;
+    }
+
+    public async loadGMA(dataFetcher: DataFetcher, path: string, modelID: number, type: AVLZ_Type = AVLZ_Type.NONE): Promise<GMAData>{
         let gmaPath = `${path}.gma`;
         let tplPath = `${path}.tpl`;
+        const compress = type !== AVLZ_Type.NONE;
         if(compress === true){
             tplPath += `.lz`;
             gmaPath += `.lz`;
