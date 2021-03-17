@@ -532,11 +532,18 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     const texSrts: MDL0_TexSrtEntry[] = [];
     for (let i = 0; i < 8; i++) {
         // SRT
-        const scaleS = view.getFloat32(texSrtTableIdx + 0x00);
-        const scaleT = view.getFloat32(texSrtTableIdx + 0x04);
-        const rotation = view.getFloat32(texSrtTableIdx + 0x08);
-        const translationS = view.getFloat32(texSrtTableIdx + 0x0C);
-        const translationT = view.getFloat32(texSrtTableIdx + 0x10);
+        const enum Flags {
+            SCALE_ONE  = 0x02,
+            ROT_ZERO   = 0x04,
+            TRANS_ZERO = 0x08,
+        }
+        const srtFlag: Flags = (srtFlags >>> i * 4) & 0x0F;
+
+        const scaleS = (srtFlag & Flags.SCALE_ONE) ? 1 : view.getFloat32(texSrtTableIdx + 0x00);
+        const scaleT = (srtFlag & Flags.SCALE_ONE) ? 1 : view.getFloat32(texSrtTableIdx + 0x04);
+        const rotation = (srtFlag & Flags.ROT_ZERO) ? 0 : view.getFloat32(texSrtTableIdx + 0x08);
+        const translationS = (srtFlag & Flags.TRANS_ZERO) ? 0 : view.getFloat32(texSrtTableIdx + 0x0C);
+        const translationT = (srtFlag & Flags.TRANS_ZERO) ? 0 : view.getFloat32(texSrtTableIdx + 0x10);
 
         const refCamera = view.getInt8(texMtxTableIdx + 0x00);
         const refLight = view.getInt8(texMtxTableIdx + 0x01);
