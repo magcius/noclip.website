@@ -267,9 +267,11 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     const width = view.getUint16(0x1C);
     const height = view.getUint16(0x1E);
     const format: GX.TexFormat = view.getUint32(0x20);
-    const mipCount = view.getUint32(0x24);
+    const mipCountRaw = view.getUint32(0x24);
     const minLOD = view.getFloat32(0x28) * 1/8;
     const maxLOD = view.getFloat32(0x2C) * 1/8;
+    const maxMipLevel = Math.min(mipCountRaw, maxLOD);
+    const mipCount = Math.max(Math.ceil(maxMipLevel), 1);
 
     const data = buffer.subarray(dataOffs);
 
@@ -290,7 +292,7 @@ function parseMDL0_TevEntry(buffer: ArrayBufferSlice, r: DisplayListRegisters, n
 
     const index = view.getUint32(0x08);
     const numStages = view.getUint8(0x0C);
-    assert(numStages === numStagesCheck);
+    // assert(numStages === numStagesCheck);
 
     const dlOffs = 0x20;
     displayListRegistersRun(r, buffer.subarray(dlOffs, 480));
