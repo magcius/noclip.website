@@ -268,10 +268,9 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     const height = view.getUint16(0x1E);
     const format: GX.TexFormat = view.getUint32(0x20);
     const mipCountRaw = view.getUint32(0x24);
-    const minLOD = view.getFloat32(0x28) * 1/8;
-    const maxLOD = view.getFloat32(0x2C) * 1/8;
-    const maxMipLevel = Math.min(mipCountRaw, maxLOD);
-    const mipCount = Math.max(Math.ceil(maxMipLevel), 1);
+    const minLOD = view.getFloat32(0x28);
+    const maxLOD = view.getFloat32(0x2C);
+    const mipCount = Math.ceil(Math.min(mipCountRaw, maxLOD + 1));
 
     const data = buffer.subarray(dataOffs);
 
