@@ -125,7 +125,7 @@ export class AmusementVisionSceneRenderer extends BasicGXRendererHelper {
 }
 
 export class AmusementVisionSceneDesc {
-    constructor(public id: string, public backGroundName: string, public name: string, public pathBase: string=``) {
+    constructor(public id: string, public name: string, public type: AVLZ_Type = AVLZ_Type.NONE) {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {
@@ -135,7 +135,7 @@ export class AmusementVisionSceneDesc {
 
         //load Model
         let modelID = 0;
-        const model = await this.loadGMA(dataFetcher, `${this.pathBase}/${this.id}`, modelID);
+        const model = await this.loadGMA(dataFetcher, `${this.id}`, modelID, this.type);
         sceneRender.modelCache.registGcmf(device, sceneRender, model, modelID++);
         
         // only show gma
