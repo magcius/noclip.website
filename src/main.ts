@@ -61,6 +61,7 @@ import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
+import * as Scenes_HalfLife2DM from './SourceEngine/Scenes_HalfLife2DM';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
 import * as Scenes_Portal from './SourceEngine/Scenes_Portal';
 import * as Scenes_BeetleAdventureRacing from './BeetleAdventureRacing/Scenes';
@@ -149,6 +150,7 @@ const sceneGroups = [
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_Fez.sceneGroup,
     Scenes_HalfLife2.sceneGroup,
+    Scenes_HalfLife2DM.sceneGroup,
     Scenes_TeamFortress2.sceneGroup,
     Scenes_Portal.sceneGroup,
     "Experimental",
