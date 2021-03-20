@@ -12,9 +12,11 @@ import { Anim, SFAAnimationController, AnimCollection, AmapCollection, interpola
 import { SFARenderer, SceneRenderContext } from './render';
 import { ModelFetcher, ModelInstance, ModelRenderContext } from './models';
 import { MaterialFactory } from './materials';
-import { dataSubarray, createDownloadLink, readUint16 } from './util';
+import { dataSubarray, readUint16 } from './util';
 import { TextureFetcher, SFATextureFetcher } from './textures';
 import { ModelVersion } from './modelloader';
+import { downloadBufferSlice } from '../DownloadUtils';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 class ModelExhibitRenderer extends SFARenderer {
     private modelInst: ModelInstance | null | undefined = undefined; // undefined: Not set. null: Failed to load.
@@ -90,8 +92,7 @@ class ModelExhibitRenderer extends SFARenderer {
 
     public downloadModel() {
         if (this.modelInst !== null && this.modelInst !== undefined) {
-            const link = createDownloadLink(this.modelInst.model.modelData, `model_${this.subdir}_${this.modelNum}${this.modelInst.model.version === ModelVersion.Beta ? '_beta' : ''}.bin`);
-            link.click();
+            downloadBufferSlice(`model_${this.subdir}_${this.modelNum}${this.modelInst.model.version === ModelVersion.Beta ? '_beta' : ''}.bin`, ArrayBufferSlice.fromView(this.modelInst.model.modelData));
         }
     }
 

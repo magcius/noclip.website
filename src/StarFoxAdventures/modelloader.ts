@@ -1,4 +1,5 @@
 import { vec3 } from 'gl-matrix';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 import { AABB } from '../Geometry';
 import { GX_Array, GX_VtxAttrFmt, GX_VtxDesc } from '../gx/gx_displaylist';
 import * as GX from '../gx/gx_enum';
@@ -9,7 +10,7 @@ import { Model, ModelShapes } from './models';
 import { Shape, ShapeGeometry, ShapeMaterial } from './shapes';
 import { Skeleton } from './skeleton';
 import { TextureFetcher } from './textures';
-import { arrayBufferSliceFromDataView, dataCopy, dataSubarray, LowBitReader, readUint16, readUint32, readVec3 } from './util';
+import { dataCopy, dataSubarray, LowBitReader, readUint16, readUint32, readVec3 } from './util';
 
 export enum ModelVersion {
     AncientMap,
@@ -607,12 +608,12 @@ export function loadModel(data: DataView, texFetcher: TextureFetcher, materialFa
 
     const getVtxArrays = (posBuffer: DataView, nrmBuffer?: DataView) => {
         const vtxArrays: GX_Array[] = [];
-        vtxArrays[GX.Attr.POS] = { buffer: arrayBufferSliceFromDataView(posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
+        vtxArrays[GX.Attr.POS] = { buffer: ArrayBufferSlice.fromView(posBuffer), offs: 0, stride: 6 /*getAttributeByteSize(vat[0], GX.Attr.POS)*/ };
         if (fields.hasNormals)
-            vtxArrays[GX.Attr.NRM] = { buffer: arrayBufferSliceFromDataView(nrmBuffer!), offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
-        vtxArrays[GX.Attr.CLR0] = { buffer: arrayBufferSliceFromDataView(clrBuffer), offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
+            vtxArrays[GX.Attr.NRM] = { buffer: ArrayBufferSlice.fromView(nrmBuffer!), offs: 0, stride: (nrmTypeFlags & 8) != 0 ? 9 : 3 /*getAttributeByteSize(vat[0], GX.Attr.NRM)*/ };
+        vtxArrays[GX.Attr.CLR0] = { buffer: ArrayBufferSlice.fromView(clrBuffer), offs: 0, stride: 2 /*getAttributeByteSize(vat[0], GX.Attr.CLR0)*/ };
         for (let t = 0; t < 8; t++)
-            vtxArrays[GX.Attr.TEX0 + t] = { buffer: arrayBufferSliceFromDataView(texcoordBuffer), offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
+            vtxArrays[GX.Attr.TEX0 + t] = { buffer: ArrayBufferSlice.fromView(texcoordBuffer), offs: 0, stride: 4 /*getAttributeByteSize(vat[0], GX.Attr.TEX0)*/ };
         return vtxArrays;
     }
 

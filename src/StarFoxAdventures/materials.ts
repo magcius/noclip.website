@@ -742,34 +742,30 @@ export class StandardMaterial extends MaterialBase {
     private addTevStagesForLava() {
         const warpParam = 1.0; // TODO: is this animated?
 
-        const itm0 = mat4.create();
         const indTexMtx0 = this.genIndTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
             const animSin = Math.sin(3.142 * matCtx.sceneCtx.animController.envAnimValue1);
             const scale = (0.125 * animSin + 0.75) * warpParam;
             const cs = scale * Math.cos(3.142 * matCtx.sceneCtx.animController.envAnimValue0);
             const sn = scale * Math.sin(3.142 * matCtx.sceneCtx.animController.envAnimValue0);
-            mat4SetRowMajor(itm0,
+            mat4SetRowMajor(dst,
                 cs,  sn,  0.0, 0.0,
                 -sn, cs,  0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
             );
-            mat4.copy(dst, itm0);
         });
 
-        const itm1 = mat4.create();
         const indTexMtx1 = this.genIndTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
             const animSin = Math.sin(3.142 * matCtx.sceneCtx.animController.envAnimValue0);
             const scale = (0.125 * animSin + 0.75) * warpParam;
             const cs = scale * Math.cos(3.142 * -matCtx.sceneCtx.animController.envAnimValue1);
             const sn = scale * Math.sin(3.142 * -matCtx.sceneCtx.animController.envAnimValue1);
-            mat4SetRowMajor(itm1,
+            mat4SetRowMajor(dst,
                 cs,  sn,  0.0, 0.0,
                 -sn, cs,  0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
             );
-            mat4.copy(dst, itm1);
         });
 
         const texMap0 = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, 0x600, false)));
