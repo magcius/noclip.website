@@ -18,6 +18,8 @@ import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, scaleMatrix, calcBillb
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -301,15 +303,9 @@ ${this.generateAlphaTest()}
 }
 
 export function textureToCanvas(texture: RDP.Texture): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    canvas.width = texture.width;
-    canvas.height = texture.height;
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
     canvas.title = texture.name;
 
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(texture.pixels);
-    ctx.putImageData(imgData, 0, 0);
     const surfaces = [ canvas ];
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
