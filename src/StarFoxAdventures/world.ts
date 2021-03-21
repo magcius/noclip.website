@@ -339,7 +339,7 @@ class WorldRenderer extends SFARenderer {
             for (let i = 0; i < this.world.envfxMan.skyscape.objects.length; i++) {
                 const obj = this.world.envfxMan.skyscape.objects[i];
                 obj.setPosition(eyePos);
-                obj.render(device, renderInstManager, null, objectCtx);
+                obj.addRenderInsts(device, renderInstManager, null, objectCtx);
             }
 
             renderInstManager.popTemplateRenderInst();
@@ -421,9 +421,6 @@ class WorldRenderer extends SFARenderer {
             setupLights: this.setupLights.bind(this),
         };
 
-        if (this.world.mapInstance !== null)
-            this.world.mapInstance.prepareToRender(device, renderInstManager, renderLists, modelCtx);
-
         if (this.showObjects) {
             for (let i = 0; i < this.world.objectInstances.length; i++) {
                 const obj = this.world.objectInstances[i];
@@ -432,7 +429,7 @@ class WorldRenderer extends SFARenderer {
                     continue;
     
                 if (obj.isInLayer(this.layerSelect.getValue())) {
-                    obj.render(device, renderInstManager, renderLists, modelCtx);
+                    obj.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
         
                     const drawLabels = false;
                     if (drawLabels)
@@ -440,6 +437,9 @@ class WorldRenderer extends SFARenderer {
                 }
             }
         }
+        
+        if (this.world.mapInstance !== null)
+            this.world.mapInstance.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 
         renderInstManager.popTemplateRenderInst();
     }
@@ -450,17 +450,15 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
     private subdirs: string[];
 
     constructor(public id_: string | string[], subdir_: string | string[], private mapNum: number | null, public name: string, private gameInfo: GameInfo = SFA_GAME_INFO) {
-        if (Array.isArray(id_)) {
+        if (Array.isArray(id_))
             this.id = id_[0];
-        } else {
+        else
             this.id = id_;
-        }
 
-        if (Array.isArray(subdir_)) {
+        if (Array.isArray(subdir_))
             this.subdirs = subdir_;
-        } else {
+        else
             this.subdirs = [subdir_];
-        }
     }
 
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {

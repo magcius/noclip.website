@@ -134,7 +134,7 @@ namespace TriggerClass {
 
     interface UserData {
         actions: Action[];
-        lastPoint?: vec3;
+        prevPoint?: vec3;
         triggerData?: TrigPlnData;
     }
 
@@ -187,33 +187,33 @@ namespace TriggerClass {
             const userData = obj.userData as UserData;
             const triggerData = userData.triggerData as TrigPlnData;
 
-            const curPoint = scratchVec0;
+            const currPoint = scratchVec0;
             // FIXME: The current point is not always the camera. It can also be the player character.
-            getCamPos(curPoint, updateCtx.viewerInput.camera);
+            getCamPos(currPoint, updateCtx.viewerInput.camera);
 
-            if (userData.lastPoint === undefined) {
-                userData.lastPoint = vec3.clone(curPoint);
+            if (userData.prevPoint === undefined) {
+                userData.prevPoint = vec3.clone(currPoint);
             } else {
-                const lastPointInPlane = triggerData.plane.distance(userData.lastPoint[0], userData.lastPoint[1], userData.lastPoint[2]) >= 0;
-                const curPointInPlane = triggerData.plane.distance(curPoint[0], curPoint[1], curPoint[2]) >= 0;
+                const prevPointInPlane = triggerData.plane.distance(userData.prevPoint[0], userData.prevPoint[1], userData.prevPoint[2]) >= 0;
+                const currPointInPlane = triggerData.plane.distance(currPoint[0], currPoint[1], currPoint[2]) >= 0;
 
-                if (curPointInPlane !== lastPointInPlane) {
+                if (currPointInPlane !== prevPointInPlane) {
                     const intersection = scratchVec1;
-                    triggerData.plane.intersectLineSegment(intersection, userData.lastPoint, curPoint);
+                    triggerData.plane.intersectLineSegment(intersection, userData.prevPoint, currPoint);
                     vec3.transformMat4(intersection, intersection, triggerData.worldToPlaneSpaceMatrix);
                     if (-triggerData.radius <= intersection[0] && intersection[0] <= triggerData.radius &&
                         -triggerData.radius <= intersection[1] && intersection[1] <= triggerData.radius)
                     {
-                        if (curPointInPlane)
+                        if (currPointInPlane)
                             console.log(`Entered plane 0x${obj.commonObjectParams.id.toString(16)}`);
                         else
                             console.log(`Exited plane 0x${obj.commonObjectParams.id.toString(16)}`);
 
-                        performActions(obj, !curPointInPlane);
+                        performActions(obj, !currPointInPlane);
                     }
                 }
 
-                vec3.copy(userData.lastPoint, curPoint);
+                vec3.copy(userData.prevPoint, currPoint);
             }
         }
     }
@@ -775,9 +775,8 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
         setup: (obj: ObjectInstance, data: DataView) => {
             commonSetup(obj, data, 0x18);
             const scaleParam = data.getInt16(0x1a);
-            if (scaleParam !== 0) {
+            if (scaleParam !== 0)
                 obj.scale = 10 * scaleParam / 32767.0;
-            }
         },
     },
     [650]: commonClass(0x18),
@@ -991,6 +990,8 @@ export interface Light {
     position: vec3;
 }
 
+const OBJECT_RENDER_LAYER = 31; // FIXME: For some spawn flags, 7 is used.
+
 export class ObjectInstance {
     public modelInst: ModelInstance | null = null;
 
@@ -1174,7 +1175,7 @@ export class ObjectInstance {
         return !viewerInput.camera.frustum.containsSphere(this.position, this.cullRadius * this.scale);
     }
 
-    public render(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists | null, objectCtx: ObjectRenderContext) {
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists | null, objectCtx: ObjectRenderContext) {
         if (this.modelInst !== null && this.modelInst !== undefined && !this.isFrustumCulled(objectCtx.sceneCtx.viewerInput)) {
             // Update animation
             if (this.anim !== null && (!this.modelInst.model.hasFineSkinning || this.world.animController.enableFineSkinAnims)) {
@@ -1200,33 +1201,10 @@ export class ObjectInstance {
             const viewPos = scratchVec0;
             vec3.transformMat4(viewPos, this.position, viewMtx);
             this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
-            this.modelInst.prepareToRender(device, renderInstManager, {
+            this.modelInst.addRenderInsts(device, renderInstManager, {
                 ...objectCtx,
                 outdoorAmbientColor: scratchColor0,
-            }, renderLists, mtx, -viewPos[2]);
-
-            // Draw bones
-            const drawBones = false;
-            if (drawBones) {
-                const ctx = getDebugOverlayCanvas2D();
-                // TODO: Draw pyramid shapes instead of lines
-                for (let i = 1; i < this.modelInst.model.joints.length; i++) {
-                    const joint = this.modelInst.model.joints[i];
-                    const jointMtx = mat4.clone(this.modelInst.skeletonInst!.getJointMatrix(i));
-                    mat4.mul(jointMtx, jointMtx, mtx);
-                    const jointPt = vec3.create();
-                    mat4.getTranslation(jointPt, jointMtx);
-                    if (joint.parent != 0xff) {
-                        const parentMtx = mat4.clone(this.modelInst.skeletonInst!.getJointMatrix(joint.parent));
-                        mat4.mul(parentMtx, parentMtx, mtx);
-                        const parentPt = vec3.create();
-                        mat4.getTranslation(parentPt, parentMtx);
-                        drawWorldSpaceLine(ctx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, parentPt, jointPt);
-                    } else {
-                        drawWorldSpacePoint(ctx, objectCtx.sceneCtx.viewerInput.camera.clipFromWorldMatrix, jointPt);
-                    }
-                }
-            }
+            }, renderLists, mtx, -viewPos[2], OBJECT_RENDER_LAYER);
         }
     }
 }

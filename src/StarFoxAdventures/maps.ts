@@ -145,11 +145,11 @@ export class MapInstance {
         return block;
     }
 
-    public prepareToRender(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, modelCtx: ModelRenderContext) {
+    public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, modelCtx: ModelRenderContext) {
         for (let b of this.iterateBlocks()) {
             mat4.fromTranslation(scratchMtx0, [640 * b.x, 0, 640 * b.z]);
             mat4.mul(scratchMtx0, this.matrix, scratchMtx0);
-            b.block.prepareToRender(device, renderInstManager, modelCtx, renderLists, scratchMtx0);
+            b.block.addRenderInsts(device, renderInstManager, modelCtx, renderLists, scratchMtx0);
         }
     }
 
@@ -234,7 +234,7 @@ class MapSceneRenderer extends SFARenderer {
             setupLights: () => {},
         };
 
-        this.map.prepareToRender(device, renderInstManager, renderLists, modelCtx);
+        this.map.addRenderInsts(device, renderInstManager, renderLists, modelCtx);
 
         renderInstManager.popTemplateRenderInst();
     }

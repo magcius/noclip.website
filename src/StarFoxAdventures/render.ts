@@ -32,7 +32,6 @@ export class SFARenderer implements Viewer.SceneGfx {
     
     private opaqueSceneTextureMapping = new TextureMapping();
     private sceneTexture = new GfxrTemporalTexture();
-    // private mainColorTemporalTexture = new GfxrTemporalTexture();
 
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     protected mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -93,7 +92,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
 
         builder.pushPass((pass) => {
-            pass.setDebugName('World Transparents');
+            pass.setDebugName('World Translucents');
             pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
