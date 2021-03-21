@@ -20,6 +20,10 @@ class TeamFortress2SceneDesc implements SceneDesc {
                 filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`),
                 filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`),
             ]);
+
+            // cp_cloak
+            filesystem.hotpatch.set('materials/test/computerwall003d.vmt', 'materials/concrete/computerwall003d.vmt');
+
             return filesystem;
         });
 
@@ -41,6 +45,7 @@ class GarrysModSceneDesc implements SceneDesc {
                 filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`),
                 filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`),
             ]);
+
             return filesystem;
         });
 

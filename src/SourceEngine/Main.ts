@@ -57,6 +57,7 @@ function decompressZipFileEntry(entry: ZipFileEntry): ArrayBufferSlice {
 export class SourceFileSystem {
     public pakfiles: ZipFile[] = [];
     public mounts: VPKMount[] = [];
+    public hotpatch = new Map<string, string>();
 
     constructor(private dataFetcher: DataFetcher) {
     }
@@ -82,6 +83,9 @@ export class SourceFileSystem {
 
             path = parts.join('/');
         }
+
+        if (this.hotpatch.has(path))
+            path = this.hotpatch.get(path)!;
 
         return path;
     }
