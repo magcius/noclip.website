@@ -185,7 +185,7 @@ export class VTF {
     private versionMajor: number;
     private versionMinor: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, additionalFlags: VTFFlags) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, srgb: boolean) {
         if (buffer === null)
             return;
 
@@ -203,7 +203,7 @@ export class VTF {
 
             this.width = view.getUint16(0x10, true);
             this.height = view.getUint16(0x12, true);
-            this.flags = view.getUint32(0x14, true) | additionalFlags;
+            this.flags = view.getUint32(0x14, true);
             this.numFrames = view.getUint16(0x18, true);
             const startFrame = view.getUint16(0x1A, true);
             const reflectivityR = view.getFloat32(0x20, true);
@@ -246,7 +246,8 @@ export class VTF {
         }
 
         const isCube = !!(this.flags & VTFFlags.ENVMAP);
-        const srgb = !!(this.flags & VTFFlags.SRGB);
+        // The srgb flag in the file does nothing :/, we have to know from the material system instead.
+        // const srgb = !!(this.flags & VTFFlags.SRGB);
         const pixelFormat = imageFormatToGfxFormat(device, this.format, srgb);
         const dimension = isCube ? GfxTextureDimension.Cube : GfxTextureDimension.n2D;
         const faceCount = (isCube ? 6 : 1);
@@ -264,7 +265,6 @@ export class VTF {
             device.setResourceName(texture, `${this.name} frame ${i}`);
             this.gfxTextures.push(texture);
         }
-
 
         const levelDatas: ArrayBufferView[][] = nArray(this.gfxTextures.length, () => []);
 
