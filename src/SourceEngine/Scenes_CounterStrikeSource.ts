@@ -33,7 +33,7 @@ const sceneDescs = [
     new CounterStrikeSourceSceneDesc('cs_compound'),
     new CounterStrikeSourceSceneDesc('cs_havana'),
     new CounterStrikeSourceSceneDesc('cs_italy'),
-    //new CounterStrikeSourceSceneDesc('cs_militia'), //CRASHES!
+    new CounterStrikeSourceSceneDesc('cs_militia'),
     new CounterStrikeSourceSceneDesc('cs_office'),
     "Defuse",
     new CounterStrikeSourceSceneDesc('de_aztec'),
