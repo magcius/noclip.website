@@ -3,7 +3,7 @@ import { DeviceProgram } from "../Program";
 import { VMT, parseVMT, VKFPair, vmtParseVector } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderInstManager";
-import { nArray, assert, assertExists, fallbackUndefined } from "../util";
+import { nArray, assert, assertExists } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3, ReadonlyMat4 } from "gl-matrix";
@@ -928,9 +928,11 @@ void mainVS() {
 vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
     if (t_CombineMode == COMBINE_MODE_MUL_DETAIL2) {
         return t_BaseTexture * mix(vec4(1.0), t_DetailTexture * 2.0, t_BlendFactor);
+    } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE) {
+        return t_BaseTexture + t_DetailTexture * t_BlendFactor;
     } else if (t_CombineMode == COMBINE_MODE_BASE_OVER_DETAIL) {
         return vec4(mix(t_BaseTexture.rgb, t_DetailTexture.rgb, (t_BlendFactor * (1.0 - t_BaseTexture.a))), t_DetailTexture.a);
-    } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
+    } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM || t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
         // Done in Post-Lighting.
         return t_BaseTexture;
     } else {
@@ -940,18 +942,20 @@ vec4 TextureCombine(in vec4 t_BaseTexture, in vec4 t_DetailTexture, in int t_Com
 }
 
 vec3 TextureCombinePostLighting(in vec3 t_DiffuseColor, in vec3 t_DetailTexture, in int t_CombineMode, in float t_BlendFactor) {
-    if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
+    if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM) {
+        return t_DiffuseColor.rgb + t_DetailTexture.rgb * t_BlendFactor;
+    } else if (t_CombineMode == COMBINE_MODE_RGB_ADDITIVE_SELFILLUM_THRESHOLD_FADE) {
         // Remap.
         if (t_BlendFactor >= 0.5) {
             float t_Mult = (1.0 / t_BlendFactor);
-            return t_DiffuseColor + clamp((t_Mult * t_DetailTexture.rgb) + (1.0 - t_Mult), 0.0, 1.0);
+            return t_DiffuseColor.rgb + clamp((t_Mult * t_DetailTexture.rgb) + (1.0 - t_Mult), 0.0, 1.0);
         } else {
             float t_Mult = (4.0 * t_BlendFactor);
-            return t_DiffuseColor + clamp((t_Mult * t_DetailTexture.rgb) + (-0.5 * t_Mult), 0.0, 1.0);
+            return t_DiffuseColor.rgb + clamp((t_Mult * t_DetailTexture.rgb) + (-0.5 * t_Mult), 0.0, 1.0);
         }
     } else {
         // Nothing to do.
-        return t_DiffuseColor;
+        return t_DiffuseColor.rgb;
     }
 }
 
