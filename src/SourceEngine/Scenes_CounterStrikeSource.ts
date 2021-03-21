@@ -42,12 +42,12 @@ const sceneDescs = [
     new CounterStrikeSourceSceneDesc('de_dust'),
     new CounterStrikeSourceSceneDesc('de_dust2'),
     new CounterStrikeSourceSceneDesc('de_inferno'),
-    //new CounterStrikeSourceSceneDesc('de_nuke'), //CRASHES!
+    new CounterStrikeSourceSceneDesc('de_nuke'),
     new CounterStrikeSourceSceneDesc('de_piranesi'),
     new CounterStrikeSourceSceneDesc('de_port'),
     new CounterStrikeSourceSceneDesc('de_prodigy'),
     new CounterStrikeSourceSceneDesc('de_tides'),
-    //new CounterStrikeSourceSceneDesc('de_train'), //CRASHES!
+    new CounterStrikeSourceSceneDesc('de_train'),
     "Other",
     new CounterStrikeSourceSceneDesc('test_hardware'),
     new CounterStrikeSourceSceneDesc('test_speakers'),
