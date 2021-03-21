@@ -69,6 +69,19 @@ export class SourceFileSystem {
         path = path.toLowerCase().replace(/\\/g, '/');
         if (!path.endsWith(ext))
             path = `${path}${ext}`;
+
+        if (path.includes('../')) {
+            // Resolve relative paths.
+            const parts = path.split('/');
+
+            while (parts.includes('..')) {
+                const idx = parts.indexOf('..');
+                parts.splice(idx - 1, 2);
+            }
+
+            path = parts.join('/');
+        }
+
         return path;
     }
 
