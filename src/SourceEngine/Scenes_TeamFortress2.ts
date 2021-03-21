@@ -181,7 +181,7 @@ const sceneDescs = [
     "Other Gamemodes",
     new TeamFortress2SceneDesc('rd_asteroid'),
     new TeamFortress2SceneDesc('sd_doomsday'),
-    //new TeamFortress2SceneDesc('sd_doomsday_event'), //CRASHES!
+    new TeamFortress2SceneDesc('sd_doomsday_event'),
     new TeamFortress2SceneDesc('tc_hydro'),
     new TeamFortress2SceneDesc('tr_dustbowl'),
     new TeamFortress2SceneDesc('tr_target'),
