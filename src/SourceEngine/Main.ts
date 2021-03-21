@@ -278,8 +278,6 @@ class BSPSurfaceRenderer {
             const lightmapData = this.surface.lightmapData[i];
             this.lightmaps.push(new SurfaceLightmap(lightmapManager, lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap));
         }
-
-        this.materialInstance.setLightmapAllocation(lightmapManager.getPageTexture(this.surface.lightmapPageIndex), lightmapManager.gfxSampler);
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -318,7 +316,7 @@ class BSPSurfaceRenderer {
             this.lightmaps[i].buildLightmap(renderContext.worldLightingState);
 
         const renderInst = renderInstManager.newRenderInst();
-        this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix);
+        this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix, this.surface.lightmapPageIndex);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
 
         if (this.surface.center !== null) {

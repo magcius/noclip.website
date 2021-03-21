@@ -14,7 +14,6 @@ import { decompress, decodeLZMAProperties } from '../Common/Compression/LZMA';
 import { Color, colorNewFromRGBA, colorCopy, TransparentBlack, colorScaleAndAdd, colorScale, colorNewCopy } from "../Color";
 import { unpackColorRGBExp32 } from "./Materials";
 import { lerp } from "../MathHelpers";
-import { arrayEqual } from "../gfx/platform/GfxPlatformUtil";
 
 const enum LumpType {
     ENTITIES                  = 0,
@@ -95,6 +94,7 @@ export interface Surface {
 }
 
 interface TexinfoMapping {
+    // 4x2 matrix for texture coordinates
     s: vec4;
     t: vec4;
 }
@@ -119,7 +119,7 @@ interface Texinfo {
     height: number;
 }
 
-function calcTexCoord(dst: vec2, v: vec3, m: TexinfoMapping): void {
+function calcTexCoord(dst: vec2, v: ReadonlyVec3, m: TexinfoMapping): void {
     dst[0] = v[0]*m.s[0] + v[1]*m.s[1] + v[2]*m.s[2] + m.s[3];
     dst[1] = v[0]*m.t[0] + v[1]*m.t[1] + v[2]*m.t[2] + m.t[3];
 }

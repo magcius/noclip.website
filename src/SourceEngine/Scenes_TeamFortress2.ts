@@ -51,6 +51,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('cp_badlands'),
     new TeamFortress2SceneDesc('cp_foundry'),
     new TeamFortress2SceneDesc('cp_dustbowl'),
+    new TeamFortress2SceneDesc('cp_egypt_final'),
     new TeamFortress2SceneDesc('cp_gorge'),
     new TeamFortress2SceneDesc('cp_sunshine'),
     new TeamFortress2SceneDesc('ctf_2fort'),

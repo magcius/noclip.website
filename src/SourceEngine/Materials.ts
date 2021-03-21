@@ -412,10 +412,6 @@ export abstract class BaseMaterial {
         return true;
     }
 
-    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
-        // Nothing by default.
-    }
-
     public setSkinningMode(skinningMode: SkinningMode): void {
         // Nothing by default.
     }
@@ -606,7 +602,7 @@ export abstract class BaseMaterial {
             this.proxyDriver.update(renderContext, this.entityParams);
     }
 
-    public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void;
+    public abstract setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex?: number): void;
 
     public setOnRenderInstSkinningParams(renderInst: GfxRenderInst, boneMatrix: ReadonlyMat4[], bonePaletteTable: number[]): void {
         // Nothing by default.
@@ -1135,12 +1131,6 @@ class Material_Generic extends BaseMaterial {
         }
     }
 
-    public setLightmapAllocation(gfxTexture: GfxTexture, gfxSampler: GfxSampler): void {
-        const lightmapTextureMapping = this.textureMapping[3];
-        lightmapTextureMapping.gfxTexture = gfxTexture;
-        lightmapTextureMapping.gfxSampler = gfxSampler;
-    }
-
     protected initParameters(): void {
         super.initParameters();
 
@@ -1313,9 +1303,14 @@ class Material_Generic extends BaseMaterial {
         return offs - origOffs;
     }
 
-    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null): void {
+    public setOnRenderInst(renderContext: SourceRenderContext, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4 | null, lightmapPageIndex: number | null = null): void {
         assert(this.isMaterialLoaded());
         this.updateTextureMappings();
+        if (lightmapPageIndex !== null) {
+            const lightmapManager = renderContext.lightmapManager;
+            this.textureMapping[3].gfxTexture = lightmapManager.getPageTexture(lightmapPageIndex);
+            this.textureMapping[3].gfxSampler = lightmapManager.gfxSampler;
+        }
         this.recacheProgram(renderContext.device, renderContext.cache);
 
         let offs = renderInst.allocateUniformBuffer(Material_Generic_Program.ub_ObjectParams, 128);
