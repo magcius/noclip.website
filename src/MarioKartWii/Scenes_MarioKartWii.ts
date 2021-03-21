@@ -3,20 +3,20 @@
 
 import * as Viewer from '../viewer';
 import * as UI from '../ui';
-import * as BRRES from './brres';
-import * as U8 from './u8';
+import * as BRRES from '../rres/brres';
+import * as U8 from '../rres/u8';
 import * as Yaz0 from '../Common/Compression/Yaz0';
 
 import { assert, readString, hexzero, assertExists } from '../util';
 import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
-import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
+import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from '../rres/render';
 import AnimationController from '../AnimationController';
 import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { computeModelMatrixSRT, computeModelMatrixS, MathConstants, scaleMatrix } from '../MathHelpers';
 import { SceneContext, GraphObjBase } from '../SceneBase';
-import { EggLightManager, parseBLIGHT } from './Egg';
+import { EggLightManager, parseBLIGHT } from '../rres/Egg';
 import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { CameraController } from '../Camera';
 

@@ -36,7 +36,7 @@ import * as Scenes_Elebits from './rres/Scenes_Elebits';
 import * as Scenes_KirbysReturnToDreamLand from './rres/Scenes_KirbysReturnToDreamLand';
 import * as Scenes_Klonoa from './rres/Scenes_Klonoa';
 import * as Scenes_MarioAndSonicAtThe2012OlympicGames from './rres/Scenes_MarioAndSonicAtTheOlympicGames2012';
-import * as Scenes_MarioKartWii from './rres/Scenes_MarioKartWii';
+import * as Scenes_MarioKartWii from './MarioKartWii/Scenes_MarioKartWii';
 import * as Scenes_Okami from './rres/Scenes_Okami';
 import * as Scenes_SonicColors from './rres/Scenes_SonicColors';
 import * as Scenes_SuperSmashBrosBrawl from './rres/Scenes_SuperSmashBrosBrawl';
