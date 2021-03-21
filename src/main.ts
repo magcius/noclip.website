@@ -60,6 +60,7 @@ import * as Scenes_WiiUTransferTool from './rres/Scenes_WiiUTransferTool';
 import * as Scenes_GoldenEye007 from './GoldenEye007/Scenes_GoldenEye007';
 import * as Scenes_BanjoTooie from './BanjoTooie/scenes';
 import * as Scenes_SunshineWater from './InteractiveExamples/SunshineWater';
+import * as Scenes_CounterStrikeSource from './SourceEngine/Scenes_CounterStrikeSource';
 import * as Scenes_HalfLife2 from './SourceEngine/Scenes_HalfLife2';
 import * as Scenes_HalfLife2DM from './SourceEngine/Scenes_HalfLife2DM';
 import * as Scenes_TeamFortress2 from './SourceEngine/Scenes_TeamFortress2';
@@ -149,6 +150,7 @@ const sceneGroups = [
     Scenes_DarkSouls.sceneGroup,
     Scenes_DarkSoulsCollision.sceneGroup,
     Scenes_Fez.sceneGroup,
+    Scenes_CounterStrikeSource.sceneGroup,
     Scenes_HalfLife2.sceneGroup,
     Scenes_HalfLife2DM.sceneGroup,
     Scenes_TeamFortress2.sceneGroup,
