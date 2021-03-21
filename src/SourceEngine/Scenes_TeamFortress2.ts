@@ -20,10 +20,6 @@ class TeamFortress2SceneDesc implements SceneDesc {
                 filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`),
                 filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`),
             ]);
-
-            // cp_cloak
-            filesystem.hotpatch.set('materials/test/computerwall003d.vmt', 'materials/concrete/computerwall003d.vmt');
-
             return filesystem;
         });
 
@@ -98,7 +94,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('cp_junction_final'),
     new TeamFortress2SceneDesc('cp_manor_event'),
     new TeamFortress2SceneDesc('cp_mercenarypark'),
-    new TeamFortress2SceneDesc('cp_mossrock'), //map geometry missing
+    new TeamFortress2SceneDesc('cp_mossrock'),
     new TeamFortress2SceneDesc('cp_mountainlab'),
     new TeamFortress2SceneDesc('cp_steel'),
     "Capture the Flag",
