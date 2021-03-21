@@ -5,7 +5,6 @@ import { SourceFileSystem } from "./Main";
 import { createScene } from "./Scenes";
 
 const pathBase = `TeamFortress2`;
-const pathBase2 = `HalfLife2`;
 
 class TeamFortress2SceneDesc implements SceneDesc {
     constructor(public id: string, public name: string = id) {
@@ -15,7 +14,6 @@ class TeamFortress2SceneDesc implements SceneDesc {
         const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             // According to gameinfo.txt, it first mounts TF2 and then HL2.
-
             await Promise.all([
                 filesystem.createVPKMount(`${pathBase}/tf/tf2_textures`),
                 filesystem.createVPKMount(`${pathBase}/tf/tf2_misc`),
@@ -34,7 +32,7 @@ class GarrysModSceneDesc implements SceneDesc {
     }
 
     public async createScene(device: GfxDevice, context: SceneContext) {
-        const pathBase = `GarrysMod`;
+        const pathBase2 = `GarrysMod`;
 
         const filesystem = await context.dataShare.ensureObject(`${pathBase2}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
