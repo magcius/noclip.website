@@ -3,7 +3,7 @@ import { DeviceProgram } from "../Program";
 import { VMT, parseVMT, VKFPair, vmtParseVector } from "./VMT";
 import { TextureMapping } from "../TextureHolder";
 import { GfxRenderInst, makeSortKey, GfxRendererLayer, setSortKeyProgramKey } from "../gfx/render/GfxRenderInstManager";
-import { nArray, assert, assertExists } from "../util";
+import { nArray, assert, assertExists, fallbackUndefined } from "../util";
 import { GfxDevice, GfxProgram, GfxMegaStateDescriptor, GfxFrontFaceMode, GfxBlendMode, GfxBlendFactor, GfxTexture, makeTextureDescriptor2D, GfxFormat, GfxSampler, GfxTexFilterMode, GfxMipFilterMode, GfxWrapMode, GfxCullMode } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { mat4, vec4, vec3, ReadonlyMat4 } from "gl-matrix";
@@ -2524,7 +2524,9 @@ export class ParameterReference {
 function paramLookupOptional<T extends Parameter>(map: ParameterMap, ref: ParameterReference): T | null {
     if (ref.name !== null) {
         const pm = map[ref.name];
-        if (ref.index !== -1)
+        if (pm === undefined)
+            return null;
+        else if (ref.index !== -1)
             return pm.index(ref.index) as T;
         else
             return pm as T;
