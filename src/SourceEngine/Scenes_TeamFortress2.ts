@@ -25,7 +25,7 @@ class TeamFortress2SceneDesc implements SceneDesc {
             return filesystem;
         });
 
-        return createScene(context, filesystem, this.id, `${pathBase}/maps/${this.id}.bsp`);
+        return createScene(context, filesystem, this.id, `${pathBase}/tf/maps/${this.id}.bsp`);
     }
 }
 
