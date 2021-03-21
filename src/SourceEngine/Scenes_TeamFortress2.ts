@@ -155,7 +155,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('pl_fifthcurve_event'),
     new TeamFortress2SceneDesc('pl_frontier_final'),
     new TeamFortress2SceneDesc('pl_goldrush'),
-    new TeamFortress2SceneDesc('pl_hasslecastle'), //map geometry missing
+    new TeamFortress2SceneDesc('pl_hasslecastle'),
     new TeamFortress2SceneDesc('pl_hoodoo_final'),
     new TeamFortress2SceneDesc('pl_millstone_event'),
     new TeamFortress2SceneDesc('pl_pier'),
@@ -173,11 +173,11 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('plr_nightfall_final'),
     new TeamFortress2SceneDesc('plr_pipeline'),
     "Player Destruction",
-    new TeamFortress2SceneDesc('pd_cursed_cove_event'), //map geometry missing
+    new TeamFortress2SceneDesc('pd_cursed_cove_event'),
     new TeamFortress2SceneDesc('pd_monster_bash'),
     new TeamFortress2SceneDesc('pd_pit_of_death_event'),
     new TeamFortress2SceneDesc('pd_snowville_event'),
-    new TeamFortress2SceneDesc('pd_watergate'), //map geometry missing
+    new TeamFortress2SceneDesc('pd_watergate'),
     "Other Gamemodes",
     new TeamFortress2SceneDesc('rd_asteroid'),
     new TeamFortress2SceneDesc('sd_doomsday'),
