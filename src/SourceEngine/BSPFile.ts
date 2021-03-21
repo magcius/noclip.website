@@ -815,13 +815,16 @@ export class BSPFile {
         if (leafambientindex.byteLength === 0)
             leafambientindex = getLumpData(LumpType.LEAF_AMBIENT_INDEX).createDataView();
 
-        let leafambientlighting = getLumpData(LumpType.LEAF_AMBIENT_LIGHTING_HDR, 1).createDataView();
-        if (leafambientlighting.byteLength === 0)
-            leafambientlighting = getLumpData(LumpType.LEAF_AMBIENT_LIGHTING, 1).createDataView();
+        let leafambientlightingLump: ArrayBufferSlice;
+        let leafambientlightingVersion: number;
+        [leafambientlightingLump, leafambientlightingVersion] = getLumpDataEx(LumpType.LEAF_AMBIENT_LIGHTING_HDR);
+        if (leafambientlightingLump.byteLength === 0)
+            [leafambientlightingLump, leafambientlightingVersion] = getLumpDataEx(LumpType.LEAF_AMBIENT_LIGHTING);
+        const leafambientlighting = leafambientlightingLump.createDataView();
 
         const leaffacelist = getLumpData(LumpType.LEAFFACES).createTypedArray(Uint16Array);
         const surfaceToLeafIdx: number[][] = nArray(basicSurfaces.length, () => []);
-        for (let idx = 0x00; idx < leafs.byteLength;) {
+        for (let i = 0, idx = 0x00; idx < leafs.byteLength; i++) {
             const contents = leafs.getUint32(idx + 0x00, true);
             const cluster = leafs.getUint16(idx + 0x04, true);
             const areaAndFlags = leafs.getUint16(idx + 0x06, true);
@@ -867,7 +870,34 @@ export class BSPFile {
 
                 // Padding.
                 idx += 0x02;
+            } else if (leafambientindex.byteLength === 0) {
+                // Intermediate leafambient version.
+                assert(leafambientlighting.byteLength !== 0);
+                assert(leafambientlightingVersion !== 1);
+
+                // We only have one ambient cube sample, in the middle of the leaf.
+                const ambientCube: Color[] = [];
+
+                for (let j = 0; j < 6; j++) {
+                    const ambientSampleColorIdx = (i * 6 + j) * 0x04;
+                    const exp = leafambientlighting.getUint8(ambientSampleColorIdx + 0x03);
+                    const r = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x00), exp) * 255.0;
+                    const g = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x01), exp) * 255.0;
+                    const b = unpackColorRGBExp32(leafambientlighting.getUint8(ambientSampleColorIdx + 0x02), exp) * 255.0;
+                    ambientCube.push(colorNewFromRGBA(r, g, b));
+                }
+
+                const x = lerp(bboxMinX, bboxMaxX, 0.5);
+                const y = lerp(bboxMinY, bboxMaxY, 0.5);
+                const z = lerp(bboxMinZ, bboxMaxZ, 0.5);
+                const pos = vec3.fromValues(x, y, z);
+
+                ambientLightSamples.push({ ambientCube, pos });
+
+                // Padding.
+                idx += 0x02;
             } else {
+                assert(leafambientlightingVersion === 1);
                 const ambientSampleCount = leafambientindex.getUint16(leafindex * 0x04 + 0x00, true);
                 const firstAmbientSample = leafambientindex.getUint16(leafindex * 0x04 + 0x02, true);
                 for (let i = 0; i < ambientSampleCount; i++) {

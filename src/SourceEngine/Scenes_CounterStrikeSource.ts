@@ -11,9 +11,11 @@ class CounterStrikeSourceSceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext) {
         const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
-            await filesystem.createVPKMount(`${pathBase}/cstrike_pak`);
-            await filesystem.createVPKMount(`${pathBase2}/hl2_textures`);
-            await filesystem.createVPKMount(`${pathBase2}/hl2_misc`);
+            await Promise.all([
+                filesystem.createVPKMount(`${pathBase}/cstrike_pak`),
+                filesystem.createVPKMount(`${pathBase2}/hl2_textures`),
+                filesystem.createVPKMount(`${pathBase2}/hl2_misc`),
+            ]);
             return filesystem;
         });
 
@@ -33,7 +35,7 @@ const sceneDescs = [
     new CounterStrikeSourceSceneDesc('cs_compound'),
     new CounterStrikeSourceSceneDesc('cs_havana'),
     new CounterStrikeSourceSceneDesc('cs_italy'),
-    //new CounterStrikeSourceSceneDesc('cs_militia'), //CRASHES!
+    new CounterStrikeSourceSceneDesc('cs_militia'),
     new CounterStrikeSourceSceneDesc('cs_office'),
     "Defuse",
     new CounterStrikeSourceSceneDesc('de_aztec'),
@@ -42,12 +44,12 @@ const sceneDescs = [
     new CounterStrikeSourceSceneDesc('de_dust'),
     new CounterStrikeSourceSceneDesc('de_dust2'),
     new CounterStrikeSourceSceneDesc('de_inferno'),
-    //new CounterStrikeSourceSceneDesc('de_nuke'), //CRASHES!
+    new CounterStrikeSourceSceneDesc('de_nuke'),
     new CounterStrikeSourceSceneDesc('de_piranesi'),
     new CounterStrikeSourceSceneDesc('de_port'),
     new CounterStrikeSourceSceneDesc('de_prodigy'),
     new CounterStrikeSourceSceneDesc('de_tides'),
-    //new CounterStrikeSourceSceneDesc('de_train'), //CRASHES!
+    new CounterStrikeSourceSceneDesc('de_train'),
     "Other",
     new CounterStrikeSourceSceneDesc('test_hardware'),
     new CounterStrikeSourceSceneDesc('test_speakers'),
