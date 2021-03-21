@@ -103,6 +103,8 @@ export class BaseEntity {
 
         if (entity.startdisabled)
             this.enabled = !Number(entity.startdisabled);
+        else if (entity.start_disabled)
+            this.enabled = !Number(entity.start_disabled);
 
         this.registerInput('enable', this.input_enable.bind(this));
         this.registerInput('disable', this.input_disable.bind(this));
@@ -937,10 +939,21 @@ export class EntitySystem {
             this.entities[i].spawn(this);
     }
 
-    private createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, entity: BSPEntity): void {
-        const factory = this.classname.has(entity.classname) ? this.classname.get(entity.classname)! : BaseEntity;
-        const entityInstance = new factory(this, renderContext, renderer, entity);
-        this.entities.push(entityInstance);
+    private createEntity(renderContext: SourceRenderContext, renderer: BSPRenderer, bspEntity: BSPEntity): void {
+        const factory = this.classname.get(bspEntity.classname);
+
+        let entity: BaseEntity;
+        if (factory !== undefined) {
+            entity = new factory(this, renderContext, renderer, bspEntity);
+        } else {
+            entity = new BaseEntity(this, renderContext, renderer, bspEntity);
+
+            // Set up some defaults.
+            if (bspEntity.classname.startsWith('func_nav_'))
+                entity.visible = false;
+        }
+
+        this.entities.push(entity);
     }
 
     public createEntities(renderContext: SourceRenderContext, renderer: BSPRenderer, entities: BSPEntity[]): void {

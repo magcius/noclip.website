@@ -64,6 +64,7 @@ const sceneDescs = [
     new TeamFortress2SceneDesc('koth_sawmill'),
     new TeamFortress2SceneDesc('koth_suijin'),
     new TeamFortress2SceneDesc('koth_viaduct'),
+    new TeamFortress2SceneDesc('mvm_mannhattan'),
     new TeamFortress2SceneDesc('pl_goldrush'),
     new TeamFortress2SceneDesc('pl_badwater'),
     new TeamFortress2SceneDesc('pl_barnblitz'),
