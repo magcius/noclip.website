@@ -14,10 +14,12 @@ class TeamFortress2SceneDesc implements SceneDesc {
         const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
             // According to gameinfo.txt, it first mounts TF2 and then HL2.
-            filesystem.createVPKMount(`${pathBase}/tf/tf2_textures`);
-            filesystem.createVPKMount(`${pathBase}/tf/tf2_misc`);
-            filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`);
-            filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`);
+            await Promise.all([
+                filesystem.createVPKMount(`${pathBase}/tf/tf2_textures`),
+                filesystem.createVPKMount(`${pathBase}/tf/tf2_misc`),
+                filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`),
+                filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`),
+            ]);
             return filesystem;
         });
 
@@ -34,9 +36,11 @@ class GarrysModSceneDesc implements SceneDesc {
 
         const filesystem = await context.dataShare.ensureObject(`${pathBase2}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
-            await filesystem.createVPKMount(`${pathBase2}/garrysmod`);
-            await filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`);
-            await filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`);
+            await Promise.all([
+                filesystem.createVPKMount(`${pathBase2}/garrysmod`),
+                filesystem.createVPKMount(`${pathBase}/hl2/hl2_textures`),
+                filesystem.createVPKMount(`${pathBase}/hl2/hl2_misc`),
+            ]);
             return filesystem;
         });
 
@@ -49,6 +53,7 @@ const name = 'Team Fortress 2';
 const sceneDescs = [
     new TeamFortress2SceneDesc('background01'),
     new TeamFortress2SceneDesc('cp_badlands'),
+    new TeamFortress2SceneDesc('cp_cloak'),
     new TeamFortress2SceneDesc('cp_foundry'),
     new TeamFortress2SceneDesc('cp_dustbowl'),
     new TeamFortress2SceneDesc('cp_egypt_final'),

@@ -11,8 +11,10 @@ class HalfLife2SceneDesc implements SceneDesc {
     public async createScene(device: GfxDevice, context: SceneContext) {
         const filesystem = await context.dataShare.ensureObject(`${pathBase}/SourceFileSystem`, async () => {
             const filesystem = new SourceFileSystem(context.dataFetcher);
-            await filesystem.createVPKMount(`${pathBase}/hl2_textures`);
-            await filesystem.createVPKMount(`${pathBase}/hl2_misc`);
+            await Promise.all([
+                filesystem.createVPKMount(`${pathBase}/hl2_textures`),
+                filesystem.createVPKMount(`${pathBase}/hl2_misc`),
+            ]);
             return filesystem;
         });
 
