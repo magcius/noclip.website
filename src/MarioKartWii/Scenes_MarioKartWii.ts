@@ -22,7 +22,6 @@ import { CameraController } from '../Camera';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { EggBloom, parseBBLM } from './PostEffect';
-import { makeDebugTextDrawer } from '../gfx/helpers/DebugTextDrawer';
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -126,6 +125,12 @@ class MarioKartWiiRenderer {
             this.enablePostProcessing = v;
         };
         renderHacksPanel.contents.appendChild(enablePostProcessing.elem);
+        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', false);
+        showDebugThumbnails.onchanged = () => {
+            const v = showDebugThumbnails.checked;
+            this.renderHelper.debugThumbnails.enabled = v;
+        };
+        renderHacksPanel.contents.appendChild(showDebugThumbnails.elem);
 
         return [renderHacksPanel];
     }

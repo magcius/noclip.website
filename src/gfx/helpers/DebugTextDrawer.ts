@@ -12,9 +12,8 @@ import { GX_Program } from "../../gx/gx_material";
 import { fillMatrix4x3 } from "./UniformBufferHelpers";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { fillSceneParamsData, gxBindingLayouts, SceneParams, ub_SceneParamsBufferSize } from "../../gx/gx_render";
-import { computeProjectionMatrixFromCuboid } from "../../MathHelpers";
-import { GfxrRenderTargetDescription } from "../render/GfxRenderGraph";
-import { Color, colorCopy, colorNewCopy, White } from "../../Color";
+import { computeProjectionMatrixFromCuboid, MathConstants } from "../../MathHelpers";
+import { colorCopy, colorNewCopy, OpaqueBlack, White } from "../../Color";
 
 const scratchMatrix = mat4.create();
 const scratchVec4 = vec4.create();
@@ -25,6 +24,7 @@ export class DebugTextDrawer {
     private ddraw = new TDDraw();
 
     public textColor = colorNewCopy(White);
+    public strokeColor = colorNewCopy(OpaqueBlack);
 
     constructor(context: SceneContext, private fontData: ResFont) {
         this.charWriter.setFont(fontData, 0, 0);
@@ -52,9 +52,20 @@ export class DebugTextDrawer {
         offs += fillMatrix4x3(d, offs, scratchMatrix);
     }
 
-    public drawString(renderInstManager: GfxRenderInstManager, desc: GfxrRenderTargetDescription, str: string, x: number, y: number): void {
+    public beginDraw(): void {
         this.ddraw.beginDraw();
+    }
 
+    public endDraw(renderInstManager: GfxRenderInstManager): void {
+        this.ddraw.endAndUpload(renderInstManager.device, renderInstManager);
+    }
+
+    public setFontScale(scale: number): void {
+        this.charWriter.scale[0] = scale;
+        this.charWriter.scale[1] = scale;
+    }
+
+    public drawString(renderInstManager: GfxRenderInstManager, vw: number, vh: number, str: string, x: number, y: number, strokeWidth = 1, strokeNum = 4): void {
         this.charWriter.calcRect(scratchVec4, str);
 
         // Center align
@@ -62,17 +73,26 @@ export class DebugTextDrawer {
         const w = rx1 - rx0;
         x -= w / 2;
 
-        colorCopy(this.charWriter.color1, this.textColor);
-
         const template = renderInstManager.pushTemplateRenderInst();
         template.setBindingLayouts(gxBindingLayouts);
-        this.setSceneParams(template, desc.width, desc.height);
+        this.setSceneParams(template, vw, vh);
         this.setPacketParams(template);
-        vec3.set(this.charWriter.cursor, x, desc.height - y, 0);
-        this.charWriter.drawString(renderInstManager.device, renderInstManager, this.ddraw, str);
-        renderInstManager.popTemplateRenderInst();
 
-        this.ddraw.endAndUpload(renderInstManager.device, renderInstManager);
+        // Stroke
+        colorCopy(this.charWriter.color1, this.strokeColor);
+        for (let i = 0; i < strokeNum; i++) {
+            const theta = i * MathConstants.TAU / strokeNum;
+            const sy = strokeWidth * Math.sin(theta), sx = strokeWidth * Math.cos(theta);
+            vec3.set(this.charWriter.cursor, x + sx, y + sy, 0);
+            this.charWriter.drawString(renderInstManager.device, renderInstManager, this.ddraw, str);
+        }
+
+        // Main fill
+        colorCopy(this.charWriter.color1, this.textColor);
+        vec3.set(this.charWriter.cursor, x, y, 0);
+        this.charWriter.drawString(renderInstManager.device, renderInstManager, this.ddraw, str);
+
+        renderInstManager.popTemplateRenderInst();
     }
 
     public destroy(device: GfxDevice): void {

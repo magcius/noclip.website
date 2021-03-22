@@ -66,9 +66,6 @@ export class GfxRenderHelper {
         this.renderInstManager.destroy(this.device);
         this.renderCache.destroy(this.device);
         this.renderGraph.destroy(this.device);
-
-        if (this.debugTextDrawer.value !== null)
-            this.debugTextDrawer.value.destroy(device);
     }
 
     public getCache(): GfxRenderCache {

@@ -1,6 +1,6 @@
 
 import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil';
-import { GfxProgram, GfxRenderPass, GfxSamplerBinding } from '../platform/GfxPlatform';
+import { GfxDevice, GfxProgram, GfxRenderPass, GfxSamplerBinding } from '../platform/GfxPlatform';
 import { GfxShaderLibrary } from '../helpers/ShaderHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
@@ -8,8 +8,8 @@ import { GfxRenderInstList, GfxRenderInstManager } from '../render/GfxRenderInst
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription } from '../render/GfxRenderGraph';
 
 import { lerp, saturate, smoothstep } from '../../MathHelpers';
-import { IS_DEVELOPMENT } from '../../BuildVersion';
 import { GfxRenderHelper } from '../render/GfxRenderHelper';
+import { GfxRenderDynamicUniformBuffer } from '../render/GfxRenderDynamicUniformBuffer';
 
 interface MouseLocation {
     mouseX: number;
@@ -38,13 +38,14 @@ function rectFlipY(r: Rect, h: number): void {
 
 export class DebugThumbnailDrawer {
     private blitProgram: GfxProgram;
-    private thumbnailLerp: number[] = [];
+    private anim: number[] = [];
     private textureMapping: GfxSamplerBinding[] = nArray(1, gfxSamplerBindingNew);
 
     // Used for text.
     private renderInstList = new GfxRenderInstList(null);
+    private uniformBuffer: GfxRenderDynamicUniformBuffer;
 
-    public enabled = IS_DEVELOPMENT;
+    public enabled = false;
     public thumbnailWidth: number = 128;
     public thumbnailHeight: number = 128;
     public padding: number = 32;
@@ -54,6 +55,8 @@ export class DebugThumbnailDrawer {
 
         const blitProgram = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS);
         this.blitProgram = cache.createProgramSimple(device, blitProgram);
+
+        this.uniformBuffer = new GfxRenderDynamicUniformBuffer(device);
     }
 
     private computeViewport(desc: GfxrRenderTargetDescription, location: Rect): Rect {
@@ -71,14 +74,17 @@ export class DebugThumbnailDrawer {
         return { x1, x2, y1, y2 };
     }
 
-    private lerpLocation(location: Rect, mouseLocation: MouseLocation | null, i: number, dest: Rect): void {
-        const thumbnailContainsMouse = (mouseLocation !== null && rectContainsPoint(location, mouseLocation.mouseX, mouseLocation.mouseY));
-        const speed = 0.1 * (thumbnailContainsMouse ? 1 : -1);
-        this.thumbnailLerp[i] = saturate(this.thumbnailLerp[i] + speed);
-        rectLerp(location, location, dest, smoothstep(this.thumbnailLerp[i]));
+    private adjustAnim(i: number, location: Rect, mouseLocation: MouseLocation): number {
+        const thumbnailContainsMouse = rectContainsPoint(location, mouseLocation.mouseX, mouseLocation.mouseY);
+        const speed = 0.05 * (thumbnailContainsMouse ? 1 : -1);
+        this.anim[i] = saturate(this.anim[i] + speed);
+        return smoothstep(this.anim[i]);
     }
 
-    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mouseLocation: MouseLocation | null = null): void {
+    public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mouseLocation: MouseLocation): void {
+        if (!this.enabled)
+            return;
+
         const debugTextDrawer = this.helper.getDebugTextDrawer();
 
         const builderDebug = builder.getDebug();
@@ -127,25 +133,33 @@ export class DebugThumbnailDrawer {
             const x1 = x2 - this.thumbnailWidth;
 
             const location = { x1, y1, x2, y2 };
-            this.lerpLocation(location, mouseLocation, i, fullscreenRect);
+            const t = this.adjustAnim(i, location, mouseLocation);
+            rectLerp(location, location, fullscreenRect, t);
 
             // y-flip will never die!!
             rectFlipY(location, desc.height);
 
             const viewport = this.computeViewport(thumbnailDesc, location);
-            passRenderer.setViewport(viewport.x1, viewport.y1, viewport.x2 - viewport.x1, viewport.y2 - viewport.y1);
+            const vw = viewport.x2 - viewport.x1, vh = viewport.y2 - viewport.y1;
+            passRenderer.setViewport(viewport.x1, viewport.y1, vw, vh);
             passRenderer.setScissor(location.x1, location.y1, location.x2 - location.x1, location.y2 - location.y1);
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
             renderInst.drawOnPass(renderInstManager.device, renderInstManager.gfxRenderCache, passRenderer);
 
-            const t = this.thumbnailLerp[i];
-            if (debugTextDrawer !== null && t > 0.0) {
+            if (debugTextDrawer !== null) {
                 const oldRenderInstList = renderInstManager.currentRenderInstList;
                 renderInstManager.currentRenderInstList = this.renderInstList;
 
-                debugTextDrawer.textColor.a = t;
+                const template = renderInstManager.pushTemplateRenderInst();
+                template.setUniformBuffer(this.uniformBuffer);
+
                 const thumbnailDebugName = builderDebug.getRenderTargetIDDebugName(renderTargetIDs[i]);
-                debugTextDrawer.drawString(renderInstManager, desc, thumbnailDebugName, desc.width / 2, 20);
+                debugTextDrawer.textColor.a = lerp(0.6, 1.0, t);
+                debugTextDrawer.setFontScale(lerp(0.5, 1.0, t));
+                const y = lerp(5, 20, t);
+                debugTextDrawer.drawString(renderInstManager, vw, vh, thumbnailDebugName, vw / 2, vh - y);
+
+                renderInstManager.popTemplateRenderInst();
                 this.renderInstList.drawOnPassRenderer(renderInstManager.device, renderInstManager.gfxRenderCache, passRenderer);
 
                 renderInstManager.currentRenderInstList = oldRenderInstList;
@@ -153,11 +167,11 @@ export class DebugThumbnailDrawer {
         };
 
         for (let i = 0; i < resolveTextureIDs.length; i++)
-            if (!this.thumbnailLerp[i])
-                this.thumbnailLerp[i] = 0.0;
+            if (!this.anim[i])
+                this.anim[i] = 0.0;
 
         const drawOrder = range(0, resolveTextureIDs.length);
-        drawOrder.sort((a, b) => (this.thumbnailLerp[a] - this.thumbnailLerp[b]));
+        drawOrder.sort((a, b) => (this.anim[a] - this.anim[b]));
 
         builder.pushPass((pass) => {
             pass.setDebugName('Debug Thumbnails');
@@ -167,10 +181,19 @@ export class DebugThumbnailDrawer {
                 pass.attachResolveTexture(resolveTextureIDs[i]);
 
             pass.exec((passRenderer, scope) => {
+                if (debugTextDrawer !== null)
+                    debugTextDrawer.beginDraw();
                 for (let i = 0; i < resolveTextureIDs.length; i++)
                     drawThumbnail(scope, passRenderer, drawOrder[i]);
+                if (debugTextDrawer !== null)
+                    debugTextDrawer.endDraw(renderInstManager);
+                this.uniformBuffer.prepareToRender(renderInstManager.device);
             });
         });
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.uniformBuffer.destroy(device);
     }
 }
 //#endregion
