@@ -22,6 +22,7 @@ import { CameraController } from '../Camera';
 import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
 import { EggBloom, parseBBLM } from './PostEffect';
+import { makeDebugTextDrawer } from '../gfx/helpers/DebugTextDrawer';
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -79,7 +80,7 @@ class MarioKartWiiRenderer {
     public modelCache = new ModelCache();
 
     constructor(context: SceneContext) {
-        this.renderHelper = new GXRenderHelperGfx(context.device);
+        this.renderHelper = new GXRenderHelperGfx(context.device, context);
     }
 
     private setMirrored(mirror: boolean): void {

@@ -1,15 +1,15 @@
 
 import { gfxSamplerBindingNew, nArray, range } from '../platform/GfxPlatformUtil';
-import { GfxDevice, GfxProgram, GfxRenderPass, GfxSamplerBinding } from '../platform/GfxPlatform';
+import { GfxProgram, GfxRenderPass, GfxSamplerBinding } from '../platform/GfxPlatform';
 import { GfxShaderLibrary } from '../helpers/ShaderHelpers';
 import { preprocessProgram_GLSL } from '../shaderc/GfxShaderCompiler';
 import { fullscreenMegaState } from '../helpers/GfxMegaStateDescriptorHelpers';
-import { GfxRenderCache } from '../render/GfxRenderCache';
-import { GfxRenderInstManager } from '../render/GfxRenderInstManager';
+import { GfxRenderInstList, GfxRenderInstManager } from '../render/GfxRenderInstManager';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrPassScope, GfxrRenderTargetDescription } from '../render/GfxRenderGraph';
 
 import { lerp, saturate, smoothstep } from '../../MathHelpers';
 import { IS_DEVELOPMENT } from '../../BuildVersion';
+import { GfxRenderHelper } from '../render/GfxRenderHelper';
 
 interface MouseLocation {
     mouseX: number;
@@ -41,12 +41,17 @@ export class DebugThumbnailDrawer {
     private thumbnailLerp: number[] = [];
     private textureMapping: GfxSamplerBinding[] = nArray(1, gfxSamplerBindingNew);
 
+    // Used for text.
+    private renderInstList = new GfxRenderInstList(null);
+
     public enabled = IS_DEVELOPMENT;
     public thumbnailWidth: number = 128;
     public thumbnailHeight: number = 128;
     public padding: number = 32;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache) {
+    constructor(private helper: GfxRenderHelper) {
+        const device = helper.device, cache = helper.renderCache;
+
         const blitProgram = preprocessProgram_GLSL(device.queryVendorInfo(), GfxShaderLibrary.fullscreenVS, GfxShaderLibrary.fullscreenBlitOneTexPS);
         this.blitProgram = cache.createProgramSimple(device, blitProgram);
     }
@@ -74,6 +79,8 @@ export class DebugThumbnailDrawer {
     }
 
     public pushPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, mouseLocation: MouseLocation | null = null): void {
+        const debugTextDrawer = this.helper.getDebugTextDrawer();
+
         const builderDebug = builder.getDebug();
 
         const inputPasses = builderDebug.getPasses();
@@ -130,6 +137,19 @@ export class DebugThumbnailDrawer {
             passRenderer.setScissor(location.x1, location.y1, location.x2 - location.x1, location.y2 - location.y1);
             renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
             renderInst.drawOnPass(renderInstManager.device, renderInstManager.gfxRenderCache, passRenderer);
+
+            const t = this.thumbnailLerp[i];
+            if (debugTextDrawer !== null && t > 0.0) {
+                const oldRenderInstList = renderInstManager.currentRenderInstList;
+                renderInstManager.currentRenderInstList = this.renderInstList;
+
+                debugTextDrawer.textColor.a = t;
+                const thumbnailDebugName = builderDebug.getRenderTargetIDDebugName(renderTargetIDs[i]);
+                debugTextDrawer.drawString(renderInstManager, desc, thumbnailDebugName, desc.width / 2, 20);
+                this.renderInstList.drawOnPassRenderer(renderInstManager.device, renderInstManager.gfxRenderCache, passRenderer);
+
+                renderInstManager.currentRenderInstList = oldRenderInstList;
+            }
         };
 
         for (let i = 0; i < resolveTextureIDs.length; i++)

@@ -567,6 +567,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
 
                 builder.pushPass((pass) => {
                     pass.setDebugName('Bloom Objects');
+                    pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
                     pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, bloomObjectsTargetID);
                     pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
                     pass.exec((passRenderer) => {
@@ -599,6 +600,8 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.Model3DFor2D);
             });
         });
+
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
 
@@ -1677,7 +1680,7 @@ export abstract class SMGSceneDescBase implements Viewer.SceneDesc {
             return new ModelCache(device, this.pathBase, context.dataFetcher);
         });
 
-        const renderHelper = new GXRenderHelperGfx(device);
+        const renderHelper = new GXRenderHelperGfx(device, context);
         context.destroyablePool.push(renderHelper);
 
         const galaxyName = this.galaxyName;

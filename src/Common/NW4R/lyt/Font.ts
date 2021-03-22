@@ -274,12 +274,12 @@ export class CharWriter {
 
     private textureMapping = nArray(1, () => new TextureMapping());
 
-    public setFont(font: ResFont, charSpacing: number, lineHeight: number, fontWidth: number, fontHeight: number): void {
+    public setFont(font: ResFont, charSpacing: number, lineHeight: number, fontWidth: number | null = null, fontHeight: number | null = null): void {
         this.font = font;
         const rfnt = this.font.rfnt;
         this.charSpacing = charSpacing;
-        this.scale[0] = fontWidth / rfnt.width;
-        this.scale[1] = fontHeight / rfnt.height;
+        this.scale[0] = fontWidth !== null ? (fontWidth / rfnt.width) : 1;
+        this.scale[1] = fontHeight !== null ? (fontHeight / rfnt.height) : 1;
         // TODO(jstpierre): This isn't correct
         this.lineHeight = lineHeight - (rfnt.advanceHeight * this.scale[1]);
     }

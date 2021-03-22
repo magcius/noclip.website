@@ -634,7 +634,7 @@ export class GfxRenderInstManager {
     public instPool = new RenderInstPool();
     public templatePool = new RenderInstPool();
     public simpleRenderInstList: GfxRenderInstList | null = new GfxRenderInstList();
-    private currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
+    public currentRenderInstList: GfxRenderInstList = this.simpleRenderInstList!;
 
     constructor(public device: GfxDevice, public gfxRenderCache: GfxRenderCache) {
     }

@@ -12,7 +12,7 @@ import { GfxDevice, GfxSampler } from "../../../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../../../gfx/render/GfxRenderCache";
 import { TextureMapping } from "../../../TextureHolder";
 import { TDDraw } from "../../../SuperMarioGalaxy/DDraw";
-import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from "../../../gx/gx_render";
+import { ColorKind, GXMaterialHelperGfx, MaterialParams } from "../../../gx/gx_render";
 import { TEX1_SamplerSub, translateSampler } from "../../JSYSTEM/JUTTexture";
 import { getPointHermite } from "../../../Spline";
 import { arrayCopy } from "../../../gfx/platform/GfxPlatformUtil";

@@ -16,7 +16,7 @@ import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { J3DFrameCtrl } from "../Common/JSYSTEM/J3D/J3DGraphAnimator";
 import { LoopMode as J3DLoopMode } from "../Common/JSYSTEM/J3D/J3DLoader";
 import { LoopMode as NW4RLoopMode } from "../rres/brres";
-import { parseBRFNT, ResFont, RFNT } from "../Common/NW4R/lyt/Font";
+import { parseBRFNT, ResFont } from "../Common/NW4R/lyt/Font";
 import { vec4 } from "gl-matrix";
 
 export class LayoutHolder {
@@ -24,7 +24,7 @@ export class LayoutHolder {
     public rlanTable = new Map<string, RLAN>();
     public timgTable = new Map<string, BTIData>();
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, private gameSystemFontHolder: GameSystemFontHolder, layoutName: string, public arc: JKRArchive) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, private gameSystemFontHolder: GameSystemFontHolder, private layoutName: string, public arc: JKRArchive) {
         initEachResTable(this.arc, this.rlytTable, ['.brlyt'], (file) => parseBRLYT(file.buffer));
         initEachResTable(this.arc, this.rlanTable, ['.brlan'], (file) => parseBRLAN(file.buffer));
         initEachResTable(this.arc, this.timgTable, ['.tpl'], (file) => {
