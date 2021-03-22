@@ -473,6 +473,9 @@ export abstract class MaterialBase implements SFAMaterial {
             else
                 colorFromRGBA(params.u_Color[ColorKind.K0 + i], 1.0, 1.0, 1.0, 1.0);
         }
+
+        // For heat shimmer effect (probably has no effect?)
+        colorFromRGBA(params.u_Color[ColorKind.C2], 0, 0, 0, 1.0);
     }
     
     public getTexture(num: number): MaterialTexture {

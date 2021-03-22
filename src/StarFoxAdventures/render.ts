@@ -8,7 +8,7 @@ import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/r
 import { CameraController } from '../Camera';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
-import { Color, colorFromARGB8, colorFromRGBA, colorFromRGBA8, colorNewFromRGBA8, White } from '../Color';
+import { Color, colorFromRGBA, colorNewFromRGBA8, White } from '../Color';
 import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
 import { TDDraw } from '../SuperMarioGalaxy/DDraw';
@@ -35,12 +35,13 @@ export interface SFARenderLists {
 
 class HeatShimmerMaterial extends MaterialBase {
     protected rebuildInternal() {
-        const texMap0 = this.genTexMap(makeSceneMaterialTexture()); // FIXME: should be previous frame?
+        const texMap0 = this.genTexMap(makeSceneMaterialTexture());
         const texMap1 = this.genTexMap(this.factory.getWavyTexture());
         
-        const k0 = this.genKonstColor((dst: Color) => {
-            const alpha = 0xff; // TODO: adjusts strength of shimmer
-            colorFromRGBA(dst, 0, 0, 0x80/0xff, alpha);
+        const k0 = this.genKonstColor((dst: Color, matCtx: MaterialRenderContext) => {
+            const alpha = matCtx.sceneCtx.animController.envAnimValue1 * 0xff; // TODO: adjusts strength of shimmer
+            // const alpha = 0xff;
+            colorFromRGBA(dst, 0, 0, 0x80/0xff, alpha/0xff);
         });
         const k1 = this.genKonstColor((dst: Color) => {
             colorFromRGBA(dst, 0x80/0xff, 0x80/0xff, 0, 0);
@@ -52,6 +53,7 @@ class HeatShimmerMaterial extends MaterialBase {
             colorFromRGBA(dst, 0x80/0xff, 0, 0x80/0xff, 0);
         });
 
+        // Stage 0 is blank because ALPHA_BUMP_N cannot be used until later stages.
         const stage0 = this.genTevStage();
         this.mb.setTevDirect(stage0.id);
         this.setTevOrder(stage0);
@@ -66,12 +68,8 @@ class HeatShimmerMaterial extends MaterialBase {
         };
         const texCoord1 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX0);
 
-        const indStage0 = this.genIndTexStage();
-        this.setIndTexOrder(indStage0, texCoord1, texMap1);
-        this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
-
         const rot45 = mat4.create();
-        mat4.fromRotation(rot45, Math.PI / 4, [0, 0, 1]); // FIXME: verify correctness
+        mat4.fromZRotation(rot45, Math.PI / 4);
         this.texMtx[1] = (dst: mat4, matCtx: MaterialRenderContext) => {
             mat4.fromScaling(dst, [0.25, 0.25, 1.0]);
             mat4.mul(dst, rot45, dst);
@@ -80,9 +78,9 @@ class HeatShimmerMaterial extends MaterialBase {
         };
         const texCoord2 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX1);
 
-        const indStage1 = this.genIndTexStage();
-        this.setIndTexOrder(indStage1, texCoord2, texMap1);
-        this.mb.setIndTexScale(getIndTexStageID(indStage1), GX.IndTexScale._1, GX.IndTexScale._1);
+        const indStage0 = this.genIndTexStage();
+        this.setIndTexOrder(indStage0, texCoord1, texMap1);
+        this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
 
         const indTexMtx0 = this.genIndTexMtx((dst: mat4) => {
             mat4SetRowMajor(dst, 
@@ -99,6 +97,10 @@ class HeatShimmerMaterial extends MaterialBase {
         this.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
 
+        const indStage1 = this.genIndTexStage();
+        this.setIndTexOrder(indStage1, texCoord2, texMap1);
+        this.mb.setIndTexScale(getIndTexStageID(indStage1), GX.IndTexScale._1, GX.IndTexScale._1);
+        
         const indTexMtx1 = this.genIndTexMtx((dst: mat4) => {
             mat4SetRowMajor(dst, 
                 0.5, 0.0, 0.0, 0.0,
@@ -156,6 +158,7 @@ class HeatShimmerMaterial extends MaterialBase {
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         this.mb.setCullMode(GX.CullMode.NONE);
         this.mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
         this.mb.setZMode(false, GX.CompareType.ALWAYS, false);
     }
 }
@@ -262,6 +265,7 @@ export class SFARenderer implements Viewer.SceneGfx {
                 pass.setViewport(sceneCtx.viewerInput.viewport);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+                // FIXME: heat shimmer uses the opaque scene texture downscaled by 1/2
                 pass.attachResolveTexture(mainColorResolveTextureID);
 
                 pass.exec((passRenderer, scope) => {
@@ -273,7 +277,6 @@ export class SFARenderer implements Viewer.SceneGfx {
             });
         }
 
-        if (false) { // TODO: enable
         builder.pushPass((pass) => {
             pass.setDebugName('World Translucents');
             pass.setViewport(sceneCtx.viewerInput.viewport);
@@ -290,11 +293,10 @@ export class SFARenderer implements Viewer.SceneGfx {
                 renderInstManager.drawListOnPassRenderer(renderLists.world[2], passRenderer);
             });
         });
-        }
     }
 
     protected addHeatShimmerRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
-        renderInstManager.setCurrentRenderInstList(renderLists.atmosphere);
+        renderInstManager.setCurrentRenderInstList(renderLists.heatShimmer);
 
         // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
         // to obtain a local SceneParams buffer
@@ -325,13 +327,21 @@ export class SFARenderer implements Viewer.SceneGfx {
             this.heatShimmerMaterialHelper = new GXMaterialHelperGfx(this.heatShimmerMaterial.getGXMaterial());
         }
 
-        this.heatShimmerMaterial!.setupMaterialParams(scratchMaterialParams, {
+        const matCtx = {
             sceneCtx,
             modelViewMtx: mat4.create(),
             invModelViewMtx: mat4.create(),
             outdoorAmbientColor: White,
             furLayer: 0,
-        });
+        };
+        this.heatShimmerMaterial!.setupMaterialParams(scratchMaterialParams, matCtx);
+        for (let i = 0; i < 8; i++) {
+            const tex = this.heatShimmerMaterial!.getTexture(i);
+            if (tex !== undefined)
+                tex.setOnTextureMapping(scratchMaterialParams.m_TextureMapping[i], matCtx);
+            else
+                scratchMaterialParams.m_TextureMapping[i].reset();
+        }
         submitScratchRenderInst(device, renderInstManager, this.heatShimmerMaterialHelper!, renderInst, sceneCtx.viewerInput, true, scratchMaterialParams, scratchPacketParams);
 
         this.shimmerddraw.endAndUpload(device, renderInstManager);
