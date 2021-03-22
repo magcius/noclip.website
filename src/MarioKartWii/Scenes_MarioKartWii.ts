@@ -78,8 +78,8 @@ class MarioKartWiiRenderer {
     public baseObjects: BaseObject[] = [];
     public modelCache = new ModelCache();
 
-    constructor(device: GfxDevice) {
-        this.renderHelper = new GXRenderHelperGfx(device);
+    constructor(context: SceneContext) {
+        this.renderHelper = new GXRenderHelperGfx(context.device);
     }
 
     private setMirrored(mirror: boolean): void {
@@ -169,6 +169,8 @@ class MarioKartWiiRenderer {
             if (this.eggBloom !== null)
                 this.eggBloom.pushPassesBloom(builder, renderInstManager, mainColorTargetID);
         }
+
+        this.renderHelper.debugThumbnails.pushPasses(builder, renderInstManager, mainColorTargetID, viewerInput.mouseLocation);
 
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
@@ -850,10 +852,11 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         }
     }
 
-    public static createSceneFromU8Archive(device: GfxDevice, arc: U8.U8Archive): MarioKartWiiRenderer {
+    public static createSceneFromU8Archive(context: SceneContext, arc: U8.U8Archive): MarioKartWiiRenderer {
+        const device = context.device;
         const kmp = parseKMP(assertExists(arc.findFileData(`./course.kmp`)));
         console.log(arc, kmp);
-        const renderer = new MarioKartWiiRenderer(device);
+        const renderer = new MarioKartWiiRenderer(context);
 
         const modelCache = renderer.modelCache;
 
@@ -895,12 +898,12 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
         const buffer = await dataFetcher.fetchData(`mkwii/${this.id}.szs`);
         const decompressed = await Yaz0.decompress(buffer);
         const arc = U8.parse(decompressed);
-        return MarioKartWiiSceneDesc.createSceneFromU8Archive(device, arc);
+        return MarioKartWiiSceneDesc.createSceneFromU8Archive(context, arc);
     }
 }
 
-export function createMarioKartWiiSceneFromU8Archive(device: GfxDevice, arc: U8.U8Archive) {
-    return MarioKartWiiSceneDesc.createSceneFromU8Archive(device, arc);
+export function createMarioKartWiiSceneFromU8Archive(context: SceneContext, arc: U8.U8Archive) {
+    return MarioKartWiiSceneDesc.createSceneFromU8Archive(context, arc);
 }
 
 const id = 'mkwii';

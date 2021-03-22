@@ -391,6 +391,10 @@ export function invlerp(a: number, b: number, v: number): number {
     return (v - a) / (b - a);
 }
 
+export function smoothstep(t: number): number {
+    return t*t*(3 - t*2);
+}
+
 // https://gist.github.com/shaunlebron/8832585
 export function lerpAngle(v0: number, v1: number, t: number, maxAngle: number = MathConstants.TAU): number {
     const da = (v1 - v0) % maxAngle;

@@ -140,7 +140,7 @@ export function createSceneFromU8Buffer(context: SceneContext, buffer: ArrayBuff
 
     // If we have a course.kmp, that means we're a Mario Kart Wii archive.
     if (arc.findFile('./course.kmp') !== null)
-        return createMarioKartWiiSceneFromU8Archive(device, arc);
+        return createMarioKartWiiSceneFromU8Archive(context, arc);
 
     // Otherwise, assume that we have a basic scene.
     return createBasicRRESRendererFromU8Archive(device, arc);
