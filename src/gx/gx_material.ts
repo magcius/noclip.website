@@ -189,6 +189,7 @@ export interface TevStage {
     indTexStage: GX.IndTexStageID;
     indTexFormat: GX.IndTexFormat;
     indTexBiasSel: GX.IndTexBiasSel;
+    indTexAlphaSel: GX.IndTexAlphaSel;
     indTexMatrix: GX.IndTexMtxID;
     indTexWrapS: GX.IndTexWrap;
     indTexWrapT: GX.IndTexWrap;
@@ -806,11 +807,40 @@ ${this.generateLightAttnFn(chan, lightName)}
         }
     }
 
+    private generateIndTexCoordBase(stage: TevStage) {
+        return `(t_IndTexCoord${stage.indTexStage})`;
+    }
+
+    private generateAlphaBumpSelChannel(stage: TevStage) {
+        const baseCoord = this.generateIndTexCoordBase(stage);
+        switch (stage.indTexAlphaSel) {
+        case GX.IndTexAlphaSel.S: return `${baseCoord}.x`;
+        case GX.IndTexAlphaSel.T: return `${baseCoord}.y`;
+        case GX.IndTexAlphaSel.U: return `${baseCoord}.z`;
+        default:
+            throw "whoops";
+        }
+    }
+
+    private generateAlphaBumpSel(stage: TevStage) {
+        const baseCoord = this.generateAlphaBumpSelChannel(stage);
+        switch (stage.indTexFormat) {
+        case GX.IndTexFormat._8: return `TevMask(${baseCoord}, 0xF8)`;
+        case GX.IndTexFormat._5: return `TevMask(${baseCoord}, 0xE0)`;
+        case GX.IndTexFormat._4: return `TevMask(${baseCoord}, 0xF0)`;
+        case GX.IndTexFormat._3: return `TevMask(${baseCoord}, 0xF8)`;
+        default:
+            throw "whoops";
+        }
+    }
+
     private generateRas(stage: TevStage) {
         switch (stage.channelId) {
-        case GX.RasColorChannelID.COLOR0A0:   return `v_Color0`;
-        case GX.RasColorChannelID.COLOR1A1:   return `v_Color1`;
-        case GX.RasColorChannelID.COLOR_ZERO: return `vec4(0, 0, 0, 0)`;
+        case GX.RasColorChannelID.COLOR0A0:     return `v_Color0`;
+        case GX.RasColorChannelID.COLOR1A1:     return `v_Color1`;
+        case GX.RasColorChannelID.ALPHA_BUMP:   return `vec4(${this.generateAlphaBumpSel(stage)})`;
+        case GX.RasColorChannelID.ALPHA_BUMP_N: return `vec4(${this.generateAlphaBumpSel(stage)} * (255.0/248.0))`;
+        case GX.RasColorChannelID.COLOR_ZERO:   return `vec4(0, 0, 0, 0)`;
         default:
             throw new Error(`whoops ${stage.channelId}`);
         }
@@ -1024,7 +1054,7 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTevTexCoordIndTexCoord(stage: TevStage): string {
-        const baseCoord = `(t_IndTexCoord${stage.indTexStage})`;
+        const baseCoord = this.generateIndTexCoordBase(stage);
         switch (stage.indTexFormat) {
         case GX.IndTexFormat._8: return baseCoord;
         default:
@@ -1033,16 +1063,16 @@ ${this.generateLightAttnFn(chan, lightName)}
     }
 
     private generateTevTexCoordIndirectMtx(stage: TevStage): string {
-        const indTevCoord = `(${this.generateTevTexCoordIndTexCoord(stage)}${this.generateTevTexCoordIndTexCoordBias(stage)})`;
+        const indTexCoord = `(${this.generateTevTexCoordIndTexCoord(stage)}${this.generateTevTexCoordIndTexCoordBias(stage)})`;
 
         switch (stage.indTexMatrix) {
-        case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTevCoord}, 0.0))`;
-        case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTevCoord}, 0.0))`;
-        case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTevCoord}, 0.0))`;
+        case GX.IndTexMtxID._0:  return `Mul(u_IndTexMtx[0], vec4(${indTexCoord}, 0.0))`;
+        case GX.IndTexMtxID._1:  return `Mul(u_IndTexMtx[1], vec4(${indTexCoord}, 0.0))`;
+        case GX.IndTexMtxID._2:  return `Mul(u_IndTexMtx[2], vec4(${indTexCoord}, 0.0))`;
         // TODO(jstpierre): These other options. BossBakkunPlanet.arc uses them.
         default:
             console.warn(`Unimplemented indTexMatrix mode: ${stage.indTexMatrix}`);
-            return `${indTevCoord}.xy`;
+            return `${indTexCoord}.xy`;
         }
     }
 
@@ -1335,6 +1365,7 @@ float TevPerCompGT(float a, float b) { return float(a >  b); }
 float TevPerCompEQ(float a, float b) { return float(a == b); }
 vec3 TevPerCompGT(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
 vec3 TevPerCompEQ(vec3 a, vec3 b) { return vec3(greaterThan(a, b)); }
+float TevMask(float n, int mask) { return float(int((n * 255.0)) & mask) / 255.0; }
 
 void main() {
     vec4 s_kColor0   = u_KonstColor[0];
@@ -1555,15 +1586,15 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
         const konstAlphaSel: GX.KonstAlphaSel = ((i & 1) ? (ksel >>> 19) : (ksel >>> 9)) & 0x1F;
 
         const indCmd = r.bp[GX.BPRegister.IND_CMD0_ID + i];
-        const indTexStage: GX.IndTexStageID =   (indCmd >>>  0) & 0x03;
-        const indTexFormat: GX.IndTexFormat =   (indCmd >>>  2) & 0x03;
-        const indTexBiasSel: GX.IndTexBiasSel = (indCmd >>>  4) & 0x07;
-        // alpha sel
-        const indTexMatrix: GX.IndTexMtxID =    (indCmd >>>  9) & 0x0F;
-        const indTexWrapS: GX.IndTexWrap =      (indCmd >>> 13) & 0x07;
-        const indTexWrapT: GX.IndTexWrap =      (indCmd >>> 16) & 0x07;
-        const indTexUseOrigLOD: boolean =    !!((indCmd >>> 19) & 0x01);
-        const indTexAddPrev: boolean =       !!((indCmd >>> 20) & 0x01);
+        const indTexStage: GX.IndTexStageID =     (indCmd >>>  0) & 0x03;
+        const indTexFormat: GX.IndTexFormat =     (indCmd >>>  2) & 0x03;
+        const indTexBiasSel: GX.IndTexBiasSel =   (indCmd >>>  4) & 0x07;
+        const indTexAlphaSel: GX.IndTexAlphaSel = (indCmd >>>  7) & 0x03;
+        const indTexMatrix: GX.IndTexMtxID =      (indCmd >>>  9) & 0x0F;
+        const indTexWrapS: GX.IndTexWrap =        (indCmd >>> 13) & 0x07;
+        const indTexWrapT: GX.IndTexWrap =        (indCmd >>> 16) & 0x07;
+        const indTexUseOrigLOD: boolean =      !!((indCmd >>> 19) & 0x01);
+        const indTexAddPrev: boolean =         !!((indCmd >>> 20) & 0x01);
 
         const rasSwapTableRG = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2)];
         const rasSwapTableBA = r.bp[GX.BPRegister.TEV_KSEL_0_ID + (rswap * 2) + 1];
@@ -1596,7 +1627,7 @@ export function parseTevStages(r: DisplayListRegisters, numTevs: number): TevSta
             konstColorSel, konstAlphaSel,
             rasSwapTable, texSwapTable,
 
-            indTexStage, indTexFormat, indTexBiasSel, indTexMatrix, indTexWrapS, indTexWrapT, indTexAddPrev, indTexUseOrigLOD,
+            indTexStage, indTexFormat, indTexBiasSel, indTexAlphaSel, indTexMatrix, indTexWrapS, indTexWrapT, indTexAddPrev, indTexUseOrigLOD,
         };
 
         tevStages.push(tevStage);
