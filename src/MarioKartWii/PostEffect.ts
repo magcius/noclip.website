@@ -100,8 +100,6 @@ void main() {
 }
 
 class EggBloomBlurProgram extends EggBloomBaseProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
-
     constructor(tapCount: number, numPasses: number, intensity: number, radius: number)  {
         super();
 
@@ -138,8 +136,6 @@ ${code}
 }
 
 class EggBloomCombineProgram extends EggBloomBaseProgram {
-    public vert = GfxShaderLibrary.fullscreenVS;
-
     constructor(numPasses: number)  {
         super();
 
@@ -180,7 +176,7 @@ export class EggBloom {
     private compositeProgram: GfxProgram;
     private compositeMegaState = copyMegaState(fullscreenMegaState);
 
-    private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
+    private textureMapping: TextureMapping[] = nArray(2, () => new TextureMapping());
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private pblm: BBLM) {
         // Threshold settings.
@@ -272,7 +268,7 @@ export class EggBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(device, cache, passRenderer);
             });
         });
 
@@ -288,7 +284,7 @@ export class EggBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(device, cache, passRenderer);
             });
         });
 
@@ -304,7 +300,7 @@ export class EggBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(device, cache, passRenderer);
             });
         });
 
@@ -320,7 +316,7 @@ export class EggBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsample4ColorResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(device, cache, passRenderer);
             });
         });
 
@@ -336,7 +332,7 @@ export class EggBloom {
                 renderInst.setMegaStateFlags(fullscreenMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(device, cache, passRenderer);
             });
         });
 
@@ -352,9 +348,9 @@ export class EggBloom {
                 renderInst.setGfxProgram(this.compositeProgram);
                 renderInst.setMegaStateFlags(this.compositeMegaState);
                 this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsample4ColorResolveTextureID);
-                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(downsample8ColorResolveTextureID);
+                this.textureMapping[1].gfxTexture = scope.getResolveTextureForID(downsample8ColorResolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
-                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+                renderInst.drawOnPass(device, cache, passRenderer);
             });
         });
     }
