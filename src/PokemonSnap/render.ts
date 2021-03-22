@@ -13,8 +13,7 @@ import { TextureMapping } from '../TextureHolder';
 import { GfxRenderInstManager, makeSortKey, GfxRendererLayer } from '../gfx/render/GfxRenderInstManager';
 import { computeViewMatrixSkybox, computeViewMatrix } from '../Camera';
 import { fillVec4, fillMatrix4x2, fillMatrix4x3, fillMatrix4x4, fillVec4v } from '../gfx/helpers/UniformBufferHelpers';
-import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY } from '../MathHelpers';
-import { J3DCalcBBoardMtx, J3DCalcYBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
+import { clamp, computeModelMatrixSRT, Vec3One, Vec3Zero, Vec3UnitY, calcBillboardMatrix, CalcBillboardFlags } from '../MathHelpers';
 import { LevelGlobals } from './actor';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
 
@@ -175,9 +174,9 @@ class DrawCallInstance {
         for (let i = 0; i < this.drawMatrices.length; i++) {
             mat4.mul(modelViewScratch, viewMatrixScratch, this.drawMatrices[i]);
             if (this.billboard & 8)
-                J3DCalcBBoardMtx(modelViewScratch, modelViewScratch);
+                calcBillboardMatrix(modelViewScratch, modelViewScratch, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
             else if (this.billboard & 2)
-                J3DCalcYBBoardMtx(modelViewScratch, modelViewScratch);
+                calcBillboardMatrix(modelViewScratch, modelViewScratch, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
             offs += fillMatrix4x3(mappedF32, offs, modelViewScratch);
         }
 

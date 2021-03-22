@@ -1,7 +1,7 @@
 
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import * as PLB from './plb';
-import { assert } from "../util";
+import { align, assert } from "../util";
 import { DataStream } from "./DataStream";
 
 export function normalizeTextureName(textureName: string): string {
@@ -103,14 +103,12 @@ function getTextureFormatGetBytesPerPixel(fmt: TextureFormat): number {
 }
 
 function calcTextureByteSize(fmt: TextureFormat, width: number, height: number): number {
-    height = Math.max(height, 4);
-    width = Math.max(width, 4);
     switch (fmt) {
     case TextureFormat.DXT1:
-        return (width * height) >>> 1;
+        return (align(width, 4) * align(height, 4)) >>> 1;
     case TextureFormat.DXT3:
     case TextureFormat.DXT5:
-        return width * height;
+        return align(width, 4) * align(height, 4);
     default:
         return getTextureFormatGetBytesPerPixel(fmt) * width * height;
     }

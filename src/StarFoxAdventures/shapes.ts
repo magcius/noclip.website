@@ -1,4 +1,5 @@
 import { mat4, ReadonlyMat4, vec3 } from 'gl-matrix';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 import { Camera, computeViewMatrix } from '../Camera';
 import { colorCopy, colorNewFromRGBA, White } from '../Color';
 import { drawWorldSpaceAABB, drawWorldSpacePoint, drawWorldSpaceText, getDebugOverlayCanvas2D } from '../DebugJunk';
@@ -14,8 +15,7 @@ import { nArray } from '../util';
 
 import { MaterialRenderContext, SFAMaterial } from './materials';
 import { ModelRenderContext } from './models';
-import { arrayBufferSliceFromDataView, computeModelView } from './util';
-
+import { computeModelView } from './util';
 
 class MyShapeHelper {
     public inputState: GfxInputState;
@@ -115,7 +115,7 @@ export class ShapeGeometry {
 
     constructor(private vtxArrays: GX_Array[], vcd: GX_VtxDesc[], vat: GX_VtxAttrFmt[][], displayList: DataView, private isDynamic: boolean) {
         this.vtxLoader = compileVtxLoaderMultiVat(vat, vcd);
-        this.loadedVertexData = this.vtxLoader.parseDisplayList(arrayBufferSliceFromDataView(displayList));
+        this.loadedVertexData = this.vtxLoader.parseDisplayList(ArrayBufferSlice.fromView(displayList));
         this.vtxLoader = compilePartialVtxLoader(this.vtxLoader, this.loadedVertexData);
         this.reloadVertices();
     }

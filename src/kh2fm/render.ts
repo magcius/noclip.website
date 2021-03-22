@@ -16,20 +16,14 @@ import { makeStaticDataBuffer } from '../gfx/helpers/BufferHelpers';
 import { fillMatrix4x4, fillMatrix4x3 } from '../gfx/helpers/UniformBufferHelpers';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import ArrayBufferSlice from '../ArrayBufferSlice';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
 
 export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    const width = texture.width();
-    const height = texture.height();
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());
     const name = `${baseName}_tex_${("000" + texture.index).slice(-3)}`
-    canvas.width = width;
-    canvas.height = height;
     canvas.title = name;
 
-    const context = canvas.getContext("2d")!;
-    const imgData = context.createImageData(canvas.width, canvas.height);
-    imgData.data.set(texture.pixels());
-    context.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', texture.parent.format);
@@ -37,18 +31,9 @@ export function textureToCanvas(texture: MAP.Texture, baseName: string): Viewer.
 }
 
 export function textureAnimationToCanvas(textureAnim: MAP.TextureAnimation, parentTexture: MAP.Texture, baseName: string): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    const width = textureAnim.sheetWidth;
-    const height = textureAnim.sheetHeight;
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(textureAnim.pixels), textureAnim.sheetWidth, textureAnim.sheetHeight);
     const name = `${baseName}_tex_${("000" + parentTexture.index).slice(-3)}_texa`
-    canvas.width = width;
-    canvas.height = height;
     canvas.title = name;
-
-    const context = canvas.getContext("2d")!;
-    const imgData = context.createImageData(canvas.width, canvas.height);
-    imgData.data.set(textureAnim.pixels);
-    context.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', parentTexture.parent.format);

@@ -26,7 +26,7 @@ import { LightDataHolder, LightDirector, LightAreaHolder } from './LightData';
 import { SceneNameObjListExecutor, DrawBufferType, DrawType, NameObjHolder, NameObj, GameBits } from './NameObj';
 import { EffectSystem } from './EffectSystem';
 
-import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder } from './Actors/MiscActor';
+import { AirBubbleHolder, WaterPlantDrawInit, TrapezeRopeDrawInit, SwingRopeGroup, ElectricRailHolder, PriorDrawAirHolder, CoinRotater, GalaxyNameSortTable, MiniatureGalaxyHolder, HeatHazeDirector, CoinHolder, SpinDriverPathDrawInit } from './Actors/MiscActor';
 import { getNameObjFactoryTableEntry, PlanetMapCreator, NameObjFactoryTableEntry } from './NameObjFactory';
 import { ZoneAndLayer, LayerId, LiveActorGroupArray, getJMapInfoTrans, getJMapInfoRotate, ResourceHolder } from './LiveActor';
 import { NoclipLegacyActorSpawner } from './Actors/LegacyActor';
@@ -473,6 +473,7 @@ export class SMGRenderer implements Viewer.SceneGfx {
                 this.drawXlu(passRenderer, DrawBufferType.EnemyDecoration);
                 this.drawXlu(passRenderer, DrawBufferType.TornadoMario);
                 // executeDrawListXlu()
+                this.execute(passRenderer, DrawType.SpinDriverPathDrawer);
                 this.drawXlu(passRenderer, 0x18);
 
                 this.execute(passRenderer, DrawType.ShadowSurface);
@@ -1005,6 +1006,7 @@ export class SceneObjHolder {
     public shadowControllerHolder: ShadowControllerHolder | null = null;
     public swingRopeGroup: SwingRopeGroup | null = null;
     public trapezeRopeDrawInit: TrapezeRopeDrawInit | null = null;
+    public spinDriverPathDrawInit: SpinDriverPathDrawInit | null = null;
     public mapPartsRailGuideHolder: MapPartsRailGuideHolder | null = null;
     public electricRailHolder: ElectricRailHolder | null = null;
     public heatHazeDirector: HeatHazeDirector | null = null;
@@ -1088,6 +1090,8 @@ export class SceneObjHolder {
             return this.swingRopeGroup;
         else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
             return this.trapezeRopeDrawInit;
+        else if (sceneObj === SceneObj.SpinDriverPathDrawInit)
+            return this.spinDriverPathDrawInit;
         else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
             return this.mapPartsRailGuideHolder;
         else if (sceneObj === SceneObj.ElectricRailHolder)
@@ -1162,6 +1166,8 @@ export class SceneObjHolder {
             this.swingRopeGroup = new SwingRopeGroup(this);
         else if (sceneObj === SceneObj.TrapezeRopeDrawInit)
             this.trapezeRopeDrawInit = new TrapezeRopeDrawInit(this);
+        else if (sceneObj === SceneObj.SpinDriverPathDrawInit)
+            this.spinDriverPathDrawInit = new SpinDriverPathDrawInit(this);
         else if (sceneObj === SceneObj.MapPartsRailGuideHolder)
             this.mapPartsRailGuideHolder = new MapPartsRailGuideHolder(this);
         else if (sceneObj === SceneObj.ElectricRailHolder)

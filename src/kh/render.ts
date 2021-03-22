@@ -18,20 +18,14 @@ import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers'
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
 import { GfxRenderHelper } from '../gfx/render/GfxRenderHelper';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export function textureToCanvas(texture: BinTex.Texture): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    const width = texture.width();
-    const height = texture.height();
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels()), texture.width(), texture.height());
     const name = texture.name();
-    canvas.width = width;
-    canvas.height = height;
     canvas.title = name;
 
-    const context = canvas.getContext("2d")!;
-    const imgData = context.createImageData(canvas.width, canvas.height);
-    imgData.data.set(texture.pixels());
-    context.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', texture.parent.format);

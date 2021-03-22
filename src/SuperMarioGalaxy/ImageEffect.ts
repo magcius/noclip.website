@@ -20,30 +20,34 @@ import { MathConstants } from "../MathHelpers";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
+import { GXShaderLibrary } from "../gx/gx_material";
 
 const scratchVec3 = vec3.create();
 
 const ImageEffectShaderLib = `
 ${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.monochromeNTSC}
+${GXShaderLibrary.TevOverflow}
 
-float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
-vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b)); }
+vec2 BlurAspect(PD_SAMPLER_2D(t_Texture)) {
+    vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));
+    vec2 t_Aspect = vec2((t_Size.y / t_Size.x) / (3.0/4.0), 1.0);
+    return t_Aspect;
+}
 `;
 
-function generateBlurFunction(functionName: string, tapCount: number, radiusStr: string, intensityStr: string, angleOffset: number = 0.0): string {
+export function generateBlurFunction(functionName: string, tapCount: number, radiusStr: string, intensityPerTapStr: string, angleOffset: number = 0.0): string {
     let S = `
-vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord) {
+vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord, in vec2 t_Aspect) {
     vec3 c = vec3(0.0);
 `;
 
-    const aspect = 4/3;
     for (let i = 0; i < tapCount; i++) {
         const theta = angleOffset + (MathConstants.TAU * (i / tapCount));
-        const x = Math.cos(theta), y = aspect * -Math.sin(theta);
+        const x = Math.cos(theta), y = -Math.sin(theta);
 
         S += `
-    c += (texture(PU_SAMPLER_2D(t_Texture), t_TexCoord + vec2(${glslGenerateFloat(x)} * ${radiusStr}, ${glslGenerateFloat(y)} * ${radiusStr})).rgb * ${intensityStr});`;
+    c += (texture(PU_SAMPLER_2D(t_Texture), t_TexCoord + t_Aspect * vec2(${glslGenerateFloat(x)} * ${radiusStr}, ${glslGenerateFloat(y)} * ${radiusStr})).rgb * ${intensityPerTapStr});`;
     }
 
     S += `
@@ -159,12 +163,12 @@ abstract class BloomPassBlurProgram extends BloomPassBaseProgram {
 
         for (let i = 0; i < radiusL.length; i++) {
             const funcName = `BlurPass${i}`;
-            const radius = radiusL[i];
+            const radius = -radiusL[i];
             const radiusStr = radius.toFixed(5);
             const angleOffset = ofsL[i];
             funcs += generateBlurFunction(funcName, tapCount, radiusStr, intensityVar, angleOffset);
             main += `
-    f += TevOverflow(${funcName}(PP_SAMPLER_2D(u_Texture), v_TexCoord));`;
+    f += TevOverflow(${funcName}(PP_SAMPLER_2D(u_Texture), v_TexCoord, t_Aspect));`;
         }
 
         this.frag = `
@@ -177,6 +181,8 @@ ${funcs}
 
 void main() {
     vec3 f = vec3(0.0);
+    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
+
 ${main}
 `;
     }
@@ -226,7 +232,9 @@ export class BloomEffect extends ImageEffectBase {
 
     private textureMapping: TextureMapping[] = nArray(1, () => new TextureMapping());
 
-    private targetColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+    private target2ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+    private target4ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
+    private target8ColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
 
     constructor(sceneObjHolder: SceneObjHolder) {
         super(sceneObjHolder, 'BloomEffect');
@@ -271,13 +279,16 @@ export class BloomEffect extends ImageEffectBase {
         const device = sceneObjHolder.modelCache.device;
 
         const bloomObjectsTargetDesc = builder.getRenderTargetDescription(bloomObjectsTargetID);
-        const targetWidth = bloomObjectsTargetDesc.width >> 2;
-        const targetHeight = bloomObjectsTargetDesc.height >> 2;
-        this.targetColorDesc.setDimensions(targetWidth, targetHeight, 1);
 
-        const downsampleColorTargetID = builder.createRenderTargetID(this.targetColorDesc, 'Bloom Downsample');
-        const blurL1ColorTargetID = builder.createRenderTargetID(this.targetColorDesc, 'Bloom Blur L1');
-        const blurL2ColorTargetID = builder.createRenderTargetID(this.targetColorDesc, 'Bloom Blur L2');
+        this.target2ColorDesc.setDimensions(bloomObjectsTargetDesc.width >>> 1, bloomObjectsTargetDesc.height >>> 1, 1);
+        this.target4ColorDesc.setDimensions(this.target2ColorDesc.width >>> 1, this.target2ColorDesc.height >>> 1, 1);
+        this.target8ColorDesc.setDimensions(this.target4ColorDesc.width >>> 1, this.target4ColorDesc.height >>> 1, 1);
+
+        const downsample2ColorTargetID = builder.createRenderTargetID(this.target2ColorDesc, 'Bloom Downsample 1/2');
+        const downsample4ColorTargetID = builder.createRenderTargetID(this.target4ColorDesc, 'Bloom Downsample 1/4');
+        const blurL1ColorTargetID = builder.createRenderTargetID(this.target4ColorDesc, 'Bloom Blur L1');
+        const downsample8ColorTargetID = builder.createRenderTargetID(this.target8ColorDesc, 'Bloom Blur Downsample 1/8');
+        const blurL2ColorTargetID = builder.createRenderTargetID(this.target8ColorDesc, 'Bloom Blur L2 (Bokeh)');
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setAllowSkippingIfPipelineNotReady(false);
@@ -288,16 +299,32 @@ export class BloomEffect extends ImageEffectBase {
 
         // Downsample and threshold.
         builder.pushPass((pass) => {
-            pass.setDebugName('Bloom Downsample');
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsampleColorTargetID);
+            pass.setDebugName('Bloom Downsample 1/2');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample2ColorTargetID);
 
-            const bloomObjectsResolveTextureID = builder.resolveRenderTarget(bloomObjectsTargetID);
-            pass.attachResolveTexture(bloomObjectsResolveTextureID);
+            const resolveTextureID = builder.resolveRenderTarget(bloomObjectsTargetID);
+            pass.attachResolveTexture(resolveTextureID);
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.thresholdProgram);
                 renderInst.setMegaStateFlags(fullscreenMegaState);
-                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomObjectsResolveTextureID);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Downsample 1/4');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample4ColorTargetID);
+
+            const resolveTextureID = builder.resolveRenderTarget(downsample2ColorTargetID);
+            pass.attachResolveTexture(resolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blitProgram);
+                renderInst.setMegaStateFlags(fullscreenMegaState);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
             });
@@ -308,32 +335,45 @@ export class BloomEffect extends ImageEffectBase {
             pass.setDebugName('Bloom Blur L1');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurL1ColorTargetID);
 
-            const bloomDownsampleResolveTextureID = builder.resolveRenderTarget(downsampleColorTargetID);
-            pass.attachResolveTexture(bloomDownsampleResolveTextureID);
+            const resolveTextureID = builder.resolveRenderTarget(downsample4ColorTargetID);
+            pass.attachResolveTexture(resolveTextureID);
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.blur1Program);
                 renderInst.setMegaStateFlags(fullscreenMegaState);
-                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomDownsampleResolveTextureID);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
             });
         });
 
-        // TODO(jstpierre): Downsample blur / bokeh as well.
-
-        // Blur L2.
         builder.pushPass((pass) => {
-            pass.setDebugName('Bloom Blur L2');
+            pass.setDebugName('Bloom Blur Downsample 1/8');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample8ColorTargetID);
+
+            const resolveTextureID = builder.resolveRenderTarget(blurL1ColorTargetID);
+            pass.attachResolveTexture(resolveTextureID);
+
+            pass.exec((passRenderer, scope) => {
+                renderInst.setGfxProgram(this.blitProgram);
+                renderInst.setMegaStateFlags(fullscreenMegaState);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
+                renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+
+        builder.pushPass((pass) => {
+            pass.setDebugName('Bloom Blur L2 (Bokeh)');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurL2ColorTargetID);
 
-            const bloomBlurL1ResolveTextureID = builder.resolveRenderTarget(blurL1ColorTargetID);
-            pass.attachResolveTexture(bloomBlurL1ResolveTextureID);
+            const resolveTextureID = builder.resolveRenderTarget(downsample8ColorTargetID);
+            pass.attachResolveTexture(resolveTextureID);
 
             pass.exec((passRenderer, scope) => {
                 renderInst.setGfxProgram(this.blur2Program);
                 renderInst.setMegaStateFlags(fullscreenMegaState);
-                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(bloomBlurL1ResolveTextureID);
+                this.textureMapping[0].gfxTexture = scope.getResolveTextureForID(resolveTextureID);
                 renderInst.setSamplerBindingsFromTextureMappings(this.textureMapping);
                 renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
             });
@@ -412,7 +452,8 @@ ${BloomSimplePSCommon}
 ${generateBlurFunction(`Blur`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap))}
 
 void main() {
-    float t_BlurredValue = saturate(Blur(PP_SAMPLER_2D(u_Texture), v_TexCoord).r);
+    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
+    float t_BlurredValue = saturate(Blur(PP_SAMPLER_2D(u_Texture), v_TexCoord, t_Aspect).r);
     float t_Value = t_BlurredValue * u_Intensity;
     gl_FragColor = vec4(t_Value, t_Value, t_Value, 0.0);
 }
@@ -572,7 +613,8 @@ void main() {
     // Do the "indirect texture lookup"
     float t_BlurAmount = saturate(invlerp(t_TexCoord, u_BlurMinDist, u_BlurMaxDist));
 
-    vec3 t_BlurredSample = Blur(PP_SAMPLER_2D(u_TextureColor), v_TexCoord);
+    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
+    vec3 t_BlurredSample = Blur(PP_SAMPLER_2D(u_TextureColor), v_TexCoord, t_Aspect);
     gl_FragColor = vec4(t_BlurredSample, t_BlurAmount * u_Intensity);
 }
 `;

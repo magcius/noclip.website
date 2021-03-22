@@ -24,6 +24,7 @@ import { Color, TransparentBlack, colorNewCopy, colorFromRGBA } from '../Color';
 import { AttachmentStateSimple, setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
 import { reverseDepthForCompareMode } from '../gfx/helpers/ReversedDepthHelpers';
 import { GfxrAttachmentSlot, makeBackbufferDescSimple } from '../gfx/render/GfxRenderGraph';
+import { convertToCanvasData } from '../gfx/helpers/TextureConversionHelpers';
 
 export enum ColorKind {
     MAT0, MAT1, AMB0, AMB1,
@@ -187,10 +188,7 @@ export class GXViewerTexture implements Viewer.Texture {
             this.surfaces.push(canvas);
 
             promises.push(GX_Texture.decodeTexture(mipLevel).then((rgbaTexture) => {
-                const ctx = canvas.getContext('2d')!;
-                const imgData = new ImageData(mipLevel.width, mipLevel.height);
-                imgData.data.set(new Uint8Array(rgbaTexture.pixels.buffer));
-                ctx.putImageData(imgData, 0, 0);
+                convertToCanvasData(canvas, ArrayBufferSlice.fromView(rgbaTexture.pixels));
             }));
         }
 

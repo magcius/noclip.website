@@ -267,9 +267,10 @@ function parseTEX0(buffer: ArrayBufferSlice): TEX0 {
     const width = view.getUint16(0x1C);
     const height = view.getUint16(0x1E);
     const format: GX.TexFormat = view.getUint32(0x20);
-    const mipCount = view.getUint32(0x24);
-    const minLOD = view.getFloat32(0x28) * 1/8;
-    const maxLOD = view.getFloat32(0x2C) * 1/8;
+    const mipCountRaw = view.getUint32(0x24);
+    const minLOD = view.getFloat32(0x28);
+    const maxLOD = view.getFloat32(0x2C);
+    const mipCount = Math.ceil(Math.min(mipCountRaw, maxLOD + 1));
 
     const data = buffer.subarray(dataOffs);
 
@@ -290,7 +291,7 @@ function parseMDL0_TevEntry(buffer: ArrayBufferSlice, r: DisplayListRegisters, n
 
     const index = view.getUint32(0x08);
     const numStages = view.getUint8(0x0C);
-    assert(numStages === numStagesCheck);
+    // assert(numStages === numStagesCheck);
 
     const dlOffs = 0x20;
     displayListRegistersRun(r, buffer.subarray(dlOffs, 480));
@@ -532,11 +533,18 @@ function parseMDL0_MaterialEntry(buffer: ArrayBufferSlice, version: number): MDL
     const texSrts: MDL0_TexSrtEntry[] = [];
     for (let i = 0; i < 8; i++) {
         // SRT
-        const scaleS = view.getFloat32(texSrtTableIdx + 0x00);
-        const scaleT = view.getFloat32(texSrtTableIdx + 0x04);
-        const rotation = view.getFloat32(texSrtTableIdx + 0x08);
-        const translationS = view.getFloat32(texSrtTableIdx + 0x0C);
-        const translationT = view.getFloat32(texSrtTableIdx + 0x10);
+        const enum Flags {
+            SCALE_ONE  = 0x02,
+            ROT_ZERO   = 0x04,
+            TRANS_ZERO = 0x08,
+        }
+        const srtFlag: Flags = (srtFlags >>> i * 4) & 0x0F;
+
+        const scaleS = (srtFlag & Flags.SCALE_ONE) ? 1 : view.getFloat32(texSrtTableIdx + 0x00);
+        const scaleT = (srtFlag & Flags.SCALE_ONE) ? 1 : view.getFloat32(texSrtTableIdx + 0x04);
+        const rotation = (srtFlag & Flags.ROT_ZERO) ? 0 : view.getFloat32(texSrtTableIdx + 0x08);
+        const translationS = (srtFlag & Flags.TRANS_ZERO) ? 0 : view.getFloat32(texSrtTableIdx + 0x0C);
+        const translationT = (srtFlag & Flags.TRANS_ZERO) ? 0 : view.getFloat32(texSrtTableIdx + 0x10);
 
         const refCamera = view.getInt8(texMtxTableIdx + 0x00);
         const refLight = view.getInt8(texMtxTableIdx + 0x01);
@@ -881,6 +889,8 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
     const billboardMode: BillboardMode = view.getUint32(0x18);
     const billboardRefNodeId = view.getUint32(0x1C);
 
+    const modelMatrix = mat4.create();
+
     const scaleX = view.getFloat32(0x20);
     const scaleY = view.getFloat32(0x24);
     const scaleZ = view.getFloat32(0x28);
@@ -891,7 +901,6 @@ function parseMDL0_NodeEntry(buffer: ArrayBufferSlice, entryOffs: number, baseOf
     const translationY = view.getFloat32(0x3C);
     const translationZ = view.getFloat32(0x40);
 
-    const modelMatrix = mat4.create();
     computeModelMatrixSRT(modelMatrix, scaleX, scaleY, scaleZ, rotationX, rotationY, rotationZ, translationX, translationY, translationZ);
 
     // TODO(jstpierre): NW4R doesn't appear to use this anymore?

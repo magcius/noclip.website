@@ -3,11 +3,11 @@
 
 import { mat4, quat, ReadonlyMat4, ReadonlyVec3, vec2, vec3 } from 'gl-matrix';
 import { Camera } from '../../Camera';
-import { Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow } from '../../Color';
+import { Blue, Color, colorCopy, colorFromRGBA8, colorNewCopy, colorNewFromRGBA8, Green, OpaqueBlack, Red, White, Yellow } from '../../Color';
 import { buildEnvMtx } from '../../Common/JSYSTEM/J3D/J3DGraphBase';
 import * as RARC from '../../Common/JSYSTEM/JKRArchive';
 import { BTIData } from '../../Common/JSYSTEM/JUTTexture';
-import { drawWorldSpaceBasis, drawWorldSpacePoint, getDebugOverlayCanvas2D } from '../../DebugJunk';
+import { drawWorldSpaceBasis, drawWorldSpacePoint, drawWorldSpaceVector, getDebugOverlayCanvas2D } from '../../DebugJunk';
 import { makeStaticDataBuffer } from '../../gfx/helpers/BufferHelpers';
 import { getTriangleIndexCountForTopologyIndexCount, GfxTopology } from '../../gfx/helpers/TopologyHelpers';
 import { GfxBuffer, GfxBufferUsage, GfxDevice, GfxFormat, GfxInputLayout, GfxInputLayoutBufferDescriptor, GfxInputState, GfxVertexAttributeDescriptor, GfxVertexBufferFrequency } from '../../gfx/platform/GfxPlatform';
@@ -17,7 +17,7 @@ import { VertexAttributeInput } from '../../gx/gx_displaylist';
 import * as GX from '../../gx/gx_enum';
 import { getVertexInputLocation } from '../../gx/gx_material';
 import { ColorKind, GXMaterialHelperGfx, MaterialParams, PacketParams } from '../../gx/gx_render';
-import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
+import { clamp, clampRange, computeEulerAngleRotationFromSRTMatrix, computeMatrixWithoutScale, computeModelMatrixR, computeModelMatrixS, computeModelMatrixSRT, computeModelMatrixT, computeNormalMatrix, getMatrixAxisY, getMatrixAxisZ, getMatrixTranslation, invlerp, isNearZeroVec3, lerp, MathConstants, normToLength, saturate, scaleMatrix, setMatrixTranslation, transformVec3Mat4w0, transformVec3Mat4w1, Vec3NegX, Vec3NegY, vec3SetAll, Vec3UnitX, Vec3UnitY, Vec3UnitZ, Vec3Zero } from '../../MathHelpers';
 import { TextureMapping } from '../../TextureHolder';
 import { assert, assertExists, fallback, leftPad, mod, nArray } from '../../util';
 import * as Viewer from '../../viewer';
@@ -35,7 +35,7 @@ import { getDeltaTimeFrames, getObjectName, getTimeFrames, SceneObj, SceneObjHol
 import { getMapPartsArgMoveConditionType, MapPartsRailMover, MoveConditionType } from '../MapParts';
 import { HazeCube, isInWater, WaterAreaHolder, WaterInfo } from '../MiscMap';
 import { CalcAnimType, DrawBufferType, DrawType, MovementType, NameObj, NameObjAdaptor } from '../NameObj';
-import { isConnectedWithRail } from '../RailRider';
+import { isConnectedWithRail, RailRider } from '../RailRider';
 import { addShadowVolumeCylinder, initShadowController, initShadowSurfaceCircle, initShadowVolumeCylinder, initShadowVolumeFlatModel, initShadowVolumeSphere, onCalcShadow, onCalcShadowDropPrivateGravity, onCalcShadowDropPrivateGravityOneTime, onCalcShadowOneTime, setShadowDropLength, setShadowDropPosition, setShadowDropPositionPtr } from '../Shadow';
 import { calcNerveRate, isFirstStep, isGreaterEqualStep, isGreaterStep, isLessStep } from '../Spine';
 import { isExistStageSwitchSleep } from '../Switch';
@@ -2313,13 +2313,307 @@ export class SurprisedGalaxy extends LiveActor {
     }
 }
 
+export class SpinDriverPathDrawInit extends NameObj {
+    public normalColorTex: BTIData;
+    public greenTex: BTIData;
+    public pinkTex: BTIData;
+    public maskTex: BTIData;
+
+    public materialHelper: GXMaterialHelperGfx;
+
+    constructor(sceneObjHolder: SceneObjHolder) {
+        super(sceneObjHolder, `SpinDriverPathDrawInit`);
+
+        const arc = sceneObjHolder.modelCache.getObjectData('SpinDriverPath')!;
+        this.normalColorTex = loadBTIData(sceneObjHolder, arc, `NormalColor.bti`);
+        this.greenTex = loadBTIData(sceneObjHolder, arc, `Green.bti`);
+        this.pinkTex = loadBTIData(sceneObjHolder, arc, `Pink.bti`);
+        this.maskTex = loadBTIData(sceneObjHolder, arc, `Mask.bti`);
+
+        const mb = new GXMaterialBuilder('SpinDriverPathDrawer');
+        mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.TEXMTX0);
+        mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, false, GX.Register.PREV);
+        mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR_ZERO);
+        mb.setZMode(true, GX.CompareType.LEQUAL, false);
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.ONE);
+        mb.setUsePnMtxIdx(false);
+        this.materialHelper = new GXMaterialHelperGfx(mb.finish());
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.normalColorTex.destroy(device);
+        this.greenTex.destroy(device);
+        this.pinkTex.destroy(device);
+        this.maskTex.destroy(device);
+    }
+
+    public static requestArchives(sceneObjHolder: SceneObjHolder): void {
+        sceneObjHolder.modelCache.requestObjectData("SpinDriverPath");
+    }
+}
+
+function calcParabolicFunctionParam(dst: { coef2: number, coef1: number }, a: number, b: number): void {
+    const v0 = a * (a - b);
+    if (v0 > 0.0) {
+        const v1 = Math.sqrt(v0);
+        const v2 = (a + v1) / b;
+        const v3 = -a / v2**2;
+        dst.coef2 = v3;
+        dst.coef1 = v2 * v3 * -2.0;
+    } else {
+        dst.coef2 = -a;
+        dst.coef1 = a - b;
+    }
+}
+
+class ParabolicPath {
+    private startPos = vec3.create();
+    private axisY = vec3.create();
+    private axisZ = vec3.create();
+    private axisZLength: number;
+
+    public coef2: number = 0;
+    public coef1: number = 0;
+
+    public calcPosition(dst: vec3, t: number): void {
+        vec3.scaleAndAdd(dst, this.startPos, this.axisZ, t * this.axisZLength);
+        vec3.scaleAndAdd(dst, dst, this.axisY, (this.coef2 * t**2) + this.coef1*t);
+    }
+
+    public initFromMaxHeight(startPos: ReadonlyVec3, railEndPos: ReadonlyVec3, railStartPos: ReadonlyVec3): void {
+        vec3.sub(scratchVec3a, railStartPos, railEndPos);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        vec3.sub(scratchVec3b, railStartPos, startPos);
+        const dot = vec3.dot(scratchVec3a, scratchVec3b);
+        this.initFromUpVector(startPos, railEndPos, scratchVec3a, dot);
+    }
+
+    private initFromUpVector(startPos: ReadonlyVec3, railEndPos: ReadonlyVec3, up: ReadonlyVec3, dot: number): void {
+        vec3.copy(this.axisY, up);
+        vec3.sub(scratchVec3a, railEndPos, startPos);
+        const dot2 = vecKillElement(this.axisZ, scratchVec3a, this.axisY);
+        this.axisZLength = vec3.length(this.axisZ);
+        vec3.normalize(this.axisZ, this.axisZ);
+        // calcParabolicFunctionParam(this, dot, dot2);
+        vec3.copy(this.startPos, startPos);
+    }
+}
+
+class SpinDriverShootPath {
+    private railRider: RailRider;
+    private parabolicPath: ParabolicPath | null = null;
+
+    constructor(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, private startPosition: ReadonlyVec3) {
+        this.railRider = new RailRider(sceneObjHolder, infoIter);
+
+        if (this.railRider.getPointNum() <= 2) {
+            this.parabolicPath = new ParabolicPath();
+            this.parabolicPath.initFromMaxHeight(this.startPosition, this.railRider.endPos, this.railRider.startPos);
+        }
+    }
+
+    public getTotalLength(): number {
+        return this.railRider.getTotalLength();
+    }
+
+    public calcPosition(dst: vec3, t: number): void {
+        if (this.parabolicPath !== null) {
+            this.parabolicPath.calcPosition(dst, t);
+        } else {
+            const coord = this.getTotalLength() * t;
+            this.railRider.calcPosAtCoord(dst, coord);
+            const lerpAmt = getEaseOutValue(saturate(invlerp(0, 0.5, t)), 1.0, 0.0, 1.0);
+            vec3.lerp(dst, dst, this.startPosition, lerpAmt);
+        }
+    }
+
+    public calcDirection(dst: vec3, t: number, delta: number): void {
+        let t0: number, t1: number;
+
+        if (t <= 0.0 + delta) {
+            t0 = 0.0;
+            t1 = t;
+        } else if (t >= 1.0 - delta) {
+            t0 = 1.0 - delta;
+            t1 = 1.0;
+        } else {
+            t0 = t;
+            t1 = t + delta;
+        }
+
+        this.calcPosition(scratchVec3a, t0);
+        this.calcPosition(scratchVec3b, t1);
+        vec3.sub(dst, scratchVec3b, scratchVec3a);
+        vec3.normalize(dst, dst);
+    }
+
+    public shouldDraw(): boolean {
+        // TODO(jstpierre): Finish parabolic path code
+        return this.parabolicPath === null;
+    }
+
+    public debugDraw(sceneObjHolder: SceneObjHolder): void {
+        // this.railRider.debugDrawRailLine(sceneObjHolder.viewerInput.camera);
+        /*
+        if (this.parabolicPath !== null) {
+            drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisY, 100, Green);
+            drawWorldSpaceVector(getDebugOverlayCanvas2D(), window.main.viewer.camera.clipFromWorldMatrix, this.startPosition, this.parabolicPath.axisZ, 100, Blue);
+        }
+        */
+    }
+}
+
+const enum SpinDriverColor { Normal, Green, Pink }
+
+class SpinDriverPathDrawer extends LiveActor {
+    private ddraw: TDDraw = new TDDraw();
+    private coords: number[] = [];
+    private positions: vec3[] = [];
+    private axisRights: vec3[] = [];
+    private axisUps: vec3[] = [];
+    private color: SpinDriverColor = SpinDriverColor.Normal;
+    private fadeScale = 1.0;
+
+    constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, private shootPath: SpinDriverShootPath) {
+        super(zoneAndLayer, sceneObjHolder, 'SpinDriverPathDrawer');
+
+        connectToScene(sceneObjHolder, this, MovementType.None, CalcAnimType.None, DrawBufferType.None, DrawType.SpinDriverPathDrawer);
+
+        this.ddraw.setVtxDesc(GX.Attr.POS, true);
+        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+
+        this.initPositionList(75.0, 25.0);
+    }
+
+    public setColor(color: SpinDriverColor): void {
+        this.color = color;
+    }
+
+    private initPositionList(pointSpacing: number, v2: number): void {
+        this.shootPath.calcPosition(scratchVec3a, 0);
+        this.positions.push(vec3.clone(scratchVec3a));
+        this.shootPath.calcDirection(scratchVec3b, 0, 0.01);
+        makeAxisVerticalZX(scratchVec3c, scratchVec3b);
+        this.axisUps.push(vec3.clone(scratchVec3c));
+        vec3.cross(scratchVec3b, scratchVec3c, scratchVec3b);
+        this.axisRights.push(vec3.clone(scratchVec3b));
+
+        const length = this.shootPath.getTotalLength();
+        const numPoints = ((length / pointSpacing) | 0);
+
+        for (let i = 1; i < numPoints; i++) {
+            const t = i / numPoints;
+            this.coords.push(t);
+
+            this.shootPath.calcPosition(scratchVec3a, t);
+            this.positions.push(vec3.clone(scratchVec3a));
+            this.shootPath.calcDirection(scratchVec3b, t, 0.01);
+            makeAxisVerticalZX(scratchVec3c, scratchVec3b);
+            this.axisUps.push(vec3.clone(scratchVec3c));
+            vec3.cross(scratchVec3b, scratchVec3c, scratchVec3b);
+            this.axisRights.push(vec3.clone(scratchVec3b));
+        }
+    }
+
+    private sendPoint(pos: ReadonlyVec3, s: number, t: number): void {
+        this.ddraw.position3vec3(pos);
+        this.ddraw.texCoord2f32(GX.Attr.TEX0, s, t);
+    }
+
+    public draw(sceneObjHolder: SceneObjHolder, renderInstManager: GfxRenderInstManager, viewerInput: Viewer.ViewerRenderInput): void {
+        super.draw(sceneObjHolder, renderInstManager, viewerInput);
+
+        if (!isValidDraw(this) || !this.shootPath.shouldDraw())
+            return;
+
+        this.shootPath.debugDraw(sceneObjHolder);
+
+        const ddraw = this.ddraw;
+        ddraw.beginDraw();
+
+        const width = 100;
+
+        for (let i = 1; i < this.positions.length; i++) {
+            const i1 = i, i0 = i - 1;
+            const t0 = this.coords[i0], t1 = this.coords[i1];
+
+            ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+            vec3.scaleAndAdd(scratchVec3a, this.positions[i0], this.axisRights[i0], -width);
+            this.sendPoint(scratchVec3a, 0, t0);
+            vec3.scaleAndAdd(scratchVec3a, this.positions[i1], this.axisRights[i1], -width);
+            this.sendPoint(scratchVec3a, 0, t1);
+
+            this.sendPoint(this.positions[i0], 0.5, t0);
+            this.sendPoint(this.positions[i1], 0.5, t1);
+
+            vec3.scaleAndAdd(scratchVec3a, this.positions[i0], this.axisRights[i0], width);
+            this.sendPoint(scratchVec3a, 0, t0);
+            vec3.scaleAndAdd(scratchVec3a, this.positions[i1], this.axisRights[i1], width);
+            this.sendPoint(scratchVec3a, 0, t1);
+            ddraw.end();
+
+            ddraw.begin(GX.Command.DRAW_TRIANGLE_STRIP);
+            vec3.scaleAndAdd(scratchVec3a, this.positions[i0], this.axisUps[i0], -width);
+            this.sendPoint(scratchVec3a, 0, t0);
+            vec3.scaleAndAdd(scratchVec3a, this.positions[i1], this.axisUps[i1], -width);
+            this.sendPoint(scratchVec3a, 0, t1);
+
+            this.sendPoint(this.positions[i0], 0.5, t0);
+            this.sendPoint(this.positions[i1], 0.5, t1);
+
+            vec3.scaleAndAdd(scratchVec3a, this.positions[i0], this.axisUps[i0], width);
+            this.sendPoint(scratchVec3a, 0, t0);
+            vec3.scaleAndAdd(scratchVec3a, this.positions[i1], this.axisUps[i1], width);
+            this.sendPoint(scratchVec3a, 0, t1);
+            ddraw.end();
+        }
+
+        const spinDriverPathDrawInit = sceneObjHolder.spinDriverPathDrawInit!;
+        const materialHelper = spinDriverPathDrawInit.materialHelper;
+
+        if (this.color === SpinDriverColor.Normal)
+            spinDriverPathDrawInit.normalColorTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        else if (this.color === SpinDriverColor.Green)
+            spinDriverPathDrawInit.greenTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+        else if (this.color === SpinDriverColor.Pink)
+            spinDriverPathDrawInit.pinkTex.fillTextureMapping(materialParams.m_TextureMapping[0]);
+
+        const texMtx0 = materialParams.u_TexMtx[0];
+        mat4.identity(texMtx0);
+
+        const renderInst = ddraw.endDraw(renderInstManager.device, renderInstManager);
+        materialHelper.setOnRenderInst(renderInstManager.device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
+        renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
+        packetParams.clear();
+        mat4.copy(packetParams.u_PosMtx[0], viewerInput.camera.viewMatrix);
+        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        renderInstManager.submitRenderInst(renderInst);
+    }
+
+    public destroy(device: GfxDevice): void {
+        this.ddraw.destroy(device);
+    }
+}
+
 class SuperSpinDriver extends LiveActor {
+    private shootPath: SpinDriverShootPath;
+    private pathDrawer: SpinDriverPathDrawer;
+
     constructor(zoneAndLayer: ZoneAndLayer, sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter, colorArg: number) {
         super(zoneAndLayer, sceneObjHolder, getObjectName(infoIter));
 
         initDefaultPos(sceneObjHolder, this, infoIter);
         this.initModelManagerWithAnm(sceneObjHolder, "SuperSpinDriver");
         connectToSceneNoSilhouettedMapObjStrongLight(sceneObjHolder, this);
+
+        this.initEffectKeeper(sceneObjHolder, null);
 
         // initParamFromJMapInfo()
         const shadowDropLength = fallback(getJMapInfoArg1(infoIter), -1.0);
@@ -2337,16 +2631,23 @@ class SuperSpinDriver extends LiveActor {
             setShadowDropLength(this, null, 500.0);
         onCalcShadowOneTime(this);
 
+        this.shootPath = new SpinDriverShootPath(sceneObjHolder, infoIter, this.translation);
+        this.pathDrawer = new SpinDriverPathDrawer(zoneAndLayer, sceneObjHolder, this.shootPath);
+
         this.initColor(colorArg);
         startBck(this, 'Wait');
+
+        sceneObjHolder.create(SceneObj.SpinDriverPathDrawInit);
+        emitEffect(sceneObjHolder, this, 'EndGlow');
     }
 
     public static requestArchives(sceneObjHolder: SceneObjHolder, infoIter: JMapInfoIter): void {
         sceneObjHolder.modelCache.requestObjectData("SuperSpinDriver");
         sceneObjHolder.modelCache.requestObjectData("SuperSpinDriverShadow");
+        SpinDriverPathDrawInit.requestArchives(sceneObjHolder);
     }
 
-    private initColor(colorArg: number): void {
+    private initColor(colorArg: SpinDriverColor): void {
         startBtp(this, 'SuperSpinDriver');
         setBtpFrameAndStop(this, colorArg);
 
@@ -2357,6 +2658,8 @@ class SuperSpinDriver extends LiveActor {
         } else {
             startBrk(this, 'Pink');
         }
+
+        this.pathDrawer.setColor(colorArg);
     }
 }
 

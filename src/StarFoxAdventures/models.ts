@@ -11,13 +11,14 @@ import { GameInfo } from './scenes';
 import { SFAMaterial } from './materials';
 import { SFAAnimationController } from './animation';
 import { MaterialFactory } from './materials';
-import { dataSubarray, readUint32, mat4SetRowMajor, mat4SetCol, setInt8Clamped, setInt16Clamped } from './util';
+import { dataSubarray, readUint32, mat4SetRowMajor, setInt8Clamped, setInt16Clamped } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape } from './shapes';
 import { SceneRenderContext, SFARenderLists } from './render';
 import { Skeleton, SkeletonInstance } from './skeleton';
 import { loadModel, ModelVersion } from './modelloader';
+import { transformVec3Mat4w0 } from '../MathHelpers';
 
 interface Joint {
     parent: number;
@@ -372,10 +373,9 @@ export class ModelInstance {
                 // magnitude 1, which is required for full accuracy.
                 // For the correct and general formula to produce a normal matrix from a
                 // position matrix, see: <https://github.com/graphitemaster/normals_revisited>
-                mat4SetCol(scratchMtx0, 3, 0, 0, 0, 1);
-                vec3.transformMat4(pos, pos, scratchMtx0);
+                transformVec3Mat4w0(pos, scratchMtx0, pos);
 
-                setInt8Clamped(dst, bufferOffs, pos[0]);
+                setInt8Clamped(dst, bufferOffs + 0, pos[0]);
                 setInt8Clamped(dst, bufferOffs + 1, pos[1]);
                 setInt8Clamped(dst, bufferOffs + 2, pos[2]);
 

@@ -16,7 +16,7 @@ import { GfxBufferCoalescerCombo } from '../gfx/helpers/BufferHelpers';
 import { nArray, assertExists } from '../util';
 import { getDebugOverlayCanvas2D, drawWorldSpaceLine } from '../DebugJunk';
 import { colorCopy, Color } from '../Color';
-import { computeNormalMatrix, texEnvMtx } from '../MathHelpers';
+import { CalcBillboardFlags, calcBillboardMatrix, computeNormalMatrix, getMatrixAxisY, texEnvMtx } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { LoadedVertexDraw } from '../gx/gx_displaylist';
 import { arrayCopy } from '../gfx/platform/GfxPlatformUtil';
@@ -416,137 +416,43 @@ class MaterialInstance {
     }
 }
 
-const enum MtxCol {
-    X = 0, Y = 4, Z = 8,
+function Calc_BILLBOARD_STD(m: mat4, nodeMatrix: ReadonlyMat4): void {
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
 }
 
-function GetMtx34Scale(m: ReadonlyMat4, c: MtxCol): number {
-    return Math.hypot(m[c + 0], m[c + 1], m[c + 2]);
+function Calc_BILLBOARD_PERSP_STD(m: mat4, nodeMatrix: ReadonlyMat4): void {
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZSphere);
 }
 
-function SetMdlViewMtxSR(dst: mat4, scaleX: number, scaleY: number, scaleZ: number, rxx: number, rxy: number, rxz: number, ryx: number, ryy: number, ryz: number, rzx: number, rzy: number, rzz: number): void {
-    dst[0] =  scaleX * rxx;
-    dst[1] =  scaleX * rxy;
-    dst[2] =  scaleX * rxz;
-    dst[3] =  0.0;
-
-    dst[4] =  scaleY * ryx;
-    dst[5] =  scaleY * ryy;
-    dst[6] =  scaleY * ryz;
-    dst[7] =  0.0;
-
-    dst[8] =  scaleZ * rzx;
-    dst[9] =  scaleZ * rzy;
-    dst[10] = scaleZ * rzz;
-    dst[11] = 0.0;
-}
-
-const scratchVec3 = nArray(3, () => vec3.create());
-function Calc_BILLBOARD_STD(m: mat4, nodeMatrix: ReadonlyMat4, vy: vec3 = scratchVec3[0]): void {
-    vec3.set(vy, m[4], m[5], 0);
-    vec3.normalize(vy, vy);
-
-    const yx = vy[0], yy = vy[1];
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        yy, -yx, 0,
-        yx,  yy, 0,
-        0, 0, 1);
-}
-
-function Calc_BILLBOARD_PERSP_STD(m: mat4, nodeMatrix: ReadonlyMat4, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
-    vec3.set(vy, m[4], m[5], m[6]);
-    vec3.set(vz, -m[12], -m[13], -m[14]);
-    vec3.normalize(vz, vz);
-    vec3.cross(vx, vy, vz);
-    vec3.normalize(vx, vx);
-    vec3.cross(vy, vz, vx);
-
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        vx[0], vx[1], vx[2],
-        vy[0], vy[1], vy[2],
-        vz[0], vz[1], vz[2]);
-}
-
+const scratchVec3 = vec3.create();
 const scratchMatrixInv1 = mat4.create();
 function GetModelLocalAxisY(v: vec3, parentNodeMatrix: ReadonlyMat4 | null, nodeMatrix: ReadonlyMat4, scratchMatrix: mat4 = scratchMatrixInv1): void {
     if (parentNodeMatrix !== null) {
         mat4.invert(scratchMatrix, parentNodeMatrix);
         mat4.mul(scratchMatrix, parentNodeMatrix, nodeMatrix);
-        vec3.set(v, scratchMatrix[4], scratchMatrix[5], scratchMatrix[6]);
+        getMatrixAxisY(v, scratchMatrix);
     } else {
-        vec3.set(v, nodeMatrix[4], nodeMatrix[5], nodeMatrix[6]);
+        getMatrixAxisY(v, nodeMatrix);
     }
+    vec3.normalize(v, v);
 }
 
-function Calc_BILLBOARD_ROT(m: mat4, nodeMatrix: ReadonlyMat4, parentNodeMatrix: ReadonlyMat4 | null, vy: vec3 = scratchVec3[0]): void {
+function Calc_BILLBOARD_ROT(m: mat4, nodeMatrix: ReadonlyMat4, parentNodeMatrix: ReadonlyMat4 | null, vy: vec3 = scratchVec3): void {
     GetModelLocalAxisY(vy, parentNodeMatrix, nodeMatrix);
-    vy[2] = 0;
-    vec3.normalize(vy, vy);
-
-    const yx = vy[0], yy = vy[1];
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        yy, -yx, 0,
-        yx,  yy, 0,
-        0, 0, 1);
+    calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane, vy);
 }
 
-function Calc_BILLBOARD_PERSP_ROT(m: mat4, nodeMatrix: ReadonlyMat4, parentNodeMatrix: ReadonlyMat4 | null, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
+function Calc_BILLBOARD_PERSP_ROT(m: mat4, nodeMatrix: ReadonlyMat4, parentNodeMatrix: ReadonlyMat4 | null, vy: vec3 = scratchVec3): void {
     GetModelLocalAxisY(vy, parentNodeMatrix, nodeMatrix);
-    vec3.set(vz, -m[12], -m[13], -m[14]);
-    vec3.normalize(vy, vy);
-    vec3.cross(vx, vy, vz);
-    vec3.normalize(vx, vx);
-    vec3.cross(vz, vx, vy);
-
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        vx[0], vx[1], vx[2],
-        vy[0], vy[1], vy[2],
-        vz[0], vz[1], vz[2]);
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZSphere, vy);
 }
 
-function Calc_BILLBOARD_Y(m: mat4, nodeMatrix: ReadonlyMat4, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
-    vec3.set(vy, m[4], m[5], m[6]);
-    vec3.set(vx, vy[1], -vy[0], 0);
-    vec3.normalize(vy, vy);
-    vec3.normalize(vx, vx);
-    vec3.cross(vz, vx, vy);
-
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        vx[0], vx[1], vx[2],
-        vy[0], vy[1], vy[2],
-        vz[0], vz[1], vz[2]);
+function Calc_BILLBOARD_Y(m: mat4, nodeMatrix: ReadonlyMat4): void {
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane);
 }
 
-function Calc_BILLBOARD_PERSP_Y(m: mat4, nodeMatrix: ReadonlyMat4, vx: vec3 = scratchVec3[0], vy: vec3 = scratchVec3[1], vz: vec3 = scratchVec3[2]): void {
-    vec3.set(vy, m[4], m[5], m[6]);
-    vec3.set(vz, -m[12], -m[13], -m[14]);
-    vec3.normalize(vz, vz);
-    vec3.cross(vx, vy, vz);
-    vec3.normalize(vx, vx);
-    vec3.cross(vy, vz, vx);
-
-    const scaleX = GetMtx34Scale(nodeMatrix, MtxCol.X);
-    const scaleY = GetMtx34Scale(nodeMatrix, MtxCol.Y);
-    const scaleZ = GetMtx34Scale(nodeMatrix, MtxCol.Z);
-    SetMdlViewMtxSR(m, scaleX, scaleY, scaleZ,
-        vx[0], vx[1], vx[2],
-        vy[0], vy[1], vy[2],
-        vz[0], vz[1], vz[2]);
+function Calc_BILLBOARD_PERSP_Y(m: mat4, nodeMatrix: ReadonlyMat4): void {
+    return calcBillboardMatrix(m, nodeMatrix, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZSphere);
 }
 
 const matrixScratchArray = nArray(1, () => mat4.create());
@@ -712,17 +618,17 @@ export class MDL0ModelInstance {
                     const parentNodeToWorldMatrix = parentNodeId >= 0 ? this.instanceStateData.jointToWorldMatrixArray[parentNodeId] : null;
 
                     if (billboardMode === BRRES.BillboardMode.BILLBOARD) {
-                        Calc_BILLBOARD_STD(dstDrawMatrix, nodeToWorldMatrix);
+                        Calc_BILLBOARD_STD(dstDrawMatrix, dstDrawMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.PERSP_BILLBOARD) {
-                        Calc_BILLBOARD_PERSP_STD(dstDrawMatrix, nodeToWorldMatrix);
+                        Calc_BILLBOARD_PERSP_STD(dstDrawMatrix, dstDrawMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.ROT) {
-                        Calc_BILLBOARD_ROT(dstDrawMatrix, nodeToWorldMatrix, parentNodeToWorldMatrix);
+                        Calc_BILLBOARD_ROT(dstDrawMatrix, dstDrawMatrix, parentNodeToWorldMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.PERSP_ROT) {
-                        Calc_BILLBOARD_PERSP_ROT(dstDrawMatrix, nodeToWorldMatrix, parentNodeToWorldMatrix);
+                        Calc_BILLBOARD_PERSP_ROT(dstDrawMatrix, dstDrawMatrix, parentNodeToWorldMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.Y) {
-                        Calc_BILLBOARD_Y(dstDrawMatrix, nodeToWorldMatrix);
+                        Calc_BILLBOARD_Y(dstDrawMatrix, dstDrawMatrix);
                     } else if (billboardMode === BRRES.BillboardMode.PERSP_Y) {
-                        Calc_BILLBOARD_PERSP_Y(dstDrawMatrix, nodeToWorldMatrix);
+                        Calc_BILLBOARD_PERSP_Y(dstDrawMatrix, dstDrawMatrix);
                     }
                 }
             }

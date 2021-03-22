@@ -5,6 +5,7 @@ import { DataStream } from "./DataStream";
 import { GfxDevice, GfxFormat, makeTextureDescriptor2D } from "../../gfx/platform/GfxPlatform";
 import { TextureHolder, LoadedTexture, TextureBase } from "../../TextureHolder";
 import * as Viewer from '../../viewer';
+import { convertToCanvas } from "../../gfx/helpers/TextureConversionHelpers";
 
 // Ported for JSR to TS from
 //  https://github.com/yevgeniy-logachev/spvr2png/blob/master/SegaPVRImage.c
@@ -150,16 +151,7 @@ export function parseFromStream(buffer: DataStream, name: string): PVR_Texture {
 }
 
 function surfaceToCanvas(textureLevel: PVR_TextureLevel): HTMLCanvasElement {
-    const canvas = document.createElement("canvas");
-    canvas.width = textureLevel.width;
-    canvas.height = textureLevel.height;
-
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(textureLevel.data);
-    ctx.putImageData(imgData, 0, 0);
-    
-    return canvas;
+    return convertToCanvas(ArrayBufferSlice.fromView(textureLevel.data), textureLevel.width, textureLevel.height);
 }
 
 function textureToCanvas(texture: PVR_Texture): Viewer.Texture {

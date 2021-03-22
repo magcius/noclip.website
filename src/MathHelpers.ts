@@ -180,7 +180,7 @@ export function scaleMatrix(dst: mat4, m: ReadonlyMat4, scaleX: number, scaleY: 
  * To determine whether the model matrix is uniformly scaled, the helper function
  * {@function matrixHasUniformScale} is provided.
  */
-export function computeNormalMatrix(dst: mat4, m: mat4, isUniformScale?: boolean): void {
+export function computeNormalMatrix(dst: mat4, m: ReadonlyMat4, isUniformScale?: boolean): void {
     if (isUniformScale === undefined)
         isUniformScale = matrixHasUniformScale(m);
 
@@ -227,7 +227,7 @@ export function transformVec3Mat4w0(dst: vec3, m: ReadonlyMat4, v: ReadonlyVec3)
     dst[2] = m[2] * x + m[6] * y + m[10] * z;
 }
 
-const scratchVec3 = vec3.create();
+const scratchVec3a = vec3.create(), scratchVec3b = vec3.create(), scratchVec3c = vec3.create();
 
 function compareEpsilon(a: number, b: number) {
     return Math.abs(a-b) <= MathConstants.EPSILON*Math.max(1, Math.abs(a), Math.abs(b));
@@ -236,7 +236,7 @@ function compareEpsilon(a: number, b: number) {
 /**
  * Returns whether matrix {@param m} has a uniform scale.
  */
-export function matrixHasUniformScale(m: mat4, v: vec3 = scratchVec3): boolean {
+export function matrixHasUniformScale(m: ReadonlyMat4): boolean {
     const sx = Math.hypot(m[0], m[4], m[8]);
     const sy = Math.hypot(m[1], m[5], m[9]);
     const sz = Math.hypot(m[2], m[6], m[10]);
@@ -362,7 +362,7 @@ export function computeMatrixWithoutTranslation(dst: mat4, m: ReadonlyMat4): voi
     dst[14] = 0;
 }
 
-export function computeMatrixWithoutRotation(dst: mat4, m: mat4, v: vec3 = scratchVec3): void {
+export function computeMatrixWithoutRotation(dst: mat4, m: ReadonlyMat4, v: vec3 = scratchVec3a): void {
     const tx = m[12], ty = m[13], tz = m[14];
     mat4.getScaling(v, dst);
     mat4.fromScaling(dst, v);
@@ -389,6 +389,10 @@ export function lerp(a: number, b: number, t: number): number {
 
 export function invlerp(a: number, b: number, v: number): number {
     return (v - a) / (b - a);
+}
+
+export function smoothstep(t: number): number {
+    return t*t*(3 - t*2);
 }
 
 // https://gist.github.com/shaunlebron/8832585
@@ -617,4 +621,185 @@ export function vec3QuantizeMajorAxis(dst: vec3, m: vec3): void {
 
 export function vec3SetAll(dst: vec3, v: number): void {
     vec3.set(dst, v, v, v);
+}
+
+export const enum CalcBillboardFlags {
+    // The up vector for computing roll should come from the input matrix.
+    UseRollLocal = 0 << 0,
+    // The up vector for computing roll should be global world up 0, 1, 0.
+    UseRollGlobal = 1 << 0,
+
+    // Z, X, Y priority (normal billboard mode)
+    PriorityZ      = 0 << 1,
+    // Z, X, Y, Z priority ("Y billboard" mode)
+    PriorityY      = 1 << 1,
+
+    // The Z+ vector should be projected onto a plane (Z+ = 0, 0, 1)
+    UseZPlane      = 0 << 2,
+    // The Z+ vector should be projected onto a sphere (Z+ = -Translation), aka "persp" mode
+    UseZSphere     = 1 << 2,
+}
+
+export function calcBillboardMatrix(dst: mat4, m: ReadonlyMat4, flags: CalcBillboardFlags, axisY: ReadonlyVec3 | null = null): void {
+    // Extract scale.
+    const mx = Math.hypot(m[0], m[1], m[2]);
+    const my = Math.hypot(m[4], m[5], m[6]);
+    const mz = Math.hypot(m[8], m[9], m[10]);
+
+    // General calculation:
+    //
+    //   GlobalX = { 1, 0, 0 }, GlobalY = { 0, 1, 0 }, GlobalZ = { 0, 0, 1 }
+    //   MatrixX = { m[0], m[1], m[2] }
+    //   MatrixY = axisY || { m[4], m[5], m[6] }
+    //   MatrixZ = { m[8], m[9], m[10] }
+    //
+    // Pick InputZ:
+    //   UseZPlane: GlobalZ
+    //   UseZSphere: { -m[12], -m[13], -m[14] }
+    //
+    // Pick InputYRoll:
+    //   UseRollLocal: MatrixY
+    //   UseRollGlobal: GlobalY
+    //
+    // Calculate:
+    //   Z = InputZ
+    //   X = InputYRoll ^ Z
+    // PriorityZ:
+    //   Y = Z ^ X
+    // PriorityY:
+    //   Y = MatrixY
+    //   Z = X ^ Y
+
+    // Special cases for speed.
+    if (flags === (CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane)) {
+        // InputZ = { 0, 0, 1 }, InputRollY = { 0, 1, 0 }
+        // Z = InputZ         = { 0, 0, 1 }
+        // X = InputRollY ^ Z = { 0, 1, 0 } ^ { 0, 0, 1 } = { 1, 0, 0 }
+        // Y = Z ^ X          = { 0, 0, 1 } ^ { 1, 0, 0 } = { 0, 1, 0 }
+
+        dst[0] = mx;
+        dst[1] = 0;
+        dst[2] = 0;
+
+        dst[4] = 0;
+        dst[5] = my;
+        dst[6] = 0;
+
+        dst[8] = 0;
+        dst[9] = 0;
+        dst[10] = mz;
+    } else if (flags === (CalcBillboardFlags.UseRollGlobal | CalcBillboardFlags.PriorityY | CalcBillboardFlags.UseZPlane)) {
+        // InputZ = { 0, 0, 1 }, InputRollY = { 0, 1, 0 }
+        // Z = InputZ         = { 0, 0, 1 }
+        // X = InputRollY ^ Z = { 0, 1, 0 } ^ { 0, 0, 1 } = { 1, 0, 0 }
+        // Z = X ^ Y          = { 0, -Y[2], Y[1] }
+
+        vec3.set(scratchVec3a, 0.0, -m[6], m[5]);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        dst[0] = mx;
+        dst[1] = 0;
+        dst[2] = 0;
+
+        dst[4] = m[4];
+        dst[5] = m[5];
+        dst[6] = m[6];
+
+        dst[8] = 0;
+        dst[9] = scratchVec3a[1] * mz;
+        dst[10] = scratchVec3a[2] * mz;
+    } else if (flags === (CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane)) {
+        // InputZ = { 0, 0, 1 }, InputRollY = { m[4], m[5], m[6] }
+        // Z = InputZ         = { 0, 0, 1 }
+        // X = InputRollY ^ Z = { Y[1], -Y[0], 0 }
+        // Y = Z ^ X          = { Y[0],  Y[1], 0 }
+
+        vec3.set(scratchVec3a, m[4], m[5], 0);
+        vec3.normalize(scratchVec3a, scratchVec3a);
+
+        dst[0] = mx * scratchVec3a[1];
+        dst[1] = mx * -scratchVec3a[0];
+        dst[2] = 0;
+
+        dst[4] = my * scratchVec3a[0];
+        dst[5] = my * scratchVec3a[1];
+        dst[6] = 0;
+
+        dst[8] = 0;
+        dst[9] = 0;
+        dst[10] = mz;
+    } else {
+        // Generic code.
+
+        // Pick InputZ:
+        //   UseZPlane: GlobalZ
+        //   UseZSphere: { -m[12], -m[13], -m[14] }
+        const InputZ = scratchVec3a;
+        if (!!(flags & CalcBillboardFlags.UseZSphere)) {
+            vec3.set(InputZ, -m[12], -m[13], -m[14]);
+            vec3.normalize(InputZ, InputZ);
+        } else {
+            vec3.set(InputZ, 0, 0, 1);
+        }
+
+        // Pick InputYRoll:
+        //   UseRollLocal: MatrixY
+        //   UseRollGlobal: GlobalY
+        const InputYRoll = scratchVec3b;
+        if (!!(flags & CalcBillboardFlags.UseRollGlobal))
+            vec3.set(InputYRoll, 0, 1, 0);
+        else if (axisY !== null)
+            vec3.copy(InputYRoll, axisY);
+        else
+            vec3.set(InputYRoll, m[4] / my, m[5] / my, m[6] / my);
+
+        // Calculate:
+        //   Z = InputZ
+        //   X = InputYRoll ^ Z
+        const Z = InputZ;
+        const X = InputYRoll;
+        vec3.cross(X, InputYRoll, Z);
+        vec3.normalize(X, X);
+
+        const Y = scratchVec3c;
+        if (!!(flags & CalcBillboardFlags.PriorityY)) {
+            // PriorityY:
+            //   Y = MatrixY
+            //   Z = X ^ Y
+            if (axisY !== null)
+                vec3.copy(Y, axisY);
+            else
+                vec3.set(Y, m[4] / my, m[5] / my, m[6] / my);
+            vec3.cross(Z, X, Y);
+            vec3.normalize(Z, Z);
+        } else {
+            // PriorityZ:
+            //   Y = Z ^ X
+            vec3.cross(Y, Z, X);
+            vec3.normalize(Y, Y);
+        }
+
+        dst[0] = mx * X[0];
+        dst[1] = mx * X[1];
+        dst[2] = mx * X[2];
+
+        dst[4] = my * Y[0];
+        dst[5] = my * Y[1];
+        dst[6] = my * Y[2];
+
+        dst[8] = mz * Z[0];
+        dst[9] = mz * Z[1];
+        dst[10] = mz * Z[2];
+    }
+
+    dst[12] = m[12];
+    dst[13] = m[13];
+    dst[14] = m[14];
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
 }

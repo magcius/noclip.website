@@ -94,8 +94,8 @@ export default class InputManager {
                 this.ondraggingmodechanged();
         });
         this.toplevel.addEventListener('mousemove', (e) => {
-            this.mouseX = e.clientX;
-            this.mouseY = e.clientY;
+            this.mouseX = e.clientX * window.devicePixelRatio;
+            this.mouseY = e.clientY * window.devicePixelRatio;
         });
         this.toplevel.addEventListener('mouseup', (e) => {
             this.buttons = e.buttons;

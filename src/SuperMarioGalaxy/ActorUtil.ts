@@ -640,6 +640,10 @@ export function calcRailEndPointPos(dst: vec3, actor: LiveActor): void {
     actor.railRider!.copyPointPos(dst, actor.railRider!.getPointNum() - 1);
 }
 
+export function calcRailEndPointDirection(dst: vec3, actor: LiveActor): void {
+    actor.railRider!.calcDirectionAtCoord(dst, actor.railRider!.getTotalLength());
+}
+
 export function isRailGoingToEnd(actor: LiveActor): boolean {
     return actor.railRider!.direction === RailDirection.TowardsEnd;
 }

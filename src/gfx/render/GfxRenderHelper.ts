@@ -4,16 +4,19 @@ import { GfxRenderCache } from "./GfxRenderCache";
 import { GfxRenderDynamicUniformBuffer } from "./GfxRenderDynamicUniformBuffer";
 import { GfxRenderInst, GfxRenderInstManager } from "./GfxRenderInstManager";
 import { GfxrRenderGraph, GfxrRenderGraphImpl } from "./GfxRenderGraph";
+import { DebugThumbnailDrawer } from "../helpers/DebugThumbnailHelpers";
 
 export class GfxRenderHelper {
     public uniformBuffer: GfxRenderDynamicUniformBuffer;
     public renderInstManager: GfxRenderInstManager;
     public renderCache = new GfxRenderCache();
     public renderGraph: GfxrRenderGraph = new GfxrRenderGraphImpl();
+    public debugThumbnails: DebugThumbnailDrawer;
 
     constructor(public device: GfxDevice) {
         this.renderInstManager = new GfxRenderInstManager(this.device, this.renderCache);
         this.uniformBuffer = new GfxRenderDynamicUniformBuffer(this.device);
+        this.debugThumbnails = new DebugThumbnailDrawer(this.device, this.renderCache);
     }
 
     public pushTemplateRenderInst(): GfxRenderInst {

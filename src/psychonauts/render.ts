@@ -58,7 +58,7 @@ export class PsychonautsTextureHolder extends TextureHolder<PPAK_Texture> {
             levelDatas.push(decodedSurface.pixels as Uint8Array);
 
             const canvas = document.createElement('canvas');
-            surfaceToCanvas(canvas, decodedSurface, 0);
+            surfaceToCanvas(canvas, decodedSurface);
             surfaces.push(canvas);
 
             if (mipWidth > 1) mipWidth >>>= 1;

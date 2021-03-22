@@ -17,40 +17,9 @@ import { parseTexImageParamWrapModeS, parseTexImageParamWrapModeT } from './nitr
 import { assert, nArray } from '../util';
 import { BCA, bindBCAAnimator, BCAAnimator } from './sm64ds_bca';
 import AnimationController from '../AnimationController';
-import { computeRotationMatrixFromSRTMatrix } from '../MathHelpers';
+import { CalcBillboardFlags, calcBillboardMatrix, computeRotationMatrixFromSRTMatrix } from '../MathHelpers';
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-
-function calcBBoardMtx(dst: mat4, m: mat4): void {
-    // Modifies m in-place.
-
-    // The column vectors lengths here are the scale.
-    const mx = Math.hypot(m[0], m[1], m[2]);
-    const my = Math.hypot(m[4], m[5], m[6]);
-    const mz = Math.hypot(m[8], m[9], m[10]);
-
-    dst[0] = mx;
-    dst[4] = 0;
-    dst[8] = 0;
-    dst[12] = m[12];
-
-    dst[1] = 0;
-    dst[5] = my;
-    dst[9] = 0;
-    dst[13] = m[13];
-
-    dst[2] = 0;
-    dst[6] = 0;
-    dst[10] = mz;
-    dst[14] = m[14];
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
 
 export class NITRO_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -510,7 +479,7 @@ export class BMDModelInstance {
 
         if (isBillboard) {
             // Apply billboard model if necessary.
-            calcBBoardMtx(dst, dst);
+            calcBillboardMatrix(dst, dst, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         }
     }
 

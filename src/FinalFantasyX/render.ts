@@ -15,6 +15,8 @@ import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorH
 import { AABB } from "../Geometry";
 import { clamp, computeModelMatrixR, setMatrixTranslation, transformVec3Mat4w1 } from "../MathHelpers";
 import { getPointHermite } from "../Spline";
+import { convertToCanvas } from "../gfx/helpers/TextureConversionHelpers";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export class FFXProgram extends DeviceProgram {
     public static a_Position = 0;
@@ -521,7 +523,7 @@ export class TextureData {
         device.uploadTextureData(gfxTexture, 0, [data.pixels]);
         this.gfxTexture = gfxTexture;
 
-        this.viewerTexture = textureToCanvas(data, data.name, data.pixels);
+        this.viewerTexture = textureToCanvas(data);
     }
 
     public destroy(device: GfxDevice): void {
@@ -529,22 +531,13 @@ export class TextureData {
     }
 }
 
-function textureToCanvas(texture: BIN.Texture, name: string, pixels: Uint8Array): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    const width = texture.width;
-    const height = texture.height;
-    canvas.width = width;
-    canvas.height = height;
-    canvas.title = name;
+function textureToCanvas(texture: BIN.Texture): Viewer.Texture {
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
+    canvas.title = texture.name;
 
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(pixels);
-    ctx.putImageData(imgData, 0, 0);
     const surfaces = [canvas];
-
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', psmToString(texture.tex0.psm));
 
-    return { name: name, surfaces, extraInfo };
+    return { name: texture.name, surfaces, extraInfo };
 }

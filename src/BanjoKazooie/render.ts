@@ -14,11 +14,12 @@ import { GfxRenderInstManager, setSortKeyDepthKey, setSortKeyDepth } from '../gf
 import { GfxRenderCache } from '../gfx/render/GfxRenderCache';
 import { TextFilt } from '../Common/N64/Image';
 import { Geometry, VertexAnimationEffect, VertexEffectType, GeoNode, Bone, AnimationSetup, TextureAnimationSetup, GeoFlags, isSelector, isSorter } from './geo';
-import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, scaleMatrix } from '../MathHelpers';
+import { clamp, lerp, MathConstants, Vec3Zero, Vec3UnitY, scaleMatrix, calcBillboardMatrix, CalcBillboardFlags } from '../MathHelpers';
 import { setAttachmentStateSimple } from '../gfx/helpers/GfxMegaStateDescriptorHelpers';
-import { J3DCalcBBoardMtx } from '../Common/JSYSTEM/J3D/J3DGraphBase';
 import { Flipbook, LoopMode, ReverseMode, MirrorMode, FlipbookMode } from './flipbook';
 import { calcTextureMatrixFromRSPState } from '../Common/N64/RSP';
+import { convertToCanvas } from '../gfx/helpers/TextureConversionHelpers';
+import ArrayBufferSlice from '../ArrayBufferSlice';
 
 export class F3DEX_Program extends DeviceProgram {
     public static a_Position = 0;
@@ -302,15 +303,9 @@ ${this.generateAlphaTest()}
 }
 
 export function textureToCanvas(texture: RDP.Texture): Viewer.Texture {
-    const canvas = document.createElement("canvas");
-    canvas.width = texture.width;
-    canvas.height = texture.height;
+    const canvas = convertToCanvas(ArrayBufferSlice.fromView(texture.pixels), texture.width, texture.height);
     canvas.title = texture.name;
 
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    imgData.data.set(texture.pixels);
-    ctx.putImageData(imgData, 0, 0);
     const surfaces = [ canvas ];
     const extraInfo = new Map<string, string>();
     extraInfo.set('Format', getImageFormatString(texture.tile.fmt, texture.tile.siz));
@@ -1665,7 +1660,7 @@ export class FlipbookRenderer {
 
         computeViewMatrix(viewMatrixScratch, viewerInput.camera);
         mat4.mul(modelViewScratch, viewMatrixScratch, this.modelMatrix);
-        J3DCalcBBoardMtx(modelViewScratch, modelViewScratch);
+        calcBillboardMatrix(modelViewScratch, modelViewScratch, CalcBillboardFlags.UseRollLocal | CalcBillboardFlags.PriorityZ | CalcBillboardFlags.UseZPlane);
         // apply screen transformations after billboarding
         mat4.rotateZ(modelViewScratch, modelViewScratch, this.rotationAngle);
         modelViewScratch[12] += this.screenOffset[0];

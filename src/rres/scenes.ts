@@ -6,7 +6,7 @@ import * as Viewer from '../viewer';
 import * as UI from '../ui';
 
 import { U8Archive } from "./u8";
-import { createMarioKartWiiSceneFromU8Archive } from "./Scenes_MarioKartWii";
+import { createMarioKartWiiSceneFromU8Archive } from "../MarioKartWii/Scenes_MarioKartWii";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { readString } from "../util";
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from './render';
@@ -140,7 +140,7 @@ export function createSceneFromU8Buffer(context: SceneContext, buffer: ArrayBuff
 
     // If we have a course.kmp, that means we're a Mario Kart Wii archive.
     if (arc.findFile('./course.kmp') !== null)
-        return createMarioKartWiiSceneFromU8Archive(device, arc);
+        return createMarioKartWiiSceneFromU8Archive(context, arc);
 
     // Otherwise, assume that we have a basic scene.
     return createBasicRRESRendererFromU8Archive(device, arc);

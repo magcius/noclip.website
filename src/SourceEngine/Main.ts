@@ -67,8 +67,22 @@ export class SourceFileSystem {
 
     public resolvePath(path: string, ext: string): string {
         path = path.toLowerCase().replace(/\\/g, '/');
+        path = path.replace(/\.\//g, '');
         if (!path.endsWith(ext))
             path = `${path}${ext}`;
+
+        if (path.includes('../')) {
+            // Resolve relative paths.
+            const parts = path.split('/');
+
+            while (parts.includes('..')) {
+                const idx = parts.indexOf('..');
+                parts.splice(idx - 1, 2);
+            }
+
+            path = parts.join('/');
+        }
+
         return path;
     }
 
@@ -91,7 +105,7 @@ export class SourceFileSystem {
         return null;
     }
 
-    private hasEntry(resolvedPath: string): boolean {
+    public hasEntry(resolvedPath: string): boolean {
         for (let i = 0; i < this.mounts.length; i++) {
             const entry = this.mounts[i].findEntry(resolvedPath);
             if (entry !== null)
@@ -278,8 +292,6 @@ class BSPSurfaceRenderer {
             const lightmapData = this.surface.lightmapData[i];
             this.lightmaps.push(new SurfaceLightmap(lightmapManager, lightmapData, this.materialInstance.wantsLightmap, this.materialInstance.wantsBumpmappedLightmap));
         }
-
-        this.materialInstance.setLightmapAllocation(lightmapManager.getPageTexture(this.surface.lightmapPageIndex), lightmapManager.gfxSampler);
     }
 
     public movement(renderContext: SourceRenderContext): void {
@@ -318,7 +330,7 @@ class BSPSurfaceRenderer {
             this.lightmaps[i].buildLightmap(renderContext.worldLightingState);
 
         const renderInst = renderInstManager.newRenderInst();
-        this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix);
+        this.materialInstance.setOnRenderInst(renderContext, renderInst, modelMatrix, this.surface.lightmapPageIndex);
         renderInst.drawIndexes(this.surface.indexCount, this.surface.startIndex);
 
         if (this.surface.center !== null) {

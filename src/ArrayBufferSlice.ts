@@ -51,6 +51,10 @@ export default class ArrayBufferSlice {
         assert(byteOffset >= 0 && byteLength >= 0 && (byteOffset + byteLength) <= this.arrayBuffer.byteLength);
     }
 
+    public static fromView(view: ArrayBufferView): ArrayBufferSlice {
+        return new ArrayBufferSlice(view.buffer, view.byteOffset, view.byteLength);
+    }
+
     /**
      * Detach this ArrayBufferSlice from its underlying contents, in the hope that the underlying
      * ArrayBuffer storage can be GC'd. Note that this will break any type-safety that the ArrayBufferSlice

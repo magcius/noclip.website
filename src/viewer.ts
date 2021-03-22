@@ -28,6 +28,11 @@ export interface Texture {
     activate?: () => Promise<void>;
 }
 
+interface MouseLocation {
+    mouseX: number;
+    mouseY: number;
+}
+
 export interface ViewerRenderInput {
     camera: Camera;
     time: number;
@@ -37,6 +42,7 @@ export interface ViewerRenderInput {
     viewport: Readonly<GfxNormalizedViewportCoords>;
     onscreenTexture: GfxTexture;
     antialiasingMode: AntialiasingMode;
+    mouseLocation: MouseLocation;
 }
 
 export interface SceneGfx {
@@ -66,8 +72,6 @@ export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: n
     canvas.width = width * devicePixelRatio;
     canvas.height = height * devicePixelRatio;
 }
-
-const DEFAULT_NUM_SAMPLES = 4;
 
 export class Viewer {
     public inputManager: InputManager;
@@ -113,6 +117,7 @@ export class Viewer {
             viewport: this.viewport,
             onscreenTexture: null!,
             antialiasingMode: AntialiasingMode.None,
+            mouseLocation: this.inputManager,
         };
 
         GlobalSaveManager.addSettingListener('AntialiasingMode', (saveManager, key) => {

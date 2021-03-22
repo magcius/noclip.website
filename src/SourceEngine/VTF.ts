@@ -9,6 +9,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 
 const enum ImageFormat {
     RGBA8888     = 0x00,
+    ABGR8888     = 0x01,
     BGR888       = 0x03,
     I8           = 0x05,
     ARGB8888     = 0x0B,
@@ -32,6 +33,8 @@ function imageFormatIsBlockCompressed(fmt: ImageFormat): boolean {
 
 function imageFormatGetBPP(fmt: ImageFormat): number {
     if (fmt === ImageFormat.RGBA8888)
+        return 4;
+    if (fmt === ImageFormat.ABGR8888)
         return 4;
     if (fmt === ImageFormat.ARGB8888)
         return 4;
@@ -80,6 +83,8 @@ function imageFormatToGfxFormat(device: GfxDevice, fmt: ImageFormat, srgb: boole
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (fmt === ImageFormat.BGRA8888)
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
+    else if (fmt === ImageFormat.ABGR8888)
+        return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (fmt === ImageFormat.BGRX8888)
         return srgb ? GfxFormat.U8_RGBA_SRGB : GfxFormat.U8_RGBA_NORM;
     else if (fmt === ImageFormat.BGRA5551)
@@ -107,8 +112,22 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
             p += 3;
         }
         return dst;
+    } else if (fmt === ImageFormat.ABGR8888) {
+        // ABGR8888 => RGBA8888
+        const src = data.createDataView();
+        const n = width * height * depth * 4;
+        const dst = new Uint8Array(n);
+        let p = 0;
+        for (let i = 0; i < n;) {
+            dst[i++] = src.getUint8(p + 3);
+            dst[i++] = src.getUint8(p + 2);
+            dst[i++] = src.getUint8(p + 1);
+            dst[i++] = src.getUint8(p + 0);
+            p += 4;
+        }
+        return dst;
     } else if (fmt === ImageFormat.BGRA8888) {
-        // BGRA888 => RGBA8888
+        // BGRA8888 => RGBA8888
         const src = data.createDataView();
         const n = width * height * depth * 4;
         const dst = new Uint8Array(n);
@@ -122,7 +141,7 @@ function imageFormatConvertData(device: GfxDevice, fmt: ImageFormat, data: Array
         }
         return dst;
     } else if (fmt === ImageFormat.BGRX8888) {
-        // BGRA888 => RGBA8888
+        // BGRX8888 => RGBA8888
         const src = data.createDataView();
         const n = width * height * depth * 4;
         const dst = new Uint8Array(n);
@@ -185,7 +204,7 @@ export class VTF {
     private versionMajor: number;
     private versionMinor: number;
 
-    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, additionalFlags: VTFFlags) {
+    constructor(device: GfxDevice, cache: GfxRenderCache, buffer: ArrayBufferSlice | null, private name: string, srgb: boolean) {
         if (buffer === null)
             return;
 
@@ -203,7 +222,7 @@ export class VTF {
 
             this.width = view.getUint16(0x10, true);
             this.height = view.getUint16(0x12, true);
-            this.flags = view.getUint32(0x14, true) | additionalFlags;
+            this.flags = view.getUint32(0x14, true);
             this.numFrames = view.getUint16(0x18, true);
             const startFrame = view.getUint16(0x1A, true);
             const reflectivityR = view.getFloat32(0x20, true);
@@ -246,7 +265,8 @@ export class VTF {
         }
 
         const isCube = !!(this.flags & VTFFlags.ENVMAP);
-        const srgb = !!(this.flags & VTFFlags.SRGB);
+        // The srgb flag in the file does nothing :/, we have to know from the material system instead.
+        // const srgb = !!(this.flags & VTFFlags.SRGB);
         const pixelFormat = imageFormatToGfxFormat(device, this.format, srgb);
         const dimension = isCube ? GfxTextureDimension.Cube : GfxTextureDimension.n2D;
         const faceCount = (isCube ? 6 : 1);
@@ -264,7 +284,6 @@ export class VTF {
             device.setResourceName(texture, `${this.name} frame ${i}`);
             this.gfxTextures.push(texture);
         }
-
 
         const levelDatas: ArrayBufferView[][] = nArray(this.gfxTextures.length, () => []);
 
