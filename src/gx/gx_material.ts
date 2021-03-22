@@ -12,11 +12,21 @@ import { IS_DEPTH_REVERSED } from '../gfx/helpers/ReversedDepthHelpers';
 import { MathConstants, transformVec3Mat4w1, transformVec3Mat4w0 } from '../MathHelpers';
 import { DisplayListRegisters, VertexAttributeInput } from './gx_displaylist';
 import { DeviceProgram } from '../Program';
-import { glslGenerateFloat } from '../gfx/helpers/ShaderHelpers';
+import { GfxShaderLibrary, glslGenerateFloat } from '../gfx/helpers/ShaderHelpers';
 
 // TODO(jstpierre): Move somewhere better...
 export const EFB_WIDTH = 640;
 export const EFB_HEIGHT = 528;
+
+export namespace GXShaderLibrary {
+
+export const TevOverflow = `
+float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
+vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b)); }
+vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
+`;
+
+}
 
 // #region Material definition.
 export interface GXMaterial {
@@ -864,8 +874,8 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.CC.A2:    return `t_Color2.aaa`;
         case GX.CC.TEXC:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
         case GX.CC.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateColorSwizzle(stage.texSwapTable, colorIn)}`;
-        case GX.CC.RASC:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
-        case GX.CC.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
+        case GX.CC.RASC:  return `saturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
+        case GX.CC.RASA:  return `saturate(${this.generateRas(stage)}.${this.generateColorSwizzle(stage.rasSwapTable, colorIn)})`;
         case GX.CC.ONE:   return `vec3(1)`;
         case GX.CC.HALF:  return `vec3(1.0/2.0)`;
         case GX.CC.KONST: return `${this.generateKonstColorSel(stage.konstColorSel)}`;
@@ -880,7 +890,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         case GX.CA.A1:    return `t_Color1.a`;
         case GX.CA.A2:    return `t_Color2.a`;
         case GX.CA.TEXA:  return `${this.generateTexAccess(stage)}.${this.generateComponentSwizzle(stage.texSwapTable, GX.TevColorChan.A)}`;
-        case GX.CA.RASA:  return `TevSaturate(${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)})`;
+        case GX.CA.RASA:  return `saturate(${this.generateRas(stage)}.${this.generateComponentSwizzle(stage.rasSwapTable, GX.TevColorChan.A)})`;
         case GX.CA.KONST: return `${this.generateKonstAlphaSel(stage.konstAlphaSel)}`;
         case GX.CA.ZERO:  return `0.0`;
         default:
@@ -949,7 +959,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         const expr = this.generateTevOp(op, bias, scale, a, b, c, d, zero);
 
         if (clamp)
-            return `TevSaturate(${expr})`;
+            return `saturate(${expr})`;
         else
             return expr;
     }
@@ -1195,7 +1205,7 @@ ${this.generateLightAttnFn(chan, lightName)}
         return `
     float t_FogBase = ${this.generateFogBase()};
 ${this.generateFogAdj(`t_FogBase`)}
-    float t_Fog = TevSaturate(t_FogBase - ${C});
+    float t_Fog = saturate(t_FogBase - ${C});
 ${this.generateFogFunc(`t_Fog`)}
     t_PixelOut.rgb = mix(t_PixelOut.rgb, u_FogBlock.Color.rgb, t_Fog);
 `;
@@ -1250,6 +1260,8 @@ ${this.generateFogFunc(`t_Fog`)}
 // ${this.material.name}
 precision mediump float;
 ${bindingsDefinition}
+${GfxShaderLibrary.saturate}
+${GXShaderLibrary.TevOverflow}
 
 varying vec3 v_Position;
 varying vec4 v_Color0;
@@ -1317,10 +1329,6 @@ vec2 TextureInvScale(int index) { return 1.0 / TextureScale(index); }
 
 vec3 TevBias(vec3 a, float b) { return a + vec3(b); }
 float TevBias(float a, float b) { return a + b; }
-vec3 TevSaturate(vec3 a) { return clamp(a, vec3(0), vec3(1)); }
-float TevSaturate(float a) { return clamp(a, 0.0, 1.0); }
-float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
-vec4 TevOverflow(vec4 a) { return vec4(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b), TevOverflow(a.a)); }
 float TevPack16(vec2 a) { return dot(a, vec2(1.0, 256.0)); }
 float TevPack24(vec3 a) { return dot(a, vec3(1.0, 256.0, 256.0 * 256.0)); }
 float TevPerCompGT(float a, float b) { return float(a >  b); }

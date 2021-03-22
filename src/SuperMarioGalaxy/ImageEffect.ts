@@ -20,15 +20,14 @@ import { MathConstants } from "../MathHelpers";
 import { GfxrAttachmentSlot, GfxrRenderTargetDescription, GfxrGraphBuilder } from "../gfx/render/GfxRenderGraph";
 import { GfxShaderLibrary, glslGenerateFloat } from "../gfx/helpers/ShaderHelpers";
 import { IS_DEPTH_REVERSED } from "../gfx/helpers/ReversedDepthHelpers";
+import { GXShaderLibrary } from "../gx/gx_material";
 
 const scratchVec3 = vec3.create();
 
 const ImageEffectShaderLib = `
 ${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.monochromeNTSC}
-
-float TevOverflow(float a) { return float(int(a * 255.0) & 255) / 255.0; }
-vec3 TevOverflow(vec3 a) { return vec3(TevOverflow(a.r), TevOverflow(a.g), TevOverflow(a.b)); }
+${GXShaderLibrary.TevOverflow}
 `;
 
 function generateBlurFunction(functionName: string, tapCount: number, radiusStr: string, intensityStr: string, angleOffset: number = 0.0): string {
