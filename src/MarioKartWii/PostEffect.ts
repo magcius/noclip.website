@@ -93,7 +93,7 @@ in vec2 v_TexCoord;
 
 void main() {
     vec4 c = texture(SAMPLER_2D(u_Texture), v_TexCoord);
-    gl_FragColor.rgb = c.rgb * (saturate(MonochromeNTSC(c.rgb) - u_ThresholdColor.rgb));
+    gl_FragColor.rgb = c.rgb * (2.0 * (saturate(vec3(MonochromeNTSC(c.rgb)) - u_ThresholdColor.rgb)));
     gl_FragColor.a = 1.0;
 }
 `;
@@ -180,7 +180,7 @@ export class EggBloom {
 
     constructor(device: GfxDevice, cache: GfxRenderCache, private pblm: BBLM) {
         // Threshold settings.
-        const thresholdColorScale = (pblm.thresholdAmount * 219.0 + 16.0) / 255.0;
+        const thresholdColorScale = ((pblm.thresholdAmount * 219.0 + 16.0) | 0) / 255.0;
         colorScale(this.thresholdColor, pblm.thresholdColor, thresholdColorScale);
         if (!!(pblm.blurFlags & 0x10))
             this.thresholdColor.a = 0.0;
@@ -206,6 +206,7 @@ export class EggBloom {
             maxLOD: 100,
         });
         this.textureMapping[0].gfxSampler = linearSampler;
+        this.textureMapping[1].gfxSampler = linearSampler;
 
         this.thresholdProgram = cache.createProgram(device, new EggBloomThresholdProgram());
         this.blitProgram = cache.createProgram(device, new FullscreenBlitProgram());
@@ -255,6 +256,9 @@ export class EggBloom {
         renderInst.setBindingLayouts(bindingLayouts);
         this.allocateParameterBuffer(renderInst);
         renderInst.drawPrimitives(3);
+
+        this.textureMapping[0].gfxTexture = null;
+        this.textureMapping[1].gfxTexture = null;
 
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Threshold & Downsample 1/2');
