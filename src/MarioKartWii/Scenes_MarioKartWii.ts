@@ -12,13 +12,16 @@ import ArrayBufferSlice from '../ArrayBufferSlice';
 import { mat4 } from 'gl-matrix';
 import { RRESTextureHolder, MDL0Model, MDL0ModelInstance } from '../rres/render';
 import AnimationController from '../AnimationController';
-import { BasicGXRendererHelper, fillSceneParamsDataOnTemplate } from '../gx/gx_render';
+import { fillSceneParamsDataOnTemplate, GXRenderHelperGfx } from '../gx/gx_render';
 import { GfxDevice, GfxFrontFaceMode } from '../gfx/platform/GfxPlatform';
 import { computeModelMatrixSRT, computeModelMatrixS, MathConstants, scaleMatrix } from '../MathHelpers';
 import { SceneContext, GraphObjBase } from '../SceneBase';
 import { EggLightManager, parseBLIGHT } from '../rres/Egg';
 import { GfxRendererLayer, GfxRenderInstManager } from '../gfx/render/GfxRenderInstManager';
 import { CameraController } from '../Camera';
+import { makeBackbufferDescSimple, pushAntialiasingPostProcessPass, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
+import { GfxrAttachmentSlot } from '../gfx/render/GfxRenderGraph';
+import { EggBloom, parseBBLM } from './PostEffect';
 
 class ModelCache {
     public rresCache = new Map<string, BRRES.RRES>();
@@ -62,13 +65,21 @@ function getModelInstance(baseObj: BaseObject): MDL0ModelInstance {
         throw "Object's class does not have a known model instance.";
 }
 
-class MarioKartWiiRenderer extends BasicGXRendererHelper {
+class MarioKartWiiRenderer {
+    public renderHelper: GXRenderHelperGfx;
+    public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
+
     public textureHolder = new RRESTextureHolder();
     public animationController = new AnimationController();
 
+    public eggBloom: EggBloom | null = null;
     public eggLightManager: EggLightManager | null = null;
     public baseObjects: BaseObject[] = [];
     public modelCache = new ModelCache();
+
+    constructor(device: GfxDevice) {
+        this.renderHelper = new GXRenderHelperGfx(device);
+    }
 
     private setMirrored(mirror: boolean): void {
         const negScaleMatrix = mat4.create();
@@ -126,8 +137,42 @@ class MarioKartWiiRenderer extends BasicGXRendererHelper {
         this.renderHelper.renderInstManager.popTemplateRenderInst();
     }
 
+    public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        const renderInstManager = this.renderHelper.renderInstManager;
+
+        const mainColorDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.Color0, viewerInput, standardFullClearRenderPassDescriptor);
+        const mainDepthDesc = makeBackbufferDescSimple(GfxrAttachmentSlot.DepthStencil, viewerInput, standardFullClearRenderPassDescriptor);
+
+        const builder = this.renderHelper.renderGraph.newGraphBuilder();
+
+        const template = this.renderHelper.pushTemplateRenderInst();
+
+        const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
+        const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
+        builder.pushPass((pass) => {
+            pass.setDebugName('Main');
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
+            pass.exec((passRenderer) => {
+                renderInstManager.drawOnPassRenderer(device, passRenderer);
+            });
+        });
+
+        if (this.eggBloom !== null)
+            this.eggBloom.pushPassesBloom(builder, renderInstManager, mainColorTargetID);
+
+        pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
+
+        renderInstManager.popTemplateRenderInst();
+
+        this.prepareToRender(device, viewerInput);
+        this.renderHelper.renderGraph.execute(device, builder);
+        renderInstManager.resetRenderInsts();
+    }
+
     public destroy(device: GfxDevice): void {
-        super.destroy(device);
+        this.renderHelper.destroy(device);
         this.textureHolder.destroy(device);
         for (let i = 0; i < this.baseObjects.length; i++)
             this.baseObjects[i].destroy(device);
@@ -823,6 +868,13 @@ class MarioKartWiiSceneDesc implements Viewer.SceneDesc {
             const blightRes = parseBLIGHT(blightData);
             const eggLightManager = new EggLightManager(blightRes);
             renderer.eggLightManager = eggLightManager;
+        }
+
+        const bblmData = arc.findFileData(`./posteffect/posteffect.bblm`);
+        if (bblmData !== null) {
+            const bblmRes = parseBBLM(bblmData);
+            const eggBloom = new EggBloom(renderer.renderHelper.device, renderer.renderHelper.renderCache, bblmRes);
+            renderer.eggBloom = eggBloom;
         }
 
         return renderer;

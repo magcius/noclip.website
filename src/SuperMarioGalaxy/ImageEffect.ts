@@ -28,14 +28,18 @@ const ImageEffectShaderLib = `
 ${GfxShaderLibrary.saturate}
 ${GfxShaderLibrary.monochromeNTSC}
 ${GXShaderLibrary.TevOverflow}
+
+vec2 BlurAspect(PD_SAMPLER_2D(t_Texture)) {
+    vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));
+    vec2 t_Aspect = vec2((t_Size.y / t_Size.x) / (3.0/4.0), 1.0);
+    return t_Aspect;
+}
 `;
 
-function generateBlurFunction(functionName: string, tapCount: number, radiusStr: string, intensityStr: string, angleOffset: number = 0.0): string {
+export function generateBlurFunction(functionName: string, tapCount: number, radiusStr: string, intensityPerTapStr: string, angleOffset: number = 0.0): string {
     let S = `
-vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord) {
+vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord, in vec2 t_Aspect) {
     vec3 c = vec3(0.0);
-    vec2 t_Size = vec2(textureSize(PU_SAMPLER_2D(t_Texture), 0));
-    float t_AspectX = (t_Size.y / t_Size.x) / (3.0/4.0);
 `;
 
     for (let i = 0; i < tapCount; i++) {
@@ -43,7 +47,7 @@ vec3 ${functionName}(PD_SAMPLER_2D(t_Texture), in vec2 t_TexCoord) {
         const x = Math.cos(theta), y = -Math.sin(theta);
 
         S += `
-    c += (texture(PU_SAMPLER_2D(t_Texture), t_TexCoord + vec2(t_AspectX * ${glslGenerateFloat(x)} * ${radiusStr}, ${glslGenerateFloat(y)} * ${radiusStr})).rgb * ${intensityStr});`;
+    c += (texture(PU_SAMPLER_2D(t_Texture), t_TexCoord + t_Aspect * vec2(${glslGenerateFloat(x)} * ${radiusStr}, ${glslGenerateFloat(y)} * ${radiusStr})).rgb * ${intensityPerTapStr});`;
     }
 
     S += `
@@ -164,7 +168,7 @@ abstract class BloomPassBlurProgram extends BloomPassBaseProgram {
             const angleOffset = ofsL[i];
             funcs += generateBlurFunction(funcName, tapCount, radiusStr, intensityVar, angleOffset);
             main += `
-    f += TevOverflow(${funcName}(PP_SAMPLER_2D(u_Texture), v_TexCoord));`;
+    f += TevOverflow(${funcName}(PP_SAMPLER_2D(u_Texture), v_TexCoord, t_Aspect));`;
         }
 
         this.frag = `
@@ -177,6 +181,8 @@ ${funcs}
 
 void main() {
     vec3 f = vec3(0.0);
+    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
+
 ${main}
 `;
     }
@@ -446,7 +452,8 @@ ${BloomSimplePSCommon}
 ${generateBlurFunction(`Blur`, tapCount, glslGenerateFloat(radius), glslGenerateFloat(intensityPerTap))}
 
 void main() {
-    float t_BlurredValue = saturate(Blur(PP_SAMPLER_2D(u_Texture), v_TexCoord).r);
+    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
+    float t_BlurredValue = saturate(Blur(PP_SAMPLER_2D(u_Texture), v_TexCoord, t_Aspect).r);
     float t_Value = t_BlurredValue * u_Intensity;
     gl_FragColor = vec4(t_Value, t_Value, t_Value, 0.0);
 }
@@ -606,7 +613,8 @@ void main() {
     // Do the "indirect texture lookup"
     float t_BlurAmount = saturate(invlerp(t_TexCoord, u_BlurMinDist, u_BlurMaxDist));
 
-    vec3 t_BlurredSample = Blur(PP_SAMPLER_2D(u_TextureColor), v_TexCoord);
+    vec2 t_Aspect = BlurAspect(PP_SAMPLER_2D(u_Texture));
+    vec3 t_BlurredSample = Blur(PP_SAMPLER_2D(u_TextureColor), v_TexCoord, t_Aspect);
     gl_FragColor = vec4(t_BlurredSample, t_BlurAmount * u_Intensity);
 }
 `;
