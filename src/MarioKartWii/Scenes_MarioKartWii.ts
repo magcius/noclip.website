@@ -68,6 +68,7 @@ function getModelInstance(baseObj: BaseObject): MDL0ModelInstance {
 class MarioKartWiiRenderer {
     public renderHelper: GXRenderHelperGfx;
     public clearRenderPassDescriptor = standardFullClearRenderPassDescriptor;
+    public enablePostProcessing = true;
 
     public textureHolder = new RRESTextureHolder();
     public animationController = new AnimationController();
@@ -118,6 +119,12 @@ class MarioKartWiiRenderer {
                 this.baseObjects[i].setTexturesEnabled(v);
         };
         renderHacksPanel.contents.appendChild(enableTextures.elem);
+        const enablePostProcessing = new UI.Checkbox('Enable Post-Processing', true);
+        enablePostProcessing.onchanged = () => {
+            const v = enablePostProcessing.checked;
+            this.enablePostProcessing = v;
+        };
+        renderHacksPanel.contents.appendChild(enablePostProcessing.elem);
 
         return [renderHacksPanel];
     }
@@ -145,7 +152,7 @@ class MarioKartWiiRenderer {
 
         const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
-        const template = this.renderHelper.pushTemplateRenderInst();
+        this.renderHelper.pushTemplateRenderInst();
 
         const mainColorTargetID = builder.createRenderTargetID(mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(mainDepthDesc, 'Main Depth');
@@ -158,8 +165,10 @@ class MarioKartWiiRenderer {
             });
         });
 
-        if (this.eggBloom !== null)
-            this.eggBloom.pushPassesBloom(builder, renderInstManager, mainColorTargetID);
+        if (this.enablePostProcessing) {
+            if (this.eggBloom !== null)
+                this.eggBloom.pushPassesBloom(builder, renderInstManager, mainColorTargetID);
+        }
 
         pushAntialiasingPostProcessPass(builder, this.renderHelper, viewerInput, mainColorTargetID);
         builder.resolveRenderTargetToExternalTexture(mainColorTargetID, viewerInput.onscreenTexture);
