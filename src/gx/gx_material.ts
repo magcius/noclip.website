@@ -798,9 +798,11 @@ ${this.generateLightAttnFn(chan, lightName)}
 
     private generateRas(stage: TevStage) {
         switch (stage.channelId) {
-        case GX.RasColorChannelID.COLOR0A0:   return `v_Color0`;
-        case GX.RasColorChannelID.COLOR1A1:   return `v_Color1`;
-        case GX.RasColorChannelID.COLOR_ZERO: return `vec4(0, 0, 0, 0)`;
+        case GX.RasColorChannelID.COLOR0A0:     return `v_Color0`;
+        case GX.RasColorChannelID.COLOR1A1:     return `v_Color1`;
+        case GX.RasColorChannelID.ALPHA_BUMP:   return `vec4(50/255)`; // FIXME: use alpha bump from indirect stage
+        case GX.RasColorChannelID.ALPHA_BUMP_N: return `(vec4(50/255) * vec4(255/248))`; // FIXME: use alpha bump from indirect stage
+        case GX.RasColorChannelID.COLOR_ZERO:   return `vec4(0, 0, 0, 0)`;
         default:
             throw new Error(`whoops ${stage.channelId}`);
         }

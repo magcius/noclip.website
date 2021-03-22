@@ -130,7 +130,6 @@ const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 const scratchSceneParams = new SceneParams();
 
 class WorldRenderer extends SFARenderer {
-    private materialHelperSky: GXMaterialHelperGfx;
     private timeSelect: UI.Slider;
     private enableAmbient: boolean = true;
     private layerSelect: UI.Slider;
@@ -139,15 +138,18 @@ class WorldRenderer extends SFARenderer {
     private showDevObjects: boolean = false;
     private enableLights: boolean = true;
 
+    private materialHelperSky: GXMaterialHelperGfx;
+    private skyddraw = new TDDraw();
+
     constructor(private world: World) {
         super(world.device, world.animController);
 
         packetParams.clear();
 
-        this.ddraw.setVtxDesc(GX.Attr.POS, true);
-        this.ddraw.setVtxDesc(GX.Attr.TEX0, true);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
-        this.ddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
+        this.skyddraw.setVtxDesc(GX.Attr.POS, true);
+        this.skyddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.skyddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         let mb = new GXMaterialBuilder();
         mb.setTexCoordGen(GX.TexCoordID.TEXCOORD0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY);
@@ -287,22 +289,22 @@ class WorldRenderer extends SFARenderer {
             const t0 = (pitchFactor + fovRollFactor) / tex.height;
             const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
 
-            this.ddraw.beginDraw();
-            this.ddraw.begin(GX.Command.DRAW_QUADS);
-            this.ddraw.position3f32(-1, -1, -1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-            this.ddraw.position3f32(-1, 1, -1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-            this.ddraw.position3f32(1, 1, -1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-            this.ddraw.position3f32(1, -1, -1);
-            this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-            this.ddraw.end();
+            this.skyddraw.beginDraw();
+            this.skyddraw.begin(GX.Command.DRAW_QUADS);
+            this.skyddraw.position3f32(-1, -1, -1);
+            this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+            this.skyddraw.position3f32(-1, 1, -1);
+            this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+            this.skyddraw.position3f32(1, 1, -1);
+            this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+            this.skyddraw.position3f32(1, -1, -1);
+            this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+            this.skyddraw.end();
 
-            const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
+            const renderInst = this.skyddraw.makeRenderInst(device, renderInstManager);
             submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true, materialParams, packetParams);
 
-            this.ddraw.endAndUpload(device, renderInstManager);
+            this.skyddraw.endAndUpload(device, renderInstManager);
 
             renderInstManager.popTemplateRenderInst();
         }

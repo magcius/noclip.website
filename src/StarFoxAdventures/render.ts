@@ -1,3 +1,4 @@
+import { mat4 } from 'gl-matrix';
 import * as Viewer from '../viewer';
 import * as GX from '../gx/gx_enum';
 import * as GX_Material from '../gx/gx_material';
@@ -7,16 +8,14 @@ import { GfxRenderInst, GfxRenderInstList, GfxRenderInstManager } from "../gfx/r
 import { CameraController } from '../Camera';
 import { pushAntialiasingPostProcessPass, setBackbufferDescSimple, standardFullClearRenderPassDescriptor } from '../gfx/helpers/RenderGraphHelpers';
 import { GfxrAttachmentSlot, GfxrGraphBuilder, GfxrRenderTargetDescription, GfxrTemporalTexture } from '../gfx/render/GfxRenderGraph';
-import { colorNewFromRGBA8, White } from '../Color';
+import { Color, colorFromARGB8, colorFromRGBA, colorFromRGBA8, colorNewFromRGBA8, White } from '../Color';
 import { TextureMapping } from '../TextureHolder';
 import { nArray } from '../util';
-import { mat4 } from 'gl-matrix';
+import { TDDraw } from '../SuperMarioGalaxy/DDraw';
 
 import { SFAAnimationController } from './animation';
-import { MaterialBase, MaterialFactory } from './materials';
-import { TDDraw } from '../SuperMarioGalaxy/DDraw';
-import { ColorFlagStart } from '../PokemonSnap/room';
-import { Material } from '../SuperMario64DS/sm64ds_bmd';
+import { MaterialBase, MaterialFactory, makeSceneMaterialTexture, getKonstColorSel, getTexGenSrc, getTexCoordID, getIndTexStageID, getIndTexMtxID, getKonstAlphaSel, MaterialRenderContext } from './materials';
+import { mat4SetRowMajor, mat4SetValue } from './util';
 
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
@@ -36,7 +35,128 @@ export interface SFARenderLists {
 
 class HeatShimmerMaterial extends MaterialBase {
     protected rebuildInternal() {
-        // TODO
+        const texMap0 = this.genTexMap(makeSceneMaterialTexture()); // FIXME: should be previous frame?
+        const texMap1 = this.genTexMap(this.factory.getWavyTexture());
+        
+        const k0 = this.genKonstColor((dst: Color) => {
+            const alpha = 0xff; // TODO: adjusts strength of shimmer
+            colorFromRGBA(dst, 0, 0, 0x80/0xff, alpha);
+        });
+        const k1 = this.genKonstColor((dst: Color) => {
+            colorFromRGBA(dst, 0x80/0xff, 0x80/0xff, 0, 0);
+        });
+        const k2 = this.genKonstColor((dst: Color) => {
+            colorFromRGBA(dst, 0, 0x80/0xff, 0, 0);
+        });
+        const k3 = this.genKonstColor((dst: Color) => {
+            colorFromRGBA(dst, 0x80/0xff, 0, 0x80/0xff, 0);
+        });
+
+        const stage0 = this.genTevStage();
+        this.mb.setTevDirect(stage0.id);
+        this.setTevOrder(stage0);
+        this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
+
+        const texCoord0 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0));
+
+        this.texMtx[0] = (dst: mat4, matCtx: MaterialRenderContext) => {
+            mat4.fromScaling(dst, [0.2, 0.2, 1.0]);
+            mat4SetValue(dst, 1, 3, -matCtx.sceneCtx.animController.envAnimValue0);
+        };
+        const texCoord1 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX0);
+
+        const indStage0 = this.genIndTexStage();
+        this.setIndTexOrder(indStage0, texCoord1, texMap1);
+        this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
+
+        const rot45 = mat4.create();
+        mat4.fromRotation(rot45, Math.PI / 4, [0, 0, 1]); // FIXME: verify correctness
+        this.texMtx[1] = (dst: mat4, matCtx: MaterialRenderContext) => {
+            mat4.fromScaling(dst, [0.25, 0.25, 1.0]);
+            mat4.mul(dst, rot45, dst);
+            mat4SetValue(dst, 0, 3, matCtx.sceneCtx.animController.envAnimValue1);
+            mat4SetValue(dst, 1, 3, matCtx.sceneCtx.animController.envAnimValue1);
+        };
+        const texCoord2 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX1);
+
+        const indStage1 = this.genIndTexStage();
+        this.setIndTexOrder(indStage1, texCoord2, texMap1);
+        this.mb.setIndTexScale(getIndTexStageID(indStage1), GX.IndTexScale._1, GX.IndTexScale._1);
+
+        const indTexMtx0 = this.genIndTexMtx((dst: mat4) => {
+            mat4SetRowMajor(dst, 
+                0.5, 0.0, 0.0, 0.0,
+                0.0, 0.5, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+        });
+
+        const stage1 = this.genTevStage();
+        this.mb.setTevIndirect(stage1.id, getIndTexStageID(indStage0), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx0), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.S);
+        this.setTevOrder(stage1, undefined, undefined, GX.RasColorChannelID.ALPHA_BUMP_N);
+        this.setTevColorFormula(stage1, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
+
+        const indTexMtx1 = this.genIndTexMtx((dst: mat4) => {
+            mat4SetRowMajor(dst, 
+                0.5, 0.0, 0.0, 0.0,
+                0.0, 0.5, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+        });
+
+        const stage2 = this.genTevStage();
+        this.mb.setTevIndirect(stage2.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.S);
+        this.setTevOrder(stage2, texCoord0, texMap0, GX.RasColorChannelID.ALPHA_BUMP_N);
+        this.setTevColorFormula(stage2, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
+        this.setTevAlphaFormula(stage2, GX.CA.APREV, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA, undefined, undefined, GX.TevScale.DIVIDE_2);
+
+        const stage3 = this.genTevStage();
+        this.mb.setTevDirect(stage3.id);
+        this.setTevOrder(stage3);
+        this.mb.setTevKColorSel(stage3.id, getKonstColorSel(k0));
+        this.mb.setTevKAlphaSel(stage3.id, GX.KonstAlphaSel.KASEL_4_8);
+        this.setTevColorFormula(stage3, GX.CC.ZERO, GX.CC.KONST, GX.CC.CPREV, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG0);
+        this.setTevAlphaFormula(stage3, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV, GX.TevOp.SUB, undefined, GX.TevScale.SCALE_2, undefined, GX.Register.REG0);
+
+        const stage4 = this.genTevStage();
+        this.mb.setTevDirect(stage4.id);
+        this.setTevOrder(stage4);
+        this.mb.setTevKColorSel(stage4.id, getKonstColorSel(k1));
+        this.mb.setTevKAlphaSel(stage4.id, GX.KonstAlphaSel.KASEL_4_8);
+        this.setTevColorFormula(stage4, GX.CC.KONST, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C0, undefined, undefined, undefined, undefined, GX.Register.REG0);
+        this.setTevAlphaFormula(stage4, GX.CA.APREV, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST, GX.TevOp.SUB, undefined, GX.TevScale.SCALE_2, undefined, GX.Register.REG1);
+
+        const stage5 = this.genTevStage();
+        this.mb.setTevDirect(stage5.id);
+        this.setTevOrder(stage5);
+        this.mb.setTevKColorSel(stage5.id, getKonstColorSel(k2));
+        this.setTevColorFormula(stage5, GX.CC.ZERO, GX.CC.KONST, GX.CC.CPREV, GX.CC.ZERO, undefined, undefined, undefined, undefined, GX.Register.REG1);
+        this.setTevAlphaFormula(stage5, GX.CA.A0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.A1);
+
+        const stage6 = this.genTevStage();
+        this.mb.setTevDirect(stage6.id);
+        this.mb.setTevKColorSel(stage6.id, getKonstColorSel(k3));
+        this.mb.setTevKAlphaSel(stage6.id, GX.KonstAlphaSel.KASEL_4_8);
+        this.setTevOrder(stage6);
+        this.setTevColorFormula(stage6, GX.CC.KONST, GX.CC.ZERO, GX.CC.CPREV, GX.CC.C1, undefined, undefined, undefined, undefined, GX.Register.REG1);
+        this.setTevAlphaFormula(stage6, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV);
+
+        const stage7 = this.genTevStage();
+        this.mb.setTevDirect(stage7.id);
+        this.mb.setTevKAlphaSel(stage7.id, getKonstAlphaSel(k0));
+        this.setTevOrder(stage7);
+        this.setTevColorFormula(stage7, GX.CC.C1, GX.CC.C0, GX.CC.APREV, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage7, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST);
+
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR1A1, false, GX.ColorSrc.REG, GX.ColorSrc.REG, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        this.mb.setCullMode(GX.CullMode.NONE);
+        this.mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        this.mb.setZMode(false, GX.CompareType.ALWAYS, false);
     }
 }
 
@@ -67,8 +187,8 @@ export class SFARenderer implements Viewer.SceneGfx {
     protected mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
 
     public materialFactory: MaterialFactory;
-    protected ddraw = new TDDraw();
-    private enableHeatShimmer: boolean = false; // TODO: set by camera triggers
+    private shimmerddraw = new TDDraw();
+    private enableHeatShimmer: boolean = true; // TODO: set by camera triggers
     private heatShimmerMaterial: HeatShimmerMaterial | undefined = undefined;
     // TODO: Merge GXMaterialHelperGfx into SFAMaterial
     private heatShimmerMaterialHelper: GXMaterialHelperGfx | undefined = undefined;
@@ -78,6 +198,11 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.materialFactory = new MaterialFactory(device);
+        
+        this.shimmerddraw.setVtxDesc(GX.Attr.POS, true);
+        this.shimmerddraw.setVtxDesc(GX.Attr.TEX0, true);
+        this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.POS, GX.CompCnt.POS_XYZ);
+        this.shimmerddraw.setVtxAttrFmt(GX.VtxFmt.VTXFMT0, GX.Attr.TEX0, GX.CompCnt.TEX_ST);
 
         this.renderLists = {
             atmosphere: new GfxRenderInstList(),
@@ -138,12 +263,17 @@ export class SFARenderer implements Viewer.SceneGfx {
                 pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
                 pass.attachResolveTexture(mainColorResolveTextureID);
-                pass.exec((passRenderer) => {
+
+                pass.exec((passRenderer, scope) => {
+                    this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                    renderLists.heatShimmer.resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
+
                     renderInstManager.drawListOnPassRenderer(renderLists.heatShimmer, passRenderer);
                 });
             });
         }
 
+        if (false) { // TODO: enable
         builder.pushPass((pass) => {
             pass.setDebugName('World Translucents');
             pass.setViewport(sceneCtx.viewerInput.viewport);
@@ -160,6 +290,7 @@ export class SFARenderer implements Viewer.SceneGfx {
                 renderInstManager.drawListOnPassRenderer(renderLists.world[2], passRenderer);
             });
         });
+        }
     }
 
     protected addHeatShimmerRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
@@ -175,19 +306,19 @@ export class SFARenderer implements Viewer.SceneGfx {
         const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
         fillSceneParamsData(d, offs, scratchSceneParams);
 
-        this.ddraw.beginDraw();
-        this.ddraw.begin(GX.Command.DRAW_QUADS);
-        this.ddraw.position3f32(-1, -1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.0);
-        this.ddraw.position3f32(-1, 1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 1.0);
-        this.ddraw.position3f32(1, 1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 1.0);
-        this.ddraw.position3f32(1, -1, -1);
-        this.ddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 0.0);
-        this.ddraw.end();
+        this.shimmerddraw.beginDraw();
+        this.shimmerddraw.begin(GX.Command.DRAW_QUADS);
+        this.shimmerddraw.position3f32(-1, -1, -1);
+        this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.0);
+        this.shimmerddraw.position3f32(-1, 1, -1);
+        this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 1.0);
+        this.shimmerddraw.position3f32(1, 1, -1);
+        this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 1.0);
+        this.shimmerddraw.position3f32(1, -1, -1);
+        this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 0.0);
+        this.shimmerddraw.end();
 
-        const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
+        const renderInst = this.shimmerddraw.makeRenderInst(device, renderInstManager);
 
         if (this.heatShimmerMaterial === undefined) {
             this.heatShimmerMaterial = new HeatShimmerMaterial(this.materialFactory);
@@ -203,7 +334,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         });
         submitScratchRenderInst(device, renderInstManager, this.heatShimmerMaterialHelper!, renderInst, sceneCtx.viewerInput, true, scratchMaterialParams, scratchPacketParams);
 
-        this.ddraw.endAndUpload(device, renderInstManager);
+        this.shimmerddraw.endAndUpload(device, renderInstManager);
 
         renderInstManager.popTemplateRenderInst();
     }

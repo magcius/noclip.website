@@ -2,7 +2,7 @@ import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../g
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
-import { MaterialParams, ColorKind } from '../gx/gx_render';
+import { MaterialParams, ColorKind, PacketParams } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { TextureMapping } from '../TextureHolder';
 import { texProjCameraSceneTex } from '../Camera';
@@ -195,7 +195,7 @@ export function makeMaterialTexture(texture: SFATexture | null): MaterialTexture
     }
 }
 
-function makeSceneMaterialTexture(): MaterialTexture {
+export function makeSceneMaterialTexture(): MaterialTexture {
     return {
         setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
             mapping.reset();
@@ -261,7 +261,7 @@ interface IndTexStage {
     id: number;
 }
 
-function getIndTexStageID(indTexStage: IndTexStage): GX.IndTexStageID {
+export function getIndTexStageID(indTexStage: IndTexStage): GX.IndTexStageID {
     return GX.IndTexStageID.STAGE0 + indTexStage.id;
 }
 
@@ -270,11 +270,11 @@ interface TexMap {
     id: number;
 }
 
-function getTexMapID(texMap: TexMap | null): GX.TexMapID {
+export function getTexMapID(texMap: TexMap | null): GX.TexMapID {
     return texMap !== null ? GX.TexMapID.TEXMAP0 + texMap.id : GX.TexMapID.TEXMAP_NULL;
 }
 
-function getTexGenSrc(texMap: TexMap): GX.TexGenSrc {
+export function getTexGenSrc(texMap: TexMap): GX.TexGenSrc {
     return GX.TexGenSrc.TEX0 + texMap.id;
 }
 
@@ -283,7 +283,7 @@ interface TexCoord {
     id: number;
 }
 
-function getTexCoordID(texCoord: TexCoord | null): GX.TexCoordID {
+export function getTexCoordID(texCoord: TexCoord | null): GX.TexCoordID {
     return texCoord !== null ? GX.TexCoordID.TEXCOORD0 + texCoord.id : GX.TexCoordID.TEXCOORD_NULL;
 }
 
@@ -292,7 +292,7 @@ interface PostTexMtx {
     id: number;
 }
 
-function getPostTexGenMatrix(postTexMtx: PostTexMtx): GX.PostTexGenMatrix {
+export function getPostTexGenMatrix(postTexMtx: PostTexMtx): GX.PostTexGenMatrix {
     return GX.PostTexGenMatrix.PTTEXMTX0 + 3 * postTexMtx.id;
 }
 
@@ -301,7 +301,7 @@ interface IndTexMtx {
     id: number;
 }
 
-function getIndTexMtxID(indTexMtx: IndTexMtx): GX.IndTexMtxID {
+export function getIndTexMtxID(indTexMtx: IndTexMtx): GX.IndTexMtxID {
     return GX.IndTexMtxID._0 + indTexMtx.id;
 }
 
@@ -310,11 +310,11 @@ interface KonstColor {
     id: number;
 }
 
-function getKonstColorSel(kcolor: KonstColor): GX.KonstColorSel {
+export function getKonstColorSel(kcolor: KonstColor): GX.KonstColorSel {
     return GX.KonstColorSel.KCSEL_K0 + kcolor.id;
 }
 
-function getKonstAlphaSel(kcolor: KonstColor): GX.KonstAlphaSel {
+export function getKonstAlphaSel(kcolor: KonstColor): GX.KonstAlphaSel {
     return GX.KonstAlphaSel.KASEL_K0_A + kcolor.id;
 }
 
