@@ -233,7 +233,6 @@ function makeFurMapMaterialTexture(factory: MaterialFactory): MaterialTexture {
 
 export interface SFAMaterial {
     factory: MaterialFactory;
-    shader: Shader;
     getGXMaterial: () => GXMaterial;
     setupMaterialParams: (params: MaterialParams, matCtx: MaterialRenderContext) => void;
     rebuild: () => void;
@@ -319,7 +318,7 @@ function getKonstAlphaSel(kcolor: KonstColor): GX.KonstAlphaSel {
     return GX.KonstAlphaSel.KASEL_K0_A + kcolor.id;
 }
 
-abstract class MaterialBase implements SFAMaterial {
+export abstract class MaterialBase implements SFAMaterial {
     protected mb: GXMaterialBuilder;
     protected texMtx: TexMtxFunc[] = [];
     protected ambColors: ColorFunc[] = [];
@@ -333,7 +332,7 @@ abstract class MaterialBase implements SFAMaterial {
     private konstColors: ColorFunc[];
     private gxMaterial: GXMaterial | undefined = undefined;
 
-    constructor(public factory: MaterialFactory, public shader: Shader, private name: string | null = null) {
+    constructor(public factory: MaterialFactory, private name: string | null = null) {
     }
 
     public rebuild() {
@@ -360,36 +359,32 @@ abstract class MaterialBase implements SFAMaterial {
     
     protected genTevStage(): TevStage {
         const id = this.tevStageNum;
-        if (id >= 8) {
+        if (id >= 8)
             throw Error(`Too many TEV stages`);
-        }
         this.tevStageNum++;
         return { kind: 'TevStage', id };
     }
 
     protected genIndTexStage(): IndTexStage {
         const id = this.indTexStageNum;
-        if (id >= 4) {
+        if (id >= 4)
             throw Error(`Too many indirect texture stages`);
-        }
         this.indTexStageNum++;
         return { kind: 'IndTexStage', id };
     }
 
     protected genTexMap(texture: MaterialTexture): TexMap {
         const id = this.texMaps.length;
-        if (id >= 8) {
+        if (id >= 8)
             throw Error(`Too many texture maps`);
-        }
         this.texMaps.push(texture);
         return { kind: 'TexMap', id };
     }
 
     protected genTexCoord(texGenType: GX.TexGenType, texGenSrc: GX.TexGenSrc, texMtx: GX.TexGenMatrix = GX.TexGenMatrix.IDENTITY, normalize: boolean = false, postTexMtx: GX.PostTexGenMatrix = GX.PostTexGenMatrix.PTIDENTITY): TexCoord {
         const texCoord: TexCoord = { kind: 'TexCoord', id: this.texCoordNum };
-        if (texCoord.id >= 8) {
+        if (texCoord.id >= 8)
             throw Error(`Too many texture coordinates`);
-        }
         this.texCoordNum++;
         this.mb.setTexCoordGen(getTexCoordID(texCoord), texGenType, texGenSrc, texMtx, normalize, postTexMtx);
         return texCoord;
@@ -397,27 +392,24 @@ abstract class MaterialBase implements SFAMaterial {
 
     protected genPostTexMtx(func: TexMtxFunc): PostTexMtx {
         const id = this.postTexMtxs.length;
-        if (id >= 20) {
+        if (id >= 20)
             throw Error(`Too many post-transform texture matrices`);
-        }
         this.postTexMtxs.push(func);
         return { kind: 'PostTexMtx', id };
     }
 
     protected genIndTexMtx(func: TexMtxFunc): IndTexMtx {
         const id = this.indTexMtxs.length;
-        if (id >= 3) {
+        if (id >= 3)
             throw Error(`Too many indirect texture matrices`);
-        }
         this.indTexMtxs.push(func);
         return { kind: 'IndTexMtx', id };
     }
 
     protected genKonstColor(func: ColorFunc): KonstColor {
         const id = this.konstColors.length;
-        if (id >= 4) {
+        if (id >= 4)
             throw Error(`Too many konst colors`);
-        }
         this.konstColors.push(func);
         return { kind: 'KonstColor', id };
     }
@@ -441,9 +433,8 @@ abstract class MaterialBase implements SFAMaterial {
     }
 
     public getGXMaterial(): GXMaterial {
-        if (this.gxMaterial === undefined) {
+        if (this.gxMaterial === undefined)
             this.rebuild();
-        }
 
         return this.gxMaterial!;
     }
@@ -499,7 +490,7 @@ export class StandardMaterial extends MaterialBase {
     private blendOverride?: BlendOverride = undefined;
 
     constructor(public device: GfxDevice, public factory: MaterialFactory, public shader: Shader, public texFetcher: TextureFetcher, private isMapBlock: boolean) {
-        super(factory, shader);
+        super(factory);
     }
 
     protected rebuildInternal() {
@@ -1122,8 +1113,8 @@ class WaterMaterial extends MaterialBase {
 }
 
 class FurMaterial extends MaterialBase {
-    public constructor(private device: GfxDevice, factory: MaterialFactory, shader: Shader, private texFetcher: TextureFetcher, private isMapBlock: boolean) {
-        super(factory, shader);
+    public constructor(private device: GfxDevice, factory: MaterialFactory, public shader: Shader, private texFetcher: TextureFetcher, private isMapBlock: boolean) {
+        super(factory);
     }
 
     protected rebuildInternal() {
@@ -1228,16 +1219,15 @@ export class MaterialFactory {
     private furFactory: FurFactory | null = null;
     public scrollingTexMtxs: ScrollingTexMtx[] = [];
 
-    constructor(private device: GfxDevice, private envfxMan?: EnvfxManager) {
+    constructor(private device: GfxDevice) {
     }
 
-    public getAmbientColor(out: Color, ambienceNum: number) {
-        if (this.envfxMan !== undefined) {
-            this.envfxMan.getAmbientColor(out, ambienceNum);
-        } else {
-            colorFromRGBA(out, 1.0, 1.0, 1.0, 1.0);
-        }
-    }
+    // public getAmbientColor(out: Color, ambienceNum: number) {
+    //     if (this.envfxMan !== undefined)
+    //         this.envfxMan.getAmbientColor(out, ambienceNum);
+    //     else
+    //         colorFromRGBA(out, 1.0, 1.0, 1.0, 1.0);
+    // }
 
     public update(animController: SFAAnimationController) {
         for (let i = 0; i < this.scrollingTexMtxs.length; i++) {
@@ -1259,7 +1249,7 @@ export class MaterialFactory {
     }
     
     public buildWaterMaterial(shader: Shader): SFAMaterial {
-        return new WaterMaterial(this, shader);
+        return new WaterMaterial(this);
     }
 
     public buildFurMaterial(shader: Shader, texFetcher: TextureFetcher, isMapBlock: boolean): SFAMaterial {
@@ -1267,9 +1257,8 @@ export class MaterialFactory {
     }
 
     public getFurFactory(): FurFactory {
-        if (this.furFactory !== null) {
+        if (this.furFactory !== null)
             return this.furFactory;
-        }
 
         this.furFactory = new FurFactory(this.device);
         return this.furFactory;
@@ -1277,9 +1266,8 @@ export class MaterialFactory {
 
     public getHalfGrayTexture(): MaterialTexture {
         // Used to test indirect texturing
-        if (this.halfGrayTexture !== null) {
+        if (this.halfGrayTexture !== null)
             return this.halfGrayTexture;
-        }
 
         const width = 1;
         const height = 1;
@@ -1297,11 +1285,11 @@ export class MaterialFactory {
         const pixels = new Uint8Array(4 * width * height);
 
         function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
-            const idx = 4 * (y * width + x)
-            pixels[idx] = r
-            pixels[idx + 1] = g
-            pixels[idx + 2] = b
-            pixels[idx + 3] = a
+            const idx = 4 * (y * width + x);
+            pixels[idx] = r;
+            pixels[idx + 1] = g;
+            pixels[idx + 2] = b;
+            pixels[idx + 3] = a;
         }
 
         plot(0, 0, 127, 127, 127, 127);
@@ -1313,9 +1301,8 @@ export class MaterialFactory {
     }
     
     public getRampTexture(): MaterialTexture {
-        if (this.rampTexture !== null) {
+        if (this.rampTexture !== null)
             return this.rampTexture;
-        }
 
         const width = 256;
         const height = 4;
@@ -1333,18 +1320,17 @@ export class MaterialFactory {
         const pixels = new Uint8Array(4 * width * height);
 
         function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
-            const idx = 4 * (y * width + x)
-            pixels[idx] = r
-            pixels[idx + 1] = g
-            pixels[idx + 2] = b
-            pixels[idx + 3] = a
+            const idx = 4 * (y * width + x);
+            pixels[idx] = r;
+            pixels[idx + 1] = g;
+            pixels[idx + 2] = b;
+            pixels[idx + 3] = a;
         }
 
         for (let x = 0; x < 256; x++) {
             const I = x;
-            for (let y = 0; y < 4; y++) {
-                plot(x, y, I, I, I, I)
-            }
+            for (let y = 0; y < 4; y++)
+                plot(x, y, I, I, I, I);
         }
 
         this.device.uploadTextureData(gfxTexture, 0, [pixels]);
@@ -1358,9 +1344,8 @@ export class MaterialFactory {
         // The original function to generate this texture is not customizable and
         // generates the same texture every time it is called. (?)
 
-        if (this.causticTexture !== null) {
+        if (this.causticTexture !== null)
             return this.causticTexture;
-        }
         
         const width = 128;
         const height = 128;
@@ -1378,34 +1363,32 @@ export class MaterialFactory {
         const pixels = new Uint8Array(4 * width * height);
 
         function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
-            const idx = 4 * (y * width + x)
-            pixels[idx] = r
-            pixels[idx + 1] = g
-            pixels[idx + 2] = b
-            pixels[idx + 3] = a
+            const idx = 4 * (y * width + x);
+            pixels[idx] = r;
+            pixels[idx + 1] = g;
+            pixels[idx + 2] = b;
+            pixels[idx + 3] = a;
         }
 
         for (let y = 0; y < height; y++) {
-            const fy = (y - 64) / 64
+            const fy = (y - 64) / 64;
             for (let x = 0; x < width; x++) {
-                const fx = (x - 64) / 64
+                const fx = (x - 64) / 64;
                 let dist = Math.hypot(fx, fy);
                 if (dist < 0.25 || 0.75 < dist) {
-                    dist = 0.0
+                    dist = 0.0;
                 } else {
-                    let f = 2.0 * (dist - 0.25)
-                    if (f <= 0.5) {
-                        f = 0.5 - f
-                    } else {
-                        f = f - 0.5
-                    }
-                    dist = -(2.0 * f - 1.0)
-                    if (0.0 < dist) {
-                        dist = Math.sqrt(dist)
-                    }
+                    let f = 2.0 * (dist - 0.25);
+                    if (f <= 0.5)
+                        f = 0.5 - f;
+                    else
+                        f = f - 0.5;
+                    dist = -(2.0 * f - 1.0);
+                    if (0.0 < dist)
+                        dist = Math.sqrt(dist);
                 }
-                const I = 16 * dist
-                plot(y, x, I, I, I, I)
+                const I = 16 * dist;
+                plot(y, x, I, I, I, I);
             }
         }
 
@@ -1420,9 +1403,8 @@ export class MaterialFactory {
         // The original function used to generate this texture is not customizable and
         // always generates the same texture every time it is called. (?)
 
-        if (this.wavyTexture !== null) {
+        if (this.wavyTexture !== null)
             return this.wavyTexture;
-        }
         
         const width = 64;
         const height = 64;
@@ -1441,10 +1423,10 @@ export class MaterialFactory {
 
         function plot(x: number, y: number, r: number, g: number, b: number, a: number) {
             const idx = 4 * (y * width + x)
-            pixels[idx] = r
-            pixels[idx + 1] = g
-            pixels[idx + 2] = b
-            pixels[idx + 3] = a
+            pixels[idx] = r;
+            pixels[idx + 1] = g;
+            pixels[idx + 2] = b;
+            pixels[idx + 3] = a;
         }
 
         const X_MUL = 0.39275; // Approximately pi / 8

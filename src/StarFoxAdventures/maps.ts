@@ -203,7 +203,7 @@ export async function loadMap(gameInfo: GameInfo, dataFetcher: DataFetcher, mapN
 class MapSceneRenderer extends SFARenderer {
     private map: MapInstance;
 
-    constructor(private device: GfxDevice, animController: SFAAnimationController, private materialFactory: MaterialFactory) {
+    constructor(private device: GfxDevice, animController: SFAAnimationController) {
         super(device, animController);
     }
 
@@ -251,7 +251,7 @@ export class SFAMapSceneDesc implements Viewer.SceneDesc {
         const materialFactory = new MaterialFactory(device);
         const mapSceneInfo = await loadMap(this.gameInfo, context.dataFetcher, this.mapNum);
 
-        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
+        const mapRenderer = new MapSceneRenderer(device, animController);
         const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, false);
         const blockFetcher = await SFABlockFetcher.create(this.gameInfo,context.dataFetcher, device, materialFactory, animController, Promise.resolve(texFetcher));
         await mapRenderer.create(mapSceneInfo, this.gameInfo, context.dataFetcher, blockFetcher);
@@ -286,7 +286,7 @@ export class SwapcircleSceneDesc implements Viewer.SceneDesc {
             }
         };
 
-        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
+        const mapRenderer = new MapSceneRenderer(device, animController);
         const texFetcher = await SFATextureFetcher.create(this.gameInfo, context.dataFetcher, true);
         await texFetcher.loadSubdirs(['swapcircle'], context.dataFetcher);
         const blockFetcher = await SwapcircleBlockFetcher.create(this.gameInfo,context.dataFetcher, materialFactory, texFetcher);
@@ -348,7 +348,7 @@ export class AncientMapSceneDesc implements Viewer.SceneDesc {
             }
         };
 
-        const mapRenderer = new MapSceneRenderer(device, animController, materialFactory);
+        const mapRenderer = new MapSceneRenderer(device, animController);
         const blockFetcher = await AncientBlockFetcher.create(this.gameInfo, dataFetcher, materialFactory);
         await mapRenderer.create(mapSceneInfo, this.gameInfo, dataFetcher, blockFetcher);
 

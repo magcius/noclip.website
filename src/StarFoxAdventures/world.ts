@@ -3,7 +3,7 @@ import * as UI from '../ui';
 import { DataFetcher } from '../DataFetcher';
 import * as Viewer from '../viewer';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
-import { GfxRenderInstManager, GfxRenderInst, GfxRenderInstList } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstManager, GfxRenderInst } from "../gfx/render/GfxRenderInstManager";
 import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 import { SceneContext } from '../SceneBase';
 import { TDDraw } from "../SuperMarioGalaxy/DDraw";
@@ -21,29 +21,18 @@ import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
 import { ObjectManager, ObjectInstance, ObjectRenderContext, ObjectUpdateContext } from './objects';
 import { EnvfxManager } from './envfx';
-import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
+import { SFARenderer, SceneRenderContext, SFARenderLists, submitScratchRenderInst } from './render';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3 } from './util';
 import { ModelRenderContext } from './models';
-import { MaterialFactory } from './materials';
+import { MaterialFactory, MaterialBase } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
 import { getCamPos } from './util';
+import { Material } from '../SuperMario64DS/sm64ds_bmd';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
-
-function submitScratchRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, materialHelper: GXMaterialHelperGfx, renderInst: GfxRenderInst, viewerInput: ViewerRenderInput, noViewMatrix: boolean = false, materialParams_ = materialParams, packetParams_ = packetParams): void {
-    materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-    renderInst.setSamplerBindingsFromTextureMappings(materialParams_.m_TextureMapping);
-    materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams_);
-    if (noViewMatrix)
-        mat4.identity(packetParams_.u_PosMtx[0]);
-    else
-        mat4.copy(packetParams_.u_PosMtx[0], viewerInput.camera.viewMatrix);
-    materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams_);
-    renderInstManager.submitRenderInst(renderInst);
-}
 
 function vecPitch(v: vec3): number {
     return Math.atan2(v[1], Math.hypot(v[2], v[0]));
@@ -61,19 +50,17 @@ export class World {
     public envfxMan: EnvfxManager;
     public blockFetcher: SFABlockFetcher;
     public mapInstance: MapInstance | null = null;
-    public materialFactory: MaterialFactory;
     public objectMan: ObjectManager;
     public resColl: ResourceCollection;
     public objectInstances: ObjectInstance[] = [];
     public lights: Set<Light> = new Set();
 
-    private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[]) {
+    private constructor(public device: GfxDevice, public gameInfo: GameInfo, public subdirs: string[], private materialFactory: MaterialFactory) {
     }
 
     private async init(dataFetcher: DataFetcher) {
         this.animController = new SFAAnimationController();
         this.envfxMan = await EnvfxManager.create(this, dataFetcher);
-        this.materialFactory = new MaterialFactory(this.device, this.envfxMan);
         
         const resCollPromise = ResourceCollection.create(this.device, this.gameInfo, dataFetcher, this.subdirs, this.materialFactory, this.animController);
         const texFetcherPromise = async () => {
@@ -90,8 +77,8 @@ export class World {
         this.objectMan = objectMan;
     }
 
-    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[]): Promise<World> {
-        const self = new World(device, gameInfo, subdirs);
+    public static async create(device: GfxDevice, gameInfo: GameInfo, dataFetcher: DataFetcher, subdirs: string[], materialFactory: MaterialFactory): Promise<World> {
+        const self = new World(device, gameInfo, subdirs, materialFactory);
         await self.init(dataFetcher);
         return self;
     }
@@ -143,7 +130,6 @@ const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 const scratchSceneParams = new SceneParams();
 
 class WorldRenderer extends SFARenderer {
-    private ddraw = new TDDraw();
     private materialHelperSky: GXMaterialHelperGfx;
     private timeSelect: UI.Slider;
     private enableAmbient: boolean = true;
@@ -175,7 +161,7 @@ class WorldRenderer extends SFARenderer {
         mb.setZMode(false, GX.CompareType.ALWAYS, false);
         mb.setCullMode(GX.CullMode.NONE);
         mb.setUsePnMtxIdx(false);
-        this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('sky'));
+        this.materialHelperSky = new GXMaterialHelperGfx(mb.finish('atmosphere'));
     }
 
     public createPanels(): UI.Panel[] {
@@ -242,7 +228,7 @@ class WorldRenderer extends SFARenderer {
     protected update(viewerInput: Viewer.ViewerRenderInput) {
         super.update(viewerInput);
 
-        this.world.materialFactory.update(this.animController);
+        this.materialFactory.update(this.animController);
 
         this.world.envfxMan.setTimeOfDay(this.timeSelect.getValue()|0);
         if (!this.enableAmbient)
@@ -314,7 +300,7 @@ class WorldRenderer extends SFARenderer {
             this.ddraw.end();
 
             const renderInst = this.ddraw.makeRenderInst(device, renderInstManager);
-            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true);
+            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true, materialParams, packetParams);
 
             this.ddraw.endAndUpload(device, renderInstManager);
 
@@ -466,7 +452,8 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
 
         const pathBase = this.gameInfo.pathBase;
         const dataFetcher = context.dataFetcher;
-        const world = await World.create(device, this.gameInfo, dataFetcher, this.subdirs);
+        const materialFactory = new MaterialFactory(device);
+        const world = await World.create(device, this.gameInfo, dataFetcher, this.subdirs, materialFactory);
         
         let mapInstance: MapInstance | null = null;
         if (this.mapNum !== null) {

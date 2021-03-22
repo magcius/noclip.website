@@ -409,7 +409,7 @@ const SFA_CLASSES: {[num: number]: SFAClass} = {
                 const materials = block.getMaterials();
                 for (let i = 0; i < materials.length; i++) {
                     if (materials[i] !== undefined) {
-                        const mat = materials[i]!;
+                        const mat = materials[i]! as StandardMaterial;
                         for (let j = 0; j < mat.shader.layers.length; j++) {
                             const layer = mat.shader.layers[j];
                             if (layer.texId === targetTexId) {
