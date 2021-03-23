@@ -50,7 +50,7 @@ class HeatShimmerMaterial extends MaterialBase {
         const texCoord1 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(pttexmtx0));
 
         const k0 = this.genKonstColor((dst: Color) => {
-            colorFromRGBA(dst, 0xff, 0xff, 0xff, 0xfc);
+            colorFromRGBA(dst, 1.0, 1.0, 1.0, 0xfc/0xff);
         });
 
         const stage0 = this.genTevStage();
@@ -92,7 +92,7 @@ class HeatShimmerMaterial extends MaterialBase {
 
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         this.mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
-        this.mb.setZMode(true, GX.CompareType.GREATER /* FIXME: original game uses LESS? Z order might be reversed. */, false);
+        this.mb.setZMode(true, GX.CompareType.GREATER /* XXX: original game uses LESS. Z order might be reversed. */, false);
         this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
     }
 }
@@ -168,8 +168,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.opaqueDepthTextureMapping.gfxSampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
-            minFilter: GfxTexFilterMode.BILINEAR,
-            magFilter: GfxTexFilterMode.BILINEAR,
+            minFilter: GfxTexFilterMode.POINT,
+            magFilter: GfxTexFilterMode.POINT,
             mipFilter: GfxMipFilterMode.NO_MIP,
             minLOD: 0,
             maxLOD: 100,
