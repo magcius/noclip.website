@@ -27,6 +27,14 @@ export function angle16ToRads(a: number): number {
     return interpS16(a) * Math.PI / 32768;
 }
 
+export function radsToAngle16(rads: number): number {
+    return interpS16((rads * 32768 / Math.PI) & 0xffff);
+}
+
+export function vecPitch(v: ReadonlyVec3): number {
+    return Math.atan2(v[1], Math.hypot(v[2], v[0]));
+}
+
 export function mat4SetRow(mtx: mat4, row: number, m0: number, m1: number, m2: number, m3: number) {
     // mat4's are Float32Arrays in column-major order
     mtx[row + 0x00] = m0;

@@ -23,7 +23,7 @@ import { ObjectManager, ObjectInstance, ObjectRenderContext, ObjectUpdateContext
 import { EnvfxManager } from './envfx';
 import { SFARenderer, SceneRenderContext, SFARenderLists, submitScratchRenderInst } from './render';
 import { MapInstance, loadMap } from './maps';
-import { dataSubarray, readVec3 } from './util';
+import { dataSubarray, readVec3, vecPitch } from './util';
 import { ModelRenderContext } from './models';
 import { MaterialFactory, MaterialBase } from './materials';
 import { SFAAnimationController } from './animation';
@@ -33,10 +33,6 @@ import { Material } from '../SuperMario64DS/sm64ds_bmd';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
-
-function vecPitch(v: vec3): number {
-    return Math.atan2(v[1], Math.hypot(v[2], v[0]));
-}
 
 interface Light {
     position: vec3;
