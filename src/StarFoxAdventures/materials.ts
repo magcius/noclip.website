@@ -195,22 +195,33 @@ export function makeMaterialTexture(texture: SFATexture | null): MaterialTexture
     }
 }
 
-export function makeSceneMaterialTexture(): MaterialTexture {
+export function makeOpaqueColorTexture(): MaterialTexture {
     return {
         setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
             mapping.reset();
-            mapping.lateBinding = 'opaque-scene-texture';
+            mapping.lateBinding = 'opaque-color-texture';
             mapping.width = matCtx.sceneCtx.viewerInput.backbufferWidth;
             mapping.height = matCtx.sceneCtx.viewerInput.backbufferHeight;
         }
     };
 }
 
-function makePreviousFrameMaterialTexture(): MaterialTexture {
+export function makeOpaqueDepthTexture(): MaterialTexture {
     return {
         setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
             mapping.reset();
-            mapping.lateBinding = 'previous-frame-texture';
+            mapping.lateBinding = 'opaque-depth-texture';
+            mapping.width = matCtx.sceneCtx.viewerInput.backbufferWidth;
+            mapping.height = matCtx.sceneCtx.viewerInput.backbufferHeight;
+        }
+    };
+}
+
+export function makeTemporalTexture(): MaterialTexture {
+    return {
+        setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
+            mapping.reset();
+            mapping.lateBinding = 'temporal-texture';
             mapping.width = matCtx.sceneCtx.viewerInput.backbufferWidth;
             mapping.height = matCtx.sceneCtx.viewerInput.backbufferHeight;
         }
@@ -948,7 +959,7 @@ export class StandardMaterial extends MaterialBase {
 
     private addTevStagesForReflectiveFloor() {
         // TODO: Proper planar reflections?
-        const texMap0 = this.genTexMap(makePreviousFrameMaterialTexture());
+        const texMap0 = this.genTexMap(makeTemporalTexture());
         const texCoord = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
 
         const stage = this.genTevStage();
@@ -1010,7 +1021,7 @@ class WaterMaterial extends MaterialBase {
             mat4SetValue(dst, 1, 3, matCtx.sceneCtx.animController.envAnimValue0);
         }
 
-        const texMap0 = this.genTexMap(makeSceneMaterialTexture()); // FIXME: should be previous frame?
+        const texMap0 = this.genTexMap(makeOpaqueColorTexture()); // FIXME: should be previous frame?
         const texCoord0 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
         const texMap1 = this.genTexMap(this.factory.getWavyTexture());
         const texCoord1 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX3);
@@ -1212,7 +1223,7 @@ class FurMaterial extends MaterialBase {
 
 class FaultyTVMaterial extends MaterialBase {
     protected rebuildInternal() {
-        const texMap0 = this.genTexMap(makeSceneMaterialTexture());
+        const texMap0 = this.genTexMap(makeOpaqueColorTexture());
         const texMap1 = this.genTexMap(this.factory.getWavyTexture());
         
         const k0 = this.genKonstColor((dst: Color, matCtx: MaterialRenderContext) => {

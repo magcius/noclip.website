@@ -14,7 +14,7 @@ import { nArray } from '../util';
 import { TDDraw } from '../SuperMarioGalaxy/DDraw';
 
 import { SFAAnimationController } from './animation';
-import { MaterialBase, MaterialFactory, makeSceneMaterialTexture, getKonstColorSel, getTexGenSrc, getTexCoordID, getIndTexStageID, getIndTexMtxID, getKonstAlphaSel, MaterialRenderContext, getPostTexGenMatrix } from './materials';
+import { MaterialBase, MaterialFactory, getKonstColorSel, getTexGenSrc, getTexCoordID, getIndTexStageID, getIndTexMtxID, getKonstAlphaSel, MaterialRenderContext, getPostTexGenMatrix, makeOpaqueColorTexture, makeOpaqueDepthTexture } from './materials';
 import { mat4FromRowMajor, mat4SetRowMajor, mat4SetValue, radsToAngle16, vecPitch } from './util';
 import { getMatrixAxisZ } from '../MathHelpers';
 
@@ -36,8 +36,8 @@ export interface SFARenderLists {
 
 class HeatShimmerMaterial extends MaterialBase {
     protected rebuildInternal() {
-        const texMap0 = this.genTexMap(makeSceneMaterialTexture());
-        const texMap1 = this.genTexMap(this.factory.getRampTexture()); // FIXME: use depth texture
+        const texMap0 = this.genTexMap(makeOpaqueColorTexture());
+        const texMap1 = this.genTexMap(makeOpaqueDepthTexture());
         const texMap2 = this.genTexMap(this.factory.getWavyTexture());
 
         const texCoord0 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0));
@@ -56,6 +56,9 @@ class HeatShimmerMaterial extends MaterialBase {
         const stage0 = this.genTevStage();
         this.mb.setTevDirect(stage0.id);
         this.setTevOrder(stage0, texCoord0, texMap1);
+        // Sample depth texture as if it were I8 (i.e. copy R to all channels)
+        const swap3: GX_Material.SwapTable = [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R];
+        this.mb.setTevSwapMode(stage0.id, undefined, swap3);
         this.mb.setTevKAlphaSel(stage0.id, getKonstAlphaSel(k0));
         this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         this.setTevAlphaFormula(stage0, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA, GX.TevOp.SUB, undefined, GX.TevScale.SCALE_4);
@@ -115,8 +118,10 @@ export class SFARenderer implements Viewer.SceneGfx {
     protected renderHelper: GXRenderHelperGfx;
     protected renderLists: SFARenderLists;
     
-    private opaqueSceneTextureMapping = new TextureMapping();
-    private sceneTexture = new GfxrTemporalTexture();
+    private opaqueColorTextureMapping = new TextureMapping();
+    private opaqueDepthTextureMapping = new TextureMapping();
+    private temporalTextureMapping = new TextureMapping();
+    private temporalTexture = new GfxrTemporalTexture();
 
     private mainColorDesc = new GfxrRenderTargetDescription(GfxFormat.U8_RGBA_RT);
     protected mainDepthDesc = new GfxrRenderTargetDescription(GfxFormat.D32F);
@@ -151,7 +156,16 @@ export class SFARenderer implements Viewer.SceneGfx {
         };
 
         const cache = this.renderHelper.getCache();
-        this.opaqueSceneTextureMapping.gfxSampler = cache.createSampler(device, {
+        this.opaqueColorTextureMapping.gfxSampler = cache.createSampler(device, {
+            wrapS: GfxWrapMode.CLAMP,
+            wrapT: GfxWrapMode.CLAMP,
+            minFilter: GfxTexFilterMode.BILINEAR,
+            magFilter: GfxTexFilterMode.BILINEAR,
+            mipFilter: GfxMipFilterMode.NO_MIP,
+            minLOD: 0,
+            maxLOD: 100,
+        });
+        this.opaqueDepthTextureMapping.gfxSampler = cache.createSampler(device, {
             wrapS: GfxWrapMode.CLAMP,
             wrapT: GfxWrapMode.CLAMP,
             minFilter: GfxTexFilterMode.BILINEAR,
@@ -177,13 +191,13 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     private addWorldRenderPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
         builder.pushPass((pass) => {
-            pass.setDebugName('World Opaque');
+            pass.setDebugName('World Opaques');
             pass.setViewport(sceneCtx.viewerInput.viewport);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
-                this.opaqueSceneTextureMapping.gfxTexture = this.sceneTexture.getTextureForSampling();
-                renderLists.world[0].resolveLateSamplerBinding('previous-frame-texture', this.opaqueSceneTextureMapping);
+                this.temporalTextureMapping.gfxTexture = this.temporalTexture.getTextureForSampling();
+                renderLists.world[0].resolveLateSamplerBinding('temporal-texture', this.temporalTextureMapping);
 
                 renderInstManager.drawListOnPassRenderer(renderLists.world[0], passRenderer);
                 renderInstManager.drawListOnPassRenderer(renderLists.furs, passRenderer);
@@ -194,6 +208,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
 
         if (this.enableHeatShimmer) {
+            const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
+
             builder.pushPass((pass) => {
                 pass.setDebugName('Heat Shimmer');
                 pass.setViewport(sceneCtx.viewerInput.viewport);
@@ -201,10 +217,14 @@ export class SFARenderer implements Viewer.SceneGfx {
                 pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
                 // FIXME: heat shimmer uses the opaque scene texture downscaled by 1/2
                 pass.attachResolveTexture(mainColorResolveTextureID);
+                // FIXME: depth should also be downscaled by 1/2.
+                pass.attachResolveTexture(mainDepthResolveTextureID);
 
                 pass.exec((passRenderer, scope) => {
-                    this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                    renderLists.heatShimmer.resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
+                    this.opaqueColorTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                    renderLists.heatShimmer.resolveLateSamplerBinding('opaque-color-texture', this.opaqueColorTextureMapping);
+                    this.opaqueDepthTextureMapping.gfxTexture = scope.getResolveTextureForID(mainDepthResolveTextureID);
+                    renderLists.heatShimmer.resolveLateSamplerBinding('opaque-depth-texture', this.opaqueDepthTextureMapping);
 
                     renderInstManager.drawListOnPassRenderer(renderLists.heatShimmer, passRenderer);
                 });
@@ -219,8 +239,8 @@ export class SFARenderer implements Viewer.SceneGfx {
             pass.attachResolveTexture(mainColorResolveTextureID);
 
             pass.exec((passRenderer, scope) => {
-                this.opaqueSceneTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                renderLists.waters.resolveLateSamplerBinding('opaque-scene-texture', this.opaqueSceneTextureMapping);
+                this.opaqueColorTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
+                renderLists.waters.resolveLateSamplerBinding('opaque-color-texture', this.opaqueColorTextureMapping);
 
                 renderInstManager.drawListOnPassRenderer(renderLists.waters, passRenderer);
                 renderInstManager.drawListOnPassRenderer(renderLists.world[1], passRenderer);
@@ -253,7 +273,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         else
             factor = 0xff;
 
-        const strength = Math.sin(sceneCtx.animController.envAnimValue0); // TODO: animatable
+        const strength = 0xff * ((Math.sin(sceneCtx.animController.envAnimValue0) + 1) / 2); // TODO: controlled by camera triggers
         const a1 = (strength * 0xff) >> 8;
         const a0 = (factor * strength) >> 8;
 
@@ -303,6 +323,8 @@ export class SFARenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
+        viewerInput.camera.setClipPlanes(2.5, 10000); // Set near and far planes as in the original game in order to support heat shimmer (FIXME: should be more generous?)
+
         this.update(viewerInput);
 
         this.renderHelper.pushTemplateRenderInst();
@@ -324,7 +346,7 @@ export class SFARenderer implements Viewer.SceneGfx {
         this.mainDepthDesc.copyDimensions(this.mainColorDesc);
         this.mainDepthDesc.depthClearValue = standardFullClearRenderPassDescriptor.depthClearValue;
 
-        this.sceneTexture.setDescription(device, this.mainColorDesc);
+        this.temporalTexture.setDescription(device, this.mainColorDesc);
 
         const mainColorTargetID = builder.createRenderTargetID(this.mainColorDesc, 'Main Color');
         const mainDepthTargetID = builder.createRenderTargetID(this.mainDepthDesc, 'Main Depth');
@@ -343,7 +365,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             pass.setDebugName('Copy to Temporal Texture');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
         });
-        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.sceneTexture.getTextureForResolving());
+        builder.resolveRenderTargetToExternalTexture(mainColorTargetID, this.temporalTexture.getTextureForResolving());
 
         renderInstManager.popTemplateRenderInst();
 
@@ -354,6 +376,6 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     public destroy(device: GfxDevice): void {
         this.renderHelper.destroy(device);
-        this.sceneTexture.destroy(device);
+        this.temporalTexture.destroy(device);
     }
 }
