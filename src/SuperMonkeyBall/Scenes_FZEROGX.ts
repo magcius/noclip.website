@@ -22,9 +22,9 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
     public createSceneFromColiScene(sceneRender: FZEROGXSceneRenderer, coliscene: COLI.ColiScene, id: string) {
         const modelChace = sceneRender.modelCache;
 
-        //Apper "Course Objects"
+        // Apper "Course Objects"
         const gameObjects = coliscene.gameObjects
-        for (let i = gameObjects.length-1; i > 0; i--){
+        for (let i = 0; i < gameObjects.length; i++){
             gameObjects[i].collisionBinding.referenceBindings.forEach(collisionBinding => {
                 const name = collisionBinding.name;
                 if (modelChace.gcmfChace.has(name) == true){
@@ -36,11 +36,11 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
             });
         }   
         
-        //Apper "Course Map"
+        // Apper "Course Map"
         const mapName = `C${id}_MAP`;
         if (modelChace.gcmfChace.has(mapName) == true){
             // Apper
-            super.instanceModel(sceneRender, mapName);
+            const map = super.instanceModel(sceneRender, mapName);
         }
         
     }

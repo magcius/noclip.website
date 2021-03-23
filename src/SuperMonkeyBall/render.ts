@@ -421,7 +421,7 @@ class MaterialData {
             // 0x04: "LINER & MIPMAP LINER, LINER"
             // 0x08: "NEAR & MIPMAP NEAR, NEAR (NEAR FLAG)" (mipmap: 0)
             // 0x10: "LINER & MIPMAP NEAR, LINER"
-            let texFilter = GfxTexFilterMode.POINT;
+            let texFilter = GfxTexFilterMode.BILINEAR;
             let MipFilter = GfxMipFilterMode.NO_MIP;
 
             if ((mipmapAV & (1 << 1)) !== 0){

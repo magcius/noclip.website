@@ -75,11 +75,11 @@ export class AmusementVisionSceneRenderer extends BasicGXRendererHelper {
     }
 
     protected prepareToRender(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput): void {
-        // this.animationController.setTimeInMilliseconds(viewerInput.time);
+        this.animationController.setTimeInMilliseconds(viewerInput.time);
 
         const template = this.renderHelper.pushTemplateRenderInst();
         fillSceneParamsDataOnTemplate(template, viewerInput);
-        for (let i = 0; i < this.modelInstances.length; i++)
+        for (let i = this.modelInstances.length-1; i >= 0; i--)
             this.modelInstances[i].prepareToRender(device, this.renderHelper.renderInstManager, viewerInput);
         this.renderHelper.prepareToRender(device);
         this.renderHelper.renderInstManager.popTemplateRenderInst();
