@@ -7,6 +7,7 @@ import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { CameraController } from '../Camera';
 import { AmusementVisionSceneDesc, AmusementVisionSceneRenderer } from './scenes_AmusementVision';
+import { mat4 } from 'gl-matrix';
 
 export class FZEROGXSceneRenderer extends AmusementVisionSceneRenderer {
     public adjustCameraController(c: CameraController) {
@@ -21,6 +22,20 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
     public createSceneFromColiScene(sceneRender: FZEROGXSceneRenderer, coliscene: COLI.ColiScene, id: string) {
         const modelChace = sceneRender.modelCache;
 
+        //Apper "Course Objects"
+        const gameObjects = coliscene.gameObjects
+        for (let i = gameObjects.length-1; i > 0; i--){
+            gameObjects[i].collisionBinding.referenceBindings.forEach(collisionBinding => {
+                const name = collisionBinding.name;
+                if (modelChace.gcmfChace.has(name) == true){
+                    // Apper
+                    const modelinstance = super.instanceModel(sceneRender, name);
+                    const matrix = gameObjects[i].matrix === null ? mat4.create() : gameObjects[i].matrix;
+                    modelinstance.modelMatrix = matrix;
+                }
+            });
+        }   
+        
         //Apper "Course Map"
         const mapName = `C${id}_MAP`;
         if (modelChace.gcmfChace.has(mapName) == true){
@@ -28,18 +43,6 @@ class FZEROGXSceneDesc extends AmusementVisionSceneDesc {
             super.instanceModel(sceneRender, mapName);
         }
         
-        //Apper "Course Objects"
-        const gameObjects = coliscene.gameObjects
-        for (let i = 0; i < gameObjects.length; i++){
-            gameObjects[i].collisionBinding.referenceBindings.forEach(collisionBinding => {
-                const name = collisionBinding.name;
-                if (modelChace.gcmfChace.has(name) == true){
-                    // Apper
-                    const modelinstance = super.instanceModel(sceneRender, name);
-                    modelinstance.modelMatrix = gameObjects[i].matrix;
-                }
-            });
-        }        
     }
     
     public async createScene(device: GfxDevice, context: SceneContext): Promise<Viewer.SceneGfx> {

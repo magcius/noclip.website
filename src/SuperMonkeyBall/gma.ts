@@ -30,9 +30,10 @@ export interface GcmfMaterial{
     matCount: number,
     vtxRenderFlag: GX.AttrType,
     samplerIdxs: number[], // GMA can store max 3 sampler index
-    vtxAttr: GX.Attr
-    unk0x14: number,
-    unk0x15:number
+    vtxAttr: GX.Attr,
+    unk0x14: number, // sort index?? shader index?
+    unk0x15: number,
+    unk0x40: number // relates "blending"?
 }
 
 // GCMF VertexControlHeader
@@ -47,11 +48,11 @@ interface GcmfVertexControl{
 interface VtxConType1{
     position: vec3,
     normal: vec3,
-    unk0x1C: number,
+    unk0x1C: number
 }
 
 interface VtxConType2{
-    buffer: ArrayBuffer,
+    buffer: ArrayBuffer
 }
 
 interface VtxConType3{
@@ -181,10 +182,12 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
         let offs = 0x16 + i * 0x02;
         samplerIdxs[i] = view.getInt16(offs);
     }
+    const unk0x3C = view.getInt32(0x3C);
+    const unk0x40 = view.getInt32(0x40);
 
     const vtxAttr: GX.Attr = view.getUint32(0x1C);
 
-    return { unk0x02, unk0x03, colors, emission, transparent, matCount, unk0x14, unk0x15, vtxRenderFlag, samplerIdxs, vtxAttr };
+    return { unk0x02, unk0x03, colors, emission, transparent, matCount, unk0x14, unk0x15, vtxRenderFlag, samplerIdxs, vtxAttr, unk0x40 };
 }
 
 function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader{
@@ -255,7 +258,7 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
     const loadedVertexDatas: LoadedVertexData[] = [];
     const dlistHeaders: GcmfDisplaylistHeader[] = [];
 
-    const material = parseMaterial(buffer.slice(0x00, 0x20), idx);
+    const material = parseMaterial(buffer.slice(0x00, 0x60), idx);
     for(let i = 0; i < 8; i++){
         let mtxIdx = view.getInt8(0x20 + i);
         mtxIdxs.push(mtxIdx);
@@ -265,8 +268,6 @@ function parseShape(buffer: ArrayBufferSlice, attribute: GcmfAttribute, idx: num
         dlistSizes.push(dlistSize);
     }
     vec3.set(boundingSphere, view.getFloat32(0x30), view.getFloat32(0x34), view.getFloat32(0x38));
-    const unk0x3C = view.getInt32(0x3C);
-    const unk0x40 = view.getInt32(0x40);
     const submesh_end_offs = view.byteOffset + 0x60;
     dlistHeaders.push({ mtxIdxs, dlistSizes, submesh_end_offs })
 

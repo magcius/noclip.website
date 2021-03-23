@@ -214,10 +214,10 @@ function parseGameObject(buffer: ArrayBufferSlice, offs: number): GameObject {
     const transformAbsPtr = view.getUint32(offs + 0x3C);
 
     const collisionBinding = parseCollisionBinding(buffer, collisionBindingAbsPtr);
-    const animation = parseAnimation(buffer, animationAbsPtr);
-    const unk1 = unkAbsPtr_0x34 == 0 ? parseUnknown1(buffer, unkAbsPtr_0x34) : null;
-    const skeletalAnimator = skeletalAnimatorAbsPtr == 0 ? parseSkeletalAnimator(buffer, skeletalAnimatorAbsPtr) : null;
-    const matrix = parseMatrix( buffer.slice(transformAbsPtr, transformAbsPtr + 0x30) );
+    const animation = animationAbsPtr == 0 ? null : parseAnimation(buffer, animationAbsPtr);
+    const unk1 = unkAbsPtr_0x34 == 0 ? null : parseUnknown1(buffer, unkAbsPtr_0x34);
+    const skeletalAnimator = skeletalAnimatorAbsPtr == 0 ? null : parseSkeletalAnimator(buffer, skeletalAnimatorAbsPtr);
+    const matrix = transformAbsPtr == 0 ? mat4.create() : parseMatrix( buffer.slice(transformAbsPtr, transformAbsPtr + 0x30) );
 
     return { position, scale, collisionBinding, /*animation, skeletalAnimator, */matrix };
 }

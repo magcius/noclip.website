@@ -186,39 +186,44 @@ class MaterialInstance {
 
         // for sampler 2 aand 3
         // for (let i = 1; i < this.materialData.material.matCount; i++){
-        //     mb.setTevColorIn(i, GX.CC.ZERO, GX.CC.CPREV, GX.CC.TEXC, GX.CC.ZERO);
+        //     mb.setTevOrder(i, (GX.TexCoordID.TEXCOORD0 + i) as GX.TexCoordID, (GX.TexMapID.TEXMAP0 + i) as GX.TexMapID, GX.RasColorChannelID.COLOR0A0);
+        //     mb.setTevColorIn(i,  GX.CC.ZERO, GX.CC.TEXC, GX.CC.CPREV, GX.CC.ZERO);
         //     mb.setTevColorOp(i, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        //     mb.setTevAlphaIn(i, GX.CA.ZERO, GX.CA.RASA, GX.CA.ZERO, GX.CA.TEXA);
-        //     mb.setTevAlphaOp(i, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, (GX.Register.REG0 + i) as GX.Register);
         //     mb.setTexCoordGen(i, GX.TexGenType.MTX2x4, (GX.TexGenSrc.TEX0 + i) as GX.TexGenSrc, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
         // }
 
-        // unk0x03 << 0 : ???
-        // unk0x03 << 1 : culling   0x00000001
+        // unk0x03 << 0 : ???       0x00000001
+        // unk0x03 << 1 : culling   0x00000002
+        // unk0x03 << 2 : ???       0x00000004 relate Zmode??
+        // unk0x03 << 3 : ???       0x00000008
+        // unk0x03 << 4 : ???       0x00000010
         // unk0x03 << 5 : ???       0x00000020
         // unk0x03 << 6 : blend?    0x00000040  (relate 0x3C's 0x00000010)
         // 
-        if ((this.materialData.material.unk0x03 & 1) !== 0) {
-            mb.setZMode(true, GX.CompareType.LESS, true);
+        mb.setZMode(true, GX.CompareType.LEQUAL, (unk0x03 & (1 << 5)) !== 0 ? false : true);
+        // mb.setAlphaUpdate((unk0x03 & (1 << 2)) !== 0 ? true : false);
+        
+        if ((unk0x03 & (1 << 0)) !== 0){
+            // texture conatins "alpha" value
+            mb.setAlphaCompare(GX.CompareType.GEQUAL, 0x00, GX.AlphaOp.AND, GX.CompareType.LEQUAL, 0xff);
         } else {
-            mb.setZMode(true, GX.CompareType.LESS, true);
+            mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
         }
         
-        mb.setAlphaCompare(GX.CompareType.GREATER, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+        let dstFactor = GX.BlendFactor.INVSRCALPHA;
         if ((unk0x03 & (1 << 6)) !== 0){
-            mb.setBlendMode(  GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.DSTALPHA );
-        } else {
-            mb.setBlendMode(  GX.BlendMode.BLEND, GX.BlendFactor.ONE, GX.BlendFactor.ZERO );
+            // dsetination Factor?
+            dstFactor = GX.BlendFactor.ONE;
         }
+        mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, dstFactor, GX.LogicOp.COPY)
+
         this.materialHelper = new GXMaterialHelperGfx(mb.finish(), materialData.materialHacks);
 
-        const layer = transparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
+        let layer = transparent ? GfxRendererLayer.TRANSLUCENT : GfxRendererLayer.OPAQUE;
         this.setSortKeyLayer(layer);
     }
 
     public setSortKeyLayer(layer: GfxRendererLayer): void {
-        if (this.materialData.material.transparent > 0x00)
-            layer |= GfxRendererLayer.TRANSLUCENT;
         this.sortKey = makeSortKey(layer);
     }
 
@@ -311,7 +316,7 @@ export class GcmfModelInstance {
         this.instanceStateData.jointToWorldMatrixArray = nArray(gcmfModel.gcmfEntry.gcmf.mtxCount, () => mat4.create());
         this.instanceStateData.drawViewMatrixArray = nArray(1, () => mat4.create());
         for (let i = 0; i < this.gcmfModel.materialData.length; i++){
-            let transparent = i > this.gcmfModel.gcmfEntry.gcmf.materialCount;
+            const transparent = i >= this.gcmfModel.gcmfEntry.gcmf.materialCount;
             this.materialInstances[i] = new MaterialInstance(this, this.gcmfModel.materialData[i], this.gcmfModel.gcmfEntry.gcmf.samplers, modelID, transparent);
         }
 
