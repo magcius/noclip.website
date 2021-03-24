@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, texProjOrthoMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
@@ -1061,9 +1061,33 @@ export function deserializeCamera(camera: Camera, view: DataView, byteOffs: numb
     return 0x04*4*3;
 }
 
+function texProjOrthoMtx(dst: mat4, projMtx: ReadonlyMat4, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    dst[0] = projMtx[0] * scaleS;
+    dst[4] = 0.0;
+    dst[8] = 0.0;
+    dst[12] = projMtx[12] * scaleS + transS;
+
+    dst[1] = 0.0;
+    dst[5] = projMtx[5] * scaleT;
+    dst[9] = 0.0;
+    dst[13] = projMtx[13] * scaleT + transT;
+
+    dst[2] = 0.0;
+    dst[6] = 0.0;
+    dst[10] = 0.0;
+    dst[14] = 1.0;
+
+    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
+    // since this is supposed to generate a mat4x3 matrix.
+    dst[3] = 9999.0;
+    dst[7] = 9999.0;
+    dst[11] = 9999.0;
+    dst[15] = 9999.0;
+}
+
 function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {
     if (camera.isOrthographic)
-        texProjOrthoMtx(dst, camera.frustum.left, camera.frustum.right, camera.frustum.bottom, camera.frustum.top, scaleS, scaleT, transS, transT);
+        texProjOrthoMtx(dst, camera.projectionMatrix, scaleS, scaleT, transS, transT);
     else
         texProjPerspMtx(dst, camera.fovY, camera.aspect, scaleS, scaleT, transS, transT);
 }
