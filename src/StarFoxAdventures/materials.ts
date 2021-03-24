@@ -757,6 +757,7 @@ export class StandardMaterial extends MaterialBase {
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
             );
+            mat4.multiplyScalar(dst, dst, 1 / 4); // scale_exp -2
         });
 
         const indTexMtx1 = this.genIndTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
@@ -770,6 +771,7 @@ export class StandardMaterial extends MaterialBase {
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
             );
+            mat4.multiplyScalar(dst, dst, 1 / 4); // scale_exp -2
         });
 
         const texMap0 = this.genTexMap(makeMaterialTexture(this.texFetcher.getTexture(this.device, 0x600, false)));
@@ -851,7 +853,7 @@ export class StandardMaterial extends MaterialBase {
     }
     
     private addTevStagesForCaustic() {
-        const mapOriginX = 1.0; // TODO: these values exist to ensure caustics don't exhibit seams at map boundaries.
+        const mapOriginX = 1.0; // TODO: these values are set to ensure caustics don't exhibit seams at block boundaries.
         const mapOriginZ = 1.0; // TODO
 
         const pttexmtx0 = mat4FromRowMajor(
@@ -908,6 +910,7 @@ export class StandardMaterial extends MaterialBase {
 
         const indTexMtx1 = this.genIndTexMtx((dst: mat4) => {
             mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
+            mat4.multiplyScalar(dst, dst, 1 / 2); // scale_exp -1
         });
 
         const indStage0 = this.genIndTexStage();
@@ -1141,7 +1144,6 @@ class FurMaterial extends MaterialBase {
         const indStage0 = this.genIndTexStage();
         this.setIndTexOrder(indStage0, texCoord2, texMap2);
         this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
-
     
         // Stage 1: Fur map
         const texMap1 = this.genTexMap(makeFurMapMaterialTexture(this.factory));
@@ -1211,7 +1213,71 @@ class FurMaterial extends MaterialBase {
     }
 }
 
-class FaultyTVMaterial extends MaterialBase {
+export class HeatShimmerMaterial extends MaterialBase {
+    protected rebuildInternal() {
+        const texMap0 = this.genTexMap(makeOpaqueColorTextureDownscale2x());
+        const texMap1 = this.genTexMap(makeOpaqueDepthTextureDownscale2x());
+        const texMap2 = this.genTexMap(this.factory.getWavyTexture());
+
+        const texCoord0 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0));
+
+        const pttexmtx0 = this.genPostTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
+            mat4.fromScaling(dst, [7.0, 7.0, 1.0]);
+            mat4SetValue(dst, 0, 3, matCtx.sceneCtx.animController.envAnimValue0 * 10.0);
+            mat4SetValue(dst, 1, 3, -matCtx.sceneCtx.animController.envAnimValue1 * 10.0);
+        });
+        const texCoord1 = this.genTexCoord(GX.TexGenType.MTX3x4, getTexGenSrc(texMap0), undefined, undefined, getPostTexGenMatrix(pttexmtx0));
+
+        const k0 = this.genKonstColor((dst: Color) => {
+            colorFromRGBA(dst, 1.0, 1.0, 1.0, 0xfc/0xff);
+        });
+
+        const stage0 = this.genTevStage();
+        this.mb.setTevDirect(stage0.id);
+        this.setTevOrder(stage0, texCoord0, texMap1);
+        // Sample depth texture as if it were I8 (i.e. copy R to all channels)
+        const swap3: SwapTable = [GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R, GX.TevColorChan.R];
+        this.mb.setTevSwapMode(stage0.id, undefined, swap3);
+        this.mb.setTevKAlphaSel(stage0.id, getKonstAlphaSel(k0));
+        this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage0, GX.CA.KONST, GX.CA.ZERO, GX.CA.ZERO, GX.CA.TEXA, GX.TevOp.SUB, undefined, GX.TevScale.SCALE_4);
+
+        const indTexMtx0 = this.genIndTexMtx((dst: mat4, matCtx: MaterialRenderContext) => {
+            let s = 0.5 * Math.sin(3.142 * matCtx.sceneCtx.animController.envAnimValue0 * 10.0);
+            let c = 0.5 * Math.cos(3.142 * matCtx.sceneCtx.animController.envAnimValue0 * 10.0);
+            mat4SetRowMajor(dst,
+                c,   s,   0.0, 0.0,
+                -s,  c,   0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 1.0
+            );
+            mat4.multiplyScalar(dst, dst, 1 / 64); // scale_exp -6
+        });
+
+        const indStage0 = this.genIndTexStage();
+        this.setIndTexOrder(indStage0, texCoord1, texMap2);
+        this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
+
+        const stage1 = this.genTevStage();
+        this.mb.setTevIndirect(stage1.id, getIndTexStageID(indStage0), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx0), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, false, false, GX.IndTexAlphaSel.OFF);
+        this.setTevOrder(stage1, texCoord0, texMap0);
+        this.setTevColorFormula(stage1, GX.CC.TEXC, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
+        this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.APREV, undefined, undefined, GX.TevScale.SCALE_4);
+
+        const stage2 = this.genTevStage();
+        this.mb.setTevDirect(stage2.id);
+        this.setTevOrder(stage2, undefined, undefined, GX.RasColorChannelID.COLOR0A0);
+        this.setTevColorFormula(stage2, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+        this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.APREV, GX.CA.RASA, GX.CA.ZERO, undefined, undefined, GX.TevScale.SCALE_4);
+
+        this.mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
+        this.mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
+        this.mb.setZMode(true, GX.CompareType.LESS, false);
+        this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
+    }
+}
+
+export class FaultyTVMaterial extends MaterialBase {
     protected rebuildInternal() {
         const texMap0 = this.genTexMap(makeOpaqueColorTextureDownscale2x());
         const texMap1 = this.genTexMap(this.factory.getWavyTexture());
@@ -1267,6 +1333,7 @@ class FaultyTVMaterial extends MaterialBase {
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
             );
+            mat4.multiplyScalar(dst, dst, 1 / 8); // scale_exp -3
         });
 
         const stage1 = this.genTevStage();
@@ -1286,6 +1353,7 @@ class FaultyTVMaterial extends MaterialBase {
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
             );
+            mat4.multiplyScalar(dst, dst, 1 / 8); // scale_exp -3
         });
 
         const stage2 = this.genTevStage();

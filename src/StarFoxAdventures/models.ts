@@ -116,7 +116,6 @@ export class ModelShapes {
                 );
                 mat4.multiplyScalar(scratchMtx1, scratchMtx1, 1 / 4); // scale_exp -2
                 // Caution: a different scale_exp may be used when drawing objects
-                mat4SetRow(scratchMtx1, 0, 0.0, 0.0, 0.0, 1.0);
                 fur.shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {
                     overrideIndMtx: [scratchMtx1],
                     furLayer: j,
