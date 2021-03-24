@@ -179,6 +179,7 @@ export class ShapeGeometry {
         }
 
         // Use GfxRendererLayer.TRANSLUCENT to force sorting behavior as in the game.
+        // FIXME: Depth sorting errors abound.
         if (overrideSortLayer !== undefined)
             renderInst.sortKey = setSortKeyLayer(renderInst.sortKey, GfxRendererLayer.TRANSLUCENT + overrideSortLayer);
         else if (this.sortLayer !== undefined)

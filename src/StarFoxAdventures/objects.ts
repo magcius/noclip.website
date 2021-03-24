@@ -206,10 +206,10 @@ namespace TriggerClass {
                     if (-triggerData.radius <= intersection[0] && intersection[0] <= triggerData.radius &&
                         -triggerData.radius <= intersection[1] && intersection[1] <= triggerData.radius)
                     {
-                        if (currPointInPlane)
-                            console.log(`Entered plane 0x${obj.commonObjectParams.id.toString(16)}`);
-                        else
-                            console.log(`Exited plane 0x${obj.commonObjectParams.id.toString(16)}`);
+                        // if (currPointInPlane)
+                        //     console.log(`Entered plane 0x${obj.commonObjectParams.id.toString(16)}`);
+                        // else
+                        //     console.log(`Exited plane 0x${obj.commonObjectParams.id.toString(16)}`);
 
                         performActions(obj, !currPointInPlane);
                     }

@@ -25,11 +25,10 @@ import { SFARenderer, SceneRenderContext, SFARenderLists, submitScratchRenderIns
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3, vecPitch } from './util';
 import { ModelRenderContext } from './models';
-import { MaterialFactory, MaterialBase } from './materials';
+import { MaterialFactory } from './materials';
 import { SFAAnimationController } from './animation';
 import { SFABlockFetcher } from './blocks';
 import { getCamPos } from './util';
-import { Material } from '../SuperMario64DS/sm64ds_bmd';
 
 const materialParams = new MaterialParams();
 const packetParams = new PacketParams();
