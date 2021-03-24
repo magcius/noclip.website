@@ -76,6 +76,7 @@ class HeatShimmerMaterial extends MaterialBase {
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
             );
+            mat4.multiplyScalar(dst, dst, 1 / (1 << 6)); // scale_exp -6
         });
 
         const indStage0 = this.genIndTexStage();
