@@ -566,8 +566,9 @@ export class fopAc_ac_c extends leafdraw_class {
         let frustum: Frustum; 
         if (this.cullFarDistanceRatio < 1.0) {
             scratchFrustum.copyViewFrustum(viewerInput.camera.frustum);
+            // TODO(jstpierre): Fix this
             scratchFrustum.far *= this.cullFarDistanceRatio;
-            scratchFrustum.updateWorldFrustum(viewerInput.camera.worldMatrix);
+            scratchFrustum.updateClipFrustum(viewerInput.camera.clipFromWorldMatrix);
             frustum = scratchFrustum;
         } else {
             frustum = viewerInput.camera.frustum;

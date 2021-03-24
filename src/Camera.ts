@@ -113,7 +113,7 @@ export class Camera {
 
     private updateClipFromWorld(): void {
         mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
-        this.frustum.updateWorldFrustum(this.worldMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
     }
 }
 

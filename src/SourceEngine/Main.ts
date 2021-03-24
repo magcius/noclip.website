@@ -523,7 +523,7 @@ export class SourceEngineView {
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
 
         this.frustum.copyViewFrustum(camera.frustum);
-        this.frustum.updateWorldFrustum(this.worldFromViewMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
 
         // Compute camera position.
 

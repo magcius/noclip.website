@@ -1,7 +1,6 @@
 
 import { vec3, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { nArray } from "./util";
-import { transformVec3Mat4w1 } from "./MathHelpers";
 
 export class Plane {
     private static scratchVec3: vec3[] = nArray(2, () => vec3.create());
@@ -35,6 +34,14 @@ export class Plane {
         this.y = scratch[0][1];
         this.z = scratch[0][2];
         this.d = -vec3.dot(scratch[0], p0);
+    }
+
+    public set4(x: number, y: number, z: number, d: number): void {
+        const h = Math.hypot(x, y, z);
+        this.x = x / h;
+        this.y = y / h;
+        this.z = z / h;
+        this.d = d / h;
     }
 }
 
@@ -297,8 +304,6 @@ export enum IntersectionState {
 }
 
 export class Frustum {
-    private static scratchPlaneVec3 = nArray(8, () => vec3.create());
-
     // View-space configuration.
     public left: number;
     public right: number;
@@ -332,45 +337,16 @@ export class Frustum {
         this.isOrthographic = isOrthographic;
     }
 
-    public updateWorldFrustum(worldMatrix: ReadonlyMat4): void {
-        const scratch = Frustum.scratchPlaneVec3;
-
-        // From the perspective of building anything but our far plane, any finite number would work here.
-        const hasInfiniteFar = !Number.isFinite(this.far);
-        const finiteFar = hasInfiniteFar ? Math.sign(this.far) * (this.near + 1) : this.far;
-        const fn = this.isOrthographic ? 1 : finiteFar / this.near;
-        vec3.set(scratch[0], this.left, this.top, this.near);
-        vec3.set(scratch[1], this.right, this.top, this.near);
-        vec3.set(scratch[2], this.right, this.bottom, this.near);
-        vec3.set(scratch[3], this.left, this.bottom, this.near);
-        vec3.set(scratch[4], fn * this.left, fn * this.top, finiteFar);
-        vec3.set(scratch[5], fn * this.right, fn * this.top, finiteFar);
-        vec3.set(scratch[6], fn * this.right, fn * this.bottom, finiteFar);
-        vec3.set(scratch[7], fn * this.left, fn * this.bottom, finiteFar);
-
-        for (let i = 0; i < 8; i++)
-            transformVec3Mat4w1(scratch[i], worldMatrix, scratch[i]);
-
-        this.planes[0].set(scratch[0], scratch[4], scratch[7]); // left plane
-        this.planes[1].set(scratch[2], scratch[6], scratch[5]); // right plane
-        this.planes[2].set(scratch[7], scratch[6], scratch[2]); // bottom plane
-        this.planes[3].set(scratch[1], scratch[5], scratch[4]); // top plane
-        this.planes[4].set(scratch[0], scratch[2], scratch[1]); // near plane
-        this.planes[5].set(scratch[4], scratch[5], scratch[6]); // far plane
-
-        // mark the infinite far plane invalid if that's what's going on.
-        if (hasInfiniteFar)
-            this.planes[5].d = Number.NaN;
-
+    private vizp(planes: Plane[], color: string): void {
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;
-            ctx.strokeStyle = 'green';
+            ctx.strokeStyle = color;
             ctx.beginPath();
             const drawLine = (x1: number, z1: number, x2: number, z2: number) => {
                 ctx.moveTo(this.visualizer!.dsx(x1), this.visualizer!.dsy(z1));
                 ctx.lineTo(this.visualizer!.dsx(x2), this.visualizer!.dsy(z2));
             };
-            const p0 = this.planes[0], p1 = this.planes[1], pn = this.planes[4];
+            const p0 = planes[0], p1 = planes[1], pn = planes[4];
             // Find the intersection of p0 & p1
             // line eq = ax + 0y + cz + d = 0
             const i0 = (p0.z*p1.d - p0.d*p1.z), i1 = (p0.d*p1.x - p0.x*p1.d), i2 = (p0.x*p1.z - p0.z*p1.x);
@@ -393,6 +369,20 @@ export class Frustum {
             ctx.closePath();
             ctx.stroke();
         }
+    }
+
+    public updateClipFrustum(m: ReadonlyMat4): void {
+        // http://www8.cs.umu.se/kurser/5DV051/HT12/lab/plane_extraction.pdf
+        // Note that we look down the -Z axis, rather than the +Z axis, so we have to invert all of our planes...
+
+        this.planes[0].set4(-(m[3] + m[0]), -(m[7] + m[4]), -(m[11] + m[8]) , -(m[15] + m[12])); // Left
+        this.planes[1].set4(-(m[3] - m[0]), -(m[7] - m[4]), -(m[11] - m[8]) , -(m[15] - m[12])); // Right
+        this.planes[2].set4(-(m[3] + m[1]), -(m[7] + m[5]), -(m[11] + m[9]) , -(m[15] + m[13])); // Top
+        this.planes[3].set4(-(m[3] - m[1]), -(m[7] - m[5]), -(m[11] - m[9]) , -(m[15] - m[13])); // Bottom
+        this.planes[4].set4(-(m[3] - m[2]), -(m[7] - m[6]), -(m[11] - m[10]), -(m[15] - m[14])); // Near
+        this.planes[5].set4(-(m[3] + m[2]), -(m[7] + m[6]), -(m[11] + m[10]), -(m[15] + m[14])); // Far
+
+        this.vizp(this.planes, 'green');
     }
 
     public _intersect(aabb: AABB): IntersectionState {
