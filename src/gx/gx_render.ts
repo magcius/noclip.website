@@ -473,10 +473,8 @@ export class GXMaterialHelperGfx {
     }
 
     public cacheProgram(device: GfxDevice, cache: GfxRenderCache): void {
-        if (this.gfxProgram === null) {
-            this.gfxProgram = cache.createProgram(device, this.program);
-            this.programKey = this.gfxProgram.ResourceUniqueId;
-        }
+        this.gfxProgram = cache.createProgram(device, this.program);
+        this.programKey = this.gfxProgram.ResourceUniqueId;
     }
 
     public createProgram(): void {

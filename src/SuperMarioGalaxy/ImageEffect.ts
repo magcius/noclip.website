@@ -317,6 +317,7 @@ export class BloomEffect extends ImageEffectBase {
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Downsample 1/4');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample4ColorTargetID);
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const resolveTextureID = builder.resolveRenderTarget(downsample2ColorTargetID);
             pass.attachResolveTexture(resolveTextureID);
@@ -334,6 +335,7 @@ export class BloomEffect extends ImageEffectBase {
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Blur L1');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurL1ColorTargetID);
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const resolveTextureID = builder.resolveRenderTarget(downsample4ColorTargetID);
             pass.attachResolveTexture(resolveTextureID);
@@ -350,6 +352,7 @@ export class BloomEffect extends ImageEffectBase {
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Blur Downsample 1/8');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, downsample8ColorTargetID);
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const resolveTextureID = builder.resolveRenderTarget(blurL1ColorTargetID);
             pass.attachResolveTexture(resolveTextureID);
@@ -366,6 +369,7 @@ export class BloomEffect extends ImageEffectBase {
         builder.pushPass((pass) => {
             pass.setDebugName('Bloom Blur L2 (Bokeh)');
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, blurL2ColorTargetID);
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
 
             const resolveTextureID = builder.resolveRenderTarget(downsample8ColorTargetID);
             pass.attachResolveTexture(resolveTextureID);
@@ -692,7 +696,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         const targetHeight = mainColorTargetDesc.height >> 2;
         this.targetColorDesc.setDimensions(targetWidth, targetHeight, 1);
 
-        const downsampleColorTargetID = builder.createRenderTargetID(this.targetColorDesc, 'Bloom Simple Downsample');
+        const downsampleColorTargetID = builder.createRenderTargetID(this.targetColorDesc, 'Depth of Field Simple Downsample');
 
         const renderInst = renderInstManager.newRenderInst();
         renderInst.setAllowSkippingIfPipelineNotReady(false);
@@ -722,6 +726,7 @@ export class DepthOfFieldBlur extends ImageEffectBase {
         // Combine.
         builder.pushPass((pass) => {
             pass.setDebugName('Depth of Field Combine');
+            pass.pushDebugThumbnail(GfxrAttachmentSlot.Color0);
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, resultBlendTargetID);
 
             const downsampleResolveTextureID = builder.resolveRenderTarget(downsampleColorTargetID);

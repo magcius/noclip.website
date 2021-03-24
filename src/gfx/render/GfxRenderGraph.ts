@@ -276,6 +276,7 @@ export interface GfxrGraphBuilderDebug {
     getPasses(): GfxrPass[];
     getPassDebugThumbnails(pass: GfxrPass): boolean[];
     getPassRenderTargetID(pass: GfxrPass, slot: GfxrAttachmentSlot): number;
+    getRenderTargetIDDebugName(renderTargetID: number): string;
 }
 
 class RenderTarget {
@@ -844,6 +845,10 @@ export class GfxrRenderGraphImpl implements GfxrRenderGraph, GfxrGraphBuilder, G
 
     public getPassRenderTargetID(pass: GfxrPass, slot: GfxrAttachmentSlot): number {
         return (pass as PassImpl).renderTargetIDs[slot];
+    }
+
+    public getRenderTargetIDDebugName(renderTargetID: number): string {
+        return this.currentGraph!.renderTargetDebugNames[renderTargetID];
     }
     //#endregion
 

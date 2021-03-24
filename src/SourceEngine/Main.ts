@@ -521,9 +521,7 @@ export class SourceEngineView {
         mat4.invert(this.worldFromViewMatrix, this.viewFromWorldMatrix);
         mat4.mul(this.clipFromWorldMatrix, camera.projectionMatrix, this.viewFromWorldMatrix);
         getMatrixTranslation(this.cameraPos, this.worldFromViewMatrix);
-
-        this.frustum.copyViewFrustum(camera.frustum);
-        this.frustum.updateWorldFrustum(this.worldFromViewMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
 
         // Compute camera position.
 

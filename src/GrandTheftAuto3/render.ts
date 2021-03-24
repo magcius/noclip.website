@@ -638,10 +638,10 @@ export class GTA3Renderer implements Viewer.SceneGfx {
         offs += fillMatrix4x4(mapped, offs, viewerInput.camera.projectionMatrix);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.viewMatrix);
         offs += fillMatrix4x3(mapped, offs, viewerInput.camera.worldMatrix);
-        mapped[offs++] = viewerInput.camera.frustum.right;
-        mapped[offs++] = viewerInput.camera.frustum.top;
-        mapped[offs++] = viewerInput.camera.frustum.near;
-        mapped[offs++] = viewerInput.camera.frustum.far;
+        mapped[offs++] = viewerInput.camera.right;
+        mapped[offs++] = viewerInput.camera.top;
+        mapped[offs++] = viewerInput.camera.near;
+        mapped[offs++] = viewerInput.camera.far;
         offs += fillColor(mapped, offs, this.currentColors.amb);
         offs += fillColor(mapped, offs, this.currentColors.skyTop);
         offs += fillColor(mapped, offs, this.currentColors.skyBot);

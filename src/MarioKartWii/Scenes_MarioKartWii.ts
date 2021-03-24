@@ -79,7 +79,7 @@ class MarioKartWiiRenderer {
     public modelCache = new ModelCache();
 
     constructor(context: SceneContext) {
-        this.renderHelper = new GXRenderHelperGfx(context.device);
+        this.renderHelper = new GXRenderHelperGfx(context.device, context);
     }
 
     private setMirrored(mirror: boolean): void {
@@ -125,6 +125,12 @@ class MarioKartWiiRenderer {
             this.enablePostProcessing = v;
         };
         renderHacksPanel.contents.appendChild(enablePostProcessing.elem);
+        const showDebugThumbnails = new UI.Checkbox('Show Debug Thumbnails', false);
+        showDebugThumbnails.onchanged = () => {
+            const v = showDebugThumbnails.checked;
+            this.renderHelper.debugThumbnails.enabled = v;
+        };
+        renderHacksPanel.contents.appendChild(showDebugThumbnails.elem);
 
         return [renderHacksPanel];
     }

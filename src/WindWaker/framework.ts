@@ -5,7 +5,7 @@ import { mat4, vec3, vec4 } from "gl-matrix";
 import ArrayBufferSlice from "../ArrayBufferSlice";
 import { assertExists, nArray, arrayRemove, assert } from "../util";
 import { dKy_tevstr_c, dKy_tevstr_init } from "./d_kankyo";
-import { AABB, Frustum } from "../Geometry";
+import { AABB } from "../Geometry";
 import { computeScreenSpaceProjectionFromWorldSpaceAABB, computeScreenSpaceProjectionFromWorldSpaceSphere, ScreenSpaceProjection } from "../Camera";
 import { transformVec3Mat4w1 } from "../MathHelpers";
 
@@ -467,7 +467,6 @@ export class fopScn extends process_node_class {
 //#region fopAc
 const scratchVec3a = vec3.create();
 const scratchAABB = new AABB();
-const scratchFrustum = new Frustum();
 const scratchScreenSpaceProjection = new ScreenSpaceProjection();
 export class fopAc_ac_c extends leafdraw_class {
     public pos = vec3.create();
@@ -562,16 +561,7 @@ export class fopAc_ac_c extends leafdraw_class {
         if (this.cullMtx === null)
             throw "whoops";
 
-        // Compute our view frustum. If we have a custom far distance, pull that in...
-        let frustum: Frustum; 
-        if (this.cullFarDistanceRatio < 1.0) {
-            scratchFrustum.copyViewFrustum(viewerInput.camera.frustum);
-            scratchFrustum.far *= this.cullFarDistanceRatio;
-            scratchFrustum.updateWorldFrustum(viewerInput.camera.worldMatrix);
-            frustum = scratchFrustum;
-        } else {
-            frustum = viewerInput.camera.frustum;
-        }
+        const frustum = viewerInput.camera.frustum;
 
         if (this.cullSizeBox !== null) {
             // If the box is empty, that means I forgot to fill it in for a certain actor.
