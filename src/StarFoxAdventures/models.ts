@@ -11,7 +11,7 @@ import { GameInfo } from './scenes';
 import { SFAMaterial } from './materials';
 import { SFAAnimationController } from './animation';
 import { MaterialFactory } from './materials';
-import { dataSubarray, readUint32, mat4SetRowMajor, setInt8Clamped, setInt16Clamped } from './util';
+import { dataSubarray, readUint32, mat4SetRowMajor, setInt8Clamped, setInt16Clamped, mat4SetRow } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape } from './shapes';
@@ -112,8 +112,11 @@ export class ModelShapes {
                     m00, 0.0, 0.0, 0.0,
                     0.0, m11, 0.0, 0.0,
                     0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0, 0.0
+                    0.0, 0.0, 0.0, 1.0
                 );
+                mat4.multiplyScalar(scratchMtx1, scratchMtx1, 1 / 4); // scale_exp -2
+                // Caution: a different scale_exp may be used when drawing objects
+                mat4SetRow(scratchMtx1, 0, 0.0, 0.0, 0.0, 1.0);
                 fur.shape.addRenderInsts(device, renderInstManager, scratchMtx0, modelCtx, {
                     overrideIndMtx: [scratchMtx1],
                     furLayer: j,

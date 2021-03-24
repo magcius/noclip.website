@@ -14,7 +14,7 @@ import { nArray } from '../util';
 import { TDDraw } from '../SuperMarioGalaxy/DDraw';
 
 import { SFAAnimationController } from './animation';
-import { MaterialBase, MaterialFactory, getKonstColorSel, getTexGenSrc, getTexCoordID, getIndTexStageID, getIndTexMtxID, getKonstAlphaSel, MaterialRenderContext, getPostTexGenMatrix, makeOpaqueColorTexture, makeOpaqueDepthTexture } from './materials';
+import { MaterialBase, MaterialFactory, getKonstColorSel, getTexGenSrc, getTexCoordID, getIndTexStageID, getIndTexMtxID, getKonstAlphaSel, MaterialRenderContext, getPostTexGenMatrix, makeOpaqueColorTextureDownscale2x, makeOpaqueDepthTextureDownscale2x } from './materials';
 import { interpS16, mat4FromRowMajor, mat4SetRowMajor, mat4SetValue, radsToAngle16, vecPitch } from './util';
 import { DepthResampler } from './depthresampler';
 import { getMatrixAxisZ, lerp } from '../MathHelpers';
@@ -40,8 +40,8 @@ export interface SFARenderLists {
 
 class HeatShimmerMaterial extends MaterialBase {
     protected rebuildInternal() {
-        const texMap0 = this.genTexMap(makeOpaqueColorTexture());
-        const texMap1 = this.genTexMap(makeOpaqueDepthTexture());
+        const texMap0 = this.genTexMap(makeOpaqueColorTextureDownscale2x());
+        const texMap1 = this.genTexMap(makeOpaqueDepthTextureDownscale2x());
         const texMap2 = this.genTexMap(this.factory.getWavyTexture());
 
         const texCoord0 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0));
@@ -76,7 +76,7 @@ class HeatShimmerMaterial extends MaterialBase {
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
             );
-            mat4.multiplyScalar(dst, dst, 1 / (1 << 6)); // scale_exp -6
+            mat4.multiplyScalar(dst, dst, 1 / 64); // scale_exp -6
         });
 
         const indStage0 = this.genIndTexStage();
@@ -205,15 +205,15 @@ export class SFARenderer implements Viewer.SceneGfx {
             pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
             pass.attachRenderTargetID(GfxrAttachmentSlot.DepthStencil, mainDepthTargetID);
             pass.exec((passRenderer) => {
+                // TODO: downscale temporal texture by 8x and/or apply blur
                 this.temporalTextureMapping.gfxTexture = this.temporalTexture.getTextureForSampling();
-                renderLists.world[0].resolveLateSamplerBinding('temporal-texture', this.temporalTextureMapping);
+                renderLists.world[0].resolveLateSamplerBinding('temporal-texture-downscale-8x', this.temporalTextureMapping);
 
                 renderInstManager.drawListOnPassRenderer(renderLists.world[0], passRenderer);
                 renderInstManager.drawListOnPassRenderer(renderLists.furs, passRenderer);
             });
         });
 
-        // TODO: Downscale to 1/8th scale and apply filtering (?)
         const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
 
         if (this.enableHeatShimmer) {
@@ -233,9 +233,9 @@ export class SFARenderer implements Viewer.SceneGfx {
 
                 pass.exec((passRenderer, scope) => {
                     this.opaqueColorTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                    renderLists.heatShimmer.resolveLateSamplerBinding('opaque-color-texture', this.opaqueColorTextureMapping);
+                    renderLists.heatShimmer.resolveLateSamplerBinding('opaque-color-texture-downscale-2x', this.opaqueColorTextureMapping);
                     this.opaqueDepthTextureMapping.gfxTexture = scope.getResolveTextureForID(depthResolveTextureID);
-                    renderLists.heatShimmer.resolveLateSamplerBinding('opaque-depth-texture', this.opaqueDepthTextureMapping);
+                    renderLists.heatShimmer.resolveLateSamplerBinding('opaque-depth-texture-downscale-2x', this.opaqueDepthTextureMapping);
 
                     renderInstManager.drawListOnPassRenderer(renderLists.heatShimmer, passRenderer);
                 });
@@ -251,7 +251,7 @@ export class SFARenderer implements Viewer.SceneGfx {
 
             pass.exec((passRenderer, scope) => {
                 this.opaqueColorTextureMapping.gfxTexture = scope.getResolveTextureForID(mainColorResolveTextureID);
-                renderLists.waters.resolveLateSamplerBinding('opaque-color-texture', this.opaqueColorTextureMapping);
+                renderLists.waters.resolveLateSamplerBinding('opaque-color-texture-downscale-2x', this.opaqueColorTextureMapping);
 
                 renderInstManager.drawListOnPassRenderer(renderLists.waters, passRenderer);
                 renderInstManager.drawListOnPassRenderer(renderLists.world[1], passRenderer);

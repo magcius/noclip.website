@@ -13,7 +13,6 @@ import { mat4 } from 'gl-matrix';
 import { FurFactory } from './fur';
 import { SFAAnimationController } from './animation';
 import { colorFromRGBA, Color, colorCopy } from '../Color';
-import { EnvfxManager } from './envfx';
 import { SceneRenderContext } from './render';
 
 interface ShaderLayer {
@@ -195,35 +194,35 @@ export function makeMaterialTexture(texture: SFATexture | null): MaterialTexture
     }
 }
 
-export function makeOpaqueColorTexture(): MaterialTexture {
+export function makeOpaqueColorTextureDownscale2x(): MaterialTexture {
     return {
         setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
             mapping.reset();
-            mapping.lateBinding = 'opaque-color-texture';
-            mapping.width = matCtx.sceneCtx.viewerInput.backbufferWidth;
-            mapping.height = matCtx.sceneCtx.viewerInput.backbufferHeight;
+            mapping.lateBinding = 'opaque-color-texture-downscale-2x';
+            mapping.width = 320;
+            mapping.height = 240;
         }
     };
 }
 
-export function makeOpaqueDepthTexture(): MaterialTexture {
+export function makeOpaqueDepthTextureDownscale2x(): MaterialTexture {
     return {
         setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
             mapping.reset();
-            mapping.lateBinding = 'opaque-depth-texture';
-            mapping.width = matCtx.sceneCtx.viewerInput.backbufferWidth;
-            mapping.height = matCtx.sceneCtx.viewerInput.backbufferHeight;
+            mapping.lateBinding = 'opaque-depth-texture-downscale-2x';
+            mapping.width = 320;
+            mapping.height = 240;
         }
     };
 }
 
-export function makeTemporalTexture(): MaterialTexture {
+export function makeTemporalTextureDownscale8x(): MaterialTexture {
     return {
         setOnTextureMapping: (mapping: TextureMapping, matCtx: MaterialRenderContext) => {
             mapping.reset();
-            mapping.lateBinding = 'temporal-texture';
-            mapping.width = matCtx.sceneCtx.viewerInput.backbufferWidth;
-            mapping.height = matCtx.sceneCtx.viewerInput.backbufferHeight;
+            mapping.lateBinding = 'temporal-texture-downscale-8x';
+            mapping.width = 80;
+            mapping.height = 60;
         }
     };
 }
@@ -907,14 +906,8 @@ export class StandardMaterial extends MaterialBase {
         });
         const texCoord2 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.PNMTX0, false, getPostTexGenMatrix(postTexMtx2));
 
-        const itm1 = mat4FromRowMajor(
-            0.5, 0.0, 0.0, 0.0,
-            0.0, 0.5, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 1.0
-        );
         const indTexMtx1 = this.genIndTexMtx((dst: mat4) => {
-            mat4.copy(dst, itm1);
+            mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
         });
 
         const indStage0 = this.genIndTexStage();
@@ -959,7 +952,7 @@ export class StandardMaterial extends MaterialBase {
 
     private addTevStagesForReflectiveFloor() {
         // TODO: Proper planar reflections?
-        const texMap0 = this.genTexMap(makeTemporalTexture());
+        const texMap0 = this.genTexMap(makeTemporalTextureDownscale8x());
         const texCoord = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX2);
 
         const stage = this.genTevStage();
@@ -1021,26 +1014,19 @@ class WaterMaterial extends MaterialBase {
             mat4SetValue(dst, 1, 3, matCtx.sceneCtx.animController.envAnimValue0);
         }
 
-        const texMap0 = this.genTexMap(makeOpaqueColorTexture()); // FIXME: should be previous frame?
+        const texMap0 = this.genTexMap(makeOpaqueColorTextureDownscale2x());
         const texCoord0 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX0);
         const texMap1 = this.genTexMap(this.factory.getWavyTexture());
         const texCoord1 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX3);
 
-        const stage0 = this.genTevStage();
-
         const indStage0 = this.genIndTexStage();
-        const itm0 = mat4FromRowMajor(
-            0.5, 0.0, 0.0, 0.0,
-            0.0, 0.5, 0.0, 0.0,
-            0.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 1.0
-        );
         const indTexMtx0 = this.genIndTexMtx((dst: mat4) => {
-            mat4.copy(dst, itm0);
+            mat4.fromScaling(dst, [0.5, 0.5, 0.0]);
+            mat4.multiplyScalar(dst, dst, 1 / 4); // scale_exp -2
+            mat4SetRow(itm2, 3, 0.0, 0.0, 0.0, 1.0);
         });
         this.setIndTexOrder(indStage0, texCoord1, texMap1);
         this.mb.setIndTexScale(getIndTexStageID(indStage0), GX.IndTexScale._1, GX.IndTexScale._1);
-        this.mb.setTevIndirect(stage0.id, getIndTexStageID(indStage0), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx0), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
 
         const texmtx4 = mat4.create();
         mat4.fromScaling(texmtx4, [0.83, 0.83, 0.83]);
@@ -1055,33 +1041,36 @@ class WaterMaterial extends MaterialBase {
 
         const texCoord2 = this.genTexCoord(GX.TexGenType.MTX2x4, getTexGenSrc(texMap0), GX.TexGenMatrix.TEXMTX4);
 
-        const stage1 = this.genTevStage();
-
         const itm1 = mat4FromRowMajor(
             0.3,  0.3, 0.0, 0.0,
             -0.3, 0.3, 0.0, 0.0,
             0.0,  0.0, 0.0, 0.0,
             0.0,  0.0, 0.0, 1.0
         );
+        mat4.multiplyScalar(itm1, itm1, 1 / 16); // scale_exp -4
+        mat4SetRow(itm1, 3, 0.0, 0.0, 0.0, 1.0);
         const indTexMtx1 = this.genIndTexMtx((dst: mat4) => {
             mat4.copy(dst, itm1);
         });
         const indStage1 = this.genIndTexStage();
         this.setIndTexOrder(indStage1, texCoord2, texMap1);
-        this.mb.setTevIndirect(stage1.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setIndTexScale(getIndTexStageID(indStage1), GX.IndTexScale._1, GX.IndTexScale._1);
 
-        const kcnum = this.genKonstColor((dst: Color, matCtx: MaterialRenderContext) => {
-            // FIXME: this color depends on envfx
-            colorFromRGBA(dst, 1.0, 1.0, 1.0, 0x60 / 0xff);
-        });
-
-        this.mb.setTevKAlphaSel(stage1.id, getKonstAlphaSel(kcnum));
-        this.mb.setTevKColorSel(stage1.id, getKonstColorSel(kcnum));
-
+        const stage0 = this.genTevStage();
+        this.mb.setTevIndirect(stage0.id, getIndTexStageID(indStage0), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx0), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
         this.setTevOrder(stage0);
         this.setTevColorFormula(stage0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         this.setTevAlphaFormula(stage0, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
+        const k0 = this.genKonstColor((dst: Color, matCtx: MaterialRenderContext) => {
+            // FIXME: this color depends on envfx
+            colorFromRGBA(dst, 1.0, 1.0, 1.0, 0x60 / 0xff);
+        });
+
+        const stage1 = this.genTevStage();
+        this.mb.setTevIndirect(stage1.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
+        this.mb.setTevKColorSel(stage1.id, getKonstColorSel(k0));
+        this.mb.setTevKAlphaSel(stage1.id, getKonstAlphaSel(k0));
         this.setTevOrder(stage1, texCoord0, texMap0);
         // TODO: CS_SCALE_1 is used in some cases.
         this.setTevColorFormula(stage1, GX.CC.KONST, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC,
@@ -1089,27 +1078,28 @@ class WaterMaterial extends MaterialBase {
         this.setTevAlphaFormula(stage1, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.KONST,
             GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
 
-        const stage2 = this.genTevStage();
-        const stage3 = this.genTevStage();
-
         const itm2 = mat4FromRowMajor(
             0.0,  0.5, 0.0, 0.0,
             -0.5, 0.0, 0.0, 0.0,
             0.0,  0.0, 0.0, 0.0,
             0.0,  0.0, 0.0, 1.0
         );
+        mat4.multiplyScalar(itm2, itm2, 1 / 32); // scale_exp -5
+        mat4SetRow(itm2, 3, 0.0, 0.0, 0.0, 1.0);
         const indTexMtx2 = this.genIndTexMtx((dst: mat4) => {
             mat4.copy(dst, itm2);
         });
-        this.mb.setTevIndirect(stage2.id, getIndTexStageID(indStage0), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
-        this.mb.setTevIndirect(stage3.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx2), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
 
         const texCoord3 = this.genTexCoord(GX.TexGenType.MTX3x4, GX.TexGenSrc.POS, GX.TexGenMatrix.TEXMTX1);
 
+        const stage2 = this.genTevStage();
+        this.mb.setTevIndirect(stage2.id, getIndTexStageID(indStage0), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx1), GX.IndTexWrap._0, GX.IndTexWrap._0, false, false, GX.IndTexAlphaSel.OFF);
         this.setTevOrder(stage2, null, null, GX.RasColorChannelID.COLOR0A0);
         this.setTevColorFormula(stage2, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO);
         this.setTevAlphaFormula(stage2, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO);
 
+        const stage3 = this.genTevStage();
+        this.mb.setTevIndirect(stage3.id, getIndTexStageID(indStage1), GX.IndTexFormat._8, GX.IndTexBiasSel.STU, getIndTexMtxID(indTexMtx2), GX.IndTexWrap.OFF, GX.IndTexWrap.OFF, true, false, GX.IndTexAlphaSel.OFF);
         this.setTevOrder(stage3, texCoord3, texMap0, GX.RasColorChannelID.COLOR0A0);
         this.setTevColorFormula(stage3, GX.CC.TEXC, GX.CC.C0, GX.CC.A0, GX.CC.ZERO);
         this.setTevAlphaFormula(stage3, GX.CA.ZERO, GX.CA.ZERO, GX.CA.ZERO, GX.CA.RASA);
@@ -1223,7 +1213,7 @@ class FurMaterial extends MaterialBase {
 
 class FaultyTVMaterial extends MaterialBase {
     protected rebuildInternal() {
-        const texMap0 = this.genTexMap(makeOpaqueColorTexture());
+        const texMap0 = this.genTexMap(makeOpaqueColorTextureDownscale2x());
         const texMap1 = this.genTexMap(this.factory.getWavyTexture());
         
         const k0 = this.genKonstColor((dst: Color, matCtx: MaterialRenderContext) => {
