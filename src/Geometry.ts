@@ -1,5 +1,5 @@
 
-import { vec3, mat4, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
+import { vec3, ReadonlyVec3, ReadonlyMat4 } from "gl-matrix";
 import { nArray } from "./util";
 import { transformVec3Mat4w1 } from "./MathHelpers";
 
@@ -332,7 +332,7 @@ export class Frustum {
         this.isOrthographic = isOrthographic;
     }
 
-    public updateWorldFrustum(worldMatrix: mat4): void {
+    public updateWorldFrustum(worldMatrix: ReadonlyMat4): void {
         const scratch = Frustum.scratchPlaneVec3;
 
         // From the perspective of building anything but our far plane, any finite number would work here.
@@ -353,10 +353,10 @@ export class Frustum {
 
         this.planes[0].set(scratch[0], scratch[4], scratch[7]); // left plane
         this.planes[1].set(scratch[2], scratch[6], scratch[5]); // right plane
-        this.planes[2].set(scratch[3], scratch[7], scratch[6]); // bottom plane
+        this.planes[2].set(scratch[7], scratch[6], scratch[2]); // bottom plane
         this.planes[3].set(scratch[1], scratch[5], scratch[4]); // top plane
         this.planes[4].set(scratch[0], scratch[2], scratch[1]); // near plane
-        this.planes[5].set(scratch[4], scratch[6], scratch[7]); // far plane
+        this.planes[5].set(scratch[4], scratch[5], scratch[6]); // far plane
 
         // mark the infinite far plane invalid if that's what's going on.
         if (hasInfiniteFar)
@@ -364,22 +364,32 @@ export class Frustum {
 
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;
-            ctx.strokeStyle = 'red';
-
-            vec3.set(scratch[0], this.left, 0, this.near);
-            vec3.set(scratch[1], this.right, 0, this.near);
-            vec3.set(scratch[2], fn * this.right, 0, finiteFar);
-            vec3.set(scratch[3], fn * this.left, 0, finiteFar);
-
             ctx.strokeStyle = 'green';
             ctx.beginPath();
-            for (let i = 0; i < 4; i++) {
-                const p = scratch[i];
-                transformVec3Mat4w1(p, worldMatrix, p);
-                const x = this.visualizer.dsx(p[0]);
-                const y = this.visualizer.dsy(p[2]);
-                ctx.lineTo(x, y);
-            }
+            const drawLine = (x1: number, z1: number, x2: number, z2: number) => {
+                ctx.moveTo(this.visualizer!.dsx(x1), this.visualizer!.dsy(z1));
+                ctx.lineTo(this.visualizer!.dsx(x2), this.visualizer!.dsy(z2));
+            };
+            const p0 = this.planes[0], p1 = this.planes[1], pn = this.planes[4];
+            // Find the intersection of p0 & p1
+            // line eq = ax + 0y + cz + d = 0
+            const i0 = (p0.z*p1.d - p0.d*p1.z), i1 = (p0.d*p1.x - p0.x*p1.d), i2 = (p0.x*p1.z - p0.z*p1.x);
+            const ix = i0/i2, iz = i1/i2;
+            const G = 10;
+            ctx.fillStyle = 'black';
+            ctx.fillRect(this.visualizer!.dsx(ix) - G/2, this.visualizer!.dsy(iz) - G/2, G, G);
+            const drawPlane = (p: Plane) => {
+                // ax + 0y + cz + d = 0, solve for z, z = -(ax + d) / c
+                const x1 = -100000, x2 = -x1;
+                const z1 = -(p.d + p.x * x1) / p.z;
+                const z2 = -(p.d + p.x * x2) / p.z;
+                const dot = (pn.x*x1 + pn.z*z1);
+                const px = dot >= 0 ? x2 : x1;
+                const pz = dot >= 0 ? z2 : z1;
+                drawLine(px, pz, ix, iz);
+            };
+            drawPlane(p0);
+            drawPlane(p1);
             ctx.closePath();
             ctx.stroke();
         }
