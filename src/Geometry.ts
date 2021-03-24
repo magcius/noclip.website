@@ -360,7 +360,7 @@ export class Frustum {
 
         // mark the infinite far plane invalid if that's what's going on.
         if (hasInfiniteFar)
-            this.planes[3].d = Number.NaN;
+            this.planes[5].d = Number.NaN;
 
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;
