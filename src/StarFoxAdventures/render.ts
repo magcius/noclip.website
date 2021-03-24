@@ -72,8 +72,6 @@ export class SFARenderer implements Viewer.SceneGfx {
     private shimmerddraw = new TDDraw();
     private enableHeatShimmer: boolean = false; // TODO: set by camera triggers
     private heatShimmerMaterial: HeatShimmerMaterial | undefined = undefined;
-    // TODO: Merge GXMaterialHelperGfx into SFAMaterial
-    private heatShimmerMaterialHelper: GXMaterialHelperGfx | undefined = undefined;
 
     constructor(device: GfxDevice, protected animController: SFAAnimationController, public materialFactory: MaterialFactory) {
         this.renderHelper = new GXRenderHelperGfx(device);
@@ -242,7 +240,6 @@ export class SFARenderer implements Viewer.SceneGfx {
 
         if (this.heatShimmerMaterial === undefined) {
             this.heatShimmerMaterial = new HeatShimmerMaterial(this.materialFactory);
-            this.heatShimmerMaterialHelper = new GXMaterialHelperGfx(this.heatShimmerMaterial.getGXMaterial());
         }
 
         const matCtx = {
@@ -260,7 +257,7 @@ export class SFARenderer implements Viewer.SceneGfx {
             else
                 scratchMaterialParams.m_TextureMapping[i].reset();
         }
-        submitScratchRenderInst(device, renderInstManager, this.heatShimmerMaterialHelper!, renderInst, sceneCtx.viewerInput, true, scratchMaterialParams, scratchPacketParams);
+        submitScratchRenderInst(device, renderInstManager, this.heatShimmerMaterial!.getGXMaterialHelper(), renderInst, sceneCtx.viewerInput, true, scratchMaterialParams, scratchPacketParams);
 
         this.shimmerddraw.endAndUpload(device, renderInstManager);
 
@@ -268,7 +265,7 @@ export class SFARenderer implements Viewer.SceneGfx {
     }
 
     public render(device: GfxDevice, viewerInput: Viewer.ViewerRenderInput) {
-        viewerInput.camera.setClipPlanes(2.5, 10000); // Set near and far planes as in the original game in order to support heat shimmer (FIXME: should be more generous?)
+        // viewerInput.camera.setClipPlanes(2.5, 10000); // Set near and far planes as in the original game in order to support heat shimmer (TODO: use depth resampler instead)
 
         this.update(viewerInput);
 

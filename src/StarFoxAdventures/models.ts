@@ -11,7 +11,7 @@ import { GameInfo } from './scenes';
 import { SFAMaterial } from './materials';
 import { SFAAnimationController } from './animation';
 import { MaterialFactory } from './materials';
-import { dataSubarray, readUint32, mat4SetRowMajor, setInt8Clamped, setInt16Clamped, mat4SetRow } from './util';
+import { dataSubarray, readUint32, mat4SetRowMajor, setInt8Clamped, setInt16Clamped } from './util';
 import { loadRes } from './resource';
 import { TextureFetcher } from './textures';
 import { Shape } from './shapes';

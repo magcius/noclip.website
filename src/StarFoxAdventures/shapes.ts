@@ -203,31 +203,18 @@ export interface MaterialOptions {
 }
 
 export class ShapeMaterial {
-    private gxMaterial: GXMaterial | undefined;
-    private materialHelper: GXMaterialHelperGfx;
     private materialParams = new MaterialParams();
     private matCtx: MaterialRenderContext | undefined;
 
     public constructor(private material: SFAMaterial) {
-        this.updateMaterialHelper();
     }
 
     // Caution: Material is referenced, not copied.
     public setMaterial(material: SFAMaterial) {
         this.material = material;
-        this.updateMaterialHelper();
-    }
-
-    private updateMaterialHelper() {
-        if (this.gxMaterial !== this.material.getGXMaterial()) {
-            this.gxMaterial = this.material.getGXMaterial();
-            this.materialHelper = new GXMaterialHelperGfx(this.gxMaterial);
-        }
     }
 
     public setOnRenderInst(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderInst: GfxRenderInst, modelMatrix: ReadonlyMat4, modelCtx: ModelRenderContext, matOptions: MaterialOptions) {
-        this.updateMaterialHelper();
-        
         if (this.matCtx === undefined) {
             this.matCtx = {
                 sceneCtx: modelCtx.sceneCtx,
@@ -268,12 +255,14 @@ export class ShapeMaterial {
             }
         }
 
-        this.materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
-        this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
+        const materialHelper = this.material.getGXMaterialHelper();
+        materialHelper.setOnRenderInst(device, renderInstManager.gfxRenderCache, renderInst);
+        materialHelper.allocateMaterialParamsDataOnInst(renderInst, this.materialParams);
     }
 
     public allocatePacketParamsDataOnInst(renderInst: GfxRenderInst, packetParams: PacketParams): void {
-        this.materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
+        const materialHelper = this.material.getGXMaterialHelper();
+        materialHelper.allocatePacketParamsDataOnInst(renderInst, packetParams);
     }
 }
 

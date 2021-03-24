@@ -2,7 +2,7 @@ import { GfxDevice, GfxWrapMode, GfxMipFilterMode, GfxTexFilterMode } from '../g
 import * as GX from '../gx/gx_enum';
 import { GXMaterialBuilder } from "../gx/GXMaterialBuilder";
 import { GXMaterial, SwapTable } from '../gx/gx_material';
-import { MaterialParams, ColorKind, PacketParams } from '../gx/gx_render';
+import { MaterialParams, ColorKind, PacketParams, GXMaterialHelperGfx } from '../gx/gx_render';
 import { GfxFormat, makeTextureDescriptor2D } from '../gfx/platform/GfxPlatform';
 import { TextureMapping } from '../TextureHolder';
 import { texProjCameraSceneTex } from '../Camera';
@@ -243,7 +243,7 @@ function makeFurMapMaterialTexture(factory: MaterialFactory): MaterialTexture {
 
 export interface SFAMaterial {
     factory: MaterialFactory;
-    getGXMaterial: () => GXMaterial;
+    getGXMaterialHelper: () => GXMaterialHelperGfx;
     setupMaterialParams: (params: MaterialParams, matCtx: MaterialRenderContext) => void;
     rebuild: () => void;
     getTexture: (num: number) => MaterialTexture | undefined;
@@ -340,7 +340,9 @@ export abstract class MaterialBase implements SFAMaterial {
     private postTexMtxs: TexMtxFunc[];
     private indTexMtxs: TexMtxFunc[];
     private konstColors: ColorFunc[];
+
     private gxMaterial: GXMaterial | undefined = undefined;
+    private gxMaterialHelper: GXMaterialHelperGfx | undefined = undefined;
 
     constructor(public factory: MaterialFactory, private name: string | null = null) {
     }
@@ -349,6 +351,7 @@ export abstract class MaterialBase implements SFAMaterial {
         this.reset();
         this.rebuildInternal();
         this.gxMaterial = this.mb.finish();
+        this.gxMaterialHelper = new GXMaterialHelperGfx(this.gxMaterial);
     }
 
     protected abstract rebuildInternal(): void;
@@ -365,6 +368,7 @@ export abstract class MaterialBase implements SFAMaterial {
         this.indTexMtxs = [];
         this.konstColors = [];
         this.gxMaterial = undefined;
+        this.gxMaterialHelper = undefined;
     }
     
     protected genTevStage(): TevStage {
@@ -442,14 +446,17 @@ export abstract class MaterialBase implements SFAMaterial {
         this.mb.setIndTexOrder(getIndTexStageID(indTexStage), getTexCoordID(texCoord), getTexMapID(texMap));
     }
 
-    public getGXMaterial(): GXMaterial {
-        if (this.gxMaterial === undefined)
+    public getGXMaterialHelper(): GXMaterialHelperGfx {
+        if (this.gxMaterialHelper === undefined) {
             this.rebuild();
+        }
 
-        return this.gxMaterial!;
+        return this.gxMaterialHelper!;
     }
     
     public setupMaterialParams(params: MaterialParams, matCtx: MaterialRenderContext) {
+        this.getGXMaterialHelper(); // Ensure material is built
+        
         for (let i = 0; i < this.texMtx.length; i++) {
             const func = this.texMtx[i];
             if (func !== undefined)

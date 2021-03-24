@@ -22,6 +22,8 @@ uniform sampler2D u_DepthTexture;
 
 in vec2 v_TexCoord;
 
+// TODO: implement near-far scaling
+
 void main() {
     float d = 1.0 - texture(SAMPLER_2D(u_DepthTexture), v_TexCoord).r;
     gl_FragColor = vec4(d);
