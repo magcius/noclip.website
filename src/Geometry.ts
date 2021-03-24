@@ -308,8 +308,6 @@ export class Frustum {
     public far: number;
     public isOrthographic: boolean;
 
-    // World-space configuration.
-    public aabb: AABB = new AABB();
     // Left, Right, Near, Far, Top, Bottom
     public planes: Plane[] = nArray(6, () => new Plane());
 
@@ -361,18 +359,12 @@ export class Frustum {
         this.planes[5].set(scratch[4], scratch[6], scratch[7]); // far plane
 
         // mark the infinite far plane invalid if that's what's going on.
-        if (hasInfiniteFar) {
+        if (hasInfiniteFar)
             this.planes[3].d = Number.NaN;
-            this.aabb.minX = this.aabb.minY = this.aabb.minZ = Number.NaN;
-            this.aabb.maxX = this.aabb.maxY = this.aabb.maxZ = Number.NaN;
-        } else {
-            this.aabb.setFromPoints(scratch);
-        }
 
         if (this.visualizer) {
             const ctx = this.visualizer.ctx;
             ctx.strokeStyle = 'red';
-            this.visualizer.daabb(this.aabb);
 
             vec3.set(scratch[0], this.left, 0, this.near);
             vec3.set(scratch[1], this.right, 0, this.near);
@@ -394,9 +386,6 @@ export class Frustum {
     }
 
     public _intersect(aabb: AABB): IntersectionState {
-        if (!AABB.intersect(this.aabb, aabb))
-            return IntersectionState.FULLY_OUTSIDE;
-
         let ret = IntersectionState.FULLY_INSIDE;
         // Test planes.
         for (let i = 0; i < 6; i++) {
@@ -435,9 +424,6 @@ export class Frustum {
     }
 
     private _intersectSphere(v: ReadonlyVec3, radius: number): IntersectionState {
-        if (!this.aabb.containsSphere(v, radius))
-            return IntersectionState.FULLY_OUTSIDE;
-
         let res = IntersectionState.FULLY_INSIDE;
         for (let i = 0; i < 6; i++) {
             const dist = this.planes[i].distance(v[0], v[1], v[2]);
@@ -467,9 +453,6 @@ export class Frustum {
     }
 
     public containsPoint(v: vec3): boolean {
-        if (!this.aabb.containsPoint(v))
-            return false;
-
         for (let i = 0; i < 6; i++)
             if (this.planes[i].distance(v[0], v[1], v[2]) > 0)
                 return false;
