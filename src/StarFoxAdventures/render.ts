@@ -15,9 +15,9 @@ import { TDDraw } from '../SuperMarioGalaxy/DDraw';
 
 import { SFAAnimationController } from './animation';
 import { MaterialBase, MaterialFactory, getKonstColorSel, getTexGenSrc, getTexCoordID, getIndTexStageID, getIndTexMtxID, getKonstAlphaSel, MaterialRenderContext, getPostTexGenMatrix, makeOpaqueColorTexture, makeOpaqueDepthTexture } from './materials';
-import { mat4FromRowMajor, mat4SetRowMajor, mat4SetValue, radsToAngle16, vecPitch } from './util';
+import { interpS16, mat4FromRowMajor, mat4SetRowMajor, mat4SetValue, radsToAngle16, vecPitch } from './util';
 import { DepthResampler } from './depthresampler';
-import { getMatrixAxisZ } from '../MathHelpers';
+import { getMatrixAxisZ, lerp } from '../MathHelpers';
 
 export interface SceneRenderContext {
     viewerInput: Viewer.ViewerRenderInput;
@@ -25,6 +25,9 @@ export interface SceneRenderContext {
 }
 
 const BACKGROUND_COLOR = colorNewFromRGBA8(0xCCCCCCFF);
+
+const SCREENSPACE_ORTHO_MTX = mat4.create();
+mat4.ortho(SCREENSPACE_ORTHO_MTX, 0.0, 640.0, 0.0, 480.0, 1.0, 100.0);
 
 export interface SFARenderLists {
     atmosphere: GfxRenderInstList;
@@ -68,7 +71,7 @@ class HeatShimmerMaterial extends MaterialBase {
             let s = 0.5 * Math.sin(3.142 * matCtx.sceneCtx.animController.envAnimValue0 * 10.0);
             let c = 0.5 * Math.cos(3.142 * matCtx.sceneCtx.animController.envAnimValue0 * 10.0);
             mat4SetRowMajor(dst,
-                c,   s,   0.0, 0.0, // TODO: This matrix can be tweaked to adjust the draw distance. This may be desirable on high-resolution displays.
+                c,   s,   0.0, 0.0,
                 -s,  c,   0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 1.0
@@ -93,7 +96,7 @@ class HeatShimmerMaterial extends MaterialBase {
 
         this.mb.setChanCtrl(GX.ColorChannelID.COLOR0A0, false, GX.ColorSrc.REG, GX.ColorSrc.VTX, 0, GX.DiffuseFunction.NONE, GX.AttenuationFunction.NONE);
         this.mb.setBlendMode(GX.BlendMode.BLEND, GX.BlendFactor.SRCALPHA, GX.BlendFactor.INVSRCALPHA);
-        this.mb.setZMode(true, GX.CompareType.GREATER /* XXX: original game uses LESS. Z order might be reversed. this doesn't make sense. here be dragons. */, false);
+        this.mb.setZMode(true, GX.CompareType.LESS, false);
         this.mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
     }
 }
@@ -213,7 +216,6 @@ export class SFARenderer implements Viewer.SceneGfx {
         const mainColorResolveTextureID = builder.resolveRenderTarget(mainColorTargetID);
 
         if (this.enableHeatShimmer) {
-            // const mainDepthResolveTextureID = builder.resolveRenderTarget(mainDepthTargetID);
             const resampledDepthTargetID = this.depthResampler.run(device, builder, renderInstManager, mainDepthTargetID);
 
             builder.pushPass((pass) => {
@@ -264,8 +266,8 @@ export class SFARenderer implements Viewer.SceneGfx {
         // to obtain a local SceneParams buffer
         const template = this.renderHelper.pushTemplateRenderInst();
 
-        // Setup to draw in clip space
-        fillSceneParams(scratchSceneParams, mat4.create(), sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
+        // Setup to draw in screen space
+        fillSceneParams(scratchSceneParams, SCREENSPACE_ORTHO_MTX, sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
         let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
         const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
         fillSceneParamsData(d, offs, scratchSceneParams);
@@ -281,24 +283,25 @@ export class SFARenderer implements Viewer.SceneGfx {
         else
             factor = 0xff;
 
-        const strength = 0xff * ((Math.sin(sceneCtx.animController.envAnimValue0) + 1) / 2); // TODO: controlled by camera triggers
+        const strength = 0xff;
+        // const strength = 0xff * ((Math.sin(sceneCtx.animController.envAnimValue0) + 1) / 2); // TODO: controlled by camera triggers
         const a1 = (strength * 0xff) >> 8;
         const a0 = (factor * strength) >> 8;
 
         this.shimmerddraw.beginDraw();
         this.shimmerddraw.begin(GX.Command.DRAW_QUADS);
-        this.shimmerddraw.position3f32(-1, -1, -1);
+        this.shimmerddraw.position3f32(0, 0, -8);
         this.shimmerddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, a0);
         this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 0.0);
-        this.shimmerddraw.position3f32(-1, 1, -1);
+        this.shimmerddraw.position3f32(640, 0, -8);
         this.shimmerddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, a0);
-        this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 1.0);
-        this.shimmerddraw.position3f32(1, 1, -1);
+        this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 0.0);
+        this.shimmerddraw.position3f32(640, 480, -8);
         this.shimmerddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, a1);
         this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 1.0);
-        this.shimmerddraw.position3f32(1, -1, -1);
+        this.shimmerddraw.position3f32(0, 480, -8);
         this.shimmerddraw.color4rgba8(GX.Attr.CLR0, 0, 0, 0, a1);
-        this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 1.0, 0.0);
+        this.shimmerddraw.texCoord2f32(GX.Attr.TEX0, 0.0, 1.0);
         this.shimmerddraw.end();
 
         const renderInst = this.shimmerddraw.makeRenderInst(device, renderInstManager);

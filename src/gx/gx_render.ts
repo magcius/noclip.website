@@ -1,7 +1,7 @@
 
 // Common helpers for GX rendering.
 
-import { mat4 } from 'gl-matrix';
+import { mat4, ReadonlyMat4 } from 'gl-matrix';
 
 import * as GX from './gx_enum';
 import * as GX_Material from './gx_material';
@@ -147,7 +147,7 @@ function fillDrawParamsDataWithOptimizations(material: GX_Material.GXMaterial, d
     assert(d.length >= offs);
 }
 
-export function fillSceneParams(sceneParams: SceneParams, projectionMatrix: mat4, viewportWidth: number, viewportHeight: number, customLODBias: number | null = null): void {
+export function fillSceneParams(sceneParams: SceneParams, projectionMatrix: ReadonlyMat4, viewportWidth: number, viewportHeight: number, customLODBias: number | null = null): void {
     mat4.copy(sceneParams.u_Projection, projectionMatrix);
 
     if (customLODBias !== null) {
