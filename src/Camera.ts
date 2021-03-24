@@ -55,7 +55,6 @@ export class Camera {
     }
 
     public worldMatrixUpdated(): void {
-        this.frustum.updateWorldFrustum(this.worldMatrix);
         this.updateClipFromWorld();
     }
 
@@ -95,7 +94,6 @@ export class Camera {
 
     private setFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {
         this.frustum.setViewFrustum(left, right, bottom, top, n, f, this.isOrthographic);
-        this.frustum.updateWorldFrustum(this.worldMatrix);
 
         if (this.isOrthographic) {
             computeProjectionMatrixFromCuboid(this.projectionMatrix, left, right, bottom, top, n, f);
@@ -115,6 +113,7 @@ export class Camera {
 
     private updateClipFromWorld(): void {
         mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
+        this.frustum.updateWorldFrustum(this.worldMatrix);
     }
 }
 
