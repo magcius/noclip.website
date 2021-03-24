@@ -18,6 +18,7 @@ import { dataSubarray, angle16ToRads, readVec3, mat4FromSRT, readUint32, readUin
 import { Anim, interpolateKeyframes, Keyframe, applyKeyframeToModel } from './animation';
 import { World } from './world';
 import { SceneRenderContext, SFARenderLists } from './render';
+import { getMatrixTranslation } from '../MathHelpers';
 
 const scratchColor0 = colorNewFromRGBA(1, 1, 1, 1);
 const scratchVec0 = vec3.create();
@@ -1088,14 +1089,12 @@ export class ObjectInstance {
         return result;
     }
 
-    public getWorldSRT(): mat4 {
+    public getWorldSRT(out: mat4) {
         const localSrt = this.getLocalSRT();
         if (this.parent !== null) {
-            const result = mat4.create();
-            mat4.mul(result, this.parent.getSRTForChildren(), localSrt);
-            return result;
+            mat4.mul(out, this.parent.getSRTForChildren(), localSrt);
         } else {
-            return localSrt;
+            mat4.copy(out, localSrt);
         }
     }
 
@@ -1173,7 +1172,11 @@ export class ObjectInstance {
     }
 
     private isFrustumCulled(viewerInput: ViewerRenderInput): boolean {
-        return !viewerInput.camera.frustum.containsSphere(this.position, this.cullRadius * this.scale);
+        const worldMtx = scratchMtx0;
+        this.getWorldSRT(worldMtx);
+        const worldPos = scratchVec0;
+        getMatrixTranslation(worldPos, worldMtx);
+        return !viewerInput.camera.frustum.containsSphere(worldPos, this.cullRadius * this.scale);
     }
 
     public addRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists | null, objectCtx: ObjectRenderContext) {
@@ -1196,16 +1199,19 @@ export class ObjectInstance {
                 applyKeyframeToModel(this.curKeyframe, this.modelInst, amap);
             }
 
-            const mtx = this.getWorldSRT();
-            const viewMtx = scratchMtx0;
+            const worldMtx = scratchMtx0;
+            this.getWorldSRT(worldMtx);
+            const viewMtx = scratchMtx1;
             computeViewMatrix(viewMtx, objectCtx.sceneCtx.viewerInput.camera);
-            const viewPos = scratchVec0;
-            vec3.transformMat4(viewPos, this.position, viewMtx);
+            const worldPos = scratchVec0;
+            getMatrixTranslation(worldPos, worldMtx);
+            const viewPos = scratchVec1;
+            vec3.transformMat4(viewPos, worldPos, viewMtx);
             this.world.envfxMan.getAmbientColor(scratchColor0, this.ambienceNum);
             this.modelInst.addRenderInsts(device, renderInstManager, {
                 ...objectCtx,
                 outdoorAmbientColor: scratchColor0,
-            }, renderLists, mtx, -viewPos[2], OBJECT_RENDER_LAYER);
+            }, renderLists, worldMtx, -viewPos[2], OBJECT_RENDER_LAYER);
         }
     }
 }

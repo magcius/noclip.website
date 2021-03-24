@@ -1,13 +1,12 @@
 import * as Viewer from '../viewer';
 import { DataFetcher } from '../DataFetcher';
-import { GfxRenderInstList, GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
+import { GfxRenderInstManager } from "../gfx/render/GfxRenderInstManager";
 import { fillSceneParamsDataOnTemplate } from '../gx/gx_render';
 import { GfxDevice } from '../gfx/platform/GfxPlatform';
 import { SceneContext } from '../SceneBase';
 import { mat4 } from 'gl-matrix';
 import { nArray } from '../util';
 import { White } from '../Color';
-import { GfxrAttachmentSlot, GfxrGraphBuilder } from '../gfx/render/GfxRenderGraph';
 
 import { SFARenderer, SceneRenderContext, SFARenderLists } from './render';
 import { BlockFetcher, SFABlockFetcher, SwapcircleBlockFetcher, AncientBlockFetcher } from './blocks';
