@@ -42,6 +42,14 @@ export class Camera {
     public shearX: number = 0;
     public shearY: number = 0;
 
+    // Frustum configuration.
+    public left: number;
+    public right: number;
+    public bottom: number;
+    public top: number;
+    public near: number;
+    public far: number;
+
     private forceInfiniteFarPlane: boolean = false;
 
     private webXROverrideCameraProperties: boolean = false;
@@ -92,14 +100,17 @@ export class Camera {
         }
     }
 
-    private setFrustum(left: number, right: number, bottom: number, top: number, n: number, f: number): void {
-        this.frustum.setViewFrustum(left, right, bottom, top, n, f, this.isOrthographic);
+    private updateClipFromWorld(): void {
+        mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
+        this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
+    }
 
+    public updateProjectionMatrix(): void {
         if (this.isOrthographic) {
-            computeProjectionMatrixFromCuboid(this.projectionMatrix, left, right, bottom, top, n, f);
+            computeProjectionMatrixFromCuboid(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
             reverseDepthForPerspectiveProjectionMatrix(this.projectionMatrix);
         } else {
-            computeProjectionMatrixFromFrustum(this.projectionMatrix, left, right, bottom, top, n, f);
+            computeProjectionMatrixFromFrustum(this.projectionMatrix, this.left, this.right, this.bottom, this.top, this.near, this.far);
             reverseDepthForOrthographicProjectionMatrix(this.projectionMatrix);
         }
         projectionMatrixConvertClipSpaceNearZ(this.projectionMatrix, this.clipSpaceNearZ, GfxClipSpaceNearZ.NegativeOne);
@@ -107,13 +118,18 @@ export class Camera {
         this.updateClipFromWorld();
     }
 
-    public newFrame(): void {
-        this.frustum.newFrame();
+    private setFrustum(left: number, right: number, bottom: number, top: number, near: number, far: number): void {
+        this.left = left;
+        this.right = right;
+        this.bottom = bottom;
+        this.top = top;
+        this.near = near;
+        this.far = far;
+        this.updateProjectionMatrix();
     }
 
-    private updateClipFromWorld(): void {
-        mat4.mul(this.clipFromWorldMatrix, this.projectionMatrix, this.viewMatrix);
-        this.frustum.updateClipFrustum(this.clipFromWorldMatrix);
+    public newFrame(): void {
+        this.frustum.newFrame();
     }
 }
 
@@ -250,7 +266,7 @@ export function computeScreenSpaceProjectionFromWorldSpaceSphere(screenSpaceProj
 
     transformVec3Mat4w1(v, camera.viewMatrix, center);
 
-    v[2] = -Math.max(Math.abs(v[2] - radius), camera.frustum.near);
+    v[2] = -Math.max(Math.abs(v[2] - radius), camera.near);
 
     const viewCenterX = v[0], viewCenterY = v[1], viewCenterZ = v[2];
 

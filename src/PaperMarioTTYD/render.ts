@@ -326,7 +326,7 @@ class NodeInstance {
             //                          (1.0 * (pCam->far + pCam->near) * (1.0 + indexBias)));
 
             const indexBias = this.childIndex * 0.01;
-            const frustum = viewerInput.camera.frustum, far = frustum.far, near = frustum.near;
+            const camera = viewerInput.camera, far = camera.far, near = camera.near;
             const depthBias = 1.0 + (indexBias * -2.0 * far * near) / ((far + near) * (1.0 + indexBias));
 
             if (depthBias !== 1.0) {

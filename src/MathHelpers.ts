@@ -269,32 +269,6 @@ export function texProjPerspMtx(dst: mat4, fov: number, aspect: number, scaleS: 
     dst[15] = 9999.0;
 }
 
-export function texProjOrthoMtx(dst: mat4, l: number, r: number, b: number, t: number, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    const lr = 1.0 / (r - l);
-    dst[0] = 2 * lr * scaleS;
-    dst[4] = 0.0;
-    dst[8] = 0.0;
-    dst[12] = -(r + l) * lr * scaleS + transS;
-
-    const tb = 1.0 / (t - b);
-    dst[1] = 0.0;
-    dst[5] = 2 * tb * scaleT;
-    dst[9] = 0.0;
-    dst[13] = -(t + b) * tb * scaleT + transT;
-
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = 0.0;
-    dst[14] = 1.0;
-
-    // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
-    // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
-    dst[11] = 9999.0;
-    dst[15] = 9999.0;
-}
-
 export function texEnvMtx(dst: mat4, scaleS: number, scaleT: number, transS: number, transT: number) {
     dst[0] = scaleS;
     dst[4] = 0.0;
