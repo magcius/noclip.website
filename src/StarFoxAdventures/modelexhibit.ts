@@ -34,8 +34,8 @@ class ModelExhibitRenderer extends SFARenderer {
     private useGlobalAnimNum: boolean = false;
     private autogenAmap: boolean = false;
 
-    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, private materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelFetcher: ModelFetcher, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
-        super(device, animController);
+    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelFetcher: ModelFetcher, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
+        super(device, animController, materialFactory);
     }
 
     public createPanels(): UI.Panel[] {
@@ -249,7 +249,7 @@ class ModelExhibitRenderer extends SFARenderer {
             setupLights: () => {},
         };
 
-        modelInst.prepareToRender(device, renderInstManager, modelCtx, null, matrix);
+        modelInst.addRenderInsts(device, renderInstManager, modelCtx, null, matrix);
 
         if (this.displayBones) {
             // TODO: display bones as cones instead of lines

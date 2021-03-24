@@ -3,8 +3,8 @@ import { mat4, vec3, quat, ReadonlyMat4, ReadonlyVec3 } from 'gl-matrix';
 import { Camera, computeViewMatrix } from '../Camera';
 import { getMatrixTranslation } from '../MathHelpers';
 
-export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number): DataView {
-    return new DataView(data.buffer, data.byteOffset + byteOffset, byteLength);
+export function dataSubarray(data: DataView, byteOffset: number, byteLength?: number, index: number = 0, stride: number = byteLength ?? 0): DataView {
+    return new DataView(data.buffer, data.byteOffset + byteOffset + index * stride, byteLength);
 }
 
 export function dataCopy(data: DataView, byteOffset: number = 0, byteLength?: number): DataView {
@@ -25,6 +25,14 @@ export function interpS16(n: number): number {
 
 export function angle16ToRads(a: number): number {
     return interpS16(a) * Math.PI / 32768;
+}
+
+export function radsToAngle16(rads: number): number {
+    return interpS16((rads * 32768 / Math.PI) & 0xffff);
+}
+
+export function vecPitch(v: ReadonlyVec3): number {
+    return Math.atan2(v[1], Math.hypot(v[2], v[0]));
 }
 
 export function mat4SetRow(mtx: mat4, row: number, m0: number, m1: number, m2: number, m3: number) {
