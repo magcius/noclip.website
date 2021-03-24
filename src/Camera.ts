@@ -2,7 +2,7 @@
 import { mat4, vec3, vec4, quat, ReadonlyVec3, ReadonlyMat4 } from 'gl-matrix';
 import InputManager from './InputManager';
 import { Frustum, AABB } from './Geometry';
-import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, texProjPerspMtx, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
+import { clampRange, computeProjectionMatrixFromFrustum, computeUnitSphericalCoordinates, computeProjectionMatrixFromCuboid, lerpAngle, MathConstants, getMatrixAxisY, transformVec3Mat4w1, Vec3Zero, Vec3UnitY, Vec3UnitX, Vec3UnitZ, transformVec3Mat4w0, getMatrixAxisZ, vec3QuantizeMajorAxis } from './MathHelpers';
 import { projectionMatrixConvertClipSpaceNearZ } from './gfx/helpers/ProjectionHelpers';
 import { WebXRContext } from './WebXR';
 import { assert } from './util';
@@ -36,11 +36,8 @@ export class Camera {
 
     public frustum = new Frustum();
     public fovY: number;
-    public orthoScaleY: number;
     public aspect: number;
     public isOrthographic: boolean = false;
-    public shearX: number = 0;
-    public shearY: number = 0;
 
     // Frustum configuration.
     public left: number;
@@ -80,10 +77,9 @@ export class Camera {
     }
 
     public setOrthographic(orthoScaleY: number, aspect: number, n: number, f: number): void {
-        this.orthoScaleY = orthoScaleY;
         this.aspect = aspect;
-
         this.isOrthographic = true;
+
         const nearY = orthoScaleY;
         const nearX = orthoScaleY * aspect;
         this.setFrustum(-nearX, nearX, -nearY, nearY, n, f);
@@ -686,14 +682,10 @@ export class XRCameraController {
             mat4.copy(camera.projectionMatrix, cameraProjectionMatrix);
             const fov = 2.0*Math.atan(1.0/cameraProjectionMatrix[5]);
             const aspect = cameraProjectionMatrix[5] / cameraProjectionMatrix[0];
-            const shearX = cameraProjectionMatrix[8];
-            const shearY = cameraProjectionMatrix[9];
 
             // Extract camera properties
             camera.fovY = fov;
             camera.aspect = aspect;
-            camera.shearX = shearX;
-            camera.shearY = shearY;
             camera.setWebXROverrideEnabled(false);
             camera.setClipPlanes(5);
             camera.setWebXROverrideEnabled(true);
@@ -1077,35 +1069,32 @@ export function deserializeCamera(camera: Camera, view: DataView, byteOffs: numb
     return 0x04*4*3;
 }
 
-function texProjOrthoMtx(dst: mat4, projMtx: ReadonlyMat4, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    dst[0] = projMtx[0] * scaleS;
-    dst[4] = 0.0;
-    dst[8] = 0.0;
-    dst[12] = projMtx[12] * scaleS + transS;
+function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {
+    const projMtx = camera.projectionMatrix;
 
-    dst[1] = 0.0;
-    dst[5] = projMtx[5] * scaleT;
-    dst[9] = 0.0;
-    dst[13] = projMtx[13] * scaleT + transT;
+    // Avoid multiplications where we know the result will be 0.
+    dst[0]  = projMtx[0]  * scaleS;
+    dst[4]  = 0.0;
+    dst[8]  = projMtx[8]  * scaleS + projMtx[11] * transS;
+    dst[12] = projMtx[12] * scaleS + projMtx[15] * transS;
 
-    dst[2] = 0.0;
-    dst[6] = 0.0;
-    dst[10] = 0.0;
-    dst[14] = 1.0;
+    dst[1]  = 0.0;
+    dst[5]  = projMtx[5]  * scaleT;
+    dst[9]  = projMtx[9]  * scaleT + projMtx[11] * transT;
+    dst[13] = projMtx[12] * scaleT + projMtx[15] * transT;
+
+    // Move from third column.
+    dst[2]  = 0.0;
+    dst[6]  = 0.0;
+    dst[10] = projMtx[11];
+    dst[14] = projMtx[15];
 
     // Fill with junk to try and signal when something has gone horribly wrong. This should go unused,
     // since this is supposed to generate a mat4x3 matrix.
-    dst[3] = 9999.0;
-    dst[7] = 9999.0;
+    dst[3]  = 9999.0;
+    dst[7]  = 9999.0;
     dst[11] = 9999.0;
     dst[15] = 9999.0;
-}
-
-function texProjCamera(dst: mat4, camera: Camera, scaleS: number, scaleT: number, transS: number, transT: number): void {
-    if (camera.isOrthographic)
-        texProjOrthoMtx(dst, camera.projectionMatrix, scaleS, scaleT, transS, transT);
-    else
-        texProjPerspMtx(dst, camera.fovY, camera.aspect, scaleS, scaleT, transS, transT);
 }
 
 export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>, flipYScale: number): void {
@@ -1120,9 +1109,4 @@ export function texProjCameraSceneTex(dst: mat4, camera: Camera, viewport: Reado
     transT = transT * viewport.h + viewport.y;
 
     texProjCamera(dst, camera, scaleS, scaleT, transS, transT);
-
-    // Add in the shear factor for WebXR.
-    // TODO WebXR: move this into texProjPerspMtx
-    dst[8] += camera.shearX * scaleS;
-    dst[9] += camera.shearY * Math.abs(scaleT);
 }
