@@ -52,7 +52,7 @@ export class DepthResampler {
         })
     }
 
-    public run(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, depthInputTargetID: number): number {
+    public render(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, depthInputTargetID: number): number {
         const inputTargetDesc = builder.getRenderTargetDescription(depthInputTargetID);
 
         this.targetDesc.setDimensions(inputTargetDesc.width, inputTargetDesc.height, 1);

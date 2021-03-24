@@ -21,7 +21,7 @@ import { SFA_GAME_INFO, GameInfo } from './scenes';
 import { loadRes, ResourceCollection } from './resource';
 import { ObjectManager, ObjectInstance, ObjectRenderContext, ObjectUpdateContext } from './objects';
 import { EnvfxManager } from './envfx';
-import { SFARenderer, SceneRenderContext, SFARenderLists, submitScratchRenderInst } from './render';
+import { SFARenderer, SceneRenderContext, SFARenderLists, submitScratchRenderInst, setGXMaterialOnRenderInst } from './render';
 import { MapInstance, loadMap } from './maps';
 import { dataSubarray, readVec3, vecPitch } from './util';
 import { ModelRenderContext } from './models';
@@ -246,64 +246,74 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
-    protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
+    private renderAtmosphere(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, mainColorTargetID: number, sceneCtx: SceneRenderContext) {
         // Draw atmosphere
         const tex = this.world.envfxMan.getAtmosphereTexture();
-        if (tex !== null && tex !== undefined) {
-            renderInstManager.setCurrentRenderInstList(renderLists.atmosphere);
+        if (tex === null || tex === undefined)
+            return;
 
-            // Call renderHelper.pushTemplateRenderInst (not renderInstManager)
-            // to obtain a local SceneParams buffer
-            const template = this.renderHelper.pushTemplateRenderInst();
+        // Call renderHelper.pushTemplateRenderInst (not renderInstManager.pushTemplateRenderInst)
+        // to obtain a local SceneParams buffer
+        const template = this.renderHelper.pushTemplateRenderInst();
 
-            // Setup to draw in clip space
-            fillSceneParams(scratchSceneParams, mat4.create(), sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
-            let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
-            const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
-            fillSceneParamsData(d, offs, scratchSceneParams);
+        // Setup to draw in clip space
+        fillSceneParams(scratchSceneParams, mat4.create(), sceneCtx.viewerInput.backbufferWidth, sceneCtx.viewerInput.backbufferHeight);
+        let offs = template.getUniformBufferOffset(GX_Material.GX_Program.ub_SceneParams);
+        const d = template.mapUniformBufferF32(GX_Material.GX_Program.ub_SceneParams);
+        fillSceneParamsData(d, offs, scratchSceneParams);
 
-            materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
-            materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
-            materialParams.m_TextureMapping[0].width = tex.width;
-            materialParams.m_TextureMapping[0].height = tex.height;
-            materialParams.m_TextureMapping[0].lodBias = 0.0;
-            mat4.identity(materialParams.u_TexMtx[0]);
+        materialParams.m_TextureMapping[0].gfxTexture = tex.gfxTexture;
+        materialParams.m_TextureMapping[0].gfxSampler = tex.gfxSampler;
+        materialParams.m_TextureMapping[0].width = tex.width;
+        materialParams.m_TextureMapping[0].height = tex.height;
+        materialParams.m_TextureMapping[0].lodBias = 0.0;
+        mat4.identity(materialParams.u_TexMtx[0]);
 
-            // Extract pitch
-            const cameraFwd = scratchVec0;
-            getMatrixAxisZ(cameraFwd, sceneCtx.viewerInput.camera.worldMatrix);
-            vec3.negate(cameraFwd, cameraFwd);
-            const camPitch = vecPitch(cameraFwd);
-            const camRoll = Math.PI / 2;
+        // Extract pitch
+        const cameraFwd = scratchVec0;
+        getMatrixAxisZ(cameraFwd, sceneCtx.viewerInput.camera.worldMatrix);
+        vec3.negate(cameraFwd, cameraFwd);
+        const camPitch = vecPitch(cameraFwd);
+        const camRoll = Math.PI / 2;
 
-            // FIXME: We should probably use a different technique since this one is poorly suited to VR.
-            // TODO: Implement precise time of day. The game blends textures on the CPU to produce
-            // an atmosphere texture for a given time of day.
-            const fovRollFactor = 3.0 * (tex.height * 0.5 * sceneCtx.viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
-            const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
-            const t0 = (pitchFactor + fovRollFactor) / tex.height;
-            const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
+        // FIXME: We should probably use a different technique since this one is poorly suited to VR.
+        // TODO: Implement precise time of day. The game blends textures on the CPU to produce
+        // an atmosphere texture for a given time of day.
+        const fovRollFactor = 3.0 * (tex.height * 0.5 * sceneCtx.viewerInput.camera.fovY / Math.PI) * Math.sin(-camRoll);
+        const pitchFactor = (0.5 * tex.height - 6.0) - (3.0 * tex.height * -camPitch / Math.PI);
+        const t0 = (pitchFactor + fovRollFactor) / tex.height;
+        const t1 = t0 - (fovRollFactor * 2.0) / tex.height;
 
-            this.skyddraw.beginDraw();
-            this.skyddraw.begin(GX.Command.DRAW_QUADS);
-            this.skyddraw.position3f32(-1, -1, -1);
-            this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-            this.skyddraw.position3f32(-1, 1, -1);
-            this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-            this.skyddraw.position3f32(1, 1, -1);
-            this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
-            this.skyddraw.position3f32(1, -1, -1);
-            this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
-            this.skyddraw.end();
+        this.skyddraw.beginDraw();
+        this.skyddraw.begin(GX.Command.DRAW_QUADS);
+        this.skyddraw.position3f32(-1, -1, -1);
+        this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+        this.skyddraw.position3f32(-1, 1, -1);
+        this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+        this.skyddraw.position3f32(1, 1, -1);
+        this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t1);
+        this.skyddraw.position3f32(1, -1, -1);
+        this.skyddraw.texCoord2f32(GX.Attr.TEX0, 1.0, t0);
+        this.skyddraw.end();
 
-            const renderInst = this.skyddraw.makeRenderInst(device, renderInstManager);
-            submitScratchRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true, materialParams, packetParams);
+        const renderInst = this.skyddraw.makeRenderInst(device, renderInstManager);
+        setGXMaterialOnRenderInst(device, renderInstManager, this.materialHelperSky, renderInst, sceneCtx.viewerInput, true, materialParams, packetParams);
 
-            this.skyddraw.endAndUpload(device, renderInstManager);
+        this.skyddraw.endAndUpload(device, renderInstManager);
 
-            renderInstManager.popTemplateRenderInst();
-        }
+        renderInstManager.popTemplateRenderInst();
         
+        builder.pushPass((pass) => {
+            pass.setDebugName('Atmosphere');
+            pass.setViewport(sceneCtx.viewerInput.viewport);
+            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
+            pass.exec((passRenderer) => {
+                renderInst.drawOnPass(device, renderInstManager.gfxRenderCache, passRenderer);
+            });
+        });
+    }
+
+    protected addSkyRenderInsts(device: GfxDevice, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, sceneCtx: SceneRenderContext) {
         // Draw skyscape
         if (this.world.envfxMan.skyscape.objects.length !== 0) {
             renderInstManager.setCurrentRenderInstList(renderLists.skyscape);
@@ -329,15 +339,8 @@ class WorldRenderer extends SFARenderer {
         }
     }
 
-    protected addSkyRenderPasses(builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, mainDepthTargetID: number, sceneCtx: SceneRenderContext) {
-        builder.pushPass((pass) => {
-            pass.setDebugName('Atmosphere');
-            pass.setViewport(sceneCtx.viewerInput.viewport);
-            pass.attachRenderTargetID(GfxrAttachmentSlot.Color0, mainColorTargetID);
-            pass.exec((passRenderer) => {
-                renderInstManager.drawListOnPassRenderer(renderLists.atmosphere, passRenderer);
-            });
-        });
+    protected addSkyRenderPasses(device: GfxDevice, builder: GfxrGraphBuilder, renderInstManager: GfxRenderInstManager, renderLists: SFARenderLists, mainColorTargetID: number, sceneCtx: SceneRenderContext) {
+        this.renderAtmosphere(device, builder, renderInstManager, mainColorTargetID, sceneCtx);
 
         builder.pushPass((pass) => {
             pass.setDebugName('Skyscape');
