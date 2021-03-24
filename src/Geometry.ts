@@ -357,7 +357,7 @@ export class Frustum {
         this.planes[1].set(scratch[2], scratch[6], scratch[5]); // right plane
         this.planes[2].set(scratch[0], scratch[2], scratch[1]); // near plane
         this.planes[3].set(scratch[4], scratch[6], scratch[7]); // far plane
-        this.planes[4].set(scratch[2], scratch[6], scratch[5]); // top plane
+        this.planes[4].set(scratch[1], scratch[5], scratch[4]); // top plane
         this.planes[5].set(scratch[3], scratch[7], scratch[6]); // bottom plane
 
         // mark the infinite far plane invalid if that's what's going on.
