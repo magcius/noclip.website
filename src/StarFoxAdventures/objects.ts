@@ -148,8 +148,9 @@ namespace TriggerClass {
         const userData = obj.userData as UserData;
         
         for (let action of userData.actions) {
-            if (!!(action.flags & 0x2) === leaving)
-                console.log(`Action: flags ${!!(action.flags & 0x2) ? 'OnLeave' : 'OnEnter'} 0x${action.flags.toString(16)} type ${ACTION_TYPES[action.type] ?? `0x${action.type.toString(16)}`} param 0x${action.param.toString(16)}`);
+            if (!!(action.flags & 0x2) === leaving) {
+                // console.log(`Action: flags ${!!(action.flags & 0x2) ? 'OnLeave' : 'OnEnter'} 0x${action.flags.toString(16)} type ${ACTION_TYPES[action.type] ?? `0x${action.type.toString(16)}`} param 0x${action.param.toString(16)}`);
+            }
         }
     }
 
@@ -160,7 +161,7 @@ namespace TriggerClass {
         for (let i = 0; i < 8; i++) {
             const action = parseAction(dataSubarray(data, CommonObjectParams_SIZE, Action_SIZE, i));
             actions.push(action);
-            console.log(`Action #${i}: flags ${!!(action.flags & 0x2) ? 'OnLeave' : 'OnEnter'} 0x${action.flags.toString(16)} type ${ACTION_TYPES[action.type] ?? `0x${action.type.toString(16)}`} param 0x${action.param.toString(16)}`);
+            // console.log(`Action #${i}: flags ${!!(action.flags & 0x2) ? 'OnLeave' : 'OnEnter'} 0x${action.flags.toString(16)} type ${ACTION_TYPES[action.type] ?? `0x${action.type.toString(16)}`} param 0x${action.param.toString(16)}`);
         }
 
         if (obj.commonObjectParams.objType === OBJTYPE_TrigPln) {

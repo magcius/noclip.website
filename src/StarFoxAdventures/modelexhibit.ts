@@ -34,8 +34,8 @@ class ModelExhibitRenderer extends SFARenderer {
     private useGlobalAnimNum: boolean = false;
     private autogenAmap: boolean = false;
 
-    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, private texFetcher: TextureFetcher, private modelFetcher: ModelFetcher, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
-        super(device, animController);
+    constructor(device: GfxDevice, private subdir: string, animController: SFAAnimationController, materialFactory: MaterialFactory, private texFetcher: TextureFetcher, private modelFetcher: ModelFetcher, private animColl: AnimCollection, private amapColl: AmapCollection, private modanimColl: ModanimCollection) {
+        super(device, animController, materialFactory);
     }
 
     public createPanels(): UI.Panel[] {
@@ -292,6 +292,6 @@ export class SFAModelExhibitSceneDesc implements Viewer.SceneDesc {
         const modelFetcher = await ModelFetcher.create(this.gameInfo, Promise.resolve(texFetcher), materialFactory, animController, this.modelVersion);
         await modelFetcher.loadSubdirs([this.subdir], context.dataFetcher);
 
-        return new ModelExhibitRenderer(device, this.subdir, animController, texFetcher, modelFetcher, animColl, amapColl, modanimColl);
+        return new ModelExhibitRenderer(device, this.subdir, animController, materialFactory, texFetcher, modelFetcher, animColl, amapColl, modanimColl);
     }
 }

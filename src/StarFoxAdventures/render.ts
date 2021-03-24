@@ -69,20 +69,17 @@ export class SFARenderer implements Viewer.SceneGfx {
 
     private depthResampler: DepthResampler;
 
-    public materialFactory: MaterialFactory;
     private shimmerddraw = new TDDraw();
     private enableHeatShimmer: boolean = false; // TODO: set by camera triggers
     private heatShimmerMaterial: HeatShimmerMaterial | undefined = undefined;
     // TODO: Merge GXMaterialHelperGfx into SFAMaterial
     private heatShimmerMaterialHelper: GXMaterialHelperGfx | undefined = undefined;
 
-    constructor(device: GfxDevice, protected animController: SFAAnimationController) {
+    constructor(device: GfxDevice, protected animController: SFAAnimationController, public materialFactory: MaterialFactory) {
         this.renderHelper = new GXRenderHelperGfx(device);
         this.renderHelper.renderInstManager.disableSimpleMode();
 
         this.depthResampler = new DepthResampler(device, this.renderHelper.renderInstManager.gfxRenderCache);
-
-        this.materialFactory = new MaterialFactory(device);
         
         this.shimmerddraw.setVtxDesc(GX.Attr.POS, true);
         this.shimmerddraw.setVtxDesc(GX.Attr.CLR0, true);

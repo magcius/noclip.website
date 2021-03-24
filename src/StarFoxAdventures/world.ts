@@ -137,8 +137,8 @@ class WorldRenderer extends SFARenderer {
     private materialHelperSky: GXMaterialHelperGfx;
     private skyddraw = new TDDraw();
 
-    constructor(private world: World) {
-        super(world.device, world.animController);
+    constructor(private world: World, materialFactory: MaterialFactory) {
+        super(world.device, world.animController, materialFactory);
 
         packetParams.clear();
 
@@ -494,7 +494,7 @@ export class SFAWorldSceneDesc implements Viewer.SceneDesc {
             console.log(`Object ${objType}: ${obj.name} (type ${obj.typeNum} class ${obj.objClass})`);
         };
 
-        const renderer = new WorldRenderer(world);
+        const renderer = new WorldRenderer(world, materialFactory);
         return renderer;
     }
 }
