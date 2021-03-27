@@ -586,6 +586,11 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     public readonly separateSamplerTextures = false;
     public readonly clipSpaceNearZ = GfxClipSpaceNearZ.NegativeOne;
 
+    // GfxLimits
+    public uniformBufferWordAlignment: number;
+    public uniformBufferMaxPageWordSize: number;
+    public supportedSampleCounts: number[];
+
     constructor(public gl: WebGL2RenderingContext, configuration: GfxPlatformWebGL2Config) {
         this._contextAttributes = assertExists(gl.getContextAttributes());
 
@@ -624,6 +629,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
         // We always have depth test enabled.
         gl.enable(gl.DEPTH_TEST);
 
+        this._checkLimits();
         this._checkForBugQuirks();
 
         if (configuration.shaderDebug)
@@ -631,6 +637,18 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
 
         if (configuration.trackResources)
             this._resourceCreationTracker = new ResourceCreationTracker();
+    }
+
+    private _checkLimits(): void {
+        const gl = this.gl;
+
+        this.uniformBufferWordAlignment = gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) / 4;
+        this.uniformBufferMaxPageWordSize = this._uniformBufferMaxPageByteSize / 4;
+
+        this.supportedSampleCounts = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH32F_STENCIL8, gl.SAMPLES) || [];
+        if (!this.supportedSampleCounts.includes(1))
+            this.supportedSampleCounts.push(1);
+        this.supportedSampleCounts.sort((a, b) => (a - b));
     }
 
     private _checkForBugQuirks(): void {
@@ -1418,11 +1436,7 @@ class GfxImplP_GL implements GfxSwapChain, GfxDevice {
     }
 
     public queryLimits(): GfxDeviceLimits {
-        const gl = this.gl;
-        return {
-            uniformBufferWordAlignment: gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) / 4,
-            uniformBufferMaxPageWordSize: this._uniformBufferMaxPageByteSize / 4,
-        };
+        return this;
     }
 
     public queryTextureFormatSupported(format: GfxFormat): boolean {

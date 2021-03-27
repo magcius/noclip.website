@@ -339,17 +339,6 @@ async function initializeViewerWebGL2(out: ViewerOut, canvas: HTMLCanvasElement)
             return InitErrorCode.NO_WEBGL2_GENERIC;
     }
 
-    // Test for no MS depthbuffer support (as seen in SwiftShader).
-    const samplesArray = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.DEPTH32F_STENCIL8, gl.SAMPLES);
-    if (samplesArray === null || samplesArray.length === 0) {
-        const ext = gl.getExtension('WEBGL_debug_renderer_info');
-        console.warn(`samplesArray = ${samplesArray}`);
-        if (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).includes('SwiftShader'))
-            return InitErrorCode.GARBAGE_WEBGL2_SWIFTSHADER;
-        else
-            return InitErrorCode.GARBAGE_WEBGL2_GENERIC;
-    }
-
     const config = new GfxPlatformWebGL2Config();
     config.trackResources = IS_DEVELOPMENT;
     config.shaderDebug = IS_DEVELOPMENT;

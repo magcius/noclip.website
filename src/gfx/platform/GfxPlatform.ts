@@ -242,6 +242,7 @@ export interface GfxRenderPassDescriptor {
 export interface GfxDeviceLimits {
     uniformBufferWordAlignment: number;
     uniformBufferMaxPageWordSize: number;
+    readonly supportedSampleCounts: number[];
 }
 
 export interface GfxDebugGroup {
