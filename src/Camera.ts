@@ -310,6 +310,9 @@ export interface CameraControllerClass {
     new(): CameraController;
 }
 
+// Movement speeds have been designed for a 60fps experience.
+const FPS = 1000/60;
+
 export class FPSCameraController implements CameraController {
     public camera: Camera;
     public forceUpdate: boolean = false;
@@ -452,7 +455,7 @@ export class FPSCameraController implements CameraController {
             vec3.scaleAndAdd(finalMovement, finalMovement, viewForward, keyMovement[2]);
             vec3.scaleAndAdd(finalMovement, finalMovement, viewUp, keyMovement[1]);
 
-            vec3.scale(finalMovement, finalMovement, this.sceneMoveSpeedMult);
+            vec3.scale(finalMovement, finalMovement, this.sceneMoveSpeedMult * (dt / FPS));
 
             vec3.copy(camera.linearVelocity, finalMovement);
             mat4.translate(camera.worldMatrix, camera.worldMatrix, finalMovement);
