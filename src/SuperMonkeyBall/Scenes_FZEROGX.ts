@@ -89,6 +89,7 @@ const sceneDescs = [
     new FZEROGXSceneDesc("08", "Lightning - Loop Cross"),
     new FZEROGXSceneDesc("05", "Aeropolis - Multiplex"),
     new FZEROGXSceneDesc("01_jp", "[JP] Mute City - Twist Road"),
+    new FZEROGXSceneDesc("05_jp", "[JP] Aeropolis - Multiplex"),
     "Sapphire Cup",
     new FZEROGXSceneDesc("14", "Big Blue - Drift Highway"),
     new FZEROGXSceneDesc("13", "Port Town - Long Pipe"),
@@ -109,6 +110,7 @@ const sceneDescs = [
     new FZEROGXSceneDesc("17", "Fire Field - Undulation"),
     new FZEROGXSceneDesc("21", "Aeropolis - Dragon Slope"),
     new FZEROGXSceneDesc("28", "Phantom Road - Slim-Line Slits"),
+    new FZEROGXSceneDesc("21_jp", "[JP] Aeropolis - Dragon Slope"),
     new FZEROGXSceneDesc("17_jp", "[JP] Fire Field - Undulation"),
     "AX Cup",
     new FZEROGXSceneDesc("31", "Aeropolis - Screw Drive"),
@@ -117,6 +119,7 @@ const sceneDescs = [
     new FZEROGXSceneDesc("34", "Lightning - Thunder Road"),
     new FZEROGXSceneDesc("35", "Green Plant - Spiral"), //
     new FZEROGXSceneDesc("36", "Mute City - Sonic Oval"),
+    new FZEROGXSceneDesc("31_jp", "[JP] Aeropolis - Screw Drive"),
     new FZEROGXSceneDesc("36_jp", "[JP] Mute City - Sonic Oval"),
     "Story Mode",
     new FZEROGXSceneDesc("37", "Chapter 1"),
