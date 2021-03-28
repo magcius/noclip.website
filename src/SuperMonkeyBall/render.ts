@@ -17,6 +17,7 @@ import { ViewerRenderInput } from '../viewer';
 import { TextureMapping } from '../TextureHolder';
 import { GXMaterialBuilder } from '../gx/GXMaterialBuilder';
 import { GfxRenderInstManager, setSortKeyDepth, setSortKeyBias, GfxRendererLayer, makeSortKey, GfxRenderInst } from '../gfx/render/GfxRenderInstManager';
+import { computeNormalMatrix } from '../MathHelpers';
 
 
 export class GMAData {
@@ -112,7 +113,7 @@ class ShapeInstance {
             if (this.shape.material.samplerIdxs[i] < 0){
                 break;
             }
-            materialInstance.fillMaterialParams(template, textureHolder, this.shape.material.samplerIdxs[i], null, camera, viewport);
+            materialInstance.fillMaterialParams(template, textureHolder, instanceStateData, this.shape.material.samplerIdxs[i], null, camera, viewport);
         }
 
         packetParams.clear();
@@ -165,8 +166,9 @@ class MaterialInstance {
         };
     
         const lightChannels: GX_Material.LightChannelControl[] = [lightChannel0, lightChannel0];
-        let unk0x02 = this.materialData.material.unk0x02;
-        let unk0x03 = this.materialData.material.unk0x03;
+        const material = this.materialData.material;
+        let unk0x02 = material.unk0x02;
+        let unk0x03 = material.unk0x03;
 
         const mb = new GXMaterialBuilder();
         mb.setTevDirect(0);
@@ -174,23 +176,32 @@ class MaterialInstance {
         mb.setTevOrder(0, GX.TexCoordID.TEXCOORD0, GX.TexMapID.TEXMAP0, GX.RasColorChannelID.COLOR0A0);
         mb.setCullMode( (unk0x03 & (1 << 1)) !== 0 ? GX.CullMode.NONE : GX.CullMode.FRONT );
         
-        if ((this.materialData.material.vtxAttr & (1 << GX.Attr.CLR0)) !== 0){
+        if ((material.vtxAttr & (1 << GX.Attr.CLR0)) !== 0){
             mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.TEXC, GX.CC.RASC, GX.CC.ZERO);
         } else {
             mb.setTevColorIn(0, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.TEXC);
         }
         mb.setTevColorOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.RASA, GX.CA.ZERO, GX.CA.TEXA);
-        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.REG0);
+        mb.setTevAlphaIn(0, GX.CA.ZERO, GX.CA.TEXA, GX.CA.RASA, GX.CA.ZERO);
+        mb.setTevAlphaOp(0, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
         mb.setTexCoordGen(0, GX.TexGenType.MTX2x4, GX.TexGenSrc.TEX0, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
 
-        // for sampler 2 aand 3
-        // for (let i = 1; i < this.materialData.material.matCount; i++){
-        //     mb.setTevOrder(i, (GX.TexCoordID.TEXCOORD0 + i) as GX.TexCoordID, (GX.TexMapID.TEXMAP0 + i) as GX.TexMapID, GX.RasColorChannelID.COLOR0A0);
-        //     mb.setTevColorIn(i,  GX.CC.ZERO, GX.CC.TEXC, GX.CC.CPREV, GX.CC.ZERO);
-        //     mb.setTevColorOp(i, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
-        //     mb.setTexCoordGen(i, GX.TexGenType.MTX2x4, (GX.TexGenSrc.TEX0 + i) as GX.TexGenSrc, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
-        // }
+        const matCount = material.matCount;
+        // for sampler 2 and 3
+        for(let i = 1; i < matCount; i++){
+            mb.setTevOrder(i, (GX.TexCoordID.TEXCOORD0 + i) as GX.TexCoordID, (GX.TexMapID.TEXMAP0 + i) as GX.TexMapID, GX.RasColorChannelID.COLOR1A1);
+            const samplerIdx = material.samplerIdxs[i];
+            const unk0x10 = this.samplers[samplerIdx].unk0x10;
+            if ((unk0x10 & (1 << 0)) !== 0){
+                mb.setTevColorIn(i, GX.CC.TEXC, GX.CC.TEXC, GX.CC.CPREV, GX.CC.CPREV);
+            } else {
+                mb.setTevColorIn(i, GX.CC.ZERO, GX.CC.ZERO, GX.CC.ZERO, GX.CC.CPREV);
+            }
+            mb.setTevColorOp(i, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTevAlphaIn(i, GX.CA.ZERO, GX.CA.TEXA, GX.CA.APREV, GX.CA.ZERO);
+            mb.setTevAlphaOp(i, GX.TevOp.ADD, GX.TevBias.ZERO, GX.TevScale.SCALE_1, true, GX.Register.PREV);
+            mb.setTexCoordGen(i, GX.TexGenType.MTX2x4, (GX.TexGenSrc.TEX0 + i) as GX.TexGenSrc, GX.TexGenMatrix.IDENTITY, false, GX.PostTexGenMatrix.PTIDENTITY);
+        }
 
         // unk0x03 << 0 : ???       0x00000001
         // unk0x03 << 1 : culling   0x00000002
@@ -205,7 +216,7 @@ class MaterialInstance {
         
         if ((unk0x03 & (1 << 0)) !== 0){
             // texture conatins "alpha" value
-            mb.setAlphaCompare(GX.CompareType.GEQUAL, 0x00, GX.AlphaOp.AND, GX.CompareType.LEQUAL, 0xff);
+            mb.setAlphaCompare(GX.CompareType.GEQUAL, material.transparents[0], GX.AlphaOp.AND, GX.CompareType.LEQUAL, material.transparents[1]);
         } else {
             mb.setAlphaCompare(GX.CompareType.ALWAYS, 0, GX.AlphaOp.AND, GX.CompareType.ALWAYS, 0);
         }
@@ -254,7 +265,7 @@ class MaterialInstance {
         colorCopy(dst, color);
     }
 
-    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, posNrmMatrixIdx: number, draw: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+    private fillMaterialParamsData(materialParams: MaterialParams, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, draw: LoadedVertexDraw | null = null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
         const material = this.materialData.material;
 
         for (let i = 0; i < 3; i++) {
@@ -277,14 +288,15 @@ class MaterialInstance {
         const name: string = `texture_${this.modelID}_${texIdx}`;
         textureHolder.fillTextureMapping(dst, name);
         dst.gfxSampler = this.materialData.gfxSamplers[i];
+        dst.lodBias = this.samplers[samplerIdx].lodBias;
     }
 
     public setOnRenderInst(device: GfxDevice, cache: GfxRenderCache, renderInst: GfxRenderInst): void {
         this.materialHelper.setOnRenderInst(device, cache, renderInst);
     }
 
-    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
-        this.fillMaterialParamsData(materialParams, textureHolder, posNrmMatrixIdx, packet, camera, viewport);
+    public fillMaterialParams(renderInst: GfxRenderInst, textureHolder: GXTextureHolder, instanceStateData: InstanceStateData, posNrmMatrixIdx: number, packet: LoadedVertexDraw | null, camera: Camera, viewport: Readonly<GfxNormalizedViewportCoords>): void {
+        this.fillMaterialParamsData(materialParams, textureHolder, instanceStateData, posNrmMatrixIdx, packet, camera, viewport);
         this.materialHelper.allocateMaterialParamsDataOnInst(renderInst, materialParams);
         renderInst.setSamplerBindingsFromTextureMappings(materialParams.m_TextureMapping);
     }

@@ -21,12 +21,10 @@ export interface GcmfAttribute{
 
 // GCMF Material
 export interface GcmfMaterial{
-    // gxMaterial: GX_Material.GXMaterial;
     unk0x02: number,
     unk0x03: number,
     colors: Color[]
-    emission: number,
-    transparent: number,
+    transparents: number[],
     matCount: number,
     vtxRenderFlag: GX.AttrType,
     samplerIdxs: number[], // GMA can store max 3 sampler index
@@ -86,8 +84,10 @@ export interface GcmfSampler{
     wrapS: GX.WrapMode,
     wrapT: GX.WrapMode,
     texIdx: number, // index of tpl
+    lodBias: number,
     anisotropy: number,
-    idx: number // index of GcmfTexture
+    idx: number, // index of GcmfTexture
+    unk0x10: number
 }
 
 interface GcmfEntryOffset{
@@ -127,14 +127,14 @@ function parseSampler(buffer: ArrayBufferSlice): GcmfSampler{
     const wrapS: GX.WrapMode = (uvWrap >> 2) & 0x03;
     const wrapT: GX.WrapMode = (uvWrap >> 4) & 0x03;
     const texIdx = view.getInt16(0x04);
-    const unk0x06 = view.getInt8(0x06);
+    const lodBias = view.getInt8(0x06);
     const anisotropy = view.getInt8(0x07);
     const unk0x0C = view.getInt8(0x0C);
     const isSwappable = ((view.getUint8(0x0D) & 0x01) == 1); // swapping textures in game
     const idx = view.getInt16(0x0E);
     const unk0x10 = view.getInt32(0x10);
 
-    return { mipmapAV, wrapS, wrapT, texIdx, anisotropy, idx };
+    return { mipmapAV, wrapS, wrapT, texIdx, lodBias, anisotropy, idx, unk0x10 };
 }
 
 function parseMatrix(buffer: ArrayBufferSlice): mat4{
@@ -165,6 +165,7 @@ function parseMatrix(buffer: ArrayBufferSlice): mat4{
 function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
     const view = buffer.createDataView();
     const colors: Color[] = []
+    const transparents: number[] = [];
     const samplerIdxs: number[] = [];
 
     const unk0x02 = view.getUint8(0x02);
@@ -172,8 +173,9 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
     colors.push( colorNewFromRGBA(view.getUint8(0x04), view.getUint8(0x05), view.getUint8(0x06), view.getUint8(0x07)) );
     colors.push( colorNewFromRGBA(view.getUint8(0x08), view.getUint8(0x09), view.getUint8(0x0A), view.getUint8(0x0B)) );
     colors.push( colorNewFromRGBA(view.getUint8(0x0C), view.getUint8(0x0D), view.getUint8(0x0E), view.getUint8(0x0F)) );
-    const emission = view.getUint8(0x10);
-    const transparent = view.getUint8(0x11);
+    for(let i = 0; i < 3; i++){
+        transparents[i] = view.getUint8(0x10 + i);
+    }
     const matCount = view.getUint8(0x12);
     const vtxRenderFlag: GX.AttrType = view.getUint8(0x13);
     const unk0x14 = view.getUint8(0x14);
@@ -187,7 +189,7 @@ function parseMaterial(buffer: ArrayBufferSlice, idx: number): GcmfMaterial{
 
     const vtxAttr: GX.Attr = view.getUint32(0x1C);
 
-    return { unk0x02, unk0x03, colors, emission, transparent, matCount, unk0x14, unk0x15, vtxRenderFlag, samplerIdxs, vtxAttr, unk0x40 };
+    return { unk0x02, unk0x03, colors, transparents, matCount, unk0x14, unk0x15, vtxRenderFlag, samplerIdxs, vtxAttr, unk0x40 };
 }
 
 function parseExShape(buffer: ArrayBufferSlice): GcmfDisplaylistHeader{
